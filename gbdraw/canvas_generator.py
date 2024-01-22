@@ -1,0 +1,209 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+import logging
+import sys
+from svgwrite import Drawing
+from typing import Literal
+# Logging setup
+Logger = logging.getLogger()
+handler = logging.StreamHandler(sys.stdout)
+
+
+class CircularCanvasConfigurator:
+    """
+    Configures the settings for a circular canvas used for genomic data visualization.
+
+    Attributes:
+    output_prefix (str): Prefix for the output file.
+    total_width (int): Total width of the canvas.
+    total_height (int): Total height of the canvas.
+    radius (float): Radius of the circular canvas.
+    track_ratio (float): Ratio to determine track width.
+    show_gc (bool): Flag to display GC content.
+    show_skew (bool): Flag to display GC skew.
+    strandedness (bool): Flag to display strandedness.
+
+    Methods:
+    calculate_dimensions(): Calculates dimensions for the canvas.
+    create_svg_canvas(): Creates and returns an SVG canvas for drawing.
+    get_track_ids(): Determines the track IDs for visualization.
+    """
+
+    def __init__(self, output_prefix: str, config_dict: dict, show_gc=True, strandedness=True, show_skew=True) -> None:
+        """
+        Initializes the circular canvas configurator with given settings.
+
+        Args:
+        output_prefix (str): Prefix for the output file.
+        config_dict (dict): Configuration dictionary with canvas settings.
+        show_gc (bool, optional): Flag to display GC content. Defaults to True.
+        strandedness (bool, optional): Flag to display strandedness. Defaults to True.
+        show_skew (bool, optional): Flag to display GC skew. Defaults to True.
+        """
+        self.output_prefix: str = output_prefix
+        self.total_width: int = config_dict['canvas']['circular']['width']
+        self.total_height: int = config_dict['canvas']['circular']['height']
+        self.radius: float = config_dict['canvas']['circular']['radius']
+        self.track_ratio: float = config_dict['canvas']['circular']['track_ratio']
+        self.show_gc: bool = show_gc
+        self.show_skew: bool = show_skew
+        self.strandedness: bool = strandedness
+        self.calculate_dimensions()
+        self.get_track_ids()
+
+    def calculate_dimensions(self) -> None:
+        """
+        Calculates the dimensions and offsets for the circular canvas based on the configuration.
+        """
+        self.track_width: float = self.radius * self.track_ratio
+        self.offset_x: float = self.total_width / 2
+        self.offset_y: float = self.total_height / 2
+        # Create linear canvas
+
+    def create_svg_canvas(self) -> Drawing:
+        """
+        Creates and returns an SVG canvas based on the configurator's settings.
+
+        Returns:
+        Drawing: An SVG Drawing object.
+        """
+        return Drawing(
+            filename=self.output_prefix + ".svg",
+            size=(str(self.total_width) + 'px', str(self.total_height) + 'px'),
+            viewBox=('0 0 ' + str(self.total_width) +
+                     ' ' + str(self.total_height))
+        )
+
+    def get_track_ids(self) -> None:
+        """
+        Determines and assigns track IDs for the visualization based on the configurator's settings.
+        """
+        self.track_ids: dict = {}
+        gc_track_id: Literal[2] | None = 2 if self.show_gc or not self.show_skew else None
+        skew_track_id: Literal[3, 2] | None = (
+            3 if self.show_gc else 2) if self.show_skew else None
+
+        if gc_track_id is not None:
+            self.track_ids['gc_track'] = gc_track_id
+        if skew_track_id is not None:
+            self.track_ids['skew_track'] = skew_track_id
+
+
+class LinearCanvasConfigurator:
+    """
+    Configures the settings for a linear canvas used for genomic data visualization.
+
+    Attributes:
+    output_prefix (str): Prefix for the output file.
+    fig_width (int): Width of the figure.
+    vertical_offset (float): Vertical offset for alignment.
+    horizontal_offset (float): Horizontal offset for alignment.
+    vertical_padding (float): Vertical padding between elements.
+    comparison_height (float): Height for comparison tracks.
+    canvas_padding (float): Padding around the canvas.
+    default_cds_height (float): Default height for coding sequences.
+    default_gc_height (float): Default height for GC content.
+    show_gc (bool): Flag to display GC content.
+    strandedness (bool): Flag to display strandedness.
+    num_of_entries (int): Number of entries to visualize.
+    align_center (bool): Flag to align content to the center.
+    longest_genome (int): Length of the longest genome in the dataset.
+
+    Methods:
+    set_gc_height_and_gc_padding(): Sets GC height and padding.
+    set_cds_height_and_cds_padding(): Sets CDS height and padding.
+    set_arrow_length(): Sets the arrow length for representation.
+    calculate_dimensions(): Calculates dimensions for the canvas.
+    create_svg_canvas(): Creates and returns an SVG canvas for drawing.
+    """
+
+    def __init__(self, num_of_entries: int, longest_genome: int, config_dict: dict, output_prefix='out', show_gc=False, strandedness=False, align_center=False):
+        """
+        Initializes the linear canvas configurator with given settings.
+
+        Args:
+        num_of_entries (int): Number of entries to visualize.
+        longest_genome (int): Length of the longest genome in the dataset.
+        config_dict (dict): Configuration dictionary with canvas settings.
+        output_prefix (str, optional): Prefix for the output file. Defaults to 'out'.
+        show_gc (bool, optional): Flag to display GC content. Defaults to False.
+        strandedness (bool, optional): Flag to display strandedness. Defaults to False.
+        align_center (bool, optional): Flag to align content to the center. Defaults to False.
+        """
+        self.output_prefix: str = output_prefix
+        self.fig_width: int = config_dict['canvas']['linear']['width']
+        self.vertical_offset: float = config_dict['canvas']['linear']['vertical_offset']
+        self.horizontal_offset: float = config_dict['canvas']['linear']['horizontal_offset']
+        self.vertical_padding: float = config_dict['canvas']['linear']['vertical_padding']
+        self.comparison_height: float = config_dict['canvas']['linear']['comparison_height']
+        self.canvas_padding: float = config_dict['canvas']['linear']['canvas_padding']
+        self.default_cds_height: float = config_dict['canvas']['linear']['default_cds_height']
+        self.default_gc_height: float = config_dict['canvas']['linear']['default_gc_height']
+        self.show_gc: bool = show_gc
+        self.strandedness: bool = strandedness
+        self.num_of_entries: int = num_of_entries
+        self.align_center: bool = align_center
+        self.longest_genome: int = longest_genome
+        self.calculate_dimensions()
+        self.set_arrow_length()
+
+    def set_gc_height_and_gc_padding(self) -> None:
+        """
+        Sets the height and padding for the GC content track based on configuration settings.
+        This method adjusts the gc_height and gc_padding attributes.
+        """
+        if self.show_gc:
+            self.gc_height: float = self.default_gc_height
+            self.gc_padding: float = self.gc_height + self.vertical_padding
+        else:
+            self.gc_height: float = 0
+            self.gc_padding: float = 0
+
+    def set_cds_height_and_cds_padding(self) -> None:
+        """
+        Sets the height and padding for the coding sequences (CDS) track based on configuration settings.
+        This method adjusts the cds_height and cds_padding attributes.
+        """
+        if self.strandedness:
+            self.cds_height: float = self.default_cds_height
+            self.cds_padding: float = 0.5 * self.cds_height
+        else:
+            self.cds_height: float = 0.5 * self.default_cds_height
+            self.cds_padding: float = 0.75 * self.cds_height
+
+    def set_arrow_length(self) -> None:
+        """
+        Sets the length of the arrow used in the representation based on the longest genome.
+        This method adjusts the arrow_length attribute.
+        """
+        self.arrow_length: float = 0.0012 * self.longest_genome
+
+    def calculate_dimensions(self) -> None:
+        """
+        Calculates the dimensions for the linear canvas including the total width and height, 
+        considering all the elements and padding. This method updates total_width and total_height attributes.
+        """
+        self.set_gc_height_and_gc_padding()
+        self.set_cds_height_and_cds_padding()
+        self.add_margin: float | Literal[0] = 2 * self.cds_height if (
+            self.show_gc and not self.strandedness) else 0
+        self.alignment_width: float = self.fig_width - self.horizontal_offset
+        self.total_width = int(self.fig_width + 2 * self.canvas_padding)
+        self.total_height = int(2 * self.vertical_offset + (self.cds_height + self.gc_padding) + (self.vertical_padding +
+                                self.comparison_height + self.vertical_padding + self.cds_height + self.gc_padding) * (self.num_of_entries - 1))
+    # Create linear canvas
+
+    def create_svg_canvas(self) -> Drawing:
+        """
+        Creates and returns an SVG canvas for the linear representation based on the configurator's settings.
+
+        Returns:
+        Drawing: An SVG Drawing object representing the linear canvas.
+        """
+        return Drawing(
+            filename=self.output_prefix + ".svg",
+            size=(str(self.total_width) + 'px', str(self.total_height) + 'px'),
+            viewBox=('0 0 ' + str(self.total_width) +
+                     ' ' + str(self.total_height))
+        )

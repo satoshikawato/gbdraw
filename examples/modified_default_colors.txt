@@ -1,0 +1,4 @@
+CDS	#993366
+rRNA	#00ff00
+tRNA	#228b22
+repeat_region	#a6acb3

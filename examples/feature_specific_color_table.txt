@@ -1,0 +1,2 @@
+CDS	product	hypothetical protein	#b3b3b3
+CDS	note	possible pseudo*	#dba2bf

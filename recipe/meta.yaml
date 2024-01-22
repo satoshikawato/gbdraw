@@ -1,0 +1,49 @@
+package:
+  name: gbdraw
+  version: 0.1.0
+
+source:
+  path: ../
+
+build:
+  number: 0
+  noarch: python
+
+requirements:
+  host:
+    - python >=3.12
+    - pip
+    - setuptools
+  run:
+    - python >=3.12
+    - pandas
+    - biopython
+    - svgwrite
+    - cairosvg
+
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+test:
+  imports:
+    - gbdraw
+  commands:
+    - gbdraw --help
+    - gbdraw circular --help
+    - gbdraw linear --help
+    - cairosvg --help
+
+about:
+  home: "https://github.com/satoshikawato/gbdraw/"
+  license: "MIT"
+  license_family: "MIT"
+  license_file: "LICENSE.txt"
+  summary: "A genome diagram generator for bacterial, archaeal, and viral genomes"
+  description: "For details, see https://github.com/satoshikawato/gbdraw/"
+  fonts_license: "SIL OFL, Version 1.1"
+
+extra:
+  recipe-maintainers:
+    - satoshikawato

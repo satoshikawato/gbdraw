@@ -1,0 +1,4 @@
+CDS	product	wsv.*-like protein	#47b8f8
+CDS	product	baculoviral IAP repeat-containing protein	yellow
+
+
