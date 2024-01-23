@@ -1,6 +1,6 @@
 # gbdraw
 ![gbdraw](https://github.com/satoshikawato/gbdraw/blob/main/examples/gbdraw_preview.png)
-`gbdraw` is command-line tool designed for creating detailed diagrams of microbial genomes. 
+`gbdraw` is a command-line tool designed for creating detailed diagrams of microbial genomes. 
 `gbdraw` accepts GenBank/EMBL/DDBJ-format annotated genomes as input and outputs a visual representation of the genomes in SVG/PNG/PDF/EPS/PS formats.
 
 **NOTE:** `gbdraw` is currently a work in progress and is actively under development, with the goal of releasing it as a user-friendly conda package in the near future. The current repository is a preview and does not yet host a fully functional release version. Stay tuned for updates and releases!
