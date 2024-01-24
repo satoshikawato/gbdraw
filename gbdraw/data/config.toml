@@ -24,8 +24,10 @@ default_cds_height = 20
 default_gc_height = 20
 
 [objects]
+# Fill colors are defined in `default_colors.txt`.
+
 [objects.text]
-font_family = "'Arial', 'Helvetica', 'Liberation Sans', 'Nimbus Sans L', 'Roboto', sans-serif"
+font_family = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
 [objects.axis]
 
 [objects.axis.circular]
@@ -40,9 +42,9 @@ stroke_width = 2
 stroke = 'none'
 fill = 'black'
 font_size = '10pt'
-font_weight = "normal"
-text_anchor = "middle"
-dominant_baseline = "middle"
+font_weight = 'normal'
+text_anchor = 'middle'
+dominant_baseline = 'middle'
 
 [objects.definition.circular]
 interval = 20
@@ -50,28 +52,26 @@ fontsize = 18
 
 [objects.features]
 features_drawn = ["CDS", "tRNA" ,"rRNA", "repeat_region", "misc_feature", "ncRNA", "regulatory"]
-block_fill_color = "#d3d3d3"
-block_stroke_color = "black"
-block_stroke_width = 0.3
-line_stroke_color = "gray"
+block_stroke_color = 'black'
+block_stroke_width = 0.0
+line_stroke_color = 'gray'
 line_stroke_width = 1.0
 
 
 [objects.length_bar]
-stroke_color = "black"
+stroke_color = 'black'
 stroke_width = 3
 font_size = '10pt'
-font_weight = "normal"
+font_weight = 'normal'
 
 [objects.blast_match]
-fill_color = "#d3d3d3"
 fill_opacity = 0.7
-stroke_color = "none"
+stroke_color = 'none'
 stroke_width = 0
 
 [objects.gc_content]
-fill_color = "#808080"
 stroke_color = 'none'
+stroke_width = 0
 fill_opacity = 1
 [objects.gc_content.circular]
 norm_factor = 0.65
@@ -79,9 +79,8 @@ norm_factor = 0.65
 height = 20
 
 [objects.gc_skew]
-high_fill_color = "#40e0d0"
-low_fill_color = "#8a2be2"
 stroke_color = 'none'
+stroke_width = 0
 fill_opacity = 1
 [objects.gc_skew.circular]
 norm_factor = 0.85
@@ -92,7 +91,14 @@ tick_width = 2.0
 stroke = 'none'
 fill = 'black'
 font_size = '10pt'
-font_weight = "normal"
+font_weight = 'normal'
 
+[objects.legends]
+stroke = 'none'
+fill = 'black'
+font_size = '16pt'
+font_weight = 'normal'
+dominant_baseline = 'central'
+text_anchor = 'start'
 [png_output]
-dpi = 96 # 
+dpi = 96 # fixed value; higher or lower values lead to abberant text sizes in CairoSVG output
