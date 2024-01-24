@@ -6,11 +6,11 @@ import sys
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from .canvas_generator import CircularCanvasConfigurator
-from .circular_object_groups import GcContentGroup, GcSkewGroup, SeqRecordGroup, DefinitionGroup, TickGroup, AxisGroup
-from .object_configurators import GcContentConfigurator, FeatureDrawingConfigurator
-
-
+from .circular_object_groups import LegendGroup, GcContentGroup, GcSkewGroup, SeqRecordGroup, DefinitionGroup, TickGroup, AxisGroup
+from .object_configurators import GcSkewConfigurator, GcContentConfigurator, FeatureDrawingConfigurator
 from .file_processing import save_figure
+from .data_processing import prepare_legend_table
+from .utility_functions import check_feature_presence
 from svgwrite import Drawing
 from svgwrite.container import Group
 # Logging setup
@@ -31,9 +31,11 @@ def center_group_on_canvas(group: Group, canvas_config: CircularCanvasConfigurat
     """
     group.translate(canvas_config.offset_x, canvas_config.offset_y)
     return group
+def place_legend_on_canvas(group: Group, canvas_config: CircularCanvasConfigurator):
+    group.translate(canvas_config.legend_offset_x, canvas_config.legend_offset_y)
+    return group
 
-
-def add_gc_skew_group_on_canvas(canvas: Drawing, gb_record: SeqRecord, gc_df: DataFrame, canvas_config: CircularCanvasConfigurator, config_dict: dict) -> Drawing:
+def add_gc_skew_group_on_canvas(canvas: Drawing, gb_record: SeqRecord, gc_df: DataFrame, canvas_config: CircularCanvasConfigurator, skew_config: GcSkewConfigurator, config_dict: dict) -> Drawing:
     """
     Adds the GC skew group to the canvas.
 
@@ -47,8 +49,7 @@ def add_gc_skew_group_on_canvas(canvas: Drawing, gb_record: SeqRecord, gc_df: Da
     Returns:
     Drawing: The updated SVG drawing with the GC skew group added.
     """
-    gc_skew_group: Group = GcSkewGroup(gb_record, gc_df, canvas_config.radius, canvas_config.track_width,
-                                       config_dict, canvas_config.track_ids['skew_track']).get_group()
+    gc_skew_group: Group = GcSkewGroup(gb_record, gc_df, canvas_config.radius, canvas_config.track_width, skew_config, config_dict, canvas_config.track_ids['skew_track']).get_group()
     gc_skew_group = center_group_on_canvas(gc_skew_group, canvas_config)
     canvas.add(gc_skew_group)
     return canvas
@@ -158,8 +159,13 @@ def add_tick_group_on_canvas(canvas: Drawing, gb_record: SeqRecord, canvas_confi
     canvas.add(tick_group)
     return canvas
 
+def add_legend_group_on_canvas(canvas: Drawing, canvas_config: CircularCanvasConfigurator, legend_config, legend_table):
+    legend_group: Group = LegendGroup(canvas_config, legend_config, legend_table).get_group()    
+    legend_group = place_legend_on_canvas(legend_group, canvas_config)
+    canvas.add(legend_group)
+    return canvas
 
-def add_record_on_circular_canvas(canvas: Drawing, gb_record: SeqRecord, canvas_config: CircularCanvasConfigurator, feature_config: FeatureDrawingConfigurator, gc_config: GcContentConfigurator, gc_df: DataFrame, species: str, strain: str, config_dict: dict) -> Drawing:
+def add_record_on_circular_canvas(canvas: Drawing, gb_record: SeqRecord, canvas_config: CircularCanvasConfigurator, feature_config: FeatureDrawingConfigurator, gc_config: GcContentConfigurator, skew_config: GcSkewConfigurator, gc_df: DataFrame, species: str, strain: str, config_dict: dict, legend_config, legend_table) -> Drawing:
     """
     Adds various record-related groups to a circular canvas.
 
@@ -187,18 +193,19 @@ def add_record_on_circular_canvas(canvas: Drawing, gb_record: SeqRecord, canvas_
     # Add record tick group
     canvas = add_tick_group_on_canvas(
         canvas, gb_record, canvas_config, config_dict)
-
+    canvas = add_legend_group_on_canvas(
+        canvas, canvas_config, legend_config, legend_table)
     # Add GC content group if configured to show
     if canvas_config.show_gc:
         canvas = add_gc_content_group_on_canvas(
             canvas, gb_record, gc_df, canvas_config, gc_config, config_dict)
     if canvas_config.show_skew:
         canvas = add_gc_skew_group_on_canvas(
-            canvas, gb_record, gc_df, canvas_config, config_dict)
+            canvas, gb_record, gc_df, canvas_config, skew_config, config_dict)
     return canvas
 
 
-def plot_circular_diagram(gb_record: SeqRecord, canvas_config: CircularCanvasConfigurator, gc_df: DataFrame, gc_config: GcContentConfigurator, feature_config: FeatureDrawingConfigurator, species: str, strain: str, config_dict: dict, out_formats: list) -> None:
+def plot_circular_diagram(gb_record: SeqRecord, canvas_config: CircularCanvasConfigurator, gc_df: DataFrame, gc_config: GcContentConfigurator, skew_config: GcSkewConfigurator, feature_config: FeatureDrawingConfigurator, species: str, strain: str, config_dict: dict, out_formats: list, legend_config) -> None:
     """
     Plots a circular diagram for a GenBank record.
 
@@ -218,7 +225,8 @@ def plot_circular_diagram(gb_record: SeqRecord, canvas_config: CircularCanvasCon
     """
     # Configure and create canvas
     canvas: Drawing = canvas_config.create_svg_canvas()
-
+    features_present = check_feature_presence(gb_record, feature_config.selected_features_set)
+    legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present)
     canvas = add_record_on_circular_canvas(
-        canvas, gb_record, canvas_config, feature_config, gc_config, gc_df, species, strain, config_dict)
+        canvas, gb_record, canvas_config, feature_config, gc_config, skew_config, gc_df, species, strain, config_dict, legend_config, legend_table)
     save_figure(canvas, out_formats)

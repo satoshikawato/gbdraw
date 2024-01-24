@@ -9,9 +9,12 @@ from svgwrite import Drawing
 from svgwrite.container import Group
 from Bio.SeqRecord import SeqRecord
 from .canvas_generator import LinearCanvasConfigurator
-from .linear_object_groups import SeqRecordGroup, DefinitionGroup, GcContentGroup, PairWiseMatchGroup, LengthBarGroup
+from .linear_object_groups import LegendGroup, SeqRecordGroup, DefinitionGroup, GcContentGroup, PairWiseMatchGroup, LengthBarGroup
 from .file_processing import load_comparisons, save_figure
 from .object_configurators import GcContentConfigurator, FeatureDrawingConfigurator
+from .data_processing import prepare_legend_table
+from .utility_functions import check_feature_presence
+
 # Logging setup
 logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -227,7 +230,7 @@ def add_comparison_on_linear_canvas(canvas: Drawing, comparisons, canvas_config:
     """
     for comparison_count, comparison in enumerate(comparisons, start=1):
         match_group: Group = PairWiseMatchGroup(canvas_config, blast_config.sequence_length_dict,
-                                                comparison, canvas_config.comparison_height, comparison_count, config_dict).get_group()
+                                                comparison, canvas_config.comparison_height, comparison_count, blast_config).get_group()
         offset: float = position_comparison_group(
             comparison_count, canvas_config)
         match_group.translate(canvas_config.horizontal_offset, offset)
@@ -259,6 +262,13 @@ def add_length_bar_on_linear_canvas(canvas: Drawing, canvas_config: LinearCanvas
     canvas.add(length_bar_group)
     return canvas
 
+def add_legends_on_linear_canvas(canvas: Drawing, canvas_config: LinearCanvasConfigurator, legend_config, legend_table):
+    legend_group: Group = LegendGroup(canvas_config, legend_config, legend_table).get_group()
+    offset = canvas_config.legend_offset_y
+    offset_x = canvas_config.legend_offset_x    
+    legend_group = position_record_group(legend_group, offset, offset_x, canvas_config)
+    canvas.add(legend_group)
+    return canvas
 
 def add_records_on_linear_canvas(canvas: Drawing, records: list[SeqRecord], feature_config: FeatureDrawingConfigurator, gc_config: GcContentConfigurator, canvas_config: LinearCanvasConfigurator, config_dict: dict) -> Drawing:
     """
@@ -297,7 +307,7 @@ def add_records_on_linear_canvas(canvas: Drawing, records: list[SeqRecord], feat
     return canvas
 
 
-def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: LinearCanvasConfigurator, blast_config, feature_config: FeatureDrawingConfigurator, gc_config: GcContentConfigurator, config_dict: dict, out_formats) -> None:
+def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: LinearCanvasConfigurator, blast_config, feature_config: FeatureDrawingConfigurator, gc_config: GcContentConfigurator, config_dict: dict, out_formats, legend_config, skew_config) -> None:
     """
     Plots a linear diagram of genomic records with optional BLAST comparison data.
 
@@ -318,9 +328,16 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     canvas: Drawing = canvas_config.create_svg_canvas()
 
     # Add records
+    features_present = check_feature_presence(records, feature_config.selected_features_set)
+    print(records)
+    print(feature_config.selected_features_set)
+    print(features_present)
+    legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present)
+    print(legend_table)
     canvas = add_records_on_linear_canvas(
         canvas, records, feature_config, gc_config, canvas_config, config_dict)
     # Add length bar
+    canvas = add_legends_on_linear_canvas(canvas, canvas_config, legend_config, legend_table)
     canvas = add_length_bar_on_linear_canvas(
         canvas, canvas_config, config_dict)
     # Add BLAST pairwise matches (if specified)

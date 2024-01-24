@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+
 import pandas as pd
+from collections import defaultdict
 from pandas import DataFrame
-from typing import Generator, Any
+from typing import Generator, Any, Dict, List, Optional
 from Bio.SeqRecord import SeqRecord
 
 
@@ -121,3 +123,56 @@ def sliding_window(seq: str, window: int, step: int) -> Generator[tuple[int, str
         else:
             out_seq = seq[start:end]
         yield start, out_seq
+
+def prepare_legend_table(gc_config, skew_config, feature_config, features_present):
+    legend_table = dict()
+    color_table: Optional[DataFrame] = feature_config.color_table
+    default_colors: DataFrame = feature_config.default_colors
+    features_present: List[str] = features_present
+    block_stroke_color: str = feature_config.block_stroke_color
+    block_stroke_width: float = feature_config.block_stroke_width
+    show_gc = gc_config.show_gc
+    gc_stroke_color: str = gc_config.stroke_color
+    gc_stroke_width: float = gc_config.stroke_width
+    gc_high_fill_color: str = gc_config.high_fill_color
+    gc_low_fill_color: str = gc_config.low_fill_color
+    show_skew = skew_config.show_skew
+    skew_high_fill_color: str = skew_config.high_fill_color
+    skew_low_fill_color: str = skew_config.low_fill_color
+    skew_stroke_color: str = skew_config.stroke_color
+    skew_stroke_width: float = skew_config.stroke_width
+    feature_specific_colors = dict()
+    if color_table is not None and not color_table.empty:
+        for _, row in color_table.iterrows():
+            feature_type = row['feature_type']
+            if feature_type not in feature_specific_colors:
+                feature_specific_colors[feature_type] = []
+            feature_specific_colors[feature_type].append((row['caption'], row['color']))
+    for selected_feature in features_present:
+        if selected_feature in feature_specific_colors.keys():
+            for entry in feature_specific_colors[selected_feature]:
+                specific_caption = entry[0]
+                specific_fill_color = entry[1]
+                legend_table[specific_caption] = (block_stroke_color, block_stroke_width, specific_fill_color)
+            if selected_feature == 'CDS':
+                new_selected_key_name = 'other proteins'
+            else:
+                new_selected_key_name = f'other {selected_feature}s'
+            feature_fill_color = default_colors[default_colors['feature_type'] == selected_feature]['color'].values[0]
+            legend_table[new_selected_key_name] = (block_stroke_color, block_stroke_width, feature_fill_color)
+        else:
+            feature_fill_color = default_colors[default_colors['feature_type'] == selected_feature]['color'].values[0]
+            legend_table[selected_feature] = (block_stroke_color, block_stroke_width, feature_fill_color)        
+    if show_gc:
+        if gc_high_fill_color == gc_low_fill_color:
+            legend_table['GC content'] = (gc_stroke_color, gc_stroke_width, gc_high_fill_color)
+        else:
+            legend_table['GC content (+)'] = (gc_stroke_color, gc_stroke_width, gc_high_fill_color)
+            legend_table['GC content (-)'] = (gc_stroke_color, gc_stroke_width, gc_low_fill_color)
+    if show_skew:
+        if skew_high_fill_color == skew_low_fill_color:
+            legend_table['GC skew'] = (skew_stroke_color, skew_stroke_width, skew_high_fill_color)
+        else:
+            legend_table['GC skew (+)'] = (skew_stroke_color, skew_stroke_width, skew_high_fill_color)
+            legend_table['GC dkew (-)'] = (skew_stroke_color, skew_stroke_width, skew_low_fill_color)
+    return legend_table

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-from typing import Tuple
+from typing import Tuple, List
 
 
 class FeatureObject:
@@ -22,7 +22,19 @@ class FeatureObject:
         self.is_directional: bool = is_directional
         self.color: str = color
         self.note: str = note
-
+    def __str__(self) -> str:
+        lines: List[str] = []
+        if self.feature_id:
+            lines.append(f"ID: {self.feature_id}")
+        if self.location:
+            lines.append(f"Location: {self.location}")
+        if self.is_directional is not None:
+            lines.append(f"Is directional: {self.is_directional}")
+        if self.color:
+            lines.append(f"Color: {self.color}")
+        if self.note:
+            lines.append(f"Note: {self.note}")
+        return "\n".join(lines)
 
 class GeneObject(FeatureObject):
     def __init__(self, feature_id: str, location: list[Tuple[str, str, str, int, int, bool]], is_directional: bool, color: str, note: str, product: str, gene_biotype: str) -> None:
@@ -41,9 +53,16 @@ class GeneObject(FeatureObject):
         This class extends FeatureObject with specific properties for genes, such as product and gene_biotype.
         """
         super().__init__(feature_id, location, is_directional, color, note)
-        self.product: str = product
         self.gene_biotype: str = gene_biotype
-
+        self.product: str = product
+    def __str__(self) -> str:
+        base_str = super().__str__()
+        additional_info = []
+        if self.gene_biotype:
+            additional_info.append(f"Gene Biotype: {self.gene_biotype}")
+        if self.product:
+            additional_info.append(f"Product: {self.product}")
+        return base_str + "\n" + "\n".join(additional_info) if additional_info else base_str
 
 class RepeatObject(FeatureObject):
     def __init__(self, feature_id: str, location: list[Tuple[str, str, str, int, int, bool]], is_directional: bool, color: str, note: str, rpt_family: str, rpt_type: str) -> None:
@@ -64,3 +83,11 @@ class RepeatObject(FeatureObject):
         super().__init__(feature_id, location, is_directional, color, note)
         self.rpt_family: str = rpt_family
         self.rpt_type: str = rpt_type
+    def __str__(self) -> str:
+        base_str = super().__str__()
+        additional_info = []
+        if self.rpt_family:
+            additional_info.append(f"Repeat Family: {self.rpt_family}")
+        if self.rpt_type:
+            additional_info.append(f"Repeat Type: {self.rpt_type}")
+        return base_str + "\n" + "\n".join(additional_info) if additional_info else base_str

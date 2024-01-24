@@ -30,7 +30,7 @@ class CircularCanvasConfigurator:
     get_track_ids(): Determines the track IDs for visualization.
     """
 
-    def __init__(self, output_prefix: str, config_dict: dict, show_gc=True, strandedness=True, show_skew=True) -> None:
+    def __init__(self, output_prefix: str, config_dict: dict, legend: str, show_gc=True, strandedness=True, show_skew=True) -> None:
         """
         Initializes the circular canvas configurator with given settings.
 
@@ -42,24 +42,53 @@ class CircularCanvasConfigurator:
         show_skew (bool, optional): Flag to display GC skew. Defaults to True.
         """
         self.output_prefix: str = output_prefix
-        self.total_width: int = config_dict['canvas']['circular']['width']
-        self.total_height: int = config_dict['canvas']['circular']['height']
+        self.default_width: int = config_dict['canvas']['circular']['width']
+        self.default_height: int = config_dict['canvas']['circular']['height']
         self.radius: float = config_dict['canvas']['circular']['radius']
         self.track_ratio: float = config_dict['canvas']['circular']['track_ratio']
         self.show_gc: bool = show_gc
         self.show_skew: bool = show_skew
         self.strandedness: bool = strandedness
+        self.legend_position: str = legend
         self.calculate_dimensions()
+        self.calculate_legend_offsets()
         self.get_track_ids()
-
     def calculate_dimensions(self) -> None:
         """
         Calculates the dimensions and offsets for the circular canvas based on the configuration.
         """
+        self.total_height = self.default_height
+        self.offset_y: float = self.total_height * 0.5
         self.track_width: float = self.radius * self.track_ratio
-        self.offset_x: float = self.total_width / 2
-        self.offset_y: float = self.total_height / 2
+        if self.legend_position == "left":
+            self.total_width = self.default_width * 1.2
+            self.offset_x: float = self.default_width * 0.6
+        elif self.legend_position == "right":
+            self.total_width = self.default_width * 1.2
+            self.offset_x: float = self.default_width * 0.5
+        else:
+            self.total_width = self.default_width
+            self.offset_x: float = self.default_width * 0.5
         # Create linear canvas
+    def calculate_legend_offsets(self) -> None:
+        if self.legend_position == "right":
+            self.legend_offset_x: float = (5/6) * self.total_width
+            self.legend_offset_y: float = 0.4 * self.total_height
+        elif self.legend_position == "left":
+            self.legend_offset_x: float = 0.025 * self.total_width
+            self.legend_offset_y: float = 0.4 * self.total_height
+        elif self.legend_position == "upper_left":
+            self.legend_offset_x: float =  0.025 * self.total_width
+            self.legend_offset_y: float =  0.05 * self.total_height
+        elif self.legend_position == "upper_right":
+            self.legend_offset_x: float =  0.85 * self.total_width
+            self.legend_offset_y: float =  0.05 * self.total_height
+        elif self.legend_position == "lower_left":
+            self.egend_offset_x: float =  0.025 * self.total_width
+            self.legend_offset_y: float =  0.78 * self.total_height
+        elif self.legend_position == "lower_right":
+            self.legend_offset_x: float =  0.875 * self.total_width
+            self.legend_offset_y: float =  0.75 * self.total_height 
 
     def create_svg_canvas(self) -> Drawing:
         """
@@ -118,7 +147,7 @@ class LinearCanvasConfigurator:
     create_svg_canvas(): Creates and returns an SVG canvas for drawing.
     """
 
-    def __init__(self, num_of_entries: int, longest_genome: int, config_dict: dict, output_prefix='out', show_gc=False, strandedness=False, align_center=False):
+    def __init__(self, num_of_entries: int, longest_genome: int, config_dict: dict, legend: str, output_prefix='out', show_gc=False, strandedness=False, align_center=False, show_skew=False):
         """
         Initializes the linear canvas configurator with given settings.
 
@@ -141,11 +170,14 @@ class LinearCanvasConfigurator:
         self.default_cds_height: float = config_dict['canvas']['linear']['default_cds_height']
         self.default_gc_height: float = config_dict['canvas']['linear']['default_gc_height']
         self.show_gc: bool = show_gc
+        self.show_skew: bool = show_skew
+        self.legend_position = legend
         self.strandedness: bool = strandedness
         self.num_of_entries: int = num_of_entries
         self.align_center: bool = align_center
         self.longest_genome: int = longest_genome
         self.calculate_dimensions()
+        self.calculate_legend_offsets()
         self.set_arrow_length()
 
     def set_gc_height_and_gc_padding(self) -> None:
@@ -192,8 +224,18 @@ class LinearCanvasConfigurator:
         self.total_width = int(self.fig_width + 2 * self.canvas_padding)
         self.total_height = int(2 * self.vertical_offset + (self.cds_height + self.gc_padding) + (self.vertical_padding +
                                 self.comparison_height + self.vertical_padding + self.cds_height + self.gc_padding) * (self.num_of_entries - 1))
-    # Create linear canvas
-
+        if self.legend_position is not None:
+            self.total_width = int((self.fig_width * 1.1) + 2 * self.canvas_padding)
+    def calculate_legend_offsets(self) -> None:
+        if self.legend_position == "right":
+            self.legend_offset_x: float = 0.95 * self.fig_width
+            self.legend_offset_y: float = 0.4 * self.total_height
+        elif self.legend_position == "left":
+            self.legend_offset_x: float = self.canvas_padding
+            self.legend_offset_y: float = 0.4 * self.total_height
+        else:
+            self.legend_offset_x: float = 0.025 * self.total_width
+            self.legend_offset_y: float = 0.4 * self.total_height
     def create_svg_canvas(self) -> Drawing:
         """
         Creates and returns an SVG canvas for the linear representation based on the configurator's settings.

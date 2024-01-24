@@ -16,6 +16,7 @@ from .data_processing import skew_df
 from .create_feature_objects import create_feature_dict
 from .utility_functions import create_text_element, normalize_position_linear
 from .object_configurators import GcContentConfigurator, FeatureDrawingConfigurator
+from .circular_path_drawer import generate_text_path
 # Logging setup
 logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -399,7 +400,7 @@ class SeqRecordGroup:
             alignment_width, genome_size_normalization_factor)
         group.add(axis_path)
         for feature_object in feature_dict.values():
-            group = FeatureDrawer(self.config_dict).draw(feature_object, group, record_length, cds_height,
+            group = FeatureDrawer(self.feature_config).draw(feature_object, group, record_length, cds_height,
                                          alignment_width, genome_size_normalization_factor, strandedness, arrow_length)
         return group
 
@@ -452,7 +453,7 @@ class PairWiseMatchGroup:
         config_dict (dict): Configuration dictionary with styling parameters.
     """
 
-    def __init__(self, canvas_config: LinearCanvasConfigurator, sequence_length_dict: dict, comparison_df: DataFrame, comparison_height: float, comparison_count: int, config_dict: dict) -> None:
+    def __init__(self, canvas_config: LinearCanvasConfigurator, sequence_length_dict: dict, comparison_df: DataFrame, comparison_height: float, comparison_count: int, blast_config) -> None:
         """
         Initializes the PairWiseMatchGroup with necessary data and configurations.
 
@@ -468,10 +469,10 @@ class PairWiseMatchGroup:
         self.sequence_length_dict: Dict[str, int] = sequence_length_dict
         self.comparison_df: DataFrame = comparison_df
         self.comparison_height: float = comparison_height
-        self.match_fill_color: str = config_dict['objects']['blast_match']['fill_color']
-        self.match_fill_opacity: float = config_dict['objects']['blast_match']['fill_opacity']
-        self.match_stroke_color: str = config_dict['objects']['blast_match']['stroke_color']
-        self.match_stroke_width: float = config_dict['objects']['blast_match']['stroke_width']
+        self.match_fill_color: str = blast_config.fill_color
+        self.match_fill_opacity: float = blast_config.fill_opacity
+        self.match_stroke_color: str = blast_config.stroke_color
+        self.match_stroke_width: float = blast_config.stroke_width
         self.comparison_count: int = comparison_count
         self.track_id: str = "comparison" + str(self.comparison_count)
         self.match_group = Group(id=self.track_id)
@@ -618,3 +619,49 @@ class PairWiseMatchGroup:
             Group: The SVG group with pairwise match elements.
         """
         return self.match_group
+
+class LegendGroup:
+    def __init__(self, canvas_config, legend_config, legend_table):
+        self.legend_group = Group(id="legend")
+        self.canvas_config = canvas_config
+        self.legend_config = legend_config
+        self.legend_table = legend_table
+        self.add_elements_to_group()
+    def create_rectangle_path_for_legend(self) -> str:
+        # Normalize start and end positions
+        normalized_start: float = 0
+        normalized_end: float = 16
+        # Construct the rectangle path
+        start_y_top: float
+        start_y_bottom: float
+        end_y_top: float
+        end_y_bottom: float
+        start_y_top, start_y_bottom = -8, 8
+        end_y_top, end_y_bottom = -8, 8
+        rectangle_path: str = f"M {normalized_start},{start_y_top} L {normalized_end},{end_y_top} " f"L {normalized_end},{end_y_bottom} L {normalized_start},{start_y_bottom} z"
+        return rectangle_path
+    def add_elements_to_group(self):
+        count = 0
+        path_desc = self.create_rectangle_path_for_legend()
+        font = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+        for key in self.legend_table.keys():
+            rect_path = Path(
+                d=path_desc,
+                fill=self.legend_table[key][2],
+                stroke=self.legend_table[key][0],
+                stroke_width=self.legend_table[key][1])
+            rect_path.translate(0, count * 25)
+            self.legend_group.add(rect_path)
+            legend_path = generate_text_path(key,0, 0, 0, 16, "normal", font, dominant_baseline='central', text_anchor="start")
+            legend_path.translate(23, count * 25)
+            self.legend_group.add(legend_path)
+            count += 1
+        return self.legend_group
+    def get_group(self) -> Group:
+        """
+        Retrieves the SVG group containing the figure legends.
+
+        Returns:
+            Group: The SVG group with figure legends.
+        """
+        return self.legend_group

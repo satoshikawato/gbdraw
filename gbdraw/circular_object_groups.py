@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import math
+from collections import defaultdict
 from typing import Optional, Literal, List, Dict
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -15,8 +16,8 @@ from .utility_functions import parse_mixed_content_text
 from .create_feature_objects import create_feature_dict
 from .feature_objects import FeatureObject
 from .circular_feature_drawer import FeatureDrawer, SkewDrawer, GcContentDrawer, DefinitionDrawer
-from .circular_path_drawer import draw_circle_path, generate_circular_tick_paths, generate_circular_tick_labels
-from .object_configurators import GcContentConfigurator, FeatureDrawingConfigurator
+from .circular_path_drawer import generate_text_path, draw_circle_path, generate_circular_tick_paths, generate_circular_tick_labels
+from .object_configurators import LegendDrawingConfigurator, GcContentConfigurator, GcSkewConfigurator, FeatureDrawingConfigurator
 
 
 class GcContentGroup:
@@ -56,15 +57,14 @@ class GcContentGroup:
         self.gc_df: DataFrame = gc_df
         self.track_width: float = track_width
         self.record_len: int = len(self.gb_record.seq)
-        self.norm_factor: float = config_dict['canvas']['circular']['track_dict'][str(
-            track_id)]
+        self.norm_factor: float = config_dict['canvas']['circular']['track_dict'][str(track_id)]
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
         """
         Adds GC content visualization elements to the group.
         """
-        self.gc_group: Group = GcContentDrawer(self.config_dict).draw(
+        self.gc_group: Group = GcContentDrawer(self.gc_config).draw(
             self.radius, self.gc_group, self.gc_df, self.record_len, self.track_width, self.norm_factor)
 
     def get_group(self) -> Group:
@@ -95,7 +95,7 @@ class GcSkewGroup:
         norm_factor (float): Normalization factor for scaling the GC skew visualization.
     """
 
-    def __init__(self, gb_record: SeqRecord, gc_df: DataFrame, radius: float, track_width: float, config_dict: dict, track_id: str) -> None:
+    def __init__(self, gb_record: SeqRecord, gc_df: DataFrame, radius: float, track_width: float, skew_config: GcSkewConfigurator, config_dict: Dict, track_id: str) -> None:
         """
         Constructs the GcSkewGroup object with necessary parameters and configurations.
 
@@ -111,18 +111,17 @@ class GcSkewGroup:
         self.gc_df: DataFrame = gc_df
         self.radius: float = radius
         self.track_width: float = track_width
-        self.config_dict: dict = config_dict
+        self.skew_config: GcSkewConfigurator = skew_config
         self.record_len: int = len(self.gb_record.seq)
         self.skew_group = Group(id="skew")
-        self.norm_factor: float = config_dict['canvas']['circular']['track_dict'][str(
-            track_id)]
+        self.norm_factor: float = config_dict['canvas']['circular']['track_dict'][str(track_id)]
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
         """
         Adds the visual elements representing the GC skew data to the group.
         """
-        self.skew_group: Group = SkewDrawer(self.config_dict).draw(
+        self.skew_group: Group = SkewDrawer(self.skew_config).draw(
             self.radius, self.skew_group, self.gc_df, self.record_len, self.track_width, self.norm_factor)
 
     def get_group(self) -> Group:
@@ -266,6 +265,54 @@ class DefinitionGroup:
             Group: The SVG group with the definition section elements.
         """
         return self.definition_group
+
+class LegendGroup:
+    def __init__(self, canvas_config, legend_config, legend_table):
+        self.legend_group = Group(id="legend")
+        self.canvas_config = canvas_config
+        self.legend_config = legend_config
+        self.legend_table = legend_table
+        self.add_elements_to_group()
+    def create_rectangle_path_for_legend(self) -> str:
+        # Normalize start and end positions
+        normalized_start: float = 0
+        normalized_end: float = 16
+        # Construct the rectangle path
+        start_y_top: float
+        start_y_bottom: float
+        end_y_top: float
+        end_y_bottom: float
+        start_y_top, start_y_bottom = -8, 8
+        end_y_top, end_y_bottom = -8, 8
+        rectangle_path: str = f"M {normalized_start},{start_y_top} L {normalized_end},{end_y_top} " f"L {normalized_end},{end_y_bottom} L {normalized_start},{start_y_bottom} z"
+        return rectangle_path
+    def add_elements_to_group(self):
+        count = 0
+        path_desc = self.create_rectangle_path_for_legend()
+        font = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+        for key in self.legend_table.keys():
+            rect_path = Path(
+                d=path_desc,
+                fill=self.legend_table[key][2],
+                stroke=self.legend_table[key][0],
+                stroke_width=self.legend_table[key][1])
+            rect_path.translate(0, count * 25)
+            self.legend_group.add(rect_path)
+            legend_path = generate_text_path(key,0, 0, 0, 16, "normal", font, dominant_baseline='central', text_anchor="start")
+            legend_path.translate(23, count * 25)
+            self.legend_group.add(legend_path)
+            count += 1
+        return self.legend_group
+    def get_group(self) -> Group:
+        """
+        Retrieves the SVG group containing the figure legends.
+
+        Returns:
+            Group: The SVG group with figure legends.
+        """
+        return self.legend_group
+
+
 
 
 class TickGroup:
@@ -476,7 +523,7 @@ class SeqRecordGroup:
             Group: The SVG group with the drawn features.
         """
         for feature_object in feature_dict.values():
-            group = FeatureDrawer(self.config_dict).draw(
+            group = FeatureDrawer(self.feature_config).draw(
                 feature_object, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)
         return group
 
@@ -496,8 +543,6 @@ class SeqRecordGroup:
         default_colors: Optional[DataFrame] = self.feature_config.default_colors
         feature_dict: Dict[str, FeatureObject] = create_feature_dict(
             self.gb_record, color_table, selected_features_set, default_colors)
-
-        # type: ignore
         track_id: str = self.gb_record.annotations['accessions'][0]
         record_group = Group(id=track_id)
         record_length: int = len(self.gb_record.seq)

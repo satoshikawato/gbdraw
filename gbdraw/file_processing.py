@@ -244,7 +244,7 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
     feature types based on qualifiers and their values. If the file path is empty or invalid, it returns None.
     """
     column_names: list[str] = ['feature_type',
-                               'qualifier_key', 'value', 'color']
+                               'qualifier_key', 'value', 'color', 'caption']
     # type: ignore # Initialize color_table as None
     color_table: Optional[DataFrame] = None
     if color_table_file == '':

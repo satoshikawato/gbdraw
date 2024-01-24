@@ -8,6 +8,7 @@ from svgwrite.path import Path
 from svgwrite.container import Group
 from typing import Optional
 from .linear_path_drawer import calculate_gc_content_path_desc, create_intron_path_linear, create_arrowhead_path_linear, create_rectangle_path_linear
+from .object_configurators import FeatureDrawingConfigurator
 # Logging setup
 logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -28,15 +29,15 @@ class FeatureDrawer:
         intron_stroke_width (float): Stroke width for intron lines.
     """
 
-    def __init__(self, config_dict: dict) -> None:
+    def __init__(self, feature_config: FeatureDrawingConfigurator) -> None:
         """
         Initializes the FeatureDrawer with default drawing configurations.
         """
-        self.default_feature_color: str = config_dict['objects']['features']['block_fill_color']
-        self.default_stroke_color: str = config_dict['objects']['features']['block_stroke_color']
-        self.default_stroke_width: float = config_dict['objects']['features']['block_stroke_width']
-        self.intron_stroke_color: str = config_dict['objects']['features']['line_stroke_color']
-        self.intron_stroke_width: float = config_dict['objects']['features']['line_stroke_width']
+        self.default_feature_color: str = feature_config.block_fill_color
+        self.default_stroke_color: str = feature_config.block_stroke_color
+        self.default_stroke_width: float = feature_config.block_stroke_width
+        self.intron_stroke_color: str = feature_config.line_stroke_color
+        self.intron_stroke_width: float = feature_config.line_stroke_width
 
     def draw_path(self, path_data: str, group: Group, fill_color: str, stroke_color: Optional[str] = None, stroke_width: Optional[float] = None) -> None:
         """

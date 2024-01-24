@@ -136,19 +136,29 @@ def suppress_gc_content_and_skew(suppress_gc: bool, suppress_skew: bool) -> tupl
         show_skew = False
     return show_gc, show_skew
 
-def modify_config_dict(config_dict, block_stroke_width=None, block_stroke_color=None, line_stroke_color=None, line_stroke_width=None) -> dict:
-    # Update block_stroke_width if specified
-    if block_stroke_width is not None:
-        config_dict['objects']['features']['block_stroke_width'] = block_stroke_width
-    # Update block_stroke_color if specified
-    if block_stroke_color is not None:
-        config_dict['objects']['features']['block_stroke_color'] = block_stroke_color
-    # Update line_stroke_color if specified
-    if line_stroke_color is not None:
-        config_dict['objects']['features']['line_stroke_color'] = line_stroke_color
-    # Update line_stroke_width if specified
-    if line_stroke_width is not None:
-        config_dict['objects']['features']['line_stroke_width'] = line_stroke_width
+def update_config_value(config_dict, path, value):
+    """ Helper function to update nested dictionary """
+    keys = path.split('.')
+    for key in keys[:-1]:
+        config_dict = config_dict.setdefault(key, {})
+    config_dict[keys[-1]] = value
+
+def modify_config_dict(config_dict, block_stroke_width=None, block_stroke_color=None, 
+                       line_stroke_color=None, line_stroke_width=None, 
+                       gc_stroke_color=None) -> dict:
+    # Mapping of parameter names to their paths in the config_dict
+    param_paths = {
+        'block_stroke_width': 'objects.features.block_stroke_width',
+        'block_stroke_color': 'objects.features.block_stroke_color',
+        'line_stroke_color': 'objects.features.line_stroke_color',
+        'line_stroke_width': 'objects.features.line_stroke_width',
+        'gc_stroke_color': 'objects.gc_content.stroke_color',
+    }
+    # Update the config_dict for each specified parameter
+    for param, path in param_paths.items():
+        value = locals()[param]
+        if value is not None:
+            update_config_value(config_dict, path, value)
     return config_dict
 
 def determine_output_file_prefix(gb_records, output_prefix, record_count, accession):
@@ -170,3 +180,21 @@ def determine_output_file_prefix(gb_records, output_prefix, record_count, access
         return output_prefix
     else:
         return accession
+    
+def check_feature_presence(records: Union[List[SeqRecord], SeqRecord], features_list: List[str]) -> dict:
+    # If records is a single SeqRecord, wrap it in a list
+    if isinstance(records, SeqRecord):
+        records = [records]
+
+    features_to_be_checked = set(features_list)  # Use a set for efficient lookup
+    features_present = []  # Initialize all as False
+
+    for record in records:
+        for feature in record.features:
+            if feature.type in features_to_be_checked:
+                features_present.append(feature.type)
+                # Once a feature type is found, no need to check further for the same type
+                features_to_be_checked.remove(feature.type)
+                if not features_to_be_checked:  # Break early if all selected features are found
+                    break
+    return features_present

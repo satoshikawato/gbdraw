@@ -12,7 +12,7 @@ from .file_processing import load_default_colors, load_gbks, read_color_table, l
 from .linear_diagram_components import plot_linear_diagram
 from .utility_functions import create_dict_for_sequence_lengths, modify_config_dict
 from .canvas_generator import LinearCanvasConfigurator
-from .object_configurators import GcContentConfigurator, FeatureDrawingConfigurator, BlastMatchConfigurator
+from .object_configurators import GcSkewConfigurator, LegendDrawingConfigurator, GcContentConfigurator, FeatureDrawingConfigurator, BlastMatchConfigurator
 
 # Setup for the logging system. Configures a stream handler to direct log messages to stdout
 # and sets the logging level to INFO for both the handler and the logger.
@@ -100,6 +100,10 @@ def _get_args(args) -> argparse.Namespace:
         '--show_gc',
         help='plot GC content below genome (default: False). ',
         action='store_true')
+    # parser.add_argument(
+    #     '--show_skew',
+    #     help='plot GC skew below genome (default: False). ',
+    #     action='store_true')
     parser.add_argument(
         '--align_center',
         help='Align genomes to the center (default: False). ',
@@ -151,6 +155,12 @@ def _get_args(args) -> argparse.Namespace:
         help='Comma-separated list of output file formats (default: png)',
         type=str,
         default="png")
+    parser.add_argument(
+        '-l',
+        '--legend',
+        help='Legend position (optional = no caption by default; "left", "right")',
+        type=str,
+        default="right")
     if len(sys.argv) == 1:
         parser.print_help(sys.stderr)
         sys.exit(1)
@@ -193,16 +203,18 @@ def linear_main(cmd_args) -> None:
     step: int = args.step
     align_center: bool = args.align_center
     evalue: float = args.evalue
+    legend: str = args.legend
+    show_skew: bool = False
     bitscore: float = args.bitscore
     identity: float = args.identity
-    selected_features_set: str = args.features
+    selected_features_set: str = args.features.split(',')
     out_formats: list[str] = parse_formats(args.format)
     user_defined_default_colors: str = args.default_colors
     if blast_files:
         load_comparison = True
     else:
         load_comparison = False
-    default_colors: DataFrame | None = load_default_colors(
+    default_colors: Optional[DataFrame] = load_default_colors(
         user_defined_default_colors)
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     config_dict: dict = load_config_toml()
@@ -219,16 +231,18 @@ def linear_main(cmd_args) -> None:
     longest_genome: int = max(sequence_length_dict.values())
     num_of_entries: int = len(sequence_length_dict)
     blast_config = BlastMatchConfigurator(
-        evalue=evalue, bitscore=bitscore, identity=identity, sequence_length_dict=sequence_length_dict)
+        evalue=evalue, bitscore=bitscore, identity=identity, sequence_length_dict=sequence_length_dict, config_dict=config_dict, default_colors_df=default_colors)
     canvas_config = LinearCanvasConfigurator(output_prefix=out_file_prefix, show_gc=show_gc, strandedness=strandedness,
-                                             align_center=align_center, num_of_entries=num_of_entries, longest_genome=longest_genome, config_dict=config_dict)
+                                             align_center=align_center, num_of_entries=num_of_entries, longest_genome=longest_genome, config_dict=config_dict, show_skew=show_skew, legend=legend)
     feature_config = FeatureDrawingConfigurator(
-        color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set)
+        color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict)
     gc_config = GcContentConfigurator(
-        window=window, step=step, dinucleotide=dinucleotide)
-
+        window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors, show_gc=show_gc)
+    skew_config = GcSkewConfigurator(
+        window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors, show_skew=show_skew)
+    legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, show_gc=show_gc, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config, show_skew=show_skew)
     plot_linear_diagram(records, blast_files, canvas_config, blast_config,
-                        feature_config, gc_config, config_dict, out_formats)
+                        feature_config, gc_config, config_dict, out_formats, legend_config, skew_config)
 
 
 if __name__ == "__main__":

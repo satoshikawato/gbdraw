@@ -6,6 +6,7 @@ import sys
 import math
 from typing import Optional, Union, List, Dict
 from pandas import DataFrame
+from .object_configurators import GcSkewConfigurator, FeatureDrawingConfigurator
 from svgwrite.container import Group
 from svgwrite.path import Path
 from svgwrite.text import Text
@@ -30,17 +31,17 @@ class SkewDrawer:
         skew_fill_opacity (float): Fill opacity for the GC skew path.
     """
 
-    def __init__(self, config_dict: dict) -> None:
+    def __init__(self, skew_config: GcSkewConfigurator) -> None:
         """
         Initializes the SkewDrawer with configuration settings.
 
         Args:
             config_dict (dict): Configuration dictionary containing color and opacity settings.
         """
-        self.skew_high_fill_color: str = config_dict['objects']['gc_skew']['high_fill_color']
-        self.skew_low_fill_color: str = config_dict['objects']['gc_skew']['low_fill_color']
-        self.skew_stroke_color: str = config_dict['objects']['gc_skew']['stroke_color']
-        self.skew_fill_opacity: float = config_dict['objects']['gc_skew']['fill_opacity']
+        self.skew_high_fill_color: str = skew_config.high_fill_color
+        self.skew_low_fill_color: str = skew_config.low_fill_color
+        self.skew_stroke_color: str = skew_config.stroke_color
+        self.skew_fill_opacity: float = skew_config.fill_opacity
 
     def draw(self, radius: float, group: Group, gc_df: DataFrame, record_len: int, track_width: float, norm_factor: float) -> Group:
         """
@@ -92,17 +93,19 @@ class GcContentDrawer:
         gc_path_fill_opacity (float): Fill opacity for the GC content path.
     """
 
-    def __init__(self, config_dict: dict) -> None:
+    def __init__(self, gc_config: dict) -> None:
         """
         Initializes the GcContentDrawer with configuration settings.
 
         Args:
             config_dict (dict): Configuration dictionary containing color and opacity settings.
         """
-        self.gc_path_fill_color: str = config_dict['objects']['gc_content']['fill_color']
-        self.gc_path_stroke_color: str = config_dict['objects']['gc_content']['stroke_color']
-        self.gc_path_fill_opacity: float = config_dict['objects']['gc_content']['fill_opacity']
-
+        self.gc_path_high_fill_color: str = gc_config.high_fill_color
+        self.gc_path_low_fill_color: str = gc_config.low_fill_color
+        self.gc_path_fill_color: str = gc_config.fill_color
+        self.gc_path_stroke_color: str = gc_config.stroke_color
+        self.gc_path_stroke_width: float = gc_config.stroke_width
+        self.gc_path_fill_opacity: float = gc_config.fill_opacity
     def draw(self, radius: float, group: Group, gc_df: DataFrame, record_len: int, track_width: float, norm_factor: float) -> Group:
         """
         Draws the GC content path on the provided SVG group.
@@ -142,18 +145,18 @@ class FeatureDrawer:
         intron_stroke_width (float): Stroke width for intron lines.
     """
 
-    def __init__(self, config_dict: dict) -> None:
+    def __init__(self, feature_config: FeatureDrawingConfigurator) -> None:
         """
         Initializes the FeatureDrawer with configuration settings.
 
         Args:
             config_dict (dict): Configuration dictionary containing color and stroke settings.
         """
-        self.default_feature_color: str = config_dict['objects']['features']['block_fill_color']
-        self.default_stroke_color: str = config_dict['objects']['features']['block_stroke_color']
-        self.default_stroke_width: float = config_dict['objects']['features']['block_stroke_width']
-        self.intron_stroke_color: str = config_dict['objects']['features']['line_stroke_color']
-        self.intron_stroke_width: float = config_dict['objects']['features']['line_stroke_width']
+        self.default_feature_color: str = feature_config.block_fill_color
+        self.default_stroke_color: str = feature_config.block_stroke_color
+        self.default_stroke_width: float = feature_config.block_stroke_width
+        self.intron_stroke_color: str = feature_config.line_stroke_color
+        self.intron_stroke_width: float = feature_config.line_stroke_width
 
     def draw_path(self, path_data: str, group: Group, fill_color: str, stroke_color_specified: Optional[str] = None, stroke_width_specified: Optional[float] = None) -> None:
         """

@@ -97,6 +97,7 @@ def generate_circular_gc_content_path_desc(radius: float, record_len: int, gc_df
                      )  # type: ignore
         corrdinate: str = "L{} {}".format(str(x_corrdinate), str(y_corrdinate))
         coodinates_list.append(corrdinate)
+
     gc_desc: str = "{}".format(''.join(coodinates_list))
     gc_desc += "z"
     circle_desc: str = generate_circle_path_desc(radius, norm_factor)
@@ -505,7 +506,7 @@ def generate_name_path(name_parts: list, title_x: float, title_y: float, interva
     return name_path
 
 
-def generate_text_path(text: str, title_x: float, title_y: float, interval: float, fontsize: str, fontweight: str, font: str) -> Text:
+def generate_text_path(text: str, title_x: float, title_y: float, interval: float, fontsize: str, fontweight: str, font: str, dominant_baseline: str = "auto", text_anchor: str = "middle") -> Text:
     """
     Generates an SVG text element for general text on the circular canvas.
 
@@ -529,5 +530,6 @@ def generate_text_path(text: str, title_x: float, title_y: float, interval: floa
                      font_style='normal',
                      font_weight=fontweight,
                      font_family=font,
-                     text_anchor="middle")
+                     dominant_baseline=dominant_baseline,
+                     text_anchor=text_anchor)
     return text_path
