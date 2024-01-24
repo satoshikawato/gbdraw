@@ -72,7 +72,7 @@ class CircularCanvasConfigurator:
         # Create linear canvas
     def calculate_legend_offsets(self) -> None:
         if self.legend_position == "right":
-            self.legend_offset_x: float = (11/12) * self.total_width
+            self.legend_offset_x: float = self.default_width
             self.legend_offset_y: float = 0.4 * self.total_height
         elif self.legend_position == "left":
             self.legend_offset_x: float = 0.025 * self.total_width
