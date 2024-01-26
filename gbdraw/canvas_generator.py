@@ -50,8 +50,8 @@ class CircularCanvasConfigurator:
         self.show_skew: bool = show_skew
         self.strandedness: bool = strandedness
         self.legend_position: str = legend
+        self.dpi: int = config_dict['png_output']['dpi']
         self.calculate_dimensions()
-        self.calculate_legend_offsets()
         self.get_track_ids()
     def calculate_dimensions(self) -> None:
         """
@@ -70,13 +70,16 @@ class CircularCanvasConfigurator:
             self.total_width = self.default_width
             self.offset_x: float = self.default_width * 0.5
         # Create linear canvas
-    def calculate_legend_offsets(self) -> None:
+    def recalculate_canvas_dimensions(self, legend_config):
         if self.legend_position == "right":
-            self.legend_offset_x: float = self.default_width
-            self.legend_offset_y: float = 0.4 * self.total_height
+            self.total_width = self.default_width + (legend_config.legend_width * 1.1)
+            self.legend_offset_x = self.default_width + (legend_config.legend_width * 0.05)
+            self.legend_offset_y = (self.total_height - legend_config.legend_height) / 2
         elif self.legend_position == "left":
-            self.legend_offset_x: float = 0.025 * self.total_width
-            self.legend_offset_y: float = 0.4 * self.total_height
+            self.total_width = self.default_width + (legend_config.legend_width * 1.1)
+            self.legend_offset_x = legend_config.legend_width * 0.05       
+            self.offset_x: float = (self.default_width * 0.5) + (legend_config.legend_width * 1.1)
+            self.legend_offset_y = (self.total_height - legend_config.legend_height) / 2
         elif self.legend_position == "upper_left":
             self.legend_offset_x: float =  0.025 * self.total_width
             self.legend_offset_y: float =  0.05 * self.total_height
@@ -89,7 +92,6 @@ class CircularCanvasConfigurator:
         elif self.legend_position == "lower_right":
             self.legend_offset_x: float =  0.875 * self.total_width
             self.legend_offset_y: float =  0.75 * self.total_height 
-
     def create_svg_canvas(self) -> Drawing:
         """
         Creates and returns an SVG canvas based on the configurator's settings.
@@ -169,6 +171,7 @@ class LinearCanvasConfigurator:
         self.canvas_padding: float = config_dict['canvas']['linear']['canvas_padding']
         self.default_cds_height: float = config_dict['canvas']['linear']['default_cds_height']
         self.default_gc_height: float = config_dict['canvas']['linear']['default_gc_height']
+        self.dpi: int = config_dict['png_output']['dpi']
         self.show_gc: bool = show_gc
         self.show_skew: bool = show_skew
         self.legend_position = legend
@@ -177,7 +180,6 @@ class LinearCanvasConfigurator:
         self.align_center: bool = align_center
         self.longest_genome: int = longest_genome
         self.calculate_dimensions()
-        self.calculate_legend_offsets()
         self.set_arrow_length()
 
     def set_gc_height_and_gc_padding(self) -> None:
@@ -224,18 +226,16 @@ class LinearCanvasConfigurator:
         self.total_width = int(self.fig_width + 2 * self.canvas_padding)
         self.total_height = int(2 * self.vertical_offset + (self.cds_height + self.gc_padding) + (self.vertical_padding +
                                 self.comparison_height + self.vertical_padding + self.cds_height + self.gc_padding) * (self.num_of_entries - 1))
-        if self.legend_position is not None:
-            self.total_width = int((self.fig_width * 1.1) + 2 * self.canvas_padding)
-    def calculate_legend_offsets(self) -> None:
+    def recalculate_canvas_dimensions(self, legend_config):
         if self.legend_position == "right":
-            self.legend_offset_x: float = 0.95 * self.fig_width
-            self.legend_offset_y: float = 0.4 * self.total_height
+            self.total_width = self.total_width + (legend_config.legend_width * 1.1)
+            self.legend_offset_x = self.canvas_padding + self.fig_width + (legend_config.legend_width * 0.05)
+            self.legend_offset_y = (self.total_height - legend_config.legend_height) / 2
         elif self.legend_position == "left":
-            self.legend_offset_x: float = self.canvas_padding
-            self.legend_offset_y: float = 0.4 * self.total_height
-        else:
-            self.legend_offset_x: float = 0.025 * self.total_width
-            self.legend_offset_y: float = 0.4 * self.total_height
+            self.total_width = self.total_width + (legend_config.legend_width * 1.1)
+            self.legend_offset_x = self.canvas_padding + (legend_config.legend_width * 0.05)       
+            self.horizontal_offset: float = self.canvas_padding + (legend_config.legend_width * 1.1)
+            self.legend_offset_y = (self.total_height - legend_config.legend_height) / 2
     def create_svg_canvas(self) -> Drawing:
         """
         Creates and returns an SVG canvas for the linear representation based on the configurator's settings.

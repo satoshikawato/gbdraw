@@ -266,9 +266,6 @@ class GcContentGroup:
         self.start_y: float = start_y
         self.longest_record_len: int = longest_record_len
         self.gc_config: GcContentConfigurator = gc_config
-        self.gc_path_fill_color: str = config_dict['objects']['gc_content']['fill_color']
-        self.gc_path_stroke_color: str = config_dict['objects']['gc_content']['stroke_color']
-        self.gc_path_fill_opacity: float = config_dict['objects']['gc_content']['fill_opacity']
         self.gb_record: SeqRecord = gb_record
         self.window: int = self.gc_config.window
         self.step: int = self.gc_config.step
@@ -307,8 +304,7 @@ class GcContentGroup:
         This method calls the GcContentDrawer to draw the GC content based on the calculated 
         DataFrame and adds the resulting SVG elements to the group.
         """
-        self.gc_group: Group = GcContentDrawer().draw(self.gc_group, self.gc_df, self.record_len, self.alignment_width, self.genome_size_normalization_factor,
-                                                      self.track_height, self.gc_path_fill_color, self.gc_path_stroke_color, self.gc_path_fill_opacity, self.start_x, self.start_y)
+        self.gc_group: Group = GcContentDrawer(self.gc_config).draw(self.gc_group, self.gc_df, self.record_len, self.alignment_width, self.genome_size_normalization_factor, self.track_height, self.start_x, self.start_y)
 
     def get_group(self) -> Group:
         """

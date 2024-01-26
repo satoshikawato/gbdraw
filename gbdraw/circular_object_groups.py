@@ -272,36 +272,55 @@ class LegendGroup:
         self.canvas_config = canvas_config
         self.legend_config = legend_config
         self.legend_table = legend_table
+        self.font_family = self.legend_config.font_family
+        self.font_size = self.legend_config.font_size
+        print("self.legend_config.font_size",self.font_size)
+        self.dpi = self.canvas_config.dpi
+        self.color_rect_size = 16
+        self.num_of_lines = len(self.legend_table.keys())
         self.add_elements_to_group()
+
+
     def create_rectangle_path_for_legend(self) -> str:
         # Normalize start and end positions
         normalized_start: float = 0
-        normalized_end: float = 16
+        normalized_end: float = self.color_rect_size
         # Construct the rectangle path
         start_y_top: float
         start_y_bottom: float
         end_y_top: float
         end_y_bottom: float
-        start_y_top, start_y_bottom = -8, 8
-        end_y_top, end_y_bottom = -8, 8
+        start_y_top, start_y_bottom = -0.5 * self.color_rect_size, 0.5 * self.color_rect_size
+        end_y_top, end_y_bottom = -0.5 * self.color_rect_size, 0.5 * self.color_rect_size
         rectangle_path: str = f"M {normalized_start},{start_y_top} L {normalized_end},{end_y_top} " f"L {normalized_end},{end_y_bottom} L {normalized_start},{start_y_bottom} z"
         return rectangle_path
     def add_elements_to_group(self):
         count = 0
+        path_desc = f"M {0},{-0.5 * self.color_rect_size} L {self.legend_config.legend_width},{-0.5 * self.color_rect_size} " f"L {self.legend_config.legend_width},{self.legend_config.legend_height -0.5 * self.color_rect_size} L {0},{self.legend_config.legend_height -0.5 * self.color_rect_size} z"
+        rect_path = Path(
+                d=path_desc,
+                fill="none",
+                stroke="none",
+                stroke_width=0)
+        self.legend_group.add(rect_path)
         path_desc = self.create_rectangle_path_for_legend()
-        font = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+        font = self.font_family
+        line_margin = (24/14) * self.color_rect_size
+        x_margin = (22/14) * self.color_rect_size
+
         for key in self.legend_table.keys():
             rect_path = Path(
                 d=path_desc,
                 fill=self.legend_table[key][2],
                 stroke=self.legend_table[key][0],
                 stroke_width=self.legend_table[key][1])
-            rect_path.translate(0, count * 25)
+            rect_path.translate(0, count * line_margin)
             self.legend_group.add(rect_path)
-            legend_path = generate_text_path(key,0, 0, 0, 16, "normal", font, dominant_baseline='central', text_anchor="start")
-            legend_path.translate(23, count * 25)
+            legend_path = generate_text_path(key,0, 0, 0, "{}pt".format(self.font_size), "normal", font, dominant_baseline='central', text_anchor="start")
+            legend_path.translate(x_margin, count * line_margin)
             self.legend_group.add(legend_path)
             count += 1
+
         return self.legend_group
     def get_group(self) -> Group:
         """

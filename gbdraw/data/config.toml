@@ -3,13 +3,14 @@
 title = "gbdraw configs"
 
 [canvas]
+dpi = 96 # fixed value; higher or lower values lead to abberant text sizes in CairoSVG output
 [canvas.circular]
 # Basicaly you shouldn't modify these values.
 # If you wish to modify width and height, I strongly recommend changing the radius accordingly (=0.4*weight/height).
 # Raising track_ratio values is strongly discouraged as it will result in track overlaps.
 width = 1000 # pixel
 height = 1000 # pixel
-radius = 400
+radius = 390
 track_ratio = 0.19
 track_dict = {1 = 1.0, 2 = 0.8, 3 = 0.65}
 [canvas.linear]
@@ -96,7 +97,7 @@ font_weight = 'normal'
 [objects.legends]
 stroke = 'none'
 fill = 'black'
-font_size = '16pt'
+font_size = '14pt'
 font_weight = 'normal'
 dominant_baseline = 'central'
 text_anchor = 'start'

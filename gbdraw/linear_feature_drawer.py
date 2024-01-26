@@ -8,7 +8,7 @@ from svgwrite.path import Path
 from svgwrite.container import Group
 from typing import Optional
 from .linear_path_drawer import calculate_gc_content_path_desc, create_intron_path_linear, create_arrowhead_path_linear, create_rectangle_path_linear
-from .object_configurators import FeatureDrawingConfigurator
+from .object_configurators import GcSkewConfigurator, FeatureDrawingConfigurator
 # Logging setup
 logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -167,8 +167,15 @@ class GcContentDrawer:
     This class is a static utility for creating SVG paths that represent GC content along a linear genomic plot.
 
     """
-    @staticmethod
-    def draw(group, gc_df: DataFrame, record_len: int, alignment_width: float, genome_size_normalization_factor: float, track_height: float, gc_path_fill_color, gc_path_stroke_color: str, gc_path_fill_opacity: float, start_x: float, start_y: float) -> Group:
+    def __init__(self, gc_config):
+        self.gc_path_high_fill_color: str = gc_config.high_fill_color
+        self.gc_path_low_fill_color: str = gc_config.low_fill_color
+        self.gc_path_fill_color: str = gc_config.fill_color
+        self.gc_path_stroke_color: str = gc_config.stroke_color
+        self.gc_path_stroke_width: float = gc_config.stroke_width
+        self.gc_path_fill_opacity: float = gc_config.fill_opacity
+
+    def draw(self, group, gc_df: DataFrame, record_len: int, alignment_width: float, genome_size_normalization_factor: float, track_height: float, start_x: float, start_y: float) -> Group:
         """
         Draws the GC content path on the provided SVG group.
 
@@ -192,9 +199,84 @@ class GcContentDrawer:
             start_x, start_y, gc_df, record_len, alignment_width, genome_size_normalization_factor, track_height)
         gc_path = Path(
             d=gc_path_desc,
-            fill=gc_path_fill_color,
-            stroke=gc_path_stroke_color,
-            fill_opacity=gc_path_fill_opacity,
+            fill=self.gc_path_fill_color,
+            stroke=self.gc_path_stroke_color,
+            fill_opacity=self.gc_path_fill_opacity,
             fill_rule="evenodd")
         group.add(gc_path)
+        return group
+
+class SkewDrawer:
+    """
+    This class is responsible for drawing the GC skew on a circular canvas.
+
+    Attributes:
+        skew_high_fill_color (str): Fill color for high GC skew.
+        skew_low_fill_color (str): Fill color for low GC skew.
+        skew_stroke_color (str): Stroke color for the GC skew path.
+        skew_fill_opacity (float): Fill opacity for the GC skew path.
+    """
+
+    def __init__(self, skew_config: GcSkewConfigurator) -> None:
+        """
+        Initializes the SkewDrawer with configuration settings.
+
+        Args:
+            config_dict (dict): Configuration dictionary containing color and opacity settings.
+        """
+        self.skew_high_fill_color: str = skew_config.high_fill_color
+        self.skew_low_fill_color: str = skew_config.low_fill_color
+        self.skew_stroke_color: str = skew_config.stroke_color
+        self.skew_fill_opacity: float = skew_config.fill_opacity
+
+    def draw(self, group, gc_df: DataFrame, record_len: int, alignment_width: float, genome_size_normalization_factor: float, track_height: float, start_x: float, start_y: float) -> Group:
+        """
+        Draws the GC skew path on the provided SVG group.
+
+        Args:
+            radius (float): Radius of the circular canvas.
+            group (Group): SVG group to which the skew path will be added.
+            gc_df (DataFrame): DataFrame containing GC skew data.
+            record_len (int): Length of the genomic record.
+            track_width (float): Width of the track on the canvas.
+            norm_factor (float): Normalization factor for scaling the skew values.
+
+        Returns:
+            Group: The updated SVG group with the GC skew path added.
+        """
+        skew_desc: str = generate_circular_gc_skew_path_desc(
+            radius, gc_df, record_len, track_width, norm_factor)
+        circle_desc: str = generate_circle_path_desc(radius, norm_factor)
+        circle_path: ClipPath = ClipPath(id='clipper_circle')
+        circle_path.add(Path(d=circle_desc, fill="white", stroke='none'))
+        skew_high: Path = Path(
+            d=skew_desc,
+            fill=self.skew_high_fill_color,
+            stroke=self.skew_stroke_color,
+            fill_opacity=self.skew_fill_opacity,
+            fill_rule="evenodd")
+        skew_low: Path = Path(
+            d=skew_desc,
+            fill=self.skew_low_fill_color,
+            stroke=self.skew_stroke_color,
+            fill_opacity=self.skew_fill_opacity,
+            clip_path="url(#clipper_circle)",
+            clip_rule="nonzero",
+            fill_rule="evenodd")
+        group.add(circle_path)
+        group.add(skew_high)
+        group.add(skew_low)
+
+
+    
+        gc_path_desc: str = calculate_gc_content_path_desc(
+            start_x, start_y, gc_df, record_len, alignment_width, genome_size_normalization_factor, track_height)
+        gc_path = Path(
+            d=gc_path_desc,
+            fill=self.gc_path_fill_color,
+            stroke=self.gc_path_stroke_color,
+            fill_opacity=self.gc_path_fill_opacity,
+            fill_rule="evenodd")
+        group.add(gc_path)
+        return group
         return group

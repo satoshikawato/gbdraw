@@ -18,6 +18,7 @@ logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
 
 
+
 def center_group_on_canvas(group: Group, canvas_config: CircularCanvasConfigurator) -> Group:
     """
     Centers a given SVG group on the canvas based on the canvas configuration.
@@ -32,6 +33,7 @@ def center_group_on_canvas(group: Group, canvas_config: CircularCanvasConfigurat
     group.translate(canvas_config.offset_x, canvas_config.offset_y)
     return group
 def place_legend_on_canvas(group: Group, canvas_config: CircularCanvasConfigurator):
+    
     group.translate(canvas_config.legend_offset_x, canvas_config.legend_offset_y)
     return group
 
@@ -160,7 +162,7 @@ def add_tick_group_on_canvas(canvas: Drawing, gb_record: SeqRecord, canvas_confi
     return canvas
 
 def add_legend_group_on_canvas(canvas: Drawing, canvas_config: CircularCanvasConfigurator, legend_config, legend_table):
-    legend_group: Group = LegendGroup(canvas_config, legend_config, legend_table).get_group()    
+    legend_group = LegendGroup(canvas_config, legend_config, legend_table).get_group()    
     legend_group = place_legend_on_canvas(legend_group, canvas_config)
     canvas.add(legend_group)
     return canvas
@@ -183,6 +185,7 @@ def add_record_on_circular_canvas(canvas: Drawing, gb_record: SeqRecord, canvas_
     Returns:
     Drawing: The updated SVG drawing with all record-related groups added.
     """
+    
     canvas = add_axis_group_on_canvas(canvas, canvas_config, config_dict)
     # Add record group
     canvas = add_record_group_on_canvas(
@@ -224,9 +227,12 @@ def plot_circular_diagram(gb_record: SeqRecord, canvas_config: CircularCanvasCon
     None: The function saves the plotted diagram to specified output formats.
     """
     # Configure and create canvas
-    canvas: Drawing = canvas_config.create_svg_canvas()
+    
     features_present = check_feature_presence(gb_record, feature_config.selected_features_set)
     legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present)
+    legend_config = legend_config.recalculate_legend_dimensions(legend_table)
+    canvas_config.recalculate_canvas_dimensions(legend_config)
+    canvas: Drawing = canvas_config.create_svg_canvas()
     canvas = add_record_on_circular_canvas(
         canvas, gb_record, canvas_config, feature_config, gc_config, skew_config, gc_df, species, strain, config_dict, legend_config, legend_table)
     save_figure(canvas, out_formats)

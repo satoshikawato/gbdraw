@@ -9,9 +9,10 @@ from svgwrite import Drawing
 from svgwrite.container import Group
 from Bio.SeqRecord import SeqRecord
 from .canvas_generator import LinearCanvasConfigurator
-from .linear_object_groups import LegendGroup, SeqRecordGroup, DefinitionGroup, GcContentGroup, PairWiseMatchGroup, LengthBarGroup
+from .circular_object_groups import LegendGroup
+from .linear_object_groups import SeqRecordGroup, DefinitionGroup, GcContentGroup, PairWiseMatchGroup, LengthBarGroup
 from .file_processing import load_comparisons, save_figure
-from .object_configurators import GcContentConfigurator, FeatureDrawingConfigurator
+from .object_configurators import LegendDrawingConfigurator, GcContentConfigurator, FeatureDrawingConfigurator
 from .data_processing import prepare_legend_table
 from .utility_functions import check_feature_presence
 
@@ -98,7 +99,7 @@ def position_record_definition_group(record_definition_group: Group, offset: flo
     This function aligns the record's definition with the rest of the record's visualization on the canvas.
     """
     record_definition_group.translate(
-        offset_x + canvas_config.horizontal_offset * 0.5, offset)
+        offset_x + canvas_config.horizontal_offset - 45, offset)
     return record_definition_group
 
 
@@ -264,9 +265,9 @@ def add_length_bar_on_linear_canvas(canvas: Drawing, canvas_config: LinearCanvas
 
 def add_legends_on_linear_canvas(canvas: Drawing, canvas_config: LinearCanvasConfigurator, legend_config, legend_table):
     legend_group: Group = LegendGroup(canvas_config, legend_config, legend_table).get_group()
-    offset = canvas_config.legend_offset_y
-    offset_x = canvas_config.legend_offset_x    
-    legend_group = position_record_group(legend_group, offset, offset_x, canvas_config)
+    offset_x = canvas_config.legend_offset_x
+    offset_y = canvas_config.legend_offset_y
+    legend_group.translate(offset_x, offset_y) 
     canvas.add(legend_group)
     return canvas
 
@@ -325,19 +326,19 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     """
     # Initialize and create canvas
 
-    canvas: Drawing = canvas_config.create_svg_canvas()
 
-    # Add records
+
     features_present = check_feature_presence(records, feature_config.selected_features_set)
-    print(records)
-    print(feature_config.selected_features_set)
-    print(features_present)
     legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present)
-    print(legend_table)
+    legend_config = legend_config.recalculate_legend_dimensions(legend_table)
+    canvas_config.recalculate_canvas_dimensions(legend_config)
+    canvas: Drawing = canvas_config.create_svg_canvas()
+    # Add records
     canvas = add_records_on_linear_canvas(
         canvas, records, feature_config, gc_config, canvas_config, config_dict)
     # Add length bar
     canvas = add_legends_on_linear_canvas(canvas, canvas_config, legend_config, legend_table)
+    print(legend_config)
     canvas = add_length_bar_on_linear_canvas(
         canvas, canvas_config, config_dict)
     # Add BLAST pairwise matches (if specified)

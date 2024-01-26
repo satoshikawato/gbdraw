@@ -2,7 +2,7 @@
 # coding: utf-8
 from typing import Dict, Optional, List
 from pandas import DataFrame
-
+from .find_font_files import get_text_bbox_size_pixels, get_font_dict
 
 class GcContentConfigurator:
     """
@@ -132,7 +132,7 @@ class BlastMatchConfigurator:
         self.stroke_width: float = config_dict['objects']['blast_match']['stroke_width']
 
 class LegendDrawingConfigurator:
-    def __init__(self, color_table, default_colors, selected_features_set, config_dict, gc_config, skew_config, feature_config, show_gc, show_skew):
+    def __init__(self, color_table, default_colors, selected_features_set, config_dict, gc_config, skew_config, feature_config, show_gc, show_skew, legend_table=None):
         self.color_table = color_table
         self.default_colors = default_colors
         self.selected_features_set = selected_features_set
@@ -142,8 +142,29 @@ class LegendDrawingConfigurator:
         self.gc_config = gc_config
         self.skew_config = skew_config
         self.feature_config = feature_config
-        self.font_size: str = config_dict['objects']['legends']['font_size']
+        self.color_rect_size = 16
+        self.font_size: str = int(config_dict['objects']['legends']['font_size'].strip("pt"))
         self.font_weight: str = config_dict['objects']['legends']['font_weight']
         self.font_family: str = config_dict['objects']['text']['font_family']
         self.text_anchor: str = config_dict['objects']['legends']['text_anchor']
         self.dominant_baseline: str = config_dict['objects']['legends']['dominant_baseline']
+        self.dpi: int = config_dict['png_output']['dpi']    
+    def calculate_bbox_dimensions(self, legend_table):
+        fonts = [font.strip("'") for font in self.font_family.split(', ')]
+        primary_font_family = fonts[0]
+        font_file_dict = get_font_dict(fonts, ["Regular"]) 
+        font_path = font_file_dict[primary_font_family]["Regular"]
+        longest_key = max(legend_table.keys(), key=len)
+        print("longest_key",longest_key, self.font_size, self.dpi)
+        bbox_width_px, bbox_height_px = get_text_bbox_size_pixels(font_path, longest_key, self.font_size, self.dpi)
+        print("bbox_width_px", bbox_width_px, "bbox_height_px", bbox_height_px)
+        return bbox_width_px, bbox_height_px
+    def recalculate_legend_dimensions(self, legend_table):
+        line_margin = (24/14) * self.color_rect_size
+        x_margin = (22/14) * self.color_rect_size
+        bbox_width_px, _ = self.calculate_bbox_dimensions(legend_table)
+        self.legend_width = x_margin + bbox_width_px
+        print("x_margin", x_margin)
+        print("legend width", self.legend_width)
+        self.legend_height = (self.color_rect_size + (len(legend_table.keys()) -1) * line_margin)
+        return self
