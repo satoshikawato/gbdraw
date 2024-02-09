@@ -290,6 +290,7 @@ This package was inspired by a variety of existing programs and tools in the bio
 [GenomeMatcher](https://www.ige.tohoku.ac.jp/joho/gmProject/gmhomeJP.html)
 
 [GenomeDiagram](https://biopython-tutorial.readthedocs.io/en/latest/notebooks/17%20-%20Graphics%20including%20GenomeDiagram.html)
+[GenoVi](https://github.com/robotoD/GenoVi)
 
 The core functionality of gbdraw has evolved from [a set of Python scripts](https://github.com/satoshikawato/bio_small_scripts/) written back in 2022. Key among these are:
 
