@@ -7,15 +7,15 @@ from typing import Optional, Literal, List, Dict
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from svgwrite.container import Group
-from svgwrite.shapes import Circle
+from svgwrite.shapes import Circle, Line
 from .canvas_generator import CircularCanvasConfigurator
 from svgwrite.path import Path
 from svgwrite.text import Text
-from .data_processing import calculate_gc_percent
+from .data_processing import calculate_gc_percent, prepare_label_list
 from .utility_functions import parse_mixed_content_text
 from .create_feature_objects import create_feature_dict
 from .feature_objects import FeatureObject
-from .circular_feature_drawer import FeatureDrawer, SkewDrawer, GcContentDrawer, DefinitionDrawer
+from .circular_feature_drawer import LabelDrawer, FeatureDrawer, SkewDrawer, GcContentDrawer, DefinitionDrawer
 from .circular_path_drawer import generate_text_path, draw_circle_path, generate_circular_tick_paths, generate_circular_tick_labels
 from .object_configurators import LegendDrawingConfigurator, GcContentConfigurator, GcSkewConfigurator, FeatureDrawingConfigurator
 
@@ -57,7 +57,7 @@ class GcContentGroup:
         self.gc_df: DataFrame = gc_df
         self.track_width: float = track_width
         self.record_len: int = len(self.gb_record.seq)
-        self.norm_factor: float = config_dict['canvas']['circular']['track_dict'][str(track_id)]
+        self.norm_factor: float = config_dict['canvas']['circular']['track_dict']['in'][str(track_id)]
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
@@ -114,7 +114,7 @@ class GcSkewGroup:
         self.skew_config: GcSkewConfigurator = skew_config
         self.record_len: int = len(self.gb_record.seq)
         self.skew_group = Group(id="skew")
-        self.norm_factor: float = config_dict['canvas']['circular']['track_dict'][str(track_id)]
+        self.norm_factor: float = config_dict['canvas']['circular']['track_dict']['in'][str(track_id)]
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
@@ -274,7 +274,6 @@ class LegendGroup:
         self.legend_table = legend_table
         self.font_family = self.legend_config.font_family
         self.font_size = self.legend_config.font_size
-        print("self.legend_config.font_size",self.font_size)
         self.dpi = self.canvas_config.dpi
         self.color_rect_size = 16
         self.num_of_lines = len(self.legend_table.keys())
@@ -307,7 +306,6 @@ class LegendGroup:
         font = self.font_family
         line_margin = (24/14) * self.color_rect_size
         x_margin = (22/14) * self.color_rect_size
-
         for key in self.legend_table.keys():
             rect_path = Path(
                 d=path_desc,
@@ -541,9 +539,17 @@ class SeqRecordGroup:
         Returns:
             Group: The SVG group with the drawn features.
         """
+        #label_list = prepare_label_list(feature_dict, record_length, self.canvas_config.radius)
         for feature_object in feature_dict.values():
             group = FeatureDrawer(self.feature_config).draw(
                 feature_object, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)
+        #for label in label_list:
+        #    group = LabelDrawer(self.config_dict).draw(label, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)
+        #    if label["is_embedded"] == False:
+        #        line_path = Line(start=(label["middle_x"], label["middle_y"]), end=(label["start_x"], label["start_y"]),
+        #        stroke="gray",
+        #        stroke_width=0.5)
+        #        group.add(line_path)
         return group
 
     def setup_record_group(self) -> Group:

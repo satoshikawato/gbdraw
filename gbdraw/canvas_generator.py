@@ -91,7 +91,7 @@ class CircularCanvasConfigurator:
             self.legend_offset_y: float =  0.78 * self.total_height
         elif self.legend_position == "lower_right":
             self.legend_offset_x: float =  0.875 * self.total_width
-            self.legend_offset_y: float =  0.75 * self.total_height 
+            self.legend_offset_y: float =  0.75 * self.total_height
     def create_svg_canvas(self) -> Drawing:
         """
         Creates and returns an SVG canvas based on the configurator's settings.

@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from ast import Str
 import logging
 import sys
 from pandas import DataFrame
 from svgwrite.path import Path
 from svgwrite.container import Group
 from typing import Optional
-from .linear_path_drawer import calculate_gc_content_path_desc, create_intron_path_linear, create_arrowhead_path_linear, create_rectangle_path_linear
+from .linear_path_drawer import create_label_path_linear, calculate_gc_content_path_desc, create_intron_path_linear, create_arrowhead_path_linear, create_rectangle_path_linear
 from .object_configurators import GcSkewConfigurator, FeatureDrawingConfigurator
 # Logging setup
 logger = logging.getLogger()
@@ -39,7 +40,7 @@ class FeatureDrawer:
         self.intron_stroke_color: str = feature_config.line_stroke_color
         self.intron_stroke_width: float = feature_config.line_stroke_width
 
-    def draw_path(self, path_data: str, group: Group, fill_color: str, stroke_color: Optional[str] = None, stroke_width: Optional[float] = None) -> None:
+    def draw_path(self, path_data: str, group: Group, fill_color, stroke_color, stroke_width) -> None:
         """
         Draws a path on the provided SVG group using the specified style parameters.
 
@@ -58,8 +59,19 @@ class FeatureDrawer:
             stroke=stroke_color,
             stroke_width=stroke_width)
         group.add(path)
+    def draw_label(self, path_data, group: Group) -> None:
+        """
+        Draws a path on the provided SVG group using the specified style parameters.
 
-    def draw(self, feature_object, group: Group, genome_length: int, cds_height: float, alignment_width: float, normalization_factor: float, strandedness: str, arrow_length: float) -> Group:
+        Args:
+            path_data (str): SVG path data string.
+            group (Group): SVG group to which the path will be added.
+            fill_color (str): Fill color for the path.
+            stroke_color (Optional[str]): Stroke color for the path. Uses default if None.
+            stroke_width (Optional[float]): Stroke width for the path. Uses default if None.
+        """
+        group.add(path_data)
+    def draw(self, feature_object, group: Group, genome_length: int, cds_height: float, alignment_width: float, normalization_factor: float, strandedness: str, arrow_length: float, available_tracks) -> Group:
         """
         Draws the provided feature object onto the group based on the specified configuration.
 
@@ -76,18 +88,19 @@ class FeatureDrawer:
         Returns:
             Group: The SVG group with the drawn features.
         """
-        gene_paths = FeaturePathGenerator(genome_length, alignment_width, cds_height, normalization_factor,
-                                          strandedness, arrow_length).generate_linear_gene_path(feature_object)
+        gene_paths, available_tracks = FeaturePathGenerator(genome_length, alignment_width, cds_height, normalization_factor, strandedness, arrow_length).generate_linear_gene_path(feature_object, available_tracks)
         for gene_path in gene_paths:
             path_type: str
             path_data: str
-            path_type, path_data = gene_path
+            path_type, path_data = gene_path[0], gene_path[1]
             if path_type == "block":
-                self.draw_path(path_data, group, feature_object.color)
+                self.draw_path(path_data, group, fill_color=feature_object.color, stroke_color=self.intron_stroke_color, stroke_width=self.intron_stroke_width)
             elif path_type == "line":
                 self.draw_path(path_data, group, fill_color="none",
                                stroke_color=self.intron_stroke_color, stroke_width=self.intron_stroke_width)
-        return group
+            elif path_type == "label":        
+                self.draw_label(path_data, group)
+        return group, available_tracks
 
 
 class FeaturePathGenerator:
@@ -124,8 +137,8 @@ class FeaturePathGenerator:
         self.genome_size_normalization_factor: float = genome_size_normalization_factor
         self.strandedness: str = strandedness
         self.arrow_length: float = arrow_length
-
-    def generate_linear_gene_path(self, gene_object):
+     
+    def generate_linear_gene_path(self, gene_object, available_tracks):
         """
         Generates SVG path data for a given gene object.
 
@@ -135,6 +148,7 @@ class FeaturePathGenerator:
         Returns:
             A list of path data and types for the genomic features in the gene object.
         """
+
         coords = gene_object.location
         coordinates_paths = []
         for coord in coords:
@@ -157,7 +171,9 @@ class FeaturePathGenerator:
             else:
                 continue
             coordinates_paths.append(coord_path)
-        return coordinates_paths
+        label_path, available_tracks = create_label_path_linear(feature_object=gene_object, genome_length=self.genome_length, alignment_width=self.alignment_width, genome_size_normalization_factor=self.genome_size_normalization_factor, cds_height=self.cds_height, strandedness=self.strandedness, coord_dict=coord_dict, available_tracks = available_tracks)
+        coordinates_paths.append(label_path)
+        return coordinates_paths, available_tracks
 
 
 class GcContentDrawer:

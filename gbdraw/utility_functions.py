@@ -3,8 +3,16 @@
 from Bio.SeqRecord import SeqRecord
 from svgwrite.text import Text
 import xml.etree.ElementTree as ET
-from typing import List, Dict, Union
-
+from typing import List, Dict, Union, Literal
+from .find_font_files import get_text_bbox_size_pixels, get_font_dict
+import math
+def calculate_bbox_dimensions(text, font_family, font_size, dpi):
+    fonts = [font.strip("'") for font in font_family.split(', ')]
+    primary_font_family = fonts[0]
+    font_file_dict = get_font_dict(fonts, ["Regular"]) 
+    font_path = font_file_dict[primary_font_family]["Regular"]
+    bbox_width_px, bbox_height_px = get_text_bbox_size_pixels(font_path, text, font_size, dpi)
+    return bbox_width_px, bbox_height_px
 
 def normalize_position_linear(position: float, longest_genome: int, alignment_width: float) -> float:
     """
@@ -198,3 +206,57 @@ def check_feature_presence(records: Union[List[SeqRecord], SeqRecord], features_
                 if not features_to_be_checked:  # Break early if all selected features are found
                     break
     return features_present
+
+def edit_available_tracks(available_tracks, bbox_start, bbox_end):
+    track_found =  False
+    for track in available_tracks.keys():
+        track_end = available_tracks[track][1]
+        available_start = track_end + 10
+        if bbox_start >= available_start:
+            track_factor = list(available_tracks).index(track) + 1
+            available_tracks[track][1] = bbox_end
+            track_found = True
+            return available_tracks, track_factor
+    if track_found ==  False:
+        new_track_id = "track_{}".format((len(available_tracks.keys()) + 1))
+        available_tracks[new_track_id] = [bbox_start, bbox_end]
+        track_factor = len(available_tracks.keys()) + 1 + 1
+    return available_tracks, track_factor
+
+
+def get_label_text(seq_feature):
+    text = ''
+    if hasattr(seq_feature, 'product') and seq_feature.product:
+        text = seq_feature.product
+    elif hasattr(seq_feature, 'gene') and seq_feature.gene:
+        text = seq_feature.gene
+    elif hasattr(seq_feature, 'rpt_family') and seq_feature.rpt_family:
+        text = seq_feature.rpt_family
+    elif hasattr(seq_feature, 'note') and seq_feature.note:
+        text = seq_feature.note
+    return text
+
+def get_coordinates_of_longest_segment(feature_object):
+    coords: list[List[Union[str, int, bool]]] = feature_object.coordinates
+    for coord in coords:
+        exon_strand: str = get_strand(exon_line.strand)  # type: ignore
+    for coord in coords:
+        coord_dict: Dict[str, Union[str, int]] = {
+            'coord_type': str(coord[0]),
+            'coord_strand': coord[2],
+            'coord_start': coord[3],
+            'coord_end': coord[4]}
+        coord_type: str = str(coord_dict['coord_type'])
+        
+
+# Function to convert degrees to radians
+def deg_to_rad(deg):
+    return deg * math.pi / 180.0
+
+# Function to calculate the x and y coordinates from the center
+def calculate_coordinates(center_x, center_y, radius, angle_degrees):
+    angle_radians = deg_to_rad(angle_degrees)
+    x = center_x + radius * math.cos(angle_radians)
+    y = center_y + radius * math.sin(angle_radians)
+    return x, y
+

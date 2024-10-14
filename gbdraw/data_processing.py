@@ -3,12 +3,14 @@
 
 
 import pandas as pd
+import math
 from collections import defaultdict
+from Bio.SeqFeature import SimpleLocation
 from pandas import DataFrame
 from typing import Generator, Any, Dict, List, Optional
 from Bio.SeqRecord import SeqRecord
-
-
+from .create_feature_objects import get_strand
+from .utility_functions import calculate_bbox_dimensions, get_label_text
 def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
     """
     Calculates dinucleotide skew and content in a DNA sequence, returning a DataFrame.
@@ -176,3 +178,273 @@ def prepare_legend_table(gc_config, skew_config, feature_config, features_presen
             legend_table['GC skew (+)'] = (skew_stroke_color, skew_stroke_width, skew_high_fill_color)
             legend_table['GC dkew (-)'] = (skew_stroke_color, skew_stroke_width, skew_low_fill_color)
     return legend_table
+
+
+
+def y_overlap(label1, label2, minimum_margin):
+    # Adjusted to consider absolute values for y coordinates
+    label1_start_y = label1["start_y"]
+    label2_start_y = label2["start_y"]
+    if label1_start_y < label2_start_y:
+        if label1_start_y + 0.5 * label1["height_px"] + minimum_margin > (label2_start_y - 0.5 * label2["height_px"]):
+            return True
+        else:
+            return False
+    else:
+        if (label2_start_y + 0.5 * label2["height_px"] + minimum_margin) > (label1_start_y - 0.5 * label1["height_px"] ):
+            return True
+        else:
+            return False
+
+def x_overlap(label1, label2):
+
+    # Adjusted to directly return the evaluated condition
+    min_x1 = label1["start_x"]
+    max_x1 = label1["start_x"] + label1["width_px"]
+    min_x2 = label2["start_x"]
+    max_x2 = label2["start_x"] + label2["width_px"]
+    if min_x1 < min_x2:
+        if (max_x1 - min_x2) >0:
+            return True
+        else:
+            return False
+    else:
+        if (max_x2 - min_x1) >0:
+            return True
+        else:
+            return False
+        
+
+def calculate_angle_degrees(center_x, center_y, x, y, middle, start_angle, end_angle, total_length):
+    """Calculate the angle in degrees from a point (x, y) relative to a center (center_x, center_y)."""
+    angle_radians = math.atan2(y - center_y, x - center_x)
+    angle_degrees = math.degrees(angle_radians)
+    if x >= 0:
+        angle_degrees = angle_degrees
+    else:
+        if y >= 0:
+            angle_degrees = angle_degrees
+        else:
+            angle_degrees = 360 + angle_degrees
+    
+    #elif (total_length/4) <= middle < (total_length/2):
+    #    angle_degrees = angle_degrees
+    #elif (total_length/2) <= middle < total_length:
+    #    angle_degrees = angle_degrees
+    return angle_degrees
+
+def calculate_coordinates(center_x, center_y, radius, angle_degrees, middle, total_length):
+    """Calculate the x, y coordinates on a circle given a center, radius, and angle."""
+    angle_radians = math.radians(angle_degrees)
+    
+    y = center_y + radius * math.sin(angle_radians)
+    if middle >= total_length/2:
+        x = - abs(center_x - radius * math.cos(angle_radians))
+    else: 
+        x = center_x + radius * math.cos(angle_radians)
+    return x, y
+
+def calculate_angle_for_y(center_y, radius, y):
+    """Calculate the angle in degrees for a given y-coordinate on a circle."""
+    # Ensure the y-coordinate is within the circle's bounds to avoid math domain errors
+    if center_y - radius <= y <= center_y + radius:
+        # Calculate the arcsine of the y-coordinate
+        angle_radians = math.asin((y - center_y) / radius)
+        angle_degrees = math.degrees(angle_radians)
+        return angle_degrees
+    else:
+        return None  # Indicates the y-coordinate is outside the circle's bounds
+
+def place_labels_on_arc(labels, center_x, center_y, radius, start_angle, end_angle, total_length):
+    start_y = center_y + radius * math.sin(math.radians(start_angle))
+    end_y = center_y + radius * math.sin(math.radians(end_angle))
+    total_y_range = end_y - start_y
+    y_increment = total_y_range / (len(labels) - 1)
+
+    for i, label in enumerate(labels):
+        y = start_y + i * y_increment
+        angle_degrees = calculate_angle_for_y(center_y, radius, y)
+        # print(label["middle"], angle_degrees)
+        if angle_degrees is not None:
+            label['start_x'], label['start_y'] = calculate_coordinates(center_x, center_y, radius, angle_degrees, label['middle'], total_length)
+            start_angle = 0
+            end_angle = 0
+            degree = calculate_angle_degrees(center_x, center_y, label['start_x'], label['start_y'], label["middle"], start_angle, end_angle, total_length)
+            # print(label['middle'], label['start_x'], label['start_y'], degree)
+        else:
+            print(f"Y-coordinate {y} is outside the circle's bounds for label {label}.")
+
+    return labels
+
+def get_shifted_label_and_distance(label, current_angle, step, center_x, center_y, arc_radius, total_length):
+    x1 = label["middle_x"]
+    y1 = label["middle_y"]
+    new_label = label
+    new_angle = current_angle + step
+    new_start_x, new_start_y = calculate_coordinates(center_x, center_y, arc_radius, new_angle, label['middle'], total_length)
+    new_label["start_x"] = new_start_x
+    new_label["start_y"] = new_start_y
+    new_distance = math.sqrt((new_start_x - x1) ** 2 + (new_start_y - y1) ** 2)
+    return new_label, new_distance
+
+def iteratively_shift_label(label1, label2, minimum_margin, center_x, center_y, total_length, arc_radius, start_angle, end_angle, step):
+    current_angle = calculate_angle_degrees(center_x, center_y, label1["start_x"], label1["start_y"], label1["middle"], start_angle, end_angle, total_length)
+    current_distance = math.sqrt((label1["start_x"] - label1["middle_x"]) ** 2 + (label1["start_y"] - label1["middle_y"]) ** 2)
+    #print("current angle: {}".format(current_angle))
+    while True:
+        current_distance = math.sqrt((label1["start_x"] - label1["middle_x"]) ** 2 + (label1["start_y"] - label1["middle_y"]) ** 2)
+
+        # print("new angle: {}".format(current_angle))
+        new_angle = current_angle + step
+        if (new_angle >= end_angle) or (new_angle <= start_angle):
+            break
+        new_start_x, new_start_y = calculate_coordinates(center_x, center_y, arc_radius, current_angle, label1['middle'], total_length)
+        new_label1 = label1
+        new_label1["start_x"] = new_start_x
+        new_label1["start_y"] = new_start_y
+        new_distance = math.sqrt((new_start_x - label1["middle_x"]) ** 2 + (new_start_y - label1["middle_y"]) ** 2)
+        if y_overlap(new_label1, label2, minimum_margin):
+            break
+        if new_distance < current_distance:
+            # print("label moved!")
+            label1 = new_label1
+            current_angle = new_angle
+        else:
+            break
+    return label1
+
+def iteratively_refine_labels(labels, center_x, center_y, arc_radius, minimum_margin, start_angle, end_angle, total_length, num_iterations=1):
+    for n in range (num_iterations):
+        for i in range(1, len(labels)-1):
+            #print("iteration {}, label {}".format(n, labels[i]["middle"]))
+            label0 = labels[i-1]
+            label1 = labels[i]
+            label2 = labels[i+1]
+            x1 = label1["middle_x"]
+            y1 = label1["middle_y"]
+            x2 = label1["start_x"]
+            y2 = label1["start_y"]
+            label1_1 = label1
+            label1_2 = label1
+            #print("calculating current_distance...")
+            current_distance = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+            #print("calculating cucalculate_angle_degreesrrent_angle...")
+            current_angle = calculate_angle_degrees(center_x, center_y, x2, y2, label1["middle"], start_angle, end_angle, total_length)
+            
+            candidate_labels = {}
+            candidate_labels["label1"] = [label1, current_distance]
+            label1_1, new_distance_1 = get_shifted_label_and_distance(label1_1, current_angle, 0.01, center_x, center_y, arc_radius, total_length)
+            if not y_overlap(label1_1, label2, minimum_margin):
+                #print("candidate_label label1_1 ...")
+                candidate_labels["label1_1"] = [label1_1, new_distance_1]
+
+            label1_2, new_distance_2 = get_shifted_label_and_distance(label1_2, current_angle, -0.01, center_x, center_y, arc_radius, total_length)
+            if not y_overlap(label1_2, label0, minimum_margin):
+                #print("candidate_label label1_2 ...")
+                candidate_labels["label1_2"] = [label1_2, new_distance_2]
+            label_with_smallest_distance = min(candidate_labels, key=lambda x: candidate_labels[x][1])
+            #print("label_with_smallest_distance is {}".format(label_with_smallest_distance))
+            if label_with_smallest_distance == "label1_1":
+                #print("iteratively_shift_label label1_1...")
+                labels[i] = iteratively_shift_label(label1_1, label2, minimum_margin, center_x, center_y, total_length, arc_radius, start_angle, end_angle, 0.01)
+                #print(labels[i]["middle"], labels[i]["start_x"], labels[i]["start_y"])
+            if label_with_smallest_distance == "label1_2":
+                #print("iteratively_shift_label label1_2...")
+                labels[i] = iteratively_shift_label(label1_2, label0, minimum_margin, center_x, center_y, total_length, arc_radius, start_angle, end_angle, -0.01)        
+                #print(labels[i]["middle"], labels[i]["start_x"], labels[i]["start_y"])
+            else:
+                #print(labels[i]["middle"], labels[i]["start_x"], labels[i]["start_y"])
+                continue
+    return labels                
+
+def shift_label_positions(labels, center_x, center_y, arc_radius, start_angle, end_angle, total_length):
+    minimum_margin = 5
+    start_y = center_y + arc_radius * math.sin(math.radians(start_angle))
+    end_y = center_y + arc_radius * math.sin(math.radians(end_angle))
+    arc_height = abs(end_y - start_y)
+    total_bbox_height = sum(label["height_px"] for label in labels)
+    total_margin = minimum_margin * (len(labels)-1)
+    total_label_height = total_bbox_height + total_margin
+    if arc_height >= total_label_height:
+        labels = iteratively_refine_labels(labels, center_x, center_y, arc_radius, minimum_margin, start_angle, end_angle, total_length, num_iterations=1000)
+    else:
+        print("Labels are placed too tight")
+    return labels
+
+def rearrange_labels(labels, radius, total_length, is_right):
+    arc_radius = radius * 2
+    
+    center_y = 0
+    if is_right == True:
+        center_x = -320
+        start_angle = -50
+        end_angle = 50
+    else:
+        center_x = 320
+        start_angle = 130
+        end_angle = 230        
+    labels = place_labels_on_arc(labels, center_x, center_y, arc_radius, start_angle, end_angle, total_length)
+    labels = shift_label_positions(labels, center_x, center_y, arc_radius, start_angle, end_angle, total_length)
+    return labels
+
+def prepare_label_list(feature_dict, total_length, radius):
+    embedded_labels = []
+    left_labels = []
+    right_labels = []
+    label_list = []
+    for feature_object in feature_dict.values():
+        feature_label_text = get_label_text(feature_object)
+        #feature_label_text = feature_object.label_text
+        if feature_label_text == '':
+            continue
+        else:      
+            label_entry = dict()
+            longest_segment_length = 0
+            is_embedded = False
+            label_middle = 0
+            coordinate_strand: str = "undefined"
+            list_of_coordinates: List[SimpleLocation] = feature_object.coordinates
+            for coordinate in list_of_coordinates:
+                coordinate_start = int(coordinate.start)
+                coordinate_end = int(coordinate.end)
+                coordinate_strand = get_strand(coordinate.strand)
+                interval_length = int(coordinate_end - coordinate_start + 1)
+                interval_middle = int(coordinate_end + coordinate_start) / 2
+                if interval_length > longest_segment_length:
+                    longest_segment_length = interval_length
+                    label_middle = interval_middle
+            longest_segment_lengh_in_pixels = (2*math.pi*radius) * (longest_segment_length)/total_length
+            bbox_width_px, bbox_height_px = calculate_bbox_dimensions(feature_label_text, "Liberation Sans", 8, 96)
+            label_as_feature_length = total_length * bbox_width_px/(2*math.pi*radius)
+            label_start = label_middle - (label_as_feature_length/2)
+            label_end = label_middle + (label_as_feature_length/2)
+            middle_x: float = (1.1 * radius) * math.cos(
+                        math.radians(360.0 * (label_middle / total_length) - 90))
+            middle_y: float = (1.1 * radius) * math.sin(
+                math.radians(360.0 * (label_middle / total_length) - 90))  
+            if bbox_width_px < longest_segment_lengh_in_pixels:
+                is_embedded = True
+            else:
+                is_embedded = False
+            label_entry["label_text"] = feature_label_text
+            label_entry["middle"] = label_middle
+            label_entry["start"] = label_start
+            label_entry["end"] = label_end
+            label_entry["middle_x"] = middle_x
+            label_entry["middle_y"] = middle_y            
+            label_entry["width_px"] = bbox_width_px
+            label_entry["height_px"] = bbox_height_px
+            label_entry["strand"] = coordinate_strand
+            label_entry["is_embedded"] = is_embedded
+            if is_embedded == True:
+                embedded_labels.append(label_entry)
+            else:
+                if label_entry["middle"] > (total_length / 2):
+                    left_labels.append(label_entry)
+                else:
+                    right_labels.append(label_entry)
+            #print(label_entry["label_text"], label_entry["start_x"], label_entry["start_x"]+label_entry["width_px"], label_entry["start_y"], label_entry["start_y"]+label_entry["height_px"])
+    right_labels_rearranged = rearrange_labels(right_labels, radius, total_length, is_right=True)
+    left_labels_rearranged = rearrange_labels(left_labels, radius, total_length, is_right=False)
+    label_list = embedded_labels + right_labels_rearranged + left_labels_rearranged
+    return label_list

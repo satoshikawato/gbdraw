@@ -155,16 +155,12 @@ class LegendDrawingConfigurator:
         font_file_dict = get_font_dict(fonts, ["Regular"]) 
         font_path = font_file_dict[primary_font_family]["Regular"]
         longest_key = max(legend_table.keys(), key=len)
-        print("longest_key",longest_key, self.font_size, self.dpi)
         bbox_width_px, bbox_height_px = get_text_bbox_size_pixels(font_path, longest_key, self.font_size, self.dpi)
-        print("bbox_width_px", bbox_width_px, "bbox_height_px", bbox_height_px)
         return bbox_width_px, bbox_height_px
     def recalculate_legend_dimensions(self, legend_table):
         line_margin = (24/14) * self.color_rect_size
         x_margin = (22/14) * self.color_rect_size
         bbox_width_px, _ = self.calculate_bbox_dimensions(legend_table)
         self.legend_width = x_margin + bbox_width_px
-        print("x_margin", x_margin)
-        print("legend width", self.legend_width)
         self.legend_height = (self.color_rect_size + (len(legend_table.keys()) -1) * line_margin)
         return self

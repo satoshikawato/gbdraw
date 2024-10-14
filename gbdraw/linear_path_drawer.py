@@ -5,9 +5,9 @@ import logging
 import sys
 
 from pandas import DataFrame
-
+from .circular_path_drawer import generate_text_path
 from .create_feature_objects import set_arrow_shoulder
-from .utility_functions import normalize_position_to_linear_track
+from .utility_functions import edit_available_tracks, normalize_position_to_linear_track, calculate_bbox_dimensions
 # Logging setup
 logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -250,6 +250,57 @@ def create_rectangle_path_linear(coord_dict: dict, genome_length: int, alignment
 
     return ["block", feature_path]
 
+def create_label_path_linear(feature_object, genome_length: int, alignment_width: float, genome_size_normalization_factor: float, cds_height: float, strandedness: str, coord_dict: dict, available_tracks: dict) -> list[str]:
+    """
+    Creates a linear SVG path for a rectangular feature.
+
+    Args:
+        coord_dict (dict): Dictionary containing coordinates and other data of the feature.
+        genome_length (int): Total length of the genome.
+        alignment_width (float): Width of the alignment area.
+        genome_size_normalization_factor (float): Normalization factor for the genome size.
+        cds_height (float): Height of the coding sequence tracks.
+        strandedness (str): Strand orientation of the feature.
+
+    Returns:
+        list[str]: A list containing the type of the path and the path data.
+    """
+    feature_object
+    feat_start: float
+    feat_end: float
+    feat_start, feat_end = coord_dict['feat_start'], coord_dict['feat_end']
+    factors: list[float] = calculate_feature_position_factors_linear(
+        coord_dict["feat_strand"], strandedness)
+
+    # Normalize start and end positions
+    normalized_start: float = normalize_position_to_linear_track(
+        feat_start, genome_length, alignment_width, genome_size_normalization_factor)
+    normalized_end: float = normalize_position_to_linear_track(
+        feat_end, genome_length, alignment_width, genome_size_normalization_factor)
+    normalized_middle = (normalized_start + normalized_end)/2
+    start_y_top: float
+    start_y_top = cds_height * \
+        factors[1], cds_height * factors[2]
+    if feature_object.gene:
+        text = feature_object.gene
+    elif feature_object.product:
+        text = feature_object.product
+    else:
+        text = ''
+    if text == '':
+        return ''
+    else:       
+        bbox_width_px, _ = calculate_bbox_dimensions(text, "Liberation Sans", 6, 96)
+    if bbox_width_px >= abs(normalized_end - normalized_start):
+        bbox_start = normalized_middle - (bbox_width_px/2)
+        bbox_end = normalized_middle + (bbox_width_px/2)
+        available_tracks, track_factor = edit_available_tracks(available_tracks, bbox_start, bbox_end)
+        start_y_top = cds_height * ( -1 * track_factor)
+    else:
+        start_y_top = cds_height * \
+            factors[1]     
+    label_path = generate_text_path(text, normalized_middle, start_y_top, interval = 0, fontsize = 6, fontweight = 'normal', font = "Liberation Sans", dominant_baseline = "central", text_anchor = "middle")
+    return ["label", label_path], available_tracks
 
 def calculate_corrdinate(index: int, value: float, mean: float, max_diff: float, record_len: int, alignment_width: float, genome_size_normalization_factor: float, track_height: float) -> str:
     """

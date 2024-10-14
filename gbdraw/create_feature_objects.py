@@ -8,6 +8,7 @@ from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 from typing import List, Dict, Tuple
 from .feature_objects import GeneObject, RepeatObject, FeatureObject
+from .utility_functions import get_label_text
 # Logging setup
 logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -75,8 +76,9 @@ def create_repeat_object(repeat_id: str, feature: SeqFeature, color_table: DataF
     location: list[Tuple[str, str, str, int, int, bool]
                    ] = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors)
+    label_text = get_label_text(feature)
     repeat_object = RepeatObject(
-        repeat_id, location, is_directional, color, note, rpt_family, rpt_type)
+        repeat_id, location, is_directional, color, note, rpt_family, rpt_type, label_text, coordinates)
     return repeat_object
 
 
@@ -103,8 +105,9 @@ def create_feature_object(feature_id: str, feature: SeqFeature, color_table: Dat
     location: list[Tuple[str, str, str, int, int, bool]
                    ] = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors)
+    label_text = get_label_text(feature)
     feature_object = FeatureObject(
-        feature_id, location, is_directional, color, note)
+        feature_id, location, is_directional, color, note, label_text, coordinates)
     return feature_object
 
 
@@ -129,11 +132,13 @@ def create_gene_object(feature_id: str, feature: SeqFeature, color_table: DataFr
     coordinates: List[SimpleLocation] = feature.location.parts
     note: str = feature.qualifiers.get('note', [""])
     product: str = feature.qualifiers.get('product', [""])[0]
+    gene: str = feature.qualifiers.get('gene', [""])[0]
     location: list[Tuple[str, str, str, int, int, bool]
                    ] = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors)
+    label_text = get_label_text(feature)
     gene_object = GeneObject(
-        feature_id, location, is_directional, color, note, product, feature.type)
+        feature_id, location, is_directional, color, note, product, feature.type, gene, label_text, coordinates)
     return gene_object
 
 
@@ -163,7 +168,7 @@ def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_f
             continue
         else:
             if (feature.type == 'CDS') or (
-                    feature.type == 'rRNA') or (feature.type == 'tRNA'):
+                    feature.type == 'rRNA') or (feature.type == 'tRNA') or (feature.type == 'tmRNA') or  (feature.type == 'ncRNA') or (feature.type == 'misc_RNA'):
                 locus_count: int = locus_count + 1
                 locus_id: str = "gene_" + str(locus_count).zfill(9)
                 gene_object: GeneObject = create_gene_object(
@@ -175,7 +180,7 @@ def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_f
                 repeat_object: RepeatObject = create_repeat_object(
                     repeat_id, feature, color_table, default_colors, genome_length)
                 feature_dict[repeat_id] = repeat_object
-            elif feature.type == 'misc_feature':
+            else:
                 feature_count: int = feature_count + 1
                 feature_id: str = "feature_" + str(feature_count).zfill(9)
                 feature_object: FeatureObject = create_feature_object(

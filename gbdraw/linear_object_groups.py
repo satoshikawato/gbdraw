@@ -395,9 +395,14 @@ class SeqRecordGroup:
         axis_path: Line = self.draw_linear_axis(
             alignment_width, genome_size_normalization_factor)
         group.add(axis_path)
+        available_tracks= {"track_1":[0,0],
+                               "track_2":[0,0],
+                               "track_3":[0,0],
+                               "track_4":[0,0],
+                               "track_5":[0,0],}
         for feature_object in feature_dict.values():
-            group = FeatureDrawer(self.feature_config).draw(feature_object, group, record_length, cds_height,
-                                         alignment_width, genome_size_normalization_factor, strandedness, arrow_length)
+            group, available_tracks = FeatureDrawer(self.feature_config).draw(feature_object, group, record_length, cds_height,
+                                         alignment_width, genome_size_normalization_factor, strandedness, arrow_length, available_tracks)
         return group
 
     def setup_record_group(self) -> Group:

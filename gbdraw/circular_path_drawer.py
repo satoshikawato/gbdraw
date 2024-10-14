@@ -8,9 +8,10 @@ from typing import Literal, Tuple, Dict, Union
 from pandas import DataFrame
 from svgwrite.shapes import Circle
 from svgwrite.path import Path
-from svgwrite.text import Text, TSpan
+from svgwrite.text import Text, TSpan, TextPath
 
-from .create_feature_objects import set_arrow_shoulder
+from .create_feature_objects import set_arrow_shoulder, get_exon_and_intron_coordinates
+from .utility_functions import edit_available_tracks, normalize_position_to_linear_track, calculate_bbox_dimensions
 
 # Logging setup
 logger = logging.getLogger()
@@ -152,8 +153,15 @@ def generate_circular_gc_skew_path_desc(radius: float, df: DataFrame, total_len:
     skew_desc += circle_desc
     return skew_desc
 
-
-def calculate_feature_position_factors_circular(strand: str, track_ratio: float) -> list[float]:
+def calculate_cds_ratio(track_ratio, seq_length):
+    if seq_length < 25000:
+        cds_ratio = track_ratio * 0.50
+    elif 25000 <= seq_length < 50000:
+        cds_ratio = track_ratio * 0.35
+    else:
+        cds_ratio = track_ratio * 0.25
+    return cds_ratio
+def calculate_feature_position_factors_circular(total_length, strand: str, track_ratio: float, track_type="tuckin") -> list[float]:
     """
     Calculates position factors for a feature based on its strand orientation on a circular canvas.
 
@@ -165,12 +173,28 @@ def calculate_feature_position_factors_circular(strand: str, track_ratio: float)
         list[float]: A list of factors used to determine the feature's position on the canvas.
     """
     OFFSET: float = 0.005
-    CDS_RATIO: float = track_ratio * 0.25
+    CDS_RATIO = calculate_cds_ratio(track_ratio, total_length)
     BASE: float = 1.0
-    factors_positive: list[float] = [
-        BASE, BASE + CDS_RATIO * 0.5, BASE + CDS_RATIO]
-    factors_negatie: list[float] = [
-        BASE - CDS_RATIO, BASE - CDS_RATIO * 0.5, BASE]
+    if track_type == "default":
+        factors_positive: list[float] = [
+            BASE, BASE + CDS_RATIO * 0.5, BASE + CDS_RATIO]
+        factors_negatie: list[float] = [
+            BASE - CDS_RATIO, BASE - CDS_RATIO * 0.5, BASE]
+    elif track_type == "spreadout":
+        factors_positive: list[float] = [
+            BASE + CDS_RATIO * 1.4, BASE + CDS_RATIO * 1.9, BASE + CDS_RATIO * 2.4]
+        factors_negatie: list[float] = [
+            BASE + CDS_RATIO * 0.4, BASE + CDS_RATIO * 0.9, BASE + CDS_RATIO * 1.4]
+    elif track_type == "tuckin":
+        factors_positive: list[float] = [
+            BASE - CDS_RATIO * 1.7, BASE - CDS_RATIO * 1.2, BASE - CDS_RATIO * 0.7]
+        factors_negatie: list[float] = [
+            BASE - CDS_RATIO * 2.7, BASE - CDS_RATIO * 2.2, BASE - CDS_RATIO * 1.7]
+    else:
+        factors_positive: list[float] = [
+            BASE, BASE + CDS_RATIO * 0.5, BASE + CDS_RATIO]
+        factors_negatie: list[float] = [
+            BASE - CDS_RATIO, BASE - CDS_RATIO * 0.5, BASE]
     if strand == "positive":
         factors: list[float] = [x + OFFSET for x in factors_positive]
     else:
@@ -191,23 +215,23 @@ def generate_circular_intron_path(radius: float, coord_dict: Dict[str, Union[str
     Returns:
         list[str]: SVG path description for the intron feature.
     """
-    feat_strand: str = str(coord_dict['feat_strand'])
-    feat_start: int = int(coord_dict['feat_start'])
-    feat_end: int = int(coord_dict['feat_end'])
+    coord_strand: str = str(coord_dict['coord_strand'])
+    coord_start: int = int(coord_dict['coord_start'])
+    coord_end: int = int(coord_dict['coord_end'])
     # I admit they're magic numbers
     strand_dict: Dict[str, str] = {
         "positive": " 0 0 0 ", "negative": " 0 0 1 "}
-    param: str = strand_dict[feat_strand]
+    param: str = strand_dict[coord_strand]
     factors: list[float] = calculate_feature_position_factors_circular(
-        feat_strand, track_ratio)
+        total_length, coord_strand, track_ratio)
     start_x_1: float = (radius * factors[1]) * math.cos(
-        math.radians(360.0 * ((feat_start) / total_length) - 90))
+        math.radians(360.0 * ((coord_start) / total_length) - 90))
     start_y_1: float = (radius * factors[1]) * math.sin(
-        math.radians(360.0 * ((feat_start) / total_length) - 90))
+        math.radians(360.0 * ((coord_start) / total_length) - 90))
     end_x_1: float = (radius * factors[1]) * \
-        math.cos(math.radians(360.0 * ((feat_end) / total_length) - 90))
+        math.cos(math.radians(360.0 * ((coord_end) / total_length) - 90))
     end_y_1: float = (radius * factors[1]) * \
-        math.sin(math.radians(360.0 * ((feat_end) / total_length) - 90))
+        math.sin(math.radians(360.0 * ((coord_end) / total_length) - 90))
     feature_path: str = "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(
         # +" z"
         radius) + "," + str(radius) + param + str(end_x_1) + "," + str(end_y_1)
@@ -228,29 +252,29 @@ def generate_circular_arrowhead_path(radius: float, coord_dict: Dict[str, Union[
     Returns:
         list[str]: SVG path description for the arrowhead feature.
     """
-    feat_strand: str = str(coord_dict['feat_strand'])
+    coord_strand: str = str(coord_dict['coord_strand'])
     factors: list[float] = calculate_feature_position_factors_circular(
-        feat_strand, track_ratio)
-    feat_start = int(coord_dict["feat_start"])
-    feat_end = int(coord_dict["feat_end"])
-    feat_len: float = abs(
-        int(int(coord_dict["feat_end"]) - int(coord_dict["feat_start"])))
-    feat_strand = str(coord_dict["feat_strand"])
+        total_length, coord_strand, track_ratio)
+    coord_start = int(coord_dict["coord_start"])
+    coord_end = int(coord_dict["coord_end"])
+    coord_len: float = abs(
+        int(int(coord_dict["coord_end"]) - int(coord_dict["coord_start"])))
+    coord_strand = str(coord_dict["coord_strand"])
     arrow_strand_dict: Dict[str, Tuple[int, int, str, str]] = {
         "positive": (
-            feat_start,
-            feat_end,
+            coord_start,
+            coord_end,
             " 0 0 1 ",
             " 0 0 0 "),
         "negative": (
-            feat_end,
-            feat_start,
+            coord_end,
+            coord_start,
             " 0 0 0 ",
             " 0 0 1 ")}
-    arrow_start, arrow_end, param_1, param_2 = arrow_strand_dict[feat_strand]
+    arrow_start, arrow_end, param_1, param_2 = arrow_strand_dict[coord_strand]
     shoulder: float = set_arrow_shoulder(
-        feat_strand, arrow_end, cds_arrow_length)
-    if abs(feat_len) < cds_arrow_length:
+        coord_strand, arrow_end, cds_arrow_length)
+    if abs(coord_len) < cds_arrow_length:
         point_x: float = (
             radius * factors[1]) * math.cos(math.radians(360.0 * (arrow_end / total_length) - 90))
         point_y: float = (
@@ -304,34 +328,34 @@ def generate_circular_rectangle_path(radius: float, coord_dict: Dict[str, Union[
     Returns:
         list[str]: SVG path description for the rectangular feature.
     """
-    feat_strand: str = str(coord_dict['feat_strand'])
+    coord_strand: str = str(coord_dict['coord_strand'])
     factors: list[float] = calculate_feature_position_factors_circular(
-        feat_strand, track_ratio)
-    feat_start: int = int(coord_dict['feat_start'])
-    feat_end: int = int(coord_dict['feat_end'])
+        total_length, coord_strand, track_ratio)
+    coord_start: int = int(coord_dict['coord_start'])
+    coord_end: int = int(coord_dict['coord_end'])
     rect_strand_dict: dict[str, Tuple[str, str]] = {
         "positive": (
             " 0 0 1 ", " 0 0 0 "), "negative": (
             " 0 0 0 ", " 0 0 1 ")}
     param_1: str
     param_2: str
-    param_1, param_2 = rect_strand_dict[feat_strand]
+    param_1, param_2 = rect_strand_dict[coord_strand]
     start_x_1: float = (
-        radius * factors[0]) * math.cos(math.radians(360.0 * (feat_start / total_length) - 90))
+        radius * factors[0]) * math.cos(math.radians(360.0 * (coord_start / total_length) - 90))
     start_y_1: float = (
-        radius * factors[0]) * math.sin(math.radians(360.0 * (feat_start / total_length) - 90))
+        radius * factors[0]) * math.sin(math.radians(360.0 * (coord_start / total_length) - 90))
     start_x_2: float = (
-        radius * factors[2]) * math.cos(math.radians(360.0 * (feat_start / total_length) - 90))
+        radius * factors[2]) * math.cos(math.radians(360.0 * (coord_start / total_length) - 90))
     start_y_2: float = (
-        radius * factors[2]) * math.sin(math.radians(360.0 * (feat_start / total_length) - 90))
+        radius * factors[2]) * math.sin(math.radians(360.0 * (coord_start / total_length) - 90))
     end_x_1: float = (radius * factors[0]) * \
-        math.cos(math.radians(360.0 * ((feat_end) / total_length) - 90))
+        math.cos(math.radians(360.0 * ((coord_end) / total_length) - 90))
     end_y_1: float = (radius * factors[0]) * \
-        math.sin(math.radians(360.0 * ((feat_end) / total_length) - 90))
+        math.sin(math.radians(360.0 * ((coord_end) / total_length) - 90))
     end_x_2: float = (radius * factors[2]) * \
-        math.cos(math.radians(360.0 * ((feat_end) / total_length) - 90))
+        math.cos(math.radians(360.0 * ((coord_end) / total_length) - 90))
     end_y_2: float = (radius * factors[2]) * \
-        math.sin(math.radians(360.0 * ((feat_end) / total_length) - 90))
+        math.sin(math.radians(360.0 * ((coord_end) / total_length) - 90))
     feature_path: str = "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(radius) + "," + str(radius) + param_1 + str(end_x_1) + "," + str(
         end_y_1) + " L" + str(end_x_2) + "," + str(end_y_2) + "A" + str(radius) + "," + str(radius) + param_2 + str(start_x_2) + "," + str(start_y_2) + " z"
     return ["block", feature_path]
@@ -360,7 +384,7 @@ def draw_circle_path(radius: float, stroke_color: str, stroke_width: float) -> C
     return circle_path
 
 
-def generate_circular_tick_paths(radius: float, total_len: int, size: str, ticks: list, tick_width: float) -> list[Path]:
+def generate_circular_tick_paths(radius: float, total_len: int, size: str, ticks: list, tick_width: float, track_type = "tuckin") -> list[Path]:
     """
     Generates SVG path descriptions for tick marks on a circular canvas.
 
@@ -375,8 +399,18 @@ def generate_circular_tick_paths(radius: float, total_len: int, size: str, ticks
         list[Path]: List of SVG path elements for the tick marks.
     """
     tick_paths_list: list[Path] = []
-    ratio: dict[str, list[float]] = {
-        'small': [1.06, 1.08], 'large': [1.06, 1.11]}
+    if track_type == "default":
+        ratio: dict[str, list[float]] = {
+            'small': [1.06, 1.08], 'large': [1.06, 1.11]}
+    elif track_type == "spreadout":
+        ratio: dict[str, list[float]] = {
+            'small': [1.13, 1.15], 'large': [1.13, 1.18]}
+    elif track_type == "tuckin":
+        ratio: dict[str, list[float]] = {
+            'small': [0.985, 1.00], 'large': [0.98, 1.00]}
+    else:
+        ratio: dict[str, list[float]] = {
+            'small': [1.06, 1.08], 'large': [1.06, 1.11]}
     prox: float
     dist: float
     prox, dist = ratio[size]
@@ -400,7 +434,7 @@ def generate_circular_tick_paths(radius: float, total_len: int, size: str, ticks
     return tick_paths_list
 
 
-def generate_circular_tick_labels(radius: float, total_len: int, size: str, ticks: list, stroke: str, fill: str, font_size: str, font_weight: str, font_family: str) -> list[Text]:
+def generate_circular_tick_labels(radius: float, total_len: int, size: str, ticks: list, stroke: str, fill: str, font_size: str, font_weight: str, font_family: str, track_type = "tuckin") -> list[Text]:
     """
     Generates SVG text elements for tick labels on a circular canvas.
 
@@ -419,8 +453,18 @@ def generate_circular_tick_labels(radius: float, total_len: int, size: str, tick
         list[Text]: List of SVG text elements for the tick labels.
     """
     tick_label_paths_list: list[Text] = []
-    ratio: dict[str, list[float]] = {
-        'small': [1.10, 1.11], 'large': [1.12, 1.14]}
+    if track_type == "default":
+        ratio: dict[str, list[float]] = {
+            'small': [1.10, 1.11], 'large': [1.12, 1.14]}
+    elif track_type == "spreadout":
+        ratio: dict[str, list[float]] = {
+            'small': [1.19, 1.21], 'large': [1.19, 1.24]}
+    elif track_type == "tuckin":
+        ratio: dict[str, list[float]] = {
+            'small': [1.04, 1.06], 'large': [1.04, 1.09]}
+    else:
+        ratio: dict[str, list[float]] = {
+            'small': [1.10, 1.11], 'large': [1.12, 1.14]}
     prox: float
     dist: float
     prox, dist = ratio[size]
@@ -474,6 +518,7 @@ def set_tick_label_anchor_value(total_len: int, tick: float) -> tuple[Literal['m
     else:
         raise ValueError("Abnormal angle: verify the ticks and total length")
     return anchor_value, baseline_value
+
 
 
 def generate_name_path(name_parts: list, title_x: float, title_y: float, interval: float, fontsize: str, fontweight: str, font: str) -> Text:
@@ -533,3 +578,87 @@ def generate_text_path(text: str, title_x: float, title_y: float, interval: floa
                      dominant_baseline=dominant_baseline,
                      text_anchor=text_anchor)
     return text_path
+
+def generate_circular_label_path(radius: float, total_length: int, track_ratio: float, feature_object, available_tracks):
+    """
+    Generates the SVG path description for an arrowhead feature on a circular canvas.
+
+    Args:
+        radius (float): Radius of the circular canvas.
+        coord_dict (Dict[str, Union[str, int]]): Dictionary with coordinates and feature information.
+        total_length (int): Total length of the genomic sequence.
+        cds_arrow_length (float): Length of the coding sequence arrow.
+        track_ratio (float): Ratio for determining the track width.
+
+    Returns:
+        list[str]: SVG path description for the arrowhead feature.
+    """
+    coordinates = feature_object.coordinates
+    location: list[Tuple[str, str, str, int, int, bool]
+                   ] = get_exon_and_intron_coordinates(coordinates, total_length)
+    feat_strand: str = str(feature_object.coordinates)
+    strand_dict = {
+        "positive": (
+            " 0 0 1 ", " 0 0 0 "), "negative": (
+            " 0 0 0 ", " 0 0 1 ")}
+    param_1, param_2 = strand_dict[feat_strand]
+    factors: list[float] = calculate_feature_position_factors_circular(
+        total_length, feat_strand, track_ratio)
+    feat_start = int(coord_dict["feat_start"])
+    feat_end = int(coord_dict["feat_end"])
+    feat_middle = (feat_start + feat_end)/2
+    feat_len: float = abs(
+        int(int(coord_dict["feat_end"]) - int(coord_dict["feat_start"])))
+    feat_strand = str(coord_dict["feat_strand"])
+    feature_lengh_in_pixels = (2*math.pi*radius) * (feat_len)/total_length
+    feature_label_text = feature_object.label_text
+    if feature_label_text == '':
+        return [], available_tracks
+    else:       
+        bbox_width_px, _ = calculate_bbox_dimensions(feature_label_text, "Liberation Sans", 8, 96)
+    bbox_as_feature_length = total_length * bbox_width_px/(2*math.pi*radius)
+    bbox_start = feat_middle - (bbox_as_feature_length/2)
+    bbox_end = feat_middle + (bbox_as_feature_length/2)
+    if bbox_width_px <= abs(feature_lengh_in_pixels):
+        if (0.25*total_length) < feat_middle < (0.75 *total_length):
+            end_x: float = (radius * factors[1]) * math.cos(
+                math.radians(360.0 * (bbox_start / total_length) - 90))
+            end_y: float = (radius * factors[1]) * math.sin(
+                math.radians(360.0 * (bbox_start / total_length) - 90))
+            start_x: float = (
+                radius * factors[1]) * math.cos(math.radians(360.0 * ((bbox_end) / total_length) - 90))
+            start_y: float = (
+                radius * factors[1]) * math.sin(math.radians(360.0 * ((bbox_end) / total_length) - 90))  
+        else:
+            start_x: float = (radius * factors[1]) * math.cos(
+                math.radians(360.0 * (bbox_start / total_length) - 90))
+            start_y: float = (radius * factors[1]) * math.sin(
+                math.radians(360.0 * (bbox_start / total_length) - 90))
+            end_x: float = (
+                radius * factors[1]) * math.cos(math.radians(360.0 * ((bbox_end) / total_length) - 90))
+            end_y: float = (
+                radius * factors[1]) * math.sin(math.radians(360.0 * ((bbox_end) / total_length) - 90))
+        label_axis_path_desc: str = "M " + str(start_x) + "," + str(start_y) + "A" + str(radius) + param_1 + "," + str(radius) + param_2 + str(end_x) + "," + str(end_y)
+        label_axis_path = Path(
+                d=label_axis_path_desc,
+                stroke="none",
+                fill="none")
+        text_path = Text("") # The text path must go inside a text object. Parameter used here gets ignored
+        text_path.add(TextPath(label_axis_path, text=feature_label_text, startOffset="50%", method="align", text_anchor="middle", font_size='8pt',font_style='normal',font_weight='normal',font_family='Liberation Sans', dominant_baseline = "central"))
+        path_list = []
+        path_list.append(label_axis_path)
+        path_list.append(text_path)
+    else:
+        anchor_value, baseline_value = set_feature_label_anchor_value(total_length, feat_middle)
+        path_list = []
+        start_x_1: float = (1.1 * radius) * math.cos(
+                    math.radians(360.0 * (feat_middle / total_length) - 90))
+        start_y_1: float = (1.2 * radius) * math.sin(
+            math.radians(360.0 * (feat_middle / total_length) - 90))
+        label_path = generate_text_path(feature_label_text, start_x_1, start_y_1, interval = 0, fontsize = '8pt', fontweight = 'normal', font = "Liberation Sans", dominant_baseline = baseline_value, text_anchor = anchor_value)
+        path_list.append(label_path)
+    return ["label", path_list], available_tracks
+''' 
+'''   
+    
+

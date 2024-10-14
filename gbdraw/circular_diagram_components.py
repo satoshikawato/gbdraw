@@ -10,9 +10,10 @@ from .circular_object_groups import LegendGroup, GcContentGroup, GcSkewGroup, Se
 from .object_configurators import GcSkewConfigurator, GcContentConfigurator, FeatureDrawingConfigurator
 from .file_processing import save_figure
 from .data_processing import prepare_legend_table
-from .utility_functions import check_feature_presence
+from .utility_functions import check_feature_presence, calculate_coordinates
 from svgwrite import Drawing
 from svgwrite.container import Group
+from svgwrite.path import Path
 # Logging setup
 logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -118,8 +119,11 @@ def add_record_group_on_canvas(canvas: Drawing, record: SeqRecord, canvas_config
     # Unpack parameters
     record_group: Group = SeqRecordGroup(
         gb_record=record, canvas_config=canvas_config, feature_config=feature_config, config_dict=config_dict).get_group()
+    # Calculate start and end points for the 60-degree arc
+    
     record_group = center_group_on_canvas(record_group, canvas_config)
     canvas.add(record_group)
+
     return canvas
 
 
@@ -165,6 +169,7 @@ def add_legend_group_on_canvas(canvas: Drawing, canvas_config: CircularCanvasCon
     legend_group = LegendGroup(canvas_config, legend_config, legend_table).get_group()    
     legend_group = place_legend_on_canvas(legend_group, canvas_config)
     canvas.add(legend_group)
+
     return canvas
 
 def add_record_on_circular_canvas(canvas: Drawing, gb_record: SeqRecord, canvas_config: CircularCanvasConfigurator, feature_config: FeatureDrawingConfigurator, gc_config: GcContentConfigurator, skew_config: GcSkewConfigurator, gc_df: DataFrame, species: str, strain: str, config_dict: dict, legend_config, legend_table) -> Drawing:
