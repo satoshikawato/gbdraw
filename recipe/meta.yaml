@@ -17,6 +17,7 @@ requirements:
   run:
     - python >=3.12
     - pandas
+    - fonttools
     - biopython
     - svgwrite
     - cairosvg
