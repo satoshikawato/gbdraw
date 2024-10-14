@@ -1,0 +1,10 @@
+CDS	#F2994A
+rRNA	#56CCF2
+tRNA	#BB6BD9
+repeat_region	#EBEBEB
+misc_feature	#EBEBEB
+default	#EBEBEB
+skew_high	#333333
+skew_low	#828282
+gc_content	#27AE60
+pairwise_match	#F2C94C

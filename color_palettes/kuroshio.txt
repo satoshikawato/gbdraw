@@ -1,0 +1,10 @@
+CDS	#3e84e0
+rRNA	#6f96cb
+tRNA	#2b4c78
+repeat_region	#d3d3d3
+misc_feature	#d3d3d3
+default	#d3d3d3
+skew_high	#8b8b8b
+skew_low	#616161
+gc_content	#2f4dc0
+pairwise_match	#bedde8
