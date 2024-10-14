@@ -16,7 +16,7 @@ setup(
     include_package_data=True,
     python_requires='>=3.12',
     author='Satoshi Kawato',
-    author_email='skawato@niid.go.jp',
+    author_email='kawato@kaiyodai.ac.jp',
     description='A package for visualizing genome data',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
