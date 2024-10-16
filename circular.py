@@ -133,6 +133,10 @@ def _get_args(args) -> argparse.Namespace:
         help='Legend position (default: "right"; "left", "right", "upper_left", "upper_right", "lower_left", "lower_right")',
         type=str,
         default="right")
+    parser.add_argument(
+        '--draw_labels',
+        help='Draw feature labels (default: False).',
+        action='store_true')
     if len(sys.argv) == 1:
         parser.print_help(sys.stderr)
         sys.exit(1)
@@ -171,6 +175,7 @@ def circular_main(cmd_args) -> None:
     legend: str = args.legend
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
+    draw_labels: bool = args.draw_labels
     user_defined_default_colors: str = args.default_colors
     block_stroke_color: str = args.block_stroke_color
     block_stroke_width: str = args.block_stroke_width
