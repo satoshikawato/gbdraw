@@ -173,9 +173,9 @@ class LengthBarGroup:
         """
         self.bar_length: float = self.fig_width * \
             (self.tick / self.longest_genome)
-        self.start_x: float = (0.98 * self.fig_width - self.bar_length + 1)
+        self.start_x: float = (0.96 * self.fig_width - self.bar_length + 1)
         self.start_y: float = 0
-        self.end_x: float = 0.98 * self.fig_width
+        self.end_x: float = 0.96 * self.fig_width
         self.end_y: float = 0
 
     def create_length_bar_path_linear(self) -> Line:

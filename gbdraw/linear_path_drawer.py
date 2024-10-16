@@ -281,16 +281,11 @@ def create_label_path_linear(feature_object, genome_length: int, alignment_width
     start_y_top: float
     start_y_top = cds_height * \
         factors[1], cds_height * factors[2]
-    if feature_object.gene:
-        text = feature_object.gene
-    elif feature_object.product:
-        text = feature_object.product
-    else:
-        text = ''
-    if text == '':
-        return ''
+    feature_label_text = feature_object.label_text
+    if feature_label_text == '':
+        return [], available_tracks
     else:       
-        bbox_width_px, _ = calculate_bbox_dimensions(text, "Liberation Sans", 6, 96)
+        bbox_width_px, _ = calculate_bbox_dimensions(feature_label_text, "Liberation Sans", 6, 96)
     if bbox_width_px >= abs(normalized_end - normalized_start):
         bbox_start = normalized_middle - (bbox_width_px/2)
         bbox_end = normalized_middle + (bbox_width_px/2)
@@ -299,7 +294,7 @@ def create_label_path_linear(feature_object, genome_length: int, alignment_width
     else:
         start_y_top = cds_height * \
             factors[1]     
-    label_path = generate_text_path(text, normalized_middle, start_y_top, interval = 0, fontsize = 6, fontweight = 'normal', font = "Liberation Sans", dominant_baseline = "central", text_anchor = "middle")
+    label_path = generate_text_path(feature_label_text, normalized_middle, start_y_top, interval = 0, fontsize = 6, fontweight = 'normal', font = "Liberation Sans", dominant_baseline = "central", text_anchor = "middle")
     return ["label", label_path], available_tracks
 
 def calculate_corrdinate(index: int, value: float, mean: float, max_diff: float, record_len: int, alignment_width: float, genome_size_normalization_factor: float, track_height: float) -> str:

@@ -171,8 +171,8 @@ class FeaturePathGenerator:
             else:
                 continue
             coordinates_paths.append(coord_path)
-        label_path, available_tracks = create_label_path_linear(feature_object=gene_object, genome_length=self.genome_length, alignment_width=self.alignment_width, genome_size_normalization_factor=self.genome_size_normalization_factor, cds_height=self.cds_height, strandedness=self.strandedness, coord_dict=coord_dict, available_tracks = available_tracks)
-        coordinates_paths.append(label_path)
+        #label_path, available_tracks = create_label_path_linear(feature_object=gene_object, genome_length=self.genome_length, alignment_width=self.alignment_width, genome_size_normalization_factor=self.genome_size_normalization_factor, cds_height=self.cds_height, strandedness=self.strandedness, coord_dict=coord_dict, available_tracks = available_tracks)
+        #coordinates_paths.append(label_path)
         return coordinates_paths, available_tracks
 
 

@@ -355,7 +355,7 @@ def save_figure(canvas: Drawing, list_of_formats: List[str]) -> None:
         logger.info(f"Generated {out_filename}!")
 
 
-def load_config_toml() -> dict:
+def load_config_toml(config_directory: str, config_file: str) -> dict:
     """
     Loads configuration settings from a TOML file.
 
@@ -369,8 +369,8 @@ def load_config_toml() -> dict:
     absolute_config_path = None  # Initialize outside of try for scope in exception block
     try:
         # Generate the path object for the 'config.toml' file
-        config_path: Traversable = resources.files(
-            'gbdraw.data').joinpath('config.toml')
+        config_path: Traversable = resources.files(config_directory
+            ).joinpath(config_file)
         # Convert the path to an absolute path
         absolute_config_path = config_path.resolve()  # type: ignore
         # Display or log the absolute path
