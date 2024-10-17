@@ -258,6 +258,12 @@ MeenMJNV.MejoMJNV.tblastx.out \
 ```
 ![majaniviruses](https://github.com/satoshikawato/gbdraw/blob/main/examples/majani.svg)
 
+### Feature labels (experimental)
+```bash
+ gbdraw circular -i AP027280.gb -f svg,png   --block_stroke_width 1 --block_stroke_color gray --show_labels
+```
+![WSSV](https://github.com/satoshikawato/gbdraw/blob/main/examples/AP027280.svg)
+
 ## Planned features
 - Feature color code legends (will be added in the next update)
 - Dynamic scaling of the text (will be added in the next update)
