@@ -6,5 +6,5 @@ misc_feature	#d3d3d3
 default	#d3d3d3
 skew_high	#40e0d0
 skew_low	#8a2be2
-gc_content	#808080
+gc_content  #808080
 pairwise_match	#d3d3d3

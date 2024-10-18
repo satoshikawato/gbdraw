@@ -70,6 +70,60 @@ font_weight = 'normal'
 label_stroke_width = 0.5
 label_stroke_color = 'gray'
 
+[labels]
+[labels.font_size]
+  short = 18
+  long = 10
+[labels.radius_factor]
+[labels.radius_factor.tuckin]
+  short = 1.05
+  long = 1.05
+[labels.radius_factor.middle]
+  short = 1.1
+  long = 1.125
+[labels.radius_factor.spreadout]
+  short = 1.15
+  long = 1.25
+[labels.arc_x_radius_factor]
+[labels.arc_x_radius_factor.tuckin]
+  short = 1.325
+  long = 1.325
+[labels.arc_x_radius_factor.middle]
+  short = 1.15
+  long = 1.15
+[labels.arc_x_radius_factor.spreadout]
+  short = 1.15
+  long = 1.2
+[labels.arc_y_radius_factor]
+[labels.arc_y_radius_factor.tuckin]
+  short = 1.175
+  long = 1.175
+[labels.arc_y_radius_factor.middle]
+  short = 1.2
+  long = 1.2
+[labels.arc_y_radius_factor.spreadout]
+  short = 1.25
+  long = 1.3
+[labels.arc_center_x]
+[labels.arc_center_x.tuckin]
+  short = -70
+  long = -70
+[labels.arc_center_x.middle]
+  short = 5
+  long = 5
+[labels.arc_center_x.spreadout]
+  short = 30
+  long = 30
+[labels.arc_angle]
+[labels.arc_angle.tuckin]
+  short = 81
+  long = 81
+[labels.arc_angle.middle]
+  short = 85
+  long = 85
+[labels.arc_angle.spreadout]
+  short = 85
+  long = 85
 
 [objects.length_bar]
 stroke_color = 'black'
@@ -115,3 +169,4 @@ dominant_baseline = 'central'
 text_anchor = 'start'
 [png_output]
 dpi = 96 # fixed value; higher or lower values lead to abberant text sizes in CairoSVG output
+

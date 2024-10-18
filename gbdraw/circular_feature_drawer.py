@@ -363,9 +363,7 @@ class LabelDrawer:
             config_dict (dict): Configuration dictionary containing style settings for the definition section.
         """
         self.config_dict = config_dict
-        self.font_size: str = config_dict['objects']['features']['font_size']
-        self.font_family: str = config_dict['objects']['text']['font_family']
-        self.track_type: str = config_dict['canvas']['circular']['track_type']
+
     def set_feature_label_anchor_value(self, total_len: int, tick: float) -> tuple[Literal['middle', 'start', 'end'], Literal['text-after-edge', 'middle', 'hanging']]:
         """
         Determines the anchor and baseline values for tick labels based on their position.
@@ -447,6 +445,13 @@ class LabelDrawer:
             group.add(label_path)
             return group
     def draw(self, label, group, record_length, radius, track_ratio):
+        if record_length <25000:
+            genome_len="short"
+        else:
+            genome_len="long"
+        self.font_size: str = self.config_dict['labels']['font_size'][genome_len]
+        self.font_family: str = self.config_dict['objects']['text']['font_family']
+        self.track_type: str = self.config_dict['canvas']['circular']['track_type']
         if label["is_embedded"] == True:
             group = self.embed_label(group, label, radius, record_length, track_ratio)
         else:

@@ -542,6 +542,7 @@ class SeqRecordGroup:
         self.font_size = self.config_dict['objects']['features']['font_size']
         self.dpi =  self.config_dict['canvas']['dpi']
         self.track_type = self.config_dict['canvas']['circular']['track_type']
+        self.track_ratio = self.canvas_config.track_ratio
         self.record_group: Group = self.setup_record_group()
     def draw_record(self, feature_dict: Dict[str, FeatureObject], record_length: int, group: Group) -> Group:
         """
@@ -562,7 +563,7 @@ class SeqRecordGroup:
 
         
         if self.show_labels == True:
-            label_list = prepare_label_list(feature_dict, record_length, self.canvas_config.radius, self.font_family, self.font_size, self.dpi) 
+            label_list = prepare_label_list(feature_dict, record_length, self.canvas_config.radius, self.track_ratio, self.config_dict) 
         for feature_object in feature_dict.values():
             group = FeatureDrawer(self.feature_config).draw(feature_object, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio, self.track_type)
         if self.show_labels == True:
@@ -573,6 +574,10 @@ class SeqRecordGroup:
                     stroke=self.label_stroke_color,
                     stroke_width=self.label_stroke_width)
                     group.add(line_path)
+                    line_path2 = Line(start=(label["middle_x"], label["middle_y"]), end=(label["feature_middle_x"], label["feature_middle_y"]),
+                    stroke=self.label_stroke_color,
+                    stroke_width=self.label_stroke_width)
+                    group.add(line_path2)                    
         return group
 
     def setup_record_group(self) -> Group:
