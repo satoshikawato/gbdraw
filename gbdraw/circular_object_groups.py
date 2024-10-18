@@ -57,7 +57,12 @@ class GcContentGroup:
         self.gc_df: DataFrame = gc_df
         self.track_width: float = track_width
         self.record_len: int = len(self.gb_record.seq)
-        self.norm_factor: float = config_dict['canvas']['circular']['track_dict']['in'][str(track_id)]
+        if self.record_len < 50000:
+            track_channel = "short"
+        else:
+            track_channel = "long"
+        self.track_type: str = self.config_dict['canvas']['circular']['track_type']
+        self.norm_factor: float = self.config_dict['canvas']['circular']['track_dict'][track_channel][self.track_type][str(track_id)]
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
@@ -114,7 +119,14 @@ class GcSkewGroup:
         self.skew_config: GcSkewConfigurator = skew_config
         self.record_len: int = len(self.gb_record.seq)
         self.skew_group = Group(id="skew")
-        self.norm_factor: float = config_dict['canvas']['circular']['track_dict']['in'][str(track_id)]
+        self.config_dict = config_dict
+        self.track_type: str = self.config_dict['canvas']['circular']['track_type']
+        if self.record_len < 50000:
+            track_channel = "short"
+        else:
+            track_channel = "long"
+        self.track_type: str = self.config_dict['canvas']['circular']['track_type']
+        self.norm_factor: float = self.config_dict['canvas']['circular']['track_dict'][track_channel][self.track_type][str(track_id)]
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
@@ -147,7 +159,7 @@ class DefinitionGroup:
         species (Optional[str]): The species name, if provided; otherwise, it is extracted from the GenBank record.
         strain (Optional[str]): The strain name, if provided; otherwise, it is extracted from the GenBank record.
         interval (int): The interval between lines in the definition section.
-        fontsize (int): The font size for the text in the definition section.
+        font_size (int): The font size for the text in the definition section.
         font (str): The font family for the text in the definition section.
         config_dict (dict): Configuration dictionary for drawing settings.
         track_id (str): Identifier for the track, derived from the GenBank record ID.
@@ -170,10 +182,10 @@ class DefinitionGroup:
         self.canvas_config: CircularCanvasConfigurator = canvas_config
         self.species: str | None = species
         self.strain: str | None = strain
-        self.interval: int = config_dict['objects']['definition']['circular']['interval']
-        self.fontsize: int = config_dict['objects']['definition']['circular']['fontsize']
-        self.font: str = config_dict['objects']['text']['font_family']
         self.config_dict: dict = config_dict
+        self.interval: int = self.config_dict['objects']['definition']['circular']['interval']
+        self.font_size: int = self.config_dict['objects']['definition']['circular']['font_size']
+        self.font: str = self.config_dict['objects']['text']['font_family']
         self.track_id: str = str(self.gb_record.id).replace(" ", "_")
         self.definition_group = Group(id=self.track_id)
         self.radius: float = self.canvas_config.radius
@@ -314,7 +326,7 @@ class LegendGroup:
                 stroke_width=self.legend_table[key][1])
             rect_path.translate(0, count * line_margin)
             self.legend_group.add(rect_path)
-            legend_path = generate_text_path(key,0, 0, 0, "{}pt".format(self.font_size), "normal", font, dominant_baseline='central', text_anchor="start")
+            legend_path = generate_text_path(key,0, 0, 0, self.font_size, "normal", font, dominant_baseline='central', text_anchor="start")
             legend_path.translate(x_margin, count * line_margin)
             self.legend_group.add(legend_path)
             count += 1
@@ -369,12 +381,13 @@ class TickGroup:
         self.tick_group = Group(id="tick")
         self.total_len: int = len(self.gb_record.seq)
         self.config_dict: dict = config_dict
-        self.tick_width: float = config_dict['objects']['ticks']['tick_width']
-        self.stroke: str = config_dict['objects']['ticks']['tick_labels']['stroke']
-        self.fill: str = config_dict['objects']['ticks']['tick_labels']['fill']
-        self.font_size: str = config_dict['objects']['ticks']['tick_labels']['font_size']
-        self.font_weight: str = config_dict['objects']['ticks']['tick_labels']['font_weight']
-        self.font_family: str = config_dict['objects']['text']['font_family']
+        self.tick_width: float = self.config_dict['objects']['ticks']['tick_width']
+        self.stroke: str = self.config_dict['objects']['ticks']['tick_labels']['stroke']
+        self.fill: str = self.config_dict['objects']['ticks']['tick_labels']['fill']
+        self.font_size: str = self.config_dict['objects']['ticks']['tick_labels']['font_size']
+        self.font_weight: str = self.config_dict['objects']['ticks']['tick_labels']['font_weight']
+        self.font_family: str = self.config_dict['objects']['text']['font_family']
+        self.track_type: str = self.config_dict['canvas']['circular']['track_type']
         self.set_tick_size()
         self.add_elements_to_group()
 
@@ -414,7 +427,7 @@ class TickGroup:
             self.radius, self.total_len, size, ticks_large, self.tick_width)
         ticks_large_nonzero: list[int] = [x for x in ticks_large if x != 0]
         tick_label_paths_large: list[Text] = generate_circular_tick_labels(
-            self.radius, self.total_len, size, ticks_large_nonzero, self.stroke, self.fill, self.font_size, self.font_weight, self.font_family)
+            self.radius, self.total_len, size, ticks_large_nonzero, self.stroke, self.fill, self.font_size, self.font_weight, self.font_family, self.track_type)
         for tick_path_large in tick_paths_large:
             self.tick_group.add(tick_path_large)
         for tick_label_path_large in tick_label_paths_large:
@@ -457,8 +470,9 @@ class AxisGroup:
         """
         self.radius: float = radius
         self.axis_group = Group(id="Axis")
-        self.stroke_color: str = config_dict['objects']['axis']['circular']['stroke_color']
-        self.stroke_width: float = config_dict['objects']['axis']['circular']['stroke_width']
+        self.config_dict = config_dict
+        self.stroke_color: str = self.config_dict['objects']['axis']['circular']['stroke_color']
+        self.stroke_width: float = self.config_dict['objects']['axis']['circular']['stroke_width']
         self.add_elements_to_group()
 
     def draw_circular_axis(self) -> None:
@@ -506,7 +520,6 @@ class SeqRecordGroup:
         config_dict (dict): Dictionary containing additional configuration parameters.
         record_group (Group): The SVG group in which the SeqRecord visualization is contained.
     """
-
     def __init__(self, gb_record: SeqRecord, canvas_config: CircularCanvasConfigurator, feature_config: FeatureDrawingConfigurator, config_dict: dict) -> None:
         """
         Initializes the SeqRecordGroup with the necessary data and configurations.
@@ -521,8 +534,15 @@ class SeqRecordGroup:
         self.canvas_config: CircularCanvasConfigurator = canvas_config
         self.feature_config: FeatureDrawingConfigurator = feature_config
         self.config_dict: dict = config_dict
+        self.font_size: str = self.config_dict['objects']['ticks']['tick_labels']['font_size']
+        self.font_family: str = self.config_dict['objects']['text']['font_family']
+        self.show_labels = self.config_dict['canvas']['show_labels']
+        self.label_stroke_width = self.config_dict['objects']['features']['label_stroke_width']
+        self.label_stroke_color = self.config_dict['objects']['features']['label_stroke_color']
+        self.font_size = self.config_dict['objects']['features']['font_size']
+        self.dpi =  self.config_dict['canvas']['dpi']
+        self.track_type = self.config_dict['canvas']['circular']['track_type']
         self.record_group: Group = self.setup_record_group()
-
     def draw_record(self, feature_dict: Dict[str, FeatureObject], record_length: int, group: Group) -> Group:
         """
         Draws each feature from the genomic data onto the provided SVG group.
@@ -539,17 +559,20 @@ class SeqRecordGroup:
         Returns:
             Group: The SVG group with the drawn features.
         """
-        #label_list = prepare_label_list(feature_dict, record_length, self.canvas_config.radius)
+
+        
+        if self.show_labels == True:
+            label_list = prepare_label_list(feature_dict, record_length, self.canvas_config.radius, self.font_family, self.font_size, self.dpi) 
         for feature_object in feature_dict.values():
-            group = FeatureDrawer(self.feature_config).draw(
-                feature_object, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)
-        #for label in label_list:
-        #    group = LabelDrawer(self.config_dict).draw(label, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)
-        #    if label["is_embedded"] == False:
-        #        line_path = Line(start=(label["middle_x"], label["middle_y"]), end=(label["start_x"], label["start_y"]),
-        #        stroke="gray",
-        #        stroke_width=0.5)
-        #        group.add(line_path)
+            group = FeatureDrawer(self.feature_config).draw(feature_object, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio, self.track_type)
+        if self.show_labels == True:
+            for label in label_list:
+                group = LabelDrawer(self.config_dict).draw(label, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)
+                if label["is_embedded"] == False:
+                    line_path = Line(start=(label["middle_x"], label["middle_y"]), end=(label["start_x"], label["start_y"]),
+                    stroke=self.label_stroke_color,
+                    stroke_width=self.label_stroke_width)
+                    group.add(line_path)
         return group
 
     def setup_record_group(self) -> Group:

@@ -17,7 +17,7 @@ class GcContentConfigurator:
         dinucleotide (str): Specific dinucleotide sequence to consider for GC content calculation.
     """
 
-    def __init__(self, window: int, step: int, dinucleotide: str, config_dict: Dict, default_colors_df: DataFrame, show_gc: bool) -> None:
+    def __init__(self, window: int, step: int, dinucleotide: str, config_dict: Dict, default_colors_df: DataFrame) -> None:
         """
         Initializes the GcContentConfigurator with specified settings.
 
@@ -35,7 +35,7 @@ class GcContentConfigurator:
         self.stroke_color: str = config_dict['objects']['gc_content']['stroke_color']
         self.stroke_width: float = config_dict['objects']['gc_content']['stroke_width']
         self.fill_opacity: float = config_dict['objects']['gc_content']['fill_opacity']
-        self.show_gc: bool = show_gc
+        self.show_gc: bool = config_dict['canvas']['show_gc']
 class GcSkewConfigurator:
     """
     Configurator for GC skew calculation parameters.
@@ -49,7 +49,7 @@ class GcSkewConfigurator:
         dinucleotide (str): Specific dinucleotide sequence to consider for GC content calculation.
     """
 
-    def __init__(self, window: int, step: int, dinucleotide: str, config_dict: Dict, default_colors_df: DataFrame, show_skew: bool) -> None:
+    def __init__(self, window: int, step: int, dinucleotide: str, config_dict: Dict, default_colors_df: DataFrame) -> None:
         """
         Initializes the GcSkewConfigurator with specified settings.
 
@@ -66,7 +66,7 @@ class GcSkewConfigurator:
         self.stroke_color: str = config_dict['objects']['gc_skew']['stroke_color']
         self.stroke_width: float = config_dict['objects']['gc_skew']['stroke_width']
         self.fill_opacity: float = config_dict['objects']['gc_skew']['fill_opacity']
-        self.show_skew: bool = show_skew
+        self.show_skew: bool = config_dict['canvas']['show_skew']
 class FeatureDrawingConfigurator:
     """
     Configurator for drawing genomic features.
@@ -132,18 +132,18 @@ class BlastMatchConfigurator:
         self.stroke_width: float = config_dict['objects']['blast_match']['stroke_width']
 
 class LegendDrawingConfigurator:
-    def __init__(self, color_table, default_colors, selected_features_set, config_dict, gc_config, skew_config, feature_config, show_gc, show_skew, legend_table=None):
+    def __init__(self, color_table, default_colors, selected_features_set, config_dict, gc_config, skew_config, feature_config, legend_table=None):
         self.color_table = color_table
         self.default_colors = default_colors
         self.selected_features_set = selected_features_set
         self.config_dict = config_dict
-        self.show_gc = show_gc
-        self.show_skew = show_skew
+        self.show_gc = config_dict['canvas']['show_gc']
+        self.show_skew = config_dict['canvas']['show_skew']
         self.gc_config = gc_config
         self.skew_config = skew_config
         self.feature_config = feature_config
-        self.color_rect_size = 16
-        self.font_size: str = int(config_dict['objects']['legends']['font_size'].strip("pt"))
+        self.color_rect_size = 16 # move to config
+        self.font_size: float = config_dict['objects']['legends']['font_size']
         self.font_weight: str = config_dict['objects']['legends']['font_weight']
         self.font_family: str = config_dict['objects']['text']['font_family']
         self.text_anchor: str = config_dict['objects']['legends']['text_anchor']
@@ -158,8 +158,8 @@ class LegendDrawingConfigurator:
         bbox_width_px, bbox_height_px = get_text_bbox_size_pixels(font_path, longest_key, self.font_size, self.dpi)
         return bbox_width_px, bbox_height_px
     def recalculate_legend_dimensions(self, legend_table):
-        line_margin = (24/14) * self.color_rect_size
-        x_margin = (22/14) * self.color_rect_size
+        line_margin = (24/14) * self.color_rect_size # move to config
+        x_margin = (22/14) * self.color_rect_size # move to config
         bbox_width_px, _ = self.calculate_bbox_dimensions(legend_table)
         self.legend_width = x_margin + bbox_width_px
         self.legend_height = (self.color_rect_size + (len(legend_table.keys()) -1) * line_margin)

@@ -12,7 +12,7 @@ from svgwrite.path import Path
 from svgwrite.text import Text, TSpan, TextPath
 from svgwrite.masking import ClipPath
 from .feature_objects import FeatureObject
-from .circular_path_drawer import get_exon_and_intron_coordinates, calculate_feature_position_factors_circular, generate_circular_label_path, generate_circle_path_desc, generate_circular_gc_skew_path_desc, generate_circular_gc_content_path_desc, generate_circular_rectangle_path, generate_circular_arrowhead_path, generate_circular_intron_path, generate_name_path, generate_text_path
+from .circular_path_drawer import get_exon_and_intron_coordinates, calculate_feature_position_factors_circular,  generate_circle_path_desc, generate_circular_gc_skew_path_desc, generate_circular_gc_content_path_desc, generate_circular_rectangle_path, generate_circular_arrowhead_path, generate_circular_intron_path, generate_name_path, generate_text_path
 
 # Logging setup
 logger = logging.getLogger()
@@ -189,7 +189,7 @@ class FeatureDrawer:
         """
         group.add(path_data)
 
-    def draw(self, feature_object: FeatureObject, group: Group, total_length: int, radius: float, track_width: float) -> Group:
+    def draw(self, feature_object: FeatureObject, group: Group, total_length: int, radius: float, track_width: float, track_type: str) -> Group:
         """
         Draws genomic features based on the given FeatureObject.
 
@@ -204,7 +204,7 @@ class FeatureDrawer:
             Group: The updated SVG group with the features added.
         """
         gene_paths = FeaturePathGenerator(
-            radius, total_length, track_width).generate_circular_gene_path(feature_object)
+            radius, total_length, track_width, track_type).generate_circular_gene_path(feature_object)
         for gene_path in gene_paths:
             if not gene_path[0]:
                 continue
@@ -232,7 +232,7 @@ class FeaturePathGenerator:
         track_ratio (float): Ratio for determining the track width.
     """
 
-    def __init__(self, radius: float, total_length: int, track_width: float) -> None:
+    def __init__(self, radius: float, total_length: int, track_width: float, track_type) -> None:
         """
         Initializes the FeaturePathGenerator with circular canvas settings.
 
@@ -244,6 +244,7 @@ class FeaturePathGenerator:
         self.radius: float = radius
         self.total_length: int = total_length
         self.track_width: float = track_width
+        self.track_type = track_type
         self.set_arrow_length()
 
     def set_arrow_length(self) -> None:
@@ -283,17 +284,15 @@ class FeaturePathGenerator:
             coord_type: str = str(coord_dict['coord_type'])
             if coord_type == "line":
                 coord_path: List[str] = generate_circular_intron_path(
-                    self.radius, coord_dict, self.total_length, self.track_width)
+                    self.radius, coord_dict, self.total_length, self.track_width, self.track_type)
             elif coord_type == "block":
                 if coord[5] and feature_object.is_directional == True:
                     coord_path = generate_circular_arrowhead_path(
-                        self.radius, coord_dict, self.total_length, self.arrow_length, self.track_width)
+                        self.radius, coord_dict, self.total_length, self.arrow_length, self.track_width, self.track_type)
                 else:
                     coord_path = generate_circular_rectangle_path(
-                        self.radius, coord_dict, self.total_length, self.track_width)
+                        self.radius, coord_dict, self.total_length, self.track_width, self.track_type)
             coordinates_paths.append(coord_path)
-        #label_path_list, available_tracks = generate_circular_label_path(radius=self.radius, coord_dict=coord_dict,  total_length=self.total_length, cds_arrow_length=self.arrow_length, track_ratio=self.track_width, feature_object=feature_object, available_tracks=available_tracks)
-        #coordinates_paths.append(label_path_list)
         return coordinates_paths #, available_tracks
 
 
@@ -315,8 +314,8 @@ class DefinitionDrawer:
             config_dict (dict): Configuration dictionary containing style settings for the definition section.
         """
         self.interval: float = config_dict['objects']['definition']['circular']['interval']
-        self.fontsize: str = config_dict['objects']['definition']['circular']['fontsize']
-        self.font: str = config_dict['objects']['text']['font_family']
+        self.font_size: str = config_dict['objects']['definition']['circular']['font_size']
+        self.font_family: str = config_dict['objects']['text']['font_family']
 
     def draw(self, definition_group: Group, title_x: float, title_y: float, species_parts: list, strain_parts: list, gc_percent: float, accession: str, record_length: int) -> Group:
         """
@@ -335,23 +334,22 @@ class DefinitionDrawer:
         Returns:
             Group: The updated SVG group with the definition section added.
         """
-        self.fontsize: str = '{}pt'.format(self.fontsize)
         species_path: Text = generate_name_path(
-            species_parts, title_x, title_y, self.interval*-2, self.fontsize, "bold", self.font)
+            species_parts, title_x, title_y, self.interval*-2, self.font_size, "bold", self.font_family)
         definition_group.add(species_path)
         strain_path: Text = generate_name_path(
-            strain_parts, title_x, title_y, self.interval*-0, self.fontsize, "bold", self.font)
+            strain_parts, title_x, title_y, self.interval*-0, self.font_size, "bold", self.font_family)
         definition_group.add(strain_path)
         accession_path: Text = generate_text_path(
-            accession, title_x, title_y, self.interval*2, self.fontsize, "normal", self.font)
+            accession, title_x, title_y, self.interval*2, self.font_size, "normal", self.font_family)
         definition_group.add(accession_path)
         length_text: str = "{:,} bp".format(record_length)
         length_path: Text = generate_text_path(
-            length_text, title_x, title_y, self.interval*4, self.fontsize, "normal", self.font)
+            length_text, title_x, title_y, self.interval*4, self.font_size, "normal", self.font_family)
         definition_group.add(length_path)
         gc_percent_text: str = str(gc_percent) + "% GC"
         gc_percent_path: Text = generate_text_path(
-            gc_percent_text, title_x, title_y, self.interval*6, self.fontsize, "normal", self.font)
+            gc_percent_text, title_x, title_y, self.interval*6, self.font_size, "normal", self.font_family)
         definition_group.add(gc_percent_path)
         
         return definition_group
@@ -364,9 +362,10 @@ class LabelDrawer:
         Args:
             config_dict (dict): Configuration dictionary containing style settings for the definition section.
         """
-        self.fontsize: str = config_dict['objects']['ticks']['tick_labels']['font_size']
-        self.font: str = config_dict['objects']['text']['font_family']
-
+        self.config_dict = config_dict
+        self.font_size: str = config_dict['objects']['features']['font_size']
+        self.font_family: str = config_dict['objects']['text']['font_family']
+        self.track_type: str = config_dict['canvas']['circular']['track_type']
     def set_feature_label_anchor_value(self, total_len: int, tick: float) -> tuple[Literal['middle', 'start', 'end'], Literal['text-after-edge', 'middle', 'hanging']]:
         """
         Determines the anchor and baseline values for tick labels based on their position.
@@ -384,8 +383,10 @@ class LabelDrawer:
             anchor_value, baseline_value = "start", "text-after-edge"
         elif 45 <= angle < 155:
             anchor_value, baseline_value = "start", "middle"
-        elif 155 <= angle < 205:
-            anchor_value, baseline_value = "middle", "hanging"
+        elif 155 <= angle < 180:
+            anchor_value, baseline_value = "start", "hanging"
+        elif 180 <= angle < 205:
+            anchor_value, baseline_value = "end", "hanging"
         elif 205 <= angle < 315:
             anchor_value, baseline_value = "end", "middle"
         elif 315 <= angle < 360:
@@ -396,7 +397,7 @@ class LabelDrawer:
         
     def embed_label(self, group, label, radius, record_length, track_ratio):
         factors: list[float] = calculate_feature_position_factors_circular(
-        record_length, label["strand"], track_ratio)
+        record_length, label["strand"], track_ratio, self.track_type)
         angle = 360.0 * (label["middle"] / record_length)
         if 0 <= angle < 90:
             param = " 0 0 1 "
@@ -434,7 +435,7 @@ class LabelDrawer:
                 stroke="none",
                 fill="none")
         text_path = Text("") # The text path must go inside a text object. Parameter used here gets ignored
-        text_path.add(TextPath(label_axis_path, text=label["label_text"], startOffset="50%", method="align", text_anchor="middle", font_size='8pt',font_style='normal',font_weight='normal',font_family='Liberation Sans', dominant_baseline = "central"))
+        text_path.add(TextPath(label_axis_path, text=label["label_text"], startOffset="50%", method="align", text_anchor="middle", font_size=self.font_size, font_style='normal',font_weight='normal', font_family=self.font_family, dominant_baseline = "central"))
         group.add(label_axis_path)
         group.add(text_path)
         return group
@@ -442,7 +443,7 @@ class LabelDrawer:
             anchor_value, baseline_value = self.set_feature_label_anchor_value(record_length, label["middle"])
             start_x_1 = label["start_x"]
             start_y_1 = label["start_y"]
-            label_path = generate_text_path(label["label_text"], start_x_1, start_y_1, interval = 0, fontsize = '8pt', fontweight = 'normal', font = "Liberation Sans", dominant_baseline = baseline_value, text_anchor = anchor_value)
+            label_path = generate_text_path(label["label_text"], start_x_1, start_y_1, interval = 0, font_size = self.font_size, font_weight = 'normal', font = self.font_family, dominant_baseline = baseline_value, text_anchor = anchor_value)
             group.add(label_path)
             return group
     def draw(self, label, group, record_length, radius, track_ratio):

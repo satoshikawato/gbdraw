@@ -4,15 +4,21 @@ title = "gbdraw configs"
 
 [canvas]
 dpi = 96 # fixed value; higher or lower values lead to abberant text sizes in CairoSVG output
+show_gc = true
+show_skew = true
+show_labels = false
+strandedness = true
 [canvas.circular]
 # Basicaly you shouldn't modify these values.
 # If you wish to modify width and height, I strongly recommend changing the radius accordingly (=0.4*weight/height).
 # Raising track_ratio values is strongly discouraged as it will result in track overlaps.
-width = 1000 # pixel
+width = 1400 # pixel
 height = 1000 # pixel
 radius = 390
 track_ratio = 0.19
-track_dict = {1 = 1.0, 2 = 0.8, 3 = 0.65}
+track_dict.short = {"middle" = {1 = 1.0, 2 = 0.85, 3 = 0.60}, "spreadout" = {1 = 1.0, 2 = 0.9, 3 = 0.65}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.45}}
+track_dict.long = {"middle" = {1 = 1.0, 2 = 0.8, 3 = 0.65}, "spreadout" = {1 = 1.0, 2 = 0.85, 3 = 0.7}, "tuckin" = {1 = 1.0, 2 = 0.75, 3 = 0.60}}
+track_type = 'tuckin'
 [canvas.linear]
 # Note that only the width is defined here, as the height of the figure is dependent on the number of sequences displayed.
 width = 2000 # pixel
@@ -23,12 +29,14 @@ comparison_height = 60
 canvas_padding = 20
 default_cds_height = 20
 default_gc_height = 20
+align_center = false
 
 [objects]
 # Fill colors are defined in `default_colors.txt`.
 
 [objects.text]
 font_family = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+
 [objects.axis]
 
 [objects.axis.circular]
@@ -42,27 +50,31 @@ stroke_width = 2
 [objects.definition.linear]
 stroke = 'none'
 fill = 'black'
-font_size = '10pt'
+font_size = 10
 font_weight = 'normal'
 text_anchor = 'middle'
 dominant_baseline = 'middle'
 
 [objects.definition.circular]
 interval = 20
-fontsize = 18
+font_size = 18
 
 [objects.features]
-features_drawn = ["CDS", "tRNA" ,"rRNA", "repeat_region", "misc_feature", "ncRNA", "regulatory"]
+features_drawn = ["CDS", "rRNA", "tRNA" ,"tmRNA", "ncRNA", "misc_RNA", "repeat_region", "regulatory","rep_origin", "misc_feature"]
 block_stroke_color = 'black'
 block_stroke_width = 0.0
 line_stroke_color = 'gray'
 line_stroke_width = 1.0
+font_size = 10
+font_weight = 'normal'
+label_stroke_width = 0.5
+label_stroke_color = 'gray'
 
 
 [objects.length_bar]
 stroke_color = 'black'
 stroke_width = 3
-font_size = '10pt'
+font_size = 10
 font_weight = 'normal'
 
 [objects.blast_match]
@@ -91,13 +103,13 @@ tick_width = 2.0
 [objects.ticks.tick_labels]
 stroke = 'none'
 fill = 'black'
-font_size = '10pt'
+font_size = 10
 font_weight = 'normal'
 
 [objects.legends]
 stroke = 'none'
 fill = 'black'
-font_size = '14pt'
+font_size = 14
 font_weight = 'normal'
 dominant_baseline = 'central'
 text_anchor = 'start'

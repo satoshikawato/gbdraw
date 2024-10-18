@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Union, Literal
 from .find_font_files import get_text_bbox_size_pixels, get_font_dict
 import math
+
 def calculate_bbox_dimensions(text, font_family, font_size, dpi):
     fonts = [font.strip("'") for font in font_family.split(', ')]
     primary_font_family = fonts[0]
@@ -153,7 +154,7 @@ def update_config_value(config_dict, path, value):
 
 def modify_config_dict(config_dict, block_stroke_width=None, block_stroke_color=None, 
                        line_stroke_color=None, line_stroke_width=None, 
-                       gc_stroke_color=None) -> dict:
+                       gc_stroke_color=None, show_gc=None, show_skew=None, show_labels=None, align_center=None, cicular_width_with_labels=None, track_type=None) -> dict:
     # Mapping of parameter names to their paths in the config_dict
     param_paths = {
         'block_stroke_width': 'objects.features.block_stroke_width',
@@ -161,6 +162,11 @@ def modify_config_dict(config_dict, block_stroke_width=None, block_stroke_color=
         'line_stroke_color': 'objects.features.line_stroke_color',
         'line_stroke_width': 'objects.features.line_stroke_width',
         'gc_stroke_color': 'objects.gc_content.stroke_color',
+        'show_gc': 'canvas.show_gc',
+        'show_skew': 'canvas.show_skew',
+        'show_labels': 'canvas.show_labels',
+        'align_center': 'canvas.linear.align_center',
+        'track_type': 'canvas.circular.track_type'
     }
     # Update the config_dict for each specified parameter
     for param, path in param_paths.items():
@@ -233,7 +239,7 @@ def get_label_text(seq_feature):
     elif hasattr(seq_feature, 'rpt_family') and seq_feature.rpt_family:
         text = seq_feature.rpt_family
     elif hasattr(seq_feature, 'note') and seq_feature.note:
-        text = seq_feature.note
+        text = seq_feature.note[0]
     return text
 
 def get_coordinates_of_longest_segment(feature_object):

@@ -92,7 +92,7 @@ def _get_args(args) -> argparse.Namespace:
         '--features',
         help='Comma-separated list of feature keys to draw (default: CDS,tRNA,rRNA,repeat_region)',
         type=str,
-        default="CDS,tRNA,rRNA,repeat_region")
+        default="CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region,regulatory,rep_origin")
     parser.add_argument(
         '--block_stroke_color',
         help='Block stroke color (str; default: "black")',
@@ -133,6 +133,15 @@ def _get_args(args) -> argparse.Namespace:
         help='Legend position (default: "right"; "left", "right", "upper_left", "upper_right", "lower_left", "lower_right")',
         type=str,
         default="right")
+    parser.add_argument(
+        '--track_type',
+        help='Track type (default: "tuckin"; "tuckin", "middle", "spreadout")',
+        type=str,
+        default="tuckin")
+    parser.add_argument(
+        '--show_labels',
+        help='Show feature labels (default: False).',
+        action='store_true')
     if len(sys.argv) == 1:
         parser.print_help(sys.stderr)
         sys.exit(1)
@@ -171,38 +180,41 @@ def circular_main(cmd_args) -> None:
     legend: str = args.legend
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
+    show_labels: bool = args.show_labels
     user_defined_default_colors: str = args.default_colors
     block_stroke_color: str = args.block_stroke_color
     block_stroke_width: str = args.block_stroke_width
     line_stroke_color: str = args.line_stroke_color
     line_stroke_width: str = args.line_stroke_width   
-       
-    config_dict: dict = load_config_toml()
+    track_type: str = args.track_type
+    config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
     default_colors: Optional[DataFrame] = load_default_colors(
         user_defined_default_colors)
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     show_gc, show_skew = suppress_gc_content_and_skew(
         suppress_gc, suppress_skew)
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width)
+    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_labels=show_labels, track_type=track_type)
     out_formats: list[str] = parse_formats(args.format)
     show_gc: bool
     show_skew: bool
     record_count: int = 0
     gb_records: list[SeqRecord] = load_gbks(input_file, "circular")
     gc_config = GcContentConfigurator(
-        window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors, show_gc=show_gc)
+        window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
     skew_config = GcSkewConfigurator(
-        window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors, show_skew=show_skew)
+        window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
     feature_config = FeatureDrawingConfigurator(
         color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict)
-    legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, show_gc=show_gc, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config, show_skew=show_skew)
+    legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config)
+
+
     for gb_record in gb_records:
-        record_count += 1
+        record_count += 1 
         accession = str(gb_record.annotations["accessions"][0])  # type: ignore
         outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
         gc_df: DataFrame = skew_df(gb_record, window, step, dinucleotide)
         canvas_config = CircularCanvasConfigurator(
-            output_prefix=outfile_prefix, config_dict=config_dict, show_gc=show_gc, show_skew=show_skew, legend=legend)
+            output_prefix=outfile_prefix, config_dict=config_dict, legend=legend)
         plot_circular_diagram(gb_record, canvas_config, gc_df, gc_config, skew_config,
                               feature_config, species, strain, config_dict, out_formats, legend_config)
 
