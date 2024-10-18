@@ -165,7 +165,11 @@ def prepare_legend_table(gc_config, skew_config, feature_config, features_presen
             feature_fill_color = default_colors[default_colors['feature_type'] == selected_feature]['color'].values[0]
             legend_table[new_selected_key_name] = (block_stroke_color, block_stroke_width, feature_fill_color)
         else:
-            feature_fill_color = default_colors[default_colors['feature_type'] == "default"]['color'].values[0]
+            matching_rows = default_colors[default_colors['feature_type'] == selected_feature]
+            if not matching_rows.empty:
+                feature_fill_color = default_colors[default_colors['feature_type'] == selected_feature]['color'].values[0]
+            else:
+               feature_fill_color = default_colors[default_colors['feature_type'] == "default"]['color'].values[0]
             legend_table[selected_feature] = (block_stroke_color, block_stroke_width, feature_fill_color)        
     if show_gc:
         if gc_high_fill_color == gc_low_fill_color:
