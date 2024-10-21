@@ -260,11 +260,11 @@ MeenMJNV.MejoMJNV.tblastx.out \
 
 ### Feature labels (experimental)
 ```bash
-gbdraw circular -i LC738868.gb -f svg,png   --block_stroke_width 1 --block_stroke_color gray --show_labels  -t color_table.txt -d modified_default_colors.tsv
+gbdraw circular -i LC738868.gb -f svg,png --block_stroke_width 1 --block_stroke_color gray --show_labels --track_type middle  -t color_table.txt -d modified_default_colors.tsv
 ```
 ![MjeNMV](https://github.com/satoshikawato/gbdraw/blob/main/examples/LC738868.svg)
 ```bash
- gbdraw circular -i AP027280.gb -f svg,png   --block_stroke_width 1 --block_stroke_color gray --show_labels
+ gbdraw circular -i AP027280.gb -f svg,png --block_stroke_width 1 --block_stroke_color gray --track_type spreadout --show_labels
 ```
 ![WSSV](https://github.com/satoshikawato/gbdraw/blob/main/examples/AP027280.svg)
 
