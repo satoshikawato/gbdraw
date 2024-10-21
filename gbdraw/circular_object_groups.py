@@ -388,6 +388,7 @@ class TickGroup:
         self.font_weight: str = self.config_dict['objects']['ticks']['tick_labels']['font_weight']
         self.font_family: str = self.config_dict['objects']['text']['font_family']
         self.track_type: str = self.config_dict['canvas']['circular']['track_type']
+        self.dpi = self.canvas_config.dpi
         self.set_tick_size()
         self.add_elements_to_group()
 
@@ -424,10 +425,10 @@ class TickGroup:
         ticks_large = list(range(0, self.total_len, self.tick_large))
         size: str = "large"
         tick_paths_large: list[Path] = generate_circular_tick_paths(
-            self.radius, self.total_len, size, ticks_large, self.tick_width)
+            self.radius, self.total_len, size, ticks_large, self.tick_width, self.track_type)
         ticks_large_nonzero: list[int] = [x for x in ticks_large if x != 0]
         tick_label_paths_large: list[Text] = generate_circular_tick_labels(
-            self.radius, self.total_len, size, ticks_large_nonzero, self.stroke, self.fill, self.font_size, self.font_weight, self.font_family, self.track_type)
+            self.radius, self.total_len, size, ticks_large_nonzero, self.stroke, self.fill, self.font_size, self.font_weight, self.font_family, self.track_type, self.dpi)
         for tick_path_large in tick_paths_large:
             self.tick_group.add(tick_path_large)
         for tick_label_path_large in tick_label_paths_large:
@@ -534,11 +535,15 @@ class SeqRecordGroup:
         self.canvas_config: CircularCanvasConfigurator = canvas_config
         self.feature_config: FeatureDrawingConfigurator = feature_config
         self.config_dict: dict = config_dict
+        if len(self.gb_record) < 50000:
+            track_channel = "short"
+        else:
+            track_channel = "long"
         self.font_size: str = self.config_dict['objects']['ticks']['tick_labels']['font_size']
         self.font_family: str = self.config_dict['objects']['text']['font_family']
         self.show_labels = self.config_dict['canvas']['show_labels']
-        self.label_stroke_width = self.config_dict['objects']['features']['label_stroke_width']
-        self.label_stroke_color = self.config_dict['objects']['features']['label_stroke_color']
+        self.label_stroke_width = self.config_dict['labels']['stroke_width'][track_channel]
+        self.label_stroke_color = self.config_dict['labels']['stroke_color']['label_stroke_color']
         self.font_size = self.config_dict['objects']['features']['font_size']
         self.dpi =  self.config_dict['canvas']['dpi']
         self.track_type = self.config_dict['canvas']['circular']['track_type']

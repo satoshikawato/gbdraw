@@ -12,13 +12,15 @@ strandedness = true
 # Basicaly you shouldn't modify these values.
 # If you wish to modify width and height, I strongly recommend changing the radius accordingly (=0.4*weight/height).
 # Raising track_ratio values is strongly discouraged as it will result in track overlaps.
-width = 1400 # pixel
 height = 1000 # pixel
 radius = 390
 track_ratio = 0.19
-track_dict.short = {"middle" = {1 = 1.0, 2 = 0.85, 3 = 0.60}, "spreadout" = {1 = 1.0, 2 = 0.9, 3 = 0.65}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.45}}
-track_dict.long = {"middle" = {1 = 1.0, 2 = 0.8, 3 = 0.65}, "spreadout" = {1 = 1.0, 2 = 0.85, 3 = 0.7}, "tuckin" = {1 = 1.0, 2 = 0.75, 3 = 0.60}}
+track_dict.short = {"middle" = {1 = 1.0, 2 = 0.80, 3 = 0.55}, "spreadout" = {1 = 1.0, 2 = 0.85, 3 = 0.60}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.50}}
+track_dict.long = {"middle" = {1 = 1.0, 2 = 0.8, 3 = 0.65}, "spreadout" = {1 = 1.0, 2 = 0.85, 3 = 0.7}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.55}}
 track_type = 'tuckin'
+[canvas.circular.width]
+  with_labels = 1400
+  without_labels = 1000
 [canvas.linear]
 # Note that only the width is defined here, as the height of the figure is dependent on the number of sequences displayed.
 width = 2000 # pixel
@@ -67,13 +69,18 @@ line_stroke_color = 'gray'
 line_stroke_width = 1.0
 font_size = 10
 font_weight = 'normal'
-label_stroke_width = 0.5
-label_stroke_color = 'gray'
+
+
 
 [labels]
 [labels.font_size]
-  short = 18
+  short = 16
   long = 10
+[labels.stroke_width]
+  short = 1.5
+  long = 1.0
+[labels.stroke_color]
+  label_stroke_color = 'gray'
 [labels.radius_factor]
 [labels.radius_factor.tuckin]
   short = 1.05
@@ -82,8 +89,8 @@ label_stroke_color = 'gray'
   short = 1.1
   long = 1.125
 [labels.radius_factor.spreadout]
-  short = 1.15
-  long = 1.25
+  short = 1.2
+  long = 1.15
 [labels.arc_x_radius_factor]
 [labels.arc_x_radius_factor.tuckin]
   short = 1.325
@@ -103,7 +110,7 @@ label_stroke_color = 'gray'
   long = 1.2
 [labels.arc_y_radius_factor.spreadout]
   short = 1.25
-  long = 1.3
+  long = 1.25
 [labels.arc_center_x]
 [labels.arc_center_x.tuckin]
   short = -70
@@ -128,7 +135,7 @@ label_stroke_color = 'gray'
 [objects.length_bar]
 stroke_color = 'black'
 stroke_width = 3
-font_size = 10
+font_size = 16
 font_weight = 'normal'
 
 [objects.blast_match]
@@ -157,13 +164,13 @@ tick_width = 2.0
 [objects.ticks.tick_labels]
 stroke = 'none'
 fill = 'black'
-font_size = 10
+font_size = 14
 font_weight = 'normal'
 
 [objects.legends]
 stroke = 'none'
 fill = 'black'
-font_size = 14
+font_size = 16
 font_weight = 'normal'
 dominant_baseline = 'central'
 text_anchor = 'start'

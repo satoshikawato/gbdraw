@@ -29,8 +29,7 @@ class CircularCanvasConfigurator:
     create_svg_canvas(): Creates and returns an SVG canvas for drawing.
     get_track_ids(): Determines the track IDs for visualization.
     """
-
-    def __init__(self, output_prefix: str, config_dict: dict, legend: str, show_gc=True, strandedness=True, show_skew=True) -> None:
+    def __init__(self, output_prefix: str, config_dict: dict, legend: str) -> None:
         """
         Initializes the circular canvas configurator with given settings.
 
@@ -42,15 +41,22 @@ class CircularCanvasConfigurator:
         show_skew (bool, optional): Flag to display GC skew. Defaults to True.
         """
         self.output_prefix: str = output_prefix
-        self.default_width: int = config_dict['canvas']['circular']['width']
-        self.default_height: int = config_dict['canvas']['circular']['height']
-        self.radius: float = config_dict['canvas']['circular']['radius']
-        self.track_ratio: float = config_dict['canvas']['circular']['track_ratio']
-        self.show_gc: bool = show_gc
-        self.show_skew: bool = show_skew
-        self.strandedness: bool = strandedness
+        self.config_dict = config_dict
+        self.show_labels: bool = self.config_dict['canvas']['show_labels']
+        if self.show_labels:
+            label_setting = 'with_labels'
+        else:
+            label_setting = 'without_labels'
+        self.default_width: int = self.config_dict['canvas']['circular']['width'][label_setting]
+        self.default_height: int = self.config_dict['canvas']['circular']['height']
+        self.radius: float = self.config_dict['canvas']['circular']['radius']
+        self.track_ratio: float = self.config_dict['canvas']['circular']['track_ratio']
+        self.show_gc: bool = self.config_dict['canvas']['show_gc']
+        self.show_skew: bool = self.config_dict['canvas']['show_skew']
+        self.strandedness: bool = self.config_dict['canvas']['strandedness']
+        self.dpi: int = self.config_dict['png_output']['dpi']
         self.legend_position: str = legend
-        self.dpi: int = config_dict['png_output']['dpi']
+
         self.calculate_dimensions()
         self.get_track_ids()
     def calculate_dimensions(self) -> None:
@@ -149,7 +155,7 @@ class LinearCanvasConfigurator:
     create_svg_canvas(): Creates and returns an SVG canvas for drawing.
     """
 
-    def __init__(self, num_of_entries: int, longest_genome: int, config_dict: dict, legend: str, output_prefix='out', show_gc=False, strandedness=False, align_center=False, show_skew=False):
+    def __init__(self, num_of_entries: int, longest_genome: int, config_dict: dict, legend: str, output_prefix='out'):
         """
         Initializes the linear canvas configurator with given settings.
 
@@ -163,21 +169,23 @@ class LinearCanvasConfigurator:
         align_center (bool, optional): Flag to align content to the center. Defaults to False.
         """
         self.output_prefix: str = output_prefix
-        self.fig_width: int = config_dict['canvas']['linear']['width']
-        self.vertical_offset: float = config_dict['canvas']['linear']['vertical_offset']
-        self.horizontal_offset: float = config_dict['canvas']['linear']['horizontal_offset']
-        self.vertical_padding: float = config_dict['canvas']['linear']['vertical_padding']
-        self.comparison_height: float = config_dict['canvas']['linear']['comparison_height']
-        self.canvas_padding: float = config_dict['canvas']['linear']['canvas_padding']
-        self.default_cds_height: float = config_dict['canvas']['linear']['default_cds_height']
-        self.default_gc_height: float = config_dict['canvas']['linear']['default_gc_height']
-        self.dpi: int = config_dict['png_output']['dpi']
-        self.show_gc: bool = show_gc
-        self.show_skew: bool = show_skew
+        self.config_dict = config_dict
+        self.fig_width: int = self.config_dict['canvas']['linear']['width']
+        self.vertical_offset: float = self.config_dict['canvas']['linear']['vertical_offset']
+        self.horizontal_offset: float = self.config_dict['canvas']['linear']['horizontal_offset']
+        self.vertical_padding: float = self.config_dict['canvas']['linear']['vertical_padding']
+        self.comparison_height: float = self.config_dict['canvas']['linear']['comparison_height']
+        self.canvas_padding: float = self.config_dict['canvas']['linear']['canvas_padding']
+        self.default_cds_height: float = self.config_dict['canvas']['linear']['default_cds_height']
+        self.default_gc_height: float = self.config_dict['canvas']['linear']['default_gc_height']
+        self.dpi: int = self.config_dict['png_output']['dpi']
+        self.show_gc: bool = self.config_dict['canvas']['show_gc']
+        self.show_skew: bool = self.config_dict['canvas']['show_skew']
+        self.strandedness: bool = self.config_dict['canvas']['strandedness']
+        self.align_center: bool = self.config_dict['canvas']['linear']['align_center']
         self.legend_position = legend
-        self.strandedness: bool = strandedness
         self.num_of_entries: int = num_of_entries
-        self.align_center: bool = align_center
+
         self.longest_genome: int = longest_genome
         self.calculate_dimensions()
         self.set_arrow_length()

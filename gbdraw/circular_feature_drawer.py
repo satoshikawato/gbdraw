@@ -174,7 +174,10 @@ class FeatureDrawer:
             d=path_data,
             fill=fill_color,
             stroke=stroke_color,
-            stroke_width=stroke_width)
+            stroke_width=stroke_width,
+            stroke_linejoin='round',
+            stroke_linecap='round',
+            stroke_miterlimit=4)
         group.add(path)
     def draw_label(self, path_data, group: Group) -> None:
         """
@@ -253,7 +256,7 @@ class FeaturePathGenerator:
         The arrow length is calculated using a logistic function to ensure it remains within a reasonable range.
         """
         MIN_ARROW_LENGTH = 30
-        MAX_ARROW_LENGTH = 500
+        MAX_ARROW_LENGTH = 700
         PARAM_A = 3
         PARAM_B = 5
         self.arrow_length: float = (MIN_ARROW_LENGTH + (MAX_ARROW_LENGTH - MIN_ARROW_LENGTH)
