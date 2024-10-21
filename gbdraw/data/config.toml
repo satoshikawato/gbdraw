@@ -78,7 +78,7 @@ font_weight = 'normal'
   long = 10
 [labels.stroke_width]
   short = 1.5
-  long = 1.0
+  long = 0.5
 [labels.stroke_color]
   label_stroke_color = 'gray'
 [labels.radius_factor]

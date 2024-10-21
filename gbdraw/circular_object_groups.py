@@ -535,7 +535,7 @@ class SeqRecordGroup:
         self.canvas_config: CircularCanvasConfigurator = canvas_config
         self.feature_config: FeatureDrawingConfigurator = feature_config
         self.config_dict: dict = config_dict
-        if len(self.gb_record) < 50000:
+        if int(len(self.gb_record.seq)) < 50000:
             track_channel = "short"
         else:
             track_channel = "long"
