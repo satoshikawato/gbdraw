@@ -182,7 +182,7 @@ def prepare_legend_table(gc_config, skew_config, feature_config, features_presen
             legend_table['GC skew'] = (skew_stroke_color, skew_stroke_width, skew_high_fill_color)
         else:
             legend_table['GC skew (+)'] = (skew_stroke_color, skew_stroke_width, skew_high_fill_color)
-            legend_table['GC dkew (-)'] = (skew_stroke_color, skew_stroke_width, skew_low_fill_color)
+            legend_table['GC skew (-)'] = (skew_stroke_color, skew_stroke_width, skew_low_fill_color)
     return legend_table
 
 

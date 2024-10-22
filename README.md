@@ -177,6 +177,16 @@ gunzip GCF_000146045.2_R64_genomic.gbff.gz
 gbdraw linear -i GCF_000146045.2_R64_genomic.gbff --separate_strands --show_gc -o yeast # outputs yeast.png
 ```
 ![yeast](https://github.com/satoshikawato/gbdraw/blob/main/examples/yeast.png)
+
+### <i>Candidatus</i> Hepatoplasmataceae (mollicutes)
+```bash
+tblastx -query Fukuoka2020.fasta -subject Av-JP.fasta  -outfmt 7 -out Fukuoka2020_Av-JP.tblastx.out
+tblastx -query Av-JP.fasta -subject Ps-JP.fasta  -outfmt 7 -out Av-JP_Ps-JP.tblastx.out
+tblastx -query Ps-JP.fasta -subject Tokyo2021.fasta  -outfmt 7 -out Ps-JP_Tokyo2021.tblastx.out
+tblastx -query Tokyo2021.fasta -subject Av.fasta  -outfmt 7 -out Tokyo2021_Av.tblastx.out
+gbdraw linear -i Fukuoka2020.gb Av-JP.gb Ps-JP.gb Tokyo2021.gb Av.gb -b Fukuoka2020_Av-JP.tblastx.out  Av-JP_Ps-JP.tblastx.out  Ps-JP_Tokyo2021.tblastx.out  Tokyo2021_Av.tblastx.out -o hepatoplasmataceae --align_center --bitscore 50 --evalue 1e-3 --separate_strands
+```
+![hepatoplasmataceae](https://github.com/satoshikawato/gbdraw/blob/main/examples/hepatoplasma.svg)
 ## Advanced customization
 ### Customizing colors with configuration files
 `gbdraw` allows users to personalize feature colors. This is done by providing a custom tab-separated file that specifies the desired color codes. Additionally, the colors and widths of the strokes can be fine-tuned using command-line arguments like `--block_stroke_width`.
