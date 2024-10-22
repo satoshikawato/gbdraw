@@ -277,7 +277,10 @@ gbdraw circular -i LC738868.gb -f svg,png --block_stroke_width 1 --block_stroke_
  gbdraw circular -i AP027280.gb -f svg,png --block_stroke_width 1 --block_stroke_color gray --track_type spreadout --show_labels
 ```
 ![WSSV](https://github.com/satoshikawato/gbdraw/blob/main/examples/AP027280.svg)
-
+```bash
+gbdraw circular -i NC_012920.gb -f svg,png   --block_stroke_width 2 --block_stroke_color gray  --show_labels -w 100 -s 10
+```
+![HsmtDMA](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920.svg)
 ## Planned features
 - Feature color code legends (will be added in the next update)
 - Dynamic scaling of the text (will be added in the next update)
