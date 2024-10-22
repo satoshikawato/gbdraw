@@ -186,7 +186,7 @@ tblastx -query Ps-JP.fasta -subject Tokyo2021.fasta  -outfmt 7 -out Ps-JP_Tokyo2
 tblastx -query Tokyo2021.fasta -subject Av.fasta  -outfmt 7 -out Tokyo2021_Av.tblastx.out
 gbdraw linear -i Fukuoka2020.gb Av-JP.gb Ps-JP.gb Tokyo2021.gb Av.gb -b Fukuoka2020_Av-JP.tblastx.out  Av-JP_Ps-JP.tblastx.out  Ps-JP_Tokyo2021.tblastx.out  Tokyo2021_Av.tblastx.out -o hepatoplasmataceae --align_center --bitscore 50 --evalue 1e-3 --separate_strands
 ```
-![hepatoplasmataceae](https://github.com/satoshikawato/gbdraw/blob/main/examples/hepatoplasma.svg)
+![hepatoplasmataceae](https://github.com/satoshikawato/gbdraw/blob/main/examples/hepatoplasmataceae.svg)
 ## Advanced customization
 ### Customizing colors with configuration files
 `gbdraw` allows users to personalize feature colors. This is done by providing a custom tab-separated file that specifies the desired color codes. Additionally, the colors and widths of the strokes can be fine-tuned using command-line arguments like `--block_stroke_width`.
