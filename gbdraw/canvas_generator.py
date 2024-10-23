@@ -220,6 +220,7 @@ class LinearCanvasConfigurator:
         This method adjusts the arrow_length attribute.
         """
         self.arrow_length: float = 0.0012 * self.longest_genome
+        #self.arrow_length: float = 0.003 * self.longest_genome   when short, use this (cds height: 40)     
 
     def calculate_dimensions(self) -> None:
         """

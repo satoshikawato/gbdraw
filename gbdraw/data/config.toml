@@ -76,6 +76,9 @@ font_weight = 'normal'
 [labels.font_size]
   short = 16
   long = 10
+[labels.font_size.linear]
+  short = 6
+  long = 5
 [labels.stroke_width]
   short = 1.5
   long = 0.5

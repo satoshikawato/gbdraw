@@ -222,7 +222,7 @@ def linear_main(cmd_args) -> None:
     block_stroke_width: str = args.block_stroke_width
     line_stroke_color: str = args.line_stroke_color
     line_stroke_width: str = args.line_stroke_width       
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width)
+    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center)
 
     records: list[SeqRecord] = load_gbks(
         genbank_files, "linear", load_comparison)
@@ -232,15 +232,15 @@ def linear_main(cmd_args) -> None:
     num_of_entries: int = len(sequence_length_dict)
     blast_config = BlastMatchConfigurator(
         evalue=evalue, bitscore=bitscore, identity=identity, sequence_length_dict=sequence_length_dict, config_dict=config_dict, default_colors_df=default_colors)
-    canvas_config = LinearCanvasConfigurator(output_prefix=out_file_prefix, show_gc=show_gc, strandedness=strandedness,
-                                             align_center=align_center, num_of_entries=num_of_entries, longest_genome=longest_genome, config_dict=config_dict, show_skew=show_skew, legend=legend)
+    canvas_config = LinearCanvasConfigurator(output_prefix=out_file_prefix,
+                                            num_of_entries=num_of_entries, longest_genome=longest_genome, config_dict=config_dict, legend=legend)
     feature_config = FeatureDrawingConfigurator(
         color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict)
     gc_config = GcContentConfigurator(
-        window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors, show_gc=show_gc)
+        window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
     skew_config = GcSkewConfigurator(
-        window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors, show_skew=show_skew)
-    legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, show_gc=show_gc, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config, show_skew=show_skew)
+        window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
+    legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config)
     plot_linear_diagram(records, blast_files, canvas_config, blast_config,
                         feature_config, gc_config, config_dict, out_formats, legend_config, skew_config)
 

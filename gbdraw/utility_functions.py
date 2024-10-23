@@ -217,7 +217,7 @@ def edit_available_tracks(available_tracks, bbox_start, bbox_end):
     track_found =  False
     for track in available_tracks.keys():
         track_end = available_tracks[track][1]
-        available_start = track_end + 10
+        available_start = track_end + 1
         if bbox_start >= available_start:
             track_factor = list(available_tracks).index(track) + 1
             available_tracks[track][1] = bbox_end
@@ -226,7 +226,7 @@ def edit_available_tracks(available_tracks, bbox_start, bbox_end):
     if track_found ==  False:
         new_track_id = "track_{}".format((len(available_tracks.keys()) + 1))
         available_tracks[new_track_id] = [bbox_start, bbox_end]
-        track_factor = len(available_tracks.keys()) + 1 + 1
+        track_factor = len(available_tracks.keys())
     return available_tracks, track_factor
 
 
@@ -239,7 +239,7 @@ def get_label_text(seq_feature):
     elif hasattr(seq_feature, 'rpt_family') and seq_feature.rpt_family:
         text = seq_feature.rpt_family
     elif hasattr(seq_feature, 'note') and seq_feature.note:
-        text = seq_feature.note[0]
+        text = seq_feature.note
     return text
 
 def get_coordinates_of_longest_segment(feature_object):

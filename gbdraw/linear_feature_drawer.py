@@ -7,8 +7,9 @@ import sys
 from pandas import DataFrame
 from svgwrite.path import Path
 from svgwrite.container import Group
-from typing import Optional
-from .linear_path_drawer import create_label_path_linear, calculate_gc_content_path_desc, create_intron_path_linear, create_arrowhead_path_linear, create_rectangle_path_linear
+from typing import Optional, Literal
+from .linear_path_drawer import calculate_gc_content_path_desc, create_intron_path_linear, create_arrowhead_path_linear, create_rectangle_path_linear
+from .circular_path_drawer import generate_text_path
 from .object_configurators import GcSkewConfigurator, FeatureDrawingConfigurator
 # Logging setup
 logger = logging.getLogger()
@@ -40,7 +41,7 @@ class FeatureDrawer:
         self.intron_stroke_color: str = feature_config.line_stroke_color
         self.intron_stroke_width: float = feature_config.line_stroke_width
 
-    def draw_path(self, path_data: str, group: Group, fill_color, stroke_color, stroke_width) -> None:
+    def draw_path(self, path_data: str, group: Group, fill_color: str, stroke_color_specified: Optional[str] = None, stroke_width_specified: Optional[float] = None) -> None:
         """
         Draws a path on the provided SVG group using the specified style parameters.
 
@@ -51,8 +52,8 @@ class FeatureDrawer:
             stroke_color (Optional[str]): Stroke color for the path. Uses default if None.
             stroke_width (Optional[float]): Stroke width for the path. Uses default if None.
         """
-        stroke_color = stroke_color if stroke_color is not None else self.default_stroke_color
-        stroke_width = stroke_width if stroke_width is not None else self.default_stroke_width
+        stroke_color: str = stroke_color_specified if stroke_color_specified is not None else self.default_stroke_color
+        stroke_width: float = stroke_width_specified if stroke_width_specified is not None else self.default_stroke_width
         path = Path(
             d=path_data,
             fill=fill_color,
@@ -71,7 +72,7 @@ class FeatureDrawer:
             stroke_width (Optional[float]): Stroke width for the path. Uses default if None.
         """
         group.add(path_data)
-    def draw(self, feature_object, group: Group, genome_length: int, cds_height: float, alignment_width: float, normalization_factor: float, strandedness: str, arrow_length: float, available_tracks) -> Group:
+    def draw(self, feature_object, group: Group, genome_length: int, cds_height: float, alignment_width: float, normalization_factor: float, strandedness: str, arrow_length: float) -> Group:
         """
         Draws the provided feature object onto the group based on the specified configuration.
 
@@ -88,19 +89,17 @@ class FeatureDrawer:
         Returns:
             Group: The SVG group with the drawn features.
         """
-        gene_paths, available_tracks = FeaturePathGenerator(genome_length, alignment_width, cds_height, normalization_factor, strandedness, arrow_length).generate_linear_gene_path(feature_object, available_tracks)
+        gene_paths = FeaturePathGenerator(genome_length, alignment_width, cds_height, normalization_factor, strandedness, arrow_length).generate_linear_gene_path(feature_object)
         for gene_path in gene_paths:
             path_type: str
             path_data: str
             path_type, path_data = gene_path[0], gene_path[1]
             if path_type == "block":
-                self.draw_path(path_data, group, fill_color=feature_object.color, stroke_color=self.intron_stroke_color, stroke_width=self.intron_stroke_width)
+                self.draw_path(path_data, group, fill_color=feature_object.color)
             elif path_type == "line":
                 self.draw_path(path_data, group, fill_color="none",
-                               stroke_color=self.intron_stroke_color, stroke_width=self.intron_stroke_width)
-            elif path_type == "label":        
-                self.draw_label(path_data, group)
-        return group, available_tracks
+                               stroke_color_specified=self.intron_stroke_color, stroke_width_specified=self.intron_stroke_width)
+        return group
 
 
 class FeaturePathGenerator:
@@ -138,7 +137,7 @@ class FeaturePathGenerator:
         self.strandedness: str = strandedness
         self.arrow_length: float = arrow_length
      
-    def generate_linear_gene_path(self, gene_object, available_tracks):
+    def generate_linear_gene_path(self, gene_object):
         """
         Generates SVG path data for a given gene object.
 
@@ -171,9 +170,34 @@ class FeaturePathGenerator:
             else:
                 continue
             coordinates_paths.append(coord_path)
-        #label_path, available_tracks = create_label_path_linear(feature_object=gene_object, genome_length=self.genome_length, alignment_width=self.alignment_width, genome_size_normalization_factor=self.genome_size_normalization_factor, cds_height=self.cds_height, strandedness=self.strandedness, coord_dict=coord_dict, available_tracks = available_tracks)
-        #coordinates_paths.append(label_path)
-        return coordinates_paths, available_tracks
+
+        return coordinates_paths
+
+class LabelDrawer:
+    def __init__(self, config_dict: dict) -> None:
+        """
+        Initializes the DefinitionDrawer with configuration settings.
+
+        Args:
+            config_dict (dict): Configuration dictionary containing style settings for the definition section.
+        """
+        self.config_dict = config_dict
+
+        
+    def add_label(self, label_entry, group):
+        feature_label_text = label_entry["label_text"]
+        middle_x = label_entry["middle_x"]
+        middle_y = label_entry["middle_y"]
+        label_path = generate_text_path(text = feature_label_text, title_x = middle_x, title_y = middle_y, interval = 0, font_size = label_entry["font_size"], font_weight = 'normal', font = label_entry["font_family"], dominant_baseline = "central", text_anchor = "middle")
+        group.add(label_path)
+        #feature_path: str = "M " + \
+        #str(start_x) + "," + str(start_y) + "L" + \
+        #str(end_x) + "," + str(end_y) + " z"
+        #group.add(label_path)            
+        return group
+    def draw(self, label_entry, group):
+        group = self.add_label(label_entry, group)
+        return group
 
 
 class GcContentDrawer:
@@ -294,5 +318,4 @@ class SkewDrawer:
             fill_opacity=self.gc_path_fill_opacity,
             fill_rule="evenodd")
         group.add(gc_path)
-        return group
         return group

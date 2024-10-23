@@ -11,8 +11,8 @@ from svgwrite.path import Path
 from svgwrite.shapes import Line
 from svgwrite.text import Text
 from .canvas_generator import LinearCanvasConfigurator
-from .linear_feature_drawer import FeatureDrawer, GcContentDrawer
-from .data_processing import skew_df
+from .linear_feature_drawer import FeatureDrawer, GcContentDrawer, LabelDrawer
+from .data_processing import skew_df, prepare_label_list_linear
 from .create_feature_objects import create_feature_dict
 from .utility_functions import create_text_element, normalize_position_linear
 from .object_configurators import GcContentConfigurator, FeatureDrawingConfigurator
@@ -341,8 +341,10 @@ class SeqRecordGroup:
         self.canvas_config: LinearCanvasConfigurator = canvas_config
         self.feature_config: FeatureDrawingConfigurator = feature_config
         self.config_dict: dict = config_dict
+        self.show_labels = True #self.config_dict['objects']['label']['show_labels']
+        self.label_stroke_color = self.config_dict['labels']['stroke_color']['label_stroke_color']
+        self.label_stroke_width = self.config_dict['labels']['stroke_width']['long']
         self.record_group: Group = self.setup_record_group()
-
     def draw_linear_axis(self,
                          alignment_width: float,
                          genome_size_normalization_factor: float) -> Line:
@@ -394,15 +396,32 @@ class SeqRecordGroup:
         """
         axis_path: Line = self.draw_linear_axis(
             alignment_width, genome_size_normalization_factor)
-        group.add(axis_path)
-        available_tracks= {"track_1":[0,0],
-                               "track_2":[0,0],
-                               "track_3":[0,0],
-                               "track_4":[0,0],
-                               "track_5":[0,0],}
+        
+        available_tracks= {"track_1":[-10000,-10000],
+                               "track_2":[-10000,-100000],
+                               "track_3":[-10000,-10000],
+                               "track_4":[-10000,-10000],
+                               "track_5":[-10000,-10000],}
+
+
+
+        if self.show_labels == True:
+            label_list = prepare_label_list_linear(feature_dict, record_length, alignment_width, 
+                            genome_size_normalization_factor, cds_height, 
+                            strandedness, self.config_dict)
+            for label in label_list:
+                if label["is_embedded"] == False:
+                    line_path = Line(start=(label["middle_x"], label["feature_middle_y"]), end=(label["middle_x"], label["middle_y"]),
+                    stroke=self.label_stroke_color,
+                    stroke_width=self.label_stroke_width)
+                    group.add(line_path)
+        group.add(axis_path)   
         for feature_object in feature_dict.values():
-            group, available_tracks = FeatureDrawer(self.feature_config).draw(feature_object, group, record_length, cds_height,
-                                         alignment_width, genome_size_normalization_factor, strandedness, arrow_length, available_tracks)
+            group = FeatureDrawer(self.feature_config).draw(feature_object, group, record_length, cds_height,
+                                         alignment_width, genome_size_normalization_factor, strandedness, arrow_length)        
+        if self.show_labels == True:
+            for label in label_list:
+                group = LabelDrawer(self.config_dict).draw(label, group)             
         return group
 
     def setup_record_group(self) -> Group:

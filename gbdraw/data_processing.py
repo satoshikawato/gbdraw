@@ -13,6 +13,7 @@ from Bio.SeqRecord import SeqRecord
 from .create_feature_objects import get_strand
 from .utility_functions import calculate_bbox_dimensions, get_label_text
 from .circular_path_drawer import calculate_feature_position_factors_circular
+from .linear_path_drawer import calculate_feature_position_factors_linear, normalize_position_to_linear_track, generate_text_path
 def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
     """
     Calculates dinucleotide skew and content in a DNA sequence, returning a DataFrame.
@@ -430,7 +431,7 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
                 if interval_length > longest_segment_length:
                     longest_segment_length = interval_length
                     label_middle = interval_middle
-            longest_segment_lengh_in_pixels = (2*math.pi*radius) * (longest_segment_length)/total_length
+            longest_segment_length_in_pixels = (2*math.pi*radius) * (longest_segment_length)/total_length
             bbox_width_px, bbox_height_px = calculate_bbox_dimensions(feature_label_text, font_family, font_size, interval)
             label_as_feature_length = total_length * bbox_width_px/(2*math.pi*radius)
             label_start = label_middle - (label_as_feature_length/2)
@@ -440,7 +441,7 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
             feature_middle_y: float = (radius * factors[1]) * math.sin(math.radians(360.0 * ((label_middle) / total_length) - 90))
             middle_x: float = (radius_factor * radius) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90)) # 1.05?
             middle_y: float = (radius_factor * radius) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90)) # 1.05?  
-            if bbox_width_px  < longest_segment_lengh_in_pixels:
+            if bbox_width_px  < longest_segment_length_in_pixels:
                 is_embedded = True
             else:
                 is_embedded = False
@@ -456,6 +457,9 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
             label_entry["height_px"] = bbox_height_px
             label_entry["strand"] = coordinate_strand
             label_entry["is_embedded"] = is_embedded
+            label_entry["font_size"] = font_size
+            label_entry["font_family"] = font_family
+
             if is_embedded:
                 embedded_labels.append(label_entry)
             else:
@@ -467,3 +471,136 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
     left_labels_rearranged = rearrange_labels(left_labels, radius, total_length, genome_len, config_dict, is_right=False)
     label_list = embedded_labels + right_labels_rearranged + left_labels_rearranged
     return label_list
+
+
+def check_label_overlap(label1, label2):
+   """Check if two labels overlap horizontally"""
+   return not (label1["end"] < label2["start"] or label2["end"] < label1["start"])
+
+def find_lowest_available_track(track_dict, label):
+   """Find the lowest track (closest to track_1) where the label can be placed without overlap"""
+   track_num = 1
+   while True:
+       track_id = f"track_{track_num}"
+       # Check if this track has overlaps
+       has_overlap = False
+       if track_id in track_dict:
+           for existing_label in track_dict[track_id]:
+               if check_label_overlap(label, existing_label):
+                   has_overlap = True
+                   break
+       
+       if not has_overlap:
+           return track_num
+       track_num += 1
+
+def prepare_label_list_linear(feature_dict, genome_length, alignment_width, 
+                           genome_size_normalization_factor, cds_height, 
+                           strandedness, config_dict):
+   """
+   Prepares a list of labels for linear genome visualization with proper track organization.
+   """
+   embedded_labels = []
+   external_labels = []
+   track_dict = defaultdict(list)
+   
+   # Get configuration values
+   genome_len = "short" if genome_length < 25000 else "long"
+   font_family = config_dict['objects']['text']['font_family']
+   font_size = config_dict['labels']['font_size']['linear'][genome_len]
+   interval = config_dict['canvas']['dpi']
+   max_bbox_height = 0
+   # Process each feature
+   for feature_id, feature_object in reversed(list(feature_dict.items())):
+       feature_label_text = get_label_text(feature_object)
+       if not feature_label_text:
+           continue
+           
+       # Calculate label dimensions and positions
+       bbox_width_px, bbox_height_px = calculate_bbox_dimensions(
+           feature_label_text, font_family, font_size, interval)
+       if bbox_height_px > max_bbox_height:
+           max_bbox_height = bbox_height_px
+       # Find the longest segment and its middle point
+       longest_segment_length = 0
+       label_middle = 0
+       coordinate_strand = None
+       factors = None
+       longest_segment_start = 0
+       longest_segment_end = 0
+       for coordinate in feature_object.coordinates:
+           coordinate_strand = get_strand(coordinate.strand)
+           factors = calculate_feature_position_factors_linear(coordinate_strand, strandedness)
+           start = int(coordinate.start)
+           end = int(coordinate.end)
+           segment_length = abs(end - start + 1)
+           if segment_length > longest_segment_length:
+            longest_segment_start = start
+            longest_segment_end = end
+            longest_segment_length = segment_length
+            label_middle = (end + start) / 2
+       # Calculate normalized positions
+       normalized_start = normalize_position_to_linear_track(
+           longest_segment_start, genome_length, alignment_width, genome_size_normalization_factor)
+       normalized_end = normalize_position_to_linear_track(
+           longest_segment_end, genome_length, alignment_width, genome_size_normalization_factor)
+       #longest_segment_length_in_pixels = (alignment_width) * (longest_segment_length) / genome_length
+       longest_segment_length_in_pixels = abs(normalized_end - normalized_start) + 1
+       normalized_middle = (normalized_start + normalized_end) / 2
+       bbox_start = normalized_middle - (bbox_width_px / 2)
+       bbox_end = normalized_middle + (bbox_width_px / 2)
+       
+       # Create base label entry
+       label_entry = {
+           "label_text": feature_label_text,
+           "middle": normalized_middle,
+           "start": bbox_start,
+           "end": bbox_end,
+           "middle_x": normalized_middle,
+           "width_px": bbox_width_px,
+           "height_px": bbox_height_px,
+           "strand": coordinate_strand,
+           "feature_middle_y": cds_height * factors[1],
+           "font_size": font_size,
+           "font_family": font_family
+       }
+
+       # Determine if label should be embedded
+       if bbox_width_px < longest_segment_length_in_pixels:
+           label_entry.update({
+               "middle_y": cds_height * factors[1],
+               "is_embedded": True,
+               "track_id": "track_0"
+           })
+           track_dict["track_0"].append(label_entry)
+       else:
+           # For external labels: find lowest possible track
+           label_entry.update({
+               "middle_y": 0,
+               "is_embedded": False
+           })
+           
+           # Find lowest track where label can be placed without overlaps
+           best_track = find_lowest_available_track(track_dict, label_entry)
+           label_entry["track_id"] = f"track_{best_track}"
+           track_dict[f"track_{best_track}"].append(label_entry)
+
+   # Process embedded labels
+   if "track_0" in track_dict:
+       for label in track_dict["track_0"]:
+           embedded_labels.append(label)
+   
+   # Process external labels
+   num_tracks = len(track_dict)
+   for track_id in sorted(track_dict.keys()):
+       if track_id == "track_0":
+           continue
+           
+       track_labels = track_dict[track_id]
+       track_num = int(track_id.split("_")[1])
+       
+       for label in track_labels:
+           label["middle_y"] = (-0.5 * cds_height - (1.025* bbox_height_px) * (track_num))
+           external_labels.append(label)
+
+   return embedded_labels + external_labels

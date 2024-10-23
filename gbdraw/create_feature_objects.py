@@ -77,6 +77,7 @@ def create_repeat_object(repeat_id: str, feature: SeqFeature, color_table: DataF
                    ] = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors)
     label_text = get_label_text(feature)
+
     repeat_object = RepeatObject(
         repeat_id, location, is_directional, color, note, rpt_family, rpt_type, label_text, coordinates)
     return repeat_object
@@ -106,6 +107,7 @@ def create_feature_object(feature_id: str, feature: SeqFeature, color_table: Dat
                    ] = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors)
     label_text = get_label_text(feature)
+    print(label_text)
     feature_object = FeatureObject(
         feature_id, location, is_directional, color, note, label_text, coordinates)
     return feature_object
@@ -130,7 +132,7 @@ def create_gene_object(feature_id: str, feature: SeqFeature, color_table: DataFr
     """
     is_directional: bool = True
     coordinates: List[SimpleLocation] = feature.location.parts
-    note: str = feature.qualifiers.get('note', [""])
+    note: str = feature.qualifiers.get('note', [""])[0]
     product: str = feature.qualifiers.get('product', [""])[0]
     gene: str = feature.qualifiers.get('gene', [""])[0]
     location: list[Tuple[str, str, str, int, int, bool]

@@ -333,12 +333,10 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     legend_config = legend_config.recalculate_legend_dimensions(legend_table)
     canvas_config.recalculate_canvas_dimensions(legend_config)
     canvas: Drawing = canvas_config.create_svg_canvas()
-    # Add records
-    canvas = add_records_on_linear_canvas(
-        canvas, records, feature_config, gc_config, canvas_config, config_dict)
+
+
     # Add length bar
     canvas = add_legends_on_linear_canvas(canvas, canvas_config, legend_config, legend_table)
-    print(legend_config)
     canvas = add_length_bar_on_linear_canvas(
         canvas, canvas_config, config_dict)
     # Add BLAST pairwise matches (if specified)
@@ -347,5 +345,8 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
             blast_files, blast_config)  # file_processing
         canvas = add_comparison_on_linear_canvas(
             canvas, comparisons, canvas_config, blast_config, config_dict)
+    # Add records
+    canvas = add_records_on_linear_canvas(
+        canvas, records, feature_config, gc_config, canvas_config, config_dict)
     # Create SVG file
     save_figure(canvas, out_formats)
