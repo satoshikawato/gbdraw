@@ -380,17 +380,17 @@ class LabelDrawer:
             A tuple containing the text anchor and dominant baseline values for the tick label.
         """
         angle: float = (360.0 * (tick / total_len))
-        if 0 <= angle < 45:
+        if 0 <= angle < 10:
             anchor_value, baseline_value = "start", "text-after-edge"
-        elif 45 <= angle < 155:
+        elif 10 <= angle < 155:
             anchor_value, baseline_value = "start", "middle"
         elif 155 <= angle < 180:
             anchor_value, baseline_value = "start", "hanging"
         elif 180 <= angle < 205:
             anchor_value, baseline_value = "end", "hanging"
-        elif 205 <= angle < 315:
+        elif 205 <= angle < 350:
             anchor_value, baseline_value = "end", "middle"
-        elif 315 <= angle < 360:
+        elif 350 <= angle < 360:
             anchor_value, baseline_value = "end", "text-after-edge"
         else:
             raise ValueError("Abnormal angle: verify the ticks and total length")

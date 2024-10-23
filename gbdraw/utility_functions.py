@@ -156,6 +156,7 @@ def modify_config_dict(config_dict, block_stroke_width=None, block_stroke_color=
                        line_stroke_color=None, line_stroke_width=None, 
                        gc_stroke_color=None, show_gc=None, show_skew=None, show_labels=None, align_center=None, cicular_width_with_labels=None, track_type=None) -> dict:
     # Mapping of parameter names to their paths in the config_dict
+    
     param_paths = {
         'block_stroke_width': 'objects.features.block_stroke_width',
         'block_stroke_color': 'objects.features.block_stroke_color',
@@ -234,12 +235,13 @@ def get_label_text(seq_feature):
     text = ''
     if hasattr(seq_feature, 'product') and seq_feature.product:
         text = seq_feature.product
+    elif hasattr(seq_feature, 'note') and seq_feature.note:
+        text = seq_feature.note
     elif hasattr(seq_feature, 'gene') and seq_feature.gene:
         text = seq_feature.gene
     elif hasattr(seq_feature, 'rpt_family') and seq_feature.rpt_family:
         text = seq_feature.rpt_family
-    elif hasattr(seq_feature, 'note') and seq_feature.note:
-        text = seq_feature.note
+
     return text
 
 def get_coordinates_of_longest_segment(feature_object):

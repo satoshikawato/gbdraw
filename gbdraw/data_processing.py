@@ -193,30 +193,35 @@ def y_overlap(label1, label2, minimum_margin):
     label1_start_y = label1["start_y"]
     label2_start_y = label2["start_y"]
     if label1_start_y < label2_start_y:
-        if label1_start_y + 0.5 * label1["height_px"] +  minimum_margin > (label2_start_y - 0.5 * label2["height_px"]):
+        if (label1_start_y + 0.55 * label1["height_px"] +  minimum_margin) > (label2_start_y - 0.55 * label2["height_px"]):
             return True
         else:
             return False
     else:
-        if (label2_start_y + 0.5 * label2["height_px"] +  minimum_margin) > (label1_start_y - 0.5 * label1["height_px"] ):
+        if (label2_start_y + 0.55 * label2["height_px"] +   minimum_margin) > (label1_start_y - 0.55 * label1["height_px"] ):
             return True
         else:
             return False
 
 def x_overlap(label1, label2):
-
     # Adjusted to directly return the evaluated condition
     min_x1 = label1["start_x"]
     max_x1 = label1["start_x"] + label1["width_px"]
     min_x2 = label2["start_x"]
     max_x2 = label2["start_x"] + label2["width_px"]
     if min_x1 < min_x2:
-        if (max_x1 - min_x2) >0:
+        if max_x1 >= min_x2:
+            return True
+        # when nested also true
+        elif max_x1 >= max_x2:
             return True
         else:
             return False
     else:
-        if (max_x2 - min_x1) >0:
+        if max_x2 >= min_x1:
+            return True
+        # when nested also true
+        elif max_x2 >= max_x1:
             return True
         else:
             return False
@@ -282,7 +287,6 @@ def euclidean_distance(x1, y1, x2, y2):
     return math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
 
 
-
 def improved_label_placement(labels, center_x, center_y, x_radius, y_radius, feature_radius, total_length, start_angle, end_angle, is_right, margin=1, max_iterations=1000):
     def calculate_angle(x, y, origin_x, origin_y):
         return math.degrees(math.atan2((y - origin_y), (x - origin_x))) % 360 
@@ -320,7 +324,7 @@ def improved_label_placement(labels, center_x, center_y, x_radius, y_radius, fea
             current_score = calculate_angle_of_three_points(label["feature_middle_x"], label["feature_middle_y"], 0, 0, label['start_x'], label['start_y'])
 
             # Check overlaps with neighbors
-            overlaps_prev = i > 0 and check_overlap(label, labels[i-1])
+            overlaps_prev = i > 0 and check_overlap(labels[i-1], label)
             overlaps_next = i < len(labels) - 1 and check_overlap(label, labels[i+1])
             if overlaps_prev and overlaps_next:
                 continue
@@ -343,12 +347,12 @@ def improved_label_placement(labels, center_x, center_y, x_radius, y_radius, fea
 
             # Move label
             while True:
-                new_angle = (current_angle + direction * 0.1)
+                new_angle = (current_angle + direction * 0.01)
                 new_x, new_y = move_label(label, new_angle)
                 new_score = calculate_angle_of_three_points(label["feature_middle_x"], label["feature_middle_y"], 0, 0, new_x, new_y)
 
                 # Check if this move would create overlap with neighbors
-                creates_new_overlap = (i > 0 and check_overlap({'start_x': new_x, 'start_y': new_y, 'width_px': label['width_px'], 'height_px': label['height_px']}, labels[i-1])) or \
+                creates_new_overlap = (i > 0 and check_overlap(labels[i-1], {'start_x': new_x, 'start_y': new_y, 'width_px': label['width_px'], 'height_px': label['height_px']})) or \
                                       (i < len(labels) - 1 and check_overlap({'start_x': new_x, 'start_y': new_y, 'width_px': label['width_px'], 'height_px': label['height_px']}, labels[i+1]))
 
                 if start_angle <= new_angle <= end_angle and abs(new_score) < abs(current_score) and not creates_new_overlap:
@@ -421,27 +425,29 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
             is_embedded = False
             label_middle = 0
             coordinate_strand: str = "undefined"
+            
             list_of_coordinates: List[SimpleLocation] = feature_object.coordinates
             for coordinate in list_of_coordinates:
                 coordinate_start = int(coordinate.start)
                 coordinate_end = int(coordinate.end)
                 coordinate_strand = get_strand(coordinate.strand)
-                interval_length = int(coordinate_end - coordinate_start + 1)
+                interval_length = int(coordinate_end - coordinate_start ) + 1
                 interval_middle = int(coordinate_end + coordinate_start) / 2
                 if interval_length > longest_segment_length:
                     longest_segment_length = interval_length
                     label_middle = interval_middle
-            longest_segment_length_in_pixels = (2*math.pi*radius) * (longest_segment_length)/total_length
+            factors: list[float] = calculate_feature_position_factors_circular(total_length, coordinate_strand, track_ratio, track_type)
+            longest_segment_length_in_pixels = (2*math.pi*radius_factor*radius) * (longest_segment_length)/total_length
             bbox_width_px, bbox_height_px = calculate_bbox_dimensions(feature_label_text, font_family, font_size, interval)
             label_as_feature_length = total_length * bbox_width_px/(2*math.pi*radius)
             label_start = label_middle - (label_as_feature_length/2)
             label_end = label_middle + (label_as_feature_length/2)
-            factors: list[float] = calculate_feature_position_factors_circular(total_length, coordinate_strand, track_ratio, track_type)
+            
             feature_middle_x: float = (radius * factors[1]) * math.cos(math.radians(360.0 * ((label_middle) / total_length) - 90))
             feature_middle_y: float = (radius * factors[1]) * math.sin(math.radians(360.0 * ((label_middle) / total_length) - 90))
             middle_x: float = (radius_factor * radius) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90)) # 1.05?
             middle_y: float = (radius_factor * radius) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90)) # 1.05?  
-            if bbox_width_px  < longest_segment_length_in_pixels:
+            if bbox_width_px  < longest_segment_length_in_pixels *1.05:
                 is_embedded = True
             else:
                 is_embedded = False
@@ -471,7 +477,6 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
     left_labels_rearranged = rearrange_labels(left_labels, radius, total_length, genome_len, config_dict, is_right=False)
     label_list = embedded_labels + right_labels_rearranged + left_labels_rearranged
     return label_list
-
 
 def check_label_overlap(label1, label2):
    """Check if two labels overlap horizontally"""

@@ -99,22 +99,3 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi):
     
     text_height_pixels = ((max(ymaxes) + abs(min(ymins)))/units_per_em) * pixel
     return text_width_pixels, text_height_pixels
-
-"""
-# Example usage
-font_size = 64  # Size in points
-dpi = 96  # Dots Per Inch
-font_families = ["Arial", "Liberation Sans"]
-styles = ["Regular", "Italic"]
-text = "Homo sapiens"
-
-font_file_dict = get_font_dict(font_families, styles)
-  # Replace with the correct path
-
-
-for font in font_families:
-    for style in styles:
-        font_path = font_file_dict[font][style]
-        bbox_width_px, bbox_height_px = get_text_bbox_size_pixels(font_path, text, font_size, dpi)
-        print(f"Text bounding box size for {text} in {font} {style} at {font_size} pt in {dpi} dpi: width = {bbox_width_px}px, height = {bbox_height_px}px")
-"""

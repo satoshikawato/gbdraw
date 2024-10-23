@@ -74,8 +74,8 @@ font_weight = 'normal'
 
 [labels]
 [labels.font_size]
-  short = 16
-  long = 10
+  short = 12
+  long = 8
 [labels.font_size.linear]
   short = 6
   long = 5
@@ -99,8 +99,8 @@ font_weight = 'normal'
   short = 1.325
   long = 1.325
 [labels.arc_x_radius_factor.middle]
-  short = 1.15
-  long = 1.15
+  short = 1.17
+  long = 1.17
 [labels.arc_x_radius_factor.spreadout]
   short = 1.15
   long = 1.2
@@ -129,8 +129,8 @@ font_weight = 'normal'
   short = 81
   long = 81
 [labels.arc_angle.middle]
-  short = 85
-  long = 85
+  short = 87
+  long = 87
 [labels.arc_angle.spreadout]
   short = 85
   long = 85

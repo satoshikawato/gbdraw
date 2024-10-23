@@ -570,7 +570,7 @@ def generate_name_path(name_parts: list, title_x: float, title_y: float, interva
     return name_path
 
 
-def generate_text_path(text: str, title_x: float, title_y: float, interval: float, font_size: float, font_weight: str, font: str, dominant_baseline: str = "auto", text_anchor: str = "middle") -> Text:
+def generate_text_path(text: str, title_x: float, title_y: float, interval: float, font_size: float, font_weight: str, font: str, dominant_baseline: str = "middle", text_anchor: str = "middle") -> Text:
     """
     Generates an SVG text element for general text on the circular canvas.
 
