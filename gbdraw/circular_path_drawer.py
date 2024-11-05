@@ -154,17 +154,14 @@ def generate_circular_gc_skew_path_desc(radius: float, df: DataFrame, total_len:
     return skew_desc
 
 def calculate_cds_ratio(track_ratio, seq_length):
-    if seq_length < 25000:
-        cds_ratio = track_ratio * 0.40
+    if seq_length < 50000:
+        cds_ratio = track_ratio * 0.50
         offset = 0.01
-    elif 25000 <= seq_length < 50000:
-        cds_ratio = track_ratio * 0.35
-        offset = 0.0075
     else:
         cds_ratio = track_ratio * 0.25
         offset = 0.005
     return cds_ratio, offset
-def calculate_feature_position_factors_circular(total_length, strand: str, track_ratio: float, track_type="tuckin") -> list[float]:
+def calculate_feature_position_factors_circular(total_length, strand: str, track_ratio: float, track_type="tuckin", strandedness=True) -> list[float]:
     """
     Calculates position factors for a feature based on its strand orientation on a circular canvas.
 
@@ -177,34 +174,44 @@ def calculate_feature_position_factors_circular(total_length, strand: str, track
     """
     CDS_RATIO, OFFSET = calculate_cds_ratio(track_ratio, total_length)
     BASE: float = 1.0
-    if track_type == "middle":
-        factors_positive: list[float] = [
-            BASE, BASE + CDS_RATIO * 0.5, BASE + CDS_RATIO]
-        factors_negative: list[float] = [
-            BASE - CDS_RATIO, BASE - CDS_RATIO * 0.5, BASE]
-    elif track_type == "spreadout":
-        factors_positive: list[float] = [
-            BASE + CDS_RATIO * 1.4, BASE + CDS_RATIO * 1.9, BASE + CDS_RATIO * 2.4]
-        factors_negative: list[float] = [
-            BASE + CDS_RATIO * 0.4, BASE + CDS_RATIO * 0.9, BASE + CDS_RATIO * 1.4]
-    elif track_type == "tuckin":
-        factors_positive: list[float] = [
-            BASE - CDS_RATIO * 1.7, BASE - CDS_RATIO * 1.2, BASE - CDS_RATIO * 0.7]
-        factors_negative: list[float] = [
-            BASE - CDS_RATIO * 2.7, BASE - CDS_RATIO * 2.2, BASE - CDS_RATIO * 1.7]
+    if strandedness == True:
+        if track_type == "middle":
+            factors_positive: list[float] = [
+                BASE, BASE + CDS_RATIO * 0.5, BASE + CDS_RATIO]
+            factors_negative: list[float] = [
+                BASE - CDS_RATIO, BASE - CDS_RATIO * 0.5, BASE]
+        elif track_type == "spreadout":
+            factors_positive: list[float] = [
+                BASE + CDS_RATIO * 1.4, BASE + CDS_RATIO * 1.9, BASE + CDS_RATIO * 2.4]
+            factors_negative: list[float] = [
+                BASE + CDS_RATIO * 0.4, BASE + CDS_RATIO * 0.9, BASE + CDS_RATIO * 1.4]
+        elif track_type == "tuckin":
+            factors_positive: list[float] = [
+                BASE - CDS_RATIO * 1.7, BASE - CDS_RATIO * 1.2, BASE - CDS_RATIO * 0.7]
+            factors_negative: list[float] = [
+                BASE - CDS_RATIO * 2.7, BASE - CDS_RATIO * 2.2, BASE - CDS_RATIO * 1.7]
+        else:
+            factors_positive: list[float] = [
+                BASE, BASE + CDS_RATIO * 0.5, BASE + CDS_RATIO]
+            factors_negative: list[float] = [
+                BASE - CDS_RATIO, BASE - CDS_RATIO * 0.5, BASE]
+        if strand == "positive":
+            factors: list[float] = [x + OFFSET for x in factors_positive]
+        else:
+            factors = [x - OFFSET for x in factors_negative]
     else:
         factors_positive: list[float] = [
-            BASE, BASE + CDS_RATIO * 0.5, BASE + CDS_RATIO]
+            BASE - CDS_RATIO * 0.5, BASE, BASE + CDS_RATIO * 0.5]
         factors_negative: list[float] = [
-            BASE - CDS_RATIO, BASE - CDS_RATIO * 0.5, BASE]
-    if strand == "positive":
-        factors: list[float] = [x + OFFSET for x in factors_positive]
-    else:
-        factors = [x - OFFSET for x in factors_negative]
+            BASE - CDS_RATIO * 0.5, BASE, BASE + CDS_RATIO * 0.5]
+        if strand == "positive":
+            factors: list[float] = [x  for x in factors_positive]
+        else:
+            factors = [x for x in factors_negative]      
     return factors
 
 
-def generate_circular_intron_path(radius: float, coord_dict: Dict[str, Union[str, int]], total_length: int, track_ratio: float, track_type: str) -> list[str]:
+def generate_circular_intron_path(radius: float, coord_dict: Dict[str, Union[str, int]], total_length: int, track_ratio: float, track_type: str, strandedness: bool) -> list[str]:
     """
     Generates the SVG path description for an intron feature on a circular canvas.
 
@@ -225,7 +232,7 @@ def generate_circular_intron_path(radius: float, coord_dict: Dict[str, Union[str
         "positive": " 0 0 0 ", "negative": " 0 0 1 "}
     param: str = strand_dict[coord_strand]
     factors: list[float] = calculate_feature_position_factors_circular(
-        total_length, coord_strand, track_ratio, track_type)
+        total_length, coord_strand, track_ratio, track_type, strandedness)
     start_x_1: float = (radius * factors[1]) * math.cos(
         math.radians(360.0 * ((coord_start) / total_length) - 90))
     start_y_1: float = (radius * factors[1]) * math.sin(
@@ -240,7 +247,7 @@ def generate_circular_intron_path(radius: float, coord_dict: Dict[str, Union[str
     return ["line", feature_path]
 
 
-def generate_circular_arrowhead_path(radius: float, coord_dict: Dict[str, Union[str, int]], total_length: int, cds_arrow_length: float, track_ratio: float, track_type: str):
+def generate_circular_arrowhead_path(radius: float, coord_dict: Dict[str, Union[str, int]], total_length: int, cds_arrow_length: float, track_ratio: float, track_type: str, strandedness: bool) -> list[str]:
     """
     Generates the SVG path description for an arrowhead feature on a circular canvas.
 
@@ -256,7 +263,7 @@ def generate_circular_arrowhead_path(radius: float, coord_dict: Dict[str, Union[
     """
     coord_strand: str = str(coord_dict['coord_strand'])
     factors: list[float] = calculate_feature_position_factors_circular(
-        total_length, coord_strand, track_ratio, track_type)
+        total_length, coord_strand, track_ratio, track_type, strandedness)
     coord_start = int(coord_dict["coord_start"])
     coord_end = int(coord_dict["coord_end"])
     coord_len: float = abs(
@@ -317,7 +324,7 @@ def generate_circular_arrowhead_path(radius: float, coord_dict: Dict[str, Union[
     return ["block", feature_path]
 
 
-def generate_circular_rectangle_path(radius: float, coord_dict: Dict[str, Union[str, int]], total_length: int, track_ratio: float, track_type: str) -> list[str]:
+def generate_circular_rectangle_path(radius: float, coord_dict: Dict[str, Union[str, int]], total_length: int, track_ratio: float, track_type: str, strandedness: bool) -> list[str]:
     """
     Generates the SVG path description for a rectangular feature on a circular canvas.
 
@@ -332,7 +339,7 @@ def generate_circular_rectangle_path(radius: float, coord_dict: Dict[str, Union[
     """
     coord_strand: str = str(coord_dict['coord_strand'])
     factors: list[float] = calculate_feature_position_factors_circular(
-        total_length, coord_strand, track_ratio, track_type)
+        total_length, coord_strand, track_ratio, track_type, strandedness)
     coord_start: int = int(coord_dict['coord_start'])
     coord_end: int = int(coord_dict['coord_end'])
     rect_strand_dict: dict[str, Tuple[str, str]] = {

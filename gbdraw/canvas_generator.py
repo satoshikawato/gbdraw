@@ -5,6 +5,7 @@ import logging
 import sys
 from svgwrite import Drawing
 from typing import Literal
+from .utility_functions import determine_length_parameter
 # Logging setup
 Logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -170,13 +171,16 @@ class LinearCanvasConfigurator:
         """
         self.output_prefix: str = output_prefix
         self.config_dict = config_dict
+        self.longest_genome: int = longest_genome
         self.fig_width: int = self.config_dict['canvas']['linear']['width']
         self.vertical_offset: float = self.config_dict['canvas']['linear']['vertical_offset']
         self.horizontal_offset: float = self.config_dict['canvas']['linear']['horizontal_offset']
         self.vertical_padding: float = self.config_dict['canvas']['linear']['vertical_padding']
         self.comparison_height: float = self.config_dict['canvas']['linear']['comparison_height']
         self.canvas_padding: float = self.config_dict['canvas']['linear']['canvas_padding']
-        self.default_cds_height: float = self.config_dict['canvas']['linear']['default_cds_height']
+        self.length_threshold = self.config_dict['labels']['length_threshold']['linear']
+        self.length_param = determine_length_parameter(self.longest_genome, self.length_threshold)
+        self.default_cds_height: float = self.config_dict['canvas']['linear']['default_cds_height'][self.length_param]
         self.default_gc_height: float = self.config_dict['canvas']['linear']['default_gc_height']
         self.dpi: int = self.config_dict['png_output']['dpi']
         self.show_gc: bool = self.config_dict['canvas']['show_gc']
@@ -186,7 +190,7 @@ class LinearCanvasConfigurator:
         self.legend_position = legend
         self.num_of_entries: int = num_of_entries
 
-        self.longest_genome: int = longest_genome
+
         self.calculate_dimensions()
         self.set_arrow_length()
 
@@ -219,9 +223,8 @@ class LinearCanvasConfigurator:
         Sets the length of the arrow used in the representation based on the longest genome.
         This method adjusts the arrow_length attribute.
         """
-        self.arrow_length: float = 0.0012 * self.longest_genome
-        #self.arrow_length: float = 0.003 * self.longest_genome   when short, use this (cds height: 40)     
-
+        self.arrow_length_param = self.config_dict['canvas']['linear']['arrow_length_parameter'][self.length_param]
+        self.arrow_length: float = self.arrow_length_param * self.longest_genome
     def calculate_dimensions(self) -> None:
         """
         Calculates the dimensions for the linear canvas including the total width and height, 

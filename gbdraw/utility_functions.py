@@ -154,7 +154,7 @@ def update_config_value(config_dict, path, value):
 
 def modify_config_dict(config_dict, block_stroke_width=None, block_stroke_color=None, 
                        line_stroke_color=None, line_stroke_width=None, 
-                       gc_stroke_color=None, show_gc=None, show_skew=None, show_labels=None, align_center=None, cicular_width_with_labels=None, track_type=None) -> dict:
+                       gc_stroke_color=None, show_gc=None, show_skew=None, show_labels=None, align_center=None, cicular_width_with_labels=None, track_type=None, strandedness=None) -> dict:
     # Mapping of parameter names to their paths in the config_dict
     
     param_paths = {
@@ -163,11 +163,12 @@ def modify_config_dict(config_dict, block_stroke_width=None, block_stroke_color=
         'line_stroke_color': 'objects.features.line_stroke_color',
         'line_stroke_width': 'objects.features.line_stroke_width',
         'gc_stroke_color': 'objects.gc_content.stroke_color',
+        'strandedness': 'canvas.strandedness',
         'show_gc': 'canvas.show_gc',
         'show_skew': 'canvas.show_skew',
         'show_labels': 'canvas.show_labels',
         'align_center': 'canvas.linear.align_center',
-        'track_type': 'canvas.circular.track_type'
+        'track_type': 'canvas.circular.track_type',
     }
     # Update the config_dict for each specified parameter
     for param, path in param_paths.items():
@@ -235,13 +236,22 @@ def get_label_text(seq_feature):
     text = ''
     if hasattr(seq_feature, 'product') and seq_feature.product:
         text = seq_feature.product
-    elif hasattr(seq_feature, 'note') and seq_feature.note:
-        text = seq_feature.note
     elif hasattr(seq_feature, 'gene') and seq_feature.gene:
         text = seq_feature.gene
-    elif hasattr(seq_feature, 'rpt_family') and seq_feature.rpt_family:
-        text = seq_feature.rpt_family
-
+    elif hasattr(seq_feature, 'rpt_family'):
+        # if not undefined or None, use rpt_family, else use note
+        if seq_feature.rpt_family and seq_feature.rpt_family != 'undefined':
+            text = seq_feature.rpt_family.split(';')[0]
+        elif seq_feature.note:
+            if isinstance(seq_feature.note, list):
+                text = seq_feature.note[0].split(';')[0]
+            else:
+                text = seq_feature.note.split(';')[0]
+    elif hasattr(seq_feature, 'note') and seq_feature.note:
+        if isinstance(seq_feature.note, list):
+            text = seq_feature.note[0].split(';')[0]
+        else:
+            text = seq_feature.note.split(';')[0]
     return text
 
 def get_coordinates_of_longest_segment(feature_object):
@@ -268,3 +278,9 @@ def calculate_coordinates(center_x, center_y, radius, angle_degrees):
     y = center_y + radius * math.sin(angle_radians)
     return x, y
 
+
+def determine_length_parameter(record_length: int, length_threshold: int) -> str:
+    if record_length < length_threshold:
+        return "short"
+    else:
+        return "long"

@@ -128,7 +128,7 @@ def _get_args(args) -> argparse.Namespace:
         '--features',
         help='Comma-separated list of feature keys to draw (default: CDS,tRNA,rRNA,repeat_region)',
         type=str,
-        default="CDS,tRNA,rRNA,repeat_region")
+        default="CDS,tRNA,rRNA,tmRNA,ncRNA,repeat_region")
     parser.add_argument(
         '--block_stroke_color',
         help='Block stroke color (str; default: "black")',
@@ -161,6 +161,7 @@ def _get_args(args) -> argparse.Namespace:
         help='Legend position (optional = no caption by default; "left", "right")',
         type=str,
         default="right")
+    parser.add_argument("--show_labels", help="Show labels", action="store_true")
     if len(sys.argv) == 1:
         parser.print_help(sys.stderr)
         sys.exit(1)
@@ -207,6 +208,8 @@ def linear_main(cmd_args) -> None:
     show_skew: bool = False
     bitscore: float = args.bitscore
     identity: float = args.identity
+    show_labels: bool = args.show_labels
+    
     selected_features_set: str = args.features.split(',')
     out_formats: list[str] = parse_formats(args.format)
     user_defined_default_colors: str = args.default_colors
@@ -214,6 +217,7 @@ def linear_main(cmd_args) -> None:
         load_comparison = True
     else:
         load_comparison = False
+    
     default_colors: Optional[DataFrame] = load_default_colors(
         user_defined_default_colors)
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
@@ -222,7 +226,7 @@ def linear_main(cmd_args) -> None:
     block_stroke_width: str = args.block_stroke_width
     line_stroke_color: str = args.line_stroke_color
     line_stroke_width: str = args.line_stroke_width       
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center)
+    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness)
 
     records: list[SeqRecord] = load_gbks(
         genbank_files, "linear", load_comparison)
@@ -230,6 +234,8 @@ def linear_main(cmd_args) -> None:
                                int] = create_dict_for_sequence_lengths(records)
     longest_genome: int = max(sequence_length_dict.values())
     num_of_entries: int = len(sequence_length_dict)
+    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness, show_labels=show_labels)
+
     blast_config = BlastMatchConfigurator(
         evalue=evalue, bitscore=bitscore, identity=identity, sequence_length_dict=sequence_length_dict, config_dict=config_dict, default_colors_df=default_colors)
     canvas_config = LinearCanvasConfigurator(output_prefix=out_file_prefix,

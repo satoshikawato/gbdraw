@@ -24,6 +24,7 @@ class FeatureObject:
         self.color: str = color
         self.note: str = note
         self.label_text: str = label_text
+        self.feature_track_id = 0
     def __str__(self) -> str:
         lines: List[str] = []
         if self.feature_id:

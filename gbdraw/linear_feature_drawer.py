@@ -58,7 +58,9 @@ class FeatureDrawer:
             d=path_data,
             fill=fill_color,
             stroke=stroke_color,
-            stroke_width=stroke_width)
+            stroke_width=stroke_width,
+            stroke_linejoin='round',
+            stroke_linecap='round')
         group.add(path)
     def draw_label(self, path_data, group: Group) -> None:
         """
@@ -72,34 +74,49 @@ class FeatureDrawer:
             stroke_width (Optional[float]): Stroke width for the path. Uses default if None.
         """
         group.add(path_data)
-    def draw(self, feature_object, group: Group, genome_length: int, cds_height: float, alignment_width: float, normalization_factor: float, strandedness: str, arrow_length: float) -> Group:
+    def draw(self, feature_object, group: Group, genome_length: int, 
+             cds_height: float, alignment_width: float, normalization_factor: float,
+             feature_strand: str, separate_strands: bool, arrow_length: float) -> Group:
         """
-        Draws the provided feature object onto the group based on the specified configuration.
-
+        Draws the provided feature object onto the group
+        
         Args:
-            feature_object: The feature object containing the genomic feature data.
-            group (Group): SVG group where the features will be drawn.
-            genome_length (int): The length of the genomic sequence.
-            cds_height (float): Height of the coding sequence tracks.
-            alignment_width (float): Width of the alignment area.
-            normalization_factor (float): Factor for normalizing the size of features.
-            strandedness (str): The strandedness ('positive' or 'negative') of the feature.
-            arrow_length (float): Length of the arrow for directional features.
-
-        Returns:
-            Group: The SVG group with the drawn features.
+            feature_object: The feature object to draw
+            group: SVG group to draw on
+            genome_length: Length of the genome
+            cds_height: Height of feature
+            alignment_width: Width of alignment area
+            normalization_factor: Scale factor
+            feature_strand: Strand of this specific feature
+            separate_strands: Whether to use separate tracks for strands
+            arrow_length: Length of directional arrows
         """
-        gene_paths = FeaturePathGenerator(genome_length, alignment_width, cds_height, normalization_factor, strandedness, arrow_length).generate_linear_gene_path(feature_object)
+        path_generator = FeaturePathGenerator(
+            genome_length=genome_length,
+            alignment_width=alignment_width,
+            cds_height=cds_height,
+            genome_size_normalization_factor=normalization_factor,
+            feature_strand=feature_strand,
+            separate_strands=separate_strands,
+            arrow_length=arrow_length
+        )
+        
+        gene_paths = path_generator.generate_linear_gene_path(feature_object)
+        
         for gene_path in gene_paths:
-            path_type: str
-            path_data: str
             path_type, path_data = gene_path[0], gene_path[1]
             if path_type == "block":
                 self.draw_path(path_data, group, fill_color=feature_object.color)
             elif path_type == "line":
-                self.draw_path(path_data, group, fill_color="none",
-                               stroke_color_specified=self.intron_stroke_color, stroke_width_specified=self.intron_stroke_width)
+                self.draw_path(
+                    path_data, 
+                    group, 
+                    fill_color="none",
+                    stroke_color_specified=self.intron_stroke_color,
+                    stroke_width_specified=self.intron_stroke_width
+                )
         return group
+
 
 
 class FeaturePathGenerator:
@@ -118,57 +135,72 @@ class FeaturePathGenerator:
         arrow_length (float): Length of the arrow for directional features.
     """
 
-    def __init__(self, genome_length: int, alignment_width: float, cds_height: float, genome_size_normalization_factor: float, strandedness: str, arrow_length: float) -> None:
-        """
-        Initializes the FeaturePathGenerator with configuration settings for the linear canvas.
+    def __init__(self, genome_length: int, alignment_width: float, 
+                 cds_height: float, genome_size_normalization_factor: float,
+                 feature_strand: str, separate_strands: bool, arrow_length: float) -> None:
+        self.genome_length = genome_length
+        self.alignment_width = alignment_width
+        self.cds_height = cds_height
+        self.genome_size_normalization_factor = genome_size_normalization_factor
+        self.feature_strand = feature_strand  # Individual feature's strand
+        self.separate_strands = separate_strands  # Track separation setting
+        self.arrow_length = arrow_length
 
-        Args:
-            genome_length (int): Total length of the genomic sequence.
-            alignment_width (float): Width of the alignment area.
-            cds_height (float): Height of the coding sequence tracks.
-            genome_size_normalization_factor (float): Factor for normalizing feature sizes.
-            strandedness (str): Strand orientation of the features.
-            arrow_length (float): Length of the arrow for directional features.
-        """
-        self.genome_length: int = genome_length
-        self.alignment_width: float = alignment_width
-        self.cds_height: float = cds_height
-        self.genome_size_normalization_factor: float = genome_size_normalization_factor
-        self.strandedness: str = strandedness
-        self.arrow_length: float = arrow_length
-     
     def generate_linear_gene_path(self, gene_object):
         """
         Generates SVG path data for a given gene object.
-
-        Args:
-            gene_object: The gene object containing genomic feature data.
-
-        Returns:
-            A list of path data and types for the genomic features in the gene object.
         """
-
+        feature_track_id = gene_object.feature_track_id
         coords = gene_object.location
         coordinates_paths = []
+        
         for coord in coords:
             coord_dict = {
                 'feat_type': coord[0],
                 'feat_strand': coord[2],
                 'feat_start': coord[3],
-                'feat_end': coord[4]}
-            feat_type: str = coord_dict['feat_type']
+                'feat_end': coord[4]
+            }
+            feat_type = coord_dict['feat_type']
+            
             if feat_type == "line":
-                coord_path: list[str] = create_intron_path_linear(
-                    coord_dict, self.genome_length, self.alignment_width, self.genome_size_normalization_factor, self.cds_height, self.strandedness)
+                coord_path = create_intron_path_linear(
+                    coord_dict=coord_dict,
+                    genome_length=self.genome_length,
+                    alignment_width=self.alignment_width,
+                    genome_size_normalization_factor=self.genome_size_normalization_factor,
+                    cds_height=self.cds_height,
+                    feature_strand=self.feature_strand,  # Changed from strandedness
+                    separate_strands=self.separate_strands,
+                    feature_track_id=feature_track_id
+                )
             elif feat_type == "block":
-                if coord[5] and gene_object.is_directional == True:
+                if coord[5] and gene_object.is_directional:
                     coord_path = create_arrowhead_path_linear(
-                        coord_dict, self.arrow_length, self.cds_height, self.strandedness, self.genome_length, self.alignment_width, self.genome_size_normalization_factor)
+                        coord_dict=coord_dict,
+                        arrow_length=self.arrow_length,
+                        cds_height=self.cds_height,
+                        feature_strand=self.feature_strand,  # Changed from strandedness
+                        genome_length=self.genome_length,
+                        alignment_width=self.alignment_width,
+                        genome_size_normalization_factor=self.genome_size_normalization_factor,
+                        separate_strands=self.separate_strands,
+                        feature_track_id=feature_track_id
+                    )
                 else:
                     coord_path = create_rectangle_path_linear(
-                        coord_dict, self.genome_length, self.alignment_width, self.genome_size_normalization_factor, self.cds_height, self.strandedness)
+                        coord_dict=coord_dict,
+                        genome_length=self.genome_length,
+                        alignment_width=self.alignment_width,
+                        genome_size_normalization_factor=self.genome_size_normalization_factor,
+                        cds_height=self.cds_height,
+                        feature_strand=self.feature_strand,  # Changed from strandedness
+                        separate_strands=self.separate_strands,
+                        feature_track_id=feature_track_id
+                    )
             else:
                 continue
+                
             coordinates_paths.append(coord_path)
 
         return coordinates_paths
@@ -189,11 +221,7 @@ class LabelDrawer:
         middle_x = label_entry["middle_x"]
         middle_y = label_entry["middle_y"]
         label_path = generate_text_path(text = feature_label_text, title_x = middle_x, title_y = middle_y, interval = 0, font_size = label_entry["font_size"], font_weight = 'normal', font = label_entry["font_family"], dominant_baseline = "central", text_anchor = "middle")
-        group.add(label_path)
-        #feature_path: str = "M " + \
-        #str(start_x) + "," + str(start_y) + "L" + \
-        #str(end_x) + "," + str(end_y) + " z"
-        #group.add(label_path)            
+        group.add(label_path)        
         return group
     def draw(self, label_entry, group):
         group = self.add_label(label_entry, group)

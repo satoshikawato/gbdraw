@@ -134,6 +134,10 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         default="right")
     parser.add_argument(
+        '--separate_strands',
+        help='Separate strands (default: False).',
+        action='store_true')
+    parser.add_argument(
         '--track_type',
         help='Track type (default: "tuckin"; "tuckin", "middle", "spreadout")',
         type=str,
@@ -187,13 +191,14 @@ def circular_main(cmd_args) -> None:
     line_stroke_color: str = args.line_stroke_color
     line_stroke_width: str = args.line_stroke_width   
     track_type: str = args.track_type
+    strandedness = args.separate_strands
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
     default_colors: Optional[DataFrame] = load_default_colors(
         user_defined_default_colors)
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     show_gc, show_skew = suppress_gc_content_and_skew(
         suppress_gc, suppress_skew)
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_labels=show_labels, track_type=track_type)
+    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_labels=show_labels, track_type=track_type, strandedness=strandedness)
     out_formats: list[str] = parse_formats(args.format)
     show_gc: bool
     show_skew: bool

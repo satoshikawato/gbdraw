@@ -107,7 +107,7 @@ def create_feature_object(feature_id: str, feature: SeqFeature, color_table: Dat
                    ] = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors)
     label_text = get_label_text(feature)
-    print(label_text)
+    # print(label_text)
     feature_object = FeatureObject(
         feature_id, location, is_directional, color, note, label_text, coordinates)
     return feature_object
@@ -132,6 +132,7 @@ def create_gene_object(feature_id: str, feature: SeqFeature, color_table: DataFr
     """
     is_directional: bool = True
     coordinates: List[SimpleLocation] = feature.location.parts
+    # print(feature_id, coordinates)
     note: str = feature.qualifiers.get('note', [""])[0]
     product: str = feature.qualifiers.get('product', [""])[0]
     gene: str = feature.qualifiers.get('gene', [""])[0]
@@ -141,10 +142,220 @@ def create_gene_object(feature_id: str, feature: SeqFeature, color_table: DataFr
     label_text = get_label_text(feature)
     gene_object = GeneObject(
         feature_id, location, is_directional, color, note, product, feature.type, gene, label_text, coordinates)
+    #print(gene_object)
     return gene_object
 
 
-def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_features_set: List[str], default_colors: DataFrame) -> Dict[str, FeatureObject]:
+def get_feature_ends(feature):
+    strand = feature.location[0][2]
+    if hasattr(feature, 'coordinates') and feature.coordinates:
+        start = min(part.start for part in feature.coordinates)
+        if start < 1:
+            start = 1
+        end = max(part.end for part in feature.coordinates)
+        if end < 1:
+            end = 1
+    else:
+        start = min(part[3] for part in feature.location)
+        end = max(part[4] for part in feature.location)
+        if start < 1:
+            start = 1
+        if end < 1:
+            end = 1
+    return start, end, strand
+
+
+def calculate_feature_metrics(feature) -> Tuple[int, int]:
+    """
+    Calculate total span and occupied length with corrected calculations
+    
+    Returns:
+        Tuple[int, int]: (total_span, occupied_length)
+    """
+    # Get the full span first
+    if hasattr(feature, 'coordinates') and feature.coordinates:
+        print(feature.coordinates)
+        start = min(part.start for part in feature.coordinates)
+        if start < 1:
+            start = 1
+        end = max(part.end for part in feature.coordinates)
+        if end < 1:
+            end = 1
+    else:
+        start = min(part[3] for part in feature.location)
+        end = max(part[4] for part in feature.location)
+        if start < 1:
+            start = 1
+        if end < 1:
+            end = 1
+
+    
+    total_span = abs(end - start)
+    
+    # Calculate occupied length (only blocks/exons)
+    occupied_length = 0
+    if hasattr(feature, 'coordinates') and feature.coordinates:
+        for part in feature.location:
+            if part[0] == "block":
+                occupied_length += abs(part[4] - part[3])
+    else:
+        for part in feature.location:
+            if part[0] == "block":
+                occupied_length += abs(part[4] - part[3])
+    
+    # Ensure occupied length cannot exceed total span
+    occupied_length = min(occupied_length, total_span)
+    
+    return total_span, occupied_length
+
+def check_feature_overlap(feature1: dict, feature2: dict, separate_strands: bool = False) -> bool:
+    """
+    Check if two features overlap, considering strands only when separate_strands is True
+    
+    Args:
+        feature1, feature2 (dict): Feature dictionaries containing start, end and strand positions
+        separate_strands (bool): If True, features on different strands don't count as overlapping
+        
+    Returns:
+        bool: True if features overlap (considering strand settings), False otherwise
+    """
+    # Only consider strand differences if we're separating strands
+    if separate_strands and feature1["strand"] != feature2["strand"]:
+        return False
+    
+    # Normalize coordinates to ensure start < end
+    def normalize_coords(start: int, end: int) -> tuple[int, int]:
+        start = max(1, start)  # Ensure coordinates are at least 1
+        end = max(1, end)
+        return (min(start, end), max(start, end))
+    
+    f1_start, f1_end = normalize_coords(feature1["start"], feature1["end"])
+    f2_start, f2_end = normalize_coords(feature2["start"], feature2["end"])
+    
+    # Check for any overlap including nesting
+    overlap_conditions = [
+        # Regular overlap from either side
+        (f1_start <= f2_start <= f1_end),
+        (f1_start <= f2_end <= f1_end),
+        (f2_start <= f1_start <= f2_end),
+        (f2_start <= f1_end <= f2_end),
+        
+        # Complete nesting
+        (f1_start <= f2_start and f1_end >= f2_end),
+        (f2_start <= f1_start and f2_end >= f1_end)
+    ]
+    
+    return any(overlap_conditions)
+
+def find_best_track(feature: dict, track_dict: Dict[str, List[dict]], separate_strands: bool, max_track: int = 100) -> int:
+    """
+    Find best track with improved strand handling and track numbering
+    
+    Args:
+        feature: Feature to place
+        track_dict: Existing track assignments
+        separate_strands: If True, maintain separate tracks for different strands
+        max_track: Maximum number of tracks to consider
+        
+    Returns:
+        int: Best track number for the feature
+    """
+    # Always use positive track numbering when not separating strands
+    if not separate_strands:
+        track_range = range(max_track)
+    else:
+        # For separate strands, use negative numbers for negative strand
+        is_negative = feature["strand"] == "negative"
+        if is_negative:
+            track_range = range(-1, -max_track-1, -1)  # Start at -1 and go down
+        else:
+            track_range = range(max_track)  # Start at 0 and go up
+    
+    # Find first available track
+    for track in track_range:
+        track_id = f"track_{abs(track)}"  # Use absolute track number for dictionary key
+        
+        # Check if track exists
+        if track_id not in track_dict:
+            return track
+        
+        # Check if feature can be placed in this track
+        can_fit = True
+        for existing in track_dict[track_id]:
+            if check_feature_overlap(feature, existing, separate_strands):
+                can_fit = False
+                break
+        
+        if can_fit:
+            return track
+    
+    # Return appropriate track number
+    return -max_track if separate_strands and feature["strand"] == "negative" else max_track
+
+def arrange_feature_tracks(feature_dict: Dict[str, FeatureObject], separate_strands: bool) -> Dict[str, FeatureObject]:
+    """
+    Arrange features in tracks with improved strand handling and track assignment
+    """
+    # Calculate metrics for all features
+    feature_metrics = {}
+    for feat_id, feature in feature_dict.items():
+        total_span, occupied_length = calculate_feature_metrics(feature)
+        start, end, strand = get_feature_ends(feature)
+        
+        occupation_ratio = occupied_length / total_span if total_span > 0 else 0
+        
+        feature_metrics[feat_id] = {
+            "id": feat_id,
+            "start": start,
+            "end": end,
+            "strand": strand,
+            "total_span": total_span,
+            "occupied_length": occupied_length,
+            "occupation_ratio": occupation_ratio
+        }
+
+    # Sorting strategy - when not separating strands, ignore strand in sorting
+    def sort_key(item):
+        metrics = item[1]
+        if separate_strands:
+            return (
+                0 if metrics["strand"] == "positive" else 1,  # Group by strand
+                -metrics["occupied_length"],   # Larger features first
+                metrics["start"]               # Left to right within strand
+            )
+        else:
+            return (
+                -metrics["occupied_length"],   # Larger features first
+                metrics["start"]               # Left to right
+            )
+
+    sorted_features = sorted(feature_metrics.items(), key=sort_key)
+    
+    # Track dictionaries - only use pos_tracks when not separating strands
+    pos_tracks = {}
+    neg_tracks = {} if separate_strands else None
+    
+    # Place features
+    for feat_id, feat_metrics in sorted_features:
+        if separate_strands:
+            # Use separate track dictionaries for each strand
+            track_dict = neg_tracks if feat_metrics["strand"] == "negative" else pos_tracks
+        else:
+            # Use single track dictionary for all features
+            track_dict = pos_tracks
+        
+        track_num = find_best_track(feat_metrics, track_dict, separate_strands)
+        track_id = f"track_{abs(track_num)}"  # Use absolute track number for dictionary key
+        
+        if track_id not in track_dict:
+            track_dict[track_id] = []
+        track_dict[track_id].append(feat_metrics)
+        
+        feature_dict[feat_id].feature_track_id = track_num
+    
+    return feature_dict
+
+def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_features_set: List[str], default_colors: DataFrame, separate_strands: bool) -> Dict[str, FeatureObject]:
     """
     Creates a dictionary mapping feature IDs to FeatureObjects from a GenBank record.
 
@@ -165,6 +376,7 @@ def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_f
     repeat_count: int = 0
     feature_count: int = 0
     genome_length: int = len(gb_record.seq)
+    separate_strands: bool = separate_strands
     for feature in gb_record.features:
         if feature.type not in selected_features_set:
             continue
@@ -188,9 +400,9 @@ def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_f
                 feature_object: FeatureObject = create_feature_object(
                     feature_id, feature, color_table, default_colors, genome_length)
                 feature_dict[feature_id] = feature_object
+    feature_dict = arrange_feature_tracks(feature_dict, separate_strands)
     if locus_count == 0:
-        logger.warning(f"WARNING: No genes were found in {
-                       gb_record.id}. Are you sure the GenBank file is in the correct format?")
+        logger.warning(f"WARNING: No genes were found in {gb_record.id}. Are you sure the GenBank file is in the correct format?")
     return feature_dict
 
 
@@ -214,7 +426,12 @@ def get_exon_coordinate(exon_line: SimpleLocation, previous_exon_count: int, las
     exon_count: int = previous_exon_count + 1
     exon_id: str = str(exon_count).zfill(3)
     exon_start = int(exon_line.start)  # type: ignore
+    if exon_start < 1:
+        exon_start = 1
+
     exon_end = int(exon_line.end)  # type: ignore
+    if exon_end < 1:
+        exon_end = 1
     exon_coordinate: Tuple[str, str, str, int, int, bool] = (
         "block",
         exon_id,

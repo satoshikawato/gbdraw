@@ -13,7 +13,7 @@ from svgwrite.text import Text, TSpan, TextPath
 from svgwrite.masking import ClipPath
 from .feature_objects import FeatureObject
 from .circular_path_drawer import get_exon_and_intron_coordinates, calculate_feature_position_factors_circular,  generate_circle_path_desc, generate_circular_gc_skew_path_desc, generate_circular_gc_content_path_desc, generate_circular_rectangle_path, generate_circular_arrowhead_path, generate_circular_intron_path, generate_name_path, generate_text_path
-
+from .utility_functions import determine_length_parameter
 # Logging setup
 logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -192,7 +192,7 @@ class FeatureDrawer:
         """
         group.add(path_data)
 
-    def draw(self, feature_object: FeatureObject, group: Group, total_length: int, radius: float, track_width: float, track_type: str) -> Group:
+    def draw(self, feature_object: FeatureObject, group: Group, total_length: int, radius: float, track_width: float, track_type: str, strandedness: bool) -> Group:
         """
         Draws genomic features based on the given FeatureObject.
 
@@ -207,7 +207,7 @@ class FeatureDrawer:
             Group: The updated SVG group with the features added.
         """
         gene_paths = FeaturePathGenerator(
-            radius, total_length, track_width, track_type).generate_circular_gene_path(feature_object)
+            radius, total_length, track_width, track_type, strandedness).generate_circular_gene_path(feature_object)
         for gene_path in gene_paths:
             if not gene_path[0]:
                 continue
@@ -235,7 +235,7 @@ class FeaturePathGenerator:
         track_ratio (float): Ratio for determining the track width.
     """
 
-    def __init__(self, radius: float, total_length: int, track_width: float, track_type) -> None:
+    def __init__(self, radius: float, total_length: int, track_width: float, track_type, strandedness) -> None:
         """
         Initializes the FeaturePathGenerator with circular canvas settings.
 
@@ -248,6 +248,7 @@ class FeaturePathGenerator:
         self.total_length: int = total_length
         self.track_width: float = track_width
         self.track_type = track_type
+        self.strandedness = strandedness
         self.set_arrow_length()
 
     def set_arrow_length(self) -> None:
@@ -287,14 +288,14 @@ class FeaturePathGenerator:
             coord_type: str = str(coord_dict['coord_type'])
             if coord_type == "line":
                 coord_path: List[str] = generate_circular_intron_path(
-                    self.radius, coord_dict, self.total_length, self.track_width, self.track_type)
+                    self.radius, coord_dict, self.total_length, self.track_width, self.track_type, self.strandedness)
             elif coord_type == "block":
                 if coord[5] and feature_object.is_directional == True:
                     coord_path = generate_circular_arrowhead_path(
-                        self.radius, coord_dict, self.total_length, self.arrow_length, self.track_width, self.track_type)
+                        self.radius, coord_dict, self.total_length, self.arrow_length, self.track_width, self.track_type, self.strandedness)
                 else:
                     coord_path = generate_circular_rectangle_path(
-                        self.radius, coord_dict, self.total_length, self.track_width, self.track_type)
+                        self.radius, coord_dict, self.total_length, self.track_width, self.track_type, self.strandedness)
             coordinates_paths.append(coord_path)
         return coordinates_paths #, available_tracks
 
@@ -398,7 +399,7 @@ class LabelDrawer:
         
     def embed_label(self, group, label, radius, record_length, track_ratio):
         factors: list[float] = calculate_feature_position_factors_circular(
-        record_length, label["strand"], track_ratio, self.track_type)
+        record_length, label["strand"], track_ratio, self.track_type, self.strandedness)
         angle = 360.0 * (label["middle"] / record_length)
         if 0 <= angle < 90:
             param = " 0 0 1 "
@@ -448,15 +449,16 @@ class LabelDrawer:
             group.add(label_path)
             return group
     def draw(self, label, group, record_length, radius, track_ratio):
-        if record_length <25000:
-            genome_len="short"
-        else:
-            genome_len="long"
-        self.font_size: str = self.config_dict['labels']['font_size'][genome_len]
+        length_threshold = self.config_dict['labels']['length_threshold']['circular']
+        length_param = determine_length_parameter(record_length, length_threshold)
+        self.font_size: str = self.config_dict['labels']['font_size'][length_param]
         self.font_family: str = self.config_dict['objects']['text']['font_family']
         self.track_type: str = self.config_dict['canvas']['circular']['track_type']
+        self.strandedness: bool = self.config_dict['canvas']['strandedness']
         if label["is_embedded"] == True:
             group = self.embed_label(group, label, radius, record_length, track_ratio)
         else:
             group = self.add_label_on_the_rim(group, label, radius, record_length)
         return group
+
+

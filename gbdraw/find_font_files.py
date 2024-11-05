@@ -62,6 +62,7 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi):
     ymaxes = []
     ymins = []
     car_count = 0
+    text = str(text)
     for char in text:
         ymax = 0
         ymin = 0

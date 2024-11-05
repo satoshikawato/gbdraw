@@ -53,7 +53,7 @@ def print_help_message() -> NoReturn:
     print("Additional Information:")
     print("  - For full documentation, visit: https://github.com/satoshikawato/gbdraw/")
     print("  - For issues and source code, visit the GitHub repository: https://github.com/satoshikawato/gbdraw/")
-    print("  - For support, contact: skawato[at]niid.go.jp")
+    print("  - For support, contact: kawato[at]kaiyodai.ac.jp")
     sys.exit(0)
 
 

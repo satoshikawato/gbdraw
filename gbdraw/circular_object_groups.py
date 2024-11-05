@@ -400,7 +400,11 @@ class TickGroup:
         scaled relative to the length of the genomic sequence. Larger ticks are used for 
         longer sequences, and smaller ticks for shorter sequences.
         """
-        if self.total_len <= 150000:
+        if self.total_len <= 30000:
+            tick_large, tick_small = 1000, 100
+        elif 30000 < self.total_len <= 50000:
+            tick_large, tick_small = 5000, 1000
+        elif 50000 < self.total_len <= 150000:
             tick_large, tick_small = 10000, 1000
         elif 150000 < self.total_len <= 1000000:
             tick_large, tick_small = 50000, 10000
@@ -547,6 +551,7 @@ class SeqRecordGroup:
         self.font_size = self.config_dict['objects']['features']['font_size']
         self.dpi =  self.config_dict['canvas']['dpi']
         self.track_type = self.config_dict['canvas']['circular']['track_type']
+        self.strandedness = self.config_dict['canvas']['strandedness']
         self.track_ratio = self.canvas_config.track_ratio
         self.record_group: Group = self.setup_record_group()
     def draw_record(self, feature_dict: Dict[str, FeatureObject], record_length: int, group: Group) -> Group:
@@ -570,7 +575,7 @@ class SeqRecordGroup:
         if self.show_labels == True:
             label_list = prepare_label_list(feature_dict, record_length, self.canvas_config.radius, self.track_ratio, self.config_dict) 
         for feature_object in feature_dict.values():
-            group = FeatureDrawer(self.feature_config).draw(feature_object, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio, self.track_type)
+            group = FeatureDrawer(self.feature_config).draw(feature_object, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio, self.track_type, self.strandedness)
         if self.show_labels == True:
             for label in label_list:
                 group = LabelDrawer(self.config_dict).draw(label, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)
@@ -600,7 +605,7 @@ class SeqRecordGroup:
         color_table: Optional[DataFrame] = self.feature_config.color_table
         default_colors: Optional[DataFrame] = self.feature_config.default_colors
         feature_dict: Dict[str, FeatureObject] = create_feature_dict(
-            self.gb_record, color_table, selected_features_set, default_colors)
+            self.gb_record, color_table, selected_features_set, default_colors, self.strandedness)
         track_id: str = self.gb_record.annotations['accessions'][0]
         record_group = Group(id=track_id)
         record_length: int = len(self.gb_record.seq)

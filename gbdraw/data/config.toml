@@ -7,7 +7,7 @@ dpi = 96 # fixed value; higher or lower values lead to abberant text sizes in Ca
 show_gc = true
 show_skew = true
 show_labels = false
-strandedness = true
+strandedness = false
 [canvas.circular]
 # Basicaly you shouldn't modify these values.
 # If you wish to modify width and height, I strongly recommend changing the radius accordingly (=0.4*weight/height).
@@ -18,6 +18,7 @@ track_ratio = 0.19
 track_dict.short = {"middle" = {1 = 1.0, 2 = 0.80, 3 = 0.55}, "spreadout" = {1 = 1.0, 2 = 0.85, 3 = 0.60}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.50}}
 track_dict.long = {"middle" = {1 = 1.0, 2 = 0.8, 3 = 0.65}, "spreadout" = {1 = 1.0, 2 = 0.85, 3 = 0.7}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.55}}
 track_type = 'tuckin'
+
 [canvas.circular.width]
   with_labels = 1400
   without_labels = 1000
@@ -29,10 +30,14 @@ horizontal_offset = 80
 vertical_padding = 8
 comparison_height = 60
 canvas_padding = 20
-default_cds_height = 20
 default_gc_height = 20
 align_center = false
-
+[canvas.linear.default_cds_height]
+  short = 80
+  long = 20
+[canvas.linear.arrow_length_parameter]
+  short = 0.008
+  long = 0.0012
 [objects]
 # Fill colors are defined in `default_colors.txt`.
 
@@ -73,11 +78,14 @@ font_weight = 'normal'
 
 
 [labels]
+[labels.length_threshold]
+  circular = 50000
+  linear = 50000 
 [labels.font_size]
-  short = 12
+  short = 16
   long = 8
 [labels.font_size.linear]
-  short = 6
+  short = 16
   long = 5
 [labels.stroke_width]
   short = 1.5

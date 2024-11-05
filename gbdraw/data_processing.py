@@ -5,15 +5,21 @@
 import pandas as pd
 import random
 import math
+from dataclasses import dataclass
+from collections import defaultdict
+from typing import Dict, List, Optional, Tuple
 from collections import defaultdict
 from Bio.SeqFeature import SimpleLocation
 from pandas import DataFrame
 from typing import Generator, Any, Dict, List, Optional
 from Bio.SeqRecord import SeqRecord
 from .create_feature_objects import get_strand
-from .utility_functions import calculate_bbox_dimensions, get_label_text
+from .utility_functions import calculate_bbox_dimensions, get_label_text , determine_length_parameter
 from .circular_path_drawer import calculate_feature_position_factors_circular
 from .linear_path_drawer import calculate_feature_position_factors_linear, normalize_position_to_linear_track, generate_text_path
+
+
+
 def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
     """
     Calculates dinucleotide skew and content in a DNA sequence, returning a DataFrame.
@@ -406,15 +412,14 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
     right_labels = []
     label_list = []
 
-    if total_length < 25000:
-        genome_len = "short"
-    else:
-        genome_len = "long"
+    length_threshold = config_dict['labels']['length_threshold']['circular']
+    length_param = determine_length_parameter(total_length, length_threshold)
     track_type = config_dict['canvas']['circular']['track_type']
-    radius_factor = config_dict['labels']['radius_factor'][track_type][genome_len]
+    radius_factor = config_dict['labels']['radius_factor'][track_type][length_param]
     font_family = config_dict['objects']['text']['font_family']
-    font_size: str = config_dict['labels']['font_size'][genome_len]
+    font_size: str = config_dict['labels']['font_size'][length_param]
     interval = config_dict['canvas']['dpi']
+    strandedness = config_dict['canvas']['strandedness']
     for feature_object in feature_dict.values():
         feature_label_text = get_label_text(feature_object)
         if feature_label_text == '':
@@ -436,7 +441,7 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
                 if interval_length > longest_segment_length:
                     longest_segment_length = interval_length
                     label_middle = interval_middle
-            factors: list[float] = calculate_feature_position_factors_circular(total_length, coordinate_strand, track_ratio, track_type)
+            factors: list[float] = calculate_feature_position_factors_circular(total_length, coordinate_strand, track_ratio, track_type, strandedness)
             longest_segment_length_in_pixels = (2*math.pi*radius_factor*radius) * (longest_segment_length)/total_length
             bbox_width_px, bbox_height_px = calculate_bbox_dimensions(feature_label_text, font_family, font_size, interval)
             label_as_feature_length = total_length * bbox_width_px/(2*math.pi*radius)
@@ -473,8 +478,8 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
                     left_labels.append(label_entry)
                 else:
                     right_labels.append(label_entry)
-    right_labels_rearranged = rearrange_labels(right_labels, radius, total_length, genome_len, config_dict, is_right=True)
-    left_labels_rearranged = rearrange_labels(left_labels, radius, total_length, genome_len, config_dict, is_right=False)
+    right_labels_rearranged = rearrange_labels(right_labels, radius, total_length, length_param, config_dict, is_right=True)
+    left_labels_rearranged = rearrange_labels(left_labels, radius, total_length, length_param, config_dict, is_right=False)
     label_list = embedded_labels + right_labels_rearranged + left_labels_rearranged
     return label_list
 
@@ -508,24 +513,43 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
    embedded_labels = []
    external_labels = []
    track_dict = defaultdict(list)
+   feature_track_positions = {}  # Store feature track positions
    
    # Get configuration values
-   genome_len = "short" if genome_length < 25000 else "long"
+   length_threshold = config_dict['labels']['length_threshold']['circular']
+   length_param = determine_length_parameter(genome_length, length_threshold)
    font_family = config_dict['objects']['text']['font_family']
-   font_size = config_dict['labels']['font_size']['linear'][genome_len]
+   font_size = config_dict['labels']['font_size']['linear'][length_param]
    interval = config_dict['canvas']['dpi']
-   max_bbox_height = 0
-   # Process each feature
+   
+   # First pass: Calculate feature track positions
+   for feature_id, feature_object in feature_dict.items():
+       if len(feature_object.coordinates) == 0:
+           continue
+           
+       # Get feature track info
+       coordinate = feature_object.coordinates[0]  # Use first coordinate for strand
+       strand = get_strand(coordinate.strand)
+       feature_track_id = feature_object.feature_track_id
+       
+       # Calculate track position using the same logic as for features
+       factors = calculate_feature_position_factors_linear(strand, feature_track_id, strandedness)
+       track_y_position = cds_height * factors[1]  # Use middle factor
+       
+       # Store track position for this feature
+       feature_track_positions[feature_id] = track_y_position
+   
+   # Second pass: Process labels
    for feature_id, feature_object in reversed(list(feature_dict.items())):
        feature_label_text = get_label_text(feature_object)
+       feature_track_id = feature_object.feature_track_id
        if not feature_label_text:
            continue
            
        # Calculate label dimensions and positions
        bbox_width_px, bbox_height_px = calculate_bbox_dimensions(
            feature_label_text, font_family, font_size, interval)
-       if bbox_height_px > max_bbox_height:
-           max_bbox_height = bbox_height_px
+       
        # Find the longest segment and its middle point
        longest_segment_length = 0
        label_middle = 0
@@ -533,27 +557,31 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
        factors = None
        longest_segment_start = 0
        longest_segment_end = 0
+       
        for coordinate in feature_object.coordinates:
            coordinate_strand = get_strand(coordinate.strand)
-           factors = calculate_feature_position_factors_linear(coordinate_strand, strandedness)
+           factors = calculate_feature_position_factors_linear(coordinate_strand, strandedness, feature_track_id)
            start = int(coordinate.start)
            end = int(coordinate.end)
            segment_length = abs(end - start + 1)
            if segment_length > longest_segment_length:
-            longest_segment_start = start
-            longest_segment_end = end
-            longest_segment_length = segment_length
-            label_middle = (end + start) / 2
+               longest_segment_start = start
+               longest_segment_end = end
+               longest_segment_length = segment_length
+               label_middle = (end + start) / 2
+               
        # Calculate normalized positions
        normalized_start = normalize_position_to_linear_track(
            longest_segment_start, genome_length, alignment_width, genome_size_normalization_factor)
        normalized_end = normalize_position_to_linear_track(
            longest_segment_end, genome_length, alignment_width, genome_size_normalization_factor)
-       #longest_segment_length_in_pixels = (alignment_width) * (longest_segment_length) / genome_length
        longest_segment_length_in_pixels = abs(normalized_end - normalized_start) + 1
        normalized_middle = (normalized_start + normalized_end) / 2
        bbox_start = normalized_middle - (bbox_width_px / 2)
        bbox_end = normalized_middle + (bbox_width_px / 2)
+       
+       # Get actual feature track position
+       feature_y = feature_track_positions.get(feature_id, cds_height * factors[1])
        
        # Create base label entry
        label_entry = {
@@ -565,7 +593,7 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
            "width_px": bbox_width_px,
            "height_px": bbox_height_px,
            "strand": coordinate_strand,
-           "feature_middle_y": cds_height * factors[1],
+           "feature_middle_y": feature_y,  # Use actual feature position
            "font_size": font_size,
            "font_family": font_family
        }
@@ -573,7 +601,7 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
        # Determine if label should be embedded
        if bbox_width_px < longest_segment_length_in_pixels:
            label_entry.update({
-               "middle_y": cds_height * factors[1],
+               "middle_y": feature_y,  # Use actual feature position for embedded labels
                "is_embedded": True,
                "track_id": "track_0"
            })
@@ -595,8 +623,11 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
        for label in track_dict["track_0"]:
            embedded_labels.append(label)
    
-   # Process external labels
-   num_tracks = len(track_dict)
+   # Adjust track height based on strandedness
+   if strandedness:
+       track_height = 0.2 * cds_height  # Reduced height for separate strands mode
+   else:
+       track_height = 0.4 * cds_height  # Original height for default mode
    for track_id in sorted(track_dict.keys()):
        if track_id == "track_0":
            continue
@@ -605,7 +636,104 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
        track_num = int(track_id.split("_")[1])
        
        for label in track_labels:
-           label["middle_y"] = (-0.5 * cds_height - (1.025* bbox_height_px) * (track_num))
+           # Compact vertical positioning for external labels
+           label["middle_y"] = (-0.5 * cds_height - (track_height * track_num))
            external_labels.append(label)
 
    return embedded_labels + external_labels
+
+
+@dataclass
+class Track:
+    id: int
+    features: List[Tuple[float, float]]  # List of (start, end) positions
+    labels: List[Dict]  # List of label entries
+    height: float
+    y_position: float
+
+class TrackManager:
+    def __init__(self, cds_height: float):
+        self.tracks: Dict[str, Track] = {}
+        self.cds_height = cds_height
+        self.track_spacing = 1.025  # Spacing factor between tracks
+        
+    def init_track(self, strand: str, track_num: int) -> Track:
+        """Initialize a new track with proper vertical positioning."""
+        track_id = f"{strand}_{track_num}"
+        if track_id not in self.tracks:
+            # Calculate y-position based on strand and track number
+            if strand == "positive":
+                y_pos = -self.cds_height * (track_num + 0.5)
+            else:  # negative strand
+                y_pos = self.cds_height * (track_num + 0.5)
+            
+            self.tracks[track_id] = Track(
+                id=track_num,
+                features=[],
+                labels=[],
+                height=self.cds_height,
+                y_position=y_pos
+            )
+        return self.tracks[track_id]
+
+    def find_best_track(self, feature_start: float, feature_end: float, strand: str) -> Track:
+        """Find the best track for a new feature, creating a new one if necessary."""
+        current_track_num = 0
+        while True:
+            track = self.init_track(strand, current_track_num)
+            
+            # Check if feature fits in this track
+            can_fit = True
+            for start, end in track.features:
+                if not (feature_end < start or feature_start > end):
+                    can_fit = False
+                    break
+                    
+            if can_fit:
+                return track
+            
+            current_track_num += 1
+
+    def add_feature(self, start: float, end: float, strand: str) -> Track:
+        """Add a feature to the best available track and return the track."""
+        track = self.find_best_track(start, end, strand)
+        track.features.append((start, end))
+        return track
+
+    def can_embed_label(self, label: dict, feature_track: Track) -> bool:
+        """Check if a label can be embedded within its feature's track."""
+        label_width = label["width_px"]
+        label_start = label["middle"] - (label_width / 2)
+        label_end = label["middle"] + (label_width / 2)
+        
+        # Check for overlap with other features in the track
+        for feat_start, feat_end in feature_track.features:
+            # Allow embedding only if label fits entirely within feature
+            if not (label_start >= feat_start and label_end <= feat_end):
+                return False
+        
+        # Check for overlap with other labels in the track
+        for existing_label in feature_track.labels:
+            if check_label_overlap(label, existing_label):
+                return False
+                
+        return True
+
+    def position_label(self, label: dict, feature_track: Track) -> dict:
+        """Position a label either embedded in its feature track or in a new track."""
+        if self.can_embed_label(label, feature_track):
+            # Embed the label
+            label["is_embedded"] = True
+            label["middle_y"] = feature_track.y_position
+            feature_track.labels.append(label)
+        else:
+            # Create a new track for the label
+            label_track_num = len(self.tracks)
+            label_track = self.init_track(label["strand"], label_track_num)
+            
+            # Position label above the feature tracks
+            label["is_embedded"] = False
+            label["middle_y"] = label_track.y_position
+            label_track.labels.append(label)
+            
+        return label

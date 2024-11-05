@@ -317,34 +317,20 @@ class GcContentGroup:
 
 
 class SeqRecordGroup:
-    """
-    Manages the visualization of a SeqRecord in a linear layout.
+    """Manages the visualization of a SeqRecord in a linear layout."""
 
-    Attributes:
-        gb_record (SeqRecord): GenBank record containing genomic data.
-        canvas_config (LinearCanvasConfigurator): Configuration for the linear canvas.
-        feature_config (FeatureDrawingConfigurator): Configuration for feature drawing.
-        config_dict (dict): Configuration dictionary for drawing settings.
-    """
-
-    def __init__(self, gb_record: SeqRecord, canvas_config: LinearCanvasConfigurator, feature_config: FeatureDrawingConfigurator, config_dict: dict) -> None:
-        """
-        Initializes the SeqRecordGroup with necessary data and configurations.
-
-        Args:
-            gb_record (SeqRecord): GenBank record containing genomic data.
-            canvas_config (LinearCanvasConfigurator): Configuration for the linear canvas.
-            feature_config (FeatureDrawingConfigurator): Configuration for feature drawing.
-            config_dict (dict): Configuration dictionary for drawing settings.
-        """
-        self.gb_record: SeqRecord = gb_record
-        self.canvas_config: LinearCanvasConfigurator = canvas_config
-        self.feature_config: FeatureDrawingConfigurator = feature_config
-        self.config_dict: dict = config_dict
-        self.show_labels = True #self.config_dict['objects']['label']['show_labels']
+    def __init__(self, gb_record: SeqRecord, canvas_config: LinearCanvasConfigurator, 
+                 feature_config: FeatureDrawingConfigurator, config_dict: dict) -> None:
+        self.gb_record = gb_record
+        self.canvas_config = canvas_config
+        self.feature_config = feature_config
+        self.config_dict = config_dict
+        self.show_labels = self.config_dict['canvas']['show_labels']
         self.label_stroke_color = self.config_dict['labels']['stroke_color']['label_stroke_color']
         self.label_stroke_width = self.config_dict['labels']['stroke_width']['long']
         self.record_group: Group = self.setup_record_group()
+        self.separate_strands = self.canvas_config.strandedness
+
     def draw_linear_axis(self,
                          alignment_width: float,
                          genome_size_normalization_factor: float) -> Line:
@@ -377,51 +363,53 @@ class SeqRecordGroup:
             fill='none')
         return axis_path
 
-    def draw_record(self, feature_dict: dict, record_length: int, cds_height: float, alignment_width: float, genome_size_normalization_factor: float, strandedness, arrow_length: float, group: Group) -> Group:
-        """
-        Draws the genomic features onto the provided SVG group.
+    def draw_record(self, feature_dict: dict, record_length: int, cds_height: float, 
+                   alignment_width: float, genome_size_normalization_factor: float, 
+                   separate_strands: bool, arrow_length: float, group: Group) -> Group:
+        """Draws the genomic features onto the provided SVG group."""
+        # Draw the axis
+        axis_path = self.draw_linear_axis(alignment_width, genome_size_normalization_factor)
+        group.add(axis_path)
 
-        Args:
-            feature_dict (dict): Dictionary of feature objects to be drawn.
-            record_length (int): Length of the genomic record.
-            cds_height (float): Height of the coding sequence tracks.
-            alignment_width (float): Width of the alignment area.
-            genome_size_normalization_factor (float): Normalization factor for scaling the features.
-            strandedness: Strand orientation of the features.
-            arrow_length (float): Length of the arrow for directional features.
-            group (Group): SVG group where the features will be drawn.
-
-        Returns:
-            Group: The SVG group with the drawn features.
-        """
-        axis_path: Line = self.draw_linear_axis(
-            alignment_width, genome_size_normalization_factor)
-        
-        available_tracks= {"track_1":[-10000,-10000],
-                               "track_2":[-10000,-100000],
-                               "track_3":[-10000,-10000],
-                               "track_4":[-10000,-10000],
-                               "track_5":[-10000,-10000],}
-
-
-
-        if self.show_labels == True:
-            label_list = prepare_label_list_linear(feature_dict, record_length, alignment_width, 
-                            genome_size_normalization_factor, cds_height, 
-                            strandedness, self.config_dict)
+        # Process labels if enabled
+        if self.show_labels:
+            label_list = prepare_label_list_linear(
+                feature_dict, record_length, alignment_width,
+                genome_size_normalization_factor, cds_height,
+                separate_strands, self.config_dict
+            )
+            
+            # Add connector lines for non-embedded labels
             for label in label_list:
-                if label["is_embedded"] == False:
-                    line_path = Line(start=(label["middle_x"], label["feature_middle_y"]), end=(label["middle_x"], label["middle_y"]),
-                    stroke=self.label_stroke_color,
-                    stroke_width=self.label_stroke_width)
+                if not label["is_embedded"]:
+                    line_path = Line(
+                        start=(label["middle"], label["feature_middle_y"]),
+                        end=(label["middle"], label["middle_y"]),
+                        stroke=self.label_stroke_color,
+                        stroke_width=self.label_stroke_width
+                    )
                     group.add(line_path)
-        group.add(axis_path)   
+
+        # Draw features
         for feature_object in feature_dict.values():
-            group = FeatureDrawer(self.feature_config).draw(feature_object, group, record_length, cds_height,
-                                         alignment_width, genome_size_normalization_factor, strandedness, arrow_length)        
-        if self.show_labels == True:
+            feature_strand = feature_object.location[0][2]
+            group = FeatureDrawer(self.feature_config).draw(
+                feature_object=feature_object,
+                group=group,
+                genome_length=record_length,
+                cds_height=cds_height,
+                alignment_width=alignment_width,
+                normalization_factor=genome_size_normalization_factor,
+                feature_strand=feature_strand,
+                separate_strands=separate_strands,
+                arrow_length=arrow_length
+            )
+
+        # Add labels
+        if self.show_labels:
             for label in label_list:
-                group = LabelDrawer(self.config_dict).draw(label, group)             
+                group = LabelDrawer(self.config_dict).draw(label, group)
+
         return group
 
     def setup_record_group(self) -> Group:
@@ -434,9 +422,9 @@ class SeqRecordGroup:
         alignment_width: float = self.canvas_config.alignment_width
         cds_height: float = self.canvas_config.cds_height
         longest_genome: int = self.canvas_config.longest_genome
-        strandedness: bool = self.canvas_config.strandedness
         arrow_length: float = self.canvas_config.arrow_length
         color_table: DataFrame | None = self.feature_config.color_table
+        separate_strands = self.canvas_config.strandedness
         # type: ignore
         track_id = str(self.gb_record.annotations["accessions"][0])
         record_group = Group(id=track_id)
@@ -444,10 +432,8 @@ class SeqRecordGroup:
         genome_size_normalization_factor: float = record_length / longest_genome
         selected_features_set: str = self.feature_config.selected_features_set
         default_colors: DataFrame | None = self.feature_config.default_colors
-        feature_dict: dict = create_feature_dict(
-            self.gb_record, color_table, selected_features_set, default_colors)
-        record_group: Group = self.draw_record(feature_dict, record_length, cds_height, alignment_width,
-                                               genome_size_normalization_factor, strandedness, arrow_length, record_group)
+        feature_dict: dict = create_feature_dict(self.gb_record, color_table, selected_features_set, default_colors, separate_strands)
+        record_group: Group = self.draw_record(feature_dict, record_length, cds_height, alignment_width, genome_size_normalization_factor, separate_strands, arrow_length, record_group)
         return record_group
 
     def get_group(self) -> Group:

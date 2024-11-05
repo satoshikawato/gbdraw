@@ -1,6 +1,8 @@
 CDS	#89d1fa
 rRNA	#71ee7d
 tRNA	#e8b441
+tmRNA	#ded44e
+ncRNA	#c4fac3
 repeat_region	#d3d3d3
 misc_feature	#d3d3d3
 default	#d3d3d3
