@@ -11,11 +11,11 @@ build:
 
 requirements:
   host:
-    - python >=3.12
+    - python >=3.10
     - pip
     - setuptools
   run:
-    - python >=3.12
+    - python >=3.10
     - pandas
     - fonttools
     - biopython

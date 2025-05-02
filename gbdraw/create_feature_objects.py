@@ -107,7 +107,6 @@ def create_feature_object(feature_id: str, feature: SeqFeature, color_table: Dat
                    ] = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors)
     label_text = get_label_text(feature)
-    # print(label_text)
     feature_object = FeatureObject(
         feature_id, location, is_directional, color, note, label_text, coordinates)
     return feature_object
@@ -132,7 +131,6 @@ def create_gene_object(feature_id: str, feature: SeqFeature, color_table: DataFr
     """
     is_directional: bool = True
     coordinates: List[SimpleLocation] = feature.location.parts
-    # print(feature_id, coordinates)
     note: str = feature.qualifiers.get('note', [""])[0]
     product: str = feature.qualifiers.get('product', [""])[0]
     gene: str = feature.qualifiers.get('gene', [""])[0]
@@ -142,7 +140,6 @@ def create_gene_object(feature_id: str, feature: SeqFeature, color_table: DataFr
     label_text = get_label_text(feature)
     gene_object = GeneObject(
         feature_id, location, is_directional, color, note, product, feature.type, gene, label_text, coordinates)
-    #print(gene_object)
     return gene_object
 
 
@@ -174,7 +171,6 @@ def calculate_feature_metrics(feature) -> Tuple[int, int]:
     """
     # Get the full span first
     if hasattr(feature, 'coordinates') and feature.coordinates:
-        print(feature.coordinates)
         start = min(part.start for part in feature.coordinates)
         if start < 1:
             start = 1

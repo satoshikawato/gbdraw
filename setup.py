@@ -14,7 +14,7 @@ setup(
         'gbdraw': ['data/default_colors.tsv', 'data/config.toml', 'data/*.ttf']
     },
     include_package_data=True,
-    python_requires='>=3.12',
+    python_requires='>=3.10',
     author='Satoshi Kawato',
     author_email='kawato@kaiyodai.ac.jp',
     description='A package for visualizing genome data',
