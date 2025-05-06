@@ -177,69 +177,102 @@ def load_default_colors(user_defined_default_colors: str) -> DataFrame:
     """
     Loads default color settings for genome features, updating them with user-defined settings if provided.
 
-    Args:
-        user_defined_default_colors (str): Path to the TSV file with user-defined color settings.
-                                           If empty, loads only built-in default color settings.
-
-    Returns:
-        DataFrame: DataFrame with default color settings, updated with user-defined settings if available.
+    If a user-defined entry has a missing color, it will log a warning and keep the built-in default.
     """
-    column_names: list[str] = ['feature_type', 'color']
-    
-    # Load built-in default color settings
-    default_colors_path: Traversable = resources.files('gbdraw.data').joinpath('default_colors.tsv')
-    absolute_default_colors_path = default_colors_path.resolve()  # type: ignore
-    logger.info(f"Loading built-in default color table: {absolute_default_colors_path}")
-    
-    with resources.open_text('gbdraw.data', 'default_colors.tsv') as file:
-        default_colors: DataFrame = pd.read_csv(file, sep='\t', names=column_names, header=None)
+    column_names = ['feature_type', 'color']
 
-    # Set index to 'feature_type' for merging
+    # 1) Load built‐in defaults
+    default_colors_path: Traversable = resources.files('gbdraw.data').joinpath('default_colors.tsv')
+    abs_path = default_colors_path.resolve()  # type: ignore
+    logger.info(f"Loading built-in default color table: {abs_path}")
+    with resources.open_text('gbdraw.data', 'default_colors.tsv') as fh:
+        default_colors = pd.read_csv(fh, sep='\t', names=column_names, header=None)
     default_colors.set_index('feature_type', inplace=True)
 
-    # Load and apply user-defined color settings if provided
+    # 2) Load user‐defined overrides (if any)
     if user_defined_default_colors:
         try:
-            user_colors = pd.read_csv(user_defined_default_colors, sep='\t', names=column_names, header=None)
-            user_colors.set_index('feature_type', inplace=True)
-            # Update default colors with user-defined ones
-            default_colors.update(user_colors)
-            logger.info(f"User-defined color table loaded: {user_defined_default_colors}")
-        except FileNotFoundError as e:
-            logger.error(f"Failed to load user-defined colors: {e}")
-        except Exception as e:
-            logger.error(f"An unexpected error occurred: {e}")
+            user_colors = pd.read_csv(
+                user_defined_default_colors,
+                sep='\t',
+                names=column_names,
+                header=None,
+                dtype=str
+            ).set_index('feature_type')
 
-    # Reset index before returning
+            # Find any rows where the 'color' cell is missing
+            missing = user_colors['color'].isna()
+            if missing.any():
+                for feature in user_colors[missing].index:
+                    logger.warning(
+                        f"WARNING: user-defined default color for feature '{feature}' is missing—"
+                        " falling back to built-in default."
+                    )
+                # drop those so .update() won't overwrite with NaN
+                user_colors = user_colors[~missing]
+
+            # Now update built‐in with the remaining user overrides
+            default_colors.update(user_colors)
+            logger.info(f"User-defined default color table loaded: {user_defined_default_colors}")
+
+        except FileNotFoundError as e:
+            logger.error(f"Failed to load user-defined colors from '{user_defined_default_colors}': {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error loading '{user_defined_default_colors}': {e}")
+
+    # 3) Return to caller
     default_colors.reset_index(inplace=True)
     return default_colors
 
 
 def read_color_table(color_table_file: str) -> Optional[DataFrame]:
     """
-    Reads a color table from a TSV file to customize genome feature colors.
+    Reads a color table from a TSV file and errors out immediately if any row has
+    the wrong number of fields or missing values.
 
-    Args:
-        color_table_file (str): Path to the TSV file containing the color table.
+    Expected columns: feature_type, qualifier_key, value, color, caption
 
     Returns:
-        Optional[DataFrame]: DataFrame with color mappings if the file is provided and valid, None otherwise.
-
-    This function reads a user-defined color table from the specified TSV file. The table maps colors to genome
-    feature types based on qualifiers and their values. If the file path is empty or invalid, it returns None.
+        DataFrame with the user-defined color mappings, or None if no file was provided.
     """
-    column_names: list[str] = ['feature_type',
-                               'qualifier_key', 'value', 'color', 'caption']
-    # type: ignore # Initialize color_table as None
-    color_table: Optional[DataFrame] = None
-    if color_table_file == '':
-        pass
-    else:
-        try:
-            color_table: DataFrame = pd.read_csv(color_table_file, sep='\t', names=(column_names))
-        except FileNotFoundError as e:
-            logger.error(f"Failed to load default colors from {color_table_file}: {e}")
-    return color_table
+    required_cols = ['feature_type', 'qualifier_key', 'value', 'color', 'caption']
+
+    # If user did not supply -t, just skip and return None
+    if not color_table_file:
+        return None
+
+    try:
+        df = pd.read_csv(
+            color_table_file,
+            sep='\t',
+            header=None,
+            names=required_cols,
+            dtype=str,
+            on_bad_lines='error',  # raise on any row with wrong number of fields
+            engine='python'        # required for on_bad_lines
+        )
+    except pd.errors.ParserError as e:
+        logger.error(f"ERROR: Malformed line in '{color_table_file}': {e}")
+        sys.exit(1)
+    except FileNotFoundError as e:
+        logger.error(f"ERROR: Color table file not found: {e}")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"ERROR: Failed to read '{color_table_file}': {e}")
+        sys.exit(1)
+
+    # Check for any rows with missing values and error out if found
+    null_rows = df[df.isnull().any(axis=1)]
+    if not null_rows.empty:
+        for idx, row in null_rows.iterrows():
+            missing = [c for c in required_cols if pd.isna(row[c])]
+            logger.error(
+                f"ERROR: Missing values in '{color_table_file}' at line {idx+1}. "
+                f"Missing columns: {missing}. Row data: {row.to_dict()}"
+            )
+        sys.exit(1)
+
+    return df
 
 
 def parse_formats(out_formats: str) -> list[str]:

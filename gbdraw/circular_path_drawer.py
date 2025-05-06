@@ -200,14 +200,31 @@ def calculate_feature_position_factors_circular(total_length, strand: str, track
         else:
             factors = [x - OFFSET for x in factors_negative]
     else:
-        factors_positive: list[float] = [
-            BASE - CDS_RATIO * 0.5, BASE, BASE + CDS_RATIO * 0.5]
-        factors_negative: list[float] = [
-            BASE - CDS_RATIO * 0.5, BASE, BASE + CDS_RATIO * 0.5]
-        if strand == "positive":
-            factors: list[float] = [x  for x in factors_positive]
+        # No strand separation: use the same three radii for both strands,
+        # chosen by track_type.
+        if track_type == "middle":
+            base_factors = [BASE - CDS_RATIO * 0.5, BASE, BASE + CDS_RATIO * 0.5]
+        elif track_type == "spreadout":
+            base_factors = [
+                BASE + CDS_RATIO * 0.4,
+                BASE + CDS_RATIO * 0.9,
+                BASE + CDS_RATIO * 1.4
+            ]
+        elif track_type == "tuckin":
+            base_factors = [
+                BASE - CDS_RATIO * 1.7,
+                BASE - CDS_RATIO * 1.2,
+                BASE - CDS_RATIO * 0.7
+            ]
         else:
-            factors = [x for x in factors_negative]      
+            # fallback to middle-style
+            base_factors = [BASE - CDS_RATIO * 0.5, BASE, BASE + CDS_RATIO * 0.5]
+
+        # Apply the tiny OFFSET inward/outward
+        if strand == "positive":
+            return [x for x in base_factors]
+        else:
+            return [x for x in base_factors]   
     return factors
 
 

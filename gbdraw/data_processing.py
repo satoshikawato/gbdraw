@@ -267,25 +267,45 @@ def calculate_angle_for_y(center_y, y_radius, y):
     else:
         return None  # Indicates the y-coordinate is outside the ellipse's bounds
 
-def place_labels_on_arc(labels, center_x, center_y, x_radius, y_radius, start_angle, end_angle, total_length):
+def place_labels_on_arc(
+    labels: list[dict],
+    center_x: float,
+    center_y: float,
+    x_radius: float,
+    y_radius: float,
+    start_angle: float,
+    end_angle: float,
+    total_length: int
+) -> list[dict]:
+    """
+    与えられたラベルを start_angle → end_angle の楕円弧上に
+    等間隔で配置し、各ラベルに 'start_x', 'start_y' を書き込む。
+    """
+    # 端点の y 座標
     start_y = center_y + y_radius * math.sin(math.radians(start_angle))
-    end_y = center_y + y_radius * math.sin(math.radians(end_angle))
+    end_y   = center_y + y_radius * math.sin(math.radians(end_angle))
     total_y_range = end_y - start_y
-    if len(labels) <2:
-        len_labels = 2
-    else:
-        len_labels = len(labels)
-    y_increment = total_y_range / (len_labels - 1)
+
+    n = max(len(labels), 2)               # 1 本でも 2 分割として扱う
+    y_increment = total_y_range / (n - 1)
 
     for i, label in enumerate(labels):
         y = start_y + i * y_increment
-        angle_degrees = calculate_angle_for_y(center_y, y_radius, y)
-        if angle_degrees is not None:
-            label['start_x'], label['start_y'] = calculate_coordinates(center_x, center_y, x_radius, y_radius, angle_degrees, label['middle'], total_length)
-            degree = calculate_angle_degrees(center_x, center_y, label['start_x'], label['start_y'], 
-                                             label["middle"], 0, 360, total_length, x_radius, y_radius, normalize=True)
-        else:
-            print(f"Y-coordinate {y} is outside the ellipse's bounds for label {label}.")
+
+        angle = calculate_angle_for_y(center_y, y_radius, y)
+        if angle is None:   # 理論上起きないが保険
+            raise ValueError(
+                f"Calculated y={y:.2f} falls outside ellipse bounds "
+                f"({center_y - y_radius:.2f}..{center_y + y_radius:.2f})."
+            )
+
+        label['start_x'], label['start_y'] = calculate_coordinates(
+            center_x, center_y,
+            x_radius, y_radius,
+            angle,
+            label['middle'],
+            total_length
+        )
 
     return labels
 
@@ -394,7 +414,8 @@ def rearrange_labels(labels, feature_radius, total_length, genome_len, config_di
         center_x = - default_center_x
         start_angle = 180 - default_angle
         end_angle = 180 + default_angle    
-    
+
+    labels = sorted(labels, key=lambda x: x['middle'])    
     # Initial placement of labels
     labels = place_labels_on_arc(labels, center_x, center_y, x_radius, y_radius, start_angle, end_angle, total_length)
     
@@ -430,20 +451,31 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
             is_embedded = False
             label_middle = 0
             coordinate_strand: str = "undefined"
-            
-            list_of_coordinates: List[SimpleLocation] = feature_object.coordinates
+            feature_location_list = feature_object.location
+            list_of_coordinates = feature_object.coordinates
+            feature_location_count=0
             for coordinate in list_of_coordinates:
-                coordinate_start = int(coordinate.start)
-                coordinate_end = int(coordinate.end)
-                coordinate_strand = get_strand(coordinate.strand)
-                interval_length = int(coordinate_end - coordinate_start ) + 1
-                interval_middle = int(coordinate_end + coordinate_start) / 2
-                if interval_length > longest_segment_length:
-                    longest_segment_length = interval_length
-                    label_middle = interval_middle
+                if feature_location_list[feature_location_count][0] == "line":
+                    feature_location_count += 1
+                    continue
+                else:
+                    coordinate_start = int(coordinate.start)
+                    coordinate_end = int(coordinate.end)
+                    coordinate_strand = get_strand(coordinate.strand)
+                    interval_length = abs(int(coordinate_end - coordinate_start ) + 1)
+                    interval_middle = int(coordinate_end + coordinate_start) / 2
+                    feature_location_count += 1
+                    if interval_length > longest_segment_length:
+                        longest_segment_start = coordinate_start
+                        longest_segment_end = coordinate_end
+                        longeset_segment_middle = interval_middle
+                        longest_segment_length = interval_length
+            
+
             factors: list[float] = calculate_feature_position_factors_circular(total_length, coordinate_strand, track_ratio, track_type, strandedness)
             longest_segment_length_in_pixels = (2*math.pi*radius_factor*radius) * (longest_segment_length)/total_length
             bbox_width_px, bbox_height_px = calculate_bbox_dimensions(feature_label_text, font_family, font_size, interval)
+            label_middle = longeset_segment_middle
             label_as_feature_length = total_length * bbox_width_px/(2*math.pi*radius)
             label_start = label_middle - (label_as_feature_length/2)
             label_end = label_middle + (label_as_feature_length/2)
