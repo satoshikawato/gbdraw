@@ -388,6 +388,7 @@ class TickGroup:
         self.font_weight: str = self.config_dict['objects']['ticks']['tick_labels']['font_weight']
         self.font_family: str = self.config_dict['objects']['text']['font_family']
         self.track_type: str = self.config_dict['canvas']['circular']['track_type']
+        self.separate_strands: bool = self.config_dict['canvas']['strandedness']
         self.dpi = self.canvas_config.dpi
         self.set_tick_size()
         self.add_elements_to_group()
@@ -429,10 +430,10 @@ class TickGroup:
         ticks_large = list(range(0, self.total_len, self.tick_large))
         size: str = "large"
         tick_paths_large: list[Path] = generate_circular_tick_paths(
-            self.radius, self.total_len, size, ticks_large, self.tick_width, self.track_type)
+            self.radius, self.total_len, size, ticks_large, self.tick_width, self.track_type, self.separate_strands)
         ticks_large_nonzero: list[int] = [x for x in ticks_large if x != 0]
         tick_label_paths_large: list[Text] = generate_circular_tick_labels(
-            self.radius, self.total_len, size, ticks_large_nonzero, self.stroke, self.fill, self.font_size, self.font_weight, self.font_family, self.track_type, self.dpi)
+            self.radius, self.total_len, size, ticks_large_nonzero, self.stroke, self.fill, self.font_size, self.font_weight, self.font_family, self.track_type, self.separate_strands, self.dpi)
         for tick_path_large in tick_paths_large:
             self.tick_group.add(tick_path_large)
         for tick_label_path_large in tick_label_paths_large:

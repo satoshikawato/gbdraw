@@ -155,7 +155,7 @@ def generate_circular_gc_skew_path_desc(radius: float, df: DataFrame, total_len:
 
 def calculate_cds_ratio(track_ratio, seq_length):
     if seq_length < 50000:
-        cds_ratio = track_ratio * 0.50
+        cds_ratio = track_ratio * 0.40
         offset = 0.01
     else:
         cds_ratio = track_ratio * 0.25
@@ -187,9 +187,9 @@ def calculate_feature_position_factors_circular(total_length, strand: str, track
                 BASE + CDS_RATIO * 0.4, BASE + CDS_RATIO * 0.9, BASE + CDS_RATIO * 1.4]
         elif track_type == "tuckin":
             factors_positive: list[float] = [
-                BASE - CDS_RATIO * 1.7, BASE - CDS_RATIO * 1.2, BASE - CDS_RATIO * 0.7]
+                BASE - CDS_RATIO * 1.5, BASE - CDS_RATIO * 1.0, BASE - CDS_RATIO * 0.5]
             factors_negative: list[float] = [
-                BASE - CDS_RATIO * 2.7, BASE - CDS_RATIO * 2.2, BASE - CDS_RATIO * 1.7]
+                BASE - CDS_RATIO * 2.5, BASE - CDS_RATIO * 2.0, BASE - CDS_RATIO * 1.5]
         else:
             factors_positive: list[float] = [
                 BASE, BASE + CDS_RATIO * 0.5, BASE + CDS_RATIO]
@@ -410,7 +410,7 @@ def draw_circle_path(radius: float, stroke_color: str, stroke_width: float) -> C
     return circle_path
 
 
-def generate_circular_tick_paths(radius: float, total_len: int, size: str, ticks: list, tick_width: float, track_type: str) -> list[Path]:
+def generate_circular_tick_paths(radius: float, total_len: int, size: str, ticks: list, tick_width: float, track_type: str, strandedness: bool) -> list[Path]:
     """
     Generates SVG path descriptions for tick marks on a circular canvas.
 
@@ -425,18 +425,64 @@ def generate_circular_tick_paths(radius: float, total_len: int, size: str, ticks
         list[Path]: List of SVG path elements for the tick marks.
     """
     tick_paths_list: list[Path] = []
-    if track_type == "middle":
-        ratio: dict[str, list[float]] = {
-            'small': [0.915, 0.93], 'large': [0.91, 0.93]}
-    elif track_type == "spreadout":
-        ratio: dict[str, list[float]] = {
-            'small': [0.985, 1.0], 'large': [0.98, 1.0]}
-    elif track_type == "tuckin":
-        ratio: dict[str, list[float]] = {
-            'small': [0.845, 0.86], 'large': [0.84, 0.86]}
+    if total_len < 50000:
+        track_channel = "short"
     else:
-        ratio: dict[str, list[float]] = {
-            'small': [1.06, 1.08], 'large': [0.98, 1.0]}
+        track_channel = "long"
+    if strandedness == True:
+        if track_channel == "long":
+            if track_type == "middle":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.915, 0.93], 'large': [0.91, 0.93]}
+            elif track_type == "spreadout":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.985, 1.0], 'large': [0.98, 1.0]}
+            elif track_type == "tuckin":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.845, 0.86], 'large': [0.84, 0.86]}
+            else:
+                ratio: dict[str, list[float]] = {
+                    'small': [1.06, 1.08], 'large': [0.98, 1.0]}
+        else:
+            if track_type == "middle":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.885, 0.90], 'large': [0.88, 0.90]}
+            elif track_type == "spreadout":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.985, 1.0], 'large': [0.98, 1.0]}
+            elif track_type == "tuckin":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.985, 1.0], 'large': [0.98, 1.0]}
+            else:
+                ratio: dict[str, list[float]] = {
+                    'small': [1.06, 1.08], 'large': [0.98, 1.0]}
+    else:
+        if track_channel == "long":
+            if track_type == "middle":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.945, 0.96], 'large': [0.94, 0.96]}
+            elif track_type == "spreadout":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.985, 1.0], 'large': [0.98, 1.0]}
+            elif track_type == "tuckin":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.885, 0.90], 'large': [0.88, 0.90]}
+            else:
+                ratio: dict[str, list[float]] = {
+                    'small': [1.06, 1.08], 'large': [0.98, 1.0]}
+        else:
+            if track_type == "middle":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.925, 0.94], 'large': [0.92, 0.94]}
+            elif track_type == "spreadout":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.985, 1.0], 'large': [0.98, 1.0]}
+            elif track_type == "tuckin":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.985, 1.0], 'large': [0.98, 1.0]}
+            else:
+                ratio: dict[str, list[float]] = {
+                    'small': [1.06, 1.08], 'large': [0.98, 1.0]}        
     prox: float
     dist: float
     prox, dist = ratio[size]
@@ -463,20 +509,66 @@ def generate_circular_tick_paths(radius: float, total_len: int, size: str, ticks
 # Draw tick labels on a circle
 
 # generate_circular_tick_labels(radius: float, total_len: int, size: str, ticks: list, stroke: str, fill: str, font_size: float, font_weight: str, font_family: str, track_type: str) -> list[Text]:
-def generate_circular_tick_labels(radius: float, total_len: int, size: str, ticks: list, stroke: str, fill: str, font_size: float, font_weight: str, font_family: str, track_type: str, dpi: int) -> list[Text]:
+def generate_circular_tick_labels(radius: float, total_len: int, size: str, ticks: list, stroke: str, fill: str, font_size: float, font_weight: str, font_family: str, track_type: str, strandedness: bool, dpi: int) -> list[Text]:
     tick_label_paths_list: list[Text] = []
-    if track_type == "middle":
-        ratio: dict[str, list[float]] = {
-            'small': [0.89, 1.10], 'large': [0.89, 1.13]}
-    elif track_type == "spreadout":
-        ratio: dict[str, list[float]] = {
-            'small': [0.96, 1.21], 'large': [0.96, 1.24]}
-    elif track_type == "tuckin":
-        ratio: dict[str, list[float]] = {
-            'small': [0.81, 1.10], 'large': [0.81, 1.13]}
+    if total_len < 50000:
+        track_channel = "short"
     else:
-        ratio: dict[str, list[float]] = {
-            'small': [0.98, 1.0], 'large': [0.98, 1.0]}
+        track_channel = "long"
+    if strandedness == True:
+        if track_channel == "long":
+            if track_type == "middle":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.89, 1.10], 'large': [0.89, 1.13]}
+            elif track_type == "spreadout":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.96, 1.21], 'large': [0.96, 1.24]}
+            elif track_type == "tuckin":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.81, 1.10], 'large': [0.81, 1.13]}
+            else:
+                ratio: dict[str, list[float]] = {
+                    'small': [0.98, 1.0], 'large': [0.98, 1.0]}
+        else:
+            if track_type == "middle":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.85, 1.09], 'large': [0.85, 1.12]}
+            elif track_type == "spreadout":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.95, 1.21], 'large': [0.95, 1.24]}
+            elif track_type == "tuckin":
+                ratio: dict[str, list[float]] = {
+                    'small': [1.03, 1.21], 'large': [1.03, 1.24]}
+            else:
+                ratio: dict[str, list[float]] = {
+                    'small': [0.98, 1.0], 'large': [0.98, 1.0]}
+    else:
+        if track_channel == "long":
+            if track_type == "middle":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.91, 1.12], 'large': [0.91, 1.15]}
+            elif track_type == "spreadout":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.96, 1.21], 'large': [0.96, 1.24]}
+            elif track_type == "tuckin":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.85, 1.14], 'large': [0.85, 1.17]}
+            else:
+                ratio: dict[str, list[float]] = {
+                    'small': [0.98, 1.0], 'large': [0.98, 1.0]}
+        else:
+            if track_type == "middle":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.89, 1.10], 'large': [0.89, 1.13]}
+            elif track_type == "spreadout":
+                ratio: dict[str, list[float]] = {
+                    'small': [0.96, 1.21], 'large': [0.96, 1.24]}
+            elif track_type == "tuckin":
+                ratio: dict[str, list[float]] = {
+                    'small': [1.03, 1.21], 'large': [1.03, 1.24]}
+            else:
+                ratio: dict[str, list[float]] = {
+                    'small': [0.98, 1.0], 'large': [0.98, 1.0]}        
     prox: float
     dist: float
     prox, dist = ratio[size]
