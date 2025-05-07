@@ -321,43 +321,86 @@ class DefinitionDrawer:
         self.font_size: str = config_dict['objects']['definition']['circular']['font_size']
         self.font_family: str = config_dict['objects']['text']['font_family']
 
-    def draw(self, definition_group: Group, title_x: float, title_y: float, species_parts: list, strain_parts: list, gc_percent: float, accession: str, record_length: int) -> Group:
+    def draw(
+        self,
+        definition_group: Group,
+        title_x: float,
+        title_y: float,
+        species_parts: list,
+        strain_parts: list,
+        organelle_parts: list,
+        repicon_parts: list,
+        gc_percent: float,
+        accession: str,
+        record_length: int
+    ) -> Group:
         """
-        Draws the definition section on the provided SVG group.
-
-        Args:
-            definition_group (Group): SVG group for the definition section.
-            title_x (float): X-coordinate for the title.
-            title_y (float): Y-coordinate for the title.
-            species_parts (list): List of species name parts.
-            strain_parts (list): List of strain name parts.
-            gc_percent (float): GC content percentage.
-            accession (str): Accession number.
-            record_length (int): Length of the genomic record.
-
-        Returns:
-            Group: The updated SVG group with the definition section added.
+        描画する行数に応じて `self.interval` を中心に±方向へ配置する。
+        0 行目が最上段ではなく**中央**が 0。
         """
-        species_path: Text = generate_name_path(
-            species_parts, title_x, title_y, self.interval*-2, self.font_size, "bold", self.font_family)
-        definition_group.add(species_path)
-        strain_path: Text = generate_name_path(
-            strain_parts, title_x, title_y, self.interval*-0, self.font_size, "bold", self.font_family)
-        definition_group.add(strain_path)
-        accession_path: Text = generate_text_path(
-            accession, title_x, title_y, self.interval*2, self.font_size, "normal", self.font_family)
-        definition_group.add(accession_path)
-        length_text: str = "{:,} bp".format(record_length)
-        length_path: Text = generate_text_path(
-            length_text, title_x, title_y, self.interval*4, self.font_size, "normal", self.font_family)
-        definition_group.add(length_path)
-        gc_percent_text: str = str(gc_percent) + "% GC"
-        gc_percent_path: Text = generate_text_path(
-            gc_percent_text, title_x, title_y, self.interval*6, self.font_size, "normal", self.font_family)
-        definition_group.add(gc_percent_path)
-        
+        # ──────────────────────────────────────────
+        # 1) 出力する行のリストを構築（順序が大事）
+        # ──────────────────────────────────────────
+        lines: list[dict] = []
+
+        if species_parts and species_parts[0]["text"] is not None:
+            lines.append({"kind": "name", "parts": species_parts})
+
+        if strain_parts and strain_parts[0]["text"] is not None:
+            lines.append({"kind": "name", "parts": strain_parts})
+        if organelle_parts and organelle_parts[0]["text"] is not None:
+                lines.append({"kind": "name", "parts": organelle_parts})
+        if repicon_parts and repicon_parts[0]["text"] is not None:
+            lines.append({"kind": "name", "parts": repicon_parts})
+        if accession.strip():
+            lines.append({"kind": "plain", "text": accession})
+
+        # 長さと GC% は必ず表示
+        length_text = "{:,} bp".format(record_length)
+        lines.append({"kind": "plain", "text": length_text})
+
+        gc_text = f"{gc_percent}% GC"
+        lines.append({"kind": "plain", "text": gc_text})
+
+        # ──────────────────────────────────────────
+        # 2) 中央揃えの Y オフセットを決定
+        #    1行おきに self.interval*2 ずつ離す
+        # ──────────────────────────────────────────
+        n = len(lines)
+        step = self.interval * 2
+        start_offset = -step * (n - 1) / 2      # 最上段の y‑shift
+
+        # ──────────────────────────────────────────
+        # 3) 各行を描画
+        # ──────────────────────────────────────────
+        for i, line in enumerate(lines):
+            y_shift = start_offset + i * step
+
+            if line["kind"] == "name":      # species / strain
+                name_path = generate_name_path(
+                    line["parts"],
+                    title_x,
+                    title_y,
+                    y_shift,
+                    self.font_size,
+                    "bold",
+                    self.font_family,
+                )
+                definition_group.add(name_path)
+
+            else:                           # plain text (accession / len / GC)
+                text_path = generate_text_path(
+                    line["text"],
+                    title_x,
+                    title_y,
+                    y_shift,
+                    self.font_size,
+                    "normal",
+                    self.font_family,
+                )
+                definition_group.add(text_path)
+
         return definition_group
-
 class LabelDrawer:
     def __init__(self, config_dict: dict) -> None:
         """

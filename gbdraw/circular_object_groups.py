@@ -182,6 +182,8 @@ class DefinitionGroup:
         self.canvas_config: CircularCanvasConfigurator = canvas_config
         self.species: str | None = species
         self.strain: str | None = strain
+        self.replicon: str |None = None
+        self.organelle: str | None = None
         self.config_dict: dict = config_dict
         self.interval: int = self.config_dict['objects']['definition']['circular']['interval']
         self.font_size: int = self.config_dict['objects']['definition']['circular']['font_size']
@@ -230,6 +232,7 @@ class DefinitionGroup:
         """
         strain_name: str = ""
         record_name: str = ""
+
         for feature in self.gb_record.features:
             if feature.type == "source":
                 if 'organism' in feature.qualifiers.keys():
@@ -242,6 +245,12 @@ class DefinitionGroup:
                     strain_name = feature.qualifiers['isolate'][0]
                 elif 'strain' in feature.qualifiers.keys():
                     strain_name = feature.qualifiers['strain'][0]
+                if 'chromosome' in feature.qualifiers.keys():
+                    self.replicon = f"Chromosome {feature.qualifiers['chromosome'][0]}"
+                elif 'plasmid' in feature.qualifiers.keys():
+                    self.replicon = feature.qualifiers['plasmid'][0]
+                if 'organelle' in feature.qualifiers.keys():
+                    self.organelle = feature.qualifiers['organelle'][0]
                 else:
                     pass
         if self.species:
@@ -254,6 +263,19 @@ class DefinitionGroup:
                                          None]] = parse_mixed_content_text(self.strain)
         else:
             self.strain_parts = parse_mixed_content_text(strain_name)
+        if self.replicon:
+            self.replicon_parts: List[Dict[str, str | bool |
+                                            None]] = parse_mixed_content_text(self.replicon)
+        else:
+            self.replicon_parts = parse_mixed_content_text("")
+        if self.organelle:
+            self.organelle_parts: List[Dict[str, str | bool |
+                                             None]] = parse_mixed_content_text(self.organelle)
+        else:
+            self.organelle_parts = parse_mixed_content_text("")
+
+
+
 
     def add_circular_definitions(self) -> None:
         """
@@ -267,7 +289,7 @@ class DefinitionGroup:
         accession: str = self.gb_record.annotations['accessions'][0]
         gc_percent: float = calculate_gc_percent(self.gb_record.seq)
         self.definition_group: Group = DefinitionDrawer(self.config_dict).draw(
-            self.definition_group, self.title_x, self.title_y, self.species_parts, self.strain_parts, gc_percent, accession, record_length)
+            self.definition_group, self.title_x, self.title_y, self.species_parts, self.strain_parts, self.organelle_parts, self.replicon_parts, gc_percent, accession, record_length)
 
     def get_group(self) -> Group:
         """
