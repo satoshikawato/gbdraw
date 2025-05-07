@@ -519,13 +519,13 @@ def generate_circular_tick_labels(radius: float, total_len: int, size: str, tick
         if track_channel == "long":
             if track_type == "middle":
                 ratio: dict[str, list[float]] = {
-                    'small': [0.89, 1.10], 'large': [0.89, 1.13]}
+                    'small': [0.88, 1.10], 'large': [0.88, 1.13]}
             elif track_type == "spreadout":
                 ratio: dict[str, list[float]] = {
-                    'small': [0.96, 1.21], 'large': [0.96, 1.24]}
+                    'small': [0.94, 1.21], 'large': [0.94, 1.24]}
             elif track_type == "tuckin":
                 ratio: dict[str, list[float]] = {
-                    'small': [0.81, 1.10], 'large': [0.81, 1.13]}
+                    'small': [0.80, 1.10], 'large': [0.80, 1.13]}
             else:
                 ratio: dict[str, list[float]] = {
                     'small': [0.98, 1.0], 'large': [0.98, 1.0]}
@@ -546,13 +546,13 @@ def generate_circular_tick_labels(radius: float, total_len: int, size: str, tick
         if track_channel == "long":
             if track_type == "middle":
                 ratio: dict[str, list[float]] = {
-                    'small': [0.91, 1.12], 'large': [0.91, 1.15]}
+                    'small': [0.90, 1.12], 'large': [0.90, 1.15]}
             elif track_type == "spreadout":
                 ratio: dict[str, list[float]] = {
-                    'small': [0.96, 1.21], 'large': [0.96, 1.24]}
+                    'small': [0.95, 1.21], 'large': [0.95, 1.24]}
             elif track_type == "tuckin":
                 ratio: dict[str, list[float]] = {
-                    'small': [0.85, 1.14], 'large': [0.85, 1.17]}
+                    'small': [0.84, 1.14], 'large': [0.84, 1.17]}
             else:
                 ratio: dict[str, list[float]] = {
                     'small': [0.98, 1.0], 'large': [0.98, 1.0]}
