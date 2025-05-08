@@ -8,6 +8,7 @@ show_gc = true
 show_skew = true
 show_labels = false
 strandedness = false
+resolve_overlaps = false
 [canvas.circular]
 # Basicaly you shouldn't modify these values.
 # If you wish to modify width and height, I strongly recommend changing the radius accordingly (=0.4*weight/height).

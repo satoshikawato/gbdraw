@@ -186,6 +186,7 @@ class LinearCanvasConfigurator:
         self.show_gc: bool = self.config_dict['canvas']['show_gc']
         self.show_skew: bool = self.config_dict['canvas']['show_skew']
         self.strandedness: bool = self.config_dict['canvas']['strandedness']
+        self.resolve_overlaps: bool = self.config_dict['canvas']['resolve_overlaps']
         self.align_center: bool = self.config_dict['canvas']['linear']['align_center']
         self.legend_position = legend
         self.num_of_entries: int = num_of_entries

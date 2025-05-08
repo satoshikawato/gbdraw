@@ -566,6 +566,7 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
        
        # Calculate track position using the same logic as for features
        factors = calculate_feature_position_factors_linear(strand, feature_track_id, strandedness)
+       
        track_y_position = cds_height * factors[1]  # Use middle factor
        
        # Store track position for this feature
@@ -657,9 +658,9 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
    
    # Adjust track height based on strandedness
    if strandedness:
-       track_height = 0.2 * cds_height  # Reduced height for separate strands mode
+       track_height = 0.25 * cds_height  # Reduced height for separate strands mode
    else:
-       track_height = 0.4 * cds_height  # Original height for default mode
+       track_height = 0.50 * cds_height  # Original height for default mode
    for track_id in sorted(track_dict.keys()):
        if track_id == "track_0":
            continue
@@ -669,103 +670,8 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
        
        for label in track_labels:
            # Compact vertical positioning for external labels
-           label["middle_y"] = (-0.5 * cds_height - (track_height * track_num))
+           label["middle_y"] = (-0.75 * cds_height - (track_height * track_num))
            external_labels.append(label)
 
    return embedded_labels + external_labels
 
-
-@dataclass
-class Track:
-    id: int
-    features: List[Tuple[float, float]]  # List of (start, end) positions
-    labels: List[Dict]  # List of label entries
-    height: float
-    y_position: float
-
-class TrackManager:
-    def __init__(self, cds_height: float):
-        self.tracks: Dict[str, Track] = {}
-        self.cds_height = cds_height
-        self.track_spacing = 1.025  # Spacing factor between tracks
-        
-    def init_track(self, strand: str, track_num: int) -> Track:
-        """Initialize a new track with proper vertical positioning."""
-        track_id = f"{strand}_{track_num}"
-        if track_id not in self.tracks:
-            # Calculate y-position based on strand and track number
-            if strand == "positive":
-                y_pos = -self.cds_height * (track_num + 0.5)
-            else:  # negative strand
-                y_pos = self.cds_height * (track_num + 0.5)
-            
-            self.tracks[track_id] = Track(
-                id=track_num,
-                features=[],
-                labels=[],
-                height=self.cds_height,
-                y_position=y_pos
-            )
-        return self.tracks[track_id]
-
-    def find_best_track(self, feature_start: float, feature_end: float, strand: str) -> Track:
-        """Find the best track for a new feature, creating a new one if necessary."""
-        current_track_num = 0
-        while True:
-            track = self.init_track(strand, current_track_num)
-            
-            # Check if feature fits in this track
-            can_fit = True
-            for start, end in track.features:
-                if not (feature_end < start or feature_start > end):
-                    can_fit = False
-                    break
-                    
-            if can_fit:
-                return track
-            
-            current_track_num += 1
-
-    def add_feature(self, start: float, end: float, strand: str) -> Track:
-        """Add a feature to the best available track and return the track."""
-        track = self.find_best_track(start, end, strand)
-        track.features.append((start, end))
-        return track
-
-    def can_embed_label(self, label: dict, feature_track: Track) -> bool:
-        """Check if a label can be embedded within its feature's track."""
-        label_width = label["width_px"]
-        label_start = label["middle"] - (label_width / 2)
-        label_end = label["middle"] + (label_width / 2)
-        
-        # Check for overlap with other features in the track
-        for feat_start, feat_end in feature_track.features:
-            # Allow embedding only if label fits entirely within feature
-            if not (label_start >= feat_start and label_end <= feat_end):
-                return False
-        
-        # Check for overlap with other labels in the track
-        for existing_label in feature_track.labels:
-            if check_label_overlap(label, existing_label):
-                return False
-                
-        return True
-
-    def position_label(self, label: dict, feature_track: Track) -> dict:
-        """Position a label either embedded in its feature track or in a new track."""
-        if self.can_embed_label(label, feature_track):
-            # Embed the label
-            label["is_embedded"] = True
-            label["middle_y"] = feature_track.y_position
-            feature_track.labels.append(label)
-        else:
-            # Create a new track for the label
-            label_track_num = len(self.tracks)
-            label_track = self.init_track(label["strand"], label_track_num)
-            
-            # Position label above the feature tracks
-            label["is_embedded"] = False
-            label["middle_y"] = label_track.y_position
-            label_track.labels.append(label)
-            
-        return label

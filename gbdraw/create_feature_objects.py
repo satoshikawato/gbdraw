@@ -242,53 +242,62 @@ def check_feature_overlap(feature1: dict, feature2: dict, separate_strands: bool
     ]
     
     return any(overlap_conditions)
+def check_feature_overlap(a: dict, b: dict, separate_strands: bool) -> bool:
+    """
+    a, b の feature dict がオーバーラップするか判定──
+    separate_strands=True 時は strand が同じもののみ比較。
+    """
+    # strand が違えば overlap なし
+    if separate_strands and a["strand"] != b["strand"]:
+        return False
+    # interval [start,end] の重なりチェック
+    return not (a["end"] < b["start"] or a["start"] > b["end"])
 
-def find_best_track(feature: dict, track_dict: Dict[str, List[dict]], separate_strands: bool, max_track: int = 100) -> int:
+def find_best_track(
+    feature: dict,
+    track_dict: Dict[str, List[dict]],
+    separate_strands: bool,
+    resolve_overlaps: bool,
+    max_track: int = 100
+) -> int:
     """
-    Find best track with improved strand handling and track numbering
-    
-    Args:
-        feature: Feature to place
-        track_dict: Existing track assignments
-        separate_strands: If True, maintain separate tracks for different strands
-        max_track: Maximum number of tracks to consider
-        
-    Returns:
-        int: Best track number for the feature
+    feature を置くべきトラック番号を返す。
+    ── separate_strands=True なら正負別々に番号を振り、
+       resolve_overlaps=False なら常に 0（positive）または -1（negative）を返す。
+    ── track_dict: "track_<番号>" -> そのトラックに置かれた feature dict のリスト
     """
-    # Always use positive track numbering when not separating strands
+    # トラックを試す順番を決める
     if not separate_strands:
-        track_range = range(max_track)
+        # 全て同一レーン
+        track_nums = [0] if not resolve_overlaps else list(range(0, max_track))
     else:
-        # For separate strands, use negative numbers for negative strand
-        is_negative = feature["strand"] == "negative"
-        if is_negative:
-            track_range = range(-1, -max_track-1, -1)  # Start at -1 and go down
+        # +strand は >=0, -strand は <0 に分ける
+        if not resolve_overlaps:
+            track_nums = [0] if feature["strand"] == "positive" else [-1]
         else:
-            track_range = range(max_track)  # Start at 0 and go up
-    
-    # Find first available track
-    for track in track_range:
-        track_id = f"track_{abs(track)}"  # Use absolute track number for dictionary key
-        
-        # Check if track exists
-        if track_id not in track_dict:
-            return track
-        
-        # Check if feature can be placed in this track
-        can_fit = True
-        for existing in track_dict[track_id]:
-            if check_feature_overlap(feature, existing, separate_strands):
-                can_fit = False
-                break
-        
-        if can_fit:
-            return track
-    
-    # Return appropriate track number
-    return -max_track if separate_strands and feature["strand"] == "negative" else max_track
+            if feature["strand"] == "positive":
+                track_nums = list(range(0, max_track))
+            else:
+                track_nums = list(range(-1, -max_track-1, -1))
 
-def arrange_feature_tracks(feature_dict: Dict[str, FeatureObject], separate_strands: bool) -> Dict[str, FeatureObject]:
+    # 重複解消ありなら、順にトラックを試す
+    if resolve_overlaps:
+        for tn in track_nums:
+            key = f"track_{abs(tn)}"
+            # トラック自体に何もなければ即決
+            if key not in track_dict or not track_dict[key]:
+                return tn
+            # 既存の feature と重ならなければここに決定
+            for existing in track_dict[key]:
+                if check_feature_overlap(feature, existing, separate_strands):
+                    break
+            else:
+                return tn
+
+    # 重複解消なしなら最初の要素を返す
+    return track_nums[0]
+
+def arrange_feature_tracks(feature_dict: Dict[str, FeatureObject], separate_strands: bool, resolve_overlaps: bool) -> Dict[str, FeatureObject]:
     """
     Arrange features in tracks with improved strand handling and track assignment
     """
@@ -340,7 +349,7 @@ def arrange_feature_tracks(feature_dict: Dict[str, FeatureObject], separate_stra
             # Use single track dictionary for all features
             track_dict = pos_tracks
         
-        track_num = find_best_track(feat_metrics, track_dict, separate_strands)
+        track_num = find_best_track(feat_metrics, track_dict, separate_strands, resolve_overlaps)
         track_id = f"track_{abs(track_num)}"  # Use absolute track number for dictionary key
         
         if track_id not in track_dict:
@@ -351,7 +360,7 @@ def arrange_feature_tracks(feature_dict: Dict[str, FeatureObject], separate_stra
     
     return feature_dict
 
-def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_features_set: List[str], default_colors: DataFrame, separate_strands: bool) -> Dict[str, FeatureObject]:
+def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_features_set: List[str], default_colors: DataFrame, separate_strands: bool, resolve_overlaps:bool) -> Dict[str, FeatureObject]:
     """
     Creates a dictionary mapping feature IDs to FeatureObjects from a GenBank record.
 
@@ -373,6 +382,7 @@ def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_f
     feature_count: int = 0
     genome_length: int = len(gb_record.seq)
     separate_strands: bool = separate_strands
+    resolve_overlaps: bool = resolve_overlaps
     for feature in gb_record.features:
         if feature.type not in selected_features_set:
             continue
@@ -396,7 +406,7 @@ def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_f
                 feature_object: FeatureObject = create_feature_object(
                     feature_id, feature, color_table, default_colors, genome_length)
                 feature_dict[feature_id] = feature_object
-    feature_dict = arrange_feature_tracks(feature_dict, separate_strands)
+    feature_dict = arrange_feature_tracks(feature_dict, separate_strands, resolve_overlaps)
     if locus_count == 0:
         logger.warning(f"WARNING: No genes were found in {gb_record.id}. Are you sure the GenBank file is in the correct format?")
     return feature_dict
