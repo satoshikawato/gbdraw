@@ -188,6 +188,7 @@ class LinearCanvasConfigurator:
         self.strandedness: bool = self.config_dict['canvas']['strandedness']
         self.resolve_overlaps: bool = self.config_dict['canvas']['resolve_overlaps']
         self.align_center: bool = self.config_dict['canvas']['linear']['align_center']
+        self.show_labels: bool = self.config_dict['canvas']['show_labels']
         self.legend_position = legend
         self.num_of_entries: int = num_of_entries
 
@@ -218,7 +219,15 @@ class LinearCanvasConfigurator:
         else:
             self.cds_height: float = 0.5 * self.default_cds_height
             self.cds_padding: float = 0.75 * self.cds_height
-
+    def set_label_padding(self) -> None:
+        """
+        Sets the padding for labels based on configuration settings.
+        This method adjusts the label_padding attribute.
+        """
+        if self.show_labels:
+            self.vertical_offset: float = self.vertical_offset + 3.0 * self.cds_height
+        else:
+            self.vertical_offset: float = self.vertical_offset
     def set_arrow_length(self) -> None:
         """
         Sets the length of the arrow used in the representation based on the longest genome.
@@ -231,8 +240,10 @@ class LinearCanvasConfigurator:
         Calculates the dimensions for the linear canvas including the total width and height, 
         considering all the elements and padding. This method updates total_width and total_height attributes.
         """
+        
         self.set_gc_height_and_gc_padding()
         self.set_cds_height_and_cds_padding()
+        self.set_label_padding()
         self.add_margin: float | Literal[0] = 2 * self.cds_height if (
             self.show_gc and not self.strandedness) else 0
         self.alignment_width: float = self.fig_width - self.horizontal_offset

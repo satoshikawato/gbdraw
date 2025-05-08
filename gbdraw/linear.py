@@ -100,10 +100,6 @@ def _get_args(args) -> argparse.Namespace:
         '--show_gc',
         help='plot GC content below genome (default: False). ',
         action='store_true')
-    # parser.add_argument(
-    #     '--show_skew',
-    #     help='plot GC skew below genome (default: False). ',
-    #     action='store_true')
     parser.add_argument(
         '--align_center',
         help='Align genomes to the center (default: False). ',
@@ -162,6 +158,10 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         default="right")
     parser.add_argument("--show_labels", help="Show labels", action="store_true")
+    parser.add_argument(
+        '--resolve_overlaps',
+        help='Resolve overlaps (tentative; default: False). ',
+        action='store_true')
     if len(sys.argv) == 1:
         parser.print_help(sys.stderr)
         sys.exit(1)
@@ -198,8 +198,7 @@ def linear_main(cmd_args) -> None:
     blast_files: str = args.blast
     color_table_path: str = args.table
     strandedness: bool = args.separate_strands
-    resolve_overlaps: bool = False
-    # resolve_overlaps: bool = args.resolve_overlaps
+    resolve_overlaps: bool = args.resolve_overlaps
     dinucleotide: str = args.nt
     show_gc: bool = args.show_gc
     window: int = args.window
