@@ -575,6 +575,7 @@ class SeqRecordGroup:
         self.dpi =  self.config_dict['canvas']['dpi']
         self.track_type = self.config_dict['canvas']['circular']['track_type']
         self.strandedness = self.config_dict['canvas']['strandedness']
+        self.resolve_overlaps = self.config_dict['canvas']['resolve_overlaps']
         self.track_ratio = self.canvas_config.track_ratio
         self.record_group: Group = self.setup_record_group()
     def draw_record(self, feature_dict: Dict[str, FeatureObject], record_length: int, group: Group) -> Group:
@@ -628,7 +629,7 @@ class SeqRecordGroup:
         color_table: Optional[DataFrame] = self.feature_config.color_table
         default_colors: Optional[DataFrame] = self.feature_config.default_colors
         feature_dict: Dict[str, FeatureObject] = create_feature_dict(
-            self.gb_record, color_table, selected_features_set, default_colors, self.strandedness)
+            self.gb_record, color_table, selected_features_set, default_colors, self.strandedness, self.resolve_overlaps)
         track_id: str = self.gb_record.annotations['accessions'][0]
         record_group = Group(id=track_id)
         record_length: int = len(self.gb_record.seq)
