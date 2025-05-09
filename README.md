@@ -12,12 +12,34 @@
 - Customizable inputs: Supports Genbank/DDBJ flat files with options for color customization.
 - Various output formats: Vector and raster graphics suitable for publication and further editing.
 ## Dependencies
-- [Python](https://www.python.org/) >=3.12
+- [Python](https://www.python.org/) >=3.10
 - [Biopython](https://biopython.org/)
 - [pandas](https://pandas.pydata.org/)
 - [svgwrite](https://github.com/mozman/svgwrite)
 - [CairoSVG](https://cairosvg.org/)
 - [Liberation Fonts](https://github.com/liberationfonts/liberation-fonts) (bundled; SIL Open Font_License 1.1)
+## Installation (Experimental)
+**Prerequisite:** Make sure you have a [conda](https://docs.conda.io/en/latest/)-compatible package manager—[mamba](https://github.com/mamba-org/mamba) ,[micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html), [miniforge](https://github.com/conda-forge/miniforge) or plain conda—already installed and on your `$PATH`. All steps below assume you run the commands in such an environment.
+
+**NOTE:** gbdraw is not yet available on the Bioconda channel.
+Until the Bioconda recipe is accepted and published, you need to clone the repository yourself using `git` and build the package locally with [conda-build](https://anaconda.org/anaconda/conda-build).
+```bash
+# 1. Clone the source
+git clone https://github.com/satoshikawato/gbdraw.git
+cd gbdraw/
+
+# 2. Make sure conda-build is installed
+mamba install -y conda-build             # or: conda install conda-build
+
+# 3. Build the package locally
+conda-build .
+
+# 4. Create an isolated environment from the locally built package
+mamba create -n gbdraw -y  -c conda-forge -c bioconda -c local gbdraw
+
+# 5. Activate the environment
+mamba activate gbdraw
+```
 ## Usage
 ```bash
 gbdraw -h
