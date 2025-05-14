@@ -334,13 +334,7 @@ class DefinitionDrawer:
         accession: str,
         record_length: int
     ) -> Group:
-        """
-        描画する行数に応じて `self.interval` を中心に±方向へ配置する。
-        0 行目が最上段ではなく**中央**が 0。
-        """
-        # ──────────────────────────────────────────
-        # 1) 出力する行のリストを構築（順序が大事）
-        # ──────────────────────────────────────────
+
         lines: list[dict] = []
 
         if species_parts and species_parts[0]["text"] is not None:
@@ -355,24 +349,18 @@ class DefinitionDrawer:
         if accession.strip():
             lines.append({"kind": "plain", "text": accession})
 
-        # 長さと GC% は必ず表示
+
         length_text = "{:,} bp".format(record_length)
         lines.append({"kind": "plain", "text": length_text})
 
         gc_text = f"{gc_percent}% GC"
         lines.append({"kind": "plain", "text": gc_text})
 
-        # ──────────────────────────────────────────
-        # 2) 中央揃えの Y オフセットを決定
-        #    1行おきに self.interval*2 ずつ離す
-        # ──────────────────────────────────────────
         n = len(lines)
         step = self.interval * 2
-        start_offset = -step * (n - 1) / 2      # 最上段の y‑shift
+        start_offset = -step * (n - 2) / 2      
 
-        # ──────────────────────────────────────────
-        # 3) 各行を描画
-        # ──────────────────────────────────────────
+
         for i, line in enumerate(lines):
             y_shift = start_offset + i * step
 
@@ -480,7 +468,7 @@ class LabelDrawer:
                 stroke="none",
                 fill="none")
         text_path = Text("") # The text path must go inside a text object. Parameter used here gets ignored
-        text_path.add(TextPath(label_axis_path, text=label["label_text"], startOffset="50%", method="align", text_anchor="middle", font_size=self.font_size, font_style='normal',font_weight='normal', font_family=self.font_family, dominant_baseline = "central"))
+        text_path.add(TextPath(label_axis_path, text=label["label_text"], startOffset="50%", method="align", text_anchor="middle", font_size=self.font_size, font_style='normal',font_weight='normal', font_family=self.font_family, dominant_baseline = "middle"))
         group.add(label_axis_path)
         group.add(text_path)
         return group
