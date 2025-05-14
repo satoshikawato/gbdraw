@@ -9,6 +9,7 @@ setup(
         'svgwrite',
         'biopython',
         'cairosvg',
+        'fonttools'
     ],
     package_data={
         'gbdraw': ['data/default_colors.tsv', 'data/config.toml', 'data/*.ttf']
