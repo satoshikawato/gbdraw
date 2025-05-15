@@ -123,27 +123,29 @@ options:
 #### <i>Haemophilus influenzae</i>
 `gbdraw` automatically identifies and displays the organism and strain name from the sequence record. However, these names are not italicized by default. For example:
 ```bash
-gbdraw circular -i GCF_000931575.1_ASM93157v1_genomic.gbff -o Haemophilus_influenzae
+wget -c https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/931/575/GCF_000931575.1_ASM93157v1/GCF_000931575.1_ASM93157v1_genomic.gbff.gz # download genome
+gunzip GCF_000931575.1_ASM93157v1_genomic.gbff.gz # decompress .gz file
+gbdraw circular -i GCF_000931575.1_ASM93157v1_genomic.gbff -o Haemophilus_influenzae -f svg
 ```
-![hinfluenzae](https://github.com/satoshikawato/gbdraw/blob/main/examples/Haemophilus_influenzae.png)
+![hinfluenzae](https://github.com/satoshikawato/gbdraw/blob/main/examples/Haemophilus_influenzae.svg)
 #### <i>Escherichia coli</i> K-12
 To italicize a portion of the organism name, you can use the <i></i> tags in the --species and --strain parameters. This will format the specified text in italics. The following command will render the species name "_Escherichia coli_" in italics, while keeping "K-12" in standard text (the organim name will be overridden):
 ```bash
-gbdraw circular -i NC_000913.gb --species "<i>Escherichia coli</i>" --strain "K-12"
+gbdraw circular -i NC_000913.gb --species "<i>Escherichia coli</i>" --strain "K-12" -f svg
 ```
-![ecoli](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_000913.png)
+![ecoli](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_000913.svg)
 
 #### <i>Vibrio cholerae</i> Strain O395 (GCF_000016245.1)
 For GenBank files containing multiple entries, `gbdraw` saves each entry as a separate file. Here's how to do it for the _Vibrio cholerae_ strain O395 genome, which has two chromosomes:
 ```bash
 wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/016/245/GCF_000016245.1_ASM1624v1/GCF_000016245.1_ASM1624v1_genomic.gbff.gz # download genome
-gunzip GCF_000016245.1_ASM1624v1_genomic.gbff.gz # extract file
+gunzip GCF_000016245.1_ASM1624v1_genomic.gbff.gz # decomperss .gz file
 gbdraw circular -i GCF_000016245.1_ASM1624v1_genomic.gbff --species "<i>Vibrio cholerae</i>" --strain "O395" -f svg  # Draw genome; results in "NC_009457.svg" for Chromosome I and "NC_009456.svg" for Chromosome II
 ```
 <i>Vibrio cholerae</i> Chromosome I
-![Vibrio cholerae chromosome I](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_009457.png)
+![Vibrio cholerae chromosome I](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_009457.svg)
 <i>Vibrio cholerae</i> Chromosome II
-![Vibrio cholerae chromosome II](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_009456.png)
+![Vibrio cholerae chromosome II](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_009456.svg)
 ### Linear genome
 `gbdraw linear`
 ```bash
@@ -199,18 +201,23 @@ blastn -query NC_000898.fasta -subject NC_001664.fasta -outfmt 7 -out NC_000898_
 ```
 Use `gbdraw linear` to visualize the comparison, aligning genomes to the center and separating forward and reverse strands:
 ```bash
-gbdraw linear -i NC_000898.gb NC_001664.gb -b NC_000898_NC_001664.blastn.out --align_center --separate_strands -o HHV-6
+umamba activate blast-2.16.0
+blastn -query NC_000898.fasta -subject NC_001664.fasta -outfmt 7 -out NC_000898_NC_001664.blastn.out
+umamba deactivate
+umamba activate gbdraw-0.1.0
+gbdraw linear -i NC_000898.gb NC_001664.gb -b NC_000898_NC_001664.blastn.out --align_center --separate_strands -o HHV-6 -f svg
+umamba deactivate
 ```
-![HHV-6](https://github.com/satoshikawato/gbdraw/blob/main/examples/HHV-6.png)
+![HHV-6](https://github.com/satoshikawato/gbdraw/blob/main/examples/HHV-6.svg)
 
 ### <i>Saccharomyces cerevisiae</i> (budding yeast)
 Although primarily focused on smaller genomes, `gbdraw` <i>can</i> handle eukaryotic genomes like the budding yeast, <i>S. cerevisiae</i>:
 ```bash
-wget -c https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/146/045/GCF_000146045.2_R64/GCF_000146045.2_R64_genomic.gbff.gz
-gunzip GCF_000146045.2_R64_genomic.gbff.gz
-gbdraw linear -i GCF_000146045.2_R64_genomic.gbff --separate_strands --show_gc -o yeast # outputs yeast.png
+wget -c https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/146/045/GCF_000146045.2_R64/GCF_000146045.2_R64_genomic.gbff.gz # download genome
+gunzip GCF_000146045.2_R64_genomic.gbff.gz # decomperss .gz file
+gbdraw linear -i GCF_000146045.2_R64_genomic.gbff --separate_strands --show_gc -o yeast -f svg # outputs yeast.svg
 ```
-![yeast](https://github.com/satoshikawato/gbdraw/blob/main/examples/yeast.png)
+![yeast](https://github.com/satoshikawato/gbdraw/blob/main/examples/yeast.svg)
 
 ### <i>Candidatus</i> Hepatoplasmataceae (mollicutes)
 ```bash
@@ -218,7 +225,7 @@ tblastx -query Fukuoka2020.fasta -subject Av-JP.fasta  -outfmt 7 -out Fukuoka202
 tblastx -query Av-JP.fasta -subject Ps-JP.fasta  -outfmt 7 -out Av-JP_Ps-JP.tblastx.out
 tblastx -query Ps-JP.fasta -subject Tokyo2021.fasta  -outfmt 7 -out Ps-JP_Tokyo2021.tblastx.out
 tblastx -query Tokyo2021.fasta -subject Av.fasta  -outfmt 7 -out Tokyo2021_Av.tblastx.out
-gbdraw linear -i Fukuoka2020.gb Av-JP.gb Ps-JP.gb Tokyo2021.gb Av.gb -b Fukuoka2020_Av-JP.tblastx.out  Av-JP_Ps-JP.tblastx.out  Ps-JP_Tokyo2021.tblastx.out  Tokyo2021_Av.tblastx.out -o hepatoplasmataceae --align_center --bitscore 50 --evalue 1e-3 --separate_strands
+gbdraw linear -i Fukuoka2020.gb Av-JP.gb Ps-JP.gb Tokyo2021.gb Av.gb -b Fukuoka2020_Av-JP.tblastx.out  Av-JP_Ps-JP.tblastx.out  Ps-JP_Tokyo2021.tblastx.out  Tokyo2021_Av.tblastx.out -o hepatoplasmataceae --align_center --bitscore 50 --evalue 1e-3 --separate_strands -f svg
 ```
 ![hepatoplasmataceae](https://github.com/satoshikawato/gbdraw/blob/main/examples/hepatoplasmataceae.svg)
 ## Advanced customization
@@ -296,30 +303,34 @@ MellatMJNV.MeenMJNV.tblastx.out \
 MeenMJNV.MejoMJNV.tblastx.out \
 -t color_table.txt \
 -d modified_default_colors.tsv \
+--block_stroke_width 1 \
+--block_stroke_color gray \
+--show_labels \
 --align_center \
 --separate_strands \
--o majani 
+-o majani -f svg
 ```
 ![majaniviruses](https://github.com/satoshikawato/gbdraw/blob/main/examples/majani.svg)
 
 ### Feature labels (experimental)
 ```bash
-gbdraw circular -i LC738868.gb -f svg,png --block_stroke_width 1 --block_stroke_color gray --show_labels --track_type middle  -t color_table.txt -d modified_default_colors.tsv
+gbdraw circular -i LC738868.gb -f svg --block_stroke_width 1 --block_stroke_color gray --show_labels --separate_strands --track_type middle  -t color_table.txt -d modified_default_colors.tsv
 ```
 ![MjeNMV](https://github.com/satoshikawato/gbdraw/blob/main/examples/LC738868.svg)
 ```bash
- gbdraw circular -i AP027280.gb -f svg,png --block_stroke_width 1 --block_stroke_color gray --track_type spreadout --show_labels
+gbdraw circular -i AP027280.gb -f svg --block_stroke_width 1 --block_stroke_color gray --track_type spreadout --show_labels
 ```
 ![WSSV](https://github.com/satoshikawato/gbdraw/blob/main/examples/AP027280.svg)
 ```bash
-gbdraw circular -i NC_012920.gb -f svg,png   --block_stroke_width 2 --block_stroke_color gray  --show_labels -w 100 -s 10
+gbdraw circular -i NC_012920.gb -f svg --block_stroke_width 2 --block_stroke_color gray  --show_labels -w 100 -s 10
 ```
 ![HsmtDMA](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920.svg)
 ## Planned features
-- Feature color code legends (will be added in the next update)
 - Dynamic scaling of the text (will be added in the next update)
-- Feature labels (hopefully)
 - Multiple tracks to visualize overlapping features (overlapping genes, transcript isoforms etc.)
+## Known issues
+- trans-splicing are not correctly handled
+- SVG to PDF/PNG/EPS/PS conversion issues (dependency)
 
 ## Bug reports and suggestions
 Please feel free to submit a new issue if you find a bug or have a suggestion:
