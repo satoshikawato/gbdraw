@@ -8,6 +8,14 @@
 `gbdraw` is a command-line tool designed for creating detailed diagrams of microbial genomes. 
 `gbdraw` accepts GenBank/EMBL/DDBJ-format annotated genomes as input and outputs a visual representation of the genomes in SVG/PNG/PDF/EPS/PS formats.
 
+**NOTE (2025-05-15):** Generation of PNG/PDF/EPS/PS formats is currently not functioning correctly (as of 2025-05-15). To output in these formats, please downgrade CairoSVG to version 2.7.1 by following these steps:
+```bash
+conda activate gbdraw-0.1.0  # Activate the gbdraw environment
+conda install cairosvg=2.7.1 # Install CairoSVG v2.7.1
+```
+Alternatively, you can output SVG format (`-f svg`) and then convert to PNG using tools like [Inkscape](https://inkscape.org/). 
+
+
 **Try gbdraw on Colab Notebook!** [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
 
 ## Features
@@ -131,7 +139,7 @@ gbdraw circular -i GCF_000931575.1_ASM93157v1_genomic.gbff -o Haemophilus_influe
 #### <i>Escherichia coli</i> K-12
 To italicize a portion of the organism name, you can use the <i></i> tags in the --species and --strain parameters. This will format the specified text in italics. The following command will render the species name "_Escherichia coli_" in italics, while keeping "K-12" in standard text (the organim name will be overridden):
 ```bash
-gbdraw circular -i NC_000913.gb --species "<i>Escherichia coli</i>" --strain "K-12" -f svg
+gbdraw circular -i NC_000913.gb --species "<i>Escherichia coli</i>" --strain "K-12" -f svg --separate_strands
 ```
 ![ecoli](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_000913.svg)
 
@@ -140,7 +148,8 @@ For GenBank files containing multiple entries, `gbdraw` saves each entry as a se
 ```bash
 wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/016/245/GCF_000016245.1_ASM1624v1/GCF_000016245.1_ASM1624v1_genomic.gbff.gz # download genome
 gunzip GCF_000016245.1_ASM1624v1_genomic.gbff.gz # decomperss .gz file
-gbdraw circular -i GCF_000016245.1_ASM1624v1_genomic.gbff --species "<i>Vibrio cholerae</i>" --strain "O395" -f svg  # Draw genome; results in "NC_009457.svg" for Chromosome I and "NC_009456.svg" for Chromosome II
+gbdraw circular -i GCF_000016245.1_ASM1624v1_genomic.gbff --species "<i>Vibrio cholerae</i>" --strain "O395" -f svg --separate_strands --track_type middle # Draw genome; results in "NC_009457.svg" for Chromosome I and "NC_009456.svg" for Chromosome II
+
 ```
 <i>Vibrio cholerae</i> Chromosome I
 ![Vibrio cholerae chromosome I](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_009457.svg)
