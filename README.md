@@ -1,3 +1,8 @@
+![version.svg](https://anaconda.org/bioconda/gbdraw/badges/version.svg)
+![platforms.svg](https://anaconda.org/bioconda/gbdraw/badges/platforms.svg)
+![latest_release_date.svg](https://anaconda.org/bioconda/gbdraw/badges/latest_release_date.svg)
+![license.svg](https://anaconda.org/bioconda/gbdraw/badges/license.svg)
+
 # gbdraw
 ![gbdraw](https://github.com/satoshikawato/gbdraw/blob/main/examples/gbdraw_preview.png)
 `gbdraw` is a command-line tool designed for creating detailed diagrams of microbial genomes. 
@@ -5,8 +10,6 @@
 
 **Try gbdraw on Colab Notebook!** [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
 
-
-**NOTE:** `gbdraw` is currently a work in progress and is actively under development, with the goal of releasing it as a user-friendly conda package in the near future. The current repository is a preview and does not yet host a fully functional release version. Stay tuned for updates and releases!
 ## Features
 - Circular and linear diagrams: Generates both circular and linear representations of genome structures.
 - Customizable inputs: Supports Genbank/DDBJ flat files with options for color customization.
@@ -18,11 +21,17 @@
 - [svgwrite](https://github.com/mozman/svgwrite)
 - [CairoSVG](https://cairosvg.org/)
 - [Liberation Fonts](https://github.com/liberationfonts/liberation-fonts) (bundled; SIL Open Font_License 1.1)
-## Installation (Experimental)
+## Installation
 **Prerequisite:** Make sure you have a [conda](https://docs.conda.io/en/latest/)-compatible package manager—[mamba](https://github.com/mamba-org/mamba) ,[micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html), [miniforge](https://github.com/conda-forge/miniforge) or plain conda—already installed and on your `$PATH`. All steps below assume you run the commands in such an environment.
+### Bioconda (recommended)
+`gbdraw` is available on the Bioconda channel.
+```bash
+conda create -n gbdraw-0.1.0 -y -c conda-forge -c bioconda gbdraw=0.1.0
+conda activate gbdraw-0.1.0
+```
 
-**NOTE:** gbdraw is not yet available on the Bioconda channel.
-Until the Bioconda recipe is accepted and published, you need to clone the repository yourself using `git` and build the package locally with [conda-build](https://anaconda.org/anaconda/conda-build).
+### Local build (development version)
+To use the latest development version, clone the repository yourself using `git` and build the package locally with [conda-build](https://anaconda.org/anaconda/conda-build).
 ```bash
 # 1. Clone the source
 git clone https://github.com/satoshikawato/gbdraw.git
