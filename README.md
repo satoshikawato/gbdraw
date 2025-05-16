@@ -8,14 +8,6 @@
 `gbdraw` is a command-line tool designed for creating detailed diagrams of microbial genomes. 
 `gbdraw` accepts GenBank/EMBL/DDBJ-format annotated genomes as input and outputs a visual representation of the genomes in SVG/PNG/PDF/EPS/PS formats.
 
-**NOTE (2025-05-15):** Generation of PNG/PDF/EPS/PS formats is currently not functioning correctly (as of 2025-05-15). To output in these formats, please downgrade CairoSVG to version 2.7.1 by following these steps:
-```bash
-conda activate gbdraw-0.1.0  # Activate the gbdraw environment
-conda install cairosvg=2.7.1 # Install CairoSVG v2.7.1
-```
-Alternatively, you can output SVG format (`-f svg`) and then convert to PNG using tools like [Inkscape](https://inkscape.org/). 
-
-
 **Try gbdraw on Colab Notebook!** [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
 
 ## Features
