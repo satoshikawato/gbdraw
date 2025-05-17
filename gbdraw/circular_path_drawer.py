@@ -514,7 +514,6 @@ def generate_circular_tick_paths(radius: float, total_len: int, size: str, ticks
 
 # Draw tick labels on a circle
 
-# generate_circular_tick_labels(radius: float, total_len: int, size: str, ticks: list, stroke: str, fill: str, font_size: float, font_weight: str, font_family: str, track_type: str) -> list[Text]:
 def generate_circular_tick_labels(radius: float, total_len: int, size: str, ticks: list, stroke: str, fill: str, font_size: float, font_weight: str, font_family: str, track_type: str, strandedness: bool, dpi: int) -> list[Text]:
     tick_label_paths_list: list[Text] = []
     if total_len < 50000:

@@ -235,6 +235,7 @@ def linear_main(cmd_args) -> None:
                                int] = create_dict_for_sequence_lengths(records)
     longest_genome: int = max(sequence_length_dict.values())
     num_of_entries: int = len(sequence_length_dict)
+    
     config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness, show_labels=show_labels, resolve_overlaps=resolve_overlaps)
 
     blast_config = BlastMatchConfigurator(

@@ -334,9 +334,6 @@ class SkewDrawer:
         group.add(circle_path)
         group.add(skew_high)
         group.add(skew_low)
-
-
-    
         gc_path_desc: str = calculate_gc_content_path_desc(
             start_x, start_y, gc_df, record_len, alignment_width, genome_size_normalization_factor, track_height)
         gc_path = Path(

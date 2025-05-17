@@ -461,7 +461,7 @@ class PairWiseMatchGroup:
         config_dict (dict): Configuration dictionary with styling parameters.
     """
 
-    def __init__(self, canvas_config: LinearCanvasConfigurator, sequence_length_dict: dict, comparison_df: DataFrame, comparison_height: float, comparison_count: int, blast_config) -> None:
+    def __init__(self, canvas_config: LinearCanvasConfigurator, sequence_length_dict: dict, comparison_df: DataFrame, comparison_height: float, comparison_count: int, blast_config, records) -> None:
         """
         Initializes the PairWiseMatchGroup with necessary data and configurations.
 
@@ -482,11 +482,14 @@ class PairWiseMatchGroup:
         self.match_stroke_color: str = blast_config.stroke_color
         self.match_stroke_width: float = blast_config.stroke_width
         self.comparison_count: int = comparison_count
+        self.records = records
         self.track_id: str = "comparison" + str(self.comparison_count)
+        self.calculate_query_subject_offsets()
         self.match_group = Group(id=self.track_id)
         self.add_elements_to_group()
 
-    def calculate_query_subject_offsets(self, query_id: str, subject_id: str) -> Tuple[float, float]:
+
+    def calculate_query_subject_offsets(self) -> Tuple[float, float]:
         """
         Calculates the horizontal offsets for the query and subject sequences.
 
@@ -501,13 +504,12 @@ class PairWiseMatchGroup:
             Tuple[float, float]: The x-coordinate offsets for the query and subject sequences.
         """
         if self.canvas_config.align_center:
-            query_offset_x: float = (
-                self.canvas_config.longest_genome - self.sequence_length_dict[query_id]) / 2
-            subject_offset_x: float = (
-                self.canvas_config.longest_genome - self.sequence_length_dict[subject_id]) / 2
+            qlen = len(self.records[self.comparison_count-1].seq)
+            slen = len(self.records[self.comparison_count].seq)
+            self.query_offset_x = (self.canvas_config.longest_genome - qlen) / 2
+            self.subject_offset_x = (self.canvas_config.longest_genome - slen) / 2
         else:
-            query_offset_x = subject_offset_x = 0
-        return query_offset_x, subject_offset_x
+            self.query_offset_x = self.subject_offset_x = 0
 
     def generate_linear_match_path(self, row: DataFrame) -> Path:
         """
@@ -531,8 +533,7 @@ class PairWiseMatchGroup:
         subject_start_y: float
         subject_end_x: float
         subject_end_y: float
-        query_start, query_end, subject_start, subject_end = self.calculate_offsets(
-            row)
+        query_start, query_end, subject_start, subject_end = self.calculate_offsets(row)
         query_start_x, query_start_y, query_end_x, query_end_y = self.normalize_positions(
             query_start, query_end, 0)
         subject_start_x, subject_start_y, subject_end_x, subject_end_y = self.normalize_positions(
@@ -557,14 +558,10 @@ class PairWiseMatchGroup:
         Returns:
             Tuple[float, float, float, float]: Start and end positions for the query and subject matches.
         """
-        query_offset_x: float
-        subject_offset_x: float
-        query_offset_x, subject_offset_x = self.calculate_query_subject_offsets(
-            row.query, row.subject)
-        query_start: float = row.qstart + query_offset_x
-        query_end: float = row.qend + query_offset_x
-        subject_start: float = row.sstart + subject_offset_x
-        subject_end: float = row.send + subject_offset_x
+        query_start: float = row.qstart + self.query_offset_x
+        query_end: float = row.qend + self.query_offset_x
+        subject_start: float = row.sstart + self.subject_offset_x
+        subject_end: float = row.send + self.subject_offset_x
         return query_start, query_end, subject_start, subject_end
 
     def normalize_positions(self, start: float, end: float, y_position: float) -> tuple[float, float, float, float]:

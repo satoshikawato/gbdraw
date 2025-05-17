@@ -212,7 +212,7 @@ def add_record_definition_group(canvas: Drawing, record: SeqRecord, offset: floa
     return canvas
 
 
-def add_comparison_on_linear_canvas(canvas: Drawing, comparisons, canvas_config: LinearCanvasConfigurator, blast_config, config_dict: dict) -> Drawing:
+def add_comparison_on_linear_canvas(canvas: Drawing, comparisons, canvas_config: LinearCanvasConfigurator, blast_config, config_dict: dict, records: list) -> Drawing:
     """
     Adds comparison groups, such as pairwise matches, to the linear canvas.
 
@@ -229,9 +229,10 @@ def add_comparison_on_linear_canvas(canvas: Drawing, comparisons, canvas_config:
     Returns:
         Drawing: The updated SVG drawing with the comparison groups added.
     """
+
     for comparison_count, comparison in enumerate(comparisons, start=1):
         match_group: Group = PairWiseMatchGroup(canvas_config, blast_config.sequence_length_dict,
-                                                comparison, canvas_config.comparison_height, comparison_count, blast_config).get_group()
+                                                comparison, canvas_config.comparison_height, comparison_count, blast_config, records).get_group()
         offset: float = position_comparison_group(
             comparison_count, canvas_config)
         match_group.translate(canvas_config.horizontal_offset, offset)
@@ -339,12 +340,13 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     canvas = add_legends_on_linear_canvas(canvas, canvas_config, legend_config, legend_table)
     canvas = add_length_bar_on_linear_canvas(
         canvas, canvas_config, config_dict)
+
     # Add BLAST pairwise matches (if specified)
     if blast_files is not None:
         comparisons: list[DataFrame] = load_comparisons(
             blast_files, blast_config)  # file_processing
         canvas = add_comparison_on_linear_canvas(
-            canvas, comparisons, canvas_config, blast_config, config_dict)
+            canvas, comparisons, canvas_config, blast_config, config_dict, records)
     # Add records
     canvas = add_records_on_linear_canvas(
         canvas, records, feature_config, gc_config, canvas_config, config_dict)
