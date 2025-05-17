@@ -245,9 +245,15 @@ def generate_circular_intron_path(radius: float, coord_dict: Dict[str, Union[str
     coord_start: int = int(coord_dict['coord_start'])
     coord_end: int = int(coord_dict['coord_end'])
     # I admit they're magic numbers
-    strand_dict: Dict[str, str] = {
-        "positive": " 0 0 0 ", "negative": " 0 0 1 "}
-    param: str = strand_dict[coord_strand]
+    intron_strand_dict: dict[str, Tuple[str, str]] = {
+        "positive": (
+            " 0 0 1 ", " 0 0 0 "), "negative": (
+            " 0 0 0 ", " 0 0 1 ")}
+    params = intron_strand_dict[coord_strand]
+    if coord_start > coord_end:
+        param = params[1]
+    else:
+        param = params[0]
     factors: list[float] = calculate_feature_position_factors_circular(
         total_length, coord_strand, track_ratio, track_type, strandedness)
     start_x_1: float = (radius * factors[1]) * math.cos(
@@ -710,6 +716,7 @@ def generate_text_path(text: str, title_x: float, title_y: float, interval: floa
                      font_style='normal',
                      font_weight=font_weight,
                      font_family=font,
+                     alignment_baseline=dominant_baseline,
                      dominant_baseline=dominant_baseline,
                      text_anchor=text_anchor)
     return text_path

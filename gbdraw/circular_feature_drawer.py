@@ -13,7 +13,7 @@ from svgwrite.text import Text, TSpan, TextPath
 from svgwrite.masking import ClipPath
 from .feature_objects import FeatureObject
 from .circular_path_drawer import get_exon_and_intron_coordinates, calculate_feature_position_factors_circular,  generate_circle_path_desc, generate_circular_gc_skew_path_desc, generate_circular_gc_content_path_desc, generate_circular_rectangle_path, generate_circular_arrowhead_path, generate_circular_intron_path, generate_name_path, generate_text_path
-from .utility_functions import determine_length_parameter
+from .utility_functions import determine_length_parameter, calculate_bbox_dimensions   
 # Logging setup
 logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -432,43 +432,49 @@ class LabelDrawer:
         factors: list[float] = calculate_feature_position_factors_circular(
         record_length, label["strand"], track_ratio, self.track_type, self.strandedness)
         angle = 360.0 * (label["middle"] / record_length)
+        font_px = float(str(self.font_size).rstrip("ptpx"))
+        _, bbox_h = calculate_bbox_dimensions(label["label_text"], self.font_family, font_px, dpi=96)
+        center_offset = (bbox_h/4) 
         if 0 <= angle < 90:
             param = " 0 0 1 "
-            start_x_1: float = (radius * factors[1]) * math.cos(
+            start_x_1: float = (radius * factors[1] - center_offset) * math.cos(
                 math.radians(360.0 * (label["start"] / record_length) - 90))
-            start_y_1: float = (radius * factors[1]) * math.sin(
+            start_y_1: float = (radius * factors[1] - center_offset) * math.sin(
                 math.radians(360.0 * (label["start"] / record_length) - 90))
             end_x: float = (
-                radius * factors[1]) * math.cos(math.radians(360.0 * ((label["end"]) / record_length) - 90))
+                radius * factors[1] - center_offset) * math.cos(math.radians(360.0 * ((label["end"]) / record_length) - 90))
             end_y: float = (
-                radius * factors[1]) * math.sin(math.radians(360.0 * ((label["end"]) / record_length) - 90))
+                radius * factors[1] - center_offset) * math.sin(math.radians(360.0 * ((label["end"]) / record_length) - 90))
+            label_axis_path_desc: str = "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(radius - center_offset) + "," + str(radius - center_offset) + param + str(end_x) + "," + str(end_y)
         if 90 <= angle < 270:
             param = " 1 0 0 "
             start_x_1: float = (
-                radius * factors[1]) * math.cos(math.radians(360.0 * ((label["end"]) / record_length) - 90))
+                radius * factors[1] + center_offset) * math.cos(math.radians(360.0 * ((label["end"]) / record_length) - 90))
             start_y_1: float = (
-                radius * factors[1]) * math.sin(math.radians(360.0 * ((label["end"]) / record_length) - 90))
-            end_x: float = (radius * factors[1]) * math.cos(
+                radius * factors[1] + center_offset) * math.sin(math.radians(360.0 * ((label["end"]) / record_length) - 90))
+            end_x: float = (radius * factors[1] + center_offset) * math.cos(
                 math.radians(360.0 * (label["start"] / record_length) - 90))
-            end_y: float = (radius * factors[1]) * math.sin(
+            end_y: float = (radius * factors[1] + center_offset) * math.sin(
                 math.radians(360.0 * (label["start"] / record_length) - 90))
+            label_axis_path_desc: str = "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(radius + center_offset) + "," + str(radius + center_offset) + param + str(end_x) + "," + str(end_y)
         elif 270 <= angle <= 360:
             param = " 0 0 1 "
-            start_x_1: float = (radius * factors[1]) * math.cos(
+            start_x_1: float = (radius * factors[1] - center_offset) * math.cos(
                 math.radians(360.0 * (label["start"] / record_length) - 90))
-            start_y_1: float = (radius * factors[1]) * math.sin(
+            start_y_1: float = (radius * factors[1] - center_offset) * math.sin(
                 math.radians(360.0 * (label["start"] / record_length) - 90))
             end_x: float = (
-                radius * factors[1]) * math.cos(math.radians(360.0 * ((label["end"]) / record_length) - 90))
+                radius * factors[1] - center_offset) * math.cos(math.radians(360.0 * ((label["end"]) / record_length) - 90))
             end_y: float = (
-                radius * factors[1]) * math.sin(math.radians(360.0 * ((label["end"]) / record_length) - 90))
-        label_axis_path_desc: str = "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(radius) + "," + str(radius) + param + str(end_x) + "," + str(end_y)
+                radius * factors[1] - center_offset) * math.sin(math.radians(360.0 * ((label["end"]) / record_length) - 90))
+            label_axis_path_desc: str = "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(radius - center_offset) + "," + str(radius - center_offset) + param + str(end_x) + "," + str(end_y)
+        
         label_axis_path = Path(
                 d=label_axis_path_desc,
                 stroke="none",
                 fill="none")
         text_path = Text("") # The text path must go inside a text object. Parameter used here gets ignored
-        text_path.add(TextPath(label_axis_path, text=label["label_text"], startOffset="50%", method="align", text_anchor="middle", font_size=self.font_size, font_style='normal',font_weight='normal', font_family=self.font_family, dominant_baseline = "middle"))
+        text_path.add(TextPath(label_axis_path, text=label["label_text"], startOffset="50%", method="align", text_anchor="middle", font_size=self.font_size, font_style='normal',font_weight='normal', font_family=self.font_family, dominant_baseline = "auto"))
         group.add(label_axis_path)
         group.add(text_path)
         return group
