@@ -173,56 +173,82 @@ def load_comparisons(
     return comparison_list
 
 
-def load_default_colors(user_defined_default_colors: str) -> DataFrame:
+def load_default_colors(user_defined_default_colors: str, palette: str = "default") -> DataFrame:
     """
-    Loads default color settings for genome features, updating them with user-defined settings if provided.
+    Load the built-in colour palette from *color\_palettes.toml* (section
+    `[default]` by default) and merge any user-supplied TSV overrides.
 
-    If a user-defined entry has a missing color, it will log a warning and keep the built-in default.
+    ```
+    Parameters
+    ----------
+    user_defined_default_colors : str
+        Path to a TSV file whose rows are ``feature_type<TAB>HEX``.
+        If empty, the built-in palette is used as-is.
+    palette : str, optional
+        Name of the palette inside *color_palettes.toml*.
+        Falls back to ``[default]`` if the name is not found.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Two columns: ``feature_type`` and ``color``.
     """
-    column_names = ['feature_type', 'color']
+    column_names = ["feature_type", "color"]
 
-    # 1) Load built‐in defaults
-    default_colors_path: Traversable = resources.files('gbdraw.data').joinpath('default_colors.tsv')
-    abs_path = default_colors_path.resolve()  # type: ignore
-    logger.info(f"Loading built-in default color table: {abs_path}")
-    with resources.open_text('gbdraw.data', 'default_colors.tsv') as fh:
-        default_colors = pd.read_csv(fh, sep='\t', names=column_names, header=None)
-    default_colors.set_index('feature_type', inplace=True)
+    # ── 1) Load TOML
+    try:
+        toml_path = resources.files("gbdraw.data").joinpath("color_palettes.toml")
+        with toml_path.open("rb") as fh:
+            palettes_dict = tomllib.load(fh)
+    except Exception as exc:
+        logger.error(f"ERROR: failed to read colour_palettes.toml – {exc}")
+        raise
 
-    # 2) Load user‐defined overrides (if any)
+    if palette not in palettes_dict:
+        logger.warning(f"Palette '{palette}' not found; using [default]")
+        palette_dict = palettes_dict.get("default", {})
+    else:
+        palette_dict = palettes_dict[palette]
+
+    default_colors = (
+        pd.DataFrame(palette_dict.items(), columns=column_names)
+        .set_index("feature_type")
+    )
+
+    # ── 2) Apply user TSV overrides
     if user_defined_default_colors:
         try:
-            user_colors = pd.read_csv(
-                user_defined_default_colors,
-                sep='\t',
-                names=column_names,
-                header=None,
-                dtype=str
-            ).set_index('feature_type')
-
-            # Find any rows where the 'color' cell is missing
-            missing = user_colors['color'].isna()
+            user_df = (
+                pd.read_csv(user_defined_default_colors,
+                            sep="\t",
+                            names=column_names,
+                            header=None,
+                            dtype=str)
+                .set_index("feature_type")
+            )
+            # Drop rows with missing colour cells
+            missing = user_df["color"].isna()
             if missing.any():
-                for feature in user_colors[missing].index:
+                for ft in user_df[missing].index.tolist():
                     logger.warning(
-                        f"WARNING: user-defined default color for feature '{feature}' is missing—"
-                        " falling back to built-in default."
+                        f"WARNING: colour missing for feature '{ft}' "
+                        f"in '{user_defined_default_colors}' – "
+                        "keeping built-in value."
                     )
-                # drop those so .update() won't overwrite with NaN
-                user_colors = user_colors[~missing]
+                user_df = user_df[~missing]
 
-            # Now update built‐in with the remaining user overrides
-            default_colors.update(user_colors)
-            logger.info(f"User-defined default color table loaded: {user_defined_default_colors}")
+            default_colors.update(user_df)
+            logger.info(f"User overrides applied: {user_defined_default_colors}")
 
-        except FileNotFoundError as e:
-            logger.error(f"Failed to load user-defined colors from '{user_defined_default_colors}': {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error loading '{user_defined_default_colors}': {e}")
+        except FileNotFoundError:
+            logger.error(
+                f"ERROR: override file '{user_defined_default_colors}' not found")
+        except Exception as exc:
+            logger.error(
+                f"ERROR: failed to read '{user_defined_default_colors}' – {exc}")
 
-    # 3) Return to caller
-    default_colors.reset_index(inplace=True)
-    return default_colors
+    # ── 3) Return tidy DataFrame (index reset for downstream code)
+    return default_colors.reset_index()
 
 
 def read_color_table(color_table_file: str) -> Optional[DataFrame]:

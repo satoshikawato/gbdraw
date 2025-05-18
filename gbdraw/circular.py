@@ -50,6 +50,13 @@ def _get_args(args) -> argparse.Namespace:
         help='output file prefix (default: accession number of the sequence)',
         type=str)
     parser.add_argument(
+        "-p", "--palette",
+        metavar="NAME",
+        default="default",
+        help="Palette name (default: default)",
+        type=str
+    )
+    parser.add_argument(
         '-t',
         '--table',
         help='color table (optional)',
@@ -193,8 +200,9 @@ def circular_main(cmd_args) -> None:
     track_type: str = args.track_type
     strandedness = args.separate_strands
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
+    palette: str = args.palette
     default_colors: Optional[DataFrame] = load_default_colors(
-        user_defined_default_colors)
+        user_defined_default_colors, palette)
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     show_gc, show_skew = suppress_gc_content_and_skew(
         suppress_gc, suppress_skew)

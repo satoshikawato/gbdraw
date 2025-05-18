@@ -63,6 +63,13 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         default="")
     parser.add_argument(
+        "-p", "--palette",
+        metavar="NAME",
+        default="default",
+        help="Palette name (default: default)",
+        type=str
+    )
+    parser.add_argument(
         '-d',
         '--default_colors',
         help='TSV file that specifies default color Configurator (optional; default: data/default_colors.tsv)',
@@ -218,9 +225,9 @@ def linear_main(cmd_args) -> None:
         load_comparison = True
     else:
         load_comparison = False
-    
+    palette: str = args.palette
     default_colors: Optional[DataFrame] = load_default_colors(
-        user_defined_default_colors)
+        user_defined_default_colors, palette)
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
     block_stroke_color: str = args.block_stroke_color
@@ -235,7 +242,6 @@ def linear_main(cmd_args) -> None:
                                int] = create_dict_for_sequence_lengths(records)
     longest_genome: int = max(sequence_length_dict.values())
     num_of_entries: int = len(sequence_length_dict)
-    
     config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness, show_labels=show_labels, resolve_overlaps=resolve_overlaps)
 
     blast_config = BlastMatchConfigurator(
