@@ -231,39 +231,74 @@ gbdraw linear -i Fukuoka2020.gb Av-JP.gb Ps-JP.gb Tokyo2021.gb Av.gb -b Fukuoka2
 ```
 ![hepatoplasmataceae](https://github.com/satoshikawato/gbdraw/blob/main/examples/hepatoplasmataceae.svg)
 ## Advanced customization
-### Customizing colors with configuration files
+
 `gbdraw` allows users to personalize feature colors. This is done by providing a custom tab-separated file that specifies the desired color codes. Additionally, the colors and widths of the strokes can be fine-tuned using command-line arguments like `--block_stroke_width`.
-Colors can be specified using either of the following methods:
-Color Names: You can use any of the [147 color names defined by the SVG specification](https://johndecember.com/html/spec/colorsvg.html).
-Hexadecimal Format: For more precise color control, you can express colors in [hexadecimal format](https://htmlcolorcodes.com/).
-#### Default color table
-The default color table (`/site-packages/gbdraw/data/default_colors.txt`) is as follows:
-```default_colors.txt
-CDS     #47b8f8
-rRNA    #009e73
-tRNA    #e69f00
-repeat_region   #d3d3d3
-misc_feature    #d3d3d3
-default #d3d3d3
+
+### Customizing colors with configuration files
+`gbdraw` supports two complementary mechanisms for overriding the default colours:
+
+| Method | Purpose |
+| ------ | ------- |
+| **Default-override table** (`-d`) | Replace colours for *entire* feature classes |
+| **Feature-specific table** (`-t`) | Colour *individual* features that match user-defined rules |
+
+Both tables are tab separated. Colours may be given as any of the [147 color names defined by the SVG specification](https://johndecember.com/html/spec/colorsvg.html) or in [hexadecimal format](https://htmlcolorcodes.com/) (`#RRGGBB`).
+
+
+#### Overriding the default color table
+The default color table (`/site-packages/gbdraw/data/default_colors.tsv`) is as follows:
+```default_colors.tsv
+CDS	#89d1fa
+rRNA	#71ee7d
+tRNA	#e8b441
+tmRNA	#ded44e
+ncRNA	#c4fac3
+repeat_region	#d3d3d3
+misc_feature	#d3d3d3
+default	#d3d3d3
+skew_high	#6dded3
+skew_low	#ad72e3
+gc_content	#a1a1a1
+pairwise_match	#d3d3d3
 ```
-The following `modified_default_colors.txt`
-```modified_default_colors.txt
-CDS	#993366
-rRNA	#00ff00
-tRNA	#228b22
-repeat_region	#a6acb3
+This means:
+| feature type | color |
+| ------ | ------- |
+| CDS | #89d1fa |
+| rRNA | #71ee7d |
+| tRNA | #e8b441 |
+| ... | ... |
+
+The following `modified_default_colors.tsv` turns CDS gray (`#d3d3d3`). Other features remain the same as default:
+```modified_default_colors.tsv
+CDS	#d3d3d3
 ```
+
+| feature type | color |
+| ------ | ------- |
+| CDS | #d3d3d3 |
+
 #### Feature-specific color table
 For more precise control, especially for CDS features, you can specify colors based on specific attributes like `product` or `note`.
-```feature_specific_color_table.txt
-CDS	product	hypothetical protein	#b3b3b3
-CDS	note	possible pseudo*	#dba2bf
+This `custom_color_table.tsv` color only those CDS whose `product` qualifier matches the given regex:
+```custom_color_table.tsv
+CDS	product	wsv.*-like protein	#47b8f8	WSSV-like proteins
+CDS	product	baculoviral IAP repeat-containing protein	yellow	BIRP
+CDS	product	tyrosine recombinase	red	tyrosine recombinase
 ```
-Here, any CDS feature with unknown function (`hypothetical protein`) is colored gray. Possible pseudogenes are colored light purple.
+This means:
+| feature type | target qualifier | qualifier value regex (Python) | color | legend text |
+| ------ | ------- | ------- | ------- | ------- |
+| CDS | product | wsv.*-like protein | #47b8f8 | WSSV-like proteins |
+| CDS | product | baculoviral IAP repeat-containing protein | yellow | BIRP |
+| CDS | product | tyrosine recombinase | red | tyrosine recombinase |
+
 ```bash
-gbdraw circular -i AP027131.gb --species "<i>Ca.</i> Hepatoplasma vulgare" --strain "Av-JP" -d modified_default_colors.txt -t feature_specific_color_table.txt -o Av-JP -f svg # PNG and PDF outputs are bugged;"Ca." cannot be placed correctly
+gbdraw circular -i LC738868.gb -o LC738868_middle_separate_strands -f svg,png --block_stroke_width 1 --block_stroke_color gray --show_labels --track_type middle --separate_strands -t custom_color_table.tsv -d modified_default_colors.tsv 
 ```
-![Av-JP](https://github.com/satoshikawato/gbdraw/blob/main/examples/Av-JP.svg)
+![MjeNMV](https://github.com/satoshikawato/gbdraw/blob/main/examples/LC738868_middle_separate_strands.png)
+
+
 ### Multiple genome alignments
 `gbdraw linear` can also be used for visualizing multi-genome alignments, providing a comparative view of different genomes. This feature is particularly useful for identifying conserved regions and variations across multiple genomes.
 **NOTE:** Currently the BLAST output files must be specified in exactly the same order as the genbank files.
@@ -315,10 +350,7 @@ MeenMJNV.MejoMJNV.tblastx.out \
 ![majaniviruses](https://github.com/satoshikawato/gbdraw/blob/main/examples/majani.svg)
 
 ### Feature labels (experimental)
-```bash
-gbdraw circular -i LC738868.gb -f svg --block_stroke_width 1 --block_stroke_color gray --show_labels --separate_strands --track_type middle  -t color_table.txt -d modified_default_colors.tsv
-```
-![MjeNMV](https://github.com/satoshikawato/gbdraw/blob/main/examples/LC738868.svg)
+
 ```bash
 gbdraw circular -i AP027280.gb -f svg --block_stroke_width 1 --block_stroke_color gray --track_type spreadout --show_labels
 ```
@@ -327,12 +359,15 @@ gbdraw circular -i AP027280.gb -f svg --block_stroke_width 1 --block_stroke_colo
 gbdraw circular -i NC_012920.gb -f svg --block_stroke_width 2 --block_stroke_color gray  --show_labels -w 100 -s 10
 ```
 ![HsmtDMA](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920.svg)
+
 ## Planned features
-- Dynamic scaling of the text (will be added in the next update)
-- Multiple tracks to visualize overlapping features (overlapping genes, transcript isoforms etc.)
+- Color palettes (will be added in the next update)
+- Dynamic scaling of the text (planned)
+- Multiple tracks to visualize overlapping features (planned; overlapping genes, transcript isoforms etc.)
+- 
 ## Known issues
-- trans-splicing are not correctly handled
-- SVG to PDF/PNG/EPS/PS conversion issues (dependency)
+- trans-splicing are not correctly handled (e.g. plant organelles)
+- SVG to PDF/PNG/EPS/PS conversion issues (tick labels)
 
 ## Bug reports and suggestions
 Please feel free to submit a new issue if you find a bug or have a suggestion:
