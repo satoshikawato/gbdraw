@@ -30,7 +30,6 @@
 conda create -n gbdraw-0.1.1 -y -c conda-forge -c bioconda gbdraw=0.1.1
 conda activate gbdraw-0.1.1
 ```
-
 ### Local build (development version)
 To use the latest development version, clone the repository yourself using `git` and build the package locally with [conda-build](https://anaconda.org/anaconda/conda-build).
 ```bash
@@ -50,6 +49,11 @@ mamba create -n gbdraw -y  -c conda-forge -c bioconda -c local gbdraw
 # 5. Activate the environment
 mamba activate gbdraw
 ```
+### Colab Notebook (no local installation; Google account required)
+You can try `gbdraw` (version: latest commit to the `main` branch of the GitHub repostiory) on Google Colaboratory without any local installation:
+
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
+
 ## Usage
 ```bash
 gbdraw -h
