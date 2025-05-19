@@ -27,8 +27,8 @@
 ### Bioconda (recommended)
 `gbdraw` is available on the Bioconda channel.
 ```bash
-conda create -n gbdraw-0.1.0 -y -c conda-forge -c bioconda gbdraw=0.1.0
-conda activate gbdraw-0.1.0
+conda create -n gbdraw-0.1.1 -y -c conda-forge -c bioconda gbdraw=0.1.1
+conda activate gbdraw-0.1.1
 ```
 
 ### Local build (development version)
