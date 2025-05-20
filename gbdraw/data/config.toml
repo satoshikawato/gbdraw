@@ -17,7 +17,7 @@ height = 1000 # pixel
 radius = 390
 track_ratio = 0.19
 track_dict.short = {"middle" = {1 = 1.0, 2 = 0.75, 3 = 0.55}, "spreadout" = {1 = 1.0, 2 = 0.85, 3 = 0.60}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.50}}
-track_dict.long = {"middle" = {1 = 1.0, 2 = 0.8, 3 = 0.65}, "spreadout" = {1 = 1.0, 2 = 0.85, 3 = 0.7}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.55}}
+track_dict.long = {"middle" = {1 = 1.0, 2 = 0.75, 3 = 0.60}, "spreadout" = {1 = 1.0, 2 = 0.80, 3 = 0.65}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.55}}
 track_type = 'tuckin'
 
 [canvas.circular.width]
@@ -83,8 +83,8 @@ font_weight = 'normal'
   circular = 50000
   linear = 50000 
 [labels.font_size]
-  short = 16
-  long = 8
+  short = 14
+  long = 6
 [labels.font_size.linear]
   short = 16
   long = 5
@@ -169,7 +169,7 @@ stroke_color = 'none'
 stroke_width = 0
 fill_opacity = 1
 [objects.gc_skew.circular]
-norm_factor = 0.85
+norm_factor = 0.80
 
 [objects.ticks]
 tick_width = 2.0

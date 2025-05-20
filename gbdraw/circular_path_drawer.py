@@ -530,7 +530,7 @@ def generate_circular_tick_labels(radius: float, total_len: int, size: str, tick
                     'small': [0.94, 1.21], 'large': [0.94, 1.24]}
             elif track_type == "tuckin":
                 ratio: dict[str, list[float]] = {
-                    'small': [0.80, 1.10], 'large': [0.80, 1.13]}
+                    'small': [0.882, 1.10], 'large': [0.82, 1.13]}
             else:
                 ratio: dict[str, list[float]] = {
                     'small': [0.98, 1.0], 'large': [0.98, 1.0]}
@@ -580,53 +580,54 @@ def generate_circular_tick_labels(radius: float, total_len: int, size: str, tick
     for tick in ticks:
         anchor_value, baseline_value = set_tick_label_anchor_value(
             total_len, tick)
-            
+           
         #factors: list[float] = calculate_feature_position_factors_circular(
         #record_length, label["strand"], track_ratio, self.track_type)
         angle = 360.0 * (tick / total_len)
         label_text: str = str(int(tick / 1000)) + " kbp"
-        
+
         bbox_width_px, bbox_height_px = calculate_bbox_dimensions(label_text, font_family, font_size, dpi)
+        center_offset = (bbox_height_px/4) 
         label_as_feature_length = total_len * bbox_width_px/(2*math.pi*radius)
         label_start = tick - (label_as_feature_length/2)
         label_end = tick + (label_as_feature_length/2)
         if 0 <= angle < 90:
             param = " 0 0 1 "
-            start_x_1: float = (radius * prox) * math.cos(
+            start_x_1: float = (radius * prox - center_offset) * math.cos(
                 math.radians(360.0 * (label_start / total_len) - 90))
-            start_y_1: float = (radius * prox) * math.sin(
+            start_y_1: float = (radius * prox - center_offset) * math.sin(
                 math.radians(360.0 * (label_start / total_len) - 90))
             end_x: float = (
-                radius * prox) * math.cos(math.radians(360.0 * (label_end / total_len) - 90))
+                radius * prox - center_offset) * math.cos(math.radians(360.0 * (label_end / total_len) - 90))
             end_y: float = (
-                radius * prox) * math.sin(math.radians(360.0 * (label_end / total_len) - 90))
+                radius * prox - center_offset) * math.sin(math.radians(360.0 * (label_end / total_len) - 90))
         if 90 <= angle < 270:
             param = " 1 0 0 "
             start_x_1: float = (
-                radius * prox) * math.cos(math.radians(360.0 * (label_end / total_len) - 90))
+                radius * prox + center_offset) * math.cos(math.radians(360.0 * (label_end / total_len) - 90))
             start_y_1: float = (
-                radius * prox) * math.sin(math.radians(360.0 * (label_end / total_len) - 90))
-            end_x: float = (radius * prox) * math.cos(
+                radius * prox + center_offset) * math.sin(math.radians(360.0 * (label_end / total_len) - 90))
+            end_x: float = (radius * prox + center_offset) * math.cos(
                 math.radians(360.0 * (label_start / total_len) - 90))
-            end_y: float = (radius * prox) * math.sin(
+            end_y: float = (radius * prox + center_offset) * math.sin(
                 math.radians(360.0 * (label_start / total_len) - 90))
         elif 270 <= angle <= 360:
             param = " 0 0 1 "
-            start_x_1: float = (radius * prox) * math.cos(
+            start_x_1: float = (radius * prox - center_offset) * math.cos(
                 math.radians(360.0 * (label_start / total_len) - 90))
-            start_y_1: float = (radius * prox) * math.sin(
+            start_y_1: float = (radius * prox - center_offset) * math.sin(
                 math.radians(360.0 * (label_start / total_len) - 90))
             end_x: float = (
-                radius * prox) * math.cos(math.radians(360.0 * ((label_end) / total_len) - 90))
+                radius * prox - center_offset) * math.cos(math.radians(360.0 * ((label_end) / total_len) - 90))
             end_y: float = (
-                radius * prox) * math.sin(math.radians(360.0 * ((label_end) / total_len) - 90))
+                radius * prox - center_offset) * math.sin(math.radians(360.0 * ((label_end) / total_len) - 90))
         label_axis_path_desc: str = "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(radius) + "," + str(radius) + param + str(end_x) + "," + str(end_y)
         label_axis_path = Path(
                 d=label_axis_path_desc,
                 stroke="none",
                 fill="none")
         text_path = Text("") # The text path must go inside a text object. Parameter used here gets ignored
-        text_path.add(TextPath(label_axis_path, text=label_text, startOffset="50%", method="align", text_anchor="middle", font_size=font_size, font_style='normal',font_weight='normal', font_family=font_family, dominant_baseline = "middle"))
+        text_path.add(TextPath(label_axis_path, text=label_text, startOffset="50%", method="align", text_anchor="middle", font_size=font_size, font_style='normal',font_weight='normal', font_family=font_family))
         tick_label_paths_list.append(label_axis_path)
         tick_label_paths_list.append(text_path)
     return tick_label_paths_list
