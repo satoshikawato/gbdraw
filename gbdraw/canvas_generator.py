@@ -30,7 +30,7 @@ class CircularCanvasConfigurator:
     create_svg_canvas(): Creates and returns an SVG canvas for drawing.
     get_track_ids(): Determines the track IDs for visualization.
     """
-    def __init__(self, output_prefix: str, config_dict: dict, legend: str) -> None:
+    def __init__(self, output_prefix: str, config_dict: dict, legend: str, gb_record) -> None:
         """
         Initializes the circular canvas configurator with given settings.
 
@@ -56,6 +56,10 @@ class CircularCanvasConfigurator:
         self.show_skew: bool = self.config_dict['canvas']['show_skew']
         self.strandedness: bool = self.config_dict['canvas']['strandedness']
         self.dpi: int = self.config_dict['png_output']['dpi']
+        self.length_threshold = self.config_dict['labels']['length_threshold']['circular']
+        self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
+        self.track_width = self.config_dict['canvas']['circular']['track_width'][self.length_param]
+        self.track_ratio_factors = self.config_dict['canvas']['circular']['track_ratio_factors'][self.length_param]
         self.legend_position: str = legend
 
         self.calculate_dimensions()
@@ -66,7 +70,6 @@ class CircularCanvasConfigurator:
         """
         self.total_height = self.default_height
         self.offset_y: float = self.total_height * 0.5
-        self.track_width: float = self.radius * self.track_ratio
         if self.legend_position == "left":
             self.total_width = self.default_width * 1.2
             self.offset_x: float = self.default_width * 0.6
@@ -94,7 +97,7 @@ class CircularCanvasConfigurator:
             self.legend_offset_x: float =  0.85 * self.total_width
             self.legend_offset_y: float =  0.05 * self.total_height
         elif self.legend_position == "lower_left":
-            self.egend_offset_x: float =  0.025 * self.total_width
+            self.legend_offset_x: float =  0.025 * self.total_width
             self.legend_offset_y: float =  0.78 * self.total_height
         elif self.legend_position == "lower_right":
             self.legend_offset_x: float =  0.875 * self.total_width

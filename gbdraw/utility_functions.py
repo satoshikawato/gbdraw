@@ -285,3 +285,13 @@ def determine_length_parameter(record_length: int, length_threshold: int) -> str
         return "short"
     else:
         return "long"
+    
+
+def calculate_cds_ratio(track_ratio, length_param, track_ratio_factor):
+    if length_param == "short":
+        cds_ratio = float(track_ratio * track_ratio_factor)
+        offset = float(0.01)
+    else:
+        cds_ratio = float(track_ratio * track_ratio_factor)
+        offset = float(0.005)
+    return cds_ratio, offset

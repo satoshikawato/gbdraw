@@ -13,7 +13,7 @@ from svgwrite.text import Text, TSpan, TextPath
 from svgwrite.masking import ClipPath
 from .feature_objects import FeatureObject
 from .circular_path_drawer import get_exon_and_intron_coordinates, calculate_feature_position_factors_circular,  generate_circle_path_desc, generate_circular_gc_skew_path_desc, generate_circular_gc_content_path_desc, generate_circular_rectangle_path, generate_circular_arrowhead_path, generate_circular_intron_path, generate_name_path, generate_text_path
-from .utility_functions import determine_length_parameter, calculate_bbox_dimensions   
+from .utility_functions import determine_length_parameter, calculate_bbox_dimensions, calculate_cds_ratio
 # Logging setup
 logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -192,7 +192,7 @@ class FeatureDrawer:
         """
         group.add(path_data)
 
-    def draw(self, feature_object: FeatureObject, group: Group, total_length: int, radius: float, track_width: float, track_type: str, strandedness: bool) -> Group:
+    def draw(self, feature_object: FeatureObject, group: Group, total_length: int, radius: float, track_ratio: float, track_ratio_factor, track_type: str, strandedness: bool, length_param) -> Group:
         """
         Draws genomic features based on the given FeatureObject.
 
@@ -206,8 +206,9 @@ class FeatureDrawer:
         Returns:
             Group: The updated SVG group with the features added.
         """
+        cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
         gene_paths = FeaturePathGenerator(
-            radius, total_length, track_width, track_type, strandedness).generate_circular_gene_path(feature_object)
+            radius, total_length, track_ratio, cds_ratio, offset, track_type, strandedness).generate_circular_gene_path(feature_object)
         for gene_path in gene_paths:
             if not gene_path[0]:
                 continue
@@ -235,7 +236,7 @@ class FeaturePathGenerator:
         track_ratio (float): Ratio for determining the track width.
     """
 
-    def __init__(self, radius: float, total_length: int, track_width: float, track_type, strandedness) -> None:
+    def __init__(self, radius: float, total_length: int, track_ratio: float, cds_ratio: float, offset: float, track_type, strandedness) -> None:
         """
         Initializes the FeaturePathGenerator with circular canvas settings.
 
@@ -246,7 +247,9 @@ class FeaturePathGenerator:
         """
         self.radius: float = radius
         self.total_length: int = total_length
-        self.track_width: float = track_width
+        self.track_ratio: float = track_ratio
+        self.cds_ratio: float = cds_ratio
+        self.offset: float = offset
         self.track_type = track_type
         self.strandedness = strandedness
         self.set_arrow_length()
@@ -288,14 +291,14 @@ class FeaturePathGenerator:
             coord_type: str = str(coord_dict['coord_type'])
             if coord_type == "line":
                 coord_path: List[str] = generate_circular_intron_path(
-                    self.radius, coord_dict, self.total_length, self.track_width, self.track_type, self.strandedness)
+                    self.radius, coord_dict, self.total_length, self.track_ratio, self.cds_ratio, self.offset, self.track_type, self.strandedness)
             elif coord_type == "block":
                 if coord[5] and feature_object.is_directional == True:
                     coord_path = generate_circular_arrowhead_path(
-                        self.radius, coord_dict, self.total_length, self.arrow_length, self.track_width, self.track_type, self.strandedness)
+                        self.radius, coord_dict, self.total_length, self.arrow_length, self.track_ratio, self.cds_ratio, self.offset,  self.track_type, self.strandedness)
                 else:
                     coord_path = generate_circular_rectangle_path(
-                        self.radius, coord_dict, self.total_length, self.track_width, self.track_type, self.strandedness)
+                        self.radius, coord_dict, self.total_length, self.track_ratio, self.cds_ratio, self.offset,  self.track_type, self.strandedness)
             coordinates_paths.append(coord_path)
         return coordinates_paths #, available_tracks
 
@@ -398,7 +401,7 @@ class LabelDrawer:
             config_dict (dict): Configuration dictionary containing style settings for the definition section.
         """
         self.config_dict = config_dict
-
+        self.strandedness: bool = self.config_dict['canvas']['strandedness']
     def set_feature_label_anchor_value(self, total_len: int, tick: float) -> tuple[Literal['middle', 'start', 'end'], Literal['text-after-edge', 'middle', 'hanging']]:
         """
         Determines the anchor and baseline values for tick labels based on their position.
@@ -429,8 +432,11 @@ class LabelDrawer:
         return anchor_value, baseline_value
         
     def embed_label(self, group, label, radius, record_length, track_ratio):
+        length_param = determine_length_parameter(record_length, self.config_dict['labels']['length_threshold']['circular'])
+        track_ratio_factor = self.config_dict['canvas']['circular']['track_ratio_factors'][length_param][0]
+        cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
         factors: list[float] = calculate_feature_position_factors_circular(
-        record_length, label["strand"], track_ratio, self.track_type, self.strandedness)
+        record_length, label["strand"], track_ratio, cds_ratio, offset, self.track_type, self.strandedness)
         angle = 360.0 * (label["middle"] / record_length)
         font_px = float(str(self.font_size).rstrip("ptpx"))
         _, bbox_h = calculate_bbox_dimensions(label["label_text"], self.font_family, font_px, dpi=96)

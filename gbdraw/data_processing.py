@@ -14,7 +14,7 @@ from pandas import DataFrame
 from typing import Generator, Any, Dict, List, Optional
 from Bio.SeqRecord import SeqRecord
 from .create_feature_objects import get_strand
-from .utility_functions import calculate_bbox_dimensions, get_label_text , determine_length_parameter
+from .utility_functions import calculate_bbox_dimensions, get_label_text , determine_length_parameter, calculate_cds_ratio
 from .circular_path_drawer import calculate_feature_position_factors_circular
 from .linear_path_drawer import calculate_feature_position_factors_linear, normalize_position_to_linear_track, generate_text_path
 
@@ -441,6 +441,7 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
     font_size: str = config_dict['labels']['font_size'][length_param]
     interval = config_dict['canvas']['dpi']
     strandedness = config_dict['canvas']['strandedness']
+    track_ratio_factor = config_dict['canvas']['circular']['track_ratio_factors'][length_param][0]
     for feature_object in feature_dict.values():
         feature_label_text = get_label_text(feature_object)
         if feature_label_text == '':
@@ -471,8 +472,8 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
                         longeset_segment_middle = interval_middle
                         longest_segment_length = interval_length
             
-
-            factors: list[float] = calculate_feature_position_factors_circular(total_length, coordinate_strand, track_ratio, track_type, strandedness)
+            cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
+            factors: list[float] = calculate_feature_position_factors_circular(total_length, coordinate_strand, track_ratio, cds_ratio, offset, track_type, strandedness)
             longest_segment_length_in_pixels = (2*math.pi*radius_factor*radius) * (longest_segment_length)/total_length
             bbox_width_px, bbox_height_px = calculate_bbox_dimensions(feature_label_text, font_family, font_size, interval)
             label_middle = longeset_segment_middle
