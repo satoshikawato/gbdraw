@@ -15,6 +15,8 @@
 - Circular and linear diagrams: Generates both circular and linear representations of genome structures.
 - Customizable inputs: Supports Genbank/DDBJ flat files with options for color customization.
 - Various output formats: Vector and raster graphics suitable for publication and further editing.
+- **NEW! (v0.2.0): Color palettes implemented!** [Color palette examples](https://github.com/satoshikawato/gbdraw/blob/main/examples/color_palette_examples.md)
+![palettes_combined_image_1.png](https://github.com/satoshikawato/gbdraw/blob/main/examples/palettes_combined_image_1.png)
 ## Dependencies
 - [Python](https://www.python.org/) >=3.10
 - [Biopython](https://biopython.org/)
@@ -85,45 +87,45 @@ Additional Information:
 ```
 ### Circular genome
 ```bash
-gbdraw circular -h
-usage: gbdraw [-h] -i [INPUT ...] [-o OUTPUT] [-t TABLE] [-d DEFAULT_COLORS] [-n NT] [-w WINDOW] [-s STEP] [--species SPECIES]
-              [--strain STRAIN] [-k FEATURES] [--block_stroke_color BLOCK_STROKE_COLOR] [--block_stroke_width BLOCK_STROKE_WIDTH]
-              [--line_stroke_color LINE_STROKE_COLOR] [--line_stroke_width LINE_STROKE_WIDTH] [-f FORMAT] [--suppress_gc]
-              [--suppress_skew]
+$ gbdraw circular -h
+usage: gbdraw [-h] -i [INPUT ...] [-o OUTPUT] [-p PALETTE] [-t TABLE] [-d DEFAULT_COLORS] [-n NT] [-w WINDOW] [-s STEP] [--species SPECIES] [--strain STRAIN] [-k FEATURES] [--block_stroke_color BLOCK_STROKE_COLOR] [--block_stroke_width BLOCK_STROKE_WIDTH] [--line_stroke_color LINE_STROKE_COLOR]
+              [--line_stroke_width LINE_STROKE_WIDTH] [-f FORMAT] [--suppress_gc] [--suppress_skew] [-l LEGEND] [--separate_strands] [--track_type TRACK_TYPE] [--show_labels]
 
-Generate genome diagrams in PNG/PDF/SVG/PS/EPS. Diagrams for multiple entries are saved separately (hence the lack of output file
-name option).
+Generate genome diagrams in PNG/PDF/SVG/PS/EPS. Diagrams for multiple entries are saved separately (hence the lack of output file name option).
 
 options:
   -h, --help            show this help message and exit
-  -i [INPUT ...], --input [INPUT ...]
+  -i, --input [INPUT ...]
                         Genbank/DDBJ flatfile (required)
-  -o OUTPUT, --output OUTPUT
-                        output file prefix (default: accession number of the sequence)
-  -t TABLE, --table TABLE
-                        color table (optional)
-  -d DEFAULT_COLORS, --default_colors DEFAULT_COLORS
+  -o, --output OUTPUT   output file prefix (default: accession number of the sequence)
+  -p, --palette PALETTE
+                        Palette name (default: default)
+  -t, --table TABLE     color table (optional)
+  -d, --default_colors DEFAULT_COLORS
                         TSV file that specifies default color Configurator (optional; default: data/default_colors.tsv)
-  -n NT, --nt NT        dinucleotide (default: GC).
-  -w WINDOW, --window WINDOW
-                        window size (default: 1000)
-  -s STEP, --step STEP  step size (default: 100)
+  -n, --nt NT           dinucleotide (default: GC).
+  -w, --window WINDOW   window size (default: 1000)
+  -s, --step STEP       step size (default: 100)
   --species SPECIES     Species name (optional; e.g. "<i>Escherichia coli</i>", "<i>Ca.</i> Hepatoplasma crinochetorum")
   --strain STRAIN       Strain/isolate name (optional; e.g. "K-12", "Av")
-  -k FEATURES, --features FEATURES
+  -k, --features FEATURES
                         Comma-separated list of feature keys to draw (default: CDS,tRNA,rRNA,repeat_region)
   --block_stroke_color BLOCK_STROKE_COLOR
-                        Block stroke color (str; default: "black")
+                        Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
                         Block stroke width (float; default: 0)
   --line_stroke_color LINE_STROKE_COLOR
                         Line stroke color (str; default: "gray")
   --line_stroke_width LINE_STROKE_WIDTH
                         Line stroke width (float; default: 1.0)
-  -f FORMAT, --format FORMAT
-                        Comma-separated list of output file formats (default: png)
+  -f, --format FORMAT   Comma-separated list of output file formats (default: png)
   --suppress_gc         Suppress GC content track (default: False).
   --suppress_skew       Suppress GC skew track (default: False).
+  -l, --legend LEGEND   Legend position (default: "right"; "left", "right", "upper_left", "upper_right", "lower_left", "lower_right", "none")
+  --separate_strands    Separate strands (default: False).
+  --track_type TRACK_TYPE
+                        Track type (default: "tuckin"; "tuckin", "middle", "spreadout")
+  --show_labels         Show feature labels (default: False).
 ```
 #### <i>Haemophilus influenzae</i>
 `gbdraw` automatically identifies and displays the organism and strain name from the sequence record. However, these names are not italicized by default. For example:
@@ -156,37 +158,33 @@ gbdraw circular -i GCF_000016245.1_ASM1624v1_genomic.gbff --species "<i>Vibrio c
 `gbdraw linear`
 ```bash
 $ gbdraw linear -h
-usage: gbdraw [-h] -i [INPUT ...] [-b [BLAST ...]] [-t TABLE] [-d DEFAULT_COLORS] [-o OUTPUT] [-n NT] [-w WINDOW] [-s STEP]
-              [--separate_strands] [--show_gc] [--align_center] [--evalue EVALUE] [--bitscore BITSCORE] [--identity IDENTITY]
-              [-k FEATURES] [--block_stroke_color BLOCK_STROKE_COLOR] [--block_stroke_width BLOCK_STROKE_WIDTH]
-              [--line_stroke_color LINE_STROKE_COLOR] [--line_stroke_width LINE_STROKE_WIDTH] [-f FORMAT]
+usage: gbdraw [-h] -i [INPUT ...] [-b [BLAST ...]] [-t TABLE] [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT] [-n NT] [-w WINDOW] [-s STEP] [--separate_strands] [--show_gc] [--align_center] [--evalue EVALUE] [--bitscore BITSCORE] [--identity IDENTITY] [-k FEATURES] [--block_stroke_color BLOCK_STROKE_COLOR]
+              [--block_stroke_width BLOCK_STROKE_WIDTH] [--line_stroke_color LINE_STROKE_COLOR] [--line_stroke_width LINE_STROKE_WIDTH] [-f FORMAT] [-l LEGEND] [--show_labels] [--resolve_overlaps]
 
 Generate plot in PNG/PDF/SVG/PS/EPS.
 
 options:
   -h, --help            show this help message and exit
-  -i [INPUT ...], --input [INPUT ...]
+  -i, --input [INPUT ...]
                         genbank (required)
-  -b [BLAST ...], --blast [BLAST ...]
+  -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format (-outfmt 6 or 7) (optional)
-  -t TABLE, --table TABLE
-                        color table (optional)
-  -d DEFAULT_COLORS, --default_colors DEFAULT_COLORS
+  -t, --table TABLE     color table (optional)
+  -p, --palette PALETTE
+                        Palette name (default: default)
+  -d, --default_colors DEFAULT_COLORS
                         TSV file that specifies default color Configurator (optional; default: data/default_colors.tsv)
-  -o OUTPUT, --output OUTPUT
-                        output file prefix (default: out)
-  -n NT, --nt NT        dinucleotide skew (default: GC).
-  -w WINDOW, --window WINDOW
-                        window size (default: 1000)
-  -s STEP, --step STEP  step size (default: 100)
-  --separate_strands    separate forward and reverse strands (default: False). Features of undefined strands are shown on the
-                        forward strand.
+  -o, --output OUTPUT   output file prefix (default: out)
+  -n, --nt NT           dinucleotide skew (default: GC).
+  -w, --window WINDOW   window size (default: 1000)
+  -s, --step STEP       step size (default: 100)
+  --separate_strands    separate forward and reverse strands (default: False). Features of undefined strands are shown on the forward strand.
   --show_gc             plot GC content below genome (default: False).
   --align_center        Align genomes to the center (default: False).
   --evalue EVALUE       evalue threshold (default=1e-2)
   --bitscore BITSCORE   bitscore threshold (default=50)
   --identity IDENTITY   identity threshold (default=0)
-  -k FEATURES, --features FEATURES
+  -k, --features FEATURES
                         Comma-separated list of feature keys to draw (default: CDS,tRNA,rRNA,repeat_region)
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "black")
@@ -196,8 +194,10 @@ options:
                         Line stroke color (str; default: "gray")
   --line_stroke_width LINE_STROKE_WIDTH
                         Line stroke width (float; default: 1.0)
-  -f FORMAT, --format FORMAT
-                        Comma-separated list of output file formats (default: png)
+  -f, --format FORMAT   Comma-separated list of output file formats (default: png)
+  -l, --legend LEGEND   Legend position (default: "right"; "right", "left", "none")
+  --show_labels         Show labels
+  --resolve_overlaps    Resolve overlaps (tentative; default: False).
 ```
 ### Human herpesvirus 6 (HHV-6)
 `gbdraw` can draw linear genomes and pairwise matches depicting similar genomic regions.
@@ -239,25 +239,29 @@ gbdraw linear -i Fukuoka2020.gb Av-JP.gb Ps-JP.gb Tokyo2021.gb Av.gb -b Fukuoka2
 `gbdraw` allows users to personalize feature colors. This is done by providing a custom tab-separated file that specifies the desired color codes. Additionally, the colors and widths of the strokes can be fine-tuned using command-line arguments like `--block_stroke_width`.
 
 ### Color palettes
-`gbdraw` ships with a total of 50 color palettes. Choose a palette with **`-p/--palette <name>`** or override individual colours via TSV files.
+
+`gbdraw` ships with [a total of 55 color palettes](https://github.com/satoshikawato/gbdraw/blob/main/examples/color_palette_examples.md). Choose a palette with **`-p/--palette <name>`** or override individual colours via TSV files.
+![palettes_combined_image_1.png](https://github.com/satoshikawato/gbdraw/blob/main/examples/palettes_combined_image_1.png)
+
+
 #### Examples
 ##### autumn
-![autumn](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_autumn.svg)
+![autumn](https://github.com/satoshikawato/gbdraw/blob/main/examples/AP027078_tuckin_separate_strands_autumn.svg)
 ##### forest
-![forest](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_forest.svg)
+![forest](https://github.com/satoshikawato/gbdraw/blob/main/examples/AP027078_tuckin_separate_strands_forest.svg)
 ##### fugaku
-![fugaku](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_fugaku.svg)
+![fugaku](https://github.com/satoshikawato/gbdraw/blob/main/examples/AP027078_tuckin_separate_strands_fugaku.svg)
 ##### lavender_fields
-![lavender_fields](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_lavender_fields.svg)
+![lavender_fields](https://github.com/satoshikawato/gbdraw/blob/main/examples/AP027078_tuckin_separate_strands_lavender_fields.svg)
 ##### matcha_whispers
-![matcha_whispers](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_matcha_whispers.svg)
+![matcha_whispers](https://github.com/satoshikawato/gbdraw/blob/main/examples/AP027078_tuckin_separate_strands_matcha_whispers.svg)
 ##### sakura
-![sakura](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_sakura.svg)
+![sakura](https://github.com/satoshikawato/gbdraw/blob/main/examples/AP027078_tuckin_separate_strands_sakura.svg)
 ##### tropical
-![tropical](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_tropical.svg)
+![tropical](https://github.com/satoshikawato/gbdraw/blob/main/examples/AP027078_tuckin_separate_strands_tropical.svg)
 ##### zen
-![zen](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_zen.svg)
-
+![zen](https://github.com/satoshikawato/gbdraw/blob/main/examples/AP027078_tuckin_separate_strands_zen.svg)
+See [this page](https://github.com/satoshikawato/gbdraw/blob/main/examples/color_palette_examples.md) for the examples of all 55 palettes.
 
 ### Customizing colors with configuration files
 `gbdraw` supports two complementary mechanisms for overriding the default colours:
