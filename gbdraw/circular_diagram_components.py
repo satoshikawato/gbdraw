@@ -203,8 +203,9 @@ def add_record_on_circular_canvas(canvas: Drawing, gb_record: SeqRecord, canvas_
     # Add record tick group
     canvas = add_tick_group_on_canvas(
         canvas, gb_record, canvas_config, config_dict)
-    canvas = add_legend_group_on_canvas(
-        canvas, canvas_config, legend_config, legend_table)
+    if canvas_config.legend_position != 'none':
+        canvas = add_legend_group_on_canvas(
+            canvas, canvas_config, legend_config, legend_table)
     # Add GC content group if configured to show
     if canvas_config.show_gc:
         canvas = add_gc_content_group_on_canvas(

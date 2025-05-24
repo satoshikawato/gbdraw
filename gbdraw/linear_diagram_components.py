@@ -337,7 +337,8 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
 
 
     # Add length bar
-    canvas = add_legends_on_linear_canvas(canvas, canvas_config, legend_config, legend_table)
+    if canvas_config.legend_position != 'none':
+        canvas = add_legends_on_linear_canvas(canvas, canvas_config, legend_config, legend_table)
     canvas = add_length_bar_on_linear_canvas(
         canvas, canvas_config, config_dict)
 

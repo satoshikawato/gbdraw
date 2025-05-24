@@ -79,6 +79,7 @@ class CircularCanvasConfigurator:
         else:
             self.total_width = self.default_width
             self.offset_x: float = self.default_width * 0.5
+            
         # Create linear canvas
     def recalculate_canvas_dimensions(self, legend_config):
         if self.legend_position == "right":
@@ -102,6 +103,13 @@ class CircularCanvasConfigurator:
         elif self.legend_position == "lower_right":
             self.legend_offset_x: float =  0.875 * self.total_width
             self.legend_offset_y: float =  0.75 * self.total_height
+        elif self.legend_position == "none":
+            self.legend_offset_x: float = 0
+            self.legend_offset_y: float = 0
+        else:
+            self.legend_offset_x: float = 0
+            self.legend_offset_y: float = 0
+
     def create_svg_canvas(self) -> Drawing:
         """
         Creates and returns an SVG canvas based on the configurator's settings.
@@ -263,6 +271,12 @@ class LinearCanvasConfigurator:
             self.legend_offset_x = self.canvas_padding + (legend_config.legend_width * 0.05)       
             self.horizontal_offset: float = self.canvas_padding + (legend_config.legend_width * 1.1)
             self.legend_offset_y = (self.total_height - legend_config.legend_height) / 2
+        elif self.legend_position == "none":
+            self.legend_offset_x: float = 0
+            self.legend_offset_y: float = 0
+        else:
+            self.legend_offset_x: float = 0
+            self.legend_offset_y: float = 0
     def create_svg_canvas(self) -> Drawing:
         """
         Creates and returns an SVG canvas for the linear representation based on the configurator's settings.

@@ -161,7 +161,7 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-l',
         '--legend',
-        help='Legend position (optional = no caption by default; "left", "right")',
+        help='Legend position (default: "right"; "right", "left", "none")',
         type=str,
         default="right")
     parser.add_argument("--show_labels", help="Show labels", action="store_true")
