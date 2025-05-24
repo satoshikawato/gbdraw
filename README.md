@@ -423,6 +423,8 @@ This package was inspired by a variety of existing programs and tools in the bio
 
 [GenoVi](https://github.com/robotoD/GenoVi)
 
+[OrganellarGenomeDRAW (OGDRAW)](https://chlorobox.mpimp-golm.mpg.de/OGDraw.html)
+
 The core functionality of gbdraw has evolved from [a set of Python scripts](https://github.com/satoshikawato/bio_small_scripts/) written back in 2022. Key among these are:
 
 [plot_circular_genome.py](https://github.com/satoshikawato/bio_small_scripts/blob/main/plot_circular_genome.py)
