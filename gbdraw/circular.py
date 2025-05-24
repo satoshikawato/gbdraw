@@ -51,7 +51,7 @@ def _get_args(args) -> argparse.Namespace:
         type=str)
     parser.add_argument(
         "-p", "--palette",
-        metavar="NAME",
+        metavar="PALETTE",
         default="default",
         help="Palette name (default: default)",
         type=str
