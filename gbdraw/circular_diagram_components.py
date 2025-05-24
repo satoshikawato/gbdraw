@@ -52,7 +52,8 @@ def add_gc_skew_group_on_canvas(canvas: Drawing, gb_record: SeqRecord, gc_df: Da
     Returns:
     Drawing: The updated SVG drawing with the GC skew group added.
     """
-    gc_skew_group: Group = GcSkewGroup(gb_record, gc_df, canvas_config.radius, canvas_config.track_width, skew_config, config_dict, canvas_config.track_ids['skew_track']).get_group()
+    skew_track_width = canvas_config.radius * canvas_config.track_ratio * canvas_config.track_ratio_factors[2]
+    gc_skew_group: Group = GcSkewGroup(gb_record, gc_df, canvas_config.radius, skew_track_width, skew_config, config_dict, canvas_config.track_ids['skew_track']).get_group()
     gc_skew_group = center_group_on_canvas(gc_skew_group, canvas_config)
     canvas.add(gc_skew_group)
     return canvas
@@ -73,7 +74,8 @@ def add_gc_content_group_on_canvas(canvas: Drawing, gb_record: SeqRecord, gc_df:
     Returns:
     Drawing: The updated SVG drawing with the GC content group added.
     """
-    gc_content_group: Group = GcContentGroup(gb_record, gc_df, canvas_config.radius, canvas_config.track_width,
+    gc_content_track_width = canvas_config.radius * canvas_config.track_ratio * canvas_config.track_ratio_factors[1]
+    gc_content_group: Group = GcContentGroup(gb_record, gc_df, canvas_config.radius, gc_content_track_width,
                                              gc_config, config_dict, canvas_config.track_ids['gc_track']).get_group()
     gc_content_group = center_group_on_canvas(gc_content_group, canvas_config)
     canvas.add(gc_content_group)

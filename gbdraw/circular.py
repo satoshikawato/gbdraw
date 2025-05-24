@@ -102,9 +102,9 @@ def _get_args(args) -> argparse.Namespace:
         default="CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region,regulatory,rep_origin")
     parser.add_argument(
         '--block_stroke_color',
-        help='Block stroke color (str; default: "black")',
+        help='Block stroke color (str; default: "gray")',
         type=str,
-        default="black")
+        default="gray")
     parser.add_argument(
         '--block_stroke_width',
         help='Block stroke width (float; default: 0)',
@@ -206,10 +206,8 @@ def circular_main(cmd_args) -> None:
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     show_gc, show_skew = suppress_gc_content_and_skew(
         suppress_gc, suppress_skew)
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_labels=show_labels, track_type=track_type, strandedness=strandedness)
+    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_labels=show_labels, track_type=track_type, strandedness=strandedness, show_gc=show_gc, show_skew=show_skew)
     out_formats: list[str] = parse_formats(args.format)
-    show_gc: bool
-    show_skew: bool
     record_count: int = 0
     gb_records: list[SeqRecord] = load_gbks(input_file, "circular")
     gc_config = GcContentConfigurator(
@@ -227,7 +225,8 @@ def circular_main(cmd_args) -> None:
         outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
         gc_df: DataFrame = skew_df(gb_record, window, step, dinucleotide)
         canvas_config = CircularCanvasConfigurator(
-            output_prefix=outfile_prefix, config_dict=config_dict, legend=legend)
+            output_prefix=outfile_prefix, config_dict=config_dict, legend=legend, gb_record=gb_record
+            )
         plot_circular_diagram(gb_record, canvas_config, gc_df, gc_config, skew_config,
                               feature_config, species, strain, config_dict, out_formats, legend_config)
 

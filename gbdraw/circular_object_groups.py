@@ -12,7 +12,7 @@ from .canvas_generator import CircularCanvasConfigurator
 from svgwrite.path import Path
 from svgwrite.text import Text
 from .data_processing import calculate_gc_percent, prepare_label_list
-from .utility_functions import parse_mixed_content_text
+from .utility_functions import parse_mixed_content_text, determine_length_parameter
 from .create_feature_objects import create_feature_dict
 from .feature_objects import FeatureObject
 from .circular_feature_drawer import LabelDrawer, FeatureDrawer, SkewDrawer, GcContentDrawer, DefinitionDrawer
@@ -53,16 +53,15 @@ class GcContentGroup:
         self.radius: float = radius
         self.gc_config: GcContentConfigurator = gc_config
         self.gb_record: SeqRecord = gb_record
+        self.record_len: int = len(self.gb_record.seq)
         self.config_dict: dict = config_dict
         self.gc_df: DataFrame = gc_df
         self.track_width: float = track_width
-        self.record_len: int = len(self.gb_record.seq)
-        if self.record_len < 50000:
-            track_channel = "short"
-        else:
-            track_channel = "long"
+        self.length_threshold = self.config_dict['labels']['length_threshold']['circular']
+        self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
         self.track_type: str = self.config_dict['canvas']['circular']['track_type']
-        self.norm_factor: float = self.config_dict['canvas']['circular']['track_dict'][track_channel][self.track_type][str(track_id)]
+        self.norm_factor: float = self.config_dict['canvas']['circular']['track_dict'][self.length_param][self.track_type][str(track_id)]
+
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
@@ -121,12 +120,9 @@ class GcSkewGroup:
         self.skew_group = Group(id="skew")
         self.config_dict = config_dict
         self.track_type: str = self.config_dict['canvas']['circular']['track_type']
-        if self.record_len < 50000:
-            track_channel = "short"
-        else:
-            track_channel = "long"
-        self.track_type: str = self.config_dict['canvas']['circular']['track_type']
-        self.norm_factor: float = self.config_dict['canvas']['circular']['track_dict'][track_channel][self.track_type][str(track_id)]
+        self.length_threshold = self.config_dict['labels']['length_threshold']['circular']
+        self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
+        self.norm_factor: float = self.config_dict['canvas']['circular']['track_dict'][self.length_param][self.track_type][str(track_id)]
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
@@ -309,7 +305,8 @@ class LegendGroup:
         self.font_family = self.legend_config.font_family
         self.font_size = self.legend_config.font_size
         self.dpi = self.canvas_config.dpi
-        self.color_rect_size = 16
+
+        self.color_rect_size = self.legend_config.color_rect_size
         self.num_of_lines = len(self.legend_table.keys())
         self.add_elements_to_group()
 
@@ -562,20 +559,19 @@ class SeqRecordGroup:
         self.canvas_config: CircularCanvasConfigurator = canvas_config
         self.feature_config: FeatureDrawingConfigurator = feature_config
         self.config_dict: dict = config_dict
-        if int(len(self.gb_record.seq)) < 50000:
-            track_channel = "short"
-        else:
-            track_channel = "long"
+        self.length_threshold = self.config_dict['labels']['length_threshold']['circular']
+        self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
         self.font_size: str = self.config_dict['objects']['ticks']['tick_labels']['font_size']
         self.font_family: str = self.config_dict['objects']['text']['font_family']
         self.show_labels = self.config_dict['canvas']['show_labels']
-        self.label_stroke_width = self.config_dict['labels']['stroke_width'][track_channel]
+        self.label_stroke_width = self.config_dict['labels']['stroke_width'][self.length_param]
         self.label_stroke_color = self.config_dict['labels']['stroke_color']['label_stroke_color']
         self.font_size = self.config_dict['objects']['features']['font_size']
         self.dpi =  self.config_dict['canvas']['dpi']
         self.track_type = self.config_dict['canvas']['circular']['track_type']
         self.strandedness = self.config_dict['canvas']['strandedness']
         self.resolve_overlaps = self.config_dict['canvas']['resolve_overlaps']
+        self.track_ratio_factors = self.config_dict['canvas']['circular']['track_ratio_factors'][self.length_param]
         self.track_ratio = self.canvas_config.track_ratio
         self.record_group: Group = self.setup_record_group()
     def draw_record(self, feature_dict: Dict[str, FeatureObject], record_length: int, group: Group) -> Group:
@@ -599,7 +595,7 @@ class SeqRecordGroup:
         if self.show_labels == True:
             label_list = prepare_label_list(feature_dict, record_length, self.canvas_config.radius, self.track_ratio, self.config_dict) 
         for feature_object in feature_dict.values():
-            group = FeatureDrawer(self.feature_config).draw(feature_object, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio, self.track_type, self.strandedness)
+            group = FeatureDrawer(self.feature_config).draw(feature_object, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio, self.track_ratio_factors[0], self.track_type, self.strandedness, self.length_param)
         if self.show_labels == True:
             for label in label_list:
                 group = LabelDrawer(self.config_dict).draw(label, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)
