@@ -1,6 +1,6 @@
 package:
   name: gbdraw
-  version: 0.1.1
+  version: 0.2.0
 
 source:
   path: ../
@@ -41,7 +41,7 @@ about:
   license: "MIT"
   license_family: "MIT"
   license_file: "LICENSE.txt"
-  summary: "A genome diagram generator for bacterial, archaeal, and viral genomes"
+  summary: "A genome diagram generator for microbes and organelles"
   description: "For details, see https://github.com/satoshikawato/gbdraw/"
   fonts_license: "SIL OFL, Version 1.1"
 
