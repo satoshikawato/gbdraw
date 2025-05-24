@@ -238,6 +238,27 @@ gbdraw linear -i Fukuoka2020.gb Av-JP.gb Ps-JP.gb Tokyo2021.gb Av.gb -b Fukuoka2
 
 `gbdraw` allows users to personalize feature colors. This is done by providing a custom tab-separated file that specifies the desired color codes. Additionally, the colors and widths of the strokes can be fine-tuned using command-line arguments like `--block_stroke_width`.
 
+### Color palettes
+`gbdraw` ships with a total of 50 color palettes. Choose a palette with **`-p/--palette <name>`** or override individual colours via TSV files.
+#### Examples
+##### autumn
+![autumn](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_autumn.svg)
+##### forest
+![forest](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_forest.svg)
+##### fugaku
+![fugaku](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_fugaku.svg)
+##### lavender_fields
+![lavender_fields](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_lavender_fields.svg)
+##### matcha_whispers
+![matcha_whispers](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_matcha_whispers.svg)
+##### sakura
+![sakura](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_sakura.svg)
+##### tropical
+![tropical](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_tropical.svg)
+##### zen
+![zen](https://github.com/satoshikawato/gbdraw/blob/color_palettes/examples/AP027078_tuckin_separate_strands_zen.svg)
+
+
 ### Customizing colors with configuration files
 `gbdraw` supports two complementary mechanisms for overriding the default colours:
 

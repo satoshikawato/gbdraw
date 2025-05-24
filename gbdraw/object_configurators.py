@@ -147,6 +147,7 @@ class LegendDrawingConfigurator:
         self.font_weight: str = config_dict['objects']['legends']['font_weight']
         self.font_family: str = config_dict['objects']['text']['font_family']
         self.text_anchor: str = config_dict['objects']['legends']['text_anchor']
+        self.color_rect_size: float = config_dict['objects']['legends']['color_rect_size']
         self.dominant_baseline: str = config_dict['objects']['legends']['dominant_baseline']
         self.dpi: int = config_dict['png_output']['dpi']    
     def calculate_bbox_dimensions(self, legend_table):

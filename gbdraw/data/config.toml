@@ -17,12 +17,19 @@ height = 1000 # pixel
 radius = 390
 track_ratio = 0.19
 track_dict.short = {"middle" = {1 = 1.0, 2 = 0.75, 3 = 0.55}, "spreadout" = {1 = 1.0, 2 = 0.85, 3 = 0.60}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.50}}
-track_dict.long = {"middle" = {1 = 1.0, 2 = 0.8, 3 = 0.65}, "spreadout" = {1 = 1.0, 2 = 0.85, 3 = 0.7}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.55}}
+track_dict.long = {"middle" = {1 = 1.0, 2 = 0.75, 3 = 0.60}, "spreadout" = {1 = 1.0, 2 = 0.80, 3 = 0.65}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.55}}
 track_type = 'tuckin'
 
 [canvas.circular.width]
   with_labels = 1400
   without_labels = 1000
+[canvas.circular.track_width]
+  long = [75, 50, 50]
+  short = [100, 50, 50]
+[canvas.circular.track_ratio_factors]
+  long = [0.25, 1.0, 1.0]
+  short = [0.50, 1.0, 1.0]
+
 [canvas.linear]
 # Note that only the width is defined here, as the height of the figure is dependent on the number of sequences displayed.
 width = 2000 # pixel
@@ -69,7 +76,7 @@ font_size = 18
 
 [objects.features]
 features_drawn = ["CDS", "rRNA", "tRNA" ,"tmRNA", "ncRNA", "misc_RNA", "repeat_region", "regulatory","rep_origin", "misc_feature"]
-block_stroke_color = 'black'
+block_stroke_color = 'gray'
 block_stroke_width = 0.0
 line_stroke_color = 'gray'
 line_stroke_width = 1.0
@@ -95,11 +102,11 @@ font_weight = 'normal'
   label_stroke_color = 'gray'
 [labels.radius_factor]
 [labels.radius_factor.tuckin]
-  short = 1.05
-  long = 1.05
+  short = 1.02
+  long = 1.02
 [labels.radius_factor.middle]
   short = 1.1
-  long = 1.125
+  long = 1.075
 [labels.radius_factor.spreadout]
   short = 1.2
   long = 1.15
@@ -112,7 +119,7 @@ font_weight = 'normal'
   long = 1.17
 [labels.arc_x_radius_factor.spreadout]
   short = 1.15
-  long = 1.2
+  long = 1.25
 [labels.arc_y_radius_factor]
 [labels.arc_y_radius_factor.tuckin]
   short = 1.175
@@ -131,8 +138,8 @@ font_weight = 'normal'
   short = 5
   long = 5
 [labels.arc_center_x.spreadout]
-  short = 30
-  long = 30
+  short = 25
+  long = 20
 [labels.arc_angle]
 [labels.arc_angle.tuckin]
   short = 81
@@ -169,7 +176,7 @@ stroke_color = 'none'
 stroke_width = 0
 fill_opacity = 1
 [objects.gc_skew.circular]
-norm_factor = 0.85
+norm_factor = 0.80
 
 [objects.ticks]
 tick_width = 2.0
@@ -183,6 +190,7 @@ font_weight = 'normal'
 stroke = 'none'
 fill = 'black'
 font_size = 16
+color_rect_size = 16
 font_weight = 'normal'
 dominant_baseline = 'central'
 text_anchor = 'start'
