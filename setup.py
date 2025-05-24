@@ -12,13 +12,13 @@ setup(
         'fonttools'
     ],
     package_data={
-        'gbdraw': ['data/default_colors.tsv', 'data/config.toml', 'data/*.ttf']
+        'gbdraw': ['data/color_palettes.toml', 'data/config.toml', 'data/*.ttf']
     },
     include_package_data=True,
     python_requires='>=3.10',
     author='Satoshi Kawato',
     author_email='kawato@kaiyodai.ac.jp',
-    description='A package for visualizing genome data',
+    description='a genome diagram generator for microbes and organelles',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/satoshikawato/gbdraw/',
