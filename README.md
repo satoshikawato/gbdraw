@@ -52,7 +52,7 @@ mamba create -n gbdraw -y  -c conda-forge -c bioconda -c local gbdraw
 mamba activate gbdraw
 ```
 ### Colab Notebook (no local installation; Google account required)
-You can try `gbdraw` (version: latest commit to the `main` branch of the GitHub repostiory) on Google Colaboratory without any local installation:
+You can try `gbdraw` (latest release) on Google Colaboratory without any local installation:
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
 
