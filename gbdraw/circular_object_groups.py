@@ -600,14 +600,24 @@ class SeqRecordGroup:
             for label in label_list:
                 group = LabelDrawer(self.config_dict).draw(label, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)
                 if label["is_embedded"] == False:
-                    line_path = Line(start=(label["middle_x"], label["middle_y"]), end=(label["start_x"], label["start_y"]),
-                    stroke=self.label_stroke_color,
-                    stroke_width=self.label_stroke_width)
-                    group.add(line_path)
-                    line_path2 = Line(start=(label["middle_x"], label["middle_y"]), end=(label["feature_middle_x"], label["feature_middle_y"]),
-                    stroke=self.label_stroke_color,
-                    stroke_width=self.label_stroke_width)
-                    group.add(line_path2)                    
+                    if label["is_inner"] == False:
+                        line_path = Line(start=(label["middle_x"], label["middle_y"]), end=(label["start_x"], label["start_y"]),
+                        stroke=self.label_stroke_color,
+                        stroke_width=self.label_stroke_width)
+                        group.add(line_path)
+                        line_path2 = Line(start=(label["middle_x"], label["middle_y"]), end=(label["feature_middle_x"], label["feature_middle_y"]),
+                        stroke=self.label_stroke_color,
+                        stroke_width=self.label_stroke_width)
+                        group.add(line_path2)
+                    else:
+                        line_path = Line(start=(label["middle_x"], label["middle_y"]), end=(label["start_x"], label["start_y"]),
+                        stroke=self.label_stroke_color,
+                        stroke_width=self.label_stroke_width)
+                        group.add(line_path)
+                        line_path2 = Line(start=(label["middle_x"], label["middle_y"]), end=(label["feature_middle_x"], label["feature_middle_y"]),
+                        stroke=self.label_stroke_color,
+                        stroke_width=self.label_stroke_width)
+                        group.add(line_path2)                  
         return group
 
     def setup_record_group(self) -> Group:

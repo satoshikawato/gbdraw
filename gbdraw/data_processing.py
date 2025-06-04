@@ -397,12 +397,19 @@ def sort_labels(labels):
     return sorted(labels, key=lambda x: x['middle'])
 
 
-def rearrange_labels(labels, feature_radius, total_length, genome_len, config_dict, is_right):
+def rearrange_labels(labels, feature_radius, total_length, genome_len, config_dict, is_right, is_outer):
     track_type = config_dict['canvas']['circular']['track_type']
-    x_radius_factor = config_dict['labels']['arc_x_radius_factor'][track_type][genome_len]
-    y_radius_factor = config_dict['labels']['arc_y_radius_factor'][track_type][genome_len]
-    default_center_x = config_dict['labels']['arc_center_x'][track_type][genome_len]
-    default_angle = config_dict['labels']['arc_angle'][track_type][genome_len]
+    if is_outer:
+        x_radius_factor = config_dict['labels']['arc_x_radius_factor'][track_type][genome_len]
+        y_radius_factor = config_dict['labels']['arc_y_radius_factor'][track_type][genome_len]
+        default_center_x = config_dict['labels']['arc_center_x'][track_type][genome_len]
+        default_angle = config_dict['labels']['arc_angle'][track_type][genome_len]
+    else:
+        x_radius_factor = config_dict['labels']['inner_arc_x_radius_factor'][track_type][genome_len]
+        y_radius_factor = config_dict['labels']['inner_arc_y_radius_factor'][track_type][genome_len]
+        default_center_x = config_dict['labels']['inner_arc_center_x'][track_type][genome_len]
+        default_angle = config_dict['labels']['inner_arc_angle'][track_type][genome_len]
+
     x_radius = feature_radius * x_radius_factor  # Adjust this factor as needed
     y_radius = feature_radius * y_radius_factor   # Adjust this factor as needed
     center_y = 0
@@ -431,12 +438,15 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
     embedded_labels = []
     left_labels = []
     right_labels = []
+    left_inner_labels = []
+    right_inner_labels = []
     label_list = []
 
     length_threshold = config_dict['labels']['length_threshold']['circular']
     length_param = determine_length_parameter(total_length, length_threshold)
     track_type = config_dict['canvas']['circular']['track_type']
     radius_factor = config_dict['labels']['radius_factor'][track_type][length_param]
+    inner_radius_factor = config_dict['labels']['inner_radius_factor'][track_type][length_param]
     font_family = config_dict['objects']['text']['font_family']
     font_size: str = config_dict['labels']['font_size'][length_param]
     interval = config_dict['canvas']['dpi']
@@ -454,6 +464,8 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
             coordinate_strand: str = "undefined"
             feature_location_list = feature_object.location
             list_of_coordinates = feature_object.coordinates
+            feature_object.strand = feature_location_list[0][2]
+
             feature_location_count=0
             for coordinate in list_of_coordinates:
                 if feature_location_list[feature_location_count][0] == "line":
@@ -480,11 +492,14 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
             label_as_feature_length = total_length * bbox_width_px/(2*math.pi*radius)
             label_start = label_middle - (label_as_feature_length/2)
             label_end = label_middle + (label_as_feature_length/2)
-            
             feature_middle_x: float = (radius * factors[1]) * math.cos(math.radians(360.0 * ((label_middle) / total_length) - 90))
             feature_middle_y: float = (radius * factors[1]) * math.sin(math.radians(360.0 * ((label_middle) / total_length) - 90))
-            middle_x: float = (radius_factor * radius) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90)) # 1.05?
-            middle_y: float = (radius_factor * radius) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90)) # 1.05?  
+            if feature_object.strand == "positive":
+                middle_x: float = (radius_factor * radius) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90)) # 1.05?
+                middle_y: float = (radius_factor * radius) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90)) # 1.05?  
+            else:
+                middle_x: float = (inner_radius_factor * radius) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
+                middle_y: float = (inner_radius_factor * radius) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
             if bbox_width_px  < longest_segment_length_in_pixels *1.05:
                 is_embedded = True
             else:
@@ -508,12 +523,27 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
                 embedded_labels.append(label_entry)
             else:
                 if label_entry["middle"] > (total_length / 2):
-                    left_labels.append(label_entry)
+                    if feature_object.strand == "positive":
+                        label_entry["is_inner"] = False
+                        left_labels.append(label_entry)
+                       
+                    else:
+                        label_entry["is_inner"] = True
+                        left_inner_labels.append(label_entry)
+                        
                 else:
-                    right_labels.append(label_entry)
-    right_labels_rearranged = rearrange_labels(right_labels, radius, total_length, length_param, config_dict, is_right=True)
-    left_labels_rearranged = rearrange_labels(left_labels, radius, total_length, length_param, config_dict, is_right=False)
-    label_list = embedded_labels + right_labels_rearranged + left_labels_rearranged
+                    if feature_object.strand == "positive":
+                        label_entry["is_inner"] = False
+                        right_labels.append(label_entry)
+                    else:
+                        label_entry["is_inner"] = True
+                        right_inner_labels.append(label_entry)
+    right_labels_rearranged = rearrange_labels(right_labels, radius, total_length, length_param, config_dict, is_right=True, is_outer=True)
+    left_labels_rearranged = rearrange_labels(left_labels, radius, total_length, length_param, config_dict, is_right=False, is_outer=True)
+    right_inner_labels_rearranged = rearrange_labels(right_inner_labels, radius, total_length, length_param, config_dict, is_right=True, is_outer=False)
+    left_inner_labels_rearranged = rearrange_labels(left_inner_labels, radius, total_length, length_param, config_dict, is_right=False, is_outer=False)
+
+    label_list = embedded_labels + right_labels_rearranged + left_labels_rearranged + right_inner_labels_rearranged + left_inner_labels_rearranged
     return label_list
 
 def check_label_overlap(label1, label2):

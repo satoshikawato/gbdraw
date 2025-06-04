@@ -110,6 +110,15 @@ font_weight = 'normal'
 [labels.radius_factor.spreadout]
   short = 1.2
   long = 1.15
+[labels.inner_radius_factor.tuckin]
+  short = 0.90
+  long = 0.90
+[labels.inner_radius_factor.middle]
+  short = 1.1
+  long = 1.075
+[labels.inner_radius_factor.spreadout]
+  short = 1.2
+  long = 1.15
 [labels.arc_x_radius_factor]
 [labels.arc_x_radius_factor.tuckin]
   short = 1.325
@@ -150,7 +159,56 @@ font_weight = 'normal'
 [labels.arc_angle.spreadout]
   short = 85
   long = 85
+# 内側配置用の X軸方向の半径係数
+[labels.inner_arc_x_radius_factor]
+[labels.inner_arc_x_radius_factor.tuckin]
+  short = 0.85 # 外側用 (例: 1.325) より小さい値
+  long = 0.85
+[labels.inner_arc_x_radius_factor.middle]
+  short = 0.90
+  long = 0.90
+[labels.inner_arc_x_radius_factor.spreadout]
+  short = 0.95
+  long = 0.95
 
+# 内側配置用の Y軸方向の半径係数
+[labels.inner_arc_y_radius_factor]
+[labels.inner_arc_y_radius_factor.tuckin]
+  short = 0.80 # 外側用 (例: 1.175) より小さい値
+  long = 0.80
+[labels.inner_arc_y_radius_factor.middle]
+  short = 0.90
+  long = 0.90
+[labels.inner_arc_y_radius_factor.spreadout]
+  short = 0.95
+  long = 0.95
+
+# 内側配置用の円弧中心 X座標オフセット
+# 外側用が負の値の場合、内側はより0に近い値か、あるいは逆符号で調整
+[labels.inner_arc_center_x]
+[labels.inner_arc_center_x.tuckin]
+  short = -15 # 外側用 (例: -70) よりゲノム円中心に近い値
+  long = -15
+[labels.inner_arc_center_x.middle]
+  short = 0   # 外側用 (例: 5)
+  long = 0
+[labels.inner_arc_center_x.spreadout]
+  short = -10 # 外側用 (例: 25)
+  long = -15
+
+# 内側配置用の円弧の角度
+# 必要に応じて調整。外側より狭い角度にするなど。
+[labels.inner_arc_angle]
+[labels.inner_arc_angle.tuckin]
+  short = 80 # 外側用 (例: 81)
+  long = 80
+[labels.inner_arc_angle.middle]
+  short = 84 # 外側用 (例: 87)
+  long = 84
+[labels.inner_arc_angle.spreadout]
+  short = 82 # 外側用 (例: 85)
+  long = 82
+  
 [objects.length_bar]
 stroke_color = 'black'
 stroke_width = 3

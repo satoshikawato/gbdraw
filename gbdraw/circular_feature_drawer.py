@@ -4,7 +4,7 @@
 import logging
 import sys
 import math
-from typing import Optional, Union, List, Dict, Literal
+from typing import Optional, Union, List, Dict, Literal, Tuple
 from pandas import DataFrame
 from .object_configurators import GcSkewConfigurator, FeatureDrawingConfigurator
 from svgwrite.container import Group
@@ -402,33 +402,61 @@ class LabelDrawer:
         """
         self.config_dict = config_dict
         self.strandedness: bool = self.config_dict['canvas']['strandedness']
-    def set_feature_label_anchor_value(self, total_len: int, tick: float) -> tuple[Literal['middle', 'start', 'end'], Literal['text-after-edge', 'middle', 'hanging']]:
+    def set_feature_label_anchor_value(
+            self,
+            total_len: int,
+            tick: float,
+            is_inner: bool = False
+    ) -> Tuple[
+            Literal["middle", "start", "end"],
+            Literal["text-after-edge", "middle", "hanging"]
+    ]:
         """
-        Determines the anchor and baseline values for tick labels based on their position.
+        Decide `text-anchor` and `dominant-baseline` for a feature label.
 
-        Args:
-            total_len (int): Total length of the genomic sequence.
-            tick (float): The position of the tick on the genomic sequence.
+        Parameters
+        ----------
+        total_len : int
+            Length of the molecule (bp).
+        tick : float
+            Genomic coordinate at which the label is centred.
+        is_inner : bool, default ``False``
+            *False*  → outer-rim labels  
+            *True*   → inner-rim labels (i.e. those drawn towards the molecule’s centre).
 
-        Returns:
-            tuple[Literal['middle', 'start', 'end'], Literal['text-after-edge', 'middle', 'hanging']]: 
-            A tuple containing the text anchor and dominant baseline values for the tick label.
+        Returns
+        -------
+        anchor_value, baseline_value : str, str
         """
-        angle: float = (360.0 * (tick / total_len))
-        if 0 <= angle < 10:
-            anchor_value, baseline_value = "start", "text-after-edge"
-        elif 10 <= angle < 155:
-            anchor_value, baseline_value = "start", "middle"
-        elif 155 <= angle < 180:
-            anchor_value, baseline_value = "start", "hanging"
-        elif 180 <= angle < 205:
-            anchor_value, baseline_value = "end", "hanging"
-        elif 205 <= angle < 350:
-            anchor_value, baseline_value = "end", "middle"
-        elif 350 <= angle < 360:
-            anchor_value, baseline_value = "end", "text-after-edge"
+        angle = (360.0 * (tick / total_len)) % 360
+
+        # Same left/right anchor logic for both inner & outer
+        if   0   <= angle < 180:
+            if is_inner:
+                anchor_value = "end"
+            else:
+                anchor_value = "start"
         else:
-            raise ValueError("Abnormal angle: verify the ticks and total length")
+            if is_inner:
+                anchor_value = "start"
+            else:
+                anchor_value = "end"
+
+        # Baseline must flip when we draw inside the circle
+        if is_inner:
+            # Inside: hang text *towards* centre
+            if   10  <= angle < 170:   baseline_value = "text-after-edge"
+            elif 170 <= angle < 190:   baseline_value = "middle"
+            elif 190 <= angle < 350:   baseline_value = "middle"
+            else:                      baseline_value = "middle"
+        else:
+            # Outside: hang text *away* from centre (original gbdraw rule)
+            if   0   <= angle < 10:    baseline_value = "text-after-edge"
+            elif 10  <= angle < 155:   baseline_value = "middle"
+            elif 155 <= angle < 205:   baseline_value = "hanging"
+            elif 205 <= angle < 350:   baseline_value = "middle"
+            else:                      baseline_value = "text-after-edge"
+
         return anchor_value, baseline_value
         
     def embed_label(self, group, label, radius, record_length, track_ratio):
@@ -441,6 +469,7 @@ class LabelDrawer:
         font_px = float(str(self.font_size).rstrip("ptpx"))
         _, bbox_h = calculate_bbox_dimensions(label["label_text"], self.font_family, font_px, dpi=96)
         center_offset = (bbox_h/4) 
+        
         if 0 <= angle < 90:
             param = " 0 0 1 "
             start_x_1: float = (radius * factors[1] - center_offset) * math.cos(
@@ -485,7 +514,7 @@ class LabelDrawer:
         group.add(text_path)
         return group
     def add_label_on_the_rim(self, group, label, radius, record_length):
-            anchor_value, baseline_value = self.set_feature_label_anchor_value(record_length, label["middle"])
+            anchor_value, baseline_value = self.set_feature_label_anchor_value(record_length, label["middle"], label.get("is_inner", False))
             start_x_1 = label["start_x"]
             start_y_1 = label["start_y"]
             label_path = generate_text_path(label["label_text"], start_x_1, start_y_1, interval = 0, font_size = self.font_size, font_weight = 'normal', font = self.font_family, dominant_baseline = baseline_value, text_anchor = anchor_value)
