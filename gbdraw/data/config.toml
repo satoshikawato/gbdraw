@@ -102,13 +102,13 @@ font_weight = 'normal'
   label_stroke_color = 'gray'
 [labels.radius_factor]
 [labels.radius_factor.tuckin]
-  short = 1.02
+  short = 1.075
   long = 1.02
 [labels.radius_factor.middle]
-  short = 1.1
+  short = 1.125
   long = 1.075
 [labels.radius_factor.spreadout]
-  short = 1.2
+  short = 1.30
   long = 1.14
 [labels.inner_radius_factor.tuckin]
   short = 0.70
@@ -127,7 +127,7 @@ font_weight = 'normal'
   short = 1.17
   long = 1.10
 [labels.arc_x_radius_factor.spreadout]
-  short = 1.15
+  short = 1.35
   long = 1.175
 [labels.arc_y_radius_factor]
 [labels.arc_y_radius_factor.tuckin]
@@ -137,7 +137,7 @@ font_weight = 'normal'
   short = 1.2
   long = 1.10
 [labels.arc_y_radius_factor.spreadout]
-  short = 1.25
+  short = 1.35
   long = 1.175
 [labels.arc_center_x]
 [labels.arc_center_x.tuckin]
