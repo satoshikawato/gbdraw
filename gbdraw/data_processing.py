@@ -199,12 +199,12 @@ def y_overlap(label1, label2, minimum_margin):
     label1_start_y = label1["start_y"]
     label2_start_y = label2["start_y"]
     if label1_start_y < label2_start_y:
-        if (label1_start_y + 0.55 * label1["height_px"] +  minimum_margin) > (label2_start_y - 0.55 * label2["height_px"]):
+        if (label1_start_y + 0.5 * label1["height_px"] +  minimum_margin) > (label2_start_y - 0.5 * label2["height_px"]):
             return True
         else:
             return False
     else:
-        if (label2_start_y + 0.55 * label2["height_px"] +   minimum_margin) > (label1_start_y - 0.55 * label1["height_px"] ):
+        if (label2_start_y + 0.5 * label2["height_px"] +   minimum_margin) > (label1_start_y - 0.5 * label1["height_px"] ):
             return True
         else:
             return False
@@ -286,14 +286,14 @@ def place_labels_on_arc(
     end_y   = center_y + y_radius * math.sin(math.radians(end_angle))
     total_y_range = end_y - start_y
 
-    n = max(len(labels), 2)               # 1 本でも 2 分割として扱う
+    n = max(len(labels), 2)          
     y_increment = total_y_range / (n - 1)
 
     for i, label in enumerate(labels):
         y = start_y + i * y_increment
 
         angle = calculate_angle_for_y(center_y, y_radius, y)
-        if angle is None:   # 理論上起きないが保険
+        if angle is None:   
             raise ValueError(
                 f"Calculated y={y:.2f} falls outside ellipse bounds "
                 f"({center_y - y_radius:.2f}..{center_y + y_radius:.2f})."
@@ -313,7 +313,7 @@ def euclidean_distance(x1, y1, x2, y2):
     return math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
 
 
-def improved_label_placement(labels, center_x, center_y, x_radius, y_radius, feature_radius, total_length, start_angle, end_angle, is_right, margin=1, max_iterations=1000):
+def improved_label_placement(labels, center_x, center_y, x_radius, y_radius, feature_radius, total_length, start_angle, end_angle, is_right, margin=1.0, max_iterations=1000):
     def calculate_angle(x, y, origin_x, origin_y):
         return math.degrees(math.atan2((y - origin_y), (x - origin_x))) % 360 
 

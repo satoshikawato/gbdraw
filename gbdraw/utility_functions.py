@@ -236,7 +236,7 @@ def edit_available_tracks(available_tracks, bbox_start, bbox_end):
 def get_label_text(seq_feature):
     text = ''
     if hasattr(seq_feature, 'product') and seq_feature.product:
-        text = seq_feature.product
+        text = seq_feature.note
     elif hasattr(seq_feature, 'gene') and seq_feature.gene:
         text = seq_feature.gene
     elif hasattr(seq_feature, 'rpt_family'):
