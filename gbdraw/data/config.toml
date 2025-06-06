@@ -101,43 +101,79 @@ font_weight = 'normal'
 [labels.stroke_color]
   label_stroke_color = 'gray'
 [labels.radius_factor]
-[labels.radius_factor.tuckin]
+[labels.radius_factor.tuckin.separate]
   short = 1.075
   long = 1.02
-[labels.radius_factor.middle]
+[labels.radius_factor.tuckin.single]
+  short = 1.075
+  long = 1.02  
+[labels.radius_factor.middle.separate]
   short = 1.125
   long = 1.075
-[labels.radius_factor.spreadout]
-  short = 1.30
+[labels.radius_factor.middle.single]
+  short = 1.075
+  long = 1.05
+[labels.radius_factor.spreadout.separate]
+  short = 1.25
   long = 1.14
-[labels.inner_radius_factor.tuckin]
+[labels.radius_factor.spreadout.single]
+  short = 1.15
+  long = 1.10
+[labels.inner_radius_factor.tuckin.separate]
   short = 0.70
   long = 0.85
-[labels.inner_radius_factor.middle]
+[labels.inner_radius_factor.tuckin.single]
+  short = 0.80
+  long = 0.90
+[labels.inner_radius_factor.middle.separate]
   short = 0.85
   long = 0.925
-[labels.inner_radius_factor.spreadout]
+[labels.inner_radius_factor.middle.single]
+  short = 0.85
+  long = 0.95
+[labels.inner_radius_factor.spreadout.separate]
   short = 0.90
   long = 0.975
+[labels.inner_radius_factor.spreadout.single]
+  short = 0.925
+  long = 0.975
 [labels.arc_x_radius_factor]
-[labels.arc_x_radius_factor.tuckin]
-  short = 1.325
+[labels.arc_x_radius_factor.tuckin.separate]
+  short = 1.30
   long = 1.3
-[labels.arc_x_radius_factor.middle]
+[labels.arc_x_radius_factor.tuckin.single]
+  short = 1.30
+  long = 1.3
+[labels.arc_x_radius_factor.middle.separate]
   short = 1.17
   long = 1.10
-[labels.arc_x_radius_factor.spreadout]
-  short = 1.35
+[labels.arc_x_radius_factor.middle.single]
+  short = 1.15
+  long = 1.10
+[labels.arc_x_radius_factor.spreadout.separate]
+  short = 1.25
+  long = 1.175
+[labels.arc_x_radius_factor.spreadout.single]
+  short = 1.20
   long = 1.175
 [labels.arc_y_radius_factor]
-[labels.arc_y_radius_factor.tuckin]
-  short = 1.175
+[labels.arc_y_radius_factor.tuckin.separate]
+  short = 1.15
   long = 1.125
-[labels.arc_y_radius_factor.middle]
+[labels.arc_y_radius_factor.tuckin.single]
+  short = 1.15
+  long = 1.125
+[labels.arc_y_radius_factor.middle.separate]
   short = 1.2
   long = 1.10
-[labels.arc_y_radius_factor.spreadout]
-  short = 1.35
+[labels.arc_y_radius_factor.middle.single]
+  short = 1.15
+  long = 1.10
+[labels.arc_y_radius_factor.spreadout.separate]
+  short = 1.275
+  long = 1.175
+[labels.arc_y_radius_factor.spreadout.single]
+  short = 1.20
   long = 1.175
 [labels.arc_center_x]
 [labels.arc_center_x.tuckin]
@@ -157,32 +193,47 @@ font_weight = 'normal'
   short = 87
   long = 87
 [labels.arc_angle.spreadout]
-  short = 85
+  short = 89
   long = 88
-# 内側配置用の X軸方向の半径係数
+
 [labels.inner_arc_x_radius_factor]
-[labels.inner_arc_x_radius_factor.tuckin]
+[labels.inner_arc_x_radius_factor.tuckin.separate]
   short = 0.65
   long = 0.775
-[labels.inner_arc_x_radius_factor.middle]
+[labels.inner_arc_x_radius_factor.tuckin.single]
+  short = 0.75
+  long = 0.775
+[labels.inner_arc_x_radius_factor.middle.separate]
   short = 0.80
   long = 0.825
-[labels.inner_arc_x_radius_factor.spreadout]
+[labels.inner_arc_x_radius_factor.middle.single]
+  short = 0.80
+  long = 0.825
+[labels.inner_arc_x_radius_factor.spreadout.separate]
   short = 0.80
   long = 0.90
-
-# 内側配置用の Y軸方向の半径係数
+[labels.inner_arc_x_radius_factor.spreadout.single]
+  short = 0.80
+  long = 0.90
 [labels.inner_arc_y_radius_factor]
-[labels.inner_arc_y_radius_factor.tuckin]
+[labels.inner_arc_y_radius_factor.tuckin.separate]
   short = 0.65
   long = 0.775
-[labels.inner_arc_y_radius_factor.middle]
+[labels.inner_arc_y_radius_factor.tuckin.single]
+  short = 0.75
+  long = 0.775
+[labels.inner_arc_y_radius_factor.middle.separate]
   short = 0.80
   long = 0.825
-[labels.inner_arc_y_radius_factor.spreadout]
+[labels.inner_arc_y_radius_factor.middle.single]
+  short = 0.80
+  long = 0.825
+[labels.inner_arc_y_radius_factor.spreadout.separate]
   short = 0.80
   long = 0.875
-
+[labels.inner_arc_y_radius_factor.spreadout.single]
+  short = 0.80
+  long = 0.875
 [labels.inner_arc_center_x]
 [labels.inner_arc_center_x.tuckin]
   short = 0

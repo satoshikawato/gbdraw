@@ -397,16 +397,16 @@ def sort_labels(labels):
     return sorted(labels, key=lambda x: x['middle'])
 
 
-def rearrange_labels(labels, feature_radius, total_length, genome_len, config_dict, is_right, is_outer):
+def rearrange_labels(labels, feature_radius, total_length, genome_len, config_dict, strands, is_right, is_outer):
     track_type = config_dict['canvas']['circular']['track_type']
     if is_outer:
-        x_radius_factor = config_dict['labels']['arc_x_radius_factor'][track_type][genome_len]
-        y_radius_factor = config_dict['labels']['arc_y_radius_factor'][track_type][genome_len]
+        x_radius_factor = config_dict['labels']['arc_x_radius_factor'][track_type][strands][genome_len]
+        y_radius_factor = config_dict['labels']['arc_y_radius_factor'][track_type][strands][genome_len]
         default_center_x = config_dict['labels']['arc_center_x'][track_type][genome_len]
         default_angle = config_dict['labels']['arc_angle'][track_type][genome_len]
     else:
-        x_radius_factor = config_dict['labels']['inner_arc_x_radius_factor'][track_type][genome_len]
-        y_radius_factor = config_dict['labels']['inner_arc_y_radius_factor'][track_type][genome_len]
+        x_radius_factor = config_dict['labels']['inner_arc_x_radius_factor'][track_type][strands][genome_len]
+        y_radius_factor = config_dict['labels']['inner_arc_y_radius_factor'][track_type][strands][genome_len]
         default_center_x = config_dict['labels']['inner_arc_center_x'][track_type][genome_len]
         default_angle = config_dict['labels']['inner_arc_angle'][track_type][genome_len]
 
@@ -445,12 +445,17 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
     length_threshold = config_dict['labels']['length_threshold']['circular']
     length_param = determine_length_parameter(total_length, length_threshold)
     track_type = config_dict['canvas']['circular']['track_type']
-    radius_factor = config_dict['labels']['radius_factor'][track_type][length_param]
-    inner_radius_factor = config_dict['labels']['inner_radius_factor'][track_type][length_param]
+    strandedness = config_dict['canvas']['strandedness']
+    if strandedness:
+        strands = "separate"
+    else:
+        strands = "single"
+    radius_factor = config_dict['labels']['radius_factor'][track_type][strands][length_param]
+    inner_radius_factor = config_dict['labels']['inner_radius_factor'][track_type][strands][length_param]
     font_family = config_dict['objects']['text']['font_family']
     font_size: str = config_dict['labels']['font_size'][length_param]
     interval = config_dict['canvas']['dpi']
-    strandedness = config_dict['canvas']['strandedness']
+
     track_ratio_factor = config_dict['canvas']['circular']['track_ratio_factors'][length_param][0]
     for feature_object in feature_dict.values():
         feature_label_text = get_label_text(feature_object)
@@ -538,10 +543,10 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
                     else:
                         label_entry["is_inner"] = True
                         right_inner_labels.append(label_entry)
-    right_labels_rearranged = rearrange_labels(right_labels, radius, total_length, length_param, config_dict, is_right=True, is_outer=True)
-    left_labels_rearranged = rearrange_labels(left_labels, radius, total_length, length_param, config_dict, is_right=False, is_outer=True)
-    right_inner_labels_rearranged = rearrange_labels(right_inner_labels, radius, total_length, length_param, config_dict, is_right=True, is_outer=False)
-    left_inner_labels_rearranged = rearrange_labels(left_inner_labels, radius, total_length, length_param, config_dict, is_right=False, is_outer=False)
+    right_labels_rearranged = rearrange_labels(right_labels, radius, total_length, length_param, config_dict, strands, is_right=True, is_outer=True)
+    left_labels_rearranged = rearrange_labels(left_labels, radius, total_length, length_param, config_dict, strands, is_right=False, is_outer=True)
+    right_inner_labels_rearranged = rearrange_labels(right_inner_labels, radius, total_length, length_param, config_dict, strands, is_right=True, is_outer=False)
+    left_inner_labels_rearranged = rearrange_labels(left_inner_labels, radius, total_length, length_param, config_dict, strands, is_right=False, is_outer=False)
 
     label_list = embedded_labels + right_labels_rearranged + left_labels_rearranged + right_inner_labels_rearranged + left_inner_labels_rearranged
     return label_list
