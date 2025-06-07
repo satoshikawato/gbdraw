@@ -199,47 +199,47 @@ def y_overlap(label1, label2, minimum_margin):
     label1_start_y = label1["start_y"]
     label2_start_y = label2["start_y"]
     if label1_start_y < label2_start_y:
-        if (label1_start_y + 0.5 * label1["height_px"] +  minimum_margin) > (label2_start_y - 0.5 * label2["height_px"]):
+        if (label1_start_y + 0.5 * label1["height_px"] + minimum_margin) > (label2_start_y - 0.5 * label2["height_px"]):
             return True
         else:
             return False
     else:
-        if (label2_start_y + 0.5 * label2["height_px"] +   minimum_margin) > (label1_start_y - 0.5 * label1["height_px"] ):
+        if (label2_start_y + 0.5 * label2["height_px"] + minimum_margin) > (label1_start_y - 0.5 * label1["height_px"] ):
             return True
         else:
             return False
 
             
-def x_overlap(label1, label2):
+def x_overlap(label1, label2, minimum_margin=10.0):
     # Adjusted to directly return the evaluated condition
     if label1["is_inner"] == False:
-        if label1["start_x"] > 0:
-            min_x1 = label1["start_x"]
-            max_x1 = label1["start_x"] + label1["width_px"]
+        if label1["middle_x"] > 0:
+            max_x1 = label1["start_x"] + label1["width_px"] + 0.5 * minimum_margin
+            min_x1 = label1["start_x"] - 0.5 * minimum_margin
         else:
-            max_x1 = label1["start_x"]
-            min_x1 = label1["start_x"] - label1["width_px"]
+            max_x1 = label1["start_x"] + 0.5 * minimum_margin
+            min_x1 = label1["start_x"] - label1["width_px"] - 0.5 * minimum_margin
     else:
-        if label1["start_x"] > 0:
-            min_x1 = label1["start_x"]
-            max_x1 = label1["start_x"] - label1["width_px"]
+        if label1["middle_x"] > 0:
+            max_x1 = label1["start_x"] + 0.5 * minimum_margin
+            min_x1 = label1["start_x"] - label1["width_px"] - 0.5 * minimum_margin
         else:
-            max_x1 = label1["start_x"]
-            min_x1 = label1["start_x"] + label1["width_px"]
+            max_x1 = label1["start_x"] + label1["width_px"] + 0.5 * minimum_margin
+            min_x1 = label1["start_x"] - 0.5 * minimum_margin
     if label2["is_inner"] == False:
-        if label2["start_x"] > 0:
-            min_x2 = label2["start_x"]
-            max_x2 = label2["start_x"] + label2["width_px"]
+        if label2["middle_x"] > 0:
+            max_x2 = label2["start_x"] + label2["width_px"] + 0.5 * minimum_margin
+            min_x2 = label2["start_x"] - 0.5 * minimum_margin
         else:
-            max_x2 = label2["start_x"]
-            min_x2 = label2["start_x"] - label2["width_px"]
+            max_x2 = label2["start_x"] + 0.5 * minimum_margin
+            min_x2 = label2["start_x"] - label2["width_px"] - 0.5 * minimum_margin
     else:
-        if label2["start_x"] > 0:
-            max_x2 = label2["start_x"]
-            min_x2 = label2["start_x"] - label2["width_px"]
+        if label2["middle_x"] > 0:
+            max_x2 = label2["start_x"] + 0.5 * minimum_margin
+            min_x2 = label2["start_x"] - label2["width_px"] - 0.5 * minimum_margin
         else:
-            min_x2 = label2["start_x"]
-            max_x2 = label2["start_x"] + label2["width_px"]    
+            max_x2 = label2["start_x"] + label2["width_px"] + 0.5 * minimum_margin
+            min_x2 = label2["start_x"] - 0.5 * minimum_margin
     if min_x1 < min_x2:
         if max_x1 >= min_x2:
             return True
@@ -272,11 +272,7 @@ def calculate_coordinates(center_x, center_y, x_radius, y_radius, angle_degrees,
     angle_radians = math.radians(angle_degrees)
     y = center_y + y_radius * math.sin(angle_radians)
     x = center_x + x_radius * math.cos(angle_radians)
-    
-    # Adjust x-coordinate for left side labels
-    #if middle >= total_length/2:
-    #    x = center_x - abs(x_radius * math.cos(angle_radians))
-    
+
     return x, y
 
 def calculate_angle_for_y(center_y, y_radius, y):
@@ -290,7 +286,7 @@ def calculate_angle_for_y(center_y, y_radius, y):
         return None  # Indicates the y-coordinate is outside the ellipse's bounds
 
 
-def place_labels_on_arc_fc(labels: list[dict],center_x: float,center_y: float,x_radius: float,y_radius: float,start_angle: float,end_angle: float,total_length: int, margin=1.0, max_iterations=1000) -> list[dict]:
+def place_labels_on_arc_fc(labels: list[dict],center_x: float,center_y: float,x_radius: float,y_radius: float,start_angle: float,end_angle: float,total_length: int, margin=2.0, max_iterations=1000) -> list[dict]:
     def calculate_angle(x, y, origin_x, origin_y):
         return math.degrees(math.atan2((y - origin_y), (x - origin_x))) % 360 
 
@@ -313,14 +309,23 @@ def place_labels_on_arc_fc(labels: list[dict],center_x: float,center_y: float,x_
         return y_overlap(label1, label2, margin) and x_overlap(label1, label2)
     rearranged_labels = []
     labels = sort_labels(labels)
-    current_angle = -90
-    increment = abs(360/len(labels))
+    current_angle = -70
+    increment = abs(280/len(labels))
     for i, label in enumerate(labels):
         if i == 0:
             label['start_x'], label['start_y'] = calculate_coordinates(center_x, center_y, x_radius, y_radius, current_angle, label['middle'], total_length)
             rearranged_labels.append(label)
         else:
             new_angle = (current_angle + increment)
+            if new_angle <-70: 
+                new_angle = -70
+            elif -70 <= new_angle <70:
+                if label['middle'] > (total_length / 2):
+                    new_angle = 110
+            elif 70 <= new_angle < 110:
+                new_angle = 110
+            else:
+                new_angle = new_angle
             label['start_x'], label['start_y'] = calculate_coordinates(center_x, center_y, x_radius, y_radius, new_angle, label['middle'], total_length)
             rearranged_labels.append(label)
             current_angle = new_angle
@@ -333,24 +338,7 @@ def euclidean_distance(x1, y1, x2, y2):
 def sort_labels(labels):
     return sorted(labels, key=lambda x: x['middle'])
 
-def would_overlap_any(new_x: float, new_y: float,
-                      label: dict, labels: list[dict],
-                      margin: float) -> bool:
-    """
-    仮座標 (new_x, new_y) に label を置いたとき，
-    他のどのラベルとも衝突するか？ True/False を返す。
-    """
-    probe = label.copy()
-    probe['start_x'], probe['start_y'] = new_x, new_y
-
-    for other in labels:
-        if other is label:          # 自分自身は無視
-            continue
-        if y_overlap(probe, other, margin) and x_overlap(probe, other):
-            return True
-    return False
-
-def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, feature_radius, total_length, start_angle, end_angle, margin=0.5, max_iterations=10000):
+def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, feature_radius, total_length, start_angle, end_angle, margin=1.0, max_iterations=1000):
     def calculate_angle(x, y, origin_x, origin_y):
         return math.degrees(math.atan2((y - origin_y), (x - origin_x))) % 360 
 
@@ -381,7 +369,6 @@ def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, 
             current_angle = calculate_angle_degrees(center_x, center_y, label['start_x'], label['start_y'], label['middle'], start_angle, end_angle, total_length, x_radius, y_radius, normalize=normalize)
 
             current_score = calculate_angle_of_three_points(label["feature_middle_x"], label["feature_middle_y"], 0, 0, label['start_x'], label['start_y'])
-            #current_score = euclidean_distance(label["feature_middle_x"], label["feature_middle_y"], label['start_x'], label['start_y'])
             # Check overlaps with neighbors
             if i == 0:
                 #print(len(labels), i, reverse_i)
@@ -407,12 +394,10 @@ def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, 
                 test_angle_plus = (current_angle + 1)
                 test_x_plus, test_y_plus = move_label(label, test_angle_plus)
                 score_plus = calculate_angle_of_three_points(label["feature_middle_x"], label["feature_middle_y"], 0, 0, test_x_plus, test_y_plus)
-                #score_plus = euclidean_distance(label["feature_middle_x"], label["feature_middle_y"], test_x_plus, test_y_plus)
                 
                 test_angle_minus = (current_angle - 1)
                 test_x_minus, test_y_minus = move_label(label, test_angle_minus)
                 score_minus = calculate_angle_of_three_points(label["feature_middle_x"], label["feature_middle_y"], 0, 0, test_x_minus, test_y_minus)
-                #score_minus = euclidean_distance(label["feature_middle_x"], label["feature_middle_y"], test_x_minus, test_y_minus)
                 direction = 1 if abs(score_plus) < abs(score_minus) else -1
 
             # Move label
@@ -420,7 +405,6 @@ def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, 
                 new_angle = (current_angle + direction * 0.1)
                 new_x, new_y = move_label(label, new_angle)
                 new_score = calculate_angle_of_three_points(label["feature_middle_x"], label["feature_middle_y"], 0, 0, new_x, new_y)
-                #new_score = euclidean_distance(label["feature_middle_x"], label["feature_middle_y"],new_x, new_y)
                 # Check if this move would create overlap with neighbors
                 label_copy = label
                 label_copy['start_x'], label_copy['start_y'] = new_x, new_y               
@@ -453,14 +437,10 @@ def rearrange_labels_fc(labels, feature_radius, total_length, genome_len, config
         x_radius_factor = config_dict['labels']['arc_x_radius_factor'][track_type][strands][genome_len]
         y_radius_factor = config_dict['labels']['arc_y_radius_factor'][track_type][strands][genome_len]
         default_center_x = config_dict['labels']['arc_center_x'][track_type][genome_len]
-        #default_angle = config_dict['labels']['arc_angle'][track_type][genome_len]
-
     else:
         x_radius_factor = config_dict['labels']['inner_arc_x_radius_factor'][track_type][strands][genome_len]
         y_radius_factor = config_dict['labels']['inner_arc_y_radius_factor'][track_type][strands][genome_len]
         default_center_x = config_dict['labels']['inner_arc_center_x'][track_type][genome_len]
-        # default_angle = config_dict['labels']['inner_arc_angle'][track_type][genome_len]
-
 
     x_radius = feature_radius * x_radius_factor  # Adjust this factor as needed
     y_radius = feature_radius * y_radius_factor   # Adjust this factor as needed
@@ -485,6 +465,8 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
     right_labels = []
     left_inner_labels = []
     right_inner_labels = []
+    outer_labels_rearranged = []
+    inner_labels_rearranged = []
     outer_labels = []
     inner_labels = []
     label_list = []
@@ -497,6 +479,7 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
         strands = "separate"
     else:
         strands = "single"
+    place_inner_labels = config_dict['canvas']['circular']['place_inner_labels']
     radius_factor = config_dict['labels']['radius_factor'][track_type][strands][length_param]
     inner_radius_factor = config_dict['labels']['inner_radius_factor'][track_type][strands][length_param]
     font_family = config_dict['objects']['text']['font_family']
@@ -546,7 +529,7 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
             label_end = label_middle + (label_as_feature_length/2)
             feature_middle_x: float = (radius * factors[1]) * math.cos(math.radians(360.0 * ((label_middle) / total_length) - 90))
             feature_middle_y: float = (radius * factors[1]) * math.sin(math.radians(360.0 * ((label_middle) / total_length) - 90))
-            if feature_object.strand == "positive":
+            if feature_object.strand == "positive" or place_inner_labels == False:
                 middle_x: float = (radius_factor * radius) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90)) # 1.05?
                 middle_y: float = (radius_factor * radius) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90)) # 1.05?  
             else:
@@ -575,28 +558,24 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
                 embedded_labels.append(label_entry)
             else:
                 if label_entry["middle"] > (total_length / 2):
-                    if feature_object.strand == "positive":
+                    if feature_object.strand == "positive" or place_inner_labels == False:
                         label_entry["is_inner"] = False
-                        left_labels.append(label_entry)
                         outer_labels.append(label_entry)
                        
                     else:
                         label_entry["is_inner"] = True
-                        left_inner_labels.append(label_entry)
                         inner_labels.append(label_entry)
                         
                 else:
-                    if feature_object.strand == "positive":
+                    if feature_object.strand == "positive" or place_inner_labels == False:
                         label_entry["is_inner"] = False
-                        right_labels.append(label_entry)
                         outer_labels.append(label_entry)
                     else:
                         label_entry["is_inner"] = True
-                        right_inner_labels.append(label_entry)
                         inner_labels.append(label_entry)
     outer_labels_rearranged = rearrange_labels_fc(outer_labels, radius, total_length, length_param, config_dict, strands, is_outer=True)
-    inner_labels_rearranged = rearrange_labels_fc(inner_labels, radius, total_length, length_param, config_dict, strands, is_outer=False)
-    #label_list = embedded_labels + right_labels_rearranged + left_labels_rearranged + right_inner_labels_rearranged + left_inner_labels_rearranged
+    if place_inner_labels == True:
+        inner_labels_rearranged = rearrange_labels_fc(inner_labels, radius, total_length, length_param, config_dict, strands, is_outer=False)
     label_list_fc = embedded_labels + outer_labels_rearranged + inner_labels_rearranged
     return label_list_fc
 
