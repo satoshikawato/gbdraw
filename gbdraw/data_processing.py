@@ -722,7 +722,7 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
    
    # Adjust track height based on strandedness
    if strandedness:
-       track_height = 0.25 * cds_height  # Reduced height for separate strands mode
+       track_height = 0.275 * cds_height  # Reduced height for separate strands mode
    else:
        track_height = 0.50 * cds_height  # Original height for default mode
    for track_id in sorted(track_dict.keys()):

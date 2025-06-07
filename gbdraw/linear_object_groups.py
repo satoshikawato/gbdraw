@@ -385,7 +385,7 @@ class SeqRecordGroup:
                 if not label["is_embedded"]:
                     line_path = Line(
                         start=(label["middle"], label["feature_middle_y"]),
-                        end=(label["middle"], label["middle_y"]),
+                        end=(label["middle"], label["middle_y"] + 0.45 * label["height_px"]),
                         stroke=self.label_stroke_color,
                         stroke_width=self.label_stroke_width
                     )
