@@ -154,7 +154,7 @@ def update_config_value(config_dict, path, value):
 
 def modify_config_dict(config_dict, block_stroke_width=None, block_stroke_color=None, 
                        line_stroke_color=None, line_stroke_width=None, 
-                       gc_stroke_color=None, show_gc=None, show_skew=None, show_labels=None, align_center=None, cicular_width_with_labels=None, track_type=None, strandedness=None, resolve_overlaps=None) -> dict:
+                       gc_stroke_color=None, show_gc=None, show_skew=None, show_labels=None, align_center=None, cicular_width_with_labels=None, track_type=None, strandedness=None, resolve_overlaps=None, allow_inner_labels=None) -> dict:
     # Mapping of parameter names to their paths in the config_dict
     
     param_paths = {
@@ -170,6 +170,7 @@ def modify_config_dict(config_dict, block_stroke_width=None, block_stroke_color=
         'align_center': 'canvas.linear.align_center',
         'track_type': 'canvas.circular.track_type',
         'resolve_overlaps': 'canvas.resolve_overlaps',
+        'allow_inner_labels': 'canvas.circular.allow_inner_labels',
     }
     # Update the config_dict for each specified parameter
     for param, path in param_paths.items():

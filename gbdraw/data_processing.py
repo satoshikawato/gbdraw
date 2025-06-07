@@ -479,7 +479,7 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
         strands = "separate"
     else:
         strands = "single"
-    place_inner_labels = config_dict['canvas']['circular']['place_inner_labels']
+    allow_inner_labels = config_dict['canvas']['circular']['allow_inner_labels']
     radius_factor = config_dict['labels']['radius_factor'][track_type][strands][length_param]
     inner_radius_factor = config_dict['labels']['inner_radius_factor'][track_type][strands][length_param]
     font_family = config_dict['objects']['text']['font_family']
@@ -529,7 +529,7 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
             label_end = label_middle + (label_as_feature_length/2)
             feature_middle_x: float = (radius * factors[1]) * math.cos(math.radians(360.0 * ((label_middle) / total_length) - 90))
             feature_middle_y: float = (radius * factors[1]) * math.sin(math.radians(360.0 * ((label_middle) / total_length) - 90))
-            if feature_object.strand == "positive" or place_inner_labels == False:
+            if feature_object.strand == "positive" or allow_inner_labels == False:
                 middle_x: float = (radius_factor * radius) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90)) # 1.05?
                 middle_y: float = (radius_factor * radius) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90)) # 1.05?  
             else:
@@ -558,7 +558,7 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
                 embedded_labels.append(label_entry)
             else:
                 if label_entry["middle"] > (total_length / 2):
-                    if feature_object.strand == "positive" or place_inner_labels == False:
+                    if feature_object.strand == "positive" or allow_inner_labels == False:
                         label_entry["is_inner"] = False
                         outer_labels.append(label_entry)
                        
@@ -567,14 +567,14 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
                         inner_labels.append(label_entry)
                         
                 else:
-                    if feature_object.strand == "positive" or place_inner_labels == False:
+                    if feature_object.strand == "positive" or allow_inner_labels == False:
                         label_entry["is_inner"] = False
                         outer_labels.append(label_entry)
                     else:
                         label_entry["is_inner"] = True
                         inner_labels.append(label_entry)
     outer_labels_rearranged = rearrange_labels_fc(outer_labels, radius, total_length, length_param, config_dict, strands, is_outer=True)
-    if place_inner_labels == True:
+    if allow_inner_labels == True:
         inner_labels_rearranged = rearrange_labels_fc(inner_labels, radius, total_length, length_param, config_dict, strands, is_outer=False)
     label_list_fc = embedded_labels + outer_labels_rearranged + inner_labels_rearranged
     return label_list_fc

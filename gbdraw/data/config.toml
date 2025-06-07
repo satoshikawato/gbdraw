@@ -19,7 +19,7 @@ track_ratio = 0.19
 track_dict.short = {"middle" = {1 = 1.0, 2 = 0.75, 3 = 0.55}, "spreadout" = {1 = 1.0, 2 = 0.85, 3 = 0.60}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.50}}
 track_dict.long = {"middle" = {1 = 1.0, 2 = 0.75, 3 = 0.60}, "spreadout" = {1 = 1.0, 2 = 0.80, 3 = 0.65}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.55}}
 track_type = 'tuckin'
-place_inner_labels = true
+allow_inner_labels = false
 [canvas.circular.width]
   with_labels = 1400
   without_labels = 1000

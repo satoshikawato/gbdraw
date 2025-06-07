@@ -153,6 +153,10 @@ def _get_args(args) -> argparse.Namespace:
         '--show_labels',
         help='Show feature labels (default: False).',
         action='store_true')
+    parser.add_argument(
+        '--allow_inner_labels',
+        help='Place labels inside the circle (default: False).',
+        action='store_true')
     if len(sys.argv) == 1:
         parser.print_help(sys.stderr)
         sys.exit(1)
@@ -192,6 +196,11 @@ def circular_main(cmd_args) -> None:
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
     show_labels: bool = args.show_labels
+    allow_inner_labels: bool = args.allow_inner_labels
+    if allow_inner_labels and not show_labels:
+        show_labels = True  # If inner labels are allowed, labels must be shown
+        logger.warning(
+            "WARNING: Inner labels are allowed, but labels are not shown. Enabling labels.")
     user_defined_default_colors: str = args.default_colors
     block_stroke_color: str = args.block_stroke_color
     block_stroke_width: str = args.block_stroke_width
@@ -206,7 +215,7 @@ def circular_main(cmd_args) -> None:
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     show_gc, show_skew = suppress_gc_content_and_skew(
         suppress_gc, suppress_skew)
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_labels=show_labels, track_type=track_type, strandedness=strandedness, show_gc=show_gc, show_skew=show_skew)
+    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_labels=show_labels, track_type=track_type, strandedness=strandedness, show_gc=show_gc, show_skew=show_skew, allow_inner_labels=allow_inner_labels)
     out_formats: list[str] = parse_formats(args.format)
     record_count: int = 0
     gb_records: list[SeqRecord] = load_gbks(input_file, "circular")
