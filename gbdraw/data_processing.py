@@ -361,7 +361,7 @@ def place_labels_on_arc_fc(labels: list[dict],center_x: float,center_y: float,x_
         new_x = center_x + x_radius * math.cos(math.radians(angle))
         new_y = center_y + y_radius * math.sin(math.radians(angle))
         return new_x, new_y
-
+      
     def calculate_angle_of_three_points(x1, y1, x2, y2, x3, y3):
         v1 = (x1 - x2, y1 - y2)
         v2 = (x3 - x2, y3 - y2)
@@ -405,7 +405,6 @@ def euclidean_distance(x1, y1, x2, y2):
 def sort_labels(labels):
     return sorted(labels, key=lambda x: x['middle'])
 
-
 def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, feature_radius, total_length, start_angle, end_angle, y_margin=1.0, max_iterations=10000):
     def calculate_angle(x, y, origin_x, origin_y):
         return math.degrees(math.atan2((y - origin_y), (x - origin_x))) % 360 
@@ -439,14 +438,11 @@ def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, 
             current_score = calculate_angle_of_three_points(label["feature_middle_x"], label["feature_middle_y"], 0, 0, label['start_x'], label['start_y'])
             # Check overlaps with neighbors
             if i == 0:
-                #print(len(labels), i, reverse_i)
                 overlaps_prev = check_overlap(label, labels[reverse_i-1], total_length)
                 overlaps_next = check_overlap(label, labels[0], total_length)
             elif 0 < i < len(labels) - 1:
-                #print(len(labels), i, reverse_i)
                 overlaps_prev = check_overlap(labels[reverse_i-1], label, total_length)
                 overlaps_next = check_overlap(label, labels[reverse_i+1], total_length)
-                
             elif i == len(labels)- 1 :
                 overlaps_prev = check_overlap(label, labels[-1], total_length)
                 overlaps_next = check_overlap(label, labels[reverse_i+1], total_length)  
