@@ -194,47 +194,114 @@ def prepare_legend_table(gc_config, skew_config, feature_config, features_presen
 
 
 
-def y_overlap(label1, label2, minimum_margin):
+def y_overlap(label1, label2, total_len, minimum_margin):
     # Adjusted to consider absolute values for y coordinates
     label1_start_y = label1["start_y"]
     label2_start_y = label2["start_y"]
-    if label1_start_y < label2_start_y:
-        if (label1_start_y + 0.5 * label1["height_px"] + minimum_margin) > (label2_start_y - 0.5 * label2["height_px"]):
+    label1_angle = (360.0 * (label1["middle"] / total_len)) % 360
+    label2_angle = (360.0 * (label2["middle"] / total_len)) % 360
+    if label1["is_inner"] == False:
+        if   0   <= label1_angle < 10:    # baseline_value = "text-after-edge"
+            max_y1 = label1_start_y 
+            min_y1 = label1_start_y - 1.0 * label1["height_px"] - 0.5 * minimum_margin 
+        elif 10  <= label1_angle < 170:   # baseline_value = "middle"
+            max_y1 = label1_start_y + 0.5 * label1["height_px"] + 0.5 * minimum_margin
+            min_y1 = label1_start_y - 0.5 * label1["height_px"] - 0.5 * minimum_margin
+        elif 170 <= label1_angle < 190:   # baseline_value = "hanging"
+            max_y1 = label1_start_y + 1.0 * label1["height_px"] + 0.5 * minimum_margin
+            min_y1 = label1_start_y - 0.5 * minimum_margin 
+        elif 190 <= label1_angle < 350:   # baseline_value = "middle"
+            max_y1 = label1_start_y + 0.5 * label1["height_px"] + 0.5 * minimum_margin
+            min_y1 = label1_start_y - 0.5 * label1["height_px"] - 0.5 * minimum_margin
+        else:                      # baseline_value = "text-after-edge"
+            max_y1 = label1_start_y 
+            min_y1 = label1_start_y - 1.0 * label1["height_px"] - 0.5 * minimum_margin
+    else:
+        if   0   <= label1_angle < 10:    # baseline_value = "hanging"
+            max_y1 = label1_start_y + 1.0 * label1["height_px"] + 0.5 * minimum_margin 
+            min_y1 = label1_start_y 
+        elif 10  <= label1_angle < 170:   # baseline_value = "middle"
+            max_y1 = label1_start_y + 0.5 * label1["height_px"] + 0.5 * minimum_margin
+            min_y1 = label1_start_y - 0.5 * label1["height_px"] - 0.5 * minimum_margin
+        elif 170 <= label1_angle < 190:   # baseline_value = "middle"
+            max_y1 = label1_start_y + 0.5 * label1["height_px"] + 0.5 * minimum_margin
+            min_y1 = label1_start_y - 0.5 * label1["height_px"] - 0.5 * minimum_margin
+        elif 190 <= label1_angle < 350:   # baseline_value = "middle"
+            max_y1 = label1_start_y + 0.5 * label1["height_px"] + 0.5 * minimum_margin
+            min_y1 = label1_start_y - 0.5 * label1["height_px"] - 0.5 * minimum_margin
+        else:                      # baseline_value = "hanging"
+            max_y1 = label1_start_y 
+            min_y1 = label1_start_y - 1.0 * label1["height_px"] - 0.5 * minimum_margin
+    if label2["is_inner"] == False:
+        if   0   <= label2_angle < 10:    # baseline_value = "text-after-edge"
+            max_y2 = label2_start_y 
+            min_y2 = label2_start_y - 1.0 * label2["height_px"] - 0.5 * minimum_margin
+        elif 10  <= label2_angle < 170:   # baseline_value = "middle"
+            max_y2 = label2_start_y + 0.5 * label2["height_px"] + 0.5 * minimum_margin
+            min_y2 = label2_start_y - 0.5 * label2["height_px"] - 0.5 * minimum_margin
+        elif 170 <= label2_angle < 190:   # baseline_value = "hanging"
+            max_y2 = label2_start_y + 1.0 * label2["height_px"] + 0.5 * minimum_margin
+            min_y2 = label2_start_y - 0.5 * minimum_margin
+        elif 190 <= label2_angle < 350:   # baseline_value = "middle"
+            max_y2 = label2_start_y + 0.5 * label2["height_px"] + 0.5 * minimum_margin
+            min_y2 = label2_start_y - 0.5 * label2["height_px"] - 0.5 * minimum_margin
+        else:                      # baseline_value = "text-after-edge"
+            max_y2 = label2_start_y
+            min_y2 = label2_start_y - 1.0 * label2["height_px"] - 0.5 * minimum_margin
+    else:
+        if   0   <= label2_angle < 10:    # baseline_value = "hanging"
+            max_y2 = label2_start_y + 1.0 * label2["height_px"] + 0.5 * minimum_margin
+            min_y2 = label2_start_y
+        elif 10  <= label2_angle < 170:   # baseline_value = "middle"
+            max_y2 = label2_start_y + 0.5 * label2["height_px"] + 0.5 * minimum_margin
+            min_y2 = label2_start_y - 0.5 * label2["height_px"] - 0.5 * minimum_margin
+        elif 170 <= label2_angle < 190:   # baseline_value = "middle"
+            max_y2 = label2_start_y + 0.5 * label2["height_px"] + 0.5 * minimum_margin
+            min_y2 = label2_start_y - 0.5 * label2["height_px"] - 0.5 * minimum_margin
+        elif 190 <= label2_angle < 350:   # baseline_value = "middle"
+            max_y2 = label2_start_y + 0.5 * label2["height_px"] + 0.5 * minimum_margin
+            min_y2 = label2_start_y - 0.5 * label2["height_px"] - 0.5 * minimum_margin
+        else:                      # baseline_value = "hanging"
+            max_y2 = label2_start_y + 1.0 * label2["height_px"] + 0.5 * minimum_margin
+            min_y2 = label2_start_y
+    if min_y1 < min_y2:
+        if max_y1 >= min_y2:
             return True
         else:
             return False
     else:
-        if (label2_start_y + 0.5 * label2["height_px"] + minimum_margin) > (label1_start_y - 0.5 * label1["height_px"] ):
+        if max_y2 >= min_y1:
             return True
         else:
             return False
 
             
-def x_overlap(label1, label2, minimum_margin=10.0):
+def x_overlap(label1, label2, minimum_margin=5.0):
     # Adjusted to directly return the evaluated condition
+
     if label1["is_inner"] == False:
-        if label1["middle_x"] > 0:
+        if label1["start_x"] > 0:
             max_x1 = label1["start_x"] + label1["width_px"] + 0.5 * minimum_margin
             min_x1 = label1["start_x"] - 0.5 * minimum_margin
         else:
             max_x1 = label1["start_x"] + 0.5 * minimum_margin
             min_x1 = label1["start_x"] - label1["width_px"] - 0.5 * minimum_margin
     else:
-        if label1["middle_x"] > 0:
+        if label1["start_x"] > 0:
             max_x1 = label1["start_x"] + 0.5 * minimum_margin
             min_x1 = label1["start_x"] - label1["width_px"] - 0.5 * minimum_margin
         else:
             max_x1 = label1["start_x"] + label1["width_px"] + 0.5 * minimum_margin
             min_x1 = label1["start_x"] - 0.5 * minimum_margin
     if label2["is_inner"] == False:
-        if label2["middle_x"] > 0:
+        if label2["start_x"] > 0:
             max_x2 = label2["start_x"] + label2["width_px"] + 0.5 * minimum_margin
             min_x2 = label2["start_x"] - 0.5 * minimum_margin
         else:
             max_x2 = label2["start_x"] + 0.5 * minimum_margin
             min_x2 = label2["start_x"] - label2["width_px"] - 0.5 * minimum_margin
     else:
-        if label2["middle_x"] > 0:
+        if label2["start_x"] > 0:
             max_x2 = label2["start_x"] + 0.5 * minimum_margin
             min_x2 = label2["start_x"] - label2["width_px"] - 0.5 * minimum_margin
         else:
@@ -286,7 +353,7 @@ def calculate_angle_for_y(center_y, y_radius, y):
         return None  # Indicates the y-coordinate is outside the ellipse's bounds
 
 
-def place_labels_on_arc_fc(labels: list[dict],center_x: float,center_y: float,x_radius: float,y_radius: float,start_angle: float,end_angle: float,total_length: int, margin=2.0, max_iterations=1000) -> list[dict]:
+def place_labels_on_arc_fc(labels: list[dict],center_x: float,center_y: float,x_radius: float,y_radius: float,start_angle: float,end_angle: float,total_length: int) -> list[dict]:
     def calculate_angle(x, y, origin_x, origin_y):
         return math.degrees(math.atan2((y - origin_y), (x - origin_x))) % 360 
 
@@ -294,7 +361,7 @@ def place_labels_on_arc_fc(labels: list[dict],center_x: float,center_y: float,x_
         new_x = center_x + x_radius * math.cos(math.radians(angle))
         new_y = center_y + y_radius * math.sin(math.radians(angle))
         return new_x, new_y
-
+      
     def calculate_angle_of_three_points(x1, y1, x2, y2, x3, y3):
         v1 = (x1 - x2, y1 - y2)
         v2 = (x3 - x2, y3 - y2)
@@ -305,8 +372,8 @@ def place_labels_on_arc_fc(labels: list[dict],center_x: float,center_y: float,x_
         angle = math.acos(max(-1, min(1, cos_angle)))
         return math.degrees(angle)
 
-    def check_overlap(label1, label2):
-        return y_overlap(label1, label2, margin) and x_overlap(label1, label2)
+    def check_overlap(label1, label2, total_length, margin):
+        return y_overlap(label1, label2, total_length, margin) and x_overlap(label1, label2, minimum_margin=10)
     rearranged_labels = []
     labels = sort_labels(labels)
     current_angle = -70
@@ -338,7 +405,7 @@ def euclidean_distance(x1, y1, x2, y2):
 def sort_labels(labels):
     return sorted(labels, key=lambda x: x['middle'])
 
-def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, feature_radius, total_length, start_angle, end_angle, margin=1.0, max_iterations=1000):
+def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, feature_radius, total_length, start_angle, end_angle, y_margin=1.0, max_iterations=10000):
     def calculate_angle(x, y, origin_x, origin_y):
         return math.degrees(math.atan2((y - origin_y), (x - origin_x))) % 360 
 
@@ -357,8 +424,8 @@ def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, 
         angle = math.acos(max(-1, min(1, cos_angle)))
         return math.degrees(angle)
 
-    def check_overlap(label1, label2):
-        return y_overlap(label1, label2, margin) and x_overlap(label1, label2)
+    def check_overlap(label1, label2, total_length):
+        return y_overlap(label1, label2, total_length, y_margin) and x_overlap(label1, label2, minimum_margin=10)
 
     labels = sort_labels(labels)
     for iteration in range(max_iterations):
@@ -371,17 +438,14 @@ def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, 
             current_score = calculate_angle_of_three_points(label["feature_middle_x"], label["feature_middle_y"], 0, 0, label['start_x'], label['start_y'])
             # Check overlaps with neighbors
             if i == 0:
-                #print(len(labels), i, reverse_i)
-                overlaps_prev = check_overlap(label, labels[reverse_i -1])
-                overlaps_next = check_overlap(label, labels[0])
+                overlaps_prev = check_overlap(label, labels[reverse_i-1], total_length)
+                overlaps_next = check_overlap(label, labels[0], total_length)
             elif 0 < i < len(labels) - 1:
-                #print(len(labels), i, reverse_i)
-                overlaps_prev = check_overlap(labels[reverse_i-1], label)
-                overlaps_next = check_overlap(label, labels[reverse_i+1])
-                
+                overlaps_prev = check_overlap(labels[reverse_i-1], label, total_length)
+                overlaps_next = check_overlap(label, labels[reverse_i+1], total_length)
             elif i == len(labels)- 1 :
-                overlaps_prev = check_overlap(label, labels[-1])
-                overlaps_next = check_overlap(label, labels[reverse_i+1])  
+                overlaps_prev = check_overlap(label, labels[-1], total_length)
+                overlaps_next = check_overlap(label, labels[reverse_i+1], total_length)  
             if overlaps_prev and overlaps_next:
                 continue
             # Determine movement direction
@@ -401,30 +465,44 @@ def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, 
                 direction = 1 if abs(score_plus) < abs(score_minus) else -1
 
             # Move label
+            creates_new_overlap = False
             while True:
                 new_angle = (current_angle + direction * 0.1)
                 new_x, new_y = move_label(label, new_angle)
                 new_score = calculate_angle_of_three_points(label["feature_middle_x"], label["feature_middle_y"], 0, 0, new_x, new_y)
                 # Check if this move would create overlap with neighbors
-                label_copy = label
+                label_copy = label.copy()
                 label_copy['start_x'], label_copy['start_y'] = new_x, new_y               
                 if i == 0:
-                    creates_new_overlap = (check_overlap(label_copy, labels[reverse_i - 1])) or (check_overlap(label_copy, labels[0]))
+                    if overlaps_prev:
+                        creates_new_overlap = (check_overlap(label_copy, labels[0], total_length))
+                    elif overlaps_next:
+                        creates_new_overlap = (check_overlap(label_copy, labels[reverse_i - 1], total_length))
+                    else: 
+                        creates_new_overlap = (check_overlap(label_copy, labels[reverse_i - 1], total_length)) or (check_overlap(label_copy, labels[0], total_length))
                 elif 0 < i < len(labels)-1:
                     prev_label = labels[reverse_i - 1]
                     next_label = labels[reverse_i + 1]
-                    creates_new_overlap = (check_overlap(label_copy, prev_label)) or (check_overlap(label_copy, next_label))
+                    if overlaps_prev:
+                        creates_new_overlap = (check_overlap(label_copy, next_label, total_length))
+                    elif overlaps_next:
+                        creates_new_overlap = (check_overlap(label_copy, prev_label, total_length))
+                    else:
+                        creates_new_overlap = (check_overlap(label_copy, prev_label, total_length)) or (check_overlap(label_copy, next_label, total_length))
                 elif i == len(labels) -1:
-                    creates_new_overlap = (check_overlap(label_copy, labels[-1])) or (check_overlap(label_copy, labels[reverse_i +1]))
-                
-                if (abs(new_score) < abs(current_score)) and not creates_new_overlap:
+                    if overlaps_prev:
+                        creates_new_overlap = (check_overlap(label_copy, labels[reverse_i + 1], total_length))
+                    elif overlaps_next:
+                        creates_new_overlap = (check_overlap(label_copy, labels[-1], total_length))
+                    else:
+                        creates_new_overlap = (check_overlap(label_copy, labels[-1], total_length)) or (check_overlap(label_copy, labels[reverse_i +1], total_length))
+                if (abs(new_score) <= abs(current_score)) and not creates_new_overlap:
                     label['start_x'], label['start_y'] = new_x, new_y
                     current_angle = new_angle
                     current_score = new_score
                     changes_made = True
                 else:
                     break  # Can't move further without issues or no improvement
-
         if not changes_made:
             break  # No changes were made in this iteration, so we can stop
 
@@ -722,7 +800,7 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
    
    # Adjust track height based on strandedness
    if strandedness:
-       track_height = 0.25 * cds_height  # Reduced height for separate strands mode
+       track_height = 0.275 * cds_height  # Reduced height for separate strands mode
    else:
        track_height = 0.50 * cds_height  # Original height for default mode
    for track_id in sorted(track_dict.keys()):

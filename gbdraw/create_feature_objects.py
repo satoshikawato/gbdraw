@@ -243,10 +243,7 @@ def check_feature_overlap(feature1: dict, feature2: dict, separate_strands: bool
     
     return any(overlap_conditions)
 def check_feature_overlap(a: dict, b: dict, separate_strands: bool) -> bool:
-    """
-    a, b の feature dict がオーバーラップするか判定──
-    separate_strands=True 時は strand が同じもののみ比較。
-    """
+
     # strand が違えば overlap なし
     if separate_strands and a["strand"] != b["strand"]:
         return False
@@ -260,12 +257,7 @@ def find_best_track(
     resolve_overlaps: bool,
     max_track: int = 100
 ) -> int:
-    """
-    feature を置くべきトラック番号を返す。
-    ── separate_strands=True なら正負別々に番号を振り、
-       resolve_overlaps=False なら常に 0（positive）または -1（negative）を返す。
-    ── track_dict: "track_<番号>" -> そのトラックに置かれた feature dict のリスト
-    """
+
     # トラックを試す順番を決める
     if not separate_strands:
         # 全て同一レーン

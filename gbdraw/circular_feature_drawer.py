@@ -406,6 +406,7 @@ class LabelDrawer:
             self,
             total_len: int,
             tick: float,
+            start_x: float,
             is_inner: bool = False
     ) -> Tuple[
             Literal["middle", "start", "end"],
@@ -431,7 +432,7 @@ class LabelDrawer:
         angle = (360.0 * (tick / total_len)) % 360
 
         # Same left/right anchor logic for both inner & outer
-        if   0   <= angle < 180:
+        if   start_x > 0:
             if is_inner:
                 anchor_value = "end"
             else:
@@ -445,16 +446,17 @@ class LabelDrawer:
         # Baseline must flip when we draw inside the circle
         if is_inner:
             # Inside: hang text *towards* centre
-            if   10  <= angle < 170:   baseline_value = "text-after-edge"
+            if   0   <= angle < 10:    baseline_value = "hanging"
+            elif 10  <= angle < 170:   baseline_value = "middle"
             elif 170 <= angle < 190:   baseline_value = "middle"
             elif 190 <= angle < 350:   baseline_value = "middle"
-            else:                      baseline_value = "middle"
+            else:                      baseline_value = "hanging"
         else:
             # Outside: hang text *away* from centre (original gbdraw rule)
             if   0   <= angle < 10:    baseline_value = "text-after-edge"
-            elif 10  <= angle < 155:   baseline_value = "middle"
-            elif 155 <= angle < 205:   baseline_value = "hanging"
-            elif 205 <= angle < 350:   baseline_value = "middle"
+            elif 10  <= angle < 170:   baseline_value = "middle"
+            elif 170 <= angle < 190:   baseline_value = "hanging"
+            elif 190 <= angle < 350:   baseline_value = "middle"
             else:                      baseline_value = "text-after-edge"
 
         return anchor_value, baseline_value
@@ -514,7 +516,7 @@ class LabelDrawer:
         group.add(text_path)
         return group
     def add_label_on_the_rim(self, group, label, radius, record_length):
-            anchor_value, baseline_value = self.set_feature_label_anchor_value(record_length, label["middle"], label.get("is_inner", False))
+            anchor_value, baseline_value = self.set_feature_label_anchor_value(record_length, label["middle"], label["start_x"], label.get("is_inner", False))
             start_x_1 = label["start_x"]
             start_y_1 = label["start_y"]
             label_path = generate_text_path(label["label_text"], start_x_1, start_y_1, interval = 0, font_size = self.font_size, font_weight = 'normal', font = self.font_family, dominant_baseline = baseline_value, text_anchor = anchor_value)
