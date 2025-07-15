@@ -19,8 +19,30 @@ def cleanup():
 
 # タイトル
 st.title("🧬 gbdraw Web App")
-st.caption("Draw genome maps in circular or linear mode")
+st.caption("A genome diagram generator for microbes and organelles")
 
+st.markdown(
+    """
+    <p>
+    <a href="https://anaconda.org/bioconda/gbdraw">
+        <img src="https://anaconda.org/bioconda/gbdraw/badges/version.svg" alt="version">
+    </a>
+    <a href="https://anaconda.org/bioconda/gbdraw">
+        <img src="https://anaconda.org/bioconda/gbdraw/badges/platforms.svg" alt="platforms">
+    </a>
+    <a href="http://bioconda.github.io/recipes/gbdraw/README.html">
+        <img src="https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat" alt="install with bioconda">
+    </a>
+    <a href="https://anaconda.org/bioconda/gbdraw">
+        <img src="https://anaconda.org/bioconda/gbdraw/badges/license.svg" alt="license">
+    </a>
+    <a href="https://deepwiki.com/satoshikawato/gbdraw">
+        <img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki">
+    </a>
+    </p>
+    """,
+    unsafe_allow_html=True
+)
 # --- Tabs for circular / linear ---
 tab_circular, tab_linear = st.tabs(["🔵 Circular", "📏 Linear"])
 
@@ -32,7 +54,7 @@ with tab_circular:
     fmt_circular = st.selectbox("Output format", ["svg", "png", "pdf", "eps", "ps"], index=0, key="circular_fmt")
 
     track_type = st.selectbox("Track type", ["tuckin", "middle", "spreadout"], index=0)
-    show_labels = st.checkbox("Show labels", value=True, key="circular_labels")
+    show_labels = st.checkbox("Show labels", value=False, key="circular_labels")
     separate_strands = st.checkbox("Separate strands", value=False, key="circular_strands")
     palette = st.text_input("Palette name (optional)", value="default", key="circular_palette")
 
@@ -118,7 +140,7 @@ with tab_linear:
                 st.success("✅ gbdraw finished successfully.")
                 # Linear drawing output
 
-                st.subheader("Linear Drawing Output")
+                st.subheader("📏 Linear Drawing Output")
                 output_files = [p for p in Path(".").iterdir() if p.is_file()]
                 if not output_files:
                     st.warning("No output files found.")
@@ -131,3 +153,10 @@ with tab_linear:
                                 data=open(out, "rb"),
                                 file_name=out.name
                             )
+
+st.markdown("---")
+st.markdown(
+    "Author: [Satoshi Kawato](https://github.com/satoshikawato)  |  "
+    "Source: [gbdraw](https://github.com/satoshikawato/gbdraw)",
+    unsafe_allow_html=True
+)
