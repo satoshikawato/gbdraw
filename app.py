@@ -1,103 +1,133 @@
 import streamlit as st
 import subprocess
 import os
-import tempfile
 import shutil
 import uuid
 from pathlib import Path
 
-# Title
-st.title("🧬 gbdraw: GenBank Genome Visualizer")
-st.markdown(
-    """
-    Upload a GenBank file to visualize your genome in **linear** or **circular** mode.
-    Customize colors, tracks, and advanced options.
-    """
-)
+# 一時ディレクトリの作成
+TEMP_DIR = Path("gbdraw_temp")
+TEMP_DIR.mkdir(exist_ok=True)
 
-# Temporary workspace
-WORKDIR = tempfile.mkdtemp(prefix="gbdraw_")
+# ユーザーファイル保存用ディレクトリ
+UPLOAD_DIR = TEMP_DIR / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
 
-# Upload GenBank
-uploaded_file = st.file_uploader("📄 Upload GenBank file", type=["gb", "gbk", "genbank"])
-if uploaded_file:
-    gbk_filename = os.path.join(WORKDIR, f"{uuid.uuid4().hex}.gb")
-    with open(gbk_filename, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    st.success(f"✅ Uploaded {uploaded_file.name}")
+# 一時ファイル掃除
+def cleanup():
+    shutil.rmtree(TEMP_DIR, ignore_errors=True)
 
-# Visualization options
-mode = st.radio("Genome Visualization Mode", ["circular", "linear"])
-track_type = st.selectbox("Track Type", ["tuckin", "middle", "spreadout"], index=0)
-output_format = st.selectbox("Output Format", ["svg", "png", "pdf", "eps"], index=1)
-show_labels = st.checkbox("Show Feature Labels", value=True)
-separate_strands = st.checkbox("Separate Forward/Reverse Strands", value=False)
-legend_position = st.selectbox(
-    "Legend Position",
-    ["right", "left", "upper_left", "upper_right", "lower_left", "lower_right", "none"],
-    index=0
-)
+# タイトル
+st.title("🧬 gbdraw Web App")
+st.caption("Draw genome maps in circular or linear mode")
 
-# Advanced options
-with st.expander("🔧 Advanced Options"):
-    palette = st.text_input("Color Palette (leave blank for default):", "")
-    features = st.text_input("Features to include (comma-separated)", "CDS,tRNA,rRNA")
-    nt = st.text_input("GC Skew dinucleotide (--nt)", "GC")
-    window = st.number_input("GC Skew window size", value=1000, min_value=100, step=100)
-    step = st.number_input("GC Skew step size", value=100, min_value=10, step=10)
-    block_stroke_color = st.text_input("Block Stroke Color", "black")
-    block_stroke_width = st.number_input("Block Stroke Width", value=0.0, step=0.1)
-    line_stroke_color = st.text_input("Line Stroke Color", "gray")
-    line_stroke_width = st.number_input("Line Stroke Width", value=1.0, step=0.1)
+# --- Tabs for circular / linear ---
+tab_circular, tab_linear = st.tabs(["🔵 Circular", "📏 Linear"])
 
-# Run gbdraw
-if st.button("🚀 Run gbdraw") and uploaded_file:
-    # Build command
-    output_prefix = os.path.join(WORKDIR, Path(uploaded_file.name).stem)
-    cmd = [
-        "gbdraw", mode,
-        "-i", gbk_filename,
-        "-f", output_format,
-        "--track_type", track_type,
-        "-o", output_prefix
-    ]
+# --- CIRCULAR TAB ---
+with tab_circular:
+    st.header("Circular Genome Map")
+    gb_file_circular = st.file_uploader("Upload GenBank file", type=["gb", "gbk", "genbank"], key="circular_upload")
+    prefix_circular = st.text_input("Output prefix (optional)", key="circular_prefix")
+    fmt_circular = st.selectbox("Output format", ["svg", "png", "pdf", "eps", "ps"], index=0, key="circular_fmt")
 
-    if show_labels:
-        cmd.append("--show_labels")
-    if separate_strands:
-        cmd.append("--separate_strands")
-    if legend_position != "right":
-        cmd += ["-l", legend_position]
-    if palette.strip():
-        cmd += ["--palette", palette]
-    cmd += [
-        "-n", nt,
-        "-w", str(window),
-        "-s", str(step),
-        "--block_stroke_color", block_stroke_color,
-        "--block_stroke_width", str(block_stroke_width),
-        "--line_stroke_color", line_stroke_color,
-        "--line_stroke_width", str(line_stroke_width),
-        "-k", features
-    ]
+    track_type = st.selectbox("Track type", ["tuckin", "middle", "spreadout"], index=0)
+    show_labels = st.checkbox("Show labels", value=True, key="circular_labels")
+    separate_strands = st.checkbox("Separate strands", value=False, key="circular_strands")
+    palette = st.text_input("Palette name (optional)", value="default", key="circular_palette")
 
-    st.code(" ".join(cmd), language="bash")
-
-    # Execute
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            st.error(f"❌ gbdraw failed:\n{result.stderr}")
+    if st.button("🚀 Run gbdraw Circular"):
+        if gb_file_circular is None:
+            st.error("Please upload a GenBank file first.")
         else:
-            st.success("✅ gbdraw finished successfully")
-            output_file = f"{output_prefix}.{output_format}"
-            if output_format in ("png", "svg"):
-                st.image(output_file, caption="Genome Visualization")
-            st.download_button(
-                "⬇ Download Output File",
-                open(output_file, "rb").read(),
-                file_name=f"{Path(uploaded_file.name).stem}.{output_format}"
-            )
-    except FileNotFoundError:
-        st.error("❌ gbdraw not found. Make sure it is installed in this environment.")
+            # Save uploaded file
+            gb_path = UPLOAD_DIR / f"{uuid.uuid4().hex}_{gb_file_circular.name}"
+            with open(gb_path, "wb") as f:
+                f.write(gb_file_circular.read())
 
+            # Build gbdraw command
+            cmd = ["gbdraw", "circular", "-i", str(gb_path), "-f", fmt_circular]
+            if prefix_circular.strip():
+                cmd += ["-o", prefix_circular.strip()]
+            cmd += ["--track_type", track_type]
+            if show_labels:
+                cmd.append("--show_labels")
+            if separate_strands:
+                cmd.append("--separate_strands")
+            if palette and palette != "default":
+                cmd += ["--palette", palette]
+
+            st.info(f"🛠️ Running: {' '.join(cmd)}")
+
+            # Run gbdraw
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                st.error(f"Error running gbdraw:\n{result.stderr}")
+            else:
+                st.success("✅ gbdraw finished successfully.")
+                # Circular drawing output
+                st.subheader("🌀 Circular Drawing Output")
+                output_files = [p for p in Path(".").iterdir() if p.is_file()]
+                if not output_files:
+                    st.warning("No output files found.")
+                else:
+                    for out in output_files:
+                        if out.suffix.lower() in [".png", ".svg", ".pdf", ".eps", ".ps"]:
+                            st.image(str(out), caption=str(out.name))
+                            st.download_button(
+                                "⬇️ Download " + out.name,
+                                data=open(out, "rb"),
+                                file_name=out.name
+                            )
+
+    # --- LINEAR TAB ---
+with tab_linear:
+    st.header("Linear Genome Map")
+    gb_file_linear = st.file_uploader("Upload GenBank file", type=["gb", "gbk", "genbank"], key="linear_upload")
+    prefix_linear = st.text_input("Output prefix (optional)", key="linear_prefix")
+    fmt_linear = st.selectbox("Output format", ["svg", "png", "pdf", "eps", "ps"], index=0, key="linear_fmt")
+
+    show_labels_linear = st.checkbox("Show labels", value=True, key="linear_labels")
+    palette_linear = st.text_input("Palette name (optional)", value="default", key="linear_palette")
+
+    if st.button("🚀 Run gbdraw Linear"):
+        if gb_file_linear is None:
+            st.error("Please upload a GenBank file first.")
+        else:
+            # Save uploaded file
+            gb_path = UPLOAD_DIR / f"{uuid.uuid4().hex}_{gb_file_linear.name}"
+            with open(gb_path, "wb") as f:
+                f.write(gb_file_linear.read())
+
+            # Build gbdraw command
+            cmd = ["gbdraw", "linear", "-i", str(gb_path), "-f", fmt_linear]
+            if prefix_linear.strip():
+                cmd += ["-o", prefix_linear.strip()]
+            if show_labels_linear:
+                cmd.append("--show_labels")
+            if palette_linear and palette_linear != "default":
+                cmd += ["--palette", palette_linear]
+
+            st.info(f"🛠️ Running: {' '.join(cmd)}")
+
+            # Run gbdraw
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                st.error(f"Error running gbdraw:\n{result.stderr}")
+            else:
+                st.success("✅ gbdraw finished successfully.")
+                # Linear drawing output
+
+                st.subheader("Linear Drawing Output")
+                output_files = [p for p in Path(".").iterdir() if p.is_file()]
+                if not output_files:
+                    st.warning("No output files found.")
+                else:
+                    for out in output_files:
+                        if out.suffix.lower() in [".png", ".svg", ".pdf", ".eps", ".ps"]:
+                            st.image(str(out), caption=str(out.name))
+                            st.download_button(
+                                "⬇️ Download " + out.name,
+                                data=open(out, "rb"),
+                                file_name=out.name
+                            )
