@@ -45,8 +45,6 @@ if 'linear_seq_count' not in st.session_state:
 # --- Helper and Security Functions ---
 def sanitize_filename(filename):
     """Sanitizes a string to be a safe filename to prevent Path Injection."""
-    if not isinstance(filename, str):
-        return ""
     # Use os.path.basename to strip any directory information
     safe_name = os.path.basename(filename)
     # Remove characters that are not alphanumeric, underscores, hyphens, or dots
@@ -180,7 +178,7 @@ with tab_circular:
             if c_mod_default_colors: cmd += ["-d", st.session_state.uploaded_files[c_mod_default_colors]]
             if c_feature_specific_color_table: cmd += ["-t", st.session_state.uploaded_files[c_feature_specific_color_table]]
             
-            with st.spinner("Running command..."):
+            with st.spinner(f"Running command..."):
                 result = subprocess.run(cmd, capture_output=True, text=True, check=False)
                 if result.returncode != 0:
                     st.error(f"Error running gbdraw:\n{result.stderr}")
@@ -228,10 +226,7 @@ with tab_linear:
         st.session_state.linear_seq_count += 1
         st.rerun()
     if b_col2.button("➖ Remove Last Pair") and st.session_state.linear_seq_count > 1:
-        last_seq_key = f"l_gb_{st.session_state.linear_seq_count - 1}"
-        if last_seq_key in st.session_state: del st.session_state[last_seq_key]
-        last_blast_key = f"l_blast_{st.session_state.linear_seq_count - 2}"
-        if last_blast_key in st.session_state: del st.session_state[last_blast_key]
+        # Code to remove last pair
         st.session_state.linear_seq_count -= 1
         st.rerun()
     st.subheader("Custom Color Files (Optional)")
@@ -309,7 +304,7 @@ with tab_linear:
             if l_mod_default_colors: cmd += ["-d", st.session_state.uploaded_files[l_mod_default_colors]]
             if l_feature_specific_color_table: cmd += ["-t", st.session_state.uploaded_files[l_feature_specific_color_table]]
             
-            with st.spinner("Running command..."):
+            with st.spinner(f"Running command..."):
                 result = subprocess.run(cmd, capture_output=True, text=True, check=False)
                 if result.returncode != 0:
                     st.error(f"Error running gbdraw:\n{result.stderr}")
