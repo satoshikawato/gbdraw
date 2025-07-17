@@ -373,24 +373,14 @@ with tab_linear:
         else:
             gb_paths = [st.session_state.uploaded_files[f] for f in selected_gb]
             prefix = l_prefix.strip() or "linear"
+            if not prefix.isalnum() and "_" not in prefix:
+                st.error("Invalid output prefix. Please use only alphanumeric characters or underscores.")
+                return
+
             output_path = Path(f"{prefix}.{l_fmt}")
-            cmd = ["gbdraw", "linear", "-i", *gb_paths, "-o", prefix, "-f", l_fmt]
-            if selected_blast:
-                blast_paths = [st.session_state.uploaded_files[f] for f in selected_blast]
-                cmd += ["-b", *blast_paths]
-            if l_show_labels: cmd.append("--show_labels")
-            if l_separate_strands: cmd.append("--separate_strands")
-            if l_align_center: cmd.append("--align_center")
-            if l_show_gc: cmd.append("--show_gc")
-            if l_resolve_overlaps: cmd.append("--resolve_overlaps")
-            if l_legend != "right": cmd += ["-l", l_legend]
-            if l_palette: cmd += ["--palette", l_palette]
-            cmd += ["-k", l_adv_feat, "-n", l_adv_nt, "-w", str(l_adv_win), "-s", str(l_adv_step)]
-            cmd += ["--bitscore", str(l_adv_bitscore), "--evalue", l_adv_evalue, "--identity", str(l_adv_identity)]
-            cmd += ["--block_stroke_color", l_adv_blk_color, "--block_stroke_width", str(l_adv_blk_width)]
-            cmd += ["--line_stroke_color", l_adv_line_color, "--line_stroke_width", str(l_adv_line_width)]
-            if l_mod_default_colors: cmd += ["-d", st.session_state.uploaded_files[l_mod_default_colors]]
-            if l_feature_specific_color_table: cmd += ["-t", st.session_state.uploaded_files[l_feature_specific_color_table]]
+            allowed_formats = ["svg", "png", "pdf", "eps", "ps"]
+            allowed_legends = ["right", "left", "none"]
+            if l_fmt not in allowed_formats or l_legend not in allowed_legends:
             
             with st.spinner(f"Running: `{' '.join(cmd)}`"):
                 result = subprocess.run(cmd, capture_output=True, text=True)
