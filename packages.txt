@@ -1,3 +1,4 @@
 libcairo2-dev
 pkg-config
 python3-dev
+fontconfig
