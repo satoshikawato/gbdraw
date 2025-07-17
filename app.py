@@ -183,9 +183,11 @@ with tab_circular:
             # Sanitize and validate the prefix
             import re
             safe_prefix = re.sub(r'[^a-zA-Z0-9_-]', '_', prefix)  # Allow only alphanumeric, dashes, and underscores
-            output_path = Path(f"{safe_prefix}.{c_fmt}").resolve()
-            # Ensure output_path is within a predefined safe directory
             safe_dir = Path("./outputs").resolve()
+            # Construct and normalize the output path
+            output_path = safe_dir / f"{safe_prefix}.{c_fmt}"
+            output_path = output_path.resolve()
+            # Ensure output_path is within the predefined safe directory
             if not str(output_path).startswith(str(safe_dir)):
                 raise ValueError("Invalid output path: Potential path traversal attempt.")
             cmd = ["gbdraw", "circular", "-i", gb_path, "-o", prefix, "-f", c_fmt, "--track_type", c_track_type]
