@@ -20,7 +20,7 @@ st.markdown(
     <a href="https://anaconda.org/bioconda/gbdraw"><img src="https://anaconda.org/bioconda/gbdraw/badges/platforms.svg" alt="platforms"></a>
     <a href="http://bioconda.github.io/recipes/gbdraw/README.html"><img src="https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat" alt="install with bioconda"></a>
     <a href="https://anaconda.org/bioconda/gbdraw"><img src="https://anaconda.org/bioconda/gbdraw/badges/license.svg" alt="license"></a>
-    <a href="https://deepwiki.com/satoshikawato/gbdraw"><img src="https://deepwiki.com/satoshikawato/gbdraw" alt="Ask DeepWiki"></a>
+    <a href="https://deepwiki.com/satoshikawato/gbdraw"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
     </p>
     """,
     unsafe_allow_html=True
