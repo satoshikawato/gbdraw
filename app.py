@@ -4,10 +4,10 @@ import os
 import shutil
 import uuid
 from pathlib import Path
-import tomllib  
+import tomllib
 from importlib import resources
 
-# --- アプリケーションの基本設定 ---
+# --- Basic Application Settings ---
 st.set_page_config(layout="wide")
 
 st.title("🧬 gbdraw Web App")
@@ -20,18 +20,18 @@ st.markdown(
     <a href="https://anaconda.org/bioconda/gbdraw"><img src="https://anaconda.org/bioconda/gbdraw/badges/platforms.svg" alt="platforms"></a>
     <a href="http://bioconda.github.io/recipes/gbdraw/README.html"><img src="https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat" alt="install with bioconda"></a>
     <a href="https://anaconda.org/bioconda/gbdraw"><img src="https://anaconda.org/bioconda/gbdraw/badges/license.svg" alt="license"></a>
-    <a href="https://deepwiki.com/satoshikawato/gbdraw"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+    <a href="https://deepwiki.com/satoshikawato/gbdraw"><img src="https.deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
     </p>
     """,
     unsafe_allow_html=True
 )
 
-# --- 一時ディレクトリとセッション状態の初期化 ---
+# --- Temporary Directory and Session State Initialization ---
 TEMP_DIR = Path("gbdraw_temp")
 UPLOAD_DIR = TEMP_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True, parents=True)
 
-# セッション状態の初期化
+# Initialize session state
 if 'uploaded_files' not in st.session_state:
     st.session_state.uploaded_files = {}
 if 'circular_result' not in st.session_state:
@@ -41,12 +41,12 @@ if 'linear_result' not in st.session_state:
 if 'linear_seq_count' not in st.session_state:
     st.session_state.linear_seq_count = 1
 
-# --- ヘルパー関数 ---
+# --- Helper Functions ---
 @st.cache_data
 def get_palettes():
-    """gbdrawの内部ファイルから動的にカラーパレットのリストを取得する"""
+    """Dynamically get the list of color palettes from gbdraw's internal files."""
     try:
-        # tomllib を使用
+        # Use tomllib
         with resources.files("gbdraw").joinpath("data").joinpath("color_palettes.toml").open("rb") as fh:
             doc = tomllib.load(fh)
         return [""] + sorted(k for k in doc if k != "title")
@@ -56,7 +56,7 @@ def get_palettes():
 
 PALETTES = get_palettes()
 
-# --- サイドバー (ファイル管理) ---
+# --- Sidebar (File Management) ---
 with st.sidebar:
     st.header("📂 File Management")
 
@@ -88,26 +88,75 @@ with st.sidebar:
         UPLOAD_DIR.mkdir(exist_ok=True, parents=True)
         st.session_state.uploaded_files = {}
         st.success("All uploaded files have been cleared.")
-        st.rerun() # experimental_rerun を rerun に変更
+        st.rerun() # Rerun to reflect changes
 
-# --- メインコンテンツ（タブ） ---
+# --- Main Content (Tabs) ---
 file_options = [""] + sorted(st.session_state.uploaded_files.keys())
 tab_circular, tab_linear = st.tabs(["🔵 Circular", "📏 Linear"])
 
-# --- CIRCULARタブ ---
+# --- CIRCULAR TAB ---
 with tab_circular:
     st.header("Circular Genome Map")
+
+    # --- START: Move file selection outside the form ---
+    # By moving this outside the form, the selection state is saved immediately.
+    st.subheader("Input Files")
+
+    # GenBank file
+    gb_key = "c_gb"
+    current_gb_selection = st.session_state.get(gb_key, "")
+    try:
+        gb_index = file_options.index(current_gb_selection)
+    except ValueError:
+        gb_index = 0
+    c_gb_file = st.selectbox(
+        "GenBank file:",
+        file_options,
+        index=gb_index,
+        key=gb_key
+    )
+
+    # Custom default color file
+    d_color_key = "c_d_color"
+    current_d_color_selection = st.session_state.get(d_color_key, "")
+    try:
+        d_color_index = file_options.index(current_d_color_selection)
+    except ValueError:
+        d_color_index = 0
+    c_mod_default_colors = st.selectbox(
+        "Custom default color file (optional):",
+        file_options,
+        index=d_color_index,
+        key=d_color_key
+    )
+
+    # Feature-specific color file
+    t_color_key = "c_t_color"
+    current_t_color_selection = st.session_state.get(t_color_key, "")
+    try:
+        t_color_index = file_options.index(current_t_color_selection)
+    except ValueError:
+        t_color_index = 0
+    c_feature_specific_color_table = st.selectbox(
+        "Feature-specific color file (optional):",
+        file_options,
+        index=t_color_index,
+        key=t_color_key
+    )
+    st.markdown("---")
+    # --- END: File selection section ---
+
     with st.form("circular_form"):
-        # (Circularモードのフォーム部分は変更なし)
+        st.header("Drawing Options")
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("Basic Settings")
-            c_gb_file = st.selectbox("GenBank file:", file_options, key="c_gb")
             c_prefix = st.text_input("Output prefix (optional):", help="Default is input file name")
             c_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="c_fmt")
             c_track_type = st.selectbox("Track type:", ["tuckin", "middle", "spreadout"], index=0, key="c_track")
             c_legend = st.selectbox("Legend:", ["right", "left", "upper_left", "upper_right", "lower_left", "lower_right", "none"], index=0, key="c_legend")
             c_palette = st.selectbox("Color palette:", PALETTES, key="c_palette")
+
         with col2:
             st.subheader("Display Options")
             c_show_labels = st.checkbox("Show labels", value=False, key="c_labels")
@@ -117,16 +166,15 @@ with tab_circular:
                 c_adv_nt = st.text_input("Dinucleotide (--nt):", value="GC", key="c_nt")
                 c_adv_win = st.number_input("Window size:", value=1000, key="c_win")
                 c_adv_step = st.number_input("Step size:", value=100, key="c_step")
-                c_adv_blk_color = st.text_input("Block stroke color:", "black", key="c_b_color")
+                c_adv_blk_color = st.text_input("Block stroke color:", "gray", key="c_b_color")
                 c_adv_blk_width = st.number_input("Block stroke width:", 0.0, key="c_b_width")
                 c_adv_line_color = st.text_input("Line stroke color:", "gray", key="c_l_color")
                 c_adv_line_width = st.number_input("Line stroke width:", 1.0, key="c_l_width")
-                c_mod_default_colors = st.selectbox("Custom default color file:", file_options, key="c_d_color")
-                c_feature_specific_color_table = st.selectbox("Feature-specific color file:", file_options, key="c_t_color")
+        
+        # Place the run button at the end of the form
         c_submitted = st.form_submit_button("🚀 Run gbdraw Circular", type="primary")
 
     if c_submitted:
-        # (Circularモードの実行ロジックは変更なし)
         if not c_gb_file:
             st.error("Please select a GenBank file.")
         else:
@@ -143,6 +191,7 @@ with tab_circular:
             cmd += ["--line_stroke_color", c_adv_line_color, "--line_stroke_width", str(c_adv_line_width)]
             if c_mod_default_colors: cmd += ["-d", st.session_state.uploaded_files[c_mod_default_colors]]
             if c_feature_specific_color_table: cmd += ["-t", st.session_state.uploaded_files[c_feature_specific_color_table]]
+            
             with st.spinner(f"Running: `{' '.join(cmd)}`"):
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 if result.returncode != 0:
@@ -152,17 +201,39 @@ with tab_circular:
                     st.success("✅ gbdraw finished successfully.")
                     st.session_state.circular_result = {"path": output_path, "log": result.stdout}
 
+    # --- Circular Tab Result Display ---
     if st.session_state.circular_result:
-        # (Circularモードの結果表示ロジックは変更なし)
         st.subheader("🌀 Circular Drawing Output")
         res = st.session_state.circular_result
         out_path = res["path"]
+
         if out_path.exists():
-            if out_path.suffix.lower() == ".svg": st.image(out_path.read_text(), caption=str(out_path.name))
-            else: st.image(str(out_path), caption=str(out_path.name))
-            with open(out_path, "rb") as f: st.download_button(f"⬇️ Download {out_path.name}", data=f, file_name=out_path.name)
-            with st.expander("Show Log"): st.text(res["log"])
-        else: st.warning("Output file seems to be missing. Please run again.")
+            # Define previewable extensions
+            file_extension = out_path.suffix.lower()
+
+            # Preview handling
+            if file_extension == ".svg":
+                st.image(out_path.read_text(), caption=str(out_path.name))
+            elif file_extension == ".png":
+                st.image(str(out_path), caption=str(out_path.name))
+            else:
+                # For formats that do not support preview
+                st.info(f"📄 Preview is not available for {out_path.suffix.upper()} format. Please use the download button below.")
+
+            # Download button (always displayed)
+            with open(out_path, "rb") as f:
+                st.download_button(
+                    f"⬇️ Download {out_path.name}",
+                    data=f,
+                    file_name=out_path.name
+                )
+            
+            # Log display
+            with st.expander("Show Log"):
+                st.text(res["log"])
+                
+        else:
+            st.warning("Output file seems to be missing. Please run again.")
 
 # --- LINEAR TAB ---
 with tab_linear:
@@ -174,42 +245,32 @@ with tab_linear:
         for i in range(st.session_state.linear_seq_count):
             cols = st.columns([3, 3])
             with cols[0]:
-                # --- START: 選択状態を確実に維持するための修正 ---
                 gb_key = f"l_gb_{i}"
-                # session_stateから現在の選択値を取得
                 current_gb_selection = st.session_state.get(gb_key, "")
                 try:
-                    # 現在利用可能な選択肢リスト(file_options)から、現在の選択値が何番目にあるかを探す
                     gb_index = file_options.index(current_gb_selection)
                 except ValueError:
-                    # もし選択値がリストになければ（例：ファイルを全削除した場合）、先頭（空白）を選択する
                     gb_index = 0
-                
                 st.selectbox(
                     f"Sequence File {i+1}",
                     file_options,
-                    index=gb_index,  # インデックスを明示的に指定
+                    index=gb_index,
                     key=gb_key,
                 )
-                # --- END ---
-
             if i < st.session_state.linear_seq_count - 1:
                 with cols[1]:
-                    # --- START: comparisonファイルも同様に修正 ---
                     blast_key = f"l_blast_{i}"
                     current_blast_selection = st.session_state.get(blast_key, "")
                     try:
                         blast_index = file_options.index(current_blast_selection)
                     except ValueError:
                         blast_index = 0
-
                     st.selectbox(
                         f"Comparison File {i+1}",
                         file_options,
-                        index=blast_index, # インデックスを明示的に指定
+                        index=blast_index,
                         key=blast_key,
                     )
-                    # --- END ---
 
     b_col1, b_col2, _ = st.columns([1, 2, 5])
     if b_col1.button("➕ Add Pair"):
@@ -222,11 +283,44 @@ with tab_linear:
             del st.session_state[last_seq_key]
         if last_blast_key in st.session_state:
             del st.session_state[last_blast_key]
-        
         st.session_state.linear_seq_count -= 1
         st.rerun()
 
+    # --- START: Move custom color file selection outside the form ---
+    st.subheader("Custom Color Files (Optional)")
+    
+    # Custom default color file
+    d_color_key = "l_d_color"
+    current_d_color_selection = st.session_state.get(d_color_key, "")
+    try:
+        d_color_index = file_options.index(current_d_color_selection)
+    except ValueError:
+        d_color_index = 0
+    l_mod_default_colors = st.selectbox(
+        "Custom default color file:",
+        file_options,
+        index=d_color_index,
+        key=d_color_key
+    )
+
+    # Feature-specific color file
+    t_color_key = "l_t_color"
+    current_t_color_selection = st.session_state.get(t_color_key, "")
+    try:
+        t_color_index = file_options.index(current_t_color_selection)
+    except ValueError:
+        t_color_index = 0
+    l_feature_specific_color_table = st.selectbox(
+        "Feature-specific color file:",
+        file_options,
+        index=t_color_index,
+        key=t_color_key
+    )
+    st.markdown("---")
+    # --- END ---
+
     with st.form("linear_form"):
+        st.header("Drawing Options")
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("Basic Settings")
@@ -256,8 +350,8 @@ with tab_linear:
                 l_adv_blk_width = st.number_input("Block stroke width:", 0.0, key="l_b_width")
                 l_adv_line_color = st.text_input("Line stroke color:", "gray", key="l_l_color")
                 l_adv_line_width = st.number_input("Line stroke width:", 1.0, key="l_l_width")
-                l_mod_default_colors = st.selectbox("Custom default color file:", file_options, key="l_d_color")
-                l_feature_specific_color_table = st.selectbox("Feature-specific color file:", file_options, key="l_t_color")
+                # Custom color file selections were moved outside the form, so they are removed from here.
+        
         l_submitted = st.form_submit_button("🚀 Run gbdraw Linear", type="primary")
 
     if l_submitted:
@@ -297,6 +391,7 @@ with tab_linear:
             cmd += ["--line_stroke_color", l_adv_line_color, "--line_stroke_width", str(l_adv_line_width)]
             if l_mod_default_colors: cmd += ["-d", st.session_state.uploaded_files[l_mod_default_colors]]
             if l_feature_specific_color_table: cmd += ["-t", st.session_state.uploaded_files[l_feature_specific_color_table]]
+            
             with st.spinner(f"Running: `{' '.join(cmd)}`"):
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 if result.returncode != 0:
@@ -306,18 +401,41 @@ with tab_linear:
                     st.success("✅ gbdraw finished successfully.")
                     st.session_state.linear_result = {"path": output_path, "log": result.stdout}
 
+    # --- Linear Tab Result Display ---
     if st.session_state.linear_result:
         st.subheader("📏 Linear Drawing Output")
         res = st.session_state.linear_result
         out_path = res["path"]
+        
         if out_path.exists():
-            if out_path.suffix.lower() == ".svg": st.image(out_path.read_text(), caption=str(out_path.name))
-            else: st.image(str(out_path), caption=str(out_path.name))
-            with open(out_path, "rb") as f: st.download_button(f"⬇️ Download {out_path.name}", data=f, file_name=out_path.name)
-            with st.expander("Show Log"): st.text(res["log"])
-        else: st.warning("Output file seems to be missing. Please run again.")
+            # Define previewable extensions
+            file_extension = out_path.suffix.lower()
 
-# --- フッター ---
+            # Preview handling
+            if file_extension == ".svg":
+                st.image(out_path.read_text(), caption=str(out_path.name))
+            elif file_extension == ".png":
+                st.image(str(out_path), caption=str(out_path.name))
+            else:
+                # For formats that do not support preview
+                st.info(f"📄 Preview is not available for {out_path.suffix.upper()} format. Please use the download button below.")
+
+            # Download button (always displayed)
+            with open(out_path, "rb") as f:
+                st.download_button(
+                    f"⬇️ Download {out_path.name}",
+                    data=f,
+                    file_name=out_path.name
+                )
+            
+            # Log display
+            with st.expander("Show Log"):
+                st.text(res["log"])
+                
+        else:
+            st.warning("Output file seems to be missing. Please run again.")
+
+# --- Footer ---
 st.markdown("---")
 st.markdown(
     "Author: [Satoshi Kawato](https://github.com/satoshikawato)  |  "
