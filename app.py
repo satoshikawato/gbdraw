@@ -180,7 +180,14 @@ with tab_circular:
         else:
             gb_path = st.session_state.uploaded_files[c_gb_file]
             prefix = c_prefix.strip() or Path(c_gb_file).stem
-            output_path = Path(f"{prefix}.{c_fmt}")
+            # Sanitize and validate the prefix
+            import re
+            safe_prefix = re.sub(r'[^a-zA-Z0-9_-]', '_', prefix)  # Allow only alphanumeric, dashes, and underscores
+            output_path = Path(f"{safe_prefix}.{c_fmt}").resolve()
+            # Ensure output_path is within a predefined safe directory
+            safe_dir = Path("./outputs").resolve()
+            if not str(output_path).startswith(str(safe_dir)):
+                raise ValueError("Invalid output path: Potential path traversal attempt.")
             cmd = ["gbdraw", "circular", "-i", gb_path, "-o", prefix, "-f", c_fmt, "--track_type", c_track_type]
             if c_show_labels: cmd.append("--show_labels")
             if c_separate_strands: cmd.append("--separate_strands")
