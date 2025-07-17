@@ -54,6 +54,10 @@ mamba create -n gbdraw -y  -c conda-forge -c bioconda -c local gbdraw
 # 5. Activate the environment
 mamba activate gbdraw
 ```
+### Streamlit Web App (no local installation)
+A GUI web app of `gbdraw` (latest commit on `main` branch) is available on Streamlit without any local installation:
+[https://gbdraw.streamlit.app/](https://gbdraw.streamlit.app/)
+
 ### Colab Notebook (no local installation; Google account required)
 You can try `gbdraw` (latest release) on Google Colaboratory without any local installation:
 
