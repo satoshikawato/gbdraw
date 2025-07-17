@@ -151,7 +151,12 @@ with tab_circular:
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("Basic Settings")
-            c_prefix = st.text_input("Output prefix (optional):", help="Default is input file name")
+            import re
+            c_prefix_raw = st.text_input("Output prefix (optional):", help="Default is input file name")
+            c_prefix = c_prefix_raw.strip()
+            if c_prefix and not re.match(r"^[a-zA-Z0-9_\-]+$", c_prefix):
+                st.error("Invalid output prefix. Use only letters, numbers, underscores, or hyphens.")
+                c_prefix = ""
             c_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="c_fmt")
             c_track_type = st.selectbox("Track type:", ["tuckin", "middle", "spreadout"], index=0, key="c_track")
             c_legend = st.selectbox("Legend:", ["right", "left", "upper_left", "upper_right", "lower_left", "lower_right", "none"], index=0, key="c_legend")
@@ -179,7 +184,7 @@ with tab_circular:
             st.error("Please select a GenBank file.")
         else:
             gb_path = st.session_state.uploaded_files[c_gb_file]
-            prefix = c_prefix.strip() or Path(c_gb_file).stem
+            prefix = c_prefix or Path(c_gb_file).stem
             output_path = Path(f"{prefix}.{c_fmt}")
             cmd = ["gbdraw", "circular", "-i", gb_path, "-o", prefix, "-f", c_fmt, "--track_type", c_track_type]
             if c_show_labels: cmd.append("--show_labels")
