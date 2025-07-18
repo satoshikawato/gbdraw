@@ -135,12 +135,21 @@ with tab_circular:
         if not c_gb_file:
             st.error("Please select a GenBank file.")
         else:
-            gb_path = st.session_state.uploaded_files[c_gb_file]
-            # VULNERABILITY FIX: Sanitize prefix to prevent path traversal
             safe_prefix = Path(c_prefix.strip() or Path(c_gb_file).stem).name
-            output_path = Path(f"{safe_prefix}.{c_fmt}")
+            output_path = TEMP_DIR / f"{safe_prefix}.{c_fmt}"
             
-            circular_args = ["-i", gb_path, "-o", safe_prefix, "-f", c_fmt, "--track_type", c_track_type]
+            # Explicit security check to satisfy static analysis tools
+            try:
+                trusted_dir = TEMP_DIR.resolve()
+                absolute_output_path = output_path.resolve()
+                if not str(absolute_output_path).startswith(str(trusted_dir)):
+                    raise Exception("Attempted to write to a disallowed path.")
+            except Exception as e:
+                st.error(f"Security check failed: {e}")
+                st.stop()
+            
+            gb_path = st.session_state.uploaded_files[c_gb_file]
+            circular_args = ["-i", gb_path, "-o", str(output_path.with_suffix('')), "-f", c_fmt, "--track_type", c_track_type]
             if c_show_labels: circular_args.append("--show_labels")
             if c_separate_strands: circular_args.append("--separate_strands")
             if c_legend != "right": circular_args += ["-l", c_legend]
@@ -153,11 +162,8 @@ with tab_circular:
 
             logger = logging.getLogger()
             log_capture = io.StringIO()
-            
-            # NEW: Add the executed command to the top of the log
             command_str = f"gbdraw circular {' '.join(circular_args)}"
             log_capture.write(f"--- Executed Command ---\n{command_str}\n------------------------\n\n")
-
             stream_handler = logging.StreamHandler(log_capture)
             stream_handler.setLevel(logging.INFO)
             logger.addHandler(stream_handler)
@@ -266,12 +272,21 @@ with tab_linear:
         elif selected_blast and len(selected_blast) != len(selected_gb) - 1:
             st.error(f"Please provide {len(selected_gb) - 1} comparison file(s) for {len(selected_gb)} sequence files.")
         else:
-            gb_paths = [st.session_state.uploaded_files[f] for f in selected_gb]
-            # VULNERABILITY FIX: Sanitize prefix
             safe_prefix = Path(l_prefix.strip() or "linear").name
-            output_path = Path(f"{safe_prefix}.{l_fmt}")
-            
-            linear_args = ["-i", *gb_paths, "-o", safe_prefix, "-f", l_fmt]
+            output_path = TEMP_DIR / f"{safe_prefix}.{l_fmt}"
+
+            # Explicit security check to satisfy static analysis tools
+            try:
+                trusted_dir = TEMP_DIR.resolve()
+                absolute_output_path = output_path.resolve()
+                if not str(absolute_output_path).startswith(str(trusted_dir)):
+                    raise Exception("Attempted to write to a disallowed path.")
+            except Exception as e:
+                st.error(f"Security check failed: {e}")
+                st.stop()
+
+            gb_paths = [st.session_state.uploaded_files[f] for f in selected_gb]
+            linear_args = ["-i", *gb_paths, "-o", str(output_path.with_suffix('')), "-f", l_fmt]
             if selected_blast:
                 blast_paths = [st.session_state.uploaded_files[f] for f in selected_blast]
                 linear_args += ["-b", *blast_paths]
@@ -291,11 +306,8 @@ with tab_linear:
             
             logger = logging.getLogger()
             log_capture = io.StringIO()
-            
-            # NEW: Add the executed command to the top of the log
             command_str = f"gbdraw linear {' '.join(linear_args)}"
             log_capture.write(f"--- Executed Command ---\n{command_str}\n------------------------\n\n")
-
             stream_handler = logging.StreamHandler(log_capture)
             stream_handler.setLevel(logging.INFO)
             logger.addHandler(stream_handler)
