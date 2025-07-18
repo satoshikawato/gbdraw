@@ -175,7 +175,7 @@ def load_comparisons(
 
 def load_default_colors(user_defined_default_colors: str, palette: str = "default") -> DataFrame:
     """
-    Load the built-in colour palette from *color\_palettes.toml* (section
+    Load the built-in colour palette from *color_palettes.toml* (section
     `[default]` by default) and merge any user-supplied TSV overrides.
 
     ```
