@@ -134,8 +134,8 @@ def create_gene_object(feature_id: str, feature: SeqFeature, color_table: DataFr
     note: str = feature.qualifiers.get('note', [""])[0]
     product: str = feature.qualifiers.get('product', [""])[0]
     gene: str = feature.qualifiers.get('gene', [""])[0]
-    location: list[Tuple[str, str, str, int, int, bool]
-                   ] = get_exon_and_intron_coordinates(coordinates, genome_length)
+    is_trans_spliced = 'trans_splicing' in feature.qualifiers
+    location: list[Tuple[str, str, str, int, int, bool]] = get_exon_and_intron_coordinates(coordinates, genome_length, is_trans_spliced)
     color: str = get_color(feature, color_table, default_colors)
     label_text = get_label_text(feature)
     gene_object = GeneObject(
@@ -244,10 +244,8 @@ def check_feature_overlap(feature1: dict, feature2: dict, separate_strands: bool
     return any(overlap_conditions)
 def check_feature_overlap(a: dict, b: dict, separate_strands: bool) -> bool:
 
-    # strand が違えば overlap なし
     if separate_strands and a["strand"] != b["strand"]:
         return False
-    # interval [start,end] の重なりチェック
     return not (a["end"] < b["start"] or a["start"] > b["end"])
 
 def find_best_track(
@@ -258,12 +256,9 @@ def find_best_track(
     max_track: int = 100
 ) -> int:
 
-    # トラックを試す順番を決める
     if not separate_strands:
-        # 全て同一レーン
         track_nums = [0] if not resolve_overlaps else list(range(0, max_track))
     else:
-        # +strand は >=0, -strand は <0 に分ける
         if not resolve_overlaps:
             track_nums = [0] if feature["strand"] == "positive" else [-1]
         else:
@@ -272,21 +267,17 @@ def find_best_track(
             else:
                 track_nums = list(range(-1, -max_track-1, -1))
 
-    # 重複解消ありなら、順にトラックを試す
     if resolve_overlaps:
         for tn in track_nums:
             key = f"track_{abs(tn)}"
-            # トラック自体に何もなければ即決
             if key not in track_dict or not track_dict[key]:
                 return tn
-            # 既存の feature と重ならなければここに決定
             for existing in track_dict[key]:
                 if check_feature_overlap(feature, existing, separate_strands):
                     break
             else:
                 return tn
 
-    # 重複解消なしなら最初の要素を返す
     return track_nums[0]
 
 def arrange_feature_tracks(feature_dict: Dict[str, FeatureObject], separate_strands: bool, resolve_overlaps: bool) -> Dict[str, FeatureObject]:
@@ -511,55 +502,44 @@ def get_intron_coordinate(previous_exon: Tuple[str, str, str, int, int, bool], c
     return intron_count, intron_parts
 
 
-def get_exon_and_intron_coordinates(exons: List[SimpleLocation], genome_length: int) -> list[Tuple[str, str, str, int, int, bool]]:
+def get_exon_and_intron_coordinates(exons: List[SimpleLocation], genome_length: int, is_trans_spliced: bool = False) -> list[Tuple[str, str, str, int, int, bool]]:
     """
     Processes a list of exons to determine the coordinates of both exons and introns.
-
-    Args:
-        exons (List[SimpleLocation]): List of exon locations.
-        genome_length (int): Total length of the genome.
-
-    Returns:
-        list[Tuple[str, str, str, int, int, bool]]: A list of tuples with details for both exons and introns.
-
-    For each exon in the list, this function calculates its coordinates and then the coordinates of the intron 
-    following it. It handles single-exon cases as well as the transition from the last exon to the first in 
-    circular genomes.
+    Handles trans-spliced features by drawing only exons without introns.
     """
     coordinates_list: list[Tuple[str, str, str, int, int, bool]] = []
     exon_count: int = 0
     intron_count: int = 0
-    exon_coord: Tuple[str, str, str, int, int, bool]
-    intron_coords: list[Tuple[str, str, str, int, int, bool]]
     num_exons: int = len(exons)
+
+    if num_exons == 0:
+        return []
+
     if num_exons == 1:
-        exon_count, exon_coord = get_exon_coordinate(
-            exons[0], exon_count, True)
+        exon_count, exon_coord = get_exon_coordinate(exons[0], exon_count, True)
         coordinates_list.append(exon_coord)
-    elif num_exons != 1:
-        for exon in exons:
-            if exon_count == 0:
-                exon_count, exon_coord = get_exon_coordinate(
-                    exon, exon_count, False)
-                coordinates_list.append(exon_coord)
-            elif exon_count != 0:
-                if exon_count < (num_exons - 1):
-                    exon_count, exon_coord = get_exon_coordinate(
-                        exon, exon_count, False)
-                    if coordinates_list[-1]:
-                        intron_count, intron_coords = get_intron_coordinate(
-                            coordinates_list[-1], exon_coord, intron_count, genome_length)
-                        coordinates_list.extend(intron_coords)
-                    else:
-                        pass
-                    coordinates_list.append(exon_coord)
-                elif exon_count == (num_exons - 1):
-                    exon_count, exon_coord = get_exon_coordinate(
-                        exon, exon_count, True)
-                    intron_count, intron_coords = get_intron_coordinate(
-                        coordinates_list[-1], exon_coord, intron_count, genome_length)
-                    coordinates_list.extend(intron_coords)
-                    coordinates_list.append(exon_coord)
+
+    elif num_exons > 1 and not is_trans_spliced:
+        for i, exon in enumerate(exons):
+            is_last_exon = (i == num_exons - 1)
+            exon_count, exon_coord = get_exon_coordinate(exon, i, is_last_exon)
+
+            if i > 0:
+                previous_exon_coord = coordinates_list[-1]
+                intron_count, intron_coords = get_intron_coordinate(
+                    previous_exon_coord, exon_coord, intron_count, genome_length)
+                coordinates_list.extend(intron_coords)
+            
+            coordinates_list.append(exon_coord)
+
+
+    elif num_exons > 1 and is_trans_spliced:
+
+        for i, exon in enumerate(exons):
+            is_last = (i == num_exons - 1)
+            exon_count, exon_coord = get_exon_coordinate(exon, i, is_last)
+            coordinates_list.append(exon_coord)
+            
     return coordinates_list
 
 

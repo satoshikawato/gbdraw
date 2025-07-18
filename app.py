@@ -188,6 +188,15 @@ with tab_circular:
             st.subheader("Display Options")
             c_show_labels = st.checkbox("Show labels", value=False, key="c_labels")
             c_separate_strands = st.checkbox("Separate strands", value=False, key="c_strands")
+            c_allow_inner_labels = st.checkbox("Allow inner labels", value=False, key="c_inner_labels")
+            # Suppress GC content and GC skew tracks if inner labels are allowed
+            if c_allow_inner_labels:
+                st.info("💡 Inner labels are enabled. GC content and GC skew tracks will be automatically suppressed to avoid overlap.")
+                c_suppress_gc = True
+                c_suppress_skew = True
+            else:
+                c_suppress_gc = st.checkbox("Suppress GC content track", value=False, key="c_gc_suppress")
+                c_suppress_skew = st.checkbox("Suppress GC skew track", value=False, key="c_skew_suppress")
             with st.expander("🔧 Advanced Options"):
 
                 c_adv_feat = st.multiselect(
@@ -219,6 +228,15 @@ with tab_circular:
             circular_args = ["-i", gb_path, "-o", prefix, "-f", c_fmt, "--track_type", c_track_type]
             if c_show_labels: circular_args.append("--show_labels")
             if c_separate_strands: circular_args.append("--separate_strands")
+            if c_allow_inner_labels:
+                circular_args.append("--allow_inner_labels")
+                # If inner labels are allowed, suppress GC content and GC skew tracks
+                circular_args.append("--suppress_gc")
+                circular_args.append("--suppress_skew")
+            else:
+                # Only add these options if inner labels are not allowed
+                if c_suppress_gc: circular_args.append("--suppress_gc")
+                if c_suppress_skew: circular_args.append("--suppress_skew")
             if c_legend != "right": circular_args += ["-l", c_legend]
             if c_palette: circular_args += ["--palette", c_palette]
             circular_args += ["-k", ",".join(c_adv_feat), "-n", c_adv_nt, "-w", str(c_adv_win), "-s", str(c_adv_step)]

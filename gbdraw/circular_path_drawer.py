@@ -270,16 +270,6 @@ def generate_circular_intron_path(radius: float, coord_dict: Dict[str, Union[str
 def generate_circular_arrowhead_path(radius: float, coord_dict: Dict[str, Union[str, int]], total_length: int, cds_arrow_length: float, track_ratio: float, cds_ratio: float, offset: float, track_type: str, strandedness: bool) -> list[str]:
     """
     Generates the SVG path description for an arrowhead feature on a circular canvas.
-
-    Args:
-        radius (float): Radius of the circular canvas.
-        coord_dict (Dict[str, Union[str, int]]): Dictionary with coordinates and feature information.
-        total_length (int): Total length of the genomic sequence.
-        cds_arrow_length (float): Length of the coding sequence arrow.
-        track_ratio (float): Ratio for determining the track width.
-
-    Returns:
-        list[str]: SVG path description for the arrowhead feature.
     """
     coord_strand: str = str(coord_dict['coord_strand'])
     factors: list[float] = calculate_feature_position_factors_circular(
@@ -301,8 +291,7 @@ def generate_circular_arrowhead_path(radius: float, coord_dict: Dict[str, Union[
             " 0 0 0 ",
             " 0 0 1 ")}
     arrow_start, arrow_end, param_1, param_2 = arrow_strand_dict[coord_strand]
-    shoulder: float = set_arrow_shoulder(
-        coord_strand, arrow_end, cds_arrow_length)
+
     if abs(coord_len) < cds_arrow_length:
         point_x: float = (
             radius * factors[1]) * math.cos(math.radians(360.0 * (arrow_end / total_length) - 90))
@@ -331,6 +320,10 @@ def generate_circular_arrowhead_path(radius: float, coord_dict: Dict[str, Union[
             math.radians(360.0 * (arrow_start / total_length) - 90))
         start_y_2 = (radius * factors[2]) * math.sin(
             math.radians(360.0 * (arrow_start / total_length) - 90))
+        
+        shoulder: float = set_arrow_shoulder(
+            coord_strand, arrow_end, cds_arrow_length)
+
         end_x_1: float = (
             radius * factors[0]) * math.cos(math.radians(360.0 * ((shoulder) / total_length) - 90))
         end_y_1: float = (
@@ -339,54 +332,113 @@ def generate_circular_arrowhead_path(radius: float, coord_dict: Dict[str, Union[
             radius * factors[2]) * math.cos(math.radians(360.0 * ((shoulder) / total_length) - 90))
         end_y_2: float = (
             radius * factors[2]) * math.sin(math.radians(360.0 * ((shoulder) / total_length) - 90))
-        feature_path = "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(radius) + "," + str(radius) + param_1 + str(end_x_1) + "," + str(end_y_1) + " L" + str(
-            point_x) + "," + str(point_y) + " L" + str(end_x_2) + "," + str(end_y_2) + "A" + str(radius) + "," + str(radius) + param_2 + str(start_x_2) + "," + str(start_y_2) + " z"
+
+        # Calculate the arc length and angle for the arrowhead
+        arc_len_bp = abs(coord_len) - cds_arrow_length
+        angle_deg = 360.0 * arc_len_bp / total_length
+
+        outer_arc_path = ""
+        inner_arc_path = ""
+        # If the angle is greater than 89 degrees, we need to create a mid-point for the arc
+        if angle_deg > 20:
+            # 
+            if coord_strand == "positive":
+                mid_pos = (arrow_start + (shoulder - arrow_start) / 2)
+            else: # negative
+                mid_pos = (shoulder + (arrow_start - shoulder) / 2)
+
+            mid_x_1 = (radius * factors[0]) * math.cos(math.radians(360.0 * (mid_pos / total_length) - 90))
+            mid_y_1 = (radius * factors[0]) * math.sin(math.radians(360.0 * (mid_pos / total_length) - 90))
+            mid_x_2 = (radius * factors[2]) * math.cos(math.radians(360.0 * (mid_pos / total_length) - 90))
+            mid_y_2 = (radius * factors[2]) * math.sin(math.radians(360.0 * (mid_pos / total_length) - 90))
+            
+            # Extract the sweep flags from the parameters
+            sweep_flag_1 = param_1.strip().split(" ")[2]
+            segment_param_1 = f" 0 0 {sweep_flag_1} "
+            sweep_flag_2 = param_2.strip().split(" ")[2]
+            segment_param_2 = f" 0 0 {sweep_flag_2} "
+            
+            # Create the outer and inner arc paths
+            outer_arc_path = f"A{radius * factors[0]},{radius * factors[0]}{segment_param_1}{mid_x_1},{mid_y_1} A{radius * factors[0]},{radius * factors[0]}{segment_param_1}{end_x_1},{end_y_1}"
+            inner_arc_path = f"A{radius * factors[2]},{radius * factors[2]}{segment_param_2}{mid_x_2},{mid_y_2} A{radius * factors[2]},{radius * factors[2]}{segment_param_2}{start_x_2},{start_y_2}"
+            feature_path = f"M {start_x_1},{start_y_1} {outer_arc_path} L {point_x},{point_y} L {end_x_2},{end_y_2} {inner_arc_path} z"
+
+        else:
+            feature_path = "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(radius) + "," + str(radius) + param_1 + str(end_x_1) + "," + str(end_y_1) + " L" + str(
+                point_x) + "," + str(point_y) + " L" + str(end_x_2) + "," + str(end_y_2) + "A" + str(radius) + "," + str(radius) + param_2 + str(start_x_2) + "," + str(start_y_2) + " z"
+
+        
     return ["block", feature_path]
 
 
 def generate_circular_rectangle_path(radius: float, coord_dict: Dict[str, Union[str, int]], total_length: int, track_ratio: float, cds_ratio, offset, track_type: str, strandedness: bool) -> list[str]:
     """
     Generates the SVG path description for a rectangular feature on a circular canvas.
-
-    Args:
-        radius (float): Radius of the circular canvas.
-        coord_dict (Dict[str, Union[str, int]]): Dictionary with coordinates and feature information.
-        total_length (int): Total length of the genomic sequence.
-        track_ratio (float): Ratio for determining the track width.
-
-    Returns:
-        list[str]: SVG path description for the rectangular feature.
     """
     coord_strand: str = str(coord_dict['coord_strand'])
     factors: list[float] = calculate_feature_position_factors_circular(
         total_length, coord_strand, track_ratio, cds_ratio, offset, track_type, strandedness)
     coord_start: int = int(coord_dict['coord_start'])
     coord_end: int = int(coord_dict['coord_end'])
+
+
     rect_strand_dict: dict[str, Tuple[str, str]] = {
-        "positive": (
-            " 0 0 1 ", " 0 0 0 "), "negative": (
-            " 0 0 0 ", " 0 0 1 ")}
-    param_1: str
-    param_2: str
-    param_1, param_2 = rect_strand_dict[coord_strand]
+        "positive": (coord_start, coord_end, " 0 0 1 ", " 0 0 0 "), 
+        "negative": (coord_end, coord_start, " 0 0 0 ", " 0 0 1 ")
+    }
+    
+    rect_start, rect_end, param_1, param_2 = rect_strand_dict[coord_strand]
+
+    # If the start coordinate is greater than the end coordinate, we need to adjust the coordinates
+    coord_len_bp = coord_end - coord_start if coord_end >= coord_start else (coord_end - coord_start) + total_length
+    # Calculate the angle in degrees based on the length of the coordinates
+    angle_deg = 360.0 * coord_len_bp / total_length
+
+    # Calculate the start and end coordinates for the outer and inner rectangles
     start_x_1: float = (
-        radius * factors[0]) * math.cos(math.radians(360.0 * (coord_start / total_length) - 90))
+        radius * factors[0]) * math.cos(math.radians(360.0 * (rect_start / total_length) - 90))
     start_y_1: float = (
-        radius * factors[0]) * math.sin(math.radians(360.0 * (coord_start / total_length) - 90))
+        radius * factors[0]) * math.sin(math.radians(360.0 * (rect_start / total_length) - 90))
     start_x_2: float = (
-        radius * factors[2]) * math.cos(math.radians(360.0 * (coord_start / total_length) - 90))
+        radius * factors[2]) * math.cos(math.radians(360.0 * (rect_start / total_length) - 90))
     start_y_2: float = (
-        radius * factors[2]) * math.sin(math.radians(360.0 * (coord_start / total_length) - 90))
+        radius * factors[2]) * math.sin(math.radians(360.0 * (rect_start / total_length) - 90))
     end_x_1: float = (radius * factors[0]) * \
-        math.cos(math.radians(360.0 * ((coord_end) / total_length) - 90))
+        math.cos(math.radians(360.0 * ((rect_end) / total_length) - 90))
     end_y_1: float = (radius * factors[0]) * \
-        math.sin(math.radians(360.0 * ((coord_end) / total_length) - 90))
+        math.sin(math.radians(360.0 * ((rect_end) / total_length) - 90))
     end_x_2: float = (radius * factors[2]) * \
-        math.cos(math.radians(360.0 * ((coord_end) / total_length) - 90))
+        math.cos(math.radians(360.0 * ((rect_end) / total_length) - 90))
     end_y_2: float = (radius * factors[2]) * \
-        math.sin(math.radians(360.0 * ((coord_end) / total_length) - 90))
-    feature_path: str = "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(radius) + "," + str(radius) + param_1 + str(end_x_1) + "," + str(
-        end_y_1) + " L" + str(end_x_2) + "," + str(end_y_2) + "A" + str(radius) + "," + str(radius) + param_2 + str(start_x_2) + "," + str(start_y_2) + " z"
+        math.sin(math.radians(360.0 * ((rect_end) / total_length) - 90))
+
+    # If the angle is greater than 20 degrees, we need to create a mid-point for the arc
+    outer_arc_path = ""
+    inner_arc_path = ""
+
+    if angle_deg > 20:
+        # Calculate the mid-point for the arc
+        mid_pos = (coord_start + coord_len_bp / 2) % total_length
+        mid_x_1 = (radius * factors[0]) * math.cos(math.radians(360.0 * (mid_pos / total_length) - 90))
+        mid_y_1 = (radius * factors[0]) * math.sin(math.radians(360.0 * (mid_pos / total_length) - 90))
+        mid_x_2 = (radius * factors[2]) * math.cos(math.radians(360.0 * (mid_pos / total_length) - 90))
+        mid_y_2 = (radius * factors[2]) * math.sin(math.radians(360.0 * (mid_pos / total_length) - 90))
+
+        # Extract the sweep flags from the parameters
+        sweep_flag_1 = param_1.strip().split(" ")[2]
+        segment_param_1 = f" 0 0 {sweep_flag_1} "
+        sweep_flag_2 = param_2.strip().split(" ")[2]
+        segment_param_2 = f" 0 0 {sweep_flag_2} "
+        # Create the outer arc path
+        outer_arc_path = f"A{radius * factors[0]},{radius * factors[0]}{segment_param_1}{mid_x_1},{mid_y_1} A{radius * factors[0]},{radius * factors[0]}{segment_param_1}{end_x_1},{end_y_1}"
+        # Create the inner arc path
+        inner_arc_path = f"A{radius * factors[2]},{radius * factors[2]}{segment_param_2}{mid_x_2},{mid_y_2} A{radius * factors[2]},{radius * factors[2]}{segment_param_2}{start_x_2},{start_y_2}"
+        feature_path: str = f"M {start_x_1},{start_y_1} {outer_arc_path} L {end_x_2},{end_y_2} {inner_arc_path} z"
+    else:
+        # If the angle is less than or equal to 20 degrees, we can create the arc directly
+        feature_path: str = "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(radius) + "," + str(radius) + param_1 + str(end_x_1) + "," + str(end_y_1) + " L" + str(end_x_2) + "," + str(end_y_2) + "A" + str(radius) + "," + str(radius) + param_2 + str(start_x_2) + "," + str(start_y_2) + " z"
+
+    
     return ["block", feature_path]
 
 
@@ -717,5 +769,3 @@ def generate_text_path(text: str, title_x: float, title_y: float, interval: floa
                      dominant_baseline=dominant_baseline,
                      text_anchor=text_anchor)
     return text_path
-
-
