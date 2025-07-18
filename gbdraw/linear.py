@@ -260,6 +260,5 @@ if __name__ == "__main__":
     # This gets all arguments passed to the script, excluding the script name
     main_args = sys.argv[1:]
     if not main_args:
-        # CUIで引数が指定されなかった場合、'--help' を追加してヘルプを表示させる
         main_args.append('--help')
     linear_main(main_args)
