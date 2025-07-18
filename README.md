@@ -10,6 +10,8 @@
 `gbdraw` is a command-line tool designed for creating detailed diagrams of microbial genomes. 
 `gbdraw` accepts GenBank/EMBL/DDBJ-format annotated genomes as input and outputs a visual representation of the genomes in SVG/PNG/PDF/EPS/PS formats.
 
+**Try gbdraw Web App!** [https://gbdraw.streamlit.app/](https://gbdraw.streamlit.app/)
+
 **Try gbdraw on Colab Notebook!** [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
 
 ## Features
@@ -52,6 +54,10 @@ mamba create -n gbdraw -y  -c conda-forge -c bioconda -c local gbdraw
 # 5. Activate the environment
 mamba activate gbdraw
 ```
+### Streamlit Web App (no local installation)
+A GUI web app of `gbdraw` (latest commit on `main` branch) is available on Streamlit without any local installation:
+[https://gbdraw.streamlit.app/](https://gbdraw.streamlit.app/)
+
 ### Colab Notebook (no local installation; Google account required)
 You can try `gbdraw` (latest release) on Google Colaboratory without any local installation:
 

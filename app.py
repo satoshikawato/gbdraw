@@ -1,4 +1,5 @@
 
+
 import subprocess
 import os
 import io
@@ -14,11 +15,13 @@ from contextlib import redirect_stdout, redirect_stderr
 from gbdraw.circular import circular_main
 from gbdraw.linear import linear_main
 
+
 # --- Basic Application Settings ---
 st.set_page_config(layout="wide")
 
 st.title("🧬 gbdraw Web App")
 st.caption("A genome diagram generator for microbes and organelles")
+
 
 # --- Define the list of selectable feature keys ---
 FEATURE_KEYS = [
@@ -31,6 +34,7 @@ FEATURE_KEYS = [
     "telomere", "tmRNA", "transit_peptide", "tRNA", "unsure", "V_region",
     "V_segment", "variation", "3'UTR", "5'UTR"
 ]
+
 
 st.markdown(
     """
@@ -71,7 +75,9 @@ def get_palettes():
         return [""] + sorted(k for k in doc if k != "title")
     except (FileNotFoundError, ModuleNotFoundError, AttributeError):
         st.warning("Could not dynamically load palettes from gbdraw. Using a default list.")
+
         return ["default"]
+
 
 PALETTES = get_palettes()
 
@@ -174,13 +180,16 @@ with tab_circular:
             c_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="c_fmt")
             c_track_type = st.selectbox("Track type:", ["tuckin", "middle", "spreadout"], index=0, key="c_track")
             c_legend = st.selectbox("Legend:", ["right", "left", "upper_left", "upper_right", "lower_left", "lower_right", "none"], index=0, key="c_legend")
+
             c_palette = st.selectbox("Color palette:", PALETTES, index=0, key="c_palette")
+
 
         with col2:
             st.subheader("Display Options")
             c_show_labels = st.checkbox("Show labels", value=False, key="c_labels")
             c_separate_strands = st.checkbox("Separate strands", value=False, key="c_strands")
             with st.expander("🔧 Advanced Options"):
+
                 c_adv_feat = st.multiselect(
                     "Features (-k):",
                     options=FEATURE_KEYS,
@@ -190,10 +199,8 @@ with tab_circular:
                 c_adv_nt = st.text_input("Dinucleotide (--nt):", value="GC", key="c_nt")
                 c_adv_win = st.number_input("Window size:", value=1000, key="c_win")
                 c_adv_step = st.number_input("Step size:", value=100, key="c_step")
-                # c_adv_blk_color = st.text_input("Block stroke color:", "gray", key="c_b_color")
                 c_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="c_b_color")
                 c_adv_blk_width = st.number_input("Block stroke width:", 0.0, key="c_b_width")
-                # c_adv_line_color = st.text_input("Line stroke color:", "gray", key="c_l_color")
                 c_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="c_l_color")
                 c_adv_line_width = st.number_input("Line stroke width:", 1.0, key="c_l_width")
         
@@ -205,6 +212,7 @@ with tab_circular:
             st.error("Please select a GenBank file.")
         else:
             gb_path = st.session_state.uploaded_files[c_gb_file]
+
             sanitized_prefix = os.path.basename(c_prefix.strip())
             prefix = sanitized_prefix or Path(c_gb_file).stem
             output_path = Path(f"{prefix}.{c_fmt}")
@@ -254,6 +262,7 @@ with tab_circular:
                     st.session_state.circular_result = None
                 finally:
                     logger.removeHandler(stream_handler)
+
     # --- Circular Tab Result Display ---
     if st.session_state.circular_result:
         st.subheader("🌀 Circular Drawing Output")
@@ -380,7 +389,9 @@ with tab_linear:
             l_prefix = st.text_input("Output prefix:", value="linear", key="l_prefix")
             l_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="l_fmt")
             l_legend = st.selectbox("Legend:", ["right", "left", "none"], index=0, key="l_legend")
+
             l_palette = st.selectbox("Color palette:", PALETTES, index=0, key="l_palette")
+
         with col2:
             st.subheader("Display Options")
             l_show_labels = st.checkbox("Show labels", value=False, key="l_labels")
@@ -389,12 +400,14 @@ with tab_linear:
             l_show_gc = st.checkbox("Show GC content", value=False, key="l_gc")
             l_resolve_overlaps = st.checkbox("Resolve overlaps (experimental)", value=False, key="l_overlaps")
             with st.expander("🔧 Advanced Options"):
+
                 l_adv_feat = st.multiselect(
                     "Features (-k):",
                     options=FEATURE_KEYS,
                     default=["CDS", "tRNA", "rRNA", "repeat_region"],
                     key="l_feat"
                 )
+
                 l_adv_nt = st.text_input("nt (--nt):", value="GC", key="l_nt")
                 l_adv_win = st.number_input("Window size:", value=1000, key="l_win")
                 l_adv_step = st.number_input("Step size:", value=100, key="l_step")
@@ -404,11 +417,8 @@ with tab_linear:
                 l_adv_evalue = st.text_input("Max E-value:", value="1e-2", key="l_evalue")
                 l_adv_identity = st.number_input("Min identity (%):", value=0.0, key="l_identity")
                 st.markdown("---")
-                # l_adv_blk_color = st.text_input("Block stroke color:", "gray", key="l_b_color")
                 l_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="l_b_color")
-
                 l_adv_blk_width = st.number_input("Block stroke width:", 0.0, key="l_b_width")
-                # l_adv_line_color = st.text_input("Line stroke color:", "gray", key="l_l_color")
                 l_adv_line_color = st.color_picker("Block stroke color:", value="#808080", key="l_l_color")
                 l_adv_line_width = st.number_input("Line stroke width:", 1.0, key="l_l_width")
                 # Custom color file selections were moved outside the form, so they are removed from here.
@@ -421,7 +431,6 @@ with tab_linear:
             for i in range(st.session_state.linear_seq_count)
             if st.session_state.get(f"l_gb_{i}")
         ]
-
         selected_blast = [
             st.session_state[f"l_blast_{i}"]
             for i in range(st.session_state.linear_seq_count - 1)
@@ -480,6 +489,7 @@ with tab_linear:
                     st.session_state.linear_result = None
                 finally:
                     logger.removeHandler(stream_handler)
+
 
     # --- Linear Tab Result Display ---
     if st.session_state.linear_result:
