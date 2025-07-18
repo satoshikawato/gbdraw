@@ -1,17 +1,40 @@
-import streamlit as st
+
+
 import subprocess
 import os
+import io
+import logging
 import shutil
 import uuid
-from pathlib import Path
 import tomllib
+import streamlit as st
+from pathlib import Path
 from importlib import resources
+from contextlib import redirect_stdout, redirect_stderr
+
+from gbdraw.circular import circular_main
+from gbdraw.linear import linear_main
+
 
 # --- Basic Application Settings ---
 st.set_page_config(layout="wide")
 
 st.title("🧬 gbdraw Web App")
 st.caption("A genome diagram generator for microbes and organelles")
+
+
+# --- Define the list of selectable feature keys ---
+FEATURE_KEYS = [
+    "assembly_gap", "C_region", "CDS", "centromere", "D-loop", "D_segment",
+    "exon", "gap", "intron", "J_segment", "mat_peptide", "misc_binding",
+    "misc_difference", "misc_feature", "misc_RNA", "misc_structure",
+    "mobile_element", "modified_base", "mRNA", "ncRNA", "operon", "oriT",
+    "precursor_RNA", "primer_bind", "propeptide", "protein_bind", "regulatory",
+    "repeat_region", "rep_origin", "rRNA", "sig_peptide", "stem_loop",
+    "telomere", "tmRNA", "transit_peptide", "tRNA", "unsure", "V_region",
+    "V_segment", "variation", "3'UTR", "5'UTR"
+]
+
 
 st.markdown(
     """
@@ -52,7 +75,9 @@ def get_palettes():
         return [""] + sorted(k for k in doc if k != "title")
     except (FileNotFoundError, ModuleNotFoundError, AttributeError):
         st.warning("Could not dynamically load palettes from gbdraw. Using a default list.")
-        return ["", "default", "paired", "pastel1", "pastel2", "set1", "set2", "set3", "tab10", "tab20", "tab20b", "tab20c"]
+
+        return ["default"]
+
 
 PALETTES = get_palettes()
 
@@ -155,20 +180,28 @@ with tab_circular:
             c_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="c_fmt")
             c_track_type = st.selectbox("Track type:", ["tuckin", "middle", "spreadout"], index=0, key="c_track")
             c_legend = st.selectbox("Legend:", ["right", "left", "upper_left", "upper_right", "lower_left", "lower_right", "none"], index=0, key="c_legend")
-            c_palette = st.selectbox("Color palette:", PALETTES, key="c_palette")
+
+            c_palette = st.selectbox("Color palette:", PALETTES, index=0, key="c_palette")
+
 
         with col2:
             st.subheader("Display Options")
             c_show_labels = st.checkbox("Show labels", value=False, key="c_labels")
             c_separate_strands = st.checkbox("Separate strands", value=False, key="c_strands")
             with st.expander("🔧 Advanced Options"):
-                c_adv_feat = st.text_input("Features (-k):", value="CDS,tRNA,rRNA,repeat_region", key="c_feat")
+
+                c_adv_feat = st.multiselect(
+                    "Features (-k):",
+                    options=FEATURE_KEYS,
+                    default=["CDS", "tRNA", "rRNA", "repeat_region"],
+                    key="c_feat"
+                )
                 c_adv_nt = st.text_input("Dinucleotide (--nt):", value="GC", key="c_nt")
                 c_adv_win = st.number_input("Window size:", value=1000, key="c_win")
                 c_adv_step = st.number_input("Step size:", value=100, key="c_step")
-                c_adv_blk_color = st.text_input("Block stroke color:", "gray", key="c_b_color")
+                c_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="c_b_color")
                 c_adv_blk_width = st.number_input("Block stroke width:", 0.0, key="c_b_width")
-                c_adv_line_color = st.text_input("Line stroke color:", "gray", key="c_l_color")
+                c_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="c_l_color")
                 c_adv_line_width = st.number_input("Line stroke width:", 1.0, key="c_l_width")
         
         # Place the run button at the end of the form
@@ -179,27 +212,56 @@ with tab_circular:
             st.error("Please select a GenBank file.")
         else:
             gb_path = st.session_state.uploaded_files[c_gb_file]
-            prefix = c_prefix.strip() or Path(c_gb_file).stem
+
+            sanitized_prefix = os.path.basename(c_prefix.strip())
+            prefix = sanitized_prefix or Path(c_gb_file).stem
             output_path = Path(f"{prefix}.{c_fmt}")
-            cmd = ["gbdraw", "circular", "-i", gb_path, "-o", prefix, "-f", c_fmt, "--track_type", c_track_type]
-            if c_show_labels: cmd.append("--show_labels")
-            if c_separate_strands: cmd.append("--separate_strands")
-            if c_legend != "right": cmd += ["-l", c_legend]
-            if c_palette: cmd += ["--palette", c_palette]
-            cmd += ["-k", c_adv_feat, "-n", c_adv_nt, "-w", str(c_adv_win), "-s", str(c_adv_step)]
-            cmd += ["--block_stroke_color", c_adv_blk_color, "--block_stroke_width", str(c_adv_blk_width)]
-            cmd += ["--line_stroke_color", c_adv_line_color, "--line_stroke_width", str(c_adv_line_width)]
-            if c_mod_default_colors: cmd += ["-d", st.session_state.uploaded_files[c_mod_default_colors]]
-            if c_feature_specific_color_table: cmd += ["-t", st.session_state.uploaded_files[c_feature_specific_color_table]]
-            
-            with st.spinner(f"Running: `{' '.join(cmd)}`"):
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                if result.returncode != 0:
-                    st.error(f"Error running gbdraw:\n{result.stderr}")
-                    st.session_state.circular_result = None
-                else:
+            circular_args = ["-i", gb_path, "-o", prefix, "-f", c_fmt, "--track_type", c_track_type]
+            if c_show_labels: circular_args.append("--show_labels")
+            if c_separate_strands: circular_args.append("--separate_strands")
+            if c_legend != "right": circular_args += ["-l", c_legend]
+            if c_palette: circular_args += ["--palette", c_palette]
+            circular_args += ["-k", ",".join(c_adv_feat), "-n", c_adv_nt, "-w", str(c_adv_win), "-s", str(c_adv_step)]
+            circular_args += ["--block_stroke_color", c_adv_blk_color, "--block_stroke_width", str(c_adv_blk_width)]
+            circular_args += ["--line_stroke_color", c_adv_line_color, "--line_stroke_width", str(c_adv_line_width)]
+            if c_mod_default_colors: circular_args += ["-d", st.session_state.uploaded_files[c_mod_default_colors]]
+            if c_feature_specific_color_table: circular_args += ["-t", st.session_state.uploaded_files[c_feature_specific_color_table]]
+            # Set up logging to capture output
+            logger = logging.getLogger() 
+            log_capture = io.StringIO()  
+            # Log the command that will be executed
+            command_str = f"gbdraw circular {' '.join(circular_args)}"
+            log_capture.write(f"--- Executed Command ---\n{command_str}\n------------------------\n\n")
+            # Set up a stream handler to capture logs
+            stream_handler = logging.StreamHandler(log_capture)
+            stream_handler.setLevel(logging.INFO) 
+            logger.addHandler(stream_handler)
+
+
+
+            # VULNERABILITY FIX: Call the function directly, capturing output
+            with st.spinner("Running gbdraw circular..."):
+                st.spinner(f"Running: gbrdaw circular `{' '.join(circular_args)}`")
+                try:
+                    # Use redirect_stderr to capture any stderr output
+                    with redirect_stderr(log_capture):
+                        circular_main(circular_args)
                     st.success("✅ gbdraw finished successfully.")
-                    st.session_state.circular_result = {"path": output_path, "log": result.stdout}
+                    st.session_state.circular_result = {"path": output_path, "log": log_capture.getvalue()}
+
+                except SystemExit as e:
+                    # Catch exit calls from argparse to display errors
+                    if e.code != 0:
+                        st.error(f"Error running gbdraw (exit code {e.code}):\n{log_capture.getvalue()}")
+                        st.session_state.circular_result = None
+                    else: # Success exit code 0
+                        st.success("✅ gbdraw finished successfully.")
+                        st.session_state.circular_result = {"path": output_path, "log": log_capture.getvalue()}
+                except Exception as e:
+                    st.error(f"An unexpected error occurred:\n{e}\n\nLog:\n{log_capture.getvalue()}")
+                    st.session_state.circular_result = None
+                finally:
+                    logger.removeHandler(stream_handler)
 
     # --- Circular Tab Result Display ---
     if st.session_state.circular_result:
@@ -327,7 +389,9 @@ with tab_linear:
             l_prefix = st.text_input("Output prefix:", value="linear", key="l_prefix")
             l_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="l_fmt")
             l_legend = st.selectbox("Legend:", ["right", "left", "none"], index=0, key="l_legend")
-            l_palette = st.selectbox("Color palette:", PALETTES, key="l_palette")
+
+            l_palette = st.selectbox("Color palette:", PALETTES, index=0, key="l_palette")
+
         with col2:
             st.subheader("Display Options")
             l_show_labels = st.checkbox("Show labels", value=False, key="l_labels")
@@ -336,7 +400,14 @@ with tab_linear:
             l_show_gc = st.checkbox("Show GC content", value=False, key="l_gc")
             l_resolve_overlaps = st.checkbox("Resolve overlaps (experimental)", value=False, key="l_overlaps")
             with st.expander("🔧 Advanced Options"):
-                l_adv_feat = st.text_input("Features (-k):", value="CDS,tRNA,rRNA,repeat_region", key="l_feat")
+
+                l_adv_feat = st.multiselect(
+                    "Features (-k):",
+                    options=FEATURE_KEYS,
+                    default=["CDS", "tRNA", "rRNA", "repeat_region"],
+                    key="l_feat"
+                )
+
                 l_adv_nt = st.text_input("nt (--nt):", value="GC", key="l_nt")
                 l_adv_win = st.number_input("Window size:", value=1000, key="l_win")
                 l_adv_step = st.number_input("Step size:", value=100, key="l_step")
@@ -346,9 +417,9 @@ with tab_linear:
                 l_adv_evalue = st.text_input("Max E-value:", value="1e-2", key="l_evalue")
                 l_adv_identity = st.number_input("Min identity (%):", value=0.0, key="l_identity")
                 st.markdown("---")
-                l_adv_blk_color = st.text_input("Block stroke color:", "gray", key="l_b_color")
+                l_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="l_b_color")
                 l_adv_blk_width = st.number_input("Block stroke width:", 0.0, key="l_b_width")
-                l_adv_line_color = st.text_input("Line stroke color:", "gray", key="l_l_color")
+                l_adv_line_color = st.color_picker("Block stroke color:", value="#808080", key="l_l_color")
                 l_adv_line_width = st.number_input("Line stroke width:", 1.0, key="l_l_width")
                 # Custom color file selections were moved outside the form, so they are removed from here.
         
@@ -372,34 +443,53 @@ with tab_linear:
             st.error(f"Please provide {len(selected_gb) - 1} comparison file(s) for {len(selected_gb)} sequence files.")
         else:
             gb_paths = [st.session_state.uploaded_files[f] for f in selected_gb]
-            prefix = l_prefix.strip() or "linear"
+            sanitized_prefix = os.path.basename(l_prefix.strip())
+            prefix = sanitized_prefix or "linear"
             output_path = Path(f"{prefix}.{l_fmt}")
-            cmd = ["gbdraw", "linear", "-i", *gb_paths, "-o", prefix, "-f", l_fmt]
+            linear_args = ["-i", *gb_paths, "-o", prefix, "-f", l_fmt]
             if selected_blast:
                 blast_paths = [st.session_state.uploaded_files[f] for f in selected_blast]
-                cmd += ["-b", *blast_paths]
-            if l_show_labels: cmd.append("--show_labels")
-            if l_separate_strands: cmd.append("--separate_strands")
-            if l_align_center: cmd.append("--align_center")
-            if l_show_gc: cmd.append("--show_gc")
-            if l_resolve_overlaps: cmd.append("--resolve_overlaps")
-            if l_legend != "right": cmd += ["-l", l_legend]
-            if l_palette: cmd += ["--palette", l_palette]
-            cmd += ["-k", l_adv_feat, "-n", l_adv_nt, "-w", str(l_adv_win), "-s", str(l_adv_step)]
-            cmd += ["--bitscore", str(l_adv_bitscore), "--evalue", l_adv_evalue, "--identity", str(l_adv_identity)]
-            cmd += ["--block_stroke_color", l_adv_blk_color, "--block_stroke_width", str(l_adv_blk_width)]
-            cmd += ["--line_stroke_color", l_adv_line_color, "--line_stroke_width", str(l_adv_line_width)]
-            if l_mod_default_colors: cmd += ["-d", st.session_state.uploaded_files[l_mod_default_colors]]
-            if l_feature_specific_color_table: cmd += ["-t", st.session_state.uploaded_files[l_feature_specific_color_table]]
+                linear_args += ["-b", *blast_paths]
+            if l_show_labels: linear_args.append("--show_labels")
+            if l_separate_strands: linear_args.append("--separate_strands")
+            if l_align_center: linear_args.append("--align_center")
+            if l_show_gc: linear_args.append("--show_gc")
+            if l_resolve_overlaps: linear_args.append("--resolve_overlaps")
+            if l_legend != "right": linear_args += ["-l", l_legend]
+            if l_palette: linear_args += ["--palette", l_palette]
+            linear_args += ["-k", ",".join(c_adv_feat), "-n", l_adv_nt, "-w", str(l_adv_win), "-s", str(l_adv_step)]
+            linear_args += ["--bitscore", str(l_adv_bitscore), "--evalue", l_adv_evalue, "--identity", str(l_adv_identity)]
+            linear_args += ["--block_stroke_color", l_adv_blk_color, "--block_stroke_width", str(l_adv_blk_width)]
+            linear_args += ["--line_stroke_color", l_adv_line_color, "--line_stroke_width", str(l_adv_line_width)]
+            if l_mod_default_colors: linear_args += ["-d", st.session_state.uploaded_files[l_mod_default_colors]]
+            if l_feature_specific_color_table: linear_args += ["-t", st.session_state.uploaded_files[l_feature_specific_color_table]]
             
-            with st.spinner(f"Running: `{' '.join(cmd)}`"):
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                if result.returncode != 0:
-                    st.error(f"Error running gbdraw:\n{result.stderr}")
-                    st.session_state.linear_result = None
-                else:
+            logger = logging.getLogger()
+            log_capture = io.StringIO()
+            command_str = f"gbdraw linear {' '.join(map(str, linear_args))}" # Ensure all args are strings
+            stream_handler = logging.StreamHandler(log_capture)
+            stream_handler.setLevel(logging.INFO)
+            logger.addHandler(stream_handler)
+            log_capture.write(f"--- Executed Command ---\n{command_str}\n------------------------\n\n")
+            with st.spinner(f"Running: {command_str}"):
+                try:
+                    with redirect_stderr(log_capture):
+                        linear_main(linear_args)
                     st.success("✅ gbdraw finished successfully.")
-                    st.session_state.linear_result = {"path": output_path, "log": result.stdout}
+                    st.session_state.linear_result = {"path": output_path, "log": log_capture.getvalue()}
+                except SystemExit as e:
+                    if e.code != 0:
+                        st.error(f"Error running gbdraw (exit code {e.code}):\n{log_capture.getvalue()}")
+                        st.session_state.linear_result = None
+                    else:
+                        st.success("✅ gbdraw finished successfully.")
+                        st.session_state.linear_result = {"path": output_path, "log": log_capture.getvalue()}
+                except Exception as e:
+                    st.error(f"An unexpected error occurred:\n{e}\n\nLog:\n{log_capture.getvalue()}")
+                    st.session_state.linear_result = None
+                finally:
+                    logger.removeHandler(stream_handler)
+
 
     # --- Linear Tab Result Display ---
     if st.session_state.linear_result:

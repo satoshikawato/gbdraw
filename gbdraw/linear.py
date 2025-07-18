@@ -169,9 +169,6 @@ def _get_args(args) -> argparse.Namespace:
         '--resolve_overlaps',
         help='Resolve overlaps (tentative; default: False). ',
         action='store_true')
-    if len(sys.argv) == 1:
-        parser.print_help(sys.stderr)
-        sys.exit(1)
     args = parser.parse_args(args)
     return args
 
@@ -261,5 +258,7 @@ def linear_main(cmd_args) -> None:
 
 if __name__ == "__main__":
     # This gets all arguments passed to the script, excluding the script name
-    args = sys.argv[1:]
-    linear_main(args)
+    main_args = sys.argv[1:]
+    if not main_args:
+        main_args.append('--help')
+    linear_main(main_args)
