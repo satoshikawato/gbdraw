@@ -192,8 +192,6 @@ def prepare_legend_table(gc_config, skew_config, feature_config, features_presen
             legend_table['GC skew (-)'] = (skew_stroke_color, skew_stroke_width, skew_low_fill_color)
     return legend_table
 
-
-
 def y_overlap(label1, label2, total_len, minimum_margin):
     # Adjusted to consider absolute values for y coordinates
     label1_start_y = label1["start_y"]
@@ -276,7 +274,7 @@ def y_overlap(label1, label2, total_len, minimum_margin):
             return False
 
             
-def x_overlap(label1, label2, minimum_margin=5.0):
+def x_overlap(label1, label2, minimum_margin=1.0):
     # Adjusted to directly return the evaluated condition
 
     if label1["is_inner"] == False:
@@ -373,11 +371,18 @@ def place_labels_on_arc_fc(labels: list[dict],center_x: float,center_y: float,x_
         return math.degrees(angle)
 
     def check_overlap(label1, label2, total_length, margin):
-        return y_overlap(label1, label2, total_length, margin) and x_overlap(label1, label2, minimum_margin=10)
+        return y_overlap(label1, label2, total_length, margin) and x_overlap(label1, label2, minimum_margin=2)
+    
+
+    if not labels:
+        return []
+
     rearranged_labels = []
     labels = sort_labels(labels)
     current_angle = -70
-    increment = abs(280/len(labels))
+    increment = 0.1
+
+    
     for i, label in enumerate(labels):
         if i == 0:
             label['start_x'], label['start_y'] = calculate_coordinates(center_x, center_y, x_radius, y_radius, current_angle, label['middle'], total_length)
@@ -386,14 +391,23 @@ def place_labels_on_arc_fc(labels: list[dict],center_x: float,center_y: float,x_
             new_angle = (current_angle + increment)
             if new_angle <-70: 
                 new_angle = -70
-            elif -70 <= new_angle <70:
-                if label['middle'] > (total_length / 2):
-                    new_angle = 110
-            elif 70 <= new_angle < 110:
-                new_angle = 110
+            elif -70 <= new_angle <80:
+                if label['middle'] > (total_length / 2) or i >= len(labels) / 2:
+                    new_angle = 90
+                else:
+                    new_agle = new_angle
+            elif 80 <= new_angle < 90:
+                new_angle = 90
             else:
                 new_angle = new_angle
+            if new_angle > 269:
+                new_angle = 269
             label['start_x'], label['start_y'] = calculate_coordinates(center_x, center_y, x_radius, y_radius, new_angle, label['middle'], total_length)
+            # if the new position overlaps with the previous label, adjust the angle
+            while rearranged_labels and check_overlap(label, rearranged_labels[-1], total_length, 0.1):
+                new_angle += 0.01
+                label['start_x'], label['start_y'] = calculate_coordinates(center_x, center_y, x_radius, y_radius, new_angle, label['middle'], total_length)
+                
             rearranged_labels.append(label)
             current_angle = new_angle
 
@@ -405,7 +419,7 @@ def euclidean_distance(x1, y1, x2, y2):
 def sort_labels(labels):
     return sorted(labels, key=lambda x: x['middle'])
 
-def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, feature_radius, total_length, start_angle, end_angle, y_margin=1.0, max_iterations=10000):
+def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, feature_radius, total_length, start_angle, end_angle, y_margin=0.1, max_iterations=10000):
     def calculate_angle(x, y, origin_x, origin_y):
         return math.degrees(math.atan2((y - origin_y), (x - origin_x))) % 360 
 
@@ -425,7 +439,7 @@ def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, 
         return math.degrees(angle)
 
     def check_overlap(label1, label2, total_length):
-        return y_overlap(label1, label2, total_length, y_margin) and x_overlap(label1, label2, minimum_margin=10)
+        return y_overlap(label1, label2, total_length, y_margin) and x_overlap(label1, label2, minimum_margin=1)
 
     labels = sort_labels(labels)
     for iteration in range(max_iterations):
@@ -467,7 +481,7 @@ def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, 
             # Move label
             creates_new_overlap = False
             while True:
-                new_angle = (current_angle + direction * 0.1)
+                new_angle = (current_angle + direction * 0.05)
                 new_x, new_y = move_label(label, new_angle)
                 new_score = calculate_angle_of_three_points(label["feature_middle_x"], label["feature_middle_y"], 0, 0, new_x, new_y)
                 # Check if this move would create overlap with neighbors

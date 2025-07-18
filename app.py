@@ -188,6 +188,15 @@ with tab_circular:
             st.subheader("Display Options")
             c_show_labels = st.checkbox("Show labels", value=False, key="c_labels")
             c_separate_strands = st.checkbox("Separate strands", value=False, key="c_strands")
+            c_allow_inner_labels = st.checkbox("Allow inner labels", value=False, key="c_inner_labels")
+            # Suppress GC content and GC skew tracks if inner labels are allowed
+            if c_allow_inner_labels:
+                st.info("💡 Inner labels are enabled. GC content and GC skew tracks will be automatically suppressed to avoid overlap.")
+                c_suppress_gc = True
+                c_suppress_skew = True
+            else:
+                c_suppress_gc = st.checkbox("Suppress GC content track", value=False, key="c_gc_suppress")
+                c_suppress_skew = st.checkbox("Suppress GC skew track", value=False, key="c_skew_suppress")
             with st.expander("🔧 Advanced Options"):
 
                 c_adv_feat = st.multiselect(
@@ -219,6 +228,17 @@ with tab_circular:
             circular_args = ["-i", gb_path, "-o", prefix, "-f", c_fmt, "--track_type", c_track_type]
             if c_show_labels: circular_args.append("--show_labels")
             if c_separate_strands: circular_args.append("--separate_strands")
+
+            if c_allow_inner_labels:
+                circular_args.append("--allow_inner_labels")
+                # If inner labels are allowed, suppress GC content and GC skew tracks
+                circular_args.append("--suppress_gc")
+                circular_args.append("--suppress_skew")
+            else:
+                # Only add these options if inner labels are not allowed
+                if c_suppress_gc: circular_args.append("--suppress_gc")
+                if c_suppress_skew: circular_args.append("--suppress_skew")
+
             if c_legend != "right": circular_args += ["-l", c_legend]
             if c_palette: circular_args += ["--palette", c_palette]
             circular_args += ["-k", ",".join(c_adv_feat), "-n", c_adv_nt, "-w", str(c_adv_win), "-s", str(c_adv_step)]
@@ -238,16 +258,16 @@ with tab_circular:
             logger.addHandler(stream_handler)
 
 
+            with st.spinner(f"Running: `gbrdaw circular {' '.join(circular_args)}`"):
 
-            # VULNERABILITY FIX: Call the function directly, capturing output
-            with st.spinner("Running gbdraw circular..."):
-                st.spinner(f"Running: gbrdaw circular `{' '.join(circular_args)}`")
                 try:
                     # Use redirect_stderr to capture any stderr output
                     with redirect_stderr(log_capture):
                         circular_main(circular_args)
                     st.success("✅ gbdraw finished successfully.")
-                    st.session_state.circular_result = {"path": output_path, "log": log_capture.getvalue()}
+
+                    st.session_state.circular_result = {"prefix": prefix, "fmt": c_fmt, "log": log_capture.getvalue()}
+
 
                 except SystemExit as e:
                     # Catch exit calls from argparse to display errors
@@ -256,7 +276,9 @@ with tab_circular:
                         st.session_state.circular_result = None
                     else: # Success exit code 0
                         st.success("✅ gbdraw finished successfully.")
-                        st.session_state.circular_result = {"path": output_path, "log": log_capture.getvalue()}
+
+                        st.session_state.circular_result = {"prefix": prefix, "fmt": c_fmt, "log": log_capture.getvalue()}
+
                 except Exception as e:
                     st.error(f"An unexpected error occurred:\n{e}\n\nLog:\n{log_capture.getvalue()}")
                     st.session_state.circular_result = None
@@ -267,35 +289,42 @@ with tab_circular:
     if st.session_state.circular_result:
         st.subheader("🌀 Circular Drawing Output")
         res = st.session_state.circular_result
-        out_path = res["path"]
+        # Extract prefix and format from the result
+        prefix = res["prefix"] 
+        fmt = res["fmt"]
+        # Collect all output files matching the prefix and format
+        output_files = sorted(list(Path(".").glob(f"{prefix}*.{fmt}")))
 
-        if out_path.exists():
-            # Define previewable extensions
-            file_extension = out_path.suffix.lower()
+        if output_files:
+            for out_path in output_files:
+                file_extension = out_path.suffix.lower()
 
-            # Preview handling
-            if file_extension == ".svg":
-                st.image(out_path.read_text(), caption=str(out_path.name))
-            elif file_extension == ".png":
-                st.image(str(out_path), caption=str(out_path.name))
-            else:
-                # For formats that do not support preview
-                st.info(f"📄 Preview is not available for {out_path.suffix.upper()} format. Please use the download button below.")
+                # Preview handling
+                if file_extension == ".svg":
+                    st.image(out_path.read_text(), caption=str(out_path.name))
+                elif file_extension == ".png":
+                    st.image(str(out_path), caption=str(out_path.name))
+                else:
+                    st.info(f"📄 Preview is not available for {out_path.suffix.upper()} format. Please use the download button below.")
 
-            # Download button (always displayed)
-            with open(out_path, "rb") as f:
-                st.download_button(
-                    f"⬇️ Download {out_path.name}",
-                    data=f,
-                    file_name=out_path.name
-                )
+                # Download button
+                with open(out_path, "rb") as f:
+                    st.download_button(
+                        f"⬇️ Download {out_path.name}",
+                        data=f,
+                        file_name=out_path.name,
+                        key=f"download_{out_path.name}" # Unique key for each download button
+                    )
+                st.markdown("---")
             
             # Log display
             with st.expander("Show Log"):
                 st.text(res["log"])
                 
         else:
-            st.warning("Output file seems to be missing. Please run again.")
+            st.warning("Output file(s) seem to be missing. Please run again.")
+            with st.expander("Show Log"):
+                st.text(res["log"])
 
 # --- LINEAR TAB ---
 with tab_linear:
@@ -471,7 +500,9 @@ with tab_linear:
             stream_handler.setLevel(logging.INFO)
             logger.addHandler(stream_handler)
             log_capture.write(f"--- Executed Command ---\n{command_str}\n------------------------\n\n")
-            with st.spinner(f"Running: {command_str}"):
+
+            with st.spinner(f"Running: `{command_str}`"):
+
                 try:
                     with redirect_stderr(log_capture):
                         linear_main(linear_args)
