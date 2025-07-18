@@ -237,17 +237,13 @@ with tab_circular:
             stream_handler.setLevel(logging.INFO) 
             logger.addHandler(stream_handler)
 
-
-
-            # VULNERABILITY FIX: Call the function directly, capturing output
-            with st.spinner("Running gbdraw circular..."):
-                st.spinner(f"Running: gbrdaw circular `{' '.join(circular_args)}`")
+            with st.spinner(f"Running: `gbrdaw circular {' '.join(circular_args)}`"):
                 try:
                     # Use redirect_stderr to capture any stderr output
                     with redirect_stderr(log_capture):
                         circular_main(circular_args)
                     st.success("✅ gbdraw finished successfully.")
-                    st.session_state.circular_result = {"path": output_path, "log": log_capture.getvalue()}
+                    st.session_state.circular_result = {"prefix": prefix, "fmt": c_fmt, "log": log_capture.getvalue()}
 
                 except SystemExit as e:
                     # Catch exit calls from argparse to display errors
@@ -256,7 +252,7 @@ with tab_circular:
                         st.session_state.circular_result = None
                     else: # Success exit code 0
                         st.success("✅ gbdraw finished successfully.")
-                        st.session_state.circular_result = {"path": output_path, "log": log_capture.getvalue()}
+                        st.session_state.circular_result = {"prefix": prefix, "fmt": c_fmt, "log": log_capture.getvalue()}
                 except Exception as e:
                     st.error(f"An unexpected error occurred:\n{e}\n\nLog:\n{log_capture.getvalue()}")
                     st.session_state.circular_result = None
@@ -267,35 +263,42 @@ with tab_circular:
     if st.session_state.circular_result:
         st.subheader("🌀 Circular Drawing Output")
         res = st.session_state.circular_result
-        out_path = res["path"]
+        # Extract prefix and format from the result
+        prefix = res["prefix"] 
+        fmt = res["fmt"]
+        # Collect all output files matching the prefix and format
+        output_files = sorted(list(Path(".").glob(f"{prefix}*.{fmt}")))
 
-        if out_path.exists():
-            # Define previewable extensions
-            file_extension = out_path.suffix.lower()
+        if output_files:
+            for out_path in output_files:
+                file_extension = out_path.suffix.lower()
 
-            # Preview handling
-            if file_extension == ".svg":
-                st.image(out_path.read_text(), caption=str(out_path.name))
-            elif file_extension == ".png":
-                st.image(str(out_path), caption=str(out_path.name))
-            else:
-                # For formats that do not support preview
-                st.info(f"📄 Preview is not available for {out_path.suffix.upper()} format. Please use the download button below.")
+                # Preview handling
+                if file_extension == ".svg":
+                    st.image(out_path.read_text(), caption=str(out_path.name))
+                elif file_extension == ".png":
+                    st.image(str(out_path), caption=str(out_path.name))
+                else:
+                    st.info(f"📄 Preview is not available for {out_path.suffix.upper()} format. Please use the download button below.")
 
-            # Download button (always displayed)
-            with open(out_path, "rb") as f:
-                st.download_button(
-                    f"⬇️ Download {out_path.name}",
-                    data=f,
-                    file_name=out_path.name
-                )
+                # Download button
+                with open(out_path, "rb") as f:
+                    st.download_button(
+                        f"⬇️ Download {out_path.name}",
+                        data=f,
+                        file_name=out_path.name,
+                        key=f"download_{out_path.name}" # Unique key for each download button
+                    )
+                st.markdown("---")
             
             # Log display
             with st.expander("Show Log"):
                 st.text(res["log"])
                 
         else:
-            st.warning("Output file seems to be missing. Please run again.")
+            st.warning("Output file(s) seem to be missing. Please run again.")
+            with st.expander("Show Log"):
+                st.text(res["log"])
 
 # --- LINEAR TAB ---
 with tab_linear:
@@ -471,7 +474,7 @@ with tab_linear:
             stream_handler.setLevel(logging.INFO)
             logger.addHandler(stream_handler)
             log_capture.write(f"--- Executed Command ---\n{command_str}\n------------------------\n\n")
-            with st.spinner(f"Running: {command_str}"):
+            with st.spinner(f"Running: `{command_str}`"):
                 try:
                     with redirect_stderr(log_capture):
                         linear_main(linear_args)
