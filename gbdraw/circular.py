@@ -157,9 +157,7 @@ def _get_args(args) -> argparse.Namespace:
         '--allow_inner_labels',
         help='Place labels inside the circle (default: False).',
         action='store_true')
-    if len(sys.argv) == 1:
-        parser.print_help(sys.stderr)
-        sys.exit(1)
+
     args = parser.parse_args(args)
     return args
 
@@ -244,5 +242,8 @@ if __name__ == "__main__":
     # Calls the main function `circular_main` with command-line arguments.
     # args are parsed command-line arguments
     # This gets all arguments passed to the script, excluding the script name
-    args = sys.argv[1:]
-    circular_main(args)
+    main_args = sys.argv[1:]
+    if not main_args:
+        # CUIで引数が指定されなかった場合、'--help' を追加してヘルプを表示させる
+        main_args.append('--help')
+    circular_main(main_args)
