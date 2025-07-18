@@ -228,6 +228,7 @@ with tab_circular:
             circular_args = ["-i", gb_path, "-o", prefix, "-f", c_fmt, "--track_type", c_track_type]
             if c_show_labels: circular_args.append("--show_labels")
             if c_separate_strands: circular_args.append("--separate_strands")
+
             if c_allow_inner_labels:
                 circular_args.append("--allow_inner_labels")
                 # If inner labels are allowed, suppress GC content and GC skew tracks
@@ -237,6 +238,7 @@ with tab_circular:
                 # Only add these options if inner labels are not allowed
                 if c_suppress_gc: circular_args.append("--suppress_gc")
                 if c_suppress_skew: circular_args.append("--suppress_skew")
+
             if c_legend != "right": circular_args += ["-l", c_legend]
             if c_palette: circular_args += ["--palette", c_palette]
             circular_args += ["-k", ",".join(c_adv_feat), "-n", c_adv_nt, "-w", str(c_adv_win), "-s", str(c_adv_step)]
@@ -255,13 +257,17 @@ with tab_circular:
             stream_handler.setLevel(logging.INFO) 
             logger.addHandler(stream_handler)
 
+
             with st.spinner(f"Running: `gbrdaw circular {' '.join(circular_args)}`"):
+
                 try:
                     # Use redirect_stderr to capture any stderr output
                     with redirect_stderr(log_capture):
                         circular_main(circular_args)
                     st.success("✅ gbdraw finished successfully.")
+
                     st.session_state.circular_result = {"prefix": prefix, "fmt": c_fmt, "log": log_capture.getvalue()}
+
 
                 except SystemExit as e:
                     # Catch exit calls from argparse to display errors
@@ -270,7 +276,9 @@ with tab_circular:
                         st.session_state.circular_result = None
                     else: # Success exit code 0
                         st.success("✅ gbdraw finished successfully.")
+
                         st.session_state.circular_result = {"prefix": prefix, "fmt": c_fmt, "log": log_capture.getvalue()}
+
                 except Exception as e:
                     st.error(f"An unexpected error occurred:\n{e}\n\nLog:\n{log_capture.getvalue()}")
                     st.session_state.circular_result = None
@@ -492,7 +500,9 @@ with tab_linear:
             stream_handler.setLevel(logging.INFO)
             logger.addHandler(stream_handler)
             log_capture.write(f"--- Executed Command ---\n{command_str}\n------------------------\n\n")
+
             with st.spinner(f"Running: `{command_str}`"):
+
                 try:
                     with redirect_stderr(log_capture):
                         linear_main(linear_args)
