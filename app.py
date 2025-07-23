@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# coding: utf-8
 
 
 import subprocess
@@ -78,6 +80,26 @@ def get_palettes():
 
         return ["default"]
 
+@st.cache_data
+def get_palette_colors(palette_name: str) -> dict:
+    """Loads the colors for a specific palette from the internal TOML file."""
+    try:
+        # Use tomllib to load the color palettes
+        with resources.files("gbdraw").joinpath("data").joinpath("color_palettes.toml").open("rb") as fh:
+            all_palettes = tomllib.load(fh)
+        
+        # Return the selected palette, or fallback to 'default' if it doesn't exist
+        return all_palettes.get(palette_name, all_palettes.get("default", {}))
+    except (FileNotFoundError, ModuleNotFoundError, AttributeError) as e:
+        st.warning(f"Could not dynamically load palette colors: {e}. Using a default list.")
+        # Provide a hardcoded fallback if the file can't be read
+        return {
+            "CDS": "#89d1fa", "rRNA": "#71ee7d", "tRNA": "#e8b441",
+            "tmRNA": "#ded44e", "ncRNA": "#c4fac3", "repeat_region": "#d3d3d3",
+            "misc_feature": "#d3d3d3", "default": "#d3d3d3", "skew_high": "#6dded3",
+            "skew_low": "#ad72e3", "gc_content": "#a1a1a1", "pairwise_match": "#d3d3d3"
+        }
+
 
 PALETTES = get_palettes()
 
@@ -124,7 +146,6 @@ with tab_circular:
     st.header("Circular Genome Map")
 
     # --- START: Move file selection outside the form ---
-    # By moving this outside the form, the selection state is saved immediately.
     st.subheader("Input Files")
 
     # GenBank file
@@ -141,20 +162,6 @@ with tab_circular:
         key=gb_key
     )
 
-    # Custom default color file
-    d_color_key = "c_d_color"
-    current_d_color_selection = st.session_state.get(d_color_key, "")
-    try:
-        d_color_index = file_options.index(current_d_color_selection)
-    except ValueError:
-        d_color_index = 0
-    c_mod_default_colors = st.selectbox(
-        "Custom default color file (optional):",
-        file_options,
-        index=d_color_index,
-        key=d_color_key
-    )
-
     # Feature-specific color file
     t_color_key = "c_t_color"
     current_t_color_selection = st.session_state.get(t_color_key, "")
@@ -169,7 +176,37 @@ with tab_circular:
         key=t_color_key
     )
     st.markdown("---")
-    # --- END: File selection section ---
+
+    # --- NEW: Interactive Color Customization Section ---
+    st.subheader("🎨 Color Customization")
+    c_palette = st.selectbox("Base color palette:", PALETTES, index=0, key="c_palette_selector")
+
+    # Load colors for the selected palette
+    palette_colors = get_palette_colors(c_palette)
+
+    # Initialize or update session state for custom colors when the palette changes
+    if 'custom_circular_colors' not in st.session_state or st.session_state.get('current_c_palette') != c_palette:
+        st.session_state.custom_circular_colors = palette_colors.copy()
+        st.session_state.current_c_palette = c_palette
+
+    st.write("Click on the color boxes below to customize the default colors for each feature.")
+    
+    # Display color pickers in columns for a cleaner layout
+    cols = st.columns(5)
+    color_keys = sorted(st.session_state.custom_circular_colors.keys())
+
+    for i, feature in enumerate(color_keys):
+        col = cols[i % 5]
+        with col:
+            # The color picker widget updates the session state automatically on change
+            st.session_state.custom_circular_colors[feature] = st.color_picker(
+                label=feature,
+                value=st.session_state.custom_circular_colors[feature],
+                key=f"c_color_picker_{feature}"
+            )
+
+    st.markdown("---")
+    # --- END: Interactive Color Customization Section ---
 
     with st.form("circular_form"):
         st.header("Drawing Options")
@@ -180,9 +217,6 @@ with tab_circular:
             c_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="c_fmt")
             c_track_type = st.selectbox("Track type:", ["tuckin", "middle", "spreadout"], index=0, key="c_track")
             c_legend = st.selectbox("Legend:", ["right", "left", "upper_left", "upper_right", "lower_left", "lower_right", "none"], index=0, key="c_legend")
-
-            c_palette = st.selectbox("Color palette:", PALETTES, index=0, key="c_palette")
-
 
         with col2:
             st.subheader("Display Options")
@@ -198,13 +232,7 @@ with tab_circular:
                 c_suppress_gc = st.checkbox("Suppress GC content track", value=False, key="c_gc_suppress")
                 c_suppress_skew = st.checkbox("Suppress GC skew track", value=False, key="c_skew_suppress")
             with st.expander("🔧 Advanced Options"):
-
-                c_adv_feat = st.multiselect(
-                    "Features (-k):",
-                    options=FEATURE_KEYS,
-                    default=["CDS", "tRNA", "rRNA", "repeat_region"],
-                    key="c_feat"
-                )
+                c_adv_feat = st.multiselect("Features (-k):", options=FEATURE_KEYS, default=["CDS", "tRNA", "rRNA", "repeat_region"], key="c_feat")
                 c_adv_nt = st.text_input("Dinucleotide (--nt):", value="GC", key="c_nt")
                 c_adv_win = st.number_input("Window size:", value=1000, key="c_win")
                 c_adv_step = st.number_input("Step size:", value=100, key="c_step")
@@ -224,11 +252,11 @@ with tab_circular:
 
             sanitized_prefix = os.path.basename(c_prefix.strip())
             prefix = sanitized_prefix or Path(c_gb_file).stem
+            
             output_path = Path(f"{prefix}.{c_fmt}")
             circular_args = ["-i", gb_path, "-o", prefix, "-f", c_fmt, "--track_type", c_track_type]
             if c_show_labels: circular_args.append("--show_labels")
             if c_separate_strands: circular_args.append("--separate_strands")
-
             if c_allow_inner_labels:
                 circular_args.append("--allow_inner_labels")
                 # If inner labels are allowed, suppress GC content and GC skew tracks
@@ -238,47 +266,49 @@ with tab_circular:
                 # Only add these options if inner labels are not allowed
                 if c_suppress_gc: circular_args.append("--suppress_gc")
                 if c_suppress_skew: circular_args.append("--suppress_skew")
-
             if c_legend != "right": circular_args += ["-l", c_legend]
             if c_palette: circular_args += ["--palette", c_palette]
+            
+            # --- MODIFICATION: Generate and use the custom color file ---
+            if 'custom_circular_colors' in st.session_state and st.session_state.custom_circular_colors:
+                custom_color_filename = f"custom_colors_c_{uuid.uuid4().hex[:8]}.tsv"
+                save_path = UPLOAD_DIR / custom_color_filename
+                
+                with open(save_path, "w") as f:
+                    for feature, color in st.session_state.custom_circular_colors.items():
+                        f.write(f"{feature}\t{color}\n")
+                
+                circular_args += ["-d", str(save_path)]
+                st.session_state.uploaded_files[custom_color_filename] = str(save_path)
+            # --- END MODIFICATION ---
+
             circular_args += ["-k", ",".join(c_adv_feat), "-n", c_adv_nt, "-w", str(c_adv_win), "-s", str(c_adv_step)]
             circular_args += ["--block_stroke_color", c_adv_blk_color, "--block_stroke_width", str(c_adv_blk_width)]
             circular_args += ["--line_stroke_color", c_adv_line_color, "--line_stroke_width", str(c_adv_line_width)]
-            if c_mod_default_colors: circular_args += ["-d", st.session_state.uploaded_files[c_mod_default_colors]]
             if c_feature_specific_color_table: circular_args += ["-t", st.session_state.uploaded_files[c_feature_specific_color_table]]
-            # Set up logging to capture output
+            
             logger = logging.getLogger() 
             log_capture = io.StringIO()  
-            # Log the command that will be executed
             command_str = f"gbdraw circular {' '.join(circular_args)}"
             log_capture.write(f"--- Executed Command ---\n{command_str}\n------------------------\n\n")
-            # Set up a stream handler to capture logs
             stream_handler = logging.StreamHandler(log_capture)
             stream_handler.setLevel(logging.INFO) 
             logger.addHandler(stream_handler)
 
-
-            with st.spinner(f"Running: `gbrdaw circular {' '.join(circular_args)}`"):
-
+            with st.spinner(f"Running: `gbdraw circular {' '.join(circular_args)}`"):
                 try:
-                    # Use redirect_stderr to capture any stderr output
                     with redirect_stderr(log_capture):
                         circular_main(circular_args)
                     st.success("✅ gbdraw finished successfully.")
-
                     st.session_state.circular_result = {"prefix": prefix, "fmt": c_fmt, "log": log_capture.getvalue()}
 
-
                 except SystemExit as e:
-                    # Catch exit calls from argparse to display errors
                     if e.code != 0:
                         st.error(f"Error running gbdraw (exit code {e.code}):\n{log_capture.getvalue()}")
                         st.session_state.circular_result = None
-                    else: # Success exit code 0
+                    else: 
                         st.success("✅ gbdraw finished successfully.")
-
                         st.session_state.circular_result = {"prefix": prefix, "fmt": c_fmt, "log": log_capture.getvalue()}
-
                 except Exception as e:
                     st.error(f"An unexpected error occurred:\n{e}\n\nLog:\n{log_capture.getvalue()}")
                     st.session_state.circular_result = None
@@ -289,17 +319,14 @@ with tab_circular:
     if st.session_state.circular_result:
         st.subheader("🌀 Circular Drawing Output")
         res = st.session_state.circular_result
-        # Extract prefix and format from the result
         prefix = res["prefix"] 
         fmt = res["fmt"]
-        # Collect all output files matching the prefix and format
         output_files = sorted(list(Path(".").glob(f"{prefix}*.{fmt}")))
 
         if output_files:
             for out_path in output_files:
                 file_extension = out_path.suffix.lower()
 
-                # Preview handling
                 if file_extension == ".svg":
                     st.image(out_path.read_text(), caption=str(out_path.name))
                 elif file_extension == ".png":
@@ -307,17 +334,15 @@ with tab_circular:
                 else:
                     st.info(f"📄 Preview is not available for {out_path.suffix.upper()} format. Please use the download button below.")
 
-                # Download button
                 with open(out_path, "rb") as f:
                     st.download_button(
                         f"⬇️ Download {out_path.name}",
                         data=f,
                         file_name=out_path.name,
-                        key=f"download_{out_path.name}" # Unique key for each download button
+                        key=f"download_{out_path.name}"
                     )
                 st.markdown("---")
             
-            # Log display
             with st.expander("Show Log"):
                 st.text(res["log"])
                 
@@ -377,22 +402,7 @@ with tab_linear:
         st.session_state.linear_seq_count -= 1
         st.rerun()
 
-    # --- START: Move custom color file selection outside the form ---
-    st.subheader("Custom Color Files (Optional)")
-    
-    # Custom default color file
-    d_color_key = "l_d_color"
-    current_d_color_selection = st.session_state.get(d_color_key, "")
-    try:
-        d_color_index = file_options.index(current_d_color_selection)
-    except ValueError:
-        d_color_index = 0
-    l_mod_default_colors = st.selectbox(
-        "Custom default color file:",
-        file_options,
-        index=d_color_index,
-        key=d_color_key
-    )
+    st.subheader("Color Options")
 
     # Feature-specific color file
     t_color_key = "l_t_color"
@@ -402,11 +412,34 @@ with tab_linear:
     except ValueError:
         t_color_index = 0
     l_feature_specific_color_table = st.selectbox(
-        "Feature-specific color file:",
+        "Feature-specific color file (optional):",
         file_options,
         index=t_color_index,
         key=t_color_key
     )
+    
+    # --- NEW: Interactive Color Customization Section for Linear Tab ---
+    l_palette = st.selectbox("Base color palette:", PALETTES, index=0, key="l_palette_selector")
+
+    l_palette_colors = get_palette_colors(l_palette)
+
+    if 'custom_linear_colors' not in st.session_state or st.session_state.get('current_l_palette') != l_palette:
+        st.session_state.custom_linear_colors = l_palette_colors.copy()
+        st.session_state.current_l_palette = l_palette
+
+    st.write("Click on the color boxes below to customize the default colors for each feature.")
+    
+    l_cols = st.columns(5)
+    l_color_keys = sorted(st.session_state.custom_linear_colors.keys())
+
+    for i, feature in enumerate(l_color_keys):
+        col = l_cols[i % 5]
+        with col:
+            st.session_state.custom_linear_colors[feature] = st.color_picker(
+                label=feature,
+                value=st.session_state.custom_linear_colors[feature],
+                key=f"l_color_picker_{feature}"
+            )
     st.markdown("---")
     # --- END ---
 
@@ -418,8 +451,6 @@ with tab_linear:
             l_prefix = st.text_input("Output prefix:", value="linear", key="l_prefix")
             l_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="l_fmt")
             l_legend = st.selectbox("Legend:", ["right", "left", "none"], index=0, key="l_legend")
-
-            l_palette = st.selectbox("Color palette:", PALETTES, index=0, key="l_palette")
 
         with col2:
             st.subheader("Display Options")
@@ -448,9 +479,8 @@ with tab_linear:
                 st.markdown("---")
                 l_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="l_b_color")
                 l_adv_blk_width = st.number_input("Block stroke width:", 0.0, key="l_b_width")
-                l_adv_line_color = st.color_picker("Block stroke color:", value="#808080", key="l_l_color")
+                l_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="l_l_color")
                 l_adv_line_width = st.number_input("Line stroke width:", 1.0, key="l_l_width")
-                # Custom color file selections were moved outside the form, so they are removed from here.
         
         l_submitted = st.form_submit_button("🚀 Run gbdraw Linear", type="primary")
 
@@ -486,23 +516,34 @@ with tab_linear:
             if l_resolve_overlaps: linear_args.append("--resolve_overlaps")
             if l_legend != "right": linear_args += ["-l", l_legend]
             if l_palette: linear_args += ["--palette", l_palette]
-            linear_args += ["-k", ",".join(c_adv_feat), "-n", l_adv_nt, "-w", str(l_adv_win), "-s", str(l_adv_step)]
+            
+            # --- MODIFICATION: Generate and use the custom color file for Linear ---
+            if 'custom_linear_colors' in st.session_state and st.session_state.custom_linear_colors:
+                custom_color_filename = f"custom_colors_l_{uuid.uuid4().hex[:8]}.tsv"
+                save_path = UPLOAD_DIR / custom_color_filename
+
+                with open(save_path, "w") as f:
+                    for feature, color in st.session_state.custom_linear_colors.items():
+                        f.write(f"{feature}\t{color}\n")
+                
+                linear_args += ["-d", str(save_path)]
+                st.session_state.uploaded_files[custom_color_filename] = str(save_path)
+            # --- END MODIFICATION ---
+
+            linear_args += ["-k", ",".join(l_adv_feat), "-n", l_adv_nt, "-w", str(l_adv_win), "-s", str(l_adv_step)]
             linear_args += ["--bitscore", str(l_adv_bitscore), "--evalue", l_adv_evalue, "--identity", str(l_adv_identity)]
             linear_args += ["--block_stroke_color", l_adv_blk_color, "--block_stroke_width", str(l_adv_blk_width)]
             linear_args += ["--line_stroke_color", l_adv_line_color, "--line_stroke_width", str(l_adv_line_width)]
-            if l_mod_default_colors: linear_args += ["-d", st.session_state.uploaded_files[l_mod_default_colors]]
             if l_feature_specific_color_table: linear_args += ["-t", st.session_state.uploaded_files[l_feature_specific_color_table]]
             
             logger = logging.getLogger()
             log_capture = io.StringIO()
-            command_str = f"gbdraw linear {' '.join(map(str, linear_args))}" # Ensure all args are strings
+            command_str = f"gbdraw linear {' '.join(map(str, linear_args))}"
             stream_handler = logging.StreamHandler(log_capture)
             stream_handler.setLevel(logging.INFO)
             logger.addHandler(stream_handler)
             log_capture.write(f"--- Executed Command ---\n{command_str}\n------------------------\n\n")
-
             with st.spinner(f"Running: `{command_str}`"):
-
                 try:
                     with redirect_stderr(log_capture):
                         linear_main(linear_args)
@@ -529,19 +570,15 @@ with tab_linear:
         out_path = res["path"]
         
         if out_path.exists():
-            # Define previewable extensions
             file_extension = out_path.suffix.lower()
 
-            # Preview handling
             if file_extension == ".svg":
                 st.image(out_path.read_text(), caption=str(out_path.name))
             elif file_extension == ".png":
                 st.image(str(out_path), caption=str(out_path.name))
             else:
-                # For formats that do not support preview
                 st.info(f"📄 Preview is not available for {out_path.suffix.upper()} format. Please use the download button below.")
 
-            # Download button (always displayed)
             with open(out_path, "rb") as f:
                 st.download_button(
                     f"⬇️ Download {out_path.name}",
@@ -549,7 +586,6 @@ with tab_linear:
                     file_name=out_path.name
                 )
             
-            # Log display
             with st.expander("Show Log"):
                 st.text(res["log"])
                 
