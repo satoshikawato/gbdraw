@@ -32,8 +32,8 @@
 ### Bioconda (recommended)
 `gbdraw` is available on the Bioconda channel.
 ```bash
-conda create -n gbdraw-0.2.0 -y -c conda-forge -c bioconda gbdraw=0.2.0
-conda activate gbdraw-0.2.0
+conda create -n gbdraw-0.3.0 -y -c conda-forge -c bioconda gbdraw=0.3.0
+conda activate gbdraw-0.3.0
 ```
 ### Local build (development version)
 To use the latest development version, clone the repository yourself using `git` and build the package locally with [conda-build](https://anaconda.org/anaconda/conda-build).
@@ -66,7 +66,7 @@ You can try `gbdraw` (latest release) on Google Colaboratory without any local i
 ## Usage
 ```bash
 gbdraw -h
-gbdraw v. 0.1.0: A diagram generator for small genomes
+gbdraw v. 0.3.0: A diagram generator for small genomes
 
 Usage:
   gbdraw <subcommand> [options]
@@ -223,15 +223,6 @@ umamba deactivate
 ```
 ![HHV-6](https://github.com/satoshikawato/gbdraw/blob/main/examples/HHV-6.svg)
 
-### <i>Saccharomyces cerevisiae</i> (budding yeast)
-Although primarily focused on smaller genomes, `gbdraw` <i>can</i> handle eukaryotic genomes like the budding yeast, <i>S. cerevisiae</i>:
-```bash
-wget -c https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/146/045/GCF_000146045.2_R64/GCF_000146045.2_R64_genomic.gbff.gz # download genome
-gunzip GCF_000146045.2_R64_genomic.gbff.gz # decomperss .gz file
-gbdraw linear -i GCF_000146045.2_R64_genomic.gbff --separate_strands --show_gc -o yeast -f svg # outputs yeast.svg
-```
-![yeast](https://github.com/satoshikawato/gbdraw/blob/main/examples/yeast.svg)
-
 ### <i>Candidatus</i> Hepatoplasmataceae (mollicutes)
 ```bash
 tblastx -query Fukuoka2020.fasta -subject Av-JP.fasta  -outfmt 7 -out Fukuoka2020_Av-JP.tblastx.out
@@ -243,13 +234,10 @@ gbdraw linear -i Fukuoka2020.gb Av-JP.gb Ps-JP.gb Tokyo2021.gb Av.gb -b Fukuoka2
 ![hepatoplasmataceae](https://github.com/satoshikawato/gbdraw/blob/main/examples/hepatoplasmataceae.svg)
 ## Advanced customization
 
-`gbdraw` allows users to personalize feature colors. This is done by providing a custom tab-separated file that specifies the desired color codes. Additionally, the colors and widths of the strokes can be fine-tuned using command-line arguments like `--block_stroke_width`.
-
 ### Color palettes
 
 `gbdraw` ships with [a total of 55 color palettes](https://github.com/satoshikawato/gbdraw/blob/main/examples/color_palette_examples.md). Choose a palette with **`-p/--palette <name>`** or override individual colours via TSV files.
 ![palettes_combined_image_1.png](https://github.com/satoshikawato/gbdraw/blob/main/examples/palettes_combined_image_1.png)
-
 
 #### Examples
 ##### autumn
@@ -280,31 +268,7 @@ See [this page](https://github.com/satoshikawato/gbdraw/blob/main/examples/color
 
 Both tables are tab separated. Colours may be given as any of the [147 color names defined by the SVG specification](https://johndecember.com/html/spec/colorsvg.html) or in [hexadecimal format](https://htmlcolorcodes.com/) (`#RRGGBB`).
 
-
 #### Overriding the default color table
-The default color table (`/site-packages/gbdraw/data/default_colors.tsv`) is as follows:
-```default_colors.tsv
-CDS	#89d1fa
-rRNA	#71ee7d
-tRNA	#e8b441
-tmRNA	#ded44e
-ncRNA	#c4fac3
-repeat_region	#d3d3d3
-misc_feature	#d3d3d3
-default	#d3d3d3
-skew_high	#6dded3
-skew_low	#ad72e3
-gc_content	#a1a1a1
-pairwise_match	#d3d3d3
-```
-This means:
-| feature type | color |
-| ------ | ------- |
-| CDS | #89d1fa |
-| rRNA | #71ee7d |
-| tRNA | #e8b441 |
-| ... | ... |
-
 The following `modified_default_colors.tsv` turns CDS gray (`#d3d3d3`). Other features remain the same as default:
 ```modified_default_colors.tsv
 CDS	#d3d3d3
@@ -333,7 +297,6 @@ This means:
 gbdraw circular -i LC738868.gb -o LC738868_middle_separate_strands -f svg,png --block_stroke_width 1 --block_stroke_color gray --show_labels --track_type middle --separate_strands -t custom_color_table.tsv -d modified_default_colors.tsv 
 ```
 ![MjeNMV](https://github.com/satoshikawato/gbdraw/blob/main/examples/LC738868_middle_separate_strands.png)
-
 
 ### Multiple genome alignments
 `gbdraw linear` can also be used for visualizing multi-genome alignments, providing a comparative view of different genomes. This feature is particularly useful for identifying conserved regions and variations across multiple genomes.
@@ -385,7 +348,7 @@ MeenMJNV.MejoMJNV.tblastx.out \
 ```
 ![majaniviruses](https://github.com/satoshikawato/gbdraw/blob/main/examples/majani.svg)
 
-### Feature labels (experimental)
+### Feature labels
 
 ```bash
 gbdraw circular -i AP027280.gb -f svg --block_stroke_width 1 --block_stroke_color gray --track_type spreadout --show_labels
@@ -396,14 +359,14 @@ gbdraw circular -i NC_012920.gb -f svg --block_stroke_width 2 --block_stroke_col
 ```
 ![HsmtDMA](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920.svg)
 
+
 ## Planned features
-- Color palettes (will be added in the next update)
-- Dynamic scaling of the text (planned)
 - Multiple tracks to visualize overlapping features (planned; overlapping genes, transcript isoforms etc.)
 - 
 ## Known issues
-- trans-splicing are not correctly handled (e.g. plant organelles)
-- SVG to PDF/PNG/EPS/PS conversion issues (tick labels)
+- **Trans-introns** are not currently visualized.
+- **Mixed-format text** (e.g., combining italic and block elements like `<i>Ca.</i> Tyloplasma litorale`) cannot be reliably converted from SVG to PDF/PNG/EPS/PS.  
+  → As a workaround, export to **SVG format** and convert to other formats using external tools like [**Inkscape**](https://inkscape.org/).
 
 ## Bug reports and suggestions
 Please feel free to submit a new issue if you find a bug or have a suggestion:

@@ -36,7 +36,7 @@ def _get_args(args) -> argparse.Namespace:
     visualizing GC content, GC skew, and specific genomic features.
     """
     parser = argparse.ArgumentParser(
-        description='Generate genome diagrams in PNG/PDF/SVG/PS/EPS. Diagrams for multiple entries are saved separately (hence the lack of output file name option).')
+        description='Generate genome diagrams in PNG/PDF/SVG/PS/EPS. Diagrams for multiple entries are saved separately.')
     parser.add_argument(
         '-i',
         '--input',
@@ -65,7 +65,7 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-d',
         '--default_colors',
-        help='TSV file that specifies default color Configurator (optional; default: data/default_colors.tsv)',
+        help='TSV file that overrides the color palette (optional)',
         type=str,
         default="")
     parser.add_argument(
@@ -97,9 +97,9 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-k',
         '--features',
-        help='Comma-separated list of feature keys to draw (default: CDS,tRNA,rRNA,repeat_region)',
+        help='Comma-separated list of feature keys to draw (default: CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)',
         type=str,
-        default="CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region,regulatory,rep_origin")
+        default="CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region")
     parser.add_argument(
         '--block_stroke_color',
         help='Block stroke color (str; default: "gray")',
@@ -155,7 +155,7 @@ def _get_args(args) -> argparse.Namespace:
         action='store_true')
     parser.add_argument(
         '--allow_inner_labels',
-        help='Place labels inside the circle (default: False).',
+        help='Place labels inside the circle (default: False). If enabled, labels are placed both inside and outside the circle, and gc and skew tracks are not shown.',
         action='store_true')
 
     args = parser.parse_args(args)

@@ -72,7 +72,7 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-d',
         '--default_colors',
-        help='TSV file that specifies default color Configurator (optional; default: data/default_colors.tsv)',
+        help='TSV file that overrides the color palette (optional)',
         type=str,
         default="")
     parser.add_argument(
@@ -101,7 +101,7 @@ def _get_args(args) -> argparse.Namespace:
         default="100")
     parser.add_argument(
         '--separate_strands',
-        help='separate forward and reverse strands (default: False). Features of undefined strands are shown on the forward strand. ',
+        help='separate forward and reverse strands (default: False). Features of undefined strands are shown on the forward strand.',
         action='store_true')
     parser.add_argument(
         '--show_gc',
@@ -129,9 +129,9 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-k',
         '--features',
-        help='Comma-separated list of feature keys to draw (default: CDS,tRNA,rRNA,repeat_region)',
+        help='Comma-separated list of feature keys to draw (default: CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)',
         type=str,
-        default="CDS,tRNA,rRNA,tmRNA,ncRNA,repeat_region")
+        default="CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region")
     parser.add_argument(
         '--block_stroke_color',
         help='Block stroke color (str; default: "black")',
@@ -167,7 +167,7 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument("--show_labels", help="Show labels", action="store_true")
     parser.add_argument(
         '--resolve_overlaps',
-        help='Resolve overlaps (tentative; default: False). ',
+        help='Resolve overlaps (experimental; default: False). ',
         action='store_true')
     args = parser.parse_args(args)
     return args
