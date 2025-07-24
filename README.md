@@ -95,10 +95,14 @@ Additional Information:
 ### Circular genome
 ```bash
 $ gbdraw circular -h
-usage: gbdraw [-h] -i [INPUT ...] [-o OUTPUT] [-p PALETTE] [-t TABLE] [-d DEFAULT_COLORS] [-n NT] [-w WINDOW] [-s STEP] [--species SPECIES] [--strain STRAIN] [-k FEATURES] [--block_stroke_color BLOCK_STROKE_COLOR] [--block_stroke_width BLOCK_STROKE_WIDTH] [--line_stroke_color LINE_STROKE_COLOR]
-              [--line_stroke_width LINE_STROKE_WIDTH] [-f FORMAT] [--suppress_gc] [--suppress_skew] [-l LEGEND] [--separate_strands] [--track_type TRACK_TYPE] [--show_labels]
+usage: gbdraw [-h] -i [INPUT ...] [-o OUTPUT] [-p PALETTE] [-t TABLE] [-d DEFAULT_COLORS] [-n NT] [-w WINDOW]
+              [-s STEP] [--species SPECIES] [--strain STRAIN] [-k FEATURES]
+              [--block_stroke_color BLOCK_STROKE_COLOR] [--block_stroke_width BLOCK_STROKE_WIDTH]
+              [--line_stroke_color LINE_STROKE_COLOR] [--line_stroke_width LINE_STROKE_WIDTH] [-f FORMAT]
+              [--suppress_gc] [--suppress_skew] [-l LEGEND] [--separate_strands] [--track_type TRACK_TYPE]
+              [--show_labels] [--allow_inner_labels]
 
-Generate genome diagrams in PNG/PDF/SVG/PS/EPS. Diagrams for multiple entries are saved separately (hence the lack of output file name option).
+Generate genome diagrams in PNG/PDF/SVG/PS/EPS. Diagrams for multiple entries are saved separately.
 
 options:
   -h, --help            show this help message and exit
@@ -109,14 +113,16 @@ options:
                         Palette name (default: default)
   -t, --table TABLE     color table (optional)
   -d, --default_colors DEFAULT_COLORS
-                        TSV file that specifies default color Configurator (optional; default: data/default_colors.tsv)
+                        TSV file that overrides the color palette (optional)
   -n, --nt NT           dinucleotide (default: GC).
   -w, --window WINDOW   window size (default: 1000)
   -s, --step STEP       step size (default: 100)
-  --species SPECIES     Species name (optional; e.g. "<i>Escherichia coli</i>", "<i>Ca.</i> Hepatoplasma crinochetorum")
+  --species SPECIES     Species name (optional; e.g. "<i>Escherichia coli</i>", "<i>Ca.</i> Hepatoplasma
+                        crinochetorum")
   --strain STRAIN       Strain/isolate name (optional; e.g. "K-12", "Av")
   -k, --features FEATURES
-                        Comma-separated list of feature keys to draw (default: CDS,tRNA,rRNA,repeat_region)
+                        Comma-separated list of feature keys to draw (default:
+                        CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
@@ -128,11 +134,14 @@ options:
   -f, --format FORMAT   Comma-separated list of output file formats (default: png)
   --suppress_gc         Suppress GC content track (default: False).
   --suppress_skew       Suppress GC skew track (default: False).
-  -l, --legend LEGEND   Legend position (default: "right"; "left", "right", "upper_left", "upper_right", "lower_left", "lower_right", "none")
+  -l, --legend LEGEND   Legend position (default: "right"; "left", "right", "upper_left", "upper_right",
+                        "lower_left", "lower_right", "none")
   --separate_strands    Separate strands (default: False).
   --track_type TRACK_TYPE
                         Track type (default: "tuckin"; "tuckin", "middle", "spreadout")
   --show_labels         Show feature labels (default: False).
+  --allow_inner_labels  Place labels inside the circle (default: False). If enabled, labels are placed both
+                        inside and outside the circle, and gc and skew tracks are not shown.
 ```
 #### <i>Haemophilus influenzae</i>
 `gbdraw` automatically identifies and displays the organism and strain name from the sequence record. However, these names are not italicized by default. For example:
@@ -165,8 +174,12 @@ gbdraw circular -i GCF_000016245.1_ASM1624v1_genomic.gbff --species "<i>Vibrio c
 `gbdraw linear`
 ```bash
 $ gbdraw linear -h
-usage: gbdraw [-h] -i [INPUT ...] [-b [BLAST ...]] [-t TABLE] [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT] [-n NT] [-w WINDOW] [-s STEP] [--separate_strands] [--show_gc] [--align_center] [--evalue EVALUE] [--bitscore BITSCORE] [--identity IDENTITY] [-k FEATURES] [--block_stroke_color BLOCK_STROKE_COLOR]
-              [--block_stroke_width BLOCK_STROKE_WIDTH] [--line_stroke_color LINE_STROKE_COLOR] [--line_stroke_width LINE_STROKE_WIDTH] [-f FORMAT] [-l LEGEND] [--show_labels] [--resolve_overlaps]
+usage: gbdraw [-h] -i [INPUT ...] [-b [BLAST ...]] [-t TABLE] [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT]
+              [-n NT] [-w WINDOW] [-s STEP] [--separate_strands] [--show_gc] [--align_center] [--evalue EVALUE]
+              [--bitscore BITSCORE] [--identity IDENTITY] [-k FEATURES]
+              [--block_stroke_color BLOCK_STROKE_COLOR] [--block_stroke_width BLOCK_STROKE_WIDTH]
+              [--line_stroke_color LINE_STROKE_COLOR] [--line_stroke_width LINE_STROKE_WIDTH] [-f FORMAT]
+              [-l LEGEND] [--show_labels] [--resolve_overlaps]
 
 Generate plot in PNG/PDF/SVG/PS/EPS.
 
@@ -180,19 +193,21 @@ options:
   -p, --palette PALETTE
                         Palette name (default: default)
   -d, --default_colors DEFAULT_COLORS
-                        TSV file that specifies default color Configurator (optional; default: data/default_colors.tsv)
+                        TSV file that overrides the color palette (optional)
   -o, --output OUTPUT   output file prefix (default: out)
   -n, --nt NT           dinucleotide skew (default: GC).
   -w, --window WINDOW   window size (default: 1000)
   -s, --step STEP       step size (default: 100)
-  --separate_strands    separate forward and reverse strands (default: False). Features of undefined strands are shown on the forward strand.
+  --separate_strands    separate forward and reverse strands (default: False). Features of undefined strands are
+                        shown on the forward strand.
   --show_gc             plot GC content below genome (default: False).
   --align_center        Align genomes to the center (default: False).
   --evalue EVALUE       evalue threshold (default=1e-2)
   --bitscore BITSCORE   bitscore threshold (default=50)
   --identity IDENTITY   identity threshold (default=0)
   -k, --features FEATURES
-                        Comma-separated list of feature keys to draw (default: CDS,tRNA,rRNA,repeat_region)
+                        Comma-separated list of feature keys to draw (default:
+                        CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "black")
   --block_stroke_width BLOCK_STROKE_WIDTH
@@ -204,7 +219,7 @@ options:
   -f, --format FORMAT   Comma-separated list of output file formats (default: png)
   -l, --legend LEGEND   Legend position (default: "right"; "right", "left", "none")
   --show_labels         Show labels
-  --resolve_overlaps    Resolve overlaps (tentative; default: False).
+  --resolve_overlaps    Resolve overlaps (experimental; default: False).
 ```
 ### Human herpesvirus 6 (HHV-6)
 `gbdraw` can draw linear genomes and pairwise matches depicting similar genomic regions.
