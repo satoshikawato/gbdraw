@@ -8,6 +8,7 @@ import logging
 import shutil
 import uuid
 import tomllib
+import time
 import streamlit as st
 from pathlib import Path
 from importlib import resources
@@ -288,19 +289,28 @@ if selected_mode == "🔵 Circular":
             stream_handler = logging.StreamHandler(log_capture)
             stream_handler.setLevel(logging.INFO) 
             logger.addHandler(stream_handler)
+            start_time = time.time()
             with st.spinner(f"Running: `gbdraw circular {' '.join(circular_args)}`"):
                 try:
-                    with redirect_stderr(log_capture):
+                    with redirect_stdout(log_capture), redirect_stderr(log_capture):
                         circular_main(circular_args)
                     st.success("✅ gbdraw finished successfully.")
+                    end_time = time.time()
+                    duration = end_time - start_time
+                    log_capture.write(f"\n--- Execution Time ---\nTotal time: {duration:.2f} seconds\n----------------------")
                     st.session_state.circular_result = {"prefix": prefix, "fmt": c_fmt, "log": log_capture.getvalue()}
+
                 except SystemExit as e:
                     if e.code != 0:
                         st.error(f"Error running gbdraw (exit code {e.code}):\n{log_capture.getvalue()}")
                         st.session_state.circular_result = None
                     else: 
                         st.success("✅ gbdraw finished successfully.")
+                        end_time = time.time()
+                        duration = end_time - start_time
+                        log_capture.write(f"\n--- Execution Time ---\nTotal time: {duration:.2f} seconds\n----------------------")
                         st.session_state.circular_result = {"prefix": prefix, "fmt": c_fmt, "log": log_capture.getvalue()}
+
                 except Exception as e:
                     st.error(f"An unexpected error occurred:\n{e}\n\nLog:\n{log_capture.getvalue()}")
                     st.session_state.circular_result = None
@@ -480,19 +490,28 @@ if selected_mode == "📏 Linear":
             stream_handler.setLevel(logging.INFO)
             logger.addHandler(stream_handler)
             log_capture.write(f"--- Executed Command ---\n{command_str}\n------------------------\n\n")
+            start_time = time.time()
             with st.spinner(f"Running: `{command_str}`"):
                 try:
-                    with redirect_stderr(log_capture):
+                    with redirect_stdout(log_capture), redirect_stderr(log_capture):
                         linear_main(linear_args)
                     st.success("✅ gbdraw finished successfully.")
+                    end_time = time.time()
+                    duration = end_time - start_time
+                    log_capture.write(f"\n--- Execution Time ---\nTotal time: {duration:.2f} seconds\n----------------------")
                     st.session_state.linear_result = {"path": output_path, "log": log_capture.getvalue()}
+
                 except SystemExit as e:
                     if e.code != 0:
                         st.error(f"Error running gbdraw (exit code {e.code}):\n{log_capture.getvalue()}")
                         st.session_state.linear_result = None
                     else:
                         st.success("✅ gbdraw finished successfully.")
+                        end_time = time.time()
+                        duration = end_time - start_time
+                        log_capture.write(f"\n--- Execution Time ---\nTotal time: {duration:.2f} seconds\n----------------------")
                         st.session_state.linear_result = {"path": output_path, "log": log_capture.getvalue()}
+
                 except Exception as e:
                     st.error(f"An unexpected error occurred:\n{e}\n\nLog:\n{log_capture.getvalue()}")
                     st.session_state.linear_result = None
