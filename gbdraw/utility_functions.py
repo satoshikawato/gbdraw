@@ -152,17 +152,38 @@ def update_config_value(config_dict, path, value):
         config_dict = config_dict.setdefault(key, {})
     config_dict[keys[-1]] = value
 
-def modify_config_dict(config_dict, block_stroke_width=None, block_stroke_color=None, 
-                       line_stroke_color=None, line_stroke_width=None, 
-                       gc_stroke_color=None, show_gc=None, show_skew=None, show_labels=None, align_center=None, cicular_width_with_labels=None, track_type=None, strandedness=None, resolve_overlaps=None, allow_inner_labels=None) -> dict:
+
+def modify_config_dict(config_dict, 
+                       block_stroke_width=None, 
+                       block_stroke_color=None, 
+                       line_stroke_color=None, 
+                       line_stroke_width=None, 
+                       gc_stroke_color=None,
+                       label_font_size=None, 
+                       show_gc=None, 
+                       show_skew=None, 
+                       show_labels=None, 
+                       align_center=None, 
+                       cicular_width_with_labels=None, 
+                       track_type=None, 
+                       strandedness=None, 
+                       resolve_overlaps=None, 
+                       allow_inner_labels=None) -> dict:
     # Mapping of parameter names to their paths in the config_dict
-    
+    label_font_size_circular_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['long']
+    label_font_size_circular_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['short']
+    label_font_size_linear_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['long']
+    label_font_size_linear_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['short']
     param_paths = {
         'block_stroke_width': 'objects.features.block_stroke_width',
         'block_stroke_color': 'objects.features.block_stroke_color',
         'line_stroke_color': 'objects.features.line_stroke_color',
         'line_stroke_width': 'objects.features.line_stroke_width',
         'gc_stroke_color': 'objects.gc_content.stroke_color',
+        'label_font_size_circular_long': 'labels.font_size.long',
+        'label_font_size_circular_short': 'labels.font_size.short',
+        'label_font_size_linear_long': 'labels.font_size.linear.long',
+        'label_font_size_linear_short': 'labels.font_size.linear.short',
         'strandedness': 'canvas.strandedness',
         'show_gc': 'canvas.show_gc',
         'show_skew': 'canvas.show_skew',

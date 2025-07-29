@@ -36,7 +36,7 @@ def _get_args(args) -> argparse.Namespace:
     visualizing GC content, GC skew, and specific genomic features.
     """
     parser = argparse.ArgumentParser(
-        description='Generate genome diagrams in PNG/PDF/SVG/PS/EPS. Diagrams for multiple entries are saved separately (hence the lack of output file name option).')
+        description='Generate genome diagrams in PNG/PDF/SVG/PS/EPS. Diagrams for multiple entries are saved separately.')
     parser.add_argument(
         '-i',
         '--input',
@@ -65,7 +65,7 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-d',
         '--default_colors',
-        help='TSV file that specifies default color Configurator (optional; default: data/default_colors.tsv)',
+        help='TSV file that overrides the color palette (optional)',
         type=str,
         default="")
     parser.add_argument(
@@ -97,9 +97,9 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-k',
         '--features',
-        help='Comma-separated list of feature keys to draw (default: CDS,tRNA,rRNA,repeat_region)',
+        help='Comma-separated list of feature keys to draw (default: CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)',
         type=str,
-        default="CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region,regulatory,rep_origin")
+        default="CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region")
     parser.add_argument(
         '--block_stroke_color',
         help='Block stroke color (str; default: "gray")',
@@ -120,6 +120,10 @@ def _get_args(args) -> argparse.Namespace:
         help='Line stroke width (float; default: 1.0)',
         type=float,
         default=1.0)
+    parser.add_argument(
+        '--label_font_size',
+        help='Label font size (optional; default: 16 for short genomes, 8 for long genomes)',
+        type=float)
     parser.add_argument(
         '-f',
         '--format',
@@ -155,7 +159,7 @@ def _get_args(args) -> argparse.Namespace:
         action='store_true')
     parser.add_argument(
         '--allow_inner_labels',
-        help='Place labels inside the circle (default: False).',
+        help='Place labels inside the circle (default: False). If enabled, labels are placed both inside and outside the circle, and gc and skew tracks are not shown.',
         action='store_true')
 
     args = parser.parse_args(args)
@@ -191,6 +195,7 @@ def circular_main(cmd_args) -> None:
     species: str = args.species
     strain: str = args.strain
     legend: str = args.legend
+    label_font_size: Optional[float] = args.label_font_size
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
     show_labels: bool = args.show_labels
@@ -213,7 +218,7 @@ def circular_main(cmd_args) -> None:
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     show_gc, show_skew = suppress_gc_content_and_skew(
         suppress_gc, suppress_skew)
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_labels=show_labels, track_type=track_type, strandedness=strandedness, show_gc=show_gc, show_skew=show_skew, allow_inner_labels=allow_inner_labels)
+    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_labels=show_labels, track_type=track_type, strandedness=strandedness, show_gc=show_gc, show_skew=show_skew, allow_inner_labels=allow_inner_labels, label_font_size=label_font_size)
     out_formats: list[str] = parse_formats(args.format)
     record_count: int = 0
     gb_records: list[SeqRecord] = load_gbks(input_file, "circular")
