@@ -1,6 +1,6 @@
 package:
   name: gbdraw
-  version: 0.2.0
+  version: 0.3.0
 
 source:
   path: ../
@@ -42,9 +42,11 @@ about:
   license_family: "MIT"
   license_file: "LICENSE.txt"
   summary: "A genome diagram generator for microbes and organelles"
-  description: "For details, see https://github.com/satoshikawato/gbdraw/"
-  fonts_license: "SIL OFL, Version 1.1"
-
+  description: |
+    gbdraw is a tool for generating high-quality genome diagrams, supporting both circular and linear formats. 
+    It is designed for annotated genomes from microbes and organelles. 
+    The web app version is available here: https://gbdraw.streamlit.app/
+  fonts_license: "SIL Open Font License (OFL) Version 1.1"
 extra:
   recipe-maintainers:
     - satoshikawato
