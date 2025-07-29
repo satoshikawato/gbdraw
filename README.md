@@ -377,12 +377,13 @@ gbdraw circular -i NC_012920.gb -f svg --block_stroke_width 2 --block_stroke_col
 
 ## Planned features
 - Multiple tracks to visualize overlapping features (planned; overlapping genes, transcript isoforms etc.)
-
+- Label size adjustment
+- Label text blacklist (e.g. "hypothetical", "uncharacterized" etc.)
 ## Known issues
 - **Trans-introns** are not currently visualized.
 - **Mixed-format text** (e.g., combining italic and block elements like `<i>Ca.</i> Tyloplasma litorale`) cannot be reliably converted from SVG to PDF/PNG/EPS/PS.  
   → As a workaround, export to **SVG format** and convert to other formats using external tools like [**Inkscape**](https://inkscape.org/).
-
+- **Label overcrowding**: label size adjustment and text blacklisting to be implemented soon
 ## Bug reports and suggestions
 Please feel free to submit a new issue if you find a bug or have a suggestion:
 https://github.com/satoshikawato/gbdraw/issues
