@@ -153,6 +153,10 @@ def _get_args(args) -> argparse.Namespace:
         type=float,
         default=1.0)
     parser.add_argument(
+        '--label_font_size',
+        help='Label font size (optional; default: 16 for short genomes, 5 for long genomes)',
+        type=float)
+    parser.add_argument(
         '-f',
         '--format',
         help='Comma-separated list of output file formats (default: png)',

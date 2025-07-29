@@ -121,6 +121,10 @@ def _get_args(args) -> argparse.Namespace:
         type=float,
         default=1.0)
     parser.add_argument(
+        '--label_font_size',
+        help='Label font size (optional; default: 16 for short genomes, 8 for long genomes)',
+        type=float)
+    parser.add_argument(
         '-f',
         '--format',
         help='Comma-separated list of output file formats (default: png)',
@@ -191,6 +195,7 @@ def circular_main(cmd_args) -> None:
     species: str = args.species
     strain: str = args.strain
     legend: str = args.legend
+    label_font_size: Optional[float] = args.label_font_size
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
     show_labels: bool = args.show_labels
@@ -213,7 +218,7 @@ def circular_main(cmd_args) -> None:
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     show_gc, show_skew = suppress_gc_content_and_skew(
         suppress_gc, suppress_skew)
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_labels=show_labels, track_type=track_type, strandedness=strandedness, show_gc=show_gc, show_skew=show_skew, allow_inner_labels=allow_inner_labels)
+    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_labels=show_labels, track_type=track_type, strandedness=strandedness, show_gc=show_gc, show_skew=show_skew, allow_inner_labels=allow_inner_labels, label_font_size=label_font_size)
     out_formats: list[str] = parse_formats(args.format)
     record_count: int = 0
     gb_records: list[SeqRecord] = load_gbks(input_file, "circular")

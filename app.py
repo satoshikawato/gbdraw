@@ -242,6 +242,7 @@ if selected_mode == "🔵 Circular":
                 c_adv_blk_width = st.number_input("Block stroke width:", 0.0, key="c_b_width")
                 c_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="c_l_color")
                 c_adv_line_width = st.number_input("Line stroke width:", 1.0, key="c_l_width")
+                c_adv_label_font_size = st.number_input("Label font size (default: 8 pt (>=50 kb) or 16 pt (<50 kb):", key="c_label_font_size")
         c_submitted = st.form_submit_button("🚀 Run gbdraw Circular", type="primary")
 
     if c_submitted:
@@ -261,6 +262,8 @@ if selected_mode == "🔵 Circular":
             if c_separate_strands: circular_args.append("--separate_strands")
             if c_allow_inner_labels:
                 circular_args.extend(["--allow_inner_labels", "--suppress_gc", "--suppress_skew"])
+            if c_adv_label_font_size:
+                circular_args += ["--label_font_size", str(c_adv_label_font_size)]
             else:
                 if c_suppress_gc: circular_args.append("--suppress_gc")
                 if c_suppress_skew: circular_args.append("--suppress_skew")
@@ -435,6 +438,7 @@ if selected_mode == "📏 Linear":
                 l_adv_blk_width = st.number_input("Block stroke width:", 0.0, key="l_b_width")
                 l_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="l_l_color")
                 l_adv_line_width = st.number_input("Line stroke width:", 1.0, key="l_l_width")
+                l_adv_label_font_size = st.number_input("Label font size (default: 5 pt (>=50 kb) or 16 pt (<50 kb):", key="l_label_font_size")
         l_submitted = st.form_submit_button("🚀 Run gbdraw Linear", type="primary")
 
     if l_submitted:
@@ -462,7 +466,8 @@ if selected_mode == "📏 Linear":
             if l_show_gc: linear_args.append("--show_gc")
             if l_resolve_overlaps: linear_args.append("--resolve_overlaps")
             if l_legend != "right": linear_args += ["-l", l_legend]
-            
+            if l_adv_label_font_size:
+                linear_args += ["--label_font_size", str(l_adv_label_font_size)]
             selected_palette = st.session_state.get("l_palette_selector")
             if selected_palette: linear_args += ["--palette", selected_palette]
 
