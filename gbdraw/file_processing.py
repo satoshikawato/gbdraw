@@ -5,6 +5,8 @@ import sys
 import logging
 import tomllib
 import cairosvg
+
+from pathlib import Path
 from importlib import resources
 from importlib.abc import Traversable
 import pandas as pd
@@ -416,33 +418,104 @@ def load_config_toml(config_directory: str, config_file: str) -> dict:
         logger.error(f"Failed to load configs from {absolute_config_path}: {e}")
     return config_dict
 
-def read_qualifier_priority_file(filepath: str) -> Optional[dict]:
-    """
-    Reads a qualifier priority file (TSV) and returns a dictionary.
-    Each line should contain a feature_type, a tab, and a comma-separated list of qualifier keys.
-    e.g. 'CDS\tproduct,gene'
-    """
 
-    if not filepath or not os.path.isfile(filepath):
-        if filepath:
-            logger.warning(f"Qualifier priority file not found: {filepath}")
+
+def read_color_table(color_table_file: str) -> Optional[DataFrame]:
+    """
+    Reads a color table from a TSV file and errors out immediately if any row has
+    the wrong number of fields or missing values.
+
+    Expected columns: feature_type, qualifier_key, value, color, caption
+
+    Returns:
+        DataFrame with the user-defined color mappings, or None if no file was provided.
+    """
+    required_cols = ['feature_type', 'qualifier_key', 'value', 'color', 'caption']
+
+    # If user did not supply -t, just skip and return None
+    if not color_table_file:
         return None
+
     try:
-        priority_dict = {}
-        with open(filepath, 'r') as f:
-            for line in f:
-                line = line.strip()
-
-                if not line or line.startswith('#'):
-                    continue
-
-                parts = line.split('\t')
-                if len(parts) == 2:
-                    feature_type, priorities = parts
-
-                    priority_dict[feature_type.strip()] = [p.strip() for p in priorities.split(',')]
-        logger.info(f"Successfully loaded qualifier priority from {filepath}")
-        return priority_dict
+        df = pd.read_csv(
+            color_table_file,
+            sep='\t',
+            header=None,
+            names=required_cols,
+            dtype=str,
+            on_bad_lines='error',  # raise on any row with wrong number of fields
+            engine='python'        # required for on_bad_lines
+        )
+    except pd.errors.ParserError as e:
+        logger.error(f"ERROR: Malformed line in '{color_table_file}': {e}")
+        sys.exit(1)
+    except FileNotFoundError as e:
+        logger.error(f"ERROR: Color table file not found: {e}")
+        sys.exit(1)
     except Exception as e:
-        logger.error(f"ERROR: Failed to read or parse qualifier priority file '{filepath}': {e}")
+        logger.error(f"ERROR: Failed to read '{color_table_file}': {e}")
+        sys.exit(1)
+
+    # Check for any rows with missing values and error out if found
+    null_rows = df[df.isnull().any(axis=1)]
+    if not null_rows.empty:
+        for idx, row in null_rows.iterrows():
+            missing = [c for c in required_cols if pd.isna(row[c])]
+            logger.error(
+                f"ERROR: Missing values in '{color_table_file}' at line {idx+1}. "
+                f"Missing columns: {missing}. Row data: {row.to_dict()}"
+            )
+        sys.exit(1)
+
+    return df
+
+def read_qualifier_priority_file(filepath: str) -> Optional[DataFrame]:
+    """
+    Reads a qualifier priority file (TSV) and returns a DataFrame.
+    Errors out immediately if any row has the wrong number of fields or missing values.
+
+    Expected columns: feature_type, priorities (comma-separated string)
+
+    Returns:
+        DataFrame with the user-defined qualifier priorities, or None if no file was provided.
+    """
+    # ファイルパスが指定されていない場合はNoneを返す
+    if not filepath:
         return None
+
+    required_cols = ['feature_type', 'priorities']
+
+    try:
+        # pandasを使用してTSVファイルを読み込む
+        df = pd.read_csv(
+            filepath,
+            sep='\t',
+            header=None,
+            names=required_cols,
+            dtype=str,
+            on_bad_lines='error',  # 不正な形式の行があればエラーを発生させる
+            engine='python'        # on_bad_linesを使用するために必要
+        )
+    except pd.errors.ParserError as e:
+        logger.error(f"ERROR: Malformed line in qualifier priority file '{filepath}': {e}")
+        sys.exit(1)
+    except FileNotFoundError as e:
+        logger.error(f"ERROR: Qualifier priority file not found: {e}")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"ERROR: Failed to read '{filepath}': {e}")
+        sys.exit(1)
+
+    # 読み込んだデータに欠損値がないかチェック
+    null_rows = df[df.isnull().any(axis=1)]
+    if not null_rows.empty:
+        for idx, row in null_rows.iterrows():
+            missing = [c for c in required_cols if pd.isna(row[c])]
+            logger.error(
+                f"ERROR: Missing values in '{filepath}' at line {idx+1}. "
+                f"Missing columns: {missing}. Row data: {row.to_dict()}"
+            )
+        sys.exit(1)
+
+    logger.info(f"Successfully loaded qualifier priority from {filepath}")
+    return df

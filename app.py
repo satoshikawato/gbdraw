@@ -265,9 +265,9 @@ if selected_mode == "🔵 Circular":
                     help="Features with these keywords in their labels will be hidden.",
                     key="c_blacklist"
                 )
-                c_qualifier_priority_file = st.file_uploader(
-                    "Upload Qualifier Priority File (optional, TSV format)",
-                    type=['tsv', 'txt'],
+                c_qualifier_priority_file = st.selectbox(
+                    "Qualifier Priority File (optional)",
+                    options=file_options,
                     key="c_qual_prio_file",
                     help="A TSV file with two columns: feature_type and a comma-separated list of qualifier keys (e.g., 'CDS\tproduct,gene'). Overrides the manual settings below."
                 )

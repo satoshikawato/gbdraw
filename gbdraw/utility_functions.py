@@ -4,6 +4,7 @@ import os
 import math
 from Bio.SeqRecord import SeqRecord
 from svgwrite.text import Text
+from pandas import DataFrame
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Union, Literal
 from .find_font_files import get_text_bbox_size_pixels, get_font_dict
@@ -192,8 +193,13 @@ def modify_config_dict(config_dict,
             update_config_value(config_dict, 'labels.filtering.blacklist_keywords', [k.strip() for k in label_blacklist.split(',')])
 
     # NEW: ラベル優先順位の処理を追加
-    if qualifier_priority:
-        update_config_value(config_dict, 'labels.filtering.qualifier_priority', qualifier_priority)
+    if qualifier_priority is not None and isinstance(qualifier_priority, DataFrame):
+        # DataFrameを行ごとに処理し、{feature_type: [priority1, priority2, ...]} の辞書を作成
+        priority_dict = {
+            row['feature_type']: [p.strip() for p in row['priorities'].split(',')]
+            for _, row in qualifier_priority.iterrows()
+        }
+        update_config_value(config_dict, 'labels.filtering.qualifier_priority', priority_dict)
 
     param_paths = {
         'block_stroke_width': 'objects.features.block_stroke_width',
