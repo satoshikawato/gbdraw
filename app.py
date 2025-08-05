@@ -232,6 +232,7 @@ if selected_mode == "🔵 Circular":
                 c_suppress_gc = True
                 c_suppress_skew = True
             else:
+
                 c_suppress_gc = st.checkbox("Suppress GC content track", value=False, key="c_gc_suppress", help="Suppress the GC content track.")
                 c_suppress_skew = st.checkbox("Suppress GC skew track", value=False, key="c_skew_suppress", help="Suppress the GC skew track.")
         with st.expander("🔧 Advanced and Labeling Options"):
@@ -511,6 +512,7 @@ if selected_mode == "📏 Linear":
             l_adv_prio_gene = st.multiselect("For Gene/RNA features:", QUALIFIER_KEYS, default=["product"], key="l_prio_gene", help="Select qualifier keys to prioritize for Gene/RNA features. Default is 'product'.")
             l_adv_prio_repeat = st.multiselect("For Repeat features:", QUALIFIER_KEYS, default=["rpt_family"], key="l_prio_repeat", help="Select qualifier keys to prioritize for Repeat features. Default is 'rpt_family'.")
             l_adv_prio_feature = st.multiselect("For Other features:", QUALIFIER_KEYS, default=["note"], key="l_prio_feature", help="Select qualifier keys to prioritize for Other features. Default is 'note'.")
+
         l_submitted = st.form_submit_button("🚀 Run gbdraw Linear", type="primary")
 
     if l_submitted:
