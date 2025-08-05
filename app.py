@@ -501,12 +501,12 @@ if selected_mode == "📏 Linear":
                 help="Features with these keywords in their labels will be hidden.",
                 key="l_blacklist"
             )
-            l_qualifier_priority_file = st.file_uploader(
-                "Upload Qualifier Priority File (optional, TSV format)",
-                type=['tsv', 'txt'],
-                key="l_qual_prio_file",
-                help="A TSV file with two columns: feature_type and a comma-separated list of qualifier keys (e.g., 'CDS\tproduct,gene')."
-            )
+            l_qualifier_priority_file = st.selectbox(
+                    "Qualifier Priority File (optional)",
+                    options=file_options,
+                    key="l_qual_prio_file",
+                    help="A TSV file with two columns: feature_type and a comma-separated list of qualifier keys (e.g., 'CDS\tproduct,gene'). Overrides the manual settings below."
+                )
             st.write("Or, define priorities manually:")
             l_adv_prio_gene = st.multiselect("For Gene/RNA features:", QUALIFIER_KEYS, default=["product"], key="l_prio_gene", help="Select qualifier keys to prioritize for Gene/RNA features. Default is 'product'.")
             l_adv_prio_repeat = st.multiselect("For Repeat features:", QUALIFIER_KEYS, default=["rpt_family"], key="l_prio_repeat", help="Select qualifier keys to prioritize for Repeat features. Default is 'rpt_family'.")

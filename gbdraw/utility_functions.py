@@ -189,28 +189,32 @@ def modify_config_dict(config_dict,
     label_font_size_linear_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['long']
     label_font_size_linear_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['short']
 
-    if label_blacklist:
-        # Check if label_blacklist is a file path or a comma-separated string
-        if os.path.isfile(label_blacklist):
+    # Process label_blacklist only if the argument was explicitly passed
+    if label_blacklist is not None:
+        # If the argument is an empty string, set an empty list to disable filtering
+        if label_blacklist == "":
+            update_config_value(config_dict, 'labels.filtering.blacklist_keywords', [])
+        else:
+            is_safe_path = False
+            try:
+                safe_dir = os.path.realpath(os.getcwd())
+                requested_path = os.path.realpath(os.path.join(safe_dir, label_blacklist))
+                if os.path.commonpath([requested_path, safe_dir]) == safe_dir:
+                    is_safe_path = True
+            except TypeError:
+                is_safe_path = False
 
-            safe_current_dir = os.path.realpath(os.getcwd())
-            requested_path = os.path.realpath(label_blacklist)
-            
-            if os.path.commonpath([requested_path, safe_current_dir]) != safe_current_dir:
-                logger.warning(
-                    f"Security Warning: Path '{label_blacklist}' is outside the current working directory. "
-                    "It will be treated as a comma-separated string."
-                )
-
-                update_config_value(config_dict, 'labels.filtering.blacklist_keywords', [k.strip() for k in label_blacklist.split(',')])
-            else:
-
+            if is_safe_path and os.path.isfile(requested_path):
                 with open(requested_path, 'r') as f:
                     keywords = [line.strip() for line in f if line.strip()]
                 update_config_value(config_dict, 'labels.filtering.blacklist_keywords', keywords)
-        else:
-
-            update_config_value(config_dict, 'labels.filtering.blacklist_keywords', [k.strip() for k in label_blacklist.split(',')])
+            else:
+                if not is_safe_path and os.path.exists(label_blacklist):
+                     logger.warning(
+                        f"Security Warning: Path '{label_blacklist}' is outside the current working directory. "
+                        "It will be treated as a comma-separated string."
+                    )
+                update_config_value(config_dict, 'labels.filtering.blacklist_keywords', [k.strip() for k in label_blacklist.split(',')])
 
 
     if qualifier_priority is not None and isinstance(qualifier_priority, DataFrame):
@@ -311,17 +315,17 @@ def get_label_text(seq_feature, filtering_config) -> str:
     determined by the feature type (from config.toml), and filters it against a blacklist.
     """
     feature_type = seq_feature.type
-    priority_config = filtering_config['qualifier_priority']
-    blacklist = filtering_config['blacklist_keywords']
+    priority_config = filtering_config.get('qualifier_priority', {})
+    blacklist = filtering_config.get('blacklist_keywords', [])
 
     # Determine which priority list to use based on the feature's type string.
     # This logic corresponds to how GeneObject, RepeatObject, etc., are defined.
     if feature_type in ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'gene']:
-        priority_list = priority_config.get('gene', [])
+        priority_list = priority_config.get('gene', ['product', 'gene', 'note'])
     elif feature_type == 'repeat_region':
-        priority_list = priority_config.get('repeat', [])
+        priority_list = priority_config.get('repeat', ['rpt_family', 'note'])
     else:
-        priority_list = priority_config.get('feature', [])
+        priority_list = priority_config.get('feature', ['note'])
 
     text = ''
     for priority in priority_list:
@@ -329,22 +333,40 @@ def get_label_text(seq_feature, filtering_config) -> str:
             potential_text = getattr(seq_feature, priority)
             if isinstance(potential_text, list):
                 potential_text = ', '.join(potential_text)
-            if not any(keyword in str(potential_text).lower() for keyword in blacklist):
+            
+            # Check against blacklist
+            is_blacklisted = False
+            for keyword in blacklist:
+                if keyword and keyword.lower() in str(potential_text).lower():
+                    is_blacklisted = True
+                    break
+            
+            if not is_blacklisted:
                 text = str(potential_text)
                 break
     return text
 
 def get_coordinates_of_longest_segment(feature_object):
     coords: list[List[Union[str, int, bool]]] = feature_object.coordinates
+    if not coords:
+        return None, -1
+        
+    longest_segment_info = None
+    max_length = -1
+
     for coord in coords:
-        exon_strand: str = get_strand(exon_line.strand)  # type: ignore
-    for coord in coords:
-        coord_dict: Dict[str, Union[str, int]] = {
-            'coord_type': str(coord[0]),
-            'coord_strand': coord[2],
-            'coord_start': coord[3],
-            'coord_end': coord[4]}
-        coord_type: str = str(coord_dict['coord_type'])
+        try:
+            # Assuming coord format is [type, strand, start, end, ...]
+            start, end = int(coord[2]), int(coord[3])
+            length = abs(end - start)
+            if length > max_length:
+                max_length = length
+                longest_segment_info = coord
+        except (IndexError, TypeError, ValueError):
+            # Skip malformed coordinate entries
+            continue
+            
+    return longest_segment_info, max_length
         
 
 # Function to convert degrees to radians
