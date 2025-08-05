@@ -257,6 +257,7 @@ def circular_main(cmd_args) -> None:
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     show_gc, show_skew = suppress_gc_content_and_skew(
         suppress_gc, suppress_skew)
+
     config_dict = modify_config_dict(
         config_dict, 
         block_stroke_color=block_stroke_color, 
@@ -277,6 +278,7 @@ def circular_main(cmd_args) -> None:
         inner_label_x_radius_offset=inner_label_x_radius_offset,
         inner_label_y_radius_offset=inner_label_y_radius_offset
     )    
+
     out_formats: list[str] = parse_formats(args.format)
     record_count: int = 0
     gb_records: list[SeqRecord] = load_gbks(input_file, "circular")
