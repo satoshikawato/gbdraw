@@ -328,6 +328,7 @@ class SeqRecordGroup:
         self.show_labels = self.config_dict['canvas']['show_labels']
         self.label_stroke_color = self.config_dict['labels']['stroke_color']['label_stroke_color']
         self.label_stroke_width = self.config_dict['labels']['stroke_width']['long']
+        self.label_filtering = self.config_dict['labels']['filtering']
         self.record_group: Group = self.setup_record_group()
         self.separate_strands = self.canvas_config.strandedness
         self.resolve_overlaps = self.canvas_config.resolve_overlaps
@@ -427,14 +428,16 @@ class SeqRecordGroup:
         color_table: DataFrame | None = self.feature_config.color_table
         separate_strands = self.canvas_config.strandedness
         resolve_overlaps = self.canvas_config.resolve_overlaps
+        label_filtering = self.label_filtering  # type: ignore
         # type: ignore
         track_id = str(self.gb_record.annotations["accessions"][0])
         record_group = Group(id=track_id)
         record_length: int = len(self.gb_record.seq)
         genome_size_normalization_factor: float = record_length / longest_genome
         selected_features_set: str = self.feature_config.selected_features_set
+        
         default_colors: DataFrame | None = self.feature_config.default_colors
-        feature_dict: dict = create_feature_dict(self.gb_record, color_table, selected_features_set, default_colors, separate_strands, resolve_overlaps)
+        feature_dict: dict = create_feature_dict(self.gb_record, color_table, selected_features_set, default_colors, separate_strands, resolve_overlaps, label_filtering)
         record_group: Group = self.draw_record(feature_dict, record_length, cds_height, alignment_width, genome_size_normalization_factor, separate_strands, arrow_length, record_group)
         return record_group
 

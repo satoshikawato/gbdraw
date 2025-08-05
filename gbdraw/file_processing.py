@@ -416,3 +416,33 @@ def load_config_toml(config_directory: str, config_file: str) -> dict:
         logger.error(f"Failed to load configs from {absolute_config_path}: {e}")
     return config_dict
 
+def read_qualifier_priority_file(filepath: str) -> Optional[dict]:
+    """
+    Reads a qualifier priority file (TSV) and returns a dictionary.
+    Each line should contain a feature_type, a tab, and a comma-separated list of qualifier keys.
+    e.g. 'CDS\tproduct,gene'
+    """
+
+    if not filepath or not os.path.isfile(filepath):
+        if filepath:
+            logger.warning(f"Qualifier priority file not found: {filepath}")
+        return None
+    try:
+        priority_dict = {}
+        with open(filepath, 'r') as f:
+            for line in f:
+                line = line.strip()
+
+                if not line or line.startswith('#'):
+                    continue
+
+                parts = line.split('\t')
+                if len(parts) == 2:
+                    feature_type, priorities = parts
+
+                    priority_dict[feature_type.strip()] = [p.strip() for p in priorities.split(',')]
+        logger.info(f"Successfully loaded qualifier priority from {filepath}")
+        return priority_dict
+    except Exception as e:
+        logger.error(f"ERROR: Failed to read or parse qualifier priority file '{filepath}': {e}")
+        return None

@@ -96,7 +96,8 @@ class FeatureDrawingConfigurator:
         self.block_stroke_width: float = config_dict['objects']['features']['block_stroke_width']
         self.line_stroke_color: str = config_dict['objects']['features']['line_stroke_color']
         self.line_stroke_width: float = config_dict['objects']['features']['line_stroke_width']
-
+        self.qualifier_priority: config_dict['labels']['filtering']['qualifier_priority']
+        self.blacklist_keywords: List[str] = config_dict['labels']['filtering']['blacklist_keywords']
 
 class BlastMatchConfigurator:
     """

@@ -8,7 +8,7 @@ import sys
 from Bio.SeqRecord import SeqRecord
 from typing import Any, Optional
 from pandas import DataFrame
-from .file_processing import load_default_colors, load_gbks, read_color_table, load_config_toml, parse_formats
+from .file_processing import load_default_colors, load_gbks, read_color_table, load_config_toml, parse_formats, read_qualifier_priority_file
 from .linear_diagram_components import plot_linear_diagram
 from .utility_functions import create_dict_for_sequence_lengths, modify_config_dict
 from .canvas_generator import LinearCanvasConfigurator
@@ -173,6 +173,19 @@ def _get_args(args) -> argparse.Namespace:
         '--resolve_overlaps',
         help='Resolve overlaps (experimental; default: False). ',
         action='store_true')
+    # NEW: ラベルブラックリスト用のコマンドラインオプションを追加
+    parser.add_argument(
+        '--label_blacklist',
+        help='Comma-separated keywords or path to a file for label blacklisting (optional)',
+        type=str,
+        default="")
+        
+    # NEW: ラベル優先順位ファイル用のコマンドラインオプションを追加
+    parser.add_argument(
+        '--qualifier_priority',
+        help='Path to a TSV file defining qualifier priority for labels (optional)',
+        type=str,
+        default="")
     args = parser.parse_args(args)
     return args
 
@@ -218,8 +231,11 @@ def linear_main(cmd_args) -> None:
     bitscore: float = args.bitscore
     identity: float = args.identity
     show_labels: bool = args.show_labels
-    
+    # NEW: 新しいコマンドライン引数をローカル変数に格納
+    label_blacklist: str = args.label_blacklist
+    qualifier_priority_path: str = args.qualifier_priority
     selected_features_set: str = args.features.split(',')
+
     out_formats: list[str] = parse_formats(args.format)
     user_defined_default_colors: str = args.default_colors
     if blast_files:
@@ -231,12 +247,27 @@ def linear_main(cmd_args) -> None:
         user_defined_default_colors, palette)
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
+    # NEW: 優先順位ファイルを読み込む
+    qualifier_priority = read_qualifier_priority_file(qualifier_priority_path)
+
+
     block_stroke_color: str = args.block_stroke_color
     block_stroke_width: str = args.block_stroke_width
     line_stroke_color: str = args.line_stroke_color
     line_stroke_width: str = args.line_stroke_width       
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness)
-
+    config_dict = modify_config_dict(
+        config_dict, 
+        block_stroke_color=block_stroke_color, 
+        block_stroke_width=block_stroke_width, 
+        line_stroke_color=line_stroke_color, 
+        line_stroke_width=line_stroke_width, 
+        show_gc=show_gc, 
+        show_skew=show_skew, 
+        align_center=align_center, 
+        strandedness=strandedness,
+        label_blacklist=label_blacklist,
+        qualifier_priority=qualifier_priority
+    )
     records: list[SeqRecord] = load_gbks(
         genbank_files, "linear", load_comparison)
     sequence_length_dict: dict[str,

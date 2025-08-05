@@ -4,7 +4,7 @@ from typing import Tuple, List
 
 
 class FeatureObject:
-    def __init__(self, feature_id: str, location: list[Tuple[str, str, str, int, int, bool]], is_directional: bool, color: str, note: str, label_text: str, coordinates) -> None:
+    def __init__(self, feature_id: str, location: list[Tuple[str, str, str, int, int, bool]], is_directional: bool, color: str, note: str, label_text: str, coordinates, type) -> None:
         """
         Represents a general genomic feature.
 
@@ -25,10 +25,14 @@ class FeatureObject:
         self.note: str = note
         self.label_text: str = label_text
         self.feature_track_id = 0
+        self.type = type
+        self.qualifiers: dict = {}
     def __str__(self) -> str:
         lines: List[str] = []
         if self.feature_id:
             lines.append(f"ID: {self.feature_id}")
+        if self.type:
+            lines.append(f"Type: {self.type}")
         if self.location:
             lines.append(f"Location: {self.location}")
         if self.coordinates:
@@ -44,7 +48,7 @@ class FeatureObject:
         return "\n".join(lines)
 
 class GeneObject(FeatureObject):
-    def __init__(self, feature_id: str, location: list[Tuple[str, str, str, int, int, bool]], is_directional: bool, color: str, note: str, product: str, gene_biotype: str, gene: str, label_text: str, coordinates) -> None:
+    def __init__(self, feature_id: str, location: list[Tuple[str, str, str, int, int, bool]], is_directional: bool, color: str, note: str, product: str, gene_biotype: str, gene: str, label_text: str, coordinates, type) -> None:
         """
         Represents a gene, inheriting from FeatureObject.
 
@@ -59,7 +63,7 @@ class GeneObject(FeatureObject):
 
         This class extends FeatureObject with specific properties for genes, such as product and gene_biotype.
         """
-        super().__init__(feature_id, location, is_directional, color, note, label_text, coordinates)
+        super().__init__(feature_id, location, is_directional, color, note, label_text, coordinates, type)
         self.gene_biotype: str = gene_biotype
         self.product: str = product
         self.gene: str = gene
@@ -75,7 +79,7 @@ class GeneObject(FeatureObject):
         return base_str + "\n" + "\n".join(additional_info) if additional_info else base_str
 
 class RepeatObject(FeatureObject):
-    def __init__(self, feature_id: str, location: list[Tuple[str, str, str, int, int, bool]], is_directional: bool, color: str, note: str, rpt_family: str, rpt_type: str, label_text: str, coordinates) -> None:
+    def __init__(self, feature_id: str, location: list[Tuple[str, str, str, int, int, bool]], is_directional: bool, color: str, note: str, rpt_family: str, rpt_type: str, label_text: str, coordinates, type) -> None:
         """
         Represents a repeat region, inheriting from FeatureObject.
 
@@ -90,7 +94,7 @@ class RepeatObject(FeatureObject):
 
         This class extends FeatureObject with specific properties for repeat regions, such as rpt_family and rpt_type.
         """
-        super().__init__(feature_id, location, is_directional, color, note, label_text, coordinates)
+        super().__init__(feature_id, location, is_directional, color, note, label_text, coordinates, type)
         self.rpt_family: str = rpt_family
         self.rpt_type: str = rpt_type
     def __str__(self) -> str:

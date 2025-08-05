@@ -51,7 +51,7 @@ def get_color(feature: SeqFeature, color_table: DataFrame, default_colors: DataF
     return "#d3d3d3"  # Fallback color
 
 
-def create_repeat_object(repeat_id: str, feature: SeqFeature, color_table: DataFrame, default_colors: DataFrame, genome_length: int) -> RepeatObject:
+def create_repeat_object(repeat_id: str, feature: SeqFeature, color_table: DataFrame, default_colors: DataFrame, genome_length: int, label_filtering) -> RepeatObject:
     """
     Creates a RepeatObject representing a repeat region in a genome.
 
@@ -76,14 +76,15 @@ def create_repeat_object(repeat_id: str, feature: SeqFeature, color_table: DataF
     location: list[Tuple[str, str, str, int, int, bool]
                    ] = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors)
-    label_text = get_label_text(feature)
+    feature_type = feature.type
+    label_text = get_label_text(feature, label_filtering)
 
     repeat_object = RepeatObject(
-        repeat_id, location, is_directional, color, note, rpt_family, rpt_type, label_text, coordinates)
+        repeat_id, location, is_directional, color, note, rpt_family, rpt_type, label_text, coordinates, feature_type)
     return repeat_object
 
 
-def create_feature_object(feature_id: str, feature: SeqFeature, color_table: DataFrame, default_colors: DataFrame, genome_length: int) -> FeatureObject:
+def create_feature_object(feature_id: str, feature: SeqFeature, color_table: DataFrame, default_colors: DataFrame, genome_length: int, label_filtering) -> FeatureObject:
     """
     Creates a FeatureObject representing a generic genomic feature.
 
@@ -106,13 +107,14 @@ def create_feature_object(feature_id: str, feature: SeqFeature, color_table: Dat
     location: list[Tuple[str, str, str, int, int, bool]
                    ] = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors)
-    label_text = get_label_text(feature)
+    feature_type = feature.type
+    label_text = get_label_text(feature, label_filtering)
     feature_object = FeatureObject(
-        feature_id, location, is_directional, color, note, label_text, coordinates)
+        feature_id, location, is_directional, color, note, label_text, coordinates, feature_type)
     return feature_object
 
 
-def create_gene_object(feature_id: str, feature: SeqFeature, color_table: DataFrame, default_colors: DataFrame, genome_length: int) -> GeneObject:
+def create_gene_object(feature_id: str, feature: SeqFeature, color_table: DataFrame, default_colors: DataFrame, genome_length: int, label_filtering) -> GeneObject:
     """
     Creates a GeneObject representing a gene in a genome.
 
@@ -135,11 +137,12 @@ def create_gene_object(feature_id: str, feature: SeqFeature, color_table: DataFr
     product: str = feature.qualifiers.get('product', [""])[0]
     gene: str = feature.qualifiers.get('gene', [""])[0]
     is_trans_spliced = 'trans_splicing' in feature.qualifiers
+    feature_type = feature.type
     location: list[Tuple[str, str, str, int, int, bool]] = get_exon_and_intron_coordinates(coordinates, genome_length, is_trans_spliced)
     color: str = get_color(feature, color_table, default_colors)
-    label_text = get_label_text(feature)
+    label_text = get_label_text(feature, label_filtering)
     gene_object = GeneObject(
-        feature_id, location, is_directional, color, note, product, feature.type, gene, label_text, coordinates)
+        feature_id, location, is_directional, color, note, product, feature.type, gene, label_text, coordinates, feature_type)
     return gene_object
 
 
@@ -343,7 +346,7 @@ def arrange_feature_tracks(feature_dict: Dict[str, FeatureObject], separate_stra
     
     return feature_dict
 
-def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_features_set: List[str], default_colors: DataFrame, separate_strands: bool, resolve_overlaps:bool) -> Dict[str, FeatureObject]:
+def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_features_set: List[str], default_colors: DataFrame, separate_strands: bool, resolve_overlaps:bool, label_filtering) -> Dict[str, FeatureObject]:
     """
     Creates a dictionary mapping feature IDs to FeatureObjects from a GenBank record.
 
@@ -366,6 +369,7 @@ def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_f
     genome_length: int = len(gb_record.seq)
     separate_strands: bool = separate_strands
     resolve_overlaps: bool = resolve_overlaps
+    label_filtering = label_filtering
     for feature in gb_record.features:
         if feature.type not in selected_features_set:
             continue
@@ -375,19 +379,19 @@ def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_f
                 locus_count: int = locus_count + 1
                 locus_id: str = "gene_" + str(locus_count).zfill(9)
                 gene_object: GeneObject = create_gene_object(
-                    locus_id, feature, color_table, default_colors, genome_length)
+                    locus_id, feature, color_table, default_colors, genome_length, label_filtering)
                 feature_dict[locus_id] = gene_object
             elif feature.type == 'repeat_region':
                 repeat_count: int = repeat_count + 1
                 repeat_id: str = "crt_" + str(repeat_count).zfill(9)
                 repeat_object: RepeatObject = create_repeat_object(
-                    repeat_id, feature, color_table, default_colors, genome_length)
+                    repeat_id, feature, color_table, default_colors, genome_length, label_filtering)
                 feature_dict[repeat_id] = repeat_object
             else:
                 feature_count: int = feature_count + 1
                 feature_id: str = "feature_" + str(feature_count).zfill(9)
                 feature_object: FeatureObject = create_feature_object(
-                    feature_id, feature, color_table, default_colors, genome_length)
+                    feature_id, feature, color_table, default_colors, genome_length, label_filtering)
                 feature_dict[feature_id] = feature_object
     feature_dict = arrange_feature_tracks(feature_dict, separate_strands, resolve_overlaps)
     if locus_count == 0:

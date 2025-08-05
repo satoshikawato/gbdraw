@@ -566,6 +566,7 @@ class SeqRecordGroup:
         self.show_labels = self.config_dict['canvas']['show_labels']
         self.label_stroke_width = self.config_dict['labels']['stroke_width'][self.length_param]
         self.label_stroke_color = self.config_dict['labels']['stroke_color']['label_stroke_color']
+        self.label_filtering = self.config_dict['labels']['filtering']
         self.font_size = self.config_dict['objects']['features']['font_size']
         self.dpi =  self.config_dict['canvas']['dpi']
         self.track_type = self.config_dict['canvas']['circular']['track_type']
@@ -594,21 +595,24 @@ class SeqRecordGroup:
         
         if self.show_labels == True:
             label_list = prepare_label_list(feature_dict, record_length, self.canvas_config.radius, self.track_ratio, self.config_dict) 
+            for label in label_list:
+                if not label["is_embedded"]:
+                    group = LabelDrawer(self.config_dict).draw(label, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)
+                    if label["is_embedded"] == False:
+                        line_path = Line(start=(label["middle_x"], label["middle_y"]), end=(label["start_x"], label["start_y"]),
+                            stroke=self.label_stroke_color,
+                            stroke_width=self.label_stroke_width)
+                        group.add(line_path)
+                        line_path2 = Line(start=(label["middle_x"], label["middle_y"]), end=(label["feature_middle_x"], label["feature_middle_y"]),
+                            stroke=self.label_stroke_color,
+                            stroke_width=self.label_stroke_width)
+                        group.add(line_path2)
         for feature_object in feature_dict.values():
             group = FeatureDrawer(self.feature_config).draw(feature_object, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio, self.track_ratio_factors[0], self.track_type, self.strandedness, self.length_param)
-        if self.show_labels == True:
+        if self.show_labels:
             for label in label_list:
-                group = LabelDrawer(self.config_dict).draw(label, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)
-                if label["is_embedded"] == False:
-                    line_path = Line(start=(label["middle_x"], label["middle_y"]), end=(label["start_x"], label["start_y"]),
-                        stroke=self.label_stroke_color,
-                        stroke_width=self.label_stroke_width)
-                    group.add(line_path)
-                    line_path2 = Line(start=(label["middle_x"], label["middle_y"]), end=(label["feature_middle_x"], label["feature_middle_y"]),
-                        stroke=self.label_stroke_color,
-                        stroke_width=self.label_stroke_width)
-                    group.add(line_path2)
-                 
+                if label["is_embedded"]:
+                    group = LabelDrawer(self.config_dict).draw(label, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)                
         return group
 
     def setup_record_group(self) -> Group:
@@ -626,7 +630,7 @@ class SeqRecordGroup:
         color_table: Optional[DataFrame] = self.feature_config.color_table
         default_colors: Optional[DataFrame] = self.feature_config.default_colors
         feature_dict: Dict[str, FeatureObject] = create_feature_dict(
-            self.gb_record, color_table, selected_features_set, default_colors, self.strandedness, self.resolve_overlaps)
+            self.gb_record, color_table, selected_features_set, default_colors, self.strandedness, self.resolve_overlaps, self.label_filtering)
         track_id: str = self.gb_record.annotations['accessions'][0]
         record_group = Group(id=track_id)
         record_length: int = len(self.gb_record.seq)

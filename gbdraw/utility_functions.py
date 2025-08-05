@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
+import os
+import math
 from Bio.SeqRecord import SeqRecord
 from svgwrite.text import Text
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Union, Literal
 from .find_font_files import get_text_bbox_size_pixels, get_font_dict
-import math
+from .feature_objects import FeatureObject, GeneObject, RepeatObject
 
 def calculate_bbox_dimensions(text, font_family, font_size, dpi):
     fonts = [font.strip("'") for font in font_family.split(', ')]
@@ -168,12 +170,31 @@ def modify_config_dict(config_dict,
                        track_type=None, 
                        strandedness=None, 
                        resolve_overlaps=None, 
-                       allow_inner_labels=None) -> dict:
+                       allow_inner_labels=None,
+                       label_radius_offset=None,
+                       label_blacklist=None,
+                       qualifier_priority=None,
+                       outer_label_x_radius_offset=None,
+                       outer_label_y_radius_offset=None,
+                       inner_label_x_radius_offset=None,
+                       inner_label_y_radius_offset=None) -> dict:
     # Mapping of parameter names to their paths in the config_dict
     label_font_size_circular_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['long']
     label_font_size_circular_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['short']
     label_font_size_linear_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['long']
     label_font_size_linear_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['short']
+    if label_blacklist:
+        if os.path.isfile(label_blacklist):
+            with open(label_blacklist, 'r') as f:
+                keywords = [line.strip() for line in f if line.strip()]
+            update_config_value(config_dict, 'labels.filtering.blacklist_keywords', keywords)
+        else:
+            update_config_value(config_dict, 'labels.filtering.blacklist_keywords', [k.strip() for k in label_blacklist.split(',')])
+
+    # NEW: ラベル優先順位の処理を追加
+    if qualifier_priority:
+        update_config_value(config_dict, 'labels.filtering.qualifier_priority', qualifier_priority)
+
     param_paths = {
         'block_stroke_width': 'objects.features.block_stroke_width',
         'block_stroke_color': 'objects.features.block_stroke_color',
@@ -192,6 +213,10 @@ def modify_config_dict(config_dict,
         'track_type': 'canvas.circular.track_type',
         'resolve_overlaps': 'canvas.resolve_overlaps',
         'allow_inner_labels': 'canvas.circular.allow_inner_labels',
+        'outer_label_x_radius_offset': 'labels.unified_adjustment.outer_labels.x_radius_offset',
+        'outer_label_y_radius_offset': 'labels.unified_adjustment.outer_labels.y_radius_offset',
+        'inner_label_x_radius_offset': 'labels.unified_adjustment.inner_labels.x_radius_offset',
+        'inner_label_y_radius_offset': 'labels.unified_adjustment.inner_labels.y_radius_offset',
     }
     # Update the config_dict for each specified parameter
     for param, path in param_paths.items():
@@ -255,27 +280,34 @@ def edit_available_tracks(available_tracks, bbox_start, bbox_end):
     return available_tracks, track_factor
 
 
-def get_label_text(seq_feature):
+def get_label_text(seq_feature, filtering_config) -> str:
+    """
+    Extracts a label for a feature based on a priority list of qualifiers
+    determined by the feature type (from config.toml), and filters it against a blacklist.
+    """
+    feature_type = seq_feature.type
+    priority_config = filtering_config['qualifier_priority']
+    blacklist = filtering_config['blacklist_keywords']
+
+    # Determine which priority list to use based on the feature's type string.
+    # This logic corresponds to how GeneObject, RepeatObject, etc., are defined.
+    if feature_type in ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'gene']:
+        priority_list = priority_config['gene']
+    elif feature_type == 'repeat_region':
+        priority_list = priority_config['repeat']
+    else:
+        priority_list = priority_config['feature']
+
     text = ''
-    if hasattr(seq_feature, 'product') and seq_feature.product:
-        text = seq_feature.product
-    elif hasattr(seq_feature, 'gene') and seq_feature.gene:
-        text = seq_feature.gene
-    elif hasattr(seq_feature, 'rpt_family'):
-        # if not undefined or None, use rpt_family, else use note
-        if seq_feature.rpt_family and seq_feature.rpt_family != 'undefined':
-            text = seq_feature.rpt_family.split(';')[0]
-        elif seq_feature.note:
-            if isinstance(seq_feature.note, list):
-                text = seq_feature.note[0].split(';')[0]
-            else:
-                text = seq_feature.note.split(';')[0]
-    elif hasattr(seq_feature, 'note') and seq_feature.note:
-        if isinstance(seq_feature.note, list):
-            text = seq_feature.note[0].split(';')[0]
-        else:
-            text = seq_feature.note.split(';')[0]
-    return text
+    for priority in priority_list:
+        if hasattr(seq_feature, priority) and seq_feature.__getattribute__(priority):
+            potential_text = seq_feature.__getattribute__(priority)
+            if isinstance(potential_text, list):
+                potential_text = ', '.join(text)  # Join list items with a comma
+            if not any(keyword in potential_text.lower() for keyword in blacklist):
+                text = potential_text
+                break  # Stop at the first valid label found
+    return text # Return an empty string if no suitable label is found
 
 def get_coordinates_of_longest_segment(feature_object):
     coords: list[List[Union[str, int, bool]]] = feature_object.coordinates
