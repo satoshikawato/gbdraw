@@ -2,6 +2,7 @@
 # coding: utf-8
 import os
 import math
+import logging
 from Bio.SeqRecord import SeqRecord
 from svgwrite.text import Text
 from pandas import DataFrame
@@ -9,6 +10,9 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Union, Literal
 from .find_font_files import get_text_bbox_size_pixels, get_font_dict
 from .feature_objects import FeatureObject, GeneObject, RepeatObject
+
+
+logger = logging.getLogger(__name__)
 
 def calculate_bbox_dimensions(text, font_family, font_size, dpi):
     fonts = [font.strip("'") for font in font_family.split(', ')]
@@ -186,16 +190,30 @@ def modify_config_dict(config_dict,
     label_font_size_linear_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['short']
 
     if label_blacklist:
+        # Check if label_blacklist is a file path or a comma-separated string
         if os.path.isfile(label_blacklist):
-            with open(label_blacklist, 'r') as f:
-                keywords = [line.strip() for line in f if line.strip()]
-            update_config_value(config_dict, 'labels.filtering.blacklist_keywords', keywords)
+
+            safe_current_dir = os.path.realpath(os.getcwd())
+            requested_path = os.path.realpath(label_blacklist)
+            
+            if os.path.commonpath([requested_path, safe_current_dir]) != safe_current_dir:
+                logger.warning(
+                    f"Security Warning: Path '{label_blacklist}' is outside the current working directory. "
+                    "It will be treated as a comma-separated string."
+                )
+
+                update_config_value(config_dict, 'labels.filtering.blacklist_keywords', [k.strip() for k in label_blacklist.split(',')])
+            else:
+
+                with open(requested_path, 'r') as f:
+                    keywords = [line.strip() for line in f if line.strip()]
+                update_config_value(config_dict, 'labels.filtering.blacklist_keywords', keywords)
         else:
+
             update_config_value(config_dict, 'labels.filtering.blacklist_keywords', [k.strip() for k in label_blacklist.split(',')])
 
-    # NEW: ラベル優先順位の処理を追加
+
     if qualifier_priority is not None and isinstance(qualifier_priority, DataFrame):
-        # DataFrameを行ごとに処理し、{feature_type: [priority1, priority2, ...]} の辞書を作成
         priority_dict = {
             row['feature_type']: [p.strip() for p in row['priorities'].split(',')]
             for _, row in qualifier_priority.iterrows()
@@ -299,22 +317,22 @@ def get_label_text(seq_feature, filtering_config) -> str:
     # Determine which priority list to use based on the feature's type string.
     # This logic corresponds to how GeneObject, RepeatObject, etc., are defined.
     if feature_type in ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'gene']:
-        priority_list = priority_config['gene']
+        priority_list = priority_config.get('gene', [])
     elif feature_type == 'repeat_region':
-        priority_list = priority_config['repeat']
+        priority_list = priority_config.get('repeat', [])
     else:
-        priority_list = priority_config['feature']
+        priority_list = priority_config.get('feature', [])
 
     text = ''
     for priority in priority_list:
-        if hasattr(seq_feature, priority) and seq_feature.__getattribute__(priority):
-            potential_text = seq_feature.__getattribute__(priority)
+        if hasattr(seq_feature, priority) and getattr(seq_feature, priority):
+            potential_text = getattr(seq_feature, priority)
             if isinstance(potential_text, list):
-                potential_text = ', '.join(text)  # Join list items with a comma
-            if not any(keyword in potential_text.lower() for keyword in blacklist):
-                text = potential_text
-                break  # Stop at the first valid label found
-    return text # Return an empty string if no suitable label is found
+                potential_text = ', '.join(potential_text)
+            if not any(keyword in str(potential_text).lower() for keyword in blacklist):
+                text = str(potential_text)
+                break
+    return text
 
 def get_coordinates_of_longest_segment(feature_object):
     coords: list[List[Union[str, int, bool]]] = feature_object.coordinates
