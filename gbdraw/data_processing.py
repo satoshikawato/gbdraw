@@ -525,17 +525,28 @@ def improved_label_placement_fc(labels, center_x, center_y, x_radius, y_radius, 
 
 def rearrange_labels_fc(labels, feature_radius, total_length, genome_len, config_dict, strands, is_outer):
     track_type = config_dict['canvas']['circular']['track_type']
+    
     if is_outer:
+        offset_config = config_dict['labels']['unified_adjustment']['outer_labels']
         x_radius_factor = config_dict['labels']['arc_x_radius_factor'][track_type][strands][genome_len]
         y_radius_factor = config_dict['labels']['arc_y_radius_factor'][track_type][strands][genome_len]
         default_center_x = config_dict['labels']['arc_center_x'][track_type][genome_len]
     else:
+        offset_config = config_dict['labels']['unified_adjustment']['inner_labels']
         x_radius_factor = config_dict['labels']['inner_arc_x_radius_factor'][track_type][strands][genome_len]
         y_radius_factor = config_dict['labels']['inner_arc_y_radius_factor'][track_type][strands][genome_len]
         default_center_x = config_dict['labels']['inner_arc_center_x'][track_type][genome_len]
 
-    x_radius = feature_radius * x_radius_factor  # Adjust this factor as needed
-    y_radius = feature_radius * y_radius_factor   # Adjust this factor as needed
+    x_radius_offset = offset_config['x_radius_offset']
+    y_radius_offset = offset_config['y_radius_offset']
+
+    if is_outer:
+        x_radius = feature_radius * x_radius_factor * x_radius_offset
+        y_radius = feature_radius * y_radius_factor * y_radius_offset
+    else:
+        x_radius = feature_radius * x_radius_factor * (2 - x_radius_offset)
+        y_radius = feature_radius * y_radius_factor * (2 - y_radius_offset)
+
     center_y = 0
     center_x = default_center_x
     start_angle = 0
@@ -562,25 +573,25 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
     outer_labels = []
     inner_labels = []
     label_list = []
-
+    label_filtering = config_dict['labels']['filtering']
     length_threshold = config_dict['labels']['length_threshold']['circular']
     length_param = determine_length_parameter(total_length, length_threshold)
     track_type = config_dict['canvas']['circular']['track_type']
     strandedness = config_dict['canvas']['strandedness']
-    if strandedness:
-        strands = "separate"
-    else:
-        strands = "single"
+    label_radius_offset = config_dict['labels']['unified_adjustment']
+
+    strands = "separate" if strandedness else "single"
     allow_inner_labels = config_dict['canvas']['circular']['allow_inner_labels']
-    radius_factor = config_dict['labels']['radius_factor'][track_type][strands][length_param]
-    inner_radius_factor = config_dict['labels']['inner_radius_factor'][track_type][strands][length_param]
+    radius_factor = config_dict['labels']['radius_factor'][track_type][strands][length_param] 
+    inner_radius_factor = config_dict['labels']['inner_radius_factor'][track_type][strands][length_param]  
+
     font_family = config_dict['objects']['text']['font_family']
     font_size: str = config_dict['labels']['font_size'][length_param]
     interval = config_dict['canvas']['dpi']
 
     track_ratio_factor = config_dict['canvas']['circular']['track_ratio_factors'][length_param][0]
     for feature_object in feature_dict.values():
-        feature_label_text = get_label_text(feature_object)
+        feature_label_text = get_label_text(feature_object, label_filtering)
         if feature_label_text == '':
             continue
         else:      
@@ -666,8 +677,9 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
                         label_entry["is_inner"] = True
                         inner_labels.append(label_entry)
     outer_labels_rearranged = rearrange_labels_fc(outer_labels, radius, total_length, length_param, config_dict, strands, is_outer=True)
-    if allow_inner_labels == True:
+    if allow_inner_labels:
         inner_labels_rearranged = rearrange_labels_fc(inner_labels, radius, total_length, length_param, config_dict, strands, is_outer=False)
+    
     label_list_fc = embedded_labels + outer_labels_rearranged + inner_labels_rearranged
     return label_list_fc
 
@@ -709,7 +721,7 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
    font_family = config_dict['objects']['text']['font_family']
    font_size = config_dict['labels']['font_size']['linear'][length_param]
    interval = config_dict['canvas']['dpi']
-   
+   label_filtering = config_dict['labels']['filtering']
    # First pass: Calculate feature track positions
    for feature_id, feature_object in feature_dict.items():
        if len(feature_object.coordinates) == 0:
@@ -730,7 +742,7 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
    
    # Second pass: Process labels
    for feature_id, feature_object in reversed(list(feature_dict.items())):
-       feature_label_text = get_label_text(feature_object)
+       feature_label_text = get_label_text(feature_object, label_filtering)
        feature_track_id = feature_object.feature_track_id
        if not feature_label_text:
            continue

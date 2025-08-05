@@ -7,7 +7,7 @@ import logging
 from typing import Optional
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
-from .file_processing import load_gbks, load_default_colors, read_color_table, load_config_toml, parse_formats
+from .file_processing import load_gbks, load_default_colors, read_color_table, load_config_toml, parse_formats, read_qualifier_priority_file
 from .circular_diagram_components import plot_circular_diagram
 from .data_processing import skew_df
 from .canvas_generator import CircularCanvasConfigurator
@@ -162,6 +162,37 @@ def _get_args(args) -> argparse.Namespace:
         help='Place labels inside the circle (default: False). If enabled, labels are placed both inside and outside the circle, and gc and skew tracks are not shown.',
         action='store_true')
 
+    parser.add_argument(
+        '--label_blacklist',
+        help='Comma-separated keywords or path to a file for label blacklisting (optional)',
+        type=str,
+        default="")
+        
+    parser.add_argument(
+        '--qualifier_priority',
+        help='Path to a TSV file defining qualifier priority for labels (optional)',
+        type=str,
+        default="")
+        
+    parser.add_argument(
+        '--outer_label_x_radius_offset',
+        help='Outer label x-radius offset factor (float; default from config)',
+        type=float)
+
+    parser.add_argument(
+        '--outer_label_y_radius_offset',
+        help='Outer label y-radius offset factor (float; default from config)',
+        type=float)
+
+    parser.add_argument(
+        '--inner_label_x_radius_offset',
+        help='Inner label x-radius offset factor (float; default from config)',
+        type=float)
+
+    parser.add_argument(
+        '--inner_label_y_radius_offset',
+        help='Inner label y-radius offset factor (float; default from config)',
+        type=float)
     args = parser.parse_args(args)
     return args
 
@@ -200,6 +231,13 @@ def circular_main(cmd_args) -> None:
     suppress_skew: bool = args.suppress_skew
     show_labels: bool = args.show_labels
     allow_inner_labels: bool = args.allow_inner_labels
+    label_blacklist: str = args.label_blacklist
+    qualifier_priority_path: str = args.qualifier_priority
+    outer_label_x_radius_offset: Optional[float] = args.outer_label_x_radius_offset
+    outer_label_y_radius_offset: Optional[float] = args.outer_label_y_radius_offset
+    inner_label_x_radius_offset: Optional[float] = args.inner_label_x_radius_offset
+    inner_label_y_radius_offset: Optional[float] = args.inner_label_y_radius_offset
+
     if allow_inner_labels and not show_labels:
         show_labels = True  # If inner labels are allowed, labels must be shown
         logger.warning(
@@ -212,13 +250,35 @@ def circular_main(cmd_args) -> None:
     track_type: str = args.track_type
     strandedness = args.separate_strands
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
+    qualifier_priority = read_qualifier_priority_file(qualifier_priority_path)
     palette: str = args.palette
     default_colors: Optional[DataFrame] = load_default_colors(
         user_defined_default_colors, palette)
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     show_gc, show_skew = suppress_gc_content_and_skew(
         suppress_gc, suppress_skew)
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_labels=show_labels, track_type=track_type, strandedness=strandedness, show_gc=show_gc, show_skew=show_skew, allow_inner_labels=allow_inner_labels, label_font_size=label_font_size)
+
+    config_dict = modify_config_dict(
+        config_dict, 
+        block_stroke_color=block_stroke_color, 
+        block_stroke_width=block_stroke_width, 
+        line_stroke_color=line_stroke_color, 
+        line_stroke_width=line_stroke_width, 
+        show_labels=show_labels, 
+        track_type=track_type, 
+        strandedness=strandedness, 
+        show_gc=show_gc, 
+        show_skew=show_skew, 
+        allow_inner_labels=allow_inner_labels, 
+        label_font_size=label_font_size,
+        label_blacklist=label_blacklist,
+        qualifier_priority=qualifier_priority,
+        outer_label_x_radius_offset=outer_label_x_radius_offset,
+        outer_label_y_radius_offset=outer_label_y_radius_offset,
+        inner_label_x_radius_offset=inner_label_x_radius_offset,
+        inner_label_y_radius_offset=inner_label_y_radius_offset
+    )    
+
     out_formats: list[str] = parse_formats(args.format)
     record_count: int = 0
     gb_records: list[SeqRecord] = load_gbks(input_file, "circular")

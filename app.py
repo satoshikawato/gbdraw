@@ -36,7 +36,7 @@ FEATURE_KEYS = [
     "telomere", "tmRNA", "transit_peptide", "tRNA", "unsure", "V_region",
     "V_segment", "variation", "3'UTR", "5'UTR"
 ]
-
+QUALIFIER_KEYS = ["product", "gene", "note", "rpt_family"]
 
 st.markdown(
     """
@@ -218,31 +218,63 @@ if selected_mode == "🔵 Circular":
             c_prefix = st.text_input("Output prefix (optional):", help="Default is input file name")
             c_species = st.text_input("Species name (optional):", help='e.g., "<i>Escherichia coli</i>"')
             c_strain = st.text_input("Strain/isolate name (optional):", help='e.g., "K-12"')
-            c_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="c_fmt")
-            c_track_type = st.selectbox("Track type:", ["tuckin", "middle", "spreadout"], index=0, key="c_track")
-            c_legend = st.selectbox("Legend:", ["right", "left", "upper_left", "upper_right", "lower_left", "lower_right", "none"], index=0, key="c_legend")
+            c_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="c_fmt", help="Output file format. Default is SVG, which is the fastest and most flexible for web display.")
+            c_track_type = st.selectbox("Track type:", ["tuckin", "middle", "spreadout"], index=0, key="c_track", help="Choose how features are displayed in the circular track. 'tuckin' is the default and most compact, 'middle' places features along the middle of the circle, and 'spreadout' spreads them around the circle.")
+            c_legend = st.selectbox("Legend:", ["right", "left", "upper_left", "upper_right", "lower_left", "lower_right", "none"], index=0, key="c_legend", help="Position of the legend. 'none' hides the legend.")
         with col2:
             st.subheader("Display Options")
-            c_show_labels = st.checkbox("Show labels", value=False, key="c_labels")
-            c_separate_strands = st.checkbox("Separate strands", value=False, key="c_strands")
-            c_allow_inner_labels = st.checkbox("Allow inner labels", value=False, key="c_inner_labels")
+            c_separate_strands = st.checkbox("Separate strands", value=False, key="c_strands", help="Display features on separate strands for better distinction of forward and reverse strands.")
+            c_show_labels = st.checkbox("Show labels", value=False, key="c_labels", help="Display feature labels on the circular map.")
+            c_allow_inner_labels = st.checkbox("Allow inner labels", value=False, key="c_inner_labels", help="Enable inner labels as well as outer labels. This can help avoid label overlap in some casees but suppresses GC content and GC skew tracks.")
+        
             if c_allow_inner_labels:
                 st.info("💡 Inner labels are enabled. GC content and GC skew tracks will be automatically suppressed to avoid overlap.")
                 c_suppress_gc = True
                 c_suppress_skew = True
             else:
-                c_suppress_gc = st.checkbox("Suppress GC content track", value=False, key="c_gc_suppress")
-                c_suppress_skew = st.checkbox("Suppress GC skew track", value=False, key="c_skew_suppress")
-            with st.expander("🔧 Advanced Options"):
-                c_adv_feat = st.multiselect("Features (-k):", options=FEATURE_KEYS, default=["CDS", "tRNA", "rRNA", "repeat_region"], key="c_feat")
-                c_adv_nt = st.text_input("Dinucleotide (--nt):", value="GC", key="c_nt")
-                c_adv_win = st.number_input("Window size:", value=1000, key="c_win")
-                c_adv_step = st.number_input("Step size:", value=100, key="c_step")
-                c_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="c_b_color")
-                c_adv_blk_width = st.number_input("Block stroke width:", 0.0, key="c_b_width")
-                c_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="c_l_color")
-                c_adv_line_width = st.number_input("Line stroke width:", 1.0, key="c_l_width")
-                c_adv_label_font_size = st.number_input("Label font size (default: 8 pt (>=50 kb) or 16 pt (<50 kb):", key="c_label_font_size")
+                c_suppress_gc = st.checkbox("Suppress GC content track", value=False, key="c_gc_suppress", help="Suppress the GC content track.")
+                c_suppress_skew = st.checkbox("Suppress GC skew track", value=False, key="c_skew_suppress", help="Suppress the GC skew track.")
+        with st.expander("🔧 Advanced and Labeling Options"):
+            st.subheader("Advanced Drawing")
+            adv_cols1, adv_cols2 = st.columns(2)
+            with adv_cols1:
+                c_adv_feat = st.multiselect("Features (-k):", options=FEATURE_KEYS, default=["CDS", "tRNA", "rRNA", "repeat_region"], key="c_feat", help="Select which features to include in the circular map. Default includes CDS, tRNA, rRNA, and repeat regions.")
+                c_adv_nt = st.text_input("Dinucleotide (--nt):", value="GC", key="c_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'.")
+                c_adv_win = st.number_input("Window size:", value=1000, key="c_win", help="Window size for GC content and skew calculations. Default is 1000 bp.")
+                c_adv_step = st.number_input("Step size:", value=100, key="c_step", help="Step size for GC content and skew calculations. Default is 100 bp.")
+                c_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="c_b_color", help="Color for block strokes in the circular map.")
+                c_adv_blk_width = st.number_input("Block stroke width:", 0.0, key="c_b_width", help="Width of block strokes in the circular map. Set to 0 for no block strokes.")
+                c_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="c_l_color", help="Color for line strokes in the circular map.")
+                c_adv_line_width = st.number_input("Line stroke width:", 1.0, key="c_l_width", help="Width of line strokes in the circular map. Default is 1.0.")
+            with adv_cols2:
+                c_adv_label_font_size = st.number_input("Label font size (default: 8 pt (>=50 kb) or 16 pt (<50 kb):", key="c_label_font_size", help="Font size for feature labels. Default is 8 pt for genomes >= 50 kb, 16 pt for smaller genomes.")
+                st.subheader("Label Radius Offsets")
+                col_outer, col_inner = st.columns(2)
+                with col_outer:
+                    st.write("Outer Labels")
+                    c_adv_outer_x_offset = st.number_input("X Radius Offset", value=1.0, key="c_outer_x_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the X radius offset for outer labels.")
+                    c_adv_outer_y_offset = st.number_input("Y Radius Offset", value=1.0, key="c_outer_y_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the Y radius offset for outer labels.")
+                with col_inner:
+                    st.write("Inner Labels")
+                    c_adv_inner_x_offset = st.number_input("X Radius Offset", value=1.0, key="c_inner_x_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the X radius offset for inner labels.")
+                    c_adv_inner_y_offset = st.number_input("Y Radius Offset", value=1.0, key="c_inner_y_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the Y radius offset for inner labels.")
+                st.subheader("Label Content Filtering")
+                c_adv_blacklist_keywords = st.text_area(
+                    "Blacklist keywords (comma-separated):",
+                    value="hypothetical, uncharacterized, putative, unknown",
+                    help="Features with these keywords in their labels will be hidden.",
+                    key="c_blacklist"
+                )
+                c_qualifier_priority_file = st.selectbox(
+                    "Qualifier Priority File (optional)",
+                    options=file_options,
+                    key="c_qual_prio_file",
+                    help="A TSV file with two columns: feature_type and a comma-separated list of qualifier keys (e.g., 'CDS\tproduct,gene'). Overrides the manual settings below."
+                )
+                st.write("Or, define priorities manually:")
+                c_adv_prio_gene = st.multiselect("For CDS/RNA features:", QUALIFIER_KEYS, default=["product"], key="c_prio_gene", help="Select qualifier keys to prioritize for CDS/RNA features. Default is 'product'.")
+                c_adv_prio_repeat = st.multiselect("For repeat features:", QUALIFIER_KEYS, default=["rpt_family"], key="c_prio_repeat", help="Select qualifier keys to prioritize for repeat features. Default is 'rpt_family'.")
+                c_adv_prio_feature = st.multiselect("For other features:", QUALIFIER_KEYS, default=["note"], key="c_prio_feature", help="Select qualifier keys to prioritize for other features. Default is 'note'.")
         c_submitted = st.form_submit_button("🚀 Run gbdraw Circular", type="primary")
 
     if c_submitted:
@@ -282,9 +314,28 @@ if selected_mode == "🔵 Circular":
             circular_args += ["-k", ",".join(c_adv_feat), "-n", c_adv_nt, "-w", str(c_adv_win), "-s", str(c_adv_step)]
             circular_args += ["--block_stroke_color", c_adv_blk_color, "--block_stroke_width", str(c_adv_blk_width)]
             circular_args += ["--line_stroke_color", c_adv_line_color, "--line_stroke_width", str(c_adv_line_width)]
+            circular_args += ["--outer_label_x_radius_offset", str(c_adv_outer_x_offset)]
+            circular_args += ["--outer_label_y_radius_offset", str(c_adv_outer_y_offset)]
+            circular_args += ["--inner_label_x_radius_offset", str(c_adv_inner_x_offset)]
+            circular_args += ["--inner_label_y_radius_offset", str(c_adv_inner_y_offset)]
+            if c_adv_blacklist_keywords: circular_args += ["--label_blacklist", c_adv_blacklist_keywords]
+            if c_qualifier_priority_file:
+                save_path = UPLOAD_DIR / f"qual_prio_c_{uuid.uuid4().hex[:8]}.tsv"
+                with open(save_path, "wb") as f:
+                    f.write(c_qualifier_priority_file.getbuffer())
+                circular_args += ["--qualifier_priority", str(save_path)]
+            else:
+                prio_content = f"gene\t{','.join(c_adv_prio_gene)}\n"
+                prio_content += f"repeat\t{','.join(c_adv_prio_repeat)}\n"
+                prio_content += f"feature\t{','.join(c_adv_prio_feature)}\n"
+                save_path = UPLOAD_DIR / f"qual_prio_c_gui_{uuid.uuid4().hex[:8]}.tsv"
+                with open(save_path, "w") as f:
+                    f.write(prio_content)
+                circular_args += ["--qualifier_priority", str(save_path)]       
+
             selected_t_color_file = st.session_state.get("c_t_color_manual", "")
             if selected_t_color_file: circular_args += ["-t", st.session_state.uploaded_files[selected_t_color_file]]
-            
+    
             logger = logging.getLogger() 
             log_capture = io.StringIO()  
             command_str = f"gbdraw circular {' '.join(circular_args)}"
@@ -414,31 +465,52 @@ if selected_mode == "📏 Linear":
         st.header("Drawing Options")
         col1, col2 = st.columns(2)
         with col1:
-            l_prefix = st.text_input("Output prefix:", value="linear", key="l_prefix")
-            l_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="l_fmt")
-            l_legend = st.selectbox("Legend:", ["right", "left", "none"], index=0, key="l_legend")
+            l_prefix = st.text_input("Output prefix:", value="linear", key="l_prefix", help="Prefix for output files. Default is 'linear'.")
+            l_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="l_fmt", help="Output file format. Default is SVG, which is the fastest and most flexible for web display.")
+            l_legend = st.selectbox("Legend:", ["right", "left", "none"], index=0, key="l_legend", help="Position of the legend. 'none' hides the legend.")
         with col2:
-            l_show_labels = st.checkbox("Show labels", value=False, key="l_labels")
-            l_separate_strands = st.checkbox("Separate strands", value=False, key="l_strands")
-            l_align_center = st.checkbox("Align center", value=False, key="l_align")
-            l_show_gc = st.checkbox("Show GC content", value=False, key="l_gc")
-            l_resolve_overlaps = st.checkbox("Resolve overlaps (experimental)", value=False, key="l_overlaps")
-            with st.expander("🔧 Advanced Options"):
-                l_adv_feat = st.multiselect("Features (-k):", options=FEATURE_KEYS, default=["CDS", "tRNA", "rRNA", "repeat_region"], key="l_feat")
-                l_adv_nt = st.text_input("nt (--nt):", value="GC", key="l_nt")
-                l_adv_win = st.number_input("Window size:", value=1000, key="l_win")
-                l_adv_step = st.number_input("Step size:", value=100, key="l_step")
-                st.markdown("---")
-                st.write("Comparison Filters:")
-                l_adv_bitscore = st.number_input("Min bitscore:", value=50.0, key="l_bitscore")
-                l_adv_evalue = st.text_input("Max E-value:", value="1e-2", key="l_evalue")
-                l_adv_identity = st.number_input("Min identity (%):", value=0.0, key="l_identity")
-                st.markdown("---")
-                l_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="l_b_color")
-                l_adv_blk_width = st.number_input("Block stroke width:", 0.0, key="l_b_width")
-                l_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="l_l_color")
-                l_adv_line_width = st.number_input("Line stroke width:", 1.0, key="l_l_width")
-                l_adv_label_font_size = st.number_input("Label font size (default: 5 pt (>=50 kb) or 16 pt (<50 kb):", key="l_label_font_size")
+            l_show_labels = st.checkbox("Show labels", value=False, key="l_labels", help="Display feature labels on the linear map.")
+            l_separate_strands = st.checkbox("Separate strands", value=False, key="l_strands", help="Display features on separate strands for better distinction of forward and reverse strands.")
+            l_align_center = st.checkbox("Align center", value=False, key="l_align", help="Align the linear map to the center of the page. This can help with aesthetics, especially for long sequences.")
+            l_show_gc = st.checkbox("Show GC content", value=False, key="l_gc", help="Display the GC content track on the linear map.")
+            l_resolve_overlaps = st.checkbox("Resolve overlaps (experimental)", value=False, key="l_overlaps", help="Attempt to resolve label overlaps. This is experimental and may not work well for all genomes.")
+        with st.expander("🔧 Advanced and Labeling Options"):
+            st.subheader("Advanced Drawing")
+            adv_cols1, adv_cols2 = st.columns(2)
+            with adv_cols1:
+                l_adv_feat = st.multiselect("Features (-k):", options=FEATURE_KEYS, default=["CDS", "tRNA", "rRNA", "repeat_region"], key="l_feat", help="Select which features to include in the linear map. Default includes CDS, tRNA, rRNA, and repeat regions.")
+                l_adv_nt = st.text_input("nt (--nt):", value="GC", key="l_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'.")
+                l_adv_win = st.number_input("Window size:", value=1000, key="l_win", help="Window size for GC content and skew calculations. Default is 1000 bp.")
+                l_adv_step = st.number_input("Step size:", value=100, key="l_step", help="Step size for GC content and skew calculations. Default is 100 bp.")
+                l_adv_label_font_size = st.number_input("Label font size (default: 5 pt (>=50 kb) or 16 pt (<50 kb):", key="l_label_font_size", help="Font size for feature labels. Default is 5 pt for genomes >= 50 kb, 16 pt for smaller genomes.")
+            with adv_cols2:
+                l_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="l_b_color", help="Color for block strokes in the linear map.")
+                l_adv_blk_width = st.number_input("Block stroke width:", 0.0, key="l_b_width", help="Width of block strokes in the linear map. Set to 0 for no block strokes.")
+                l_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="l_l_color", help="Color for line strokes in the linear map.")
+                l_adv_line_width = st.number_input("Line stroke width:", 1.0, key="l_l_width", help="Width of line strokes in the linear map. Default is 1.0.")
+            st.subheader("Comparison Filters")
+            l_adv_bitscore = st.number_input("Min bitscore:", value=50.0, key="l_bitscore", help="Minimum bitscore for BLAST comparisons. Default is 50.0.")
+            l_adv_evalue = st.text_input("Max E-value:", value="1e-2", key="l_evalue", help="Maximum E-value for BLAST comparisons. Default is '1e-2'.")
+            l_adv_identity = st.number_input("Min identity (%):", value=0.0, key="l_identity", help="Minimum identity percentage for BLAST comparisons. Default is 0.0%.")
+            
+
+            st.subheader("Label Content Filtering")
+            l_adv_blacklist_keywords = st.text_area(
+                "Blacklist keywords (comma-separated):",
+                value="hypothetical, uncharacterized, putative, unknown",
+                help="Features with these keywords in their labels will be hidden.",
+                key="l_blacklist"
+            )
+            l_qualifier_priority_file = st.selectbox(
+                    "Qualifier Priority File (optional)",
+                    options=file_options,
+                    key="l_qual_prio_file",
+                    help="A TSV file with two columns: feature_type and a comma-separated list of qualifier keys (e.g., 'CDS\tproduct,gene'). Overrides the manual settings below."
+                )
+            st.write("Or, define priorities manually:")
+            l_adv_prio_gene = st.multiselect("For Gene/RNA features:", QUALIFIER_KEYS, default=["product"], key="l_prio_gene", help="Select qualifier keys to prioritize for Gene/RNA features. Default is 'product'.")
+            l_adv_prio_repeat = st.multiselect("For Repeat features:", QUALIFIER_KEYS, default=["rpt_family"], key="l_prio_repeat", help="Select qualifier keys to prioritize for Repeat features. Default is 'rpt_family'.")
+            l_adv_prio_feature = st.multiselect("For Other features:", QUALIFIER_KEYS, default=["note"], key="l_prio_feature", help="Select qualifier keys to prioritize for Other features. Default is 'note'.")
         l_submitted = st.form_submit_button("🚀 Run gbdraw Linear", type="primary")
 
     if l_submitted:
@@ -485,6 +557,21 @@ if selected_mode == "📏 Linear":
             linear_args += ["--bitscore", str(l_adv_bitscore), "--evalue", l_adv_evalue, "--identity", str(l_adv_identity)]
             linear_args += ["--block_stroke_color", l_adv_blk_color, "--block_stroke_width", str(l_adv_blk_width)]
             linear_args += ["--line_stroke_color", l_adv_line_color, "--line_stroke_width", str(l_adv_line_width)]
+            if l_adv_blacklist_keywords: linear_args += ["--label_blacklist", l_adv_blacklist_keywords]
+            if l_qualifier_priority_file:
+                save_path = UPLOAD_DIR / f"qual_prio_l_{uuid.uuid4().hex[:8]}.tsv"
+                with open(save_path, "wb") as f:
+                    f.write(l_qualifier_priority_file.getbuffer())
+                linear_args += ["--qualifier_priority", str(save_path)]
+            else:
+                prio_content = f"gene\t{','.join(l_adv_prio_gene)}\n"
+                prio_content += f"repeat\t{','.join(l_adv_prio_repeat)}\n"
+                prio_content += f"feature\t{','.join(l_adv_prio_feature)}\n"
+                save_path = UPLOAD_DIR / f"qual_prio_l_gui_{uuid.uuid4().hex[:8]}.tsv"
+                with open(save_path, "w") as f:
+                    f.write(prio_content)
+                linear_args += ["--qualifier_priority", str(save_path)]
+            
             selected_t_color_file = st.session_state.get("l_t_color_manual", "")
             if selected_t_color_file: linear_args += ["-t", st.session_state.uploaded_files[selected_t_color_file]]
             

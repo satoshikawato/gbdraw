@@ -86,6 +86,14 @@ font_weight = 'normal'
 
 
 [labels]
+
+[labels.filtering]
+blacklist_keywords = ["hypothetical", "uncharacterized", "putative", "unknown"]
+[labels.filtering.qualifier_priority]
+gene = ["product"]
+repeat = ["rpt_family"]
+feature = ["note"]
+
 [labels.length_threshold]
   circular = 50000
   linear = 50000 
@@ -255,7 +263,15 @@ font_weight = 'normal'
 [labels.inner_arc_angle.spreadout]
   short = 80 
   long = 88
-  
+
+[labels.unified_adjustment]
+  [labels.unified_adjustment.outer_labels]
+    x_radius_offset = 1.0
+    y_radius_offset = 1.0
+  [labels.unified_adjustment.inner_labels]
+    x_radius_offset = 1.0
+    y_radius_offset = 1.0
+    
 [objects.length_bar]
 stroke_color = 'black'
 stroke_width = 3

@@ -1,11 +1,18 @@
 #!/usr/bin/env python
 # coding: utf-8
+import os
+import math
+import logging
 from Bio.SeqRecord import SeqRecord
 from svgwrite.text import Text
+from pandas import DataFrame
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Union, Literal
 from .find_font_files import get_text_bbox_size_pixels, get_font_dict
-import math
+from .feature_objects import FeatureObject, GeneObject, RepeatObject
+
+
+logger = logging.getLogger(__name__)
 
 def calculate_bbox_dimensions(text, font_family, font_size, dpi):
     fonts = [font.strip("'") for font in font_family.split(', ')]
@@ -168,12 +175,55 @@ def modify_config_dict(config_dict,
                        track_type=None, 
                        strandedness=None, 
                        resolve_overlaps=None, 
-                       allow_inner_labels=None) -> dict:
+                       allow_inner_labels=None,
+                       label_radius_offset=None,
+                       label_blacklist=None,
+                       qualifier_priority=None,
+                       outer_label_x_radius_offset=None,
+                       outer_label_y_radius_offset=None,
+                       inner_label_x_radius_offset=None,
+                       inner_label_y_radius_offset=None) -> dict:
     # Mapping of parameter names to their paths in the config_dict
     label_font_size_circular_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['long']
     label_font_size_circular_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['short']
     label_font_size_linear_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['long']
     label_font_size_linear_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['short']
+
+    # Process label_blacklist only if the argument was explicitly passed
+    if label_blacklist is not None:
+        # If the argument is an empty string, set an empty list to disable filtering
+        if label_blacklist == "":
+            update_config_value(config_dict, 'labels.filtering.blacklist_keywords', [])
+        else:
+            is_safe_path = False
+            try:
+                safe_dir = os.path.realpath(os.getcwd())
+                requested_path = os.path.realpath(os.path.join(safe_dir, label_blacklist))
+                if os.path.commonpath([requested_path, safe_dir]) == safe_dir:
+                    is_safe_path = True
+            except TypeError:
+                is_safe_path = False
+
+            if is_safe_path and os.path.isfile(requested_path):
+                with open(requested_path, 'r') as f:
+                    keywords = [line.strip() for line in f if line.strip()]
+                update_config_value(config_dict, 'labels.filtering.blacklist_keywords', keywords)
+            else:
+                if not is_safe_path and os.path.exists(label_blacklist):
+                     logger.warning(
+                        f"Security Warning: Path '{label_blacklist}' is outside the current working directory. "
+                        "It will be treated as a comma-separated string."
+                    )
+                update_config_value(config_dict, 'labels.filtering.blacklist_keywords', [k.strip() for k in label_blacklist.split(',')])
+
+
+    if qualifier_priority is not None and isinstance(qualifier_priority, DataFrame):
+        priority_dict = {
+            row['feature_type']: [p.strip() for p in row['priorities'].split(',')]
+            for _, row in qualifier_priority.iterrows()
+        }
+        update_config_value(config_dict, 'labels.filtering.qualifier_priority', priority_dict)
+
     param_paths = {
         'block_stroke_width': 'objects.features.block_stroke_width',
         'block_stroke_color': 'objects.features.block_stroke_color',
@@ -192,6 +242,10 @@ def modify_config_dict(config_dict,
         'track_type': 'canvas.circular.track_type',
         'resolve_overlaps': 'canvas.resolve_overlaps',
         'allow_inner_labels': 'canvas.circular.allow_inner_labels',
+        'outer_label_x_radius_offset': 'labels.unified_adjustment.outer_labels.x_radius_offset',
+        'outer_label_y_radius_offset': 'labels.unified_adjustment.outer_labels.y_radius_offset',
+        'inner_label_x_radius_offset': 'labels.unified_adjustment.inner_labels.x_radius_offset',
+        'inner_label_y_radius_offset': 'labels.unified_adjustment.inner_labels.y_radius_offset',
     }
     # Update the config_dict for each specified parameter
     for param, path in param_paths.items():
@@ -255,39 +309,64 @@ def edit_available_tracks(available_tracks, bbox_start, bbox_end):
     return available_tracks, track_factor
 
 
-def get_label_text(seq_feature):
+def get_label_text(seq_feature, filtering_config) -> str:
+    """
+    Extracts a label for a feature based on a priority list of qualifiers
+    determined by the feature type (from config.toml), and filters it against a blacklist.
+    """
+    feature_type = seq_feature.type
+    priority_config = filtering_config.get('qualifier_priority', {})
+    blacklist = filtering_config.get('blacklist_keywords', [])
+
+    # Determine which priority list to use based on the feature's type string.
+    # This logic corresponds to how GeneObject, RepeatObject, etc., are defined.
+    if feature_type in ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'gene']:
+        priority_list = priority_config.get('gene', ['product', 'gene', 'note'])
+    elif feature_type == 'repeat_region':
+        priority_list = priority_config.get('repeat', ['rpt_family', 'note'])
+    else:
+        priority_list = priority_config.get('feature', ['note'])
+
     text = ''
-    if hasattr(seq_feature, 'product') and seq_feature.product:
-        text = seq_feature.product
-    elif hasattr(seq_feature, 'gene') and seq_feature.gene:
-        text = seq_feature.gene
-    elif hasattr(seq_feature, 'rpt_family'):
-        # if not undefined or None, use rpt_family, else use note
-        if seq_feature.rpt_family and seq_feature.rpt_family != 'undefined':
-            text = seq_feature.rpt_family.split(';')[0]
-        elif seq_feature.note:
-            if isinstance(seq_feature.note, list):
-                text = seq_feature.note[0].split(';')[0]
-            else:
-                text = seq_feature.note.split(';')[0]
-    elif hasattr(seq_feature, 'note') and seq_feature.note:
-        if isinstance(seq_feature.note, list):
-            text = seq_feature.note[0].split(';')[0]
-        else:
-            text = seq_feature.note.split(';')[0]
+    for priority in priority_list:
+        if hasattr(seq_feature, priority) and getattr(seq_feature, priority):
+            potential_text = getattr(seq_feature, priority)
+            if isinstance(potential_text, list):
+                potential_text = ', '.join(potential_text)
+            
+            # Check against blacklist
+            is_blacklisted = False
+            for keyword in blacklist:
+                if keyword and keyword.lower() in str(potential_text).lower():
+                    is_blacklisted = True
+                    break
+            
+            if not is_blacklisted:
+                text = str(potential_text)
+                break
     return text
 
 def get_coordinates_of_longest_segment(feature_object):
     coords: list[List[Union[str, int, bool]]] = feature_object.coordinates
+    if not coords:
+        return None, -1
+        
+    longest_segment_info = None
+    max_length = -1
+
     for coord in coords:
-        exon_strand: str = get_strand(exon_line.strand)  # type: ignore
-    for coord in coords:
-        coord_dict: Dict[str, Union[str, int]] = {
-            'coord_type': str(coord[0]),
-            'coord_strand': coord[2],
-            'coord_start': coord[3],
-            'coord_end': coord[4]}
-        coord_type: str = str(coord_dict['coord_type'])
+        try:
+            # Assuming coord format is [type, strand, start, end, ...]
+            start, end = int(coord[2]), int(coord[3])
+            length = abs(end - start)
+            if length > max_length:
+                max_length = length
+                longest_segment_info = coord
+        except (IndexError, TypeError, ValueError):
+            # Skip malformed coordinate entries
+            continue
+            
+    return longest_segment_info, max_length
         
 
 # Function to convert degrees to radians
