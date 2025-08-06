@@ -250,7 +250,15 @@ def circular_main(cmd_args) -> None:
     track_type: str = args.track_type
     strandedness = args.separate_strands
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
-    qualifier_priority = read_qualifier_priority_file(qualifier_priority_path)
+    # qualifier_priority.tsv ファイルの処理
+    if qualifier_priority_path:
+        qualifier_priority_df = read_qualifier_priority_file(qualifier_priority_path)
+        # get_label_textが参照できるように、正しい階層にDataFrameを格納する
+        config_dict['labels']['filtering']['qualifier_priority_df'] = qualifier_priority_df
+    else:
+        # ファイルが指定されなかった場合はNoneを設定
+        config_dict['labels']['filtering']['qualifier_priority_df'] = None
+
     palette: str = args.palette
     default_colors: Optional[DataFrame] = load_default_colors(
         user_defined_default_colors, palette)
@@ -272,7 +280,6 @@ def circular_main(cmd_args) -> None:
         allow_inner_labels=allow_inner_labels, 
         label_font_size=label_font_size,
         label_blacklist=label_blacklist,
-        qualifier_priority=qualifier_priority,
         outer_label_x_radius_offset=outer_label_x_radius_offset,
         outer_label_y_radius_offset=outer_label_y_radius_offset,
         inner_label_x_radius_offset=inner_label_x_radius_offset,

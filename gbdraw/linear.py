@@ -247,9 +247,12 @@ def linear_main(cmd_args) -> None:
         user_defined_default_colors, palette)
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
-    # NEW: 優先順位ファイルを読み込む
-    qualifier_priority = read_qualifier_priority_file(qualifier_priority_path)
 
+    if qualifier_priority_path:
+        qualifier_priority_df = read_qualifier_priority_file(qualifier_priority_path)
+        config_dict['labels']['filtering']['qualifier_priority_df'] = qualifier_priority_df
+    else:
+        config_dict['labels']['filtering']['qualifier_priority_df'] = None
 
     block_stroke_color: str = args.block_stroke_color
     block_stroke_width: str = args.block_stroke_width
@@ -265,8 +268,7 @@ def linear_main(cmd_args) -> None:
         show_skew=show_skew, 
         align_center=align_center, 
         strandedness=strandedness,
-        label_blacklist=label_blacklist,
-        qualifier_priority=qualifier_priority
+        label_blacklist=label_blacklist
     )
     records: list[SeqRecord] = load_gbks(
         genbank_files, "linear", load_comparison)
