@@ -294,6 +294,7 @@ if selected_mode == "🔵 Circular":
             else:
                 c_suppress_gc = st.checkbox("Suppress GC content track", value=False, key="c_gc_suppress", help="Suppress the GC content track.")
                 c_suppress_skew = st.checkbox("Suppress GC skew track", value=False, key="c_skew_suppress", help="Suppress the GC skew track.")
+
         with st.expander("🔧 Advanced Options"):
             st.subheader("Advanced Drawing")
             adv_cols1, adv_cols2 = st.columns(2)
@@ -318,7 +319,7 @@ if selected_mode == "🔵 Circular":
                     st.write("Inner Labels")
                     c_adv_inner_x_offset = st.number_input("X Radius Offset", value=1.0, key="c_inner_x_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the X radius offset for inner labels.")
                     c_adv_inner_y_offset = st.number_input("Y Radius Offset", value=1.0, key="c_inner_y_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the Y radius offset for inner labels.")
-                
+
         c_submitted = st.form_submit_button("🚀 Run gbdraw Circular", type="primary")
 
     if c_submitted:
@@ -362,7 +363,7 @@ if selected_mode == "🔵 Circular":
             circular_args += ["--outer_label_y_radius_offset", str(c_adv_outer_y_offset)]
             circular_args += ["--inner_label_x_radius_offset", str(c_adv_inner_x_offset)]
             circular_args += ["--inner_label_y_radius_offset", str(c_adv_inner_y_offset)]
-            
+
             # --- CORRECTED QUALIFIER PRIORITY & BLACKLIST LOGIC ---
             selected_prio_file = st.session_state.get("c_qualifier_priority_file_manual", "")
             if selected_prio_file:
@@ -576,7 +577,9 @@ if selected_mode == "📏 Linear":
             l_align_center = st.checkbox("Align center", value=False, key="l_align", help="Align the linear map to the center of the page. This can help with aesthetics, especially for long sequences.")
             l_show_gc = st.checkbox("Show GC content", value=False, key="l_gc", help="Display the GC content track on the linear map.")
             l_resolve_overlaps = st.checkbox("Resolve overlaps (experimental)", value=False, key="l_overlaps", help="Attempt to resolve label overlaps. This is experimental and may not work well for all genomes.")
+
         with st.expander("🔧 Advanced Options"):
+
             st.subheader("Advanced Drawing")
             adv_cols1, adv_cols2 = st.columns(2)
             with adv_cols1:

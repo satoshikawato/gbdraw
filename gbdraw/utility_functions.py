@@ -336,6 +336,7 @@ def get_label_text(seq_feature, filtering_config) -> str:
         else:
             priority_list = priority_config.get('feature', ['note'])
 
+
     text = ''
 
     for priority in priority_list or []:
