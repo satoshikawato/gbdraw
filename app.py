@@ -13,7 +13,7 @@ import streamlit as st
 from pathlib import Path
 from importlib import resources
 from contextlib import redirect_stdout, redirect_stderr
-
+from streamlit.runtime.uploaded_file_manager import UploadedFile
 from gbdraw.circular import circular_main
 from gbdraw.linear import linear_main
 
@@ -37,6 +37,28 @@ FEATURE_KEYS = [
     "V_segment", "variation", "3'UTR", "5'UTR"
 ]
 QUALIFIER_KEYS = ["product", "gene", "note", "rpt_family"]
+
+# --- Helper functions and Session State for Dynamic Priority Input ---
+
+def add_priority_row():
+    """Appends a new empty row to the list in session_state."""
+    if st.session_state.manual_priorities:
+        new_id = max(row['id'] for row in st.session_state.manual_priorities) + 1
+    else:
+        new_id = 0
+    st.session_state.manual_priorities.append({'id': new_id, 'feature': '', 'qualifiers': ''})
+
+def remove_priority_row(row_id):
+    """Removes a specific row by its ID."""
+    st.session_state.manual_priorities = [
+        row for row in st.session_state.manual_priorities if row['id'] != row_id
+    ]
+
+# Initialize session state for manual priorities if it doesn't exist.
+# This runs only once per session.
+if 'manual_priorities' not in st.session_state:
+    st.session_state.manual_priorities = [{'id': 0, 'feature': 'CDS', 'qualifiers': 'product,gene'}]
+
 
 st.markdown(
     """
@@ -159,7 +181,6 @@ with st.sidebar:
 # --- Main Content (Mode Selection) ---
 file_options = [""] + sorted(st.session_state.uploaded_files.keys())
 
-# Replace st.tabs with st.radio to maintain state across reruns
 selected_mode = st.radio(
     "Select Mode",
     ["🔵 Circular", "📏 Linear"],
@@ -180,12 +201,10 @@ if selected_mode == "🔵 Circular":
 
     st.subheader("🎨 Color Customization")
     
-    # Callback for circular palette change
     def circular_palette_changed():
         new_palette = st.session_state.c_palette_selector
         st.session_state.custom_circular_colors = get_palette_colors(new_palette).copy()
 
-    # Initialize state for circular colors if it doesn't exist
     if 'custom_circular_colors' not in st.session_state:
         default_palette = PALETTES[0] if PALETTES and PALETTES[0] != "" else "default"
         st.session_state.custom_circular_colors = get_palette_colors(default_palette).copy()
@@ -208,8 +227,49 @@ if selected_mode == "🔵 Circular":
                 value=st.session_state.custom_circular_colors[feature],
                 key=f"c_color_picker_{feature}"
             )
+    
+    # --- Qualifier Priority & Label Filtering Section (OUTSIDE the form) ---
+    st.markdown("---")
+    st.subheader("Label Content Options (Optional)")
+    
+    # Qualifier Priority
+    st.markdown("##### Qualifier Priority")
+    st.info("Select a TSV file from the sidebar OR define priorities manually below. If a file is selected, manual entries are ignored.")
+    create_manual_selectbox(
+        "Qualifier Priority File (optional)",
+        file_options,
+        "c_qualifier_priority_file"
+    )
+    with st.expander("Or, define priorities manually:", expanded=False):
+        col1, col2, _ = st.columns([3, 5, 1])
+        col1.markdown("**Feature Type**")
+        col2.markdown("**Qualifier Priority (comma-separated)**")
+
+        for row in st.session_state.manual_priorities:
+            col1, col2, col3 = st.columns([3, 5, 1])
+            col1.text_input("Feature", value=row['feature'], key=f"feature_{row['id']}", label_visibility="collapsed")
+            col2.text_input("Qualifiers", value=row['qualifiers'], key=f"qualifiers_{row['id']}", label_visibility="collapsed")
+            col3.button("➖", key=f"remove_{row['id']}", on_click=remove_priority_row, args=(row['id'],))
+
+        st.button("➕ Add Row", on_click=add_priority_row, use_container_width=True)
+
+    # Label Content Filtering
+    st.markdown("##### Label Content Filtering")
+    st.info("Select a file with blacklist keywords (one per line) OR enter them manually below. If a file is selected, manual entry is ignored.")
+    create_manual_selectbox(
+        "Blacklist File (optional)",
+        file_options,
+        "c_blacklist_file"
+    )
+    st.text_area(
+        "Or, enter keywords manually (comma-separated):",
+        value="hypothetical, uncharacterized, putative, unknown",
+        help="Features with these keywords in their labels will be hidden.",
+        key="c_blacklist_manual"
+    )
     st.markdown("---")
 
+    # --- Main Drawing Form ---
     with st.form("circular_form"):
         st.header("Drawing Options")
         col1, col2 = st.columns(2)
@@ -234,7 +294,8 @@ if selected_mode == "🔵 Circular":
             else:
                 c_suppress_gc = st.checkbox("Suppress GC content track", value=False, key="c_gc_suppress", help="Suppress the GC content track.")
                 c_suppress_skew = st.checkbox("Suppress GC skew track", value=False, key="c_skew_suppress", help="Suppress the GC skew track.")
-        with st.expander("🔧 Advanced and Labeling Options"):
+
+        with st.expander("🔧 Advanced Options"):
             st.subheader("Advanced Drawing")
             adv_cols1, adv_cols2 = st.columns(2)
             with adv_cols1:
@@ -258,23 +319,7 @@ if selected_mode == "🔵 Circular":
                     st.write("Inner Labels")
                     c_adv_inner_x_offset = st.number_input("X Radius Offset", value=1.0, key="c_inner_x_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the X radius offset for inner labels.")
                     c_adv_inner_y_offset = st.number_input("Y Radius Offset", value=1.0, key="c_inner_y_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the Y radius offset for inner labels.")
-                st.subheader("Label Content Filtering")
-                c_adv_blacklist_keywords = st.text_area(
-                    "Blacklist keywords (comma-separated):",
-                    value="hypothetical, uncharacterized, putative, unknown",
-                    help="Features with these keywords in their labels will be hidden.",
-                    key="c_blacklist"
-                )
-                c_qualifier_priority_file = st.selectbox(
-                    "Qualifier Priority File (optional)",
-                    options=file_options,
-                    key="c_qual_prio_file",
-                    help="A TSV file with two columns: feature_type and a comma-separated list of qualifier keys (e.g., 'CDS\tproduct,gene'). Overrides the manual settings below."
-                )
-                st.write("Or, define priorities manually:")
-                c_adv_prio_gene = st.multiselect("For CDS/RNA features:", QUALIFIER_KEYS, default=["product"], key="c_prio_gene", help="Select qualifier keys to prioritize for CDS/RNA features. Default is 'product'.")
-                c_adv_prio_repeat = st.multiselect("For repeat features:", QUALIFIER_KEYS, default=["rpt_family"], key="c_prio_repeat", help="Select qualifier keys to prioritize for repeat features. Default is 'rpt_family'.")
-                c_adv_prio_feature = st.multiselect("For other features:", QUALIFIER_KEYS, default=["note"], key="c_prio_feature", help="Select qualifier keys to prioritize for other features. Default is 'note'.")
+
         c_submitted = st.form_submit_button("🚀 Run gbdraw Circular", type="primary")
 
     if c_submitted:
@@ -318,20 +363,37 @@ if selected_mode == "🔵 Circular":
             circular_args += ["--outer_label_y_radius_offset", str(c_adv_outer_y_offset)]
             circular_args += ["--inner_label_x_radius_offset", str(c_adv_inner_x_offset)]
             circular_args += ["--inner_label_y_radius_offset", str(c_adv_inner_y_offset)]
-            if c_adv_blacklist_keywords: circular_args += ["--label_blacklist", c_adv_blacklist_keywords]
-            if c_qualifier_priority_file:
-                save_path = UPLOAD_DIR / f"qual_prio_c_{uuid.uuid4().hex[:8]}.tsv"
-                with open(save_path, "wb") as f:
-                    f.write(c_qualifier_priority_file.getbuffer())
-                circular_args += ["--qualifier_priority", str(save_path)]
+
+            # --- CORRECTED QUALIFIER PRIORITY & BLACKLIST LOGIC ---
+            selected_prio_file = st.session_state.get("c_qualifier_priority_file_manual", "")
+            if selected_prio_file:
+                prio_path = st.session_state.uploaded_files[selected_prio_file]
+                circular_args += ["--qualifier_priority", prio_path]
             else:
-                prio_content = f"gene\t{','.join(c_adv_prio_gene)}\n"
-                prio_content += f"repeat\t{','.join(c_adv_prio_repeat)}\n"
-                prio_content += f"feature\t{','.join(c_adv_prio_feature)}\n"
-                save_path = UPLOAD_DIR / f"qual_prio_c_gui_{uuid.uuid4().hex[:8]}.tsv"
-                with open(save_path, "w") as f:
-                    f.write(prio_content)
-                circular_args += ["--qualifier_priority", str(save_path)]       
+                prio_lines = []
+                for row_state in st.session_state.manual_priorities:
+                    feature_key = f"feature_{row_state['id']}"
+                    qualifiers_key = f"qualifiers_{row_state['id']}"
+                    feature_value = st.session_state.get(feature_key, "")
+                    qualifiers_value = st.session_state.get(qualifiers_key, "")
+                    if feature_value and qualifiers_value:
+                        prio_lines.append(f"{feature_value}\t{qualifiers_value}")
+                
+                if prio_lines:
+                    prio_content = "\n".join(prio_lines)
+                    save_path = UPLOAD_DIR / f"qual_prio_c_{uuid.uuid4().hex}"
+                    with open(save_path, "w", encoding="utf-8") as f:
+                        f.write(prio_content)
+                    circular_args += ["--qualifier_priority", str(save_path)]
+
+            selected_blacklist_file = st.session_state.get("c_blacklist_file_manual", "")
+            if selected_blacklist_file:
+                blacklist_path = st.session_state.uploaded_files[selected_blacklist_file]
+                circular_args += ["--label_blacklist", blacklist_path]
+            else:
+                blacklist_keywords = st.session_state.get("c_blacklist_manual", "")
+                if blacklist_keywords:
+                    circular_args += ["--label_blacklist", blacklist_keywords]
 
             selected_t_color_file = st.session_state.get("c_t_color_manual", "")
             if selected_t_color_file: circular_args += ["-t", st.session_state.uploaded_files[selected_t_color_file]]
@@ -459,7 +521,48 @@ if selected_mode == "📏 Linear":
                 value=st.session_state.custom_linear_colors[feature],
                 key=f"l_color_picker_{feature}"
             )
+    
+    # --- Qualifier Priority & Label Filtering Section (OUTSIDE the form) ---
     st.markdown("---")
+    st.subheader("Label Content Options (Optional)")
+    
+    # Qualifier Priority
+    st.markdown("##### Qualifier Priority")
+    st.info("Select a TSV file from the sidebar OR define priorities manually below. If a file is selected, manual entries are ignored.")
+    create_manual_selectbox(
+        "Qualifier Priority File (optional)",
+        file_options,
+        "l_qualifier_priority_file"
+    )
+    with st.expander("Or, define priorities manually:", expanded=False):
+        col1, col2, _ = st.columns([3, 5, 1])
+        col1.markdown("**Feature Type**")
+        col2.markdown("**Qualifier Priority (comma-separated)**")
+
+        for row in st.session_state.manual_priorities:
+            col1, col2, col3 = st.columns([3, 5, 1])
+            col1.text_input("Feature", value=row['feature'], key=f"feature_{row['id']}", label_visibility="collapsed")
+            col2.text_input("Qualifiers", value=row['qualifiers'], key=f"qualifiers_{row['id']}", label_visibility="collapsed")
+            col3.button("➖", key=f"remove_{row['id']}", on_click=remove_priority_row, args=(row['id'],))
+
+        st.button("➕ Add Row", on_click=add_priority_row, use_container_width=True)
+
+    # Label Content Filtering
+    st.markdown("##### Label Content Filtering")
+    st.info("Select a file with blacklist keywords (one per line) OR enter them manually below. If a file is selected, manual entry is ignored.")
+    create_manual_selectbox(
+        "Blacklist File (optional)",
+        file_options,
+        "l_blacklist_file"
+    )
+    st.text_area(
+        "Or, enter keywords manually (comma-separated):",
+        value="hypothetical, uncharacterized, putative, unknown",
+        help="Features with these keywords in their labels will be hidden.",
+        key="l_blacklist_manual"
+    )
+    st.markdown("---")
+
 
     with st.form("linear_form"):
         st.header("Drawing Options")
@@ -474,7 +577,9 @@ if selected_mode == "📏 Linear":
             l_align_center = st.checkbox("Align center", value=False, key="l_align", help="Align the linear map to the center of the page. This can help with aesthetics, especially for long sequences.")
             l_show_gc = st.checkbox("Show GC content", value=False, key="l_gc", help="Display the GC content track on the linear map.")
             l_resolve_overlaps = st.checkbox("Resolve overlaps (experimental)", value=False, key="l_overlaps", help="Attempt to resolve label overlaps. This is experimental and may not work well for all genomes.")
-        with st.expander("🔧 Advanced and Labeling Options"):
+
+        with st.expander("🔧 Advanced Options"):
+
             st.subheader("Advanced Drawing")
             adv_cols1, adv_cols2 = st.columns(2)
             with adv_cols1:
@@ -493,24 +598,6 @@ if selected_mode == "📏 Linear":
             l_adv_evalue = st.text_input("Max E-value:", value="1e-2", key="l_evalue", help="Maximum E-value for BLAST comparisons. Default is '1e-2'.")
             l_adv_identity = st.number_input("Min identity (%):", value=0.0, key="l_identity", help="Minimum identity percentage for BLAST comparisons. Default is 0.0%.")
             
-
-            st.subheader("Label Content Filtering")
-            l_adv_blacklist_keywords = st.text_area(
-                "Blacklist keywords (comma-separated):",
-                value="hypothetical, uncharacterized, putative, unknown",
-                help="Features with these keywords in their labels will be hidden.",
-                key="l_blacklist"
-            )
-            l_qualifier_priority_file = st.selectbox(
-                    "Qualifier Priority File (optional)",
-                    options=file_options,
-                    key="l_qual_prio_file",
-                    help="A TSV file with two columns: feature_type and a comma-separated list of qualifier keys (e.g., 'CDS\tproduct,gene'). Overrides the manual settings below."
-                )
-            st.write("Or, define priorities manually:")
-            l_adv_prio_gene = st.multiselect("For Gene/RNA features:", QUALIFIER_KEYS, default=["product"], key="l_prio_gene", help="Select qualifier keys to prioritize for Gene/RNA features. Default is 'product'.")
-            l_adv_prio_repeat = st.multiselect("For Repeat features:", QUALIFIER_KEYS, default=["rpt_family"], key="l_prio_repeat", help="Select qualifier keys to prioritize for Repeat features. Default is 'rpt_family'.")
-            l_adv_prio_feature = st.multiselect("For Other features:", QUALIFIER_KEYS, default=["note"], key="l_prio_feature", help="Select qualifier keys to prioritize for Other features. Default is 'note'.")
         l_submitted = st.form_submit_button("🚀 Run gbdraw Linear", type="primary")
 
     if l_submitted:
@@ -551,27 +638,43 @@ if selected_mode == "📏 Linear":
                         f.write(f"{feature}\t{color}\n")
                 linear_args += ["-d", str(save_path)]
             
-            # FIX: Use linear-specific variables (l_adv_win, l_adv_step) instead of circular ones.
             linear_args += ["-k", ",".join(l_adv_feat), "-n", l_adv_nt, "-w", str(l_adv_win), "-s", str(l_adv_step)]
             
             linear_args += ["--bitscore", str(l_adv_bitscore), "--evalue", l_adv_evalue, "--identity", str(l_adv_identity)]
             linear_args += ["--block_stroke_color", l_adv_blk_color, "--block_stroke_width", str(l_adv_blk_width)]
             linear_args += ["--line_stroke_color", l_adv_line_color, "--line_stroke_width", str(l_adv_line_width)]
-            if l_adv_blacklist_keywords: linear_args += ["--label_blacklist", l_adv_blacklist_keywords]
-            if l_qualifier_priority_file:
-                save_path = UPLOAD_DIR / f"qual_prio_l_{uuid.uuid4().hex[:8]}.tsv"
-                with open(save_path, "wb") as f:
-                    f.write(l_qualifier_priority_file.getbuffer())
-                linear_args += ["--qualifier_priority", str(save_path)]
-            else:
-                prio_content = f"gene\t{','.join(l_adv_prio_gene)}\n"
-                prio_content += f"repeat\t{','.join(l_adv_prio_repeat)}\n"
-                prio_content += f"feature\t{','.join(l_adv_prio_feature)}\n"
-                save_path = UPLOAD_DIR / f"qual_prio_l_gui_{uuid.uuid4().hex[:8]}.tsv"
-                with open(save_path, "w") as f:
-                    f.write(prio_content)
-                linear_args += ["--qualifier_priority", str(save_path)]
             
+            # --- CORRECTED QUALIFIER PRIORITY & BLACKLIST LOGIC ---
+            selected_prio_file = st.session_state.get("l_qualifier_priority_file_manual", "")
+            if selected_prio_file:
+                prio_path = st.session_state.uploaded_files[selected_prio_file]
+                linear_args += ["--qualifier_priority", prio_path]
+            else:
+                prio_lines = []
+                for row_state in st.session_state.manual_priorities:
+                    feature_key = f"feature_{row_state['id']}"
+                    qualifiers_key = f"qualifiers_{row_state['id']}"
+                    feature_value = st.session_state.get(feature_key, "")
+                    qualifiers_value = st.session_state.get(qualifiers_key, "")
+                    if feature_value and qualifiers_value:
+                        prio_lines.append(f"{feature_value}\t{qualifiers_value}")
+                
+                if prio_lines:
+                    prio_content = "\n".join(prio_lines)
+                    save_path = UPLOAD_DIR / f"qual_prio_l_{uuid.uuid4().hex}"
+                    with open(save_path, "w", encoding="utf-8") as f:
+                        f.write(prio_content)
+                    linear_args += ["--qualifier_priority", str(save_path)]
+            
+            selected_blacklist_file = st.session_state.get("l_blacklist_file_manual", "")
+            if selected_blacklist_file:
+                blacklist_path = st.session_state.uploaded_files[selected_blacklist_file]
+                linear_args += ["--label_blacklist", blacklist_path]
+            else:
+                blacklist_keywords = st.session_state.get("l_blacklist_manual", "")
+                if blacklist_keywords:
+                    linear_args += ["--label_blacklist", blacklist_keywords]
+
             selected_t_color_file = st.session_state.get("l_t_color_manual", "")
             if selected_t_color_file: linear_args += ["-t", st.session_state.uploaded_files[selected_t_color_file]]
             

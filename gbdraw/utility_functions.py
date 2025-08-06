@@ -311,41 +311,51 @@ def edit_available_tracks(available_tracks, bbox_start, bbox_end):
 
 def get_label_text(seq_feature, filtering_config) -> str:
     """
-    Extracts a label for a feature based on a priority list of qualifiers
-    determined by the feature type (from config.toml), and filters it against a blacklist.
+    Extracts a label for a feature based on a priority list of qualifiers.
+    The priority is determined first by a user-provided TSV file for the specific feature type.
+    If not specified in the file, it falls back to default priorities defined in config.toml.
+    The final label is filtered against a blacklist.
     """
     feature_type = seq_feature.type
-    priority_config = filtering_config.get('qualifier_priority', {})
     blacklist = filtering_config.get('blacklist_keywords', [])
+    priority_list = None
 
-    # Determine which priority list to use based on the feature's type string.
-    # This logic corresponds to how GeneObject, RepeatObject, etc., are defined.
-    if feature_type in ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'gene']:
-        priority_list = priority_config.get('gene', ['product', 'gene', 'note'])
-    elif feature_type == 'repeat_region':
-        priority_list = priority_config.get('repeat', ['rpt_family', 'note'])
-    else:
-        priority_list = priority_config.get('feature', ['note'])
+    priority_df = filtering_config.get('qualifier_priority_df')
+    if priority_df is not None and not priority_df.empty:
+        match = priority_df[priority_df['feature_type'] == feature_type]
+        if not match.empty:
+            priorities_str = match.iloc[0]['priorities']
+            priority_list = [p.strip() for p in priorities_str.split(',')]
+
+    if priority_list is None:
+        priority_config = filtering_config.get('qualifier_priority', {})
+        if feature_type in ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'gene']:
+            priority_list = priority_config.get('gene', ['product', 'gene', 'note'])
+        elif feature_type == 'repeat_region':
+            priority_list = priority_config.get('repeat', ['rpt_family', 'note'])
+        else:
+            priority_list = priority_config.get('feature', ['note'])
+
 
     text = ''
-    for priority in priority_list:
+
+    for priority in priority_list or []:
+
         if hasattr(seq_feature, priority) and getattr(seq_feature, priority):
             potential_text = getattr(seq_feature, priority)
             if isinstance(potential_text, list):
                 potential_text = ', '.join(potential_text)
             
-            # Check against blacklist
             is_blacklisted = False
             for keyword in blacklist:
                 if keyword and keyword.lower() in str(potential_text).lower():
                     is_blacklisted = True
                     break
-            
+
             if not is_blacklisted:
                 text = str(potential_text)
                 break
     return text
-
 def get_coordinates_of_longest_segment(feature_object):
     coords: list[List[Union[str, int, bool]]] = feature_object.coordinates
     if not coords:
