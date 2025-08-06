@@ -7,7 +7,7 @@
 
 # gbdraw
 ![gbdraw](https://github.com/satoshikawato/gbdraw/blob/main/examples/gbdraw_social_preview.png)
-`gbdraw` is a command-line tool designed for creating detailed diagrams of microbial genomes. 
+`gbdraw` is a command-line/GUI tool designed for creating detailed diagrams of microbial genomes. 
 `gbdraw` accepts GenBank/EMBL/DDBJ-format annotated genomes as input and outputs a visual representation of the genomes in SVG/PNG/PDF/EPS/PS formats.
 
 **Try gbdraw Web App!** [https://gbdraw.streamlit.app/](https://gbdraw.streamlit.app/)
@@ -18,8 +18,7 @@
 - Circular and linear diagrams: Generates both circular and linear representations of genome structures.
 - Customizable inputs: Supports Genbank/DDBJ flat files with options for color customization.
 - Various output formats: Vector and raster graphics suitable for publication and further editing.
-- **NEW! (v0.2.0): Color palettes implemented!** [Color palette examples](https://github.com/satoshikawato/gbdraw/blob/main/examples/color_palette_examples.md)
-![palettes_combined_image_1.png](https://github.com/satoshikawato/gbdraw/blob/main/examples/palettes_combined_image_1.png)
+
 ## Dependencies
 - [Python](https://www.python.org/) >=3.10
 - [Biopython](https://biopython.org/)
@@ -27,7 +26,18 @@
 - [svgwrite](https://github.com/mozman/svgwrite)
 - [CairoSVG](https://cairosvg.org/)
 - [Liberation Fonts](https://github.com/liberationfonts/liberation-fonts) (bundled; SIL Open Font_License 1.1)
-## Installation
+
+## Use without local installation
+### Streamlit Web App
+A GUI web app of `gbdraw` (latest commit on `main` branch) is available on Streamlit without any local installation:
+[https://gbdraw.streamlit.app/](https://gbdraw.streamlit.app/)
+
+### Colab Notebook (Google account required)
+You can try `gbdraw` (latest release) on Google Colaboratory without any local installation:
+
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
+
+## Local Installation
 **Prerequisite:** Make sure you have a [conda](https://docs.conda.io/en/latest/)-compatible package manager—[mamba](https://github.com/mamba-org/mamba) ,[micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html), [miniforge](https://github.com/conda-forge/miniforge) or plain conda—already installed and on your `$PATH`. All steps below assume you run the commands in such an environment.
 ### Bioconda (recommended)
 `gbdraw` is available on the Bioconda channel.
@@ -54,19 +64,12 @@ mamba create -n gbdraw -y  -c conda-forge -c bioconda -c local gbdraw
 # 5. Activate the environment
 mamba activate gbdraw
 ```
-### Streamlit Web App (no local installation)
-A GUI web app of `gbdraw` (latest commit on `main` branch) is available on Streamlit without any local installation:
-[https://gbdraw.streamlit.app/](https://gbdraw.streamlit.app/)
 
-### Colab Notebook (no local installation; Google account required)
-You can try `gbdraw` (latest release) on Google Colaboratory without any local installation:
-
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
 
 ## Usage
 ```bash
-gbdraw -h
-gbdraw v. 0.3.0: A diagram generator for small genomes
+$ gbdraw 
+gbdraw v. 0.4.0: A diagram generator for small genomes
 
 Usage:
   gbdraw <subcommand> [options]
@@ -91,16 +94,21 @@ Options (examples):
 Additional Information:
   - For full documentation, visit: https://github.com/satoshikawato/gbdraw/
   - For issues and source code, visit the GitHub repository: https://github.com/satoshikawato/gbdraw/
+  - For support, contact: kawato[at]kaiyodai.ac.jp
 ```
 ### Circular genome
 ```bash
 $ gbdraw circular -h
 usage: gbdraw [-h] -i [INPUT ...] [-o OUTPUT] [-p PALETTE] [-t TABLE] [-d DEFAULT_COLORS] [-n NT] [-w WINDOW]
-              [-s STEP] [--species SPECIES] [--strain STRAIN] [-k FEATURES]
-              [--block_stroke_color BLOCK_STROKE_COLOR] [--block_stroke_width BLOCK_STROKE_WIDTH]
-              [--line_stroke_color LINE_STROKE_COLOR] [--line_stroke_width LINE_STROKE_WIDTH] [-f FORMAT]
-              [--suppress_gc] [--suppress_skew] [-l LEGEND] [--separate_strands] [--track_type TRACK_TYPE]
-              [--show_labels] [--allow_inner_labels]
+              [-s STEP] [--species SPECIES] [--strain STRAIN] [-k FEATURES] [--block_stroke_color BLOCK_STROKE_COLOR]
+              [--block_stroke_width BLOCK_STROKE_WIDTH] [--line_stroke_color LINE_STROKE_COLOR]
+              [--line_stroke_width LINE_STROKE_WIDTH] [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--suppress_gc]
+              [--suppress_skew] [-l LEGEND] [--separate_strands] [--track_type TRACK_TYPE] [--show_labels]
+              [--allow_inner_labels] [--label_blacklist LABEL_BLACKLIST] [--qualifier_priority QUALIFIER_PRIORITY]
+              [--outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET]
+              [--outer_label_y_radius_offset OUTER_LABEL_Y_RADIUS_OFFSET]
+              [--inner_label_x_radius_offset INNER_LABEL_X_RADIUS_OFFSET]
+              [--inner_label_y_radius_offset INNER_LABEL_Y_RADIUS_OFFSET]
 
 Generate genome diagrams in PNG/PDF/SVG/PS/EPS. Diagrams for multiple entries are saved separately.
 
@@ -131,17 +139,31 @@ options:
                         Line stroke color (str; default: "gray")
   --line_stroke_width LINE_STROKE_WIDTH
                         Line stroke width (float; default: 1.0)
+  --label_font_size LABEL_FONT_SIZE
+                        Label font size (optional; default: 16 for short genomes, 8 for long genomes)
   -f, --format FORMAT   Comma-separated list of output file formats (default: png)
   --suppress_gc         Suppress GC content track (default: False).
   --suppress_skew       Suppress GC skew track (default: False).
-  -l, --legend LEGEND   Legend position (default: "right"; "left", "right", "upper_left", "upper_right",
-                        "lower_left", "lower_right", "none")
+  -l, --legend LEGEND   Legend position (default: "right"; "left", "right", "upper_left", "upper_right", "lower_left",
+                        "lower_right", "none")
   --separate_strands    Separate strands (default: False).
   --track_type TRACK_TYPE
                         Track type (default: "tuckin"; "tuckin", "middle", "spreadout")
   --show_labels         Show feature labels (default: False).
-  --allow_inner_labels  Place labels inside the circle (default: False). If enabled, labels are placed both
-                        inside and outside the circle, and gc and skew tracks are not shown.
+  --allow_inner_labels  Place labels inside the circle (default: False). If enabled, labels are placed both inside and
+                        outside the circle, and gc and skew tracks are not shown.
+  --label_blacklist LABEL_BLACKLIST
+                        Comma-separated keywords or path to a file for label blacklisting (optional)
+  --qualifier_priority QUALIFIER_PRIORITY
+                        Path to a TSV file defining qualifier priority for labels (optional)
+  --outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET
+                        Outer label x-radius offset factor (float; default from config)
+  --outer_label_y_radius_offset OUTER_LABEL_Y_RADIUS_OFFSET
+                        Outer label y-radius offset factor (float; default from config)
+  --inner_label_x_radius_offset INNER_LABEL_X_RADIUS_OFFSET
+                        Inner label x-radius offset factor (float; default from config)
+  --inner_label_y_radius_offset INNER_LABEL_Y_RADIUS_OFFSET
+                        Inner label y-radius offset factor (float; default from config)
 ```
 #### <i>Haemophilus influenzae</i>
 `gbdraw` automatically identifies and displays the organism and strain name from the sequence record. However, these names are not italicized by default. For example:
@@ -174,12 +196,13 @@ gbdraw circular -i GCF_000016245.1_ASM1624v1_genomic.gbff --species "<i>Vibrio c
 `gbdraw linear`
 ```bash
 $ gbdraw linear -h
-usage: gbdraw [-h] -i [INPUT ...] [-b [BLAST ...]] [-t TABLE] [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT]
-              [-n NT] [-w WINDOW] [-s STEP] [--separate_strands] [--show_gc] [--align_center] [--evalue EVALUE]
-              [--bitscore BITSCORE] [--identity IDENTITY] [-k FEATURES]
-              [--block_stroke_color BLOCK_STROKE_COLOR] [--block_stroke_width BLOCK_STROKE_WIDTH]
-              [--line_stroke_color LINE_STROKE_COLOR] [--line_stroke_width LINE_STROKE_WIDTH] [-f FORMAT]
-              [-l LEGEND] [--show_labels] [--resolve_overlaps]
+usage: gbdraw [-h] -i [INPUT ...] [-b [BLAST ...]] [-t TABLE] [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT] [-n NT]
+              [-w WINDOW] [-s STEP] [--separate_strands] [--show_gc] [--align_center] [--evalue EVALUE]
+              [--bitscore BITSCORE] [--identity IDENTITY] [-k FEATURES] [--block_stroke_color BLOCK_STROKE_COLOR]
+              [--block_stroke_width BLOCK_STROKE_WIDTH] [--line_stroke_color LINE_STROKE_COLOR]
+              [--line_stroke_width LINE_STROKE_WIDTH] [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [-l LEGEND]
+              [--show_labels] [--resolve_overlaps] [--label_blacklist LABEL_BLACKLIST]
+              [--qualifier_priority QUALIFIER_PRIORITY]
 
 Generate plot in PNG/PDF/SVG/PS/EPS.
 
@@ -198,8 +221,8 @@ options:
   -n, --nt NT           dinucleotide skew (default: GC).
   -w, --window WINDOW   window size (default: 1000)
   -s, --step STEP       step size (default: 100)
-  --separate_strands    separate forward and reverse strands (default: False). Features of undefined strands are
-                        shown on the forward strand.
+  --separate_strands    separate forward and reverse strands (default: False). Features of undefined strands are shown
+                        on the forward strand.
   --show_gc             plot GC content below genome (default: False).
   --align_center        Align genomes to the center (default: False).
   --evalue EVALUE       evalue threshold (default=1e-2)
@@ -216,10 +239,16 @@ options:
                         Line stroke color (str; default: "gray")
   --line_stroke_width LINE_STROKE_WIDTH
                         Line stroke width (float; default: 1.0)
+  --label_font_size LABEL_FONT_SIZE
+                        Label font size (optional; default: 16 for short genomes, 5 for long genomes)
   -f, --format FORMAT   Comma-separated list of output file formats (default: png)
   -l, --legend LEGEND   Legend position (default: "right"; "right", "left", "none")
   --show_labels         Show labels
   --resolve_overlaps    Resolve overlaps (experimental; default: False).
+  --label_blacklist LABEL_BLACKLIST
+                        Comma-separated keywords or path to a file for label blacklisting (optional)
+  --qualifier_priority QUALIFIER_PRIORITY
+                        Path to a TSV file defining qualifier priority for labels (optional)
 ```
 ### Human herpesvirus 6 (HHV-6)
 `gbdraw` can draw linear genomes and pairwise matches depicting similar genomic regions.
@@ -233,7 +262,8 @@ umamba activate blast-2.16.0
 blastn -query NC_000898.fasta -subject NC_001664.fasta -outfmt 7 -out NC_000898_NC_001664.blastn.out
 umamba deactivate
 umamba activate gbdraw-0.1.0
-gbdraw linear -i NC_000898.gb NC_001664.gb -b NC_000898_NC_001664.blastn.out --align_center --separate_strands -o HHV-6 -f svg
+gbdraw linear -i NC_000898.gb NC_001664.gb -b NC_000898_NC_001664.blastn.out --resolve_overlaps --align_center --separate_strands -o HHV-6 -f svg --block_stroke_width 0.5
+
 umamba deactivate
 ```
 ![HHV-6](https://github.com/satoshikawato/gbdraw/blob/main/examples/HHV-6.svg)
@@ -330,33 +360,34 @@ tblastx -query MellatMJNV.fasta -subject MeenMJNV.fasta -outfmt 7 -out MellatMJN
 tblastx -query MeenMJNV.fasta -subject MejoMJNV.fasta -outfmt 7 -out MeenMJNV.MejoMJNV.tblastx.out 
 
 # gbdraw
+
+# gbdraw
 gbdraw linear \
 -i \
-MjeNMV.gb \
-MelaMJNV.gb \
-PemoMJNVA.gb \
-PeseMJNV.gb \
-PemoMJNVB.gb \
-LvMJNV.gb \
-TrcuMJNV.gb \
-MellatMJNV.gb \
-MeenMJNV.gb \
-MejoMJNV.gb \
+./in_gbk/MjeNMV.gb \
+./in_gbk/MelaMJNV.gb \
+./in_gbk/PemoMJNVA.gb \
+./in_gbk/PeseMJNV.gb \
+./in_gbk/PemoMJNVB.gb \
+./in_gbk/LvMJNV.gb \
+./in_gbk/TrcuMJNV.gb \
+./in_gbk/MetlamMJNV.gb \
+./in_gbk/MeenMJNV.gb \
+./in_gbk/MejoMJNV.gb \
 -b \
-MjeNMV.MelaMJNV.tblastx.out \
-MelaMJNV.PemoMJNVA.tblastx.out \
-PemoMJNVA.PeseMJNV.tblastx.out \
-PeseMJNV.PemoMJNVB.tblastx.out \
-PemoMJNVB.LvMJNV.tblastx.out \
-LvMJNV.TrcuMJNV.tblastx.out \
-TrcuMJNV.MellatMJNV.tblastx.out \
-MellatMJNV.MeenMJNV.tblastx.out \
-MeenMJNV.MejoMJNV.tblastx.out \
--t color_table.txt \
+./in_fna/MjeNMV.MelaMJNV.tblastx.out \
+./in_fna/MelaMJNV.PemoMJNVA.tblastx.out \
+./in_fna/PemoMJNVA.PeseMJNV.tblastx.out \
+./in_fna/PeseMJNV.PemoMJNVB.tblastx.out \
+./in_fna/PemoMJNVB.LvMJNV.tblastx.out \
+./in_fna/LvMJNV.TrcuMJNV.tblastx.out \
+./in_fna/TrcuMJNV.MetlamMJNV.tblastx.out \
+./in_fna/MetlamMJNV.MeenMJNV.tblastx.out \
+./in_fna/MeenMJNV.MejoMJNV.tblastx.out \
+-t majani_custom_color_table.tsv \
 -d modified_default_colors.tsv \
 --block_stroke_width 1 \
 --block_stroke_color gray \
---show_labels \
 --align_center \
 --separate_strands \
 -o majani -f svg
@@ -374,16 +405,18 @@ gbdraw circular -i NC_012920.gb -f svg --block_stroke_width 2 --block_stroke_col
 ```
 ![HsmtDMA](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920.svg)
 
+#### Label size adjustment
+
+#### Label text blacklist 
 
 ## Planned features
 - Multiple tracks to visualize overlapping features (planned; overlapping genes, transcript isoforms etc.)
-- Label size adjustment
-- Label text blacklist (e.g. "hypothetical", "uncharacterized" etc.)
+
 ## Known issues
 - **Trans-introns** are not currently visualized.
 - **Mixed-format text** (e.g., combining italic and block elements like `<i>Ca.</i> Tyloplasma litorale`) cannot be reliably converted from SVG to PDF/PNG/EPS/PS.  
   → As a workaround, export to **SVG format** and convert to other formats using external tools like [**Inkscape**](https://inkscape.org/).
-- **Label overcrowding**: label size adjustment and text blacklisting to be implemented soon
+
 ## Bug reports and suggestions
 Please feel free to submit a new issue if you find a bug or have a suggestion:
 https://github.com/satoshikawato/gbdraw/issues
