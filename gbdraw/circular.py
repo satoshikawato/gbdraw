@@ -111,6 +111,16 @@ def _get_args(args) -> argparse.Namespace:
         type=float,
         default=0)
     parser.add_argument(
+        '--axis_stroke_color',
+        help='Axis stroke color (str; default: "gray")',
+        type=str,
+        default="gray")
+    parser.add_argument(
+        '--axis_stroke_width',
+        help='Axis stroke width (float; default: 1.0)',
+        type=float,
+        default=1.0)
+    parser.add_argument(
         '--line_stroke_color',
         help='Line stroke color (str; default: "gray")',
         type=str,
@@ -120,6 +130,10 @@ def _get_args(args) -> argparse.Namespace:
         help='Line stroke width (float; default: 1.0)',
         type=float,
         default=1.0)
+    parser.add_argument(
+        '--definition_font_size',
+        help='Definition font size (optional; default: 18)',
+        type=float)
     parser.add_argument(
         '--label_font_size',
         help='Label font size (optional; default: 16 for short genomes, 8 for long genomes)',
@@ -226,6 +240,7 @@ def circular_main(cmd_args) -> None:
     species: str = args.species
     strain: str = args.strain
     legend: str = args.legend
+    definition_font_size: Optional[float] = args.definition_font_size
     label_font_size: Optional[float] = args.label_font_size
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
@@ -237,14 +252,22 @@ def circular_main(cmd_args) -> None:
     outer_label_y_radius_offset: Optional[float] = args.outer_label_y_radius_offset
     inner_label_x_radius_offset: Optional[float] = args.inner_label_x_radius_offset
     inner_label_y_radius_offset: Optional[float] = args.inner_label_y_radius_offset
-
     if allow_inner_labels and not show_labels:
         show_labels = True  # If inner labels are allowed, labels must be shown
         logger.warning(
             "WARNING: Inner labels are allowed, but labels are not shown. Enabling labels.")
+    if allow_inner_labels and not (suppress_gc and suppress_skew):
+
+        suppress_gc = True 
+        suppress_skew = True
+        logger.warning(
+            "WARNING: Inner labels are allowed, but GC and skew tracks are not suppressed. Suppressing GC and skew tracks.")  # 
+
     user_defined_default_colors: str = args.default_colors
     block_stroke_color: str = args.block_stroke_color
     block_stroke_width: str = args.block_stroke_width
+    axis_stroke_color: str = args.axis_stroke_color
+    axis_stroke_width: str = args.axis_stroke_width
     line_stroke_color: str = args.line_stroke_color
     line_stroke_width: str = args.line_stroke_width   
     track_type: str = args.track_type
@@ -267,7 +290,9 @@ def circular_main(cmd_args) -> None:
     config_dict = modify_config_dict(
         config_dict, 
         block_stroke_color=block_stroke_color, 
-        block_stroke_width=block_stroke_width, 
+        block_stroke_width=block_stroke_width,
+        circular_axis_stroke_color=axis_stroke_color, 
+        circular_axis_stroke_width=axis_stroke_width, 
         line_stroke_color=line_stroke_color, 
         line_stroke_width=line_stroke_width, 
         show_labels=show_labels, 
@@ -275,7 +300,8 @@ def circular_main(cmd_args) -> None:
         strandedness=strandedness, 
         show_gc=show_gc, 
         show_skew=show_skew, 
-        allow_inner_labels=allow_inner_labels, 
+        allow_inner_labels=allow_inner_labels,
+        circular_definition_font_size=definition_font_size,
         label_font_size=label_font_size,
         label_blacklist=label_blacklist,
         outer_label_x_radius_offset=outer_label_x_radius_offset,

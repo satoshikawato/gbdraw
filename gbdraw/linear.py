@@ -143,6 +143,16 @@ def _get_args(args) -> argparse.Namespace:
         type=float,
         default=0)
     parser.add_argument(
+        '--axis_stroke_color',
+        help='Axis stroke color (str; default: "lightgray")',
+        type=str,
+        default="lightgray")
+    parser.add_argument(
+        '--axis_stroke_width',
+        help='Axis stroke width (float; default: 2.0)',
+        type=float,
+        default=2.0)
+    parser.add_argument(
         '--line_stroke_color',
         help='Line stroke color (str; default: "gray")',
         type=str,
@@ -152,6 +162,10 @@ def _get_args(args) -> argparse.Namespace:
         help='Line stroke width (float; default: 1.0)',
         type=float,
         default=1.0)
+    parser.add_argument(
+        '--definition_font_size',
+        help='Definition font size (optional; default: 10)',
+        type=float)
     parser.add_argument(
         '--label_font_size',
         help='Label font size (optional; default: 16 for short genomes, 5 for long genomes)',
@@ -248,22 +262,26 @@ def linear_main(cmd_args) -> None:
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
-
     if qualifier_priority_path:
         qualifier_priority_df = read_qualifier_priority_file(qualifier_priority_path)
         config_dict['labels']['filtering']['qualifier_priority_df'] = qualifier_priority_df
     else:
         config_dict['labels']['filtering']['qualifier_priority_df'] = None
 
-
     block_stroke_color: str = args.block_stroke_color
     block_stroke_width: str = args.block_stroke_width
+    definition_font_size: Optional[float] = args.definition_font_size
+    axis_stroke_color: str = args.axis_stroke_color
+    axis_stroke_width: str = args.axis_stroke_width
     line_stroke_color: str = args.line_stroke_color
     line_stroke_width: str = args.line_stroke_width       
     config_dict = modify_config_dict(
         config_dict, 
         block_stroke_color=block_stroke_color, 
         block_stroke_width=block_stroke_width, 
+        linear_axis_stroke_color=axis_stroke_color, 
+        linear_axis_stroke_width=axis_stroke_width, 
+        linear_definition_font_size=definition_font_size,
         line_stroke_color=line_stroke_color, 
         line_stroke_width=line_stroke_width, 
         show_gc=show_gc, 

@@ -162,10 +162,16 @@ def update_config_value(config_dict, path, value):
 
 def modify_config_dict(config_dict, 
                        block_stroke_width=None, 
-                       block_stroke_color=None, 
+                       block_stroke_color=None,
+                       circular_axis_stroke_color=None, 
+                       circular_axis_stroke_width=None,
+                       linear_axis_stroke_color=None,
+                       linear_axis_stroke_width=None, 
                        line_stroke_color=None, 
                        line_stroke_width=None, 
                        gc_stroke_color=None,
+                       linear_definition_font_size=None,
+                       circular_definition_font_size=None,
                        label_font_size=None, 
                        show_gc=None, 
                        show_skew=None, 
@@ -188,7 +194,9 @@ def modify_config_dict(config_dict,
     label_font_size_circular_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['short']
     label_font_size_linear_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['long']
     label_font_size_linear_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['short']
-
+    circular_definition_font_interval = None
+    if circular_definition_font_size is not None:
+        circular_definition_font_interval = float(circular_definition_font_size) + 2
     # Process label_blacklist only if the argument was explicitly passed
     if label_blacklist is not None:
         # If the argument is an empty string, set an empty list to disable filtering
@@ -227,9 +235,16 @@ def modify_config_dict(config_dict,
     param_paths = {
         'block_stroke_width': 'objects.features.block_stroke_width',
         'block_stroke_color': 'objects.features.block_stroke_color',
+        'circular_axis_stroke_color': 'objects.axis.circular.stroke_color',
+        'circular_axis_stroke_width': 'objects.axis.circular.stroke_width',
         'line_stroke_color': 'objects.features.line_stroke_color',
         'line_stroke_width': 'objects.features.line_stroke_width',
         'gc_stroke_color': 'objects.gc_content.stroke_color',
+        'linear_axis_stroke_color': 'objects.axis.linear.stroke_color',
+        'linear_axis_stroke_width': 'objects.axis.linear.stroke_width',
+        'linear_definition_font_size': 'objects.definition.linear.font_size',
+        'circular_definition_font_size': 'objects.definition.circular.font_size',
+        'circular_definition_font_interval': 'objects.definition.circular.interval',
         'label_font_size_circular_long': 'labels.font_size.long',
         'label_font_size_circular_short': 'labels.font_size.short',
         'label_font_size_linear_long': 'labels.font_size.linear.long',
@@ -335,7 +350,6 @@ def get_label_text(seq_feature, filtering_config) -> str:
             priority_list = priority_config.get('repeat', ['rpt_family', 'note'])
         else:
             priority_list = priority_config.get('feature', ['note'])
-
 
     text = ''
 

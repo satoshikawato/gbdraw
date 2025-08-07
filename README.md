@@ -360,8 +360,6 @@ tblastx -query MellatMJNV.fasta -subject MeenMJNV.fasta -outfmt 7 -out MellatMJN
 tblastx -query MeenMJNV.fasta -subject MejoMJNV.fasta -outfmt 7 -out MeenMJNV.MejoMJNV.tblastx.out 
 
 # gbdraw
-
-# gbdraw
 gbdraw linear \
 -i \
 ./in_gbk/MjeNMV.gb \
@@ -395,7 +393,12 @@ gbdraw linear \
 ![majaniviruses](https://github.com/satoshikawato/gbdraw/blob/main/examples/majani.svg)
 
 ### Feature labels
-
+`gbdraw` can draw feature labels. By default, most genic features have the value of `product` qualifer as the label text.
+| feature type | priority of qualifiers used for the label |
+| ------ | ------- |
+| 'CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'gene' | 'product', 'gene', 'note' |
+| repeat_region |'rpt_family', 'note'|
+| other features | note |
 ```bash
 gbdraw circular -i AP027280.gb -f svg --block_stroke_width 1 --block_stroke_color gray --track_type spreadout --show_labels
 ```
@@ -406,8 +409,35 @@ gbdraw circular -i NC_012920.gb -f svg --block_stroke_width 2 --block_stroke_col
 ![HsmtDMA](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920.svg)
 
 #### Label size adjustment
-
+The font size of the Label text can be adjusted via `--label_font_size` option.
 #### Label text blacklist 
+You can selectively hide some labels via `--label_blacklist` option. For example, supressing `hypothetical protein` and other less-informative labels reduces label redundancy and makes it easier to visualize larger genomes without layout issues.
+
+
+#### Feature qualifier priority
+The following `qualifier_priority.tsv` designated by `--qualifier_priority` opton specifies which qualifier should be used for the label text of a given feature type. Other features remain the same as default:
+
+```modified_default_colors.tsv
+CDS gene
+```
+| feature type | qualifier |
+| ------ | ------- |
+| CDS | gene |
+
+```bash
+gbdraw circular \
+-i NC_012920.gb \
+-f svg \
+--track_type middle \
+--block_stroke_width 2  \
+--allow_inner_labels \
+--suppress_skew \
+--suppress_gc \
+--show_labels \
+--qualifier_priority qualifier_priority.tsv \
+-o NC_012920_middle_qualifier_priority_inner
+```
+![NC_012920_middle_qualifier_priority_inner](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920_middle_qualifier_priority_inner.svg)
 
 ## Planned features
 - Multiple tracks to visualize overlapping features (planned; overlapping genes, transcript isoforms etc.)
