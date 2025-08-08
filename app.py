@@ -307,7 +307,10 @@ if selected_mode == "🔵 Circular":
                 c_adv_blk_width = st.number_input("Block stroke width:", 0.0, key="c_b_width", help="Width of block strokes in the circular map. Set to 0 for no block strokes.")
                 c_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="c_l_color", help="Color for line strokes in the circular map.")
                 c_adv_line_width = st.number_input("Line stroke width:", 1.0, key="c_l_width", help="Width of line strokes in the circular map. Default is 1.0.")
+                c_adv_axis_color = st.color_picker("Axis stroke color:", value="#808080", key="c_axis_color", help="Color for the circular axis line.")
+                c_adv_axis_width = st.number_input("Axis stroke width:", 1.0, key="c_axis_width", help="Width of the circular axis line.")
             with adv_cols2:
+                c_adv_def_font_size = st.number_input("Definition font size (default: 18 pt):", value=18.0, key="c_def_font_size", help="Font size for the species and strain definition text.")
                 c_adv_label_font_size = st.number_input("Label font size (default: 8 pt (>=50 kb) or 16 pt (<50 kb):", key="c_label_font_size", help="Font size for feature labels. Default is 8 pt for genomes >= 50 kb, 16 pt for smaller genomes.")
                 st.subheader("Label Radius Offsets")
                 col_outer, col_inner = st.columns(2)
@@ -339,11 +342,15 @@ if selected_mode == "🔵 Circular":
             if c_separate_strands: circular_args.append("--separate_strands")
             if c_allow_inner_labels:
                 circular_args.extend(["--allow_inner_labels", "--suppress_gc", "--suppress_skew"])
-            if c_adv_label_font_size:
-                circular_args += ["--label_font_size", str(c_adv_label_font_size)]
             else:
                 if c_suppress_gc: circular_args.append("--suppress_gc")
                 if c_suppress_skew: circular_args.append("--suppress_skew")
+
+            if c_adv_def_font_size:
+                circular_args += ["--definition_font_size", str(c_adv_def_font_size)]
+            if c_adv_label_font_size:
+                circular_args += ["--label_font_size", str(c_adv_label_font_size)]
+
             if c_legend != "right": circular_args += ["-l", c_legend]
             
             selected_palette = st.session_state.get("c_palette_selector")
@@ -359,6 +366,7 @@ if selected_mode == "🔵 Circular":
             circular_args += ["-k", ",".join(c_adv_feat), "-n", c_adv_nt, "-w", str(c_adv_win), "-s", str(c_adv_step)]
             circular_args += ["--block_stroke_color", c_adv_blk_color, "--block_stroke_width", str(c_adv_blk_width)]
             circular_args += ["--line_stroke_color", c_adv_line_color, "--line_stroke_width", str(c_adv_line_width)]
+            circular_args += ["--axis_stroke_color", c_adv_axis_color, "--axis_stroke_width", str(c_adv_axis_width)]
             circular_args += ["--outer_label_x_radius_offset", str(c_adv_outer_x_offset)]
             circular_args += ["--outer_label_y_radius_offset", str(c_adv_outer_y_offset)]
             circular_args += ["--inner_label_x_radius_offset", str(c_adv_inner_x_offset)]
@@ -587,12 +595,15 @@ if selected_mode == "📏 Linear":
                 l_adv_nt = st.text_input("nt (--nt):", value="GC", key="l_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'.")
                 l_adv_win = st.number_input("Window size:", value=1000, key="l_win", help="Window size for GC content and skew calculations. Default is 1000 bp.")
                 l_adv_step = st.number_input("Step size:", value=100, key="l_step", help="Step size for GC content and skew calculations. Default is 100 bp.")
+                l_adv_def_font_size = st.number_input("Definition font size (default: 10 pt):", value=10.0, key="l_def_font_size", help="Font size for the definition text above each sequence.")
                 l_adv_label_font_size = st.number_input("Label font size (default: 5 pt (>=50 kb) or 16 pt (<50 kb):", key="l_label_font_size", help="Font size for feature labels. Default is 5 pt for genomes >= 50 kb, 16 pt for smaller genomes.")
             with adv_cols2:
                 l_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="l_b_color", help="Color for block strokes in the linear map.")
                 l_adv_blk_width = st.number_input("Block stroke width:", 0.0, key="l_b_width", help="Width of block strokes in the linear map. Set to 0 for no block strokes.")
                 l_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="l_l_color", help="Color for line strokes in the linear map.")
                 l_adv_line_width = st.number_input("Line stroke width:", 1.0, key="l_l_width", help="Width of line strokes in the linear map. Default is 1.0.")
+                l_adv_axis_color = st.color_picker("Axis stroke color:", value="#808080", key="l_axis_color", help="Color for the linear axis line.")
+                l_adv_axis_width = st.number_input("Axis stroke width:", 2.0, key="l_axis_width", help="Width of the linear axis line.")
             st.subheader("Comparison Filters")
             l_adv_bitscore = st.number_input("Min bitscore:", value=50.0, key="l_bitscore", help="Minimum bitscore for BLAST comparisons. Default is 50.0.")
             l_adv_evalue = st.text_input("Max E-value:", value="1e-2", key="l_evalue", help="Maximum E-value for BLAST comparisons. Default is '1e-2'.")
@@ -625,8 +636,12 @@ if selected_mode == "📏 Linear":
             if l_show_gc: linear_args.append("--show_gc")
             if l_resolve_overlaps: linear_args.append("--resolve_overlaps")
             if l_legend != "right": linear_args += ["-l", l_legend]
+            
+            if l_adv_def_font_size:
+                linear_args += ["--definition_font_size", str(l_adv_def_font_size)]
             if l_adv_label_font_size:
                 linear_args += ["--label_font_size", str(l_adv_label_font_size)]
+            
             selected_palette = st.session_state.get("l_palette_selector")
             if selected_palette: linear_args += ["--palette", selected_palette]
 
@@ -639,10 +654,10 @@ if selected_mode == "📏 Linear":
                 linear_args += ["-d", str(save_path)]
             
             linear_args += ["-k", ",".join(l_adv_feat), "-n", l_adv_nt, "-w", str(l_adv_win), "-s", str(l_adv_step)]
-            
             linear_args += ["--bitscore", str(l_adv_bitscore), "--evalue", l_adv_evalue, "--identity", str(l_adv_identity)]
             linear_args += ["--block_stroke_color", l_adv_blk_color, "--block_stroke_width", str(l_adv_blk_width)]
             linear_args += ["--line_stroke_color", l_adv_line_color, "--line_stroke_width", str(l_adv_line_width)]
+            linear_args += ["--axis_stroke_color", l_adv_axis_color, "--axis_stroke_width", str(l_adv_axis_width)]
             
             # --- CORRECTED QUALIFIER PRIORITY & BLACKLIST LOGIC ---
             selected_prio_file = st.session_state.get("l_qualifier_priority_file_manual", "")
