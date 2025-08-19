@@ -481,7 +481,7 @@ gbdraw circular \
 
 ## Planned features
 - Multiple tracks to visualize overlapping features (planned; overlapping genes, transcript isoforms etc.)
-
+- Feature label whitelist (display labels for specified features only)
 ## Known issues
 - **Trans-introns** are not currently visualized.
 - **Mixed-format text** (e.g., combining italic and block elements like `<i>Ca.</i> Tyloplasma litorale`) cannot be reliably converted from SVG to PDF/PNG/EPS/PS.  
@@ -523,4 +523,5 @@ The core functionality of gbdraw has evolved from [a set of Python scripts](http
 [plot_circular_genome.py](https://github.com/satoshikawato/bio_small_scripts/blob/main/plot_circular_genome.py)
 
 [plot_linear_genome.py](https://github.com/satoshikawato/bio_small_scripts/blob/main/plot_linear_genome.py)
+
 
