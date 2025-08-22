@@ -480,8 +480,10 @@ gbdraw circular \
 ![NC_012920_middle_qualifier_priority_inner_axis5_def28_italic](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920_middle_qualifier_priority_inner_axis5_def28_italic.svg)
 
 ## Planned features
-- Multiple tracks to visualize overlapping features (planned; overlapping genes, transcript isoforms etc.)
-- Feature label whitelist (display labels for specified features only)
+- Multiple tracks to visualize overlapping features (planned; overlapping genes, transcript isoforms etc.;unsure how to impelment mutiple tracks with label overlap resolution)
+- Feature label whitelist (display labels only for specified features)
+- GFF3 support (will require additonal dependencies; GC content/skew will not be displayed unless the sequence is included in the GFF3 file or is provided separately as a FASTA file; species/strain must be explicitly designated by the user)
+- Caching (particularly relevant for the webapp; unsure how to impelement)
 ## Known issues
 - **Trans-introns** are not currently visualized.
 - **Mixed-format text** (e.g., combining italic and block elements like `<i>Ca.</i> Tyloplasma litorale`) cannot be reliably converted from SVG to PDF/PNG/EPS/PS.  
@@ -523,5 +525,6 @@ The core functionality of gbdraw has evolved from [a set of Python scripts](http
 [plot_circular_genome.py](https://github.com/satoshikawato/bio_small_scripts/blob/main/plot_circular_genome.py)
 
 [plot_linear_genome.py](https://github.com/satoshikawato/bio_small_scripts/blob/main/plot_linear_genome.py)
+
 
 
