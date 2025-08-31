@@ -1,6 +1,6 @@
 package:
   name: gbdraw
-  version: 0.4.0
+  version: 0.5.0
 
 source:
   path: ../
@@ -21,6 +21,7 @@ requirements:
     - biopython
     - svgwrite
     - cairosvg
+    - bcbio-gff
 
 channels:
   - conda-forge

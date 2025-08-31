@@ -241,14 +241,8 @@ def _get_args(args) -> argparse.Namespace:
 
     return args
 
-def validate_args(parser, args):
-    """
-    Validates the parsed command-line arguments to ensure correct combinations and presence of required arguments.
-    """
-    # --gbk と --gff/--fasta の組み合わせをチェック
 
-        
-
+    
 def circular_main(cmd_args) -> None:
     """
     Main function for generating circular genome diagrams.
@@ -271,17 +265,6 @@ def circular_main(cmd_args) -> None:
     if '-i' in cmd_args or '--input' in cmd_args:
         logger.warning(
             "WARNING: The -i/--input option is deprecated and will be removed in a future version. Please use --gbk instead.")    
-    # Unified record loading at the beginning
-    gb_records: list[SeqRecord]
-    if args.gbk:
-        gb_records = load_gbks(args.gbk, "circular")
-    elif args.gff and args.fasta:
-        gb_records = load_gff_fasta(args.gff, args.fasta, "circular")
-    else:
-        # This case should not be reached due to arg validation
-        logger.error("Invalid input file configuration.")
-        sys.exit(1)
-
     output_prefix = args.output
     dinucleotide: str = args.nt
     window: int = args.window
@@ -299,6 +282,17 @@ def circular_main(cmd_args) -> None:
     allow_inner_labels: bool = args.allow_inner_labels
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
+    # Unified record loading at the beginning
+    print(args.gff, args.fasta)
+    if args.gbk:
+        gb_records = load_gbks(args.gbk, "circular")
+    elif args.gff and args.fasta:
+        gb_records = load_gff_fasta(args.gff, args.fasta, "circular", selected_features_set)
+    else:
+        # This case should not be reached due to arg validation
+        logger.error("Invalid input file configuration.")
+        sys.exit(1)
+
     outer_label_x_radius_offset: Optional[float] = args.outer_label_x_radius_offset
     outer_label_y_radius_offset: Optional[float] = args.outer_label_y_radius_offset
     inner_label_x_radius_offset: Optional[float] = args.inner_label_x_radius_offset

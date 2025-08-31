@@ -6,16 +6,20 @@ import logging
 import tomllib
 import cairosvg
 
+
 from pathlib import Path
+from typing import Optional, Generator, List, Dict, Set
 from importlib import resources
 from importlib.abc import Traversable
 import pandas as pd
 from pandas import DataFrame
 from svgwrite import Drawing
 from Bio import SeqIO
+from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 from BCBio import GFF
-from typing import Optional, Generator, List
+
+
 from .object_configurators import BlastMatchConfigurator
 logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -67,9 +71,9 @@ def load_gbks(gbk_list: List[str], mode: str, load_comparison=False) -> list[Seq
             "INFO: BLAST results were provided. Only the first entry from each GenBank file will be loaded.")
     for gbk_file in gbk_list:
         if not os.path.isfile(gbk_file):
-            logger.warning(
-                f"WARNING: File does not exist or is not accessible: {gbk_file}")
-            continue
+            logger.error(
+                f"ERROR: File does not exist or is not accessible: {gbk_file}")
+            sys.exit(1)
         try:
             logger.info("INFO: Loading GenBank file {}".format(gbk_file))
             records: Generator[SeqRecord, None,
@@ -112,99 +116,230 @@ def load_gbks(gbk_list: List[str], mode: str, load_comparison=False) -> list[Seq
                     record_list.append(record)
                     id_list.append(record.id)  # type: ignore
         except ValueError as e:  # Catching common exception when parsing GenBank files
-            logger.warning(f"WARNING: error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format. Error: {e}")
+            logger.error(f"ERROR: error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format. Error: {e}")
+            sys.exit(1)
         except Exception as e:  # A more generic catch-all for other unexpected issues
             logger.error(f"ERROR: an unexpected error occurred while processing {gbk_file}: {e}")
+            sys.exit(1)
     logger.info("INFO:              ... finished loading GenBank file(s)")
     logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(id_list)}")
+    if len(id_list) < 1:
+        logger.error("ERROR: No valid GenBank records were loaded. Please check your input files.")
+        sys.exit(1)
     return record_list
 
-def load_gff_fasta(gff_list: List[str], fasta_list: List[str], mode: str, load_comparison=False) -> list[SeqRecord]:
+def merge_gff_fasta_records(gff_records: List[SeqRecord], fasta_records: List[SeqRecord]) -> List[SeqRecord]:
     """
-    Loads records from GFF3 and FASTA files, combining them into SeqRecord objects.
+    Merges GFF and FASTA records based on matching IDs.
 
     Args:
-        gff_list (List[str]): List of paths to GFF3 files.
-        fasta_list (List[str]): List of paths to FASTA files.
-        mode (str): Mode of operation ('linear' or 'circular'). Not currently used
-                    for GFF but kept for API consistency.
-        load_comparison (bool, optional): If True, load only the first record.
-                                           Defaults to False.
+        gff_records (List[SeqRecord]): List of SeqRecord objects from GFF files.
+        fasta_records (List[SeqRecord]): List of SeqRecord objects from FASTA files.
 
     Returns:
-        list[SeqRecord]: A list of SeqRecord objects with sequences from FASTA
-                         and features from GFF3.
+        List[SeqRecord]: Merged list of SeqRecord objects with annotations from GFF files.
+
+    This function iterates through the GFF records and searches for matching FASTA records by ID.
+    If a match is found, it merges the features from the GFF record into the corresponding FASTA record.
+    If no match is found, the GFF record is added to the merged list as is. Warnings are logged for
+    any GFF records without matching FASTA entries.
     """
-    logger.info("INFO: Loading FASTA file(s)...")
-    fasta_dict = {}
-    for fasta_file in fasta_list:
-        if not os.path.isfile(fasta_file):
-            logger.warning(f"WARNING: FASTA file not found: {fasta_file}")
-            continue
-        try:
-            with open(fasta_file) as fasta_handle:
-                # Using update allows merging multiple FASTA files.
-                # If IDs are duplicated, the last one wins.
-                fasta_dict.update(SeqIO.to_dict(SeqIO.parse(fasta_handle, "fasta")))
-        except Exception as e:
-            logger.error(f"ERROR: Could not parse FASTA file {fasta_file}: {e}")
-    
-    if not fasta_dict:
-        logger.error("ERROR: No sequences were loaded from FASTA file(s). Cannot proceed.")
-        sys.exit(1)
+    merged_records: List[SeqRecord] = []
+    fasta_dict: Dict[str, SeqRecord] = {record.id: record for record in fasta_records}
+    for gff_record in gff_records:
+        if gff_record.id in fasta_dict:
+            try:
+                fasta_record = fasta_dict[gff_record.id]
+                # If FASTA record exists, record.seq is FASTA sequence
+                gff_record.seq = fasta_record.seq
+            except Exception as e:
+                logger.error(f"ERROR: Failed to merge sequences for record {gff_record.id} with corresponding FASTA entry: {e}")
+                sys.exit(1)
+            merged_records.append(gff_record)
+        else:
+            # If no matching FASTA record, raise error and stop the process
+            logger.error(f"ERROR: No matching FASTA record found for GFF record {gff_record.id}. Please ensure that all GFF records have corresponding FASTA entries.")
+            sys.exit(1)
+    return merged_records
 
+def scan_features_recursive(features: List[SeqFeature], feature_types_to_keep: Set[str]) -> List[SeqFeature]:
+    """
+    Recursively scans a list of features and their sub-features,
+    extracting only those of the specified types.
+    """
+    filtered_list = []
+    for feature in features:
+        if feature.type in feature_types_to_keep:
+            new_feature = SeqFeature(
+                location=feature.location,
+                type=feature.type,
+                qualifiers=feature.qualifiers,
+                id=feature.id
+            )
+            filtered_list.append(new_feature)
+
+        if feature.sub_features:
+            # Recursively call and extend the list with the results
+            filtered_list.extend(scan_features_recursive(feature.sub_features, feature_types_to_keep))
+            
+    return filtered_list
+
+def filter_features_by_type(record: SeqRecord, feature_types_to_keep: Set[str]) -> SeqRecord:
+    """
+    Creates a new SeqRecord containing only features of specified types.
+    Sub-features of the desired types are extracted and promoted to top-level features.
+    """
+    new_record = SeqRecord(
+        seq=record.seq,
+        id=record.id,
+        name=record.name,
+        description=record.description,
+        dbxrefs=record.dbxrefs,
+        annotations=record.annotations,
+    )
+    
+    filtered_features = scan_features_recursive(record.features, feature_types_to_keep)
+    new_record.features = filtered_features
+    
+    logger.info(f"INFO: For record {record.id}, filtered to {len(filtered_features)} features of types: {', '.join(feature_types_to_keep)}.")
+    return new_record
+
+
+def load_gff_fasta(gff_list: List[str], fasta_list: List[str], mode: str, selected_features_set=None, load_comparison=False) -> list[SeqRecord]:
+    """
+    """
+    gff_record_list_tmp : list[SeqRecord] = []
+    gff_id_list_tmp: list[str] = []
+    fasta_record_list_tmp : list[SeqRecord] = []
+    fasta_id_list_tmp: list[str] = []
     record_list: list[SeqRecord] = []
-    id_list: list[str] = []
-    
-    logger.info("INFO: Loading and parsing GFF3 file(s)...")
+    logger.info("INFO: Loading GFF3 file(s)...")
     if load_comparison:
-        logger.info("INFO: BLAST results were provided. Only the first entry from GFF file(s) will be loaded.")
-
+        logger.info(
+            "INFO: BLAST results were provided. Only the first entry from each GFF3 file will be loaded.")
     for gff_file in gff_list:
         if not os.path.isfile(gff_file):
-            logger.warning(f"WARNING: GFF3 file not found: {gff_file}")
+            logger.error(
+                f"ERROR: File does not exist or is not accessible: {gff_file}")
+            sys.exit(1)
+        try:
+            logger.info("INFO: Loading GFF3 file {}".format(gff_file))
+            records: Generator[SeqRecord, None,
+                               None] = GFF.parse(gff_file)
+            if mode == "linear":
+                if len(gff_list) == 1:
+                    logger.info("INFO: Importing all entries...")
+                    for record in records:
+                        record = filter_features_by_type(record, selected_features_set)
+                        if record.id in gff_id_list_tmp:
+                            logger.warning(f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!")
+                        gff_record_list_tmp.append(record)
+                        gff_id_list_tmp.append(record.id)  # type: ignore
+                elif len(gff_list) > 1 and load_comparison:
+                    record: SeqRecord = next(records)
+                    record = filter_features_by_type(record, selected_features_set)
+                    if record.id in gff_id_list_tmp:
+                        logger.warning(f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!")
+                    gff_record_list_tmp.append(record)
+                    gff_id_list_tmp.append(record.id)  # type: ignore
+                else:
+                    logger.info("INFO: Importing all entries...")
+                    for record in records:
+                        record = filter_features_by_type(record, selected_features_set)
+                        if record.id in gff_id_list_tmp:
+                            logger.warning(f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!")
+                        gff_record_list_tmp.append(record)
+                        gff_id_list_tmp.append(record.id)           # type: ignore
+            elif mode == "circular":
+                logger.info("INFO: Importing all entries...")
+                for record in records:
+                    record = filter_features_by_type(record, selected_features_set)
+                    if record.id in gff_id_list_tmp:
+                        logger.warning(f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!")
+                    if "topology" in record.annotations:
+                        # type: ignore
+                        topology: str = record.annotations["topology"]
+                        if topology == "linear":
+                            logger.warning(f"WARNING: The annotation indicates that record {record.id} is linear. Are you sure you want to visualize it as circular?")
+                        elif topology == "circular":
+                            pass
+                        else:
+                            logger.warning(f"WARNING: Topology information not available for {record.id}.")
+                    gff_record_list_tmp.append(record)
+                    gff_id_list_tmp.append(record.id)  # type: ignore
+        except ValueError as e:  # Catching common exception when parsing GenBank files
+            logger.error(f"ERROR: error parsing GFF3 file {gff_file}. It may be corrupt or in the wrong format. Error: {e}")
+            sys.exit(1)
+        except Exception as e:  # A more generic catch-all for other unexpected issues
+            logger.error(f"ERROR: an unexpected error occurred while processing {gff_file}: {e}")
+            sys.exit(1)
+    logger.info("INFO:              ... finished loading GFF3 file(s)")
+    logger.info(f"INFO: Number of sequences loaded from GFF3 files: {len(gff_id_list_tmp)}")
+    logger.info("INFO: Loading FASTA file(s)...")
+    for fasta_file in fasta_list:
+        if not os.path.isfile(fasta_file):
+            logger.error(
+                f"ERROR: File does not exist or is not accessible: {fasta_file}")
+            sys.exit(1)
             continue
         try:
-            with open(gff_file) as gff_handle:
-                # GFF.parse combines GFF features with FASTA sequences via base_dict
-                gff_gen = GFF.parse(gff_handle, base_dict=fasta_dict)
-                
-                if load_comparison:
-                    try:
-                        rec = next(gff_gen)
-                        if rec.id in id_list:
-                            logger.warning(f"WARNING: Record ID '{rec.id}' is duplicated.")
-                        else:
-                            id_list.append(rec.id)
-                            record_list.append(rec)
-                    except StopIteration:
-                        logger.warning(f"WARNING: GFF file {gff_file} is empty or contains no records.")
+            logger.info("INFO: Loading FASTA file {}".format(fasta_file))
+            records: Generator[SeqRecord, None,
+                               None] = SeqIO.parse(fasta_file, 'fasta')
+            if mode == "linear":
+                if len(fasta_list) == 1:
+                    logger.info("INFO: Importing all entries...")
+                    for record in records:
+                        if record.id in fasta_id_list_tmp:
+                            logger.warning(f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!")
+                        fasta_record_list_tmp.append(record)
+                        fasta_id_list_tmp.append(record.id)  # type: ignore
+                elif len(fasta_list) > 1 and load_comparison:
+                    record: SeqRecord = next(records)
+                    if record.id in fasta_id_list_tmp:
+                        logger.warning(f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!")
+                    fasta_record_list_tmp.append(record)
+                    fasta_id_list_tmp.append(record.id)  # type: ignore
                 else:
-                    for rec in gff_gen:
-                        if rec.id in id_list:
-                            logger.warning(f"WARNING: Record ID '{rec.id}' is duplicated. Check input files.")
+                    logger.info("INFO: Importing all entries...")
+                    for record in records:
+                        if record.id in fasta_id_list_tmp:
+                            logger.warning(f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!")
+                        fasta_record_list_tmp.append(record)
+                        fasta_id_list_tmp.append(record.id)           # type: ignore
+            elif mode == "circular":
+                logger.info("INFO: Importing all entries...")
+                for record in records:
+                    if record.id in fasta_id_list_tmp:
+                        logger.warning(f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!")
+                    if "topology" in record.annotations:
+                        # type: ignore
+                        topology: str = record.annotations["topology"]
+                        if topology == "linear":
+                            logger.warning(f"WARNING: The annotation indicates that record {record.id} is linear. Are you sure you want to visualize it as circular?")
+                        elif topology == "circular":
+                            pass
                         else:
-                            id_list.append(rec.id)
-                        
-                        # BCBio-GFF creates a record even if the ID is not in fasta_dict.
-                        # The sequence will be of unknown length. Let's check for this.
-                        if len(rec.seq) == 0 or "?" in str(rec.seq):
-                             logger.warning(f"WARNING: Sequence for ID '{rec.id}' from GFF file '{gff_file}' was not found in the provided FASTA file(s). Features were loaded without a sequence.")
-
-                        record_list.append(rec)
-        except Exception as e:
-            logger.error(f"ERROR: An unexpected error occurred while processing {gff_file}: {e}")
-
-    # Check for sequences in FASTA that had no corresponding GFF entry.
-    gff_ids = set(id_list)
-    fasta_ids = set(fasta_dict.keys())
-    unannotated_ids = fasta_ids - gff_ids
-    if unannotated_ids:
-        logger.info(f"INFO: The following sequences from FASTA had no features in GFF and will be ignored: {', '.join(unannotated_ids)}")
-
-    logger.info("INFO:              ... finished loading GFF3 and FASTA file(s)")
+                            logger.warning(f"WARNING: Topology information not available for {record.id}.")
+                    fasta_record_list_tmp.append(record)
+                    fasta_id_list_tmp.append(record.id)  # type: ignore
+        except ValueError as e:  # Catching common exception when parsing GenBank files
+            logger.error(f"ERROR: error parsing FASTA file {fasta_file}. It may be corrupt or in the wrong format. Error: {e}")
+            sys.exit(1)
+        except Exception as e:  # A more generic catch-all for other unexpected issues
+            logger.error(f"ERROR: an unexpected error occurred while processing {fasta_file}: {e}")
+            sys.exit(1)
+    logger.info("INFO:              ... finished loading FASTA file(s)")
+    logger.info(f"INFO: Number of sequences loaded from FASTA files: {len(fasta_id_list_tmp)}")
+    record_list = merge_gff_fasta_records(gff_record_list_tmp, fasta_record_list_tmp)
+    logger.info(f"INFO: Number of sequences after merging GFF3 and FASTA files: {len(record_list)}")
+    logger.info("INFO:              ... finished loading GFF3 and FASTA files")
     logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(record_list)}")
+    if len(record_list) < 1:
+        logger.error("ERROR: No valid records were loaded after merging GFF3 and FASTA files. Please check your input files.")
+        sys.exit(1)
     return record_list
+            
 
 def load_comparisons(
         comparison_files: List[str],

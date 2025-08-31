@@ -268,6 +268,7 @@ def linear_main(cmd_args) -> None:
     align_center: bool = args.align_center
     evalue: float = args.evalue
     legend: str = args.legend
+
     show_skew: bool = False
     bitscore: float = args.bitscore
     identity: float = args.identity
@@ -283,16 +284,6 @@ def linear_main(cmd_args) -> None:
         load_comparison = True
     else:
         load_comparison = False
-        
-    records: list[SeqRecord]
-    if args.gbk:
-        records = load_gbks(args.gbk, "linear", load_comparison)
-    elif args.gff and args.fasta:
-        records = load_gff_fasta(args.gff, args.fasta, "linear", load_comparison)
-    else:
-        logger.error("A critical error occurred with input file arguments.")
-        sys.exit(1)
-        
     palette: str = args.palette
     default_colors: Optional[DataFrame] = load_default_colors(
         user_defined_default_colors, palette)
@@ -327,7 +318,13 @@ def linear_main(cmd_args) -> None:
         strandedness=strandedness,
         label_blacklist=label_blacklist
     )
-
+    if args.gbk:
+        records = load_gbks(args.gbk, "linear", load_comparison)
+    elif args.gff and args.fasta:
+        records = load_gff_fasta(args.gff, args.fasta, "linear", selected_features_set, load_comparison)
+    else:
+        logger.error("A critical error occurred with input file arguments.")
+        sys.exit(1)
     sequence_length_dict: dict[str,
                                int] = create_dict_for_sequence_lengths(records)
     longest_genome: int = max(sequence_length_dict.values())
