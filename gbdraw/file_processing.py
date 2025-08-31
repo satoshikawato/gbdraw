@@ -14,6 +14,7 @@ from pandas import DataFrame
 from svgwrite import Drawing
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
+from BCBio import GFF
 from typing import Optional, Generator, List
 from .object_configurators import BlastMatchConfigurator
 logger = logging.getLogger()
@@ -118,6 +119,92 @@ def load_gbks(gbk_list: List[str], mode: str, load_comparison=False) -> list[Seq
     logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(id_list)}")
     return record_list
 
+def load_gff_fasta(gff_list: List[str], fasta_list: List[str], mode: str, load_comparison=False) -> list[SeqRecord]:
+    """
+    Loads records from GFF3 and FASTA files, combining them into SeqRecord objects.
+
+    Args:
+        gff_list (List[str]): List of paths to GFF3 files.
+        fasta_list (List[str]): List of paths to FASTA files.
+        mode (str): Mode of operation ('linear' or 'circular'). Not currently used
+                    for GFF but kept for API consistency.
+        load_comparison (bool, optional): If True, load only the first record.
+                                           Defaults to False.
+
+    Returns:
+        list[SeqRecord]: A list of SeqRecord objects with sequences from FASTA
+                         and features from GFF3.
+    """
+    logger.info("INFO: Loading FASTA file(s)...")
+    fasta_dict = {}
+    for fasta_file in fasta_list:
+        if not os.path.isfile(fasta_file):
+            logger.warning(f"WARNING: FASTA file not found: {fasta_file}")
+            continue
+        try:
+            with open(fasta_file) as fasta_handle:
+                # Using update allows merging multiple FASTA files.
+                # If IDs are duplicated, the last one wins.
+                fasta_dict.update(SeqIO.to_dict(SeqIO.parse(fasta_handle, "fasta")))
+        except Exception as e:
+            logger.error(f"ERROR: Could not parse FASTA file {fasta_file}: {e}")
+    
+    if not fasta_dict:
+        logger.error("ERROR: No sequences were loaded from FASTA file(s). Cannot proceed.")
+        sys.exit(1)
+
+    record_list: list[SeqRecord] = []
+    id_list: list[str] = []
+    
+    logger.info("INFO: Loading and parsing GFF3 file(s)...")
+    if load_comparison:
+        logger.info("INFO: BLAST results were provided. Only the first entry from GFF file(s) will be loaded.")
+
+    for gff_file in gff_list:
+        if not os.path.isfile(gff_file):
+            logger.warning(f"WARNING: GFF3 file not found: {gff_file}")
+            continue
+        try:
+            with open(gff_file) as gff_handle:
+                # GFF.parse combines GFF features with FASTA sequences via base_dict
+                gff_gen = GFF.parse(gff_handle, base_dict=fasta_dict)
+                
+                if load_comparison:
+                    try:
+                        rec = next(gff_gen)
+                        if rec.id in id_list:
+                            logger.warning(f"WARNING: Record ID '{rec.id}' is duplicated.")
+                        else:
+                            id_list.append(rec.id)
+                            record_list.append(rec)
+                    except StopIteration:
+                        logger.warning(f"WARNING: GFF file {gff_file} is empty or contains no records.")
+                else:
+                    for rec in gff_gen:
+                        if rec.id in id_list:
+                            logger.warning(f"WARNING: Record ID '{rec.id}' is duplicated. Check input files.")
+                        else:
+                            id_list.append(rec.id)
+                        
+                        # BCBio-GFF creates a record even if the ID is not in fasta_dict.
+                        # The sequence will be of unknown length. Let's check for this.
+                        if len(rec.seq) == 0 or "?" in str(rec.seq):
+                             logger.warning(f"WARNING: Sequence for ID '{rec.id}' from GFF file '{gff_file}' was not found in the provided FASTA file(s). Features were loaded without a sequence.")
+
+                        record_list.append(rec)
+        except Exception as e:
+            logger.error(f"ERROR: An unexpected error occurred while processing {gff_file}: {e}")
+
+    # Check for sequences in FASTA that had no corresponding GFF entry.
+    gff_ids = set(id_list)
+    fasta_ids = set(fasta_dict.keys())
+    unannotated_ids = fasta_ids - gff_ids
+    if unannotated_ids:
+        logger.info(f"INFO: The following sequences from FASTA had no features in GFF and will be ignored: {', '.join(unannotated_ids)}")
+
+    logger.info("INFO:              ... finished loading GFF3 and FASTA file(s)")
+    logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(record_list)}")
+    return record_list
 
 def load_comparisons(
         comparison_files: List[str],
@@ -479,22 +566,21 @@ def read_qualifier_priority_file(filepath: str) -> Optional[DataFrame]:
     Returns:
         DataFrame with the user-defined qualifier priorities, or None if no file was provided.
     """
-    # ファイルパスが指定されていない場合はNoneを返す
+    # 
     if not filepath:
         return None
 
     required_cols = ['feature_type', 'priorities']
 
     try:
-        # pandasを使用してTSVファイルを読み込む
         df = pd.read_csv(
             filepath,
             sep='\t',
             header=None,
             names=required_cols,
             dtype=str,
-            on_bad_lines='error',  # 不正な形式の行があればエラーを発生させる
-            engine='python'        # on_bad_linesを使用するために必要
+            on_bad_lines='error',  
+            engine='python'
         )
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in qualifier priority file '{filepath}': {e}")
@@ -506,7 +592,6 @@ def read_qualifier_priority_file(filepath: str) -> Optional[DataFrame]:
         logger.error(f"ERROR: Failed to read '{filepath}': {e}")
         sys.exit(1)
 
-    # 読み込んだデータに欠損値がないかチェック
     null_rows = df[df.isnull().any(axis=1)]
     if not null_rows.empty:
         for idx, row in null_rows.iterrows():

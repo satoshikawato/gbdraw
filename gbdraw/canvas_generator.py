@@ -292,4 +292,3 @@ class LinearCanvasConfigurator:
                      ' ' + str(self.total_height)),
             debug=False
         )
-

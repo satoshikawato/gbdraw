@@ -281,8 +281,7 @@ class DefinitionGroup:
         GC content, and accession number, and adds them to the definition_group.
         """
         record_length: int = len(self.gb_record.seq)
-        # type: ignore
-        accession: str = self.gb_record.annotations['accessions'][0]
+        accession: str = self.gb_record.id
         gc_percent: float = calculate_gc_percent(self.gb_record.seq)
         self.definition_group: Group = DefinitionDrawer(self.config_dict).draw(
             self.definition_group, self.title_x, self.title_y, self.species_parts, self.strain_parts, self.organelle_parts, self.replicon_parts, gc_percent, accession, record_length)
@@ -631,7 +630,7 @@ class SeqRecordGroup:
         default_colors: Optional[DataFrame] = self.feature_config.default_colors
         feature_dict: Dict[str, FeatureObject] = create_feature_dict(
             self.gb_record, color_table, selected_features_set, default_colors, self.strandedness, self.resolve_overlaps, self.label_filtering)
-        track_id: str = self.gb_record.annotations['accessions'][0]
+        track_id: str = self.gb_record.id
         record_group = Group(id=track_id)
         record_length: int = len(self.gb_record.seq)
 

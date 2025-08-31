@@ -7,7 +7,7 @@ import logging
 from typing import Optional
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
-from .file_processing import load_gbks, load_default_colors, read_color_table, load_config_toml, parse_formats, read_qualifier_priority_file
+from .file_processing import load_gbks, load_gff_fasta, load_default_colors, read_color_table, load_config_toml, parse_formats, read_qualifier_priority_file
 from .circular_diagram_components import plot_circular_diagram
 from .data_processing import skew_df
 from .canvas_generator import CircularCanvasConfigurator
@@ -38,11 +38,28 @@ def _get_args(args) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description='Generate genome diagrams in PNG/PDF/SVG/PS/EPS. Diagrams for multiple entries are saved separately.')
     parser.add_argument(
-        '-i',
-        '--input',
-        help='Genbank/DDBJ flatfile (required)',
+        "--gbk",
+        metavar="GBK_FILE",
+        help='Genbank/DDBJ flatfile',
         type=str,
-        required=True,
+        nargs='*')
+    parser.add_argument(
+        '-i', '--input',
+        dest='gbk',  
+        help=argparse.SUPPRESS,
+        type=str,
+        nargs='*')
+    parser.add_argument(
+        "--gff",
+        metavar="GFF3_FILE",
+        help="GFF3 file (instead of --gbk; --fasta is required)",
+        type=str,
+        nargs='*')
+    parser.add_argument(
+        "--fasta",
+        metavar="FASTA_FILE",
+        help="FASTA file (required with --gff)",
+        type=str,
         nargs='*')
     parser.add_argument(
         '-o',
@@ -208,8 +225,29 @@ def _get_args(args) -> argparse.Namespace:
         help='Inner label y-radius offset factor (float; default from config)',
         type=float)
     args = parser.parse_args(args)
+    if args.gbk and (args.gff or args.fasta):
+        parser.error("Error: --gbk cannot be used with --gff or --fasta.")
+    
+    # Check if both --gff and --fasta are provided together
+    if args.gff and not args.fasta:
+        parser.error("Error: --gff requires --fasta.")
+    
+    if args.fasta and not args.gff:
+        parser.error("Error: --fasta requires --gff.")
+        
+    # Ensure that either --gbk or both --gff and --fasta are provided
+    if not args.gbk and not (args.gff and args.fasta):
+        parser.error("Error: Either --gbk or both --gff and --fasta must be provided.")
+
     return args
 
+def validate_args(parser, args):
+    """
+    Validates the parsed command-line arguments to ensure correct combinations and presence of required arguments.
+    """
+    # --gbk と --gff/--fasta の組み合わせをチェック
+
+        
 
 def circular_main(cmd_args) -> None:
     """
@@ -230,7 +268,20 @@ def circular_main(cmd_args) -> None:
     - Generating output files in specified formats.
     """
     args: argparse.Namespace = _get_args(cmd_args)
-    input_file: str = args.input
+    if '-i' in cmd_args or '--input' in cmd_args:
+        logger.warning(
+            "WARNING: The -i/--input option is deprecated and will be removed in a future version. Please use --gbk instead.")    
+    # Unified record loading at the beginning
+    gb_records: list[SeqRecord]
+    if args.gbk:
+        gb_records = load_gbks(args.gbk, "circular")
+    elif args.gff and args.fasta:
+        gb_records = load_gff_fasta(args.gff, args.fasta, "circular")
+    else:
+        # This case should not be reached due to arg validation
+        logger.error("Invalid input file configuration.")
+        sys.exit(1)
+
     output_prefix = args.output
     dinucleotide: str = args.nt
     window: int = args.window
@@ -312,7 +363,6 @@ def circular_main(cmd_args) -> None:
 
     out_formats: list[str] = parse_formats(args.format)
     record_count: int = 0
-    gb_records: list[SeqRecord] = load_gbks(input_file, "circular")
     gc_config = GcContentConfigurator(
         window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
     skew_config = GcSkewConfigurator(
@@ -324,7 +374,7 @@ def circular_main(cmd_args) -> None:
 
     for gb_record in gb_records:
         record_count += 1 
-        accession = str(gb_record.annotations["accessions"][0])  # type: ignore
+        accession = gb_record.id
         outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
         gc_df: DataFrame = skew_df(gb_record, window, step, dinucleotide)
         canvas_config = CircularCanvasConfigurator(
