@@ -41,6 +41,7 @@ QUALIFIER_KEYS = ["product", "gene", "note", "rpt_family"]
 
 # --- Helper functions and Session State for Dynamic Priority Input ---
 
+
 def sanitize_filename(filename: str) -> str:
     """
     Strips directory traversal characters and removes characters that are unsafe
@@ -72,6 +73,7 @@ def remove_priority_row(row_id):
         row for row in st.session_state.manual_priorities if row['id'] != row_id
     ]
 
+
 # --- Whitelist Rows Functions ---
 def add_whitelist_row():
     """Appends a new empty row to the whitelist in session_state."""
@@ -87,12 +89,15 @@ def remove_whitelist_row(row_id):
         row for row in st.session_state.manual_whitelist if row['id'] != row_id
     ]
 
+
 # Initialize session state for manual priorities if it doesn't exist.
 # This runs only once per session.
 if 'manual_priorities' not in st.session_state:
     st.session_state.manual_priorities = [{'id': 0, 'feature': 'CDS', 'qualifiers': 'product,gene'}]
+
 if 'manual_whitelist' not in st.session_state:
     st.session_state.manual_whitelist = []
+
 
 
 st.markdown(
@@ -305,6 +310,7 @@ if selected_mode == "🔵 Circular":
 
     # Label Content Filtering
     st.markdown("##### Label Content Filtering")
+
     c_filter_mode = st.radio(
         "Select label filtering mode:",
         ("None", "Blacklist (exclude keywords)", "Whitelist (include keywords)"),
@@ -341,6 +347,7 @@ if selected_mode == "🔵 Circular":
                 wl_col4.button("➖", key=f"wl_remove_{row['id']}", on_click=remove_whitelist_row, args=(row['id'],))
 
         st.button("➕ Add Whitelist Row", on_click=add_whitelist_row, use_container_width=True)
+
     st.markdown("---")
 
     # --- Main Drawing Form ---
@@ -483,7 +490,7 @@ if selected_mode == "🔵 Circular":
                 qualifiers_value = st.session_state.get(qualifiers_key, "")
                 if feature_value and qualifiers_value:
                     prio_lines.append(f"{feature_value}\t{qualifiers_value}")
-            
+
             if prio_lines:
                 prio_content = "\n".join(prio_lines)
                 save_path = UPLOAD_DIR / f"qual_prio_c_{uuid.uuid4().hex}"
@@ -715,6 +722,7 @@ if selected_mode == "📏 Linear":
 
     # Label Content Filtering
     st.markdown("##### Label Content Filtering")
+
     l_filter_mode = st.radio(
         "Select label filtering mode:",
         ("None", "Blacklist (exclude keywords)", "Whitelist (include keywords)"),
@@ -751,6 +759,7 @@ if selected_mode == "📏 Linear":
                 wl_col4.button("➖", key=f"l_wl_remove_{row['id']}", on_click=remove_whitelist_row, args=(row['id'],))
 
         st.button("➕ Add Whitelist Row", on_click=add_whitelist_row, use_container_width=True, key="l_add_wl")
+
     st.markdown("---")
 
 
@@ -966,6 +975,7 @@ if selected_mode == "📏 Linear":
                 "log": log_content,
                 "failed": True
             }
+
 
     if st.session_state.linear_result:
         res = st.session_state.linear_result

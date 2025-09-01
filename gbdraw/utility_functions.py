@@ -341,7 +341,6 @@ def get_label_text(seq_feature, filtering_config) -> str:
     feature_type = seq_feature.type
     whitelist_df = filtering_config.get('whitelist_df')
     blacklist = filtering_config.get('blacklist_keywords', [])
-    
     priority_list = None
     priority_df = filtering_config.get('qualifier_priority_df')
     if priority_df is not None and not priority_df.empty:
@@ -358,7 +357,6 @@ def get_label_text(seq_feature, filtering_config) -> str:
             priority_list = priority_config.get('repeat', ['rpt_family', 'note'])
         else:
             priority_list = priority_config.get('feature', ['note'])
-
     text = ''
     for priority_qualifier in priority_list or []:
         if hasattr(seq_feature, priority_qualifier) and getattr(seq_feature, priority_qualifier):
@@ -396,7 +394,6 @@ def get_label_text(seq_feature, filtering_config) -> str:
                 break
                 
     return text
-
 def get_coordinates_of_longest_segment(feature_object):
     coords: list[List[Union[str, int, bool]]] = feature_object.coordinates
     if not coords:
