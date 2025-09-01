@@ -739,3 +739,53 @@ def read_qualifier_priority_file(filepath: str) -> Optional[DataFrame]:
 
     logger.info(f"Successfully loaded qualifier priority from {filepath}")
     return df
+
+def read_filter_list_file(filepath: str) -> Optional[DataFrame]:
+    """
+    Reads a detailed filter list file (TSV) and returns a DataFrame.
+    Errors out if any row has the wrong number of fields or missing values.
+
+    Expected columns: feature_type, qualifier, keyword
+
+    Returns:
+        DataFrame with user-defined filters, or None if no file was provided.
+    """
+    if not filepath:
+        return None
+
+    required_cols = ['feature_type', 'qualifier', 'keyword']
+
+    try:
+        df = pd.read_csv(
+            filepath,
+            sep='\t',
+            header=None,
+            names=required_cols,
+            dtype=str,
+            comment='#',
+            on_bad_lines='error',
+            engine='python'
+        )
+    except pd.errors.ParserError as e:
+        logger.error(f"ERROR: Malformed line in filter list file '{filepath}': {e}")
+        sys.exit(1)
+    except FileNotFoundError as e:
+        logger.error(f"ERROR: Filter list file not found: {e}")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"ERROR: Failed to read '{filepath}': {e}")
+        sys.exit(1)
+
+    # Check for rows with missing values
+    null_rows = df[df.isnull().any(axis=1)]
+    if not null_rows.empty:
+        for idx, row in null_rows.iterrows():
+            missing = [c for c in required_cols if pd.isna(row[c])]
+            logger.error(
+                f"ERROR: Missing values in '{filepath}' at line {idx+1}. "
+                f"Missing columns: {missing}. Row data: {row.to_dict()}"
+            )
+        sys.exit(1)
+
+    logger.info(f"Successfully loaded filter list from {filepath}")
+    return df

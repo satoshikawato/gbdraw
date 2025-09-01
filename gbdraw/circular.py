@@ -192,10 +192,15 @@ def _get_args(args) -> argparse.Namespace:
         '--allow_inner_labels',
         help='Place labels inside the circle (default: False). If enabled, labels are placed both inside and outside the circle, and gc and skew tracks are not shown.',
         action='store_true')
-
+    label_list_group = parser.add_mutually_exclusive_group()
+    label_list_group.add_argument(
+        '--label_whitelist',
+        help='path to a file for label whitelisting (optional); mutually exclusive with --label_blacklist',
+        type=str,
+        default="")
     parser.add_argument(
         '--label_blacklist',
-        help='Comma-separated keywords or path to a file for label blacklisting (optional)',
+        help='Comma-separated keywords or path to a file for label blacklisting (optional); mutually exclusive with --label_whitelist',
         type=str,
         default="")
         
@@ -238,7 +243,8 @@ def _get_args(args) -> argparse.Namespace:
     # Ensure that either --gbk or both --gff and --fasta are provided
     if not args.gbk and not (args.gff and args.fasta):
         parser.error("Error: Either --gbk or both --gff and --fasta must be provided.")
-
+    if args.label_whitelist and args.label_blacklist:
+        parser.error("Error: --label_whitelist and --label_blacklist are mutually exclusive.")
     return args
 
 
@@ -280,6 +286,7 @@ def circular_main(cmd_args) -> None:
     suppress_skew: bool = args.suppress_skew
     show_labels: bool = args.show_labels
     allow_inner_labels: bool = args.allow_inner_labels
+    label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
     # Unified record loading at the beginning
@@ -349,6 +356,7 @@ def circular_main(cmd_args) -> None:
         circular_definition_font_size=definition_font_size,
         label_font_size=label_font_size,
         label_blacklist=label_blacklist,
+        label_whitelist=label_whitelist,
         outer_label_x_radius_offset=outer_label_x_radius_offset,
         outer_label_y_radius_offset=outer_label_y_radius_offset,
         inner_label_x_radius_offset=inner_label_x_radius_offset,

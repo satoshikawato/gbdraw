@@ -204,12 +204,17 @@ def _get_args(args) -> argparse.Namespace:
         '--resolve_overlaps',
         help='Resolve overlaps (experimental; default: False). ',
         action='store_true')
-    parser.add_argument(
-        '--label_blacklist',
-        help='Comma-separated keywords or path to a file for label blacklisting (optional)',
+    label_list_group = parser.add_mutually_exclusive_group()
+    label_list_group.add_argument(
+        '--label_whitelist',
+        help='path to a file for label whitelisting (optional); mutually exclusive with --label_blacklist',
         type=str,
         default="")
-        
+    label_list_group.add_argument(
+        '--label_blacklist',
+        help='Comma-separated keywords or path to a file for label blacklisting (optional); mutually exclusive with --label_whitelist',
+        type=str,
+        default="")
     parser.add_argument(
         '--qualifier_priority',
         help='Path to a TSV file defining qualifier priority for labels (optional)',
@@ -225,7 +230,9 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("Error: --fasta requires --gff.")
     if not args.gbk and not (args.gff and args.fasta):
         parser.error("Error: Either --gbk or both --gff and --fasta must be provided.")
-        
+    if args.label_whitelist and args.label_blacklist:
+        parser.error("Error: --label_whitelist and --label_blacklist are mutually exclusive.")
+
     return args
 
 
@@ -273,6 +280,7 @@ def linear_main(cmd_args) -> None:
     bitscore: float = args.bitscore
     identity: float = args.identity
     show_labels: bool = args.show_labels
+    label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
     selected_features_set: str = args.features.split(',')
@@ -316,7 +324,8 @@ def linear_main(cmd_args) -> None:
         show_skew=show_skew, 
         align_center=align_center, 
         strandedness=strandedness,
-        label_blacklist=label_blacklist
+        label_blacklist=label_blacklist,
+        label_whitelist=label_whitelist
     )
     if args.gbk:
         records = load_gbks(args.gbk, "linear", load_comparison)
@@ -329,7 +338,7 @@ def linear_main(cmd_args) -> None:
                                int] = create_dict_for_sequence_lengths(records)
     longest_genome: int = max(sequence_length_dict.values())
     num_of_entries: int = len(sequence_length_dict)
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness, show_labels=show_labels, resolve_overlaps=resolve_overlaps)
+    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness, show_labels=show_labels, resolve_overlaps=resolve_overlaps, label_blacklist=label_blacklist, label_whitelist=label_whitelist)
 
     blast_config = BlastMatchConfigurator(
         evalue=evalue, bitscore=bitscore, identity=identity, sequence_length_dict=sequence_length_dict, config_dict=config_dict, default_colors_df=default_colors)
