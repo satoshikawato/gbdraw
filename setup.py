@@ -4,14 +4,7 @@ setup(
     name='gbdraw',
     version='0.5.0',
     packages=find_packages(),
-    install_requires=[
-        'pandas',
-        'svgwrite',
-        'biopython',
-        'cairosvg',
-        'fonttools',
-        'bcbio-gff'
-    ],
+    install_requires=[],
     package_data={
         'gbdraw': ['data/color_palettes.toml', 'data/config.toml', 'data/*.ttf']
     },
@@ -26,3 +19,4 @@ setup(
     entry_points={'console_scripts': ['gbdraw = gbdraw.cli:main',] },
     # Add other relevant information
 )
+
