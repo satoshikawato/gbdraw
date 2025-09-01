@@ -41,7 +41,6 @@ QUALIFIER_KEYS = ["product", "gene", "note", "rpt_family"]
 
 # --- Helper functions and Session State for Dynamic Priority Input ---
 
-
 def sanitize_filename(filename: str) -> str:
     """
     Strips directory traversal characters and removes characters that are unsafe
@@ -73,7 +72,6 @@ def remove_priority_row(row_id):
         row for row in st.session_state.manual_priorities if row['id'] != row_id
     ]
 
-
 # --- Whitelist Rows Functions ---
 def add_whitelist_row():
     """Appends a new empty row to the whitelist in session_state."""
@@ -97,8 +95,6 @@ if 'manual_priorities' not in st.session_state:
 
 if 'manual_whitelist' not in st.session_state:
     st.session_state.manual_whitelist = []
-
-
 
 st.markdown(
     """
@@ -284,6 +280,69 @@ if selected_mode == "🔵 Circular":
             )
     
     # --- Qualifier Priority & Label Filtering Section (OUTSIDE the form) ---
+
+    st.markdown("---")
+    st.subheader("Label Content Options (Optional)")
+    
+    # Qualifier Priority
+    st.markdown("##### Qualifier Priority")
+    st.info("Select a TSV file from the sidebar OR define priorities manually below. If a file is selected, manual entries are ignored.")
+    create_manual_selectbox(
+        "Qualifier Priority File (optional)",
+        file_options,
+        "c_qualifier_priority_file"
+    )
+    with st.expander("Or, define priorities manually:", expanded=False):
+        col1, col2, _ = st.columns([3, 5, 1])
+        col1.markdown("**Feature Type**")
+        col2.markdown("**Qualifier Priority (comma-separated)**")
+
+        for row in st.session_state.manual_priorities:
+            col1, col2, col3 = st.columns([3, 5, 1])
+            col1.text_input("Feature", value=row['feature'], key=f"feature_{row['id']}", label_visibility="collapsed")
+            col2.text_input("Qualifiers", value=row['qualifiers'], key=f"qualifiers_{row['id']}", label_visibility="collapsed")
+            col3.button("➖", key=f"remove_{row['id']}", on_click=remove_priority_row, args=(row['id'],))
+
+        st.button("➕ Add Row", on_click=add_priority_row, use_container_width=True)
+
+    # Label Content Filtering
+    st.markdown("##### Label Content Filtering")
+    c_filter_mode = st.radio(
+        "Select label filtering mode:",
+        ("None", "Blacklist (exclude keywords)", "Whitelist (include keywords)"),
+        key="c_filter_mode",
+        horizontal=True
+    )
+
+    if c_filter_mode == "Blacklist (exclude keywords)":
+        st.info("Select a file with blacklist keywords (one per line) OR enter them manually below. If a file is selected, manual entry is ignored.")
+        create_manual_selectbox(
+            "Blacklist File (optional)",
+            file_options,
+            "c_blacklist_file"
+        )
+        st.text_area(
+            "Or, enter keywords manually (comma-separated):",
+            value="hypothetical, uncharacterized, putative, unknown",
+            help="Features with these keywords in their labels will be hidden.",
+            key="c_blacklist_manual"
+        )
+    elif c_filter_mode == "Whitelist (include keywords)":
+        st.info("Define rules to ONLY show labels containing specific keywords. For example, show 'CDS' features where the 'product' contains 'DNA polymerase'.")
+        with st.container():
+            wl_col1, wl_col2, wl_col3, _ = st.columns([3, 3, 4, 1])
+            wl_col1.markdown("**Feature Type**")
+            wl_col2.markdown("**Qualifier**")
+            wl_col3.markdown("**Keyword to Include**")
+
+            for row in st.session_state.manual_whitelist:
+                wl_col1, wl_col2, wl_col3, wl_col4 = st.columns([3, 3, 4, 1])
+                row['feature'] = wl_col1.selectbox("Feature", options=FEATURE_KEYS, index=FEATURE_KEYS.index(row['feature']) if row['feature'] in FEATURE_KEYS else 0, key=f"wl_feature_{row['id']}", label_visibility="collapsed")
+                row['qualifier'] = wl_col2.selectbox("Qualifier", options=QUALIFIER_KEYS, index=QUALIFIER_KEYS.index(row['qualifier']) if row['qualifier'] in QUALIFIER_KEYS else 0, key=f"wl_qualifier_{row['id']}", label_visibility="collapsed")
+                row['keyword'] = wl_col3.text_input("Keyword", value=row['keyword'], key=f"wl_keyword_{row['id']}", label_visibility="collapsed")
+                wl_col4.button("➖", key=f"wl_remove_{row['id']}", on_click=remove_whitelist_row, args=(row['id'],))
+
+        st.button("➕ Add Whitelist Row", on_click=add_whitelist_row, use_container_width=True)
     st.markdown("---")
     st.subheader("Label Content Options (Optional)")
     
@@ -643,8 +702,6 @@ if selected_mode == "📏 Linear":
                 if i < st.session_state.linear_seq_count - 1:
                     with cols[2]:
                         create_manual_selectbox(f"Comparison File {i+1} (BLAST)", file_options, f"l_blast_{i}")
-
-
     b_col1, b_col2, _ = st.columns([1.5, 2, 5])
     if b_col1.button("➕ Add Sequence"):
         st.session_state.linear_seq_count += 1
@@ -696,6 +753,69 @@ if selected_mode == "📏 Linear":
             )
     
     # --- Qualifier Priority & Label Filtering Section (OUTSIDE the form) ---
+
+    st.markdown("---")
+    st.subheader("Label Content Options (Optional)")
+    
+    # Qualifier Priority
+    st.markdown("##### Qualifier Priority")
+    st.info("Select a TSV file from the sidebar OR define priorities manually below. If a file is selected, manual entries are ignored.")
+    create_manual_selectbox(
+        "Qualifier Priority File (optional)",
+        file_options,
+        "l_qualifier_priority_file"
+    )
+    with st.expander("Or, define priorities manually:", expanded=False):
+        col1, col2, _ = st.columns([3, 5, 1])
+        col1.markdown("**Feature Type**")
+        col2.markdown("**Qualifier Priority (comma-separated)**")
+
+        for row in st.session_state.manual_priorities:
+            col1, col2, col3 = st.columns([3, 5, 1])
+            col1.text_input("Feature", value=row['feature'], key=f"feature_{row['id']}", label_visibility="collapsed")
+            col2.text_input("Qualifiers", value=row['qualifiers'], key=f"qualifiers_{row['id']}", label_visibility="collapsed")
+            col3.button("➖", key=f"remove_{row['id']}", on_click=remove_priority_row, args=(row['id'],))
+
+        st.button("➕ Add Row", on_click=add_priority_row, use_container_width=True)
+
+    # Label Content Filtering
+    st.markdown("##### Label Content Filtering")
+    l_filter_mode = st.radio(
+        "Select label filtering mode:",
+        ("None", "Blacklist (exclude keywords)", "Whitelist (include keywords)"),
+        key="l_filter_mode",
+        horizontal=True
+    )
+
+    if l_filter_mode == "Blacklist (exclude keywords)":
+        st.info("Select a file with blacklist keywords (one per line) OR enter them manually below. If a file is selected, manual entry is ignored.")
+        create_manual_selectbox(
+            "Blacklist File (optional)",
+            file_options,
+            "l_blacklist_file"
+        )
+        st.text_area(
+            "Or, enter keywords manually (comma-separated):",
+            value="hypothetical, uncharacterized, putative, unknown",
+            help="Features with these keywords in their labels will be hidden.",
+            key="l_blacklist_manual"
+        )
+    elif l_filter_mode == "Whitelist (include keywords)":
+        st.info("Define rules to ONLY show labels containing specific keywords. For example, show 'CDS' features where the 'product' contains 'DNA polymerase'.")
+        with st.container():
+            wl_col1, wl_col2, wl_col3, _ = st.columns([3, 3, 4, 1])
+            wl_col1.markdown("**Feature Type**")
+            wl_col2.markdown("**Qualifier**")
+            wl_col3.markdown("**Keyword to Include**")
+
+            for row in st.session_state.manual_whitelist:
+                wl_col1, wl_col2, wl_col3, wl_col4 = st.columns([3, 3, 4, 1])
+                row['feature'] = wl_col1.selectbox("Feature", options=FEATURE_KEYS, index=FEATURE_KEYS.index(row['feature']) if row['feature'] in FEATURE_KEYS else 0, key=f"l_wl_feature_{row['id']}", label_visibility="collapsed")
+                row['qualifier'] = wl_col2.selectbox("Qualifier", options=QUALIFIER_KEYS, index=QUALIFIER_KEYS.index(row['qualifier']) if row['qualifier'] in QUALIFIER_KEYS else 0, key=f"l_wl_qualifier_{row['id']}", label_visibility="collapsed")
+                row['keyword'] = wl_col3.text_input("Keyword", value=row['keyword'], key=f"l_wl_keyword_{row['id']}", label_visibility="collapsed")
+                wl_col4.button("➖", key=f"l_wl_remove_{row['id']}", on_click=remove_whitelist_row, args=(row['id'],))
+
+        st.button("➕ Add Whitelist Row", on_click=add_whitelist_row, use_container_width=True, key="l_add_wl")
     st.markdown("---")
     st.subheader("Label Content Options (Optional)")
     
@@ -761,6 +881,7 @@ if selected_mode == "📏 Linear":
         st.button("➕ Add Whitelist Row", on_click=add_whitelist_row, use_container_width=True, key="l_add_wl")
 
     st.markdown("---")
+
 
 
     with st.form("linear_form"):
@@ -975,8 +1096,6 @@ if selected_mode == "📏 Linear":
                 "log": log_content,
                 "failed": True
             }
-
-
     if st.session_state.linear_result:
         res = st.session_state.linear_result
         if res.get("failed"):

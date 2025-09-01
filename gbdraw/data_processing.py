@@ -761,7 +761,7 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
        
        for coordinate in feature_object.coordinates:
            coordinate_strand = get_strand(coordinate.strand)
-           factors = calculate_feature_position_factors_linear(coordinate_strand, strandedness, feature_track_id)
+           factors = calculate_feature_position_factors_linear(coordinate_strand, feature_track_id, strandedness)
            start = int(coordinate.start)
            end = int(coordinate.end)
            segment_length = abs(end - start + 1)
