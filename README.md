@@ -16,17 +16,22 @@
 
 ## Features
 - Circular and linear diagrams: Generates both circular and linear representations of genome structures.
-- Customizable inputs: Supports Genbank/DDBJ flat files with options for color customization.
+- **Multiple Input Formats:** Supports standard **GenBank/DDBJ** files as well as **GFF3 + FASTA** file pairs.
+- **Dual Interface:** Available as a powerful command-line tool and an interactive **local/web GUI**.
 - Various output formats: Vector and raster graphics suitable for publication and further editing.
+- **Flexible Label Control:** Provides advanced control over feature labels, including priority rules, blacklists, and **whitelists**.
+- Comparative genomics: Visualizes sequence similarity between genomes using BLAST results.
 
 ## Dependencies
 - [Python](https://www.python.org/) >=3.10
 - [Biopython](https://biopython.org/)
+- [bcbio-gff](https://github.com/chapmanb/bcbb/tree/master/gff)
 - [pandas](https://pandas.pydata.org/)
 - [svgwrite](https://github.com/mozman/svgwrite)
 - [CairoSVG](https://cairosvg.org/)
 - [Liberation Fonts](https://github.com/liberationfonts/liberation-fonts) (bundled; SIL Open Font_License 1.1)
-
+### Optional dependencies (GUI)
+- [Streamlit](https://streamlit.io/) (for the `gbdraw gui` command)
 ## Use without local installation
 ### Streamlit Web App
 A GUI web app of `gbdraw` (latest commit on `main` branch) is available on Streamlit without any local installation:
@@ -42,8 +47,10 @@ You can try `gbdraw` (latest release) on Google Colaboratory without any local i
 ### Bioconda (recommended)
 `gbdraw` is available on the Bioconda channel.
 ```bash
-conda create -n gbdraw-0.4.0 -y -c conda-forge -c bioconda gbdraw=0.4.0
-conda activate gbdraw-0.4.0
+mamba create -n gbdraw-0.5.0 -y -c conda-forge -c bioconda gbdraw=0.5.0
+mamba create -n gbdraw-0.5.0 -c conda-forge -c bioconda gbdraw=0.5.0 streamlit # Install streamlit if you want to use GUI mode. Streamlit can also be installed later
+
+mamba activate gbdraw-0.5.0
 ```
 ### Local build (development version)
 To use the latest development version, clone the repository yourself using `git` and build the package locally with [conda-build](https://anaconda.org/anaconda/conda-build).
@@ -68,8 +75,8 @@ mamba activate gbdraw
 
 ## Usage
 ```bash
-$ gbdraw 
-gbdraw v. 0.4.0: A diagram generator for small genomes
+$ gbdraw -h
+gbdraw v. 0.5.0: A diagram generator for small genomes
 
 Usage:
   gbdraw <subcommand> [options]
@@ -77,19 +84,26 @@ Usage:
 Subcommands:
   circular  Generate a circular genome diagram
   linear    Generate a linear genome diagram
+  gui       Launch the graphical user interface (requires Streamlit)
 
 For each subcommand, you can get additional help by running:
   gbdraw <subcommand> --help
 
 Examples:
-  gbdraw circular -i input.gb
-  gbdraw linear -i input.gb
+  gbdraw circular --gbk input.gb
+  gbdraw circular --gff input.gff --fasta input.fna
+  gbdraw linear --gbk input.gb
+  gbdraw linear --gff input.gff --fasta input.fna
+  gbdraw linear --gbk input1.gb input2.gb input3.gb -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt
+  gbdraw linear --gff input1.gff input2.gff input3.gff --fasta input1.fna input2.fna input3.fna -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt
+  gbdraw gui
 
 Options (examples):
-  -i, --input          Input GenBank file(s) (required)
+  --gbk                Input GenBank file(s)
+  --gff                Input GFF# file(s) (rquires --fasta; mutually exclusive with --gbk)
+  --fasta              Input FASTA file(s) (required with --gff; mutually exclusive with --gbk)
   -o, --output         Output file prefix (optional)
-  -t, --table          Color table file (optional)
-  -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; currently implemented for linear mode only)
+  -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)
 
 Additional Information:
   - For full documentation, visit: https://github.com/satoshikawato/gbdraw/
@@ -99,13 +113,14 @@ Additional Information:
 ### Circular genome
 ```bash
 $ gbdraw circular -h
-usage: gbdraw [-h] -i [INPUT ...] [-o OUTPUT] [-p PALETTE] [-t TABLE] [-d DEFAULT_COLORS] [-n NT] [-w WINDOW]
-              [-s STEP] [--species SPECIES] [--strain STRAIN] [-k FEATURES] [--block_stroke_color BLOCK_STROKE_COLOR]
-              [--block_stroke_width BLOCK_STROKE_WIDTH] [--axis_stroke_color AXIS_STROKE_COLOR]
-              [--axis_stroke_width AXIS_STROKE_WIDTH] [--line_stroke_color LINE_STROKE_COLOR]
-              [--line_stroke_width LINE_STROKE_WIDTH] [--definition_font_size DEFINITION_FONT_SIZE]
-              [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--suppress_gc] [--suppress_skew] [-l LEGEND]
-              [--separate_strands] [--track_type TRACK_TYPE] [--show_labels] [--allow_inner_labels]
+usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]] [--fasta [FASTA_FILE ...]] [-o OUTPUT] [-p PALETTE]
+              [-t TABLE] [-d DEFAULT_COLORS] [-n NT] [-w WINDOW] [-s STEP] [--species SPECIES] [--strain STRAIN]
+              [-k FEATURES] [--block_stroke_color BLOCK_STROKE_COLOR] [--block_stroke_width BLOCK_STROKE_WIDTH]
+              [--axis_stroke_color AXIS_STROKE_COLOR] [--axis_stroke_width AXIS_STROKE_WIDTH]
+              [--line_stroke_color LINE_STROKE_COLOR] [--line_stroke_width LINE_STROKE_WIDTH]
+              [--definition_font_size DEFINITION_FONT_SIZE] [--label_font_size LABEL_FONT_SIZE] [-f FORMAT]
+              [--suppress_gc] [--suppress_skew] [-l LEGEND] [--separate_strands] [--track_type TRACK_TYPE]
+              [--show_labels] [--allow_inner_labels] [--label_whitelist LABEL_WHITELIST]
               [--label_blacklist LABEL_BLACKLIST] [--qualifier_priority QUALIFIER_PRIORITY]
               [--outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET]
               [--outer_label_y_radius_offset OUTER_LABEL_Y_RADIUS_OFFSET]
@@ -116,8 +131,11 @@ Generate genome diagrams in PNG/PDF/SVG/PS/EPS. Diagrams for multiple entries ar
 
 options:
   -h, --help            show this help message and exit
-  -i, --input [INPUT ...]
-                        Genbank/DDBJ flatfile (required)
+  --gbk [GBK_FILE ...]  Genbank/DDBJ flatfile
+  --gff [GFF3_FILE ...]
+                        GFF3 file (instead of --gbk; --fasta is required)
+  --fasta [FASTA_FILE ...]
+                        FASTA file (required with --gff)
   -o, --output OUTPUT   output file prefix (default: accession number of the sequence)
   -p, --palette PALETTE
                         Palette name (default: default)
@@ -160,8 +178,11 @@ options:
   --show_labels         Show feature labels (default: False).
   --allow_inner_labels  Place labels inside the circle (default: False). If enabled, labels are placed both inside and
                         outside the circle, and gc and skew tracks are not shown.
+  --label_whitelist LABEL_WHITELIST
+                        path to a file for label whitelisting (optional); mutually exclusive with --label_blacklist
   --label_blacklist LABEL_BLACKLIST
-                        Comma-separated keywords or path to a file for label blacklisting (optional)
+                        Comma-separated keywords or path to a file for label blacklisting (optional); mutually
+                        exclusive with --label_whitelist
   --qualifier_priority QUALIFIER_PRIORITY
                         Path to a TSV file defining qualifier priority for labels (optional)
   --outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET
@@ -178,13 +199,13 @@ options:
 ```bash
 wget -c https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/931/575/GCF_000931575.1_ASM93157v1/GCF_000931575.1_ASM93157v1_genomic.gbff.gz # download genome
 gunzip GCF_000931575.1_ASM93157v1_genomic.gbff.gz # decompress .gz file
-gbdraw circular -i GCF_000931575.1_ASM93157v1_genomic.gbff -o Haemophilus_influenzae -f svg
+gbdraw circular --gbk GCF_000931575.1_ASM93157v1_genomic.gbff -o Haemophilus_influenzae -f svg
 ```
 ![hinfluenzae](https://github.com/satoshikawato/gbdraw/blob/main/examples/Haemophilus_influenzae.svg)
 #### <i>Escherichia coli</i> K-12
 To italicize a portion of the organism name, you can use the <i></i> tags in the --species and --strain parameters. This will format the specified text in italics. The following command will render the species name "_Escherichia coli_" in italics, while keeping "K-12" in standard text (the organim name will be overridden):
 ```bash
-gbdraw circular -i NC_000913.gb --species "<i>Escherichia coli</i>" --strain "K-12" -f svg --separate_strands
+gbdraw circular --gbk NC_000913.gb --species "<i>Escherichia coli</i>" --strain "K-12" -f svg --separate_strands
 ```
 ![ecoli](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_000913.svg)
 
@@ -193,7 +214,7 @@ For GenBank files containing multiple entries, `gbdraw` saves each entry as a se
 ```bash
 wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/016/245/GCF_000016245.1_ASM1624v1/GCF_000016245.1_ASM1624v1_genomic.gbff.gz # download genome
 gunzip GCF_000016245.1_ASM1624v1_genomic.gbff.gz # decomperss .gz file
-gbdraw circular -i GCF_000016245.1_ASM1624v1_genomic.gbff --species "<i>Vibrio cholerae</i>" --strain "O395" -f svg --separate_strands --track_type middle # Draw genome; results in "NC_009457.svg" for Chromosome I and "NC_009456.svg" for Chromosome II
+gbdraw circular --gbk GCF_000016245.1_ASM1624v1_genomic.gbff --species "<i>Vibrio cholerae</i>" --strain "O395" -f svg --separate_strands --track_type middle # Draw genome; results in "NC_009457.svg" for Chromosome I and "NC_009456.svg" for Chromosome II
 
 ```
 <i>Vibrio cholerae</i> Chromosome I
@@ -202,23 +223,29 @@ gbdraw circular -i GCF_000016245.1_ASM1624v1_genomic.gbff --species "<i>Vibrio c
 ![Vibrio cholerae chromosome II](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_009456.svg)
 ### Linear genome
 `gbdraw linear`
+
 ```bash
 $ gbdraw linear -h
-usage: gbdraw [-h] -i [INPUT ...] [-b [BLAST ...]] [-t TABLE] [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT] [-n NT]
-              [-w WINDOW] [-s STEP] [--separate_strands] [--show_gc] [--align_center] [--evalue EVALUE]
-              [--bitscore BITSCORE] [--identity IDENTITY] [-k FEATURES] [--block_stroke_color BLOCK_STROKE_COLOR]
+usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]] [--fasta [FASTA_FILE ...]] [-b [BLAST ...]]
+              [-t TABLE] [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT] [-n NT] [-w WINDOW] [-s STEP]
+              [--separate_strands] [--show_gc] [--align_center] [--evalue EVALUE] [--bitscore BITSCORE]
+              [--identity IDENTITY] [-k FEATURES] [--block_stroke_color BLOCK_STROKE_COLOR]
               [--block_stroke_width BLOCK_STROKE_WIDTH] [--axis_stroke_color AXIS_STROKE_COLOR]
               [--axis_stroke_width AXIS_STROKE_WIDTH] [--line_stroke_color LINE_STROKE_COLOR]
               [--line_stroke_width LINE_STROKE_WIDTH] [--definition_font_size DEFINITION_FONT_SIZE]
               [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [-l LEGEND] [--show_labels] [--resolve_overlaps]
-              [--label_blacklist LABEL_BLACKLIST] [--qualifier_priority QUALIFIER_PRIORITY]
+              [--label_whitelist LABEL_WHITELIST | --label_blacklist LABEL_BLACKLIST]
+              [--qualifier_priority QUALIFIER_PRIORITY]
 
 Generate plot in PNG/PDF/SVG/PS/EPS.
 
 options:
   -h, --help            show this help message and exit
-  -i, --input [INPUT ...]
-                        genbank (required)
+  --gbk [GBK_FILE ...]  Genbank/DDBJ flatfile
+  --gff [GFF3_FILE ...]
+                        GFF3 file (instead of --gbk; --fasta is required)
+  --fasta [FASTA_FILE ...]
+                        FASTA file (required with --gff)
   -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format (-outfmt 6 or 7) (optional)
   -t, --table TABLE     color table (optional)
@@ -260,8 +287,11 @@ options:
   -l, --legend LEGEND   Legend position (default: "right"; "right", "left", "none")
   --show_labels         Show labels
   --resolve_overlaps    Resolve overlaps (experimental; default: False).
+  --label_whitelist LABEL_WHITELIST
+                        path to a file for label whitelisting (optional); mutually exclusive with --label_blacklist
   --label_blacklist LABEL_BLACKLIST
-                        Comma-separated keywords or path to a file for label blacklisting (optional)
+                        Comma-separated keywords or path to a file for label blacklisting (optional); mutually
+                        exclusive with --label_whitelist
   --qualifier_priority QUALIFIER_PRIORITY
                         Path to a TSV file defining qualifier priority for labels (optional)
 ```
@@ -277,7 +307,7 @@ umamba activate blast-2.16.0
 blastn -query NC_000898.fasta -subject NC_001664.fasta -outfmt 7 -out NC_000898_NC_001664.blastn.out
 umamba deactivate
 umamba activate gbdraw-0.1.0
-gbdraw linear -i NC_000898.gb NC_001664.gb -b NC_000898_NC_001664.blastn.out --resolve_overlaps --align_center --separate_strands -o HHV-6 -f svg --block_stroke_width 0.5
+gbdraw linear --gbk NC_000898.gb NC_001664.gb -b NC_000898_NC_001664.blastn.out --resolve_overlaps --align_center --separate_strands -o HHV-6 -f svg --block_stroke_width 0.5
 
 umamba deactivate
 ```
@@ -289,7 +319,7 @@ tblastx -query Fukuoka2020.fasta -subject Av-JP.fasta  -outfmt 7 -out Fukuoka202
 tblastx -query Av-JP.fasta -subject Ps-JP.fasta  -outfmt 7 -out Av-JP_Ps-JP.tblastx.out
 tblastx -query Ps-JP.fasta -subject Tokyo2021.fasta  -outfmt 7 -out Ps-JP_Tokyo2021.tblastx.out
 tblastx -query Tokyo2021.fasta -subject Av.fasta  -outfmt 7 -out Tokyo2021_Av.tblastx.out
-gbdraw linear -i Fukuoka2020.gb Av-JP.gb Ps-JP.gb Tokyo2021.gb Av.gb -b Fukuoka2020_Av-JP.tblastx.out  Av-JP_Ps-JP.tblastx.out  Ps-JP_Tokyo2021.tblastx.out  Tokyo2021_Av.tblastx.out -o hepatoplasmataceae --align_center --bitscore 50 --evalue 1e-3 --separate_strands -f svg
+gbdraw linear --gbk Fukuoka2020.gb Av-JP.gb Ps-JP.gb Tokyo2021.gb Av.gb -b Fukuoka2020_Av-JP.tblastx.out  Av-JP_Ps-JP.tblastx.out  Ps-JP_Tokyo2021.tblastx.out  Tokyo2021_Av.tblastx.out -o hepatoplasmataceae --align_center --bitscore 50 --evalue 1e-3 --separate_strands -f svg
 ```
 ![hepatoplasmataceae](https://github.com/satoshikawato/gbdraw/blob/main/examples/hepatoplasmataceae.svg)
 ## Advanced customization
@@ -354,7 +384,7 @@ This means:
 | CDS | product | tyrosine recombinase | red | tyrosine recombinase |
 
 ```bash
-gbdraw circular -i LC738868.gb -o LC738868_middle_separate_strands -f svg,png --block_stroke_width 1 --block_stroke_color gray --show_labels --track_type middle --separate_strands -t custom_color_table.tsv -d modified_default_colors.tsv 
+gbdraw circular --gbk LC738868.gb -o LC738868_middle_separate_strands -f svg,png --block_stroke_width 1 --block_stroke_color gray --show_labels --track_type middle --separate_strands -t custom_color_table.tsv -d modified_default_colors.tsv 
 ```
 ![MjeNMV](https://github.com/satoshikawato/gbdraw/blob/main/examples/LC738868_middle_separate_strands.png)
 
@@ -376,7 +406,7 @@ tblastx -query MeenMJNV.fasta -subject MejoMJNV.fasta -outfmt 7 -out MeenMJNV.Me
 
 # gbdraw
 gbdraw linear \
--i \
+--gbk \
 ./in_gbk/MjeNMV.gb \
 ./in_gbk/MelaMJNV.gb \
 ./in_gbk/PemoMJNVA.gb \
@@ -415,11 +445,11 @@ gbdraw linear \
 | repeat_region |'rpt_family', 'note'|
 | other features | note |
 ```bash
-gbdraw circular -i AP027280.gb -f svg --block_stroke_width 1 --block_stroke_color gray --track_type spreadout --show_labels
+gbdraw circular --gbk AP027280.gb -f svg --block_stroke_width 1 --block_stroke_color gray --track_type spreadout --show_labels
 ```
 ![WSSV](https://github.com/satoshikawato/gbdraw/blob/main/examples/AP027280.svg)
 ```bash
-gbdraw circular -i NC_012920.gb -f svg --block_stroke_width 2 --block_stroke_color gray  --show_labels -w 100 -s 10
+gbdraw circular --gbk NC_012920.gb -f svg --block_stroke_width 2 --block_stroke_color gray  --show_labels -w 100 -s 10
 ```
 ![HsmtDMA](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920.svg)
 
@@ -429,7 +459,7 @@ The font size of the Label text can be adjusted via `--label_font_size` option.
 You can selectively hide some labels via `--label_blacklist` option. For example, supressing `hypothetical protein` and other less-informative labels reduces label redundancy and makes it easier to visualize larger genomes without layout issues.
 `--label_blacklist` accepts comma-separated keywords or path to a file containing single keyword per line.
 ```bash
-gbdraw circular -i AP027280.gb \
+gbdraw circular --gbk AP027280.gb \
 -f svg --block_stroke_width 1 \
 --track_type middle \
 --show_labels \
@@ -442,7 +472,7 @@ gbdraw circular -i AP027280.gb \
 
 ```bash
 gbdraw circular \
--i AP027078.gb \
+--gbk AP027078.gb \
 -f svg \
 --track_type middle \
 --separate_strands \
@@ -466,7 +496,7 @@ CDS gene
 
 ```bash
 gbdraw circular \
--i NC_012920.gb \
+--gbk NC_012920.gb \
 -f svg --track_type middle \
 --species "<i>Homo sapiens</i>" \
 --block_stroke_width 2 \
@@ -480,10 +510,7 @@ gbdraw circular \
 ![NC_012920_middle_qualifier_priority_inner_axis5_def28_italic](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920_middle_qualifier_priority_inner_axis5_def28_italic.svg)
 
 ## Planned features
-- Feature label whitelist (display labels only for specified features)
-- GFF3 support (will require additonal dependencies; GC content/skew will not be displayed unless the sequence is included in the GFF3 file or is provided separately as a FASTA file; species/strain must be explicitly designated by the user)
 - PAF/MAF support (pairwise matches) 
-- Caching (particularly relevant for the webapp; unsure how to impelement)
 - Feature overlap resolution (overlapping genes, transcript isoforms etc.;unsure how to impelment mutiple tracks with label overlap resolution)
 - Custom tracks (read depth, motifs, etc.)
 ## Known issues
