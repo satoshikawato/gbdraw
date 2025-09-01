@@ -204,7 +204,6 @@ def _get_args(args) -> argparse.Namespace:
         '--resolve_overlaps',
         help='Resolve overlaps (experimental; default: False). ',
         action='store_true')
-
     label_list_group = parser.add_mutually_exclusive_group()
     label_list_group.add_argument(
         '--label_whitelist',

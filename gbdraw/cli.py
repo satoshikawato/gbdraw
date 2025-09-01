@@ -17,9 +17,11 @@ Functions:
 
 
 import sys
+import subprocess
 from typing import NoReturn
 from .circular import circular_main
 from .linear import linear_main
+from importlib import resources
 from .version import __version__
 
 
@@ -36,18 +38,21 @@ def print_help_message() -> NoReturn:
     print("Subcommands:")
     print("  circular  Generate a circular genome diagram")
     print("  linear    Generate a linear genome diagram")
+    print("  gui       Launch the graphical user interface (requires Streamlit)")
     print("")
     print("For each subcommand, you can get additional help by running:")
     print("  gbdraw <subcommand> --help")
     print("")
     print("Examples:")
-    print("  gbdraw circular -i input.gb")
-    print("  gbdraw linear -i input.gb")
+    print("  gbdraw circular --gbk input.gb")
+    print("  gbdraw linear --gbk input.gb")
+    print("  gbdraw gui")
     print("")
     print("Options (examples):")
-    print("  -i, --input          Input GenBank file(s) (required)")
+    print("  --gbk                Input GenBank file(s)")
+    print("  --gff               Input GFF# file(s) (rquires --fasta; mutually exclusive with --gbk)")
+    print("  --fasta             Input FASTA file(s) (required with --gff; mutually exclusive with --gbk)")
     print("  -o, --output         Output file prefix (optional)")
-    print("  -t, --table          Color table file (optional)")
     print("  -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; currently implemented for linear mode only)")
     print("")
     print("Additional Information:")
@@ -85,12 +90,32 @@ def main() -> None:
         circular_main(args)
     elif command == "linear":
         linear_main(args)
+    elif command == "gui":
+        # Check if streamlit is installed
+        try:
+            import streamlit
+        except ImportError:
+            print("Error: Streamlit is not installed.", file=sys.stderr)
+            print("Please install it to use the GUI:", file=sys.stderr)
+            print("Examples:", file=sys.stderr)
+            print("mamba install -c conda-forge streamlit", file=sys.stderr)
+            print("micromamba install -c conda-forge streamlit", file=sys.stderr)
+            sys.exit(1)
+
+        # Get the path to the app.py file within the package
+        app_path = resources.files('gbdraw').joinpath('app.py')
+        
+        # Launch the Streamlit app
+        print("Launching gbdraw GUI...")
+        subprocess.run([sys.executable, "-m", "streamlit", "run", str(app_path)])
+ 
     else:
         print("Oops! It seems like you entered an invalid command.")
         print("Please use 'circular' or 'linear' followed by the respective options.")
         print("For example:")
-        print("  gbdraw circular -i input.gb")
-        print("  gbdraw linear -i input.gb")
+        print("  gbdraw circular --gbk input.gb")
+        print("  gbdraw linear --gbk input.gb")
+        print("  gbdraw gui")        
         sys.exit(1)
 
 
