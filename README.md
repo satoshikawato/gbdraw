@@ -8,7 +8,7 @@
 # gbdraw
 ![gbdraw](https://github.com/satoshikawato/gbdraw/blob/main/examples/gbdraw_social_preview.png)
 `gbdraw` is a command-line/GUI tool designed for creating detailed diagrams of microbial genomes. 
-`gbdraw` accepts GenBank/EMBL/DDBJ-format annotated genomes as input and outputs a visual representation of the genomes in SVG/PNG/PDF/EPS/PS formats.
+`gbdraw` accepts GenBank/DDBJ-format annotated genomes or GFF3+FASTA file pairs as input and outputs a visual representation of the genomes in SVG/PNG/PDF/EPS/PS formats.
 
 **Try gbdraw Web App!** [https://gbdraw.streamlit.app/](https://gbdraw.streamlit.app/)
 
@@ -554,6 +554,7 @@ The core functionality of gbdraw has evolved from [a set of Python scripts](http
 [plot_circular_genome.py](https://github.com/satoshikawato/bio_small_scripts/blob/main/plot_circular_genome.py)
 
 [plot_linear_genome.py](https://github.com/satoshikawato/bio_small_scripts/blob/main/plot_linear_genome.py)
+
 
 
 
