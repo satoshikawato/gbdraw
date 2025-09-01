@@ -2,14 +2,15 @@ from setuptools import setup, find_packages
 
 setup(
     name='gbdraw',
-    version='0.4.0',
+    version='0.5.0',
     packages=find_packages(),
     install_requires=[
         'pandas',
         'svgwrite',
         'biopython',
         'cairosvg',
-        'fonttools'
+        'fonttools',
+        'bcbio-gff'
     ],
     package_data={
         'gbdraw': ['data/color_palettes.toml', 'data/config.toml', 'data/*.ttf']

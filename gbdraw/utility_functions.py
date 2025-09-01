@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Union, Literal
 from .find_font_files import get_text_bbox_size_pixels, get_font_dict
 from .feature_objects import FeatureObject, GeneObject, RepeatObject
-
+from .file_processing import read_filter_list_file 
 
 logger = logging.getLogger(__name__)
 
@@ -162,10 +162,16 @@ def update_config_value(config_dict, path, value):
 
 def modify_config_dict(config_dict, 
                        block_stroke_width=None, 
-                       block_stroke_color=None, 
+                       block_stroke_color=None,
+                       circular_axis_stroke_color=None, 
+                       circular_axis_stroke_width=None,
+                       linear_axis_stroke_color=None,
+                       linear_axis_stroke_width=None, 
                        line_stroke_color=None, 
                        line_stroke_width=None, 
                        gc_stroke_color=None,
+                       linear_definition_font_size=None,
+                       circular_definition_font_size=None,
                        label_font_size=None, 
                        show_gc=None, 
                        show_skew=None, 
@@ -178,6 +184,7 @@ def modify_config_dict(config_dict,
                        allow_inner_labels=None,
                        label_radius_offset=None,
                        label_blacklist=None,
+                       label_whitelist=None,
                        qualifier_priority=None,
                        outer_label_x_radius_offset=None,
                        outer_label_y_radius_offset=None,
@@ -188,10 +195,11 @@ def modify_config_dict(config_dict,
     label_font_size_circular_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['short']
     label_font_size_linear_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['long']
     label_font_size_linear_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['short']
-
+    circular_definition_font_interval = None
+    if circular_definition_font_size is not None:
+        circular_definition_font_interval = float(circular_definition_font_size) + 2
     # Process label_blacklist only if the argument was explicitly passed
     if label_blacklist is not None:
-        # If the argument is an empty string, set an empty list to disable filtering
         if label_blacklist == "":
             update_config_value(config_dict, 'labels.filtering.blacklist_keywords', [])
         else:
@@ -215,8 +223,15 @@ def modify_config_dict(config_dict,
                         "It will be treated as a comma-separated string."
                     )
                 update_config_value(config_dict, 'labels.filtering.blacklist_keywords', [k.strip() for k in label_blacklist.split(',')])
-
-
+    
+    if label_whitelist is not None:
+        if label_whitelist == "":
+             update_config_value(config_dict, 'labels.filtering.whitelist_df', None)
+        else:
+            whitelist_df = read_filter_list_file(label_whitelist)
+            update_config_value(config_dict, 'labels.filtering.whitelist_df', whitelist_df)
+    else:
+        update_config_value(config_dict, 'labels.filtering.whitelist_df', None)
     if qualifier_priority is not None and isinstance(qualifier_priority, DataFrame):
         priority_dict = {
             row['feature_type']: [p.strip() for p in row['priorities'].split(',')]
@@ -227,9 +242,16 @@ def modify_config_dict(config_dict,
     param_paths = {
         'block_stroke_width': 'objects.features.block_stroke_width',
         'block_stroke_color': 'objects.features.block_stroke_color',
+        'circular_axis_stroke_color': 'objects.axis.circular.stroke_color',
+        'circular_axis_stroke_width': 'objects.axis.circular.stroke_width',
         'line_stroke_color': 'objects.features.line_stroke_color',
         'line_stroke_width': 'objects.features.line_stroke_width',
         'gc_stroke_color': 'objects.gc_content.stroke_color',
+        'linear_axis_stroke_color': 'objects.axis.linear.stroke_color',
+        'linear_axis_stroke_width': 'objects.axis.linear.stroke_width',
+        'linear_definition_font_size': 'objects.definition.linear.font_size',
+        'circular_definition_font_size': 'objects.definition.circular.font_size',
+        'circular_definition_font_interval': 'objects.definition.circular.interval',
         'label_font_size_circular_long': 'labels.font_size.long',
         'label_font_size_circular_short': 'labels.font_size.short',
         'label_font_size_linear_long': 'labels.font_size.linear.long',
@@ -317,9 +339,9 @@ def get_label_text(seq_feature, filtering_config) -> str:
     The final label is filtered against a blacklist.
     """
     feature_type = seq_feature.type
+    whitelist_df = filtering_config.get('whitelist_df')
     blacklist = filtering_config.get('blacklist_keywords', [])
     priority_list = None
-
     priority_df = filtering_config.get('qualifier_priority_df')
     if priority_df is not None and not priority_df.empty:
         match = priority_df[priority_df['feature_type'] == feature_type]
@@ -335,26 +357,42 @@ def get_label_text(seq_feature, filtering_config) -> str:
             priority_list = priority_config.get('repeat', ['rpt_family', 'note'])
         else:
             priority_list = priority_config.get('feature', ['note'])
-
-
     text = ''
-
-    for priority in priority_list or []:
-
-        if hasattr(seq_feature, priority) and getattr(seq_feature, priority):
-            potential_text = getattr(seq_feature, priority)
+    for priority_qualifier in priority_list or []:
+        if hasattr(seq_feature, priority_qualifier) and getattr(seq_feature, priority_qualifier):
+            potential_text = getattr(seq_feature, priority_qualifier)
             if isinstance(potential_text, list):
                 potential_text = ', '.join(potential_text)
             
-            is_blacklisted = False
-            for keyword in blacklist:
-                if keyword and keyword.lower() in str(potential_text).lower():
-                    is_blacklisted = True
-                    break
+            potential_text_str = str(potential_text)
 
-            if not is_blacklisted:
-                text = str(potential_text)
+            # Whitelist check
+            if whitelist_df is not None and not whitelist_df.empty:
+                scoped_filter = whitelist_df[
+                    (whitelist_df['feature_type'] == feature_type) &
+                    (whitelist_df['qualifier'] == priority_qualifier)
+                ]
+                if scoped_filter.empty: continue
+
+                is_whitelisted = any(keyword.lower() in potential_text_str.lower() for keyword in scoped_filter['keyword'])
+                
+                if is_whitelisted:
+                    text = potential_text_str
+                    break 
+                else:
+                    continue 
+
+            # Blacklist check
+            elif blacklist:
+                is_blacklisted = any(keyword.lower() in potential_text_str.lower() for keyword in blacklist)
+                if not is_blacklisted:
+                    text = potential_text_str
+                    break
+            
+            else:
+                text = potential_text_str
                 break
+                
     return text
 def get_coordinates_of_longest_segment(feature_object):
     coords: list[List[Union[str, int, bool]]] = feature_object.coordinates

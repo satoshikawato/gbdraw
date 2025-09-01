@@ -379,7 +379,7 @@ def place_labels_on_arc_fc(labels: list[dict],center_x: float,center_y: float,x_
 
     rearranged_labels = []
     labels = sort_labels(labels)
-    current_angle = -70
+    current_angle = -75
     increment = 0.1
 
     
@@ -389,14 +389,14 @@ def place_labels_on_arc_fc(labels: list[dict],center_x: float,center_y: float,x_
             rearranged_labels.append(label)
         else:
             new_angle = (current_angle + increment)
-            if new_angle <-70: 
-                new_angle = -70
-            elif -70 <= new_angle <80:
-                if label['middle'] > (total_length / 2) or i >= len(labels) / 2:
-                    new_angle = 90
+            if new_angle <-75: 
+                new_angle = -75
+            elif -75 <= new_angle <85:
+                if label['middle'] > (total_length / 2) or i >= len(labels) * (2/3):
+                    new_angle = 85
                 else:
                     new_agle = new_angle
-            elif 80 <= new_angle < 90:
+            elif 85 < new_angle < 90:
                 new_angle = 90
             else:
                 new_angle = new_angle
@@ -761,7 +761,7 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
        
        for coordinate in feature_object.coordinates:
            coordinate_strand = get_strand(coordinate.strand)
-           factors = calculate_feature_position_factors_linear(coordinate_strand, strandedness, feature_track_id)
+           factors = calculate_feature_position_factors_linear(coordinate_strand, feature_track_id, strandedness)
            start = int(coordinate.start)
            end = int(coordinate.end)
            segment_length = abs(end - start + 1)

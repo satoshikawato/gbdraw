@@ -42,8 +42,8 @@ You can try `gbdraw` (latest release) on Google Colaboratory without any local i
 ### Bioconda (recommended)
 `gbdraw` is available on the Bioconda channel.
 ```bash
-conda create -n gbdraw-0.3.0 -y -c conda-forge -c bioconda gbdraw=0.3.0
-conda activate gbdraw-0.3.0
+conda create -n gbdraw-0.4.0 -y -c conda-forge -c bioconda gbdraw=0.4.0
+conda activate gbdraw-0.4.0
 ```
 ### Local build (development version)
 To use the latest development version, clone the repository yourself using `git` and build the package locally with [conda-build](https://anaconda.org/anaconda/conda-build).
@@ -101,10 +101,12 @@ Additional Information:
 $ gbdraw circular -h
 usage: gbdraw [-h] -i [INPUT ...] [-o OUTPUT] [-p PALETTE] [-t TABLE] [-d DEFAULT_COLORS] [-n NT] [-w WINDOW]
               [-s STEP] [--species SPECIES] [--strain STRAIN] [-k FEATURES] [--block_stroke_color BLOCK_STROKE_COLOR]
-              [--block_stroke_width BLOCK_STROKE_WIDTH] [--line_stroke_color LINE_STROKE_COLOR]
-              [--line_stroke_width LINE_STROKE_WIDTH] [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--suppress_gc]
-              [--suppress_skew] [-l LEGEND] [--separate_strands] [--track_type TRACK_TYPE] [--show_labels]
-              [--allow_inner_labels] [--label_blacklist LABEL_BLACKLIST] [--qualifier_priority QUALIFIER_PRIORITY]
+              [--block_stroke_width BLOCK_STROKE_WIDTH] [--axis_stroke_color AXIS_STROKE_COLOR]
+              [--axis_stroke_width AXIS_STROKE_WIDTH] [--line_stroke_color LINE_STROKE_COLOR]
+              [--line_stroke_width LINE_STROKE_WIDTH] [--definition_font_size DEFINITION_FONT_SIZE]
+              [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--suppress_gc] [--suppress_skew] [-l LEGEND]
+              [--separate_strands] [--track_type TRACK_TYPE] [--show_labels] [--allow_inner_labels]
+              [--label_blacklist LABEL_BLACKLIST] [--qualifier_priority QUALIFIER_PRIORITY]
               [--outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET]
               [--outer_label_y_radius_offset OUTER_LABEL_Y_RADIUS_OFFSET]
               [--inner_label_x_radius_offset INNER_LABEL_X_RADIUS_OFFSET]
@@ -135,10 +137,16 @@ options:
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
                         Block stroke width (float; default: 0)
+  --axis_stroke_color AXIS_STROKE_COLOR
+                        Axis stroke color (str; default: "gray")
+  --axis_stroke_width AXIS_STROKE_WIDTH
+                        Axis stroke width (float; default: 1.0)
   --line_stroke_color LINE_STROKE_COLOR
                         Line stroke color (str; default: "gray")
   --line_stroke_width LINE_STROKE_WIDTH
                         Line stroke width (float; default: 1.0)
+  --definition_font_size DEFINITION_FONT_SIZE
+                        Definition font size (optional; default: 18)
   --label_font_size LABEL_FONT_SIZE
                         Label font size (optional; default: 16 for short genomes, 8 for long genomes)
   -f, --format FORMAT   Comma-separated list of output file formats (default: png)
@@ -199,10 +207,11 @@ $ gbdraw linear -h
 usage: gbdraw [-h] -i [INPUT ...] [-b [BLAST ...]] [-t TABLE] [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT] [-n NT]
               [-w WINDOW] [-s STEP] [--separate_strands] [--show_gc] [--align_center] [--evalue EVALUE]
               [--bitscore BITSCORE] [--identity IDENTITY] [-k FEATURES] [--block_stroke_color BLOCK_STROKE_COLOR]
-              [--block_stroke_width BLOCK_STROKE_WIDTH] [--line_stroke_color LINE_STROKE_COLOR]
-              [--line_stroke_width LINE_STROKE_WIDTH] [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [-l LEGEND]
-              [--show_labels] [--resolve_overlaps] [--label_blacklist LABEL_BLACKLIST]
-              [--qualifier_priority QUALIFIER_PRIORITY]
+              [--block_stroke_width BLOCK_STROKE_WIDTH] [--axis_stroke_color AXIS_STROKE_COLOR]
+              [--axis_stroke_width AXIS_STROKE_WIDTH] [--line_stroke_color LINE_STROKE_COLOR]
+              [--line_stroke_width LINE_STROKE_WIDTH] [--definition_font_size DEFINITION_FONT_SIZE]
+              [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [-l LEGEND] [--show_labels] [--resolve_overlaps]
+              [--label_blacklist LABEL_BLACKLIST] [--qualifier_priority QUALIFIER_PRIORITY]
 
 Generate plot in PNG/PDF/SVG/PS/EPS.
 
@@ -235,10 +244,16 @@ options:
                         Block stroke color (str; default: "black")
   --block_stroke_width BLOCK_STROKE_WIDTH
                         Block stroke width (float; default: 0)
+  --axis_stroke_color AXIS_STROKE_COLOR
+                        Axis stroke color (str; default: "lightgray")
+  --axis_stroke_width AXIS_STROKE_WIDTH
+                        Axis stroke width (float; default: 2.0)
   --line_stroke_color LINE_STROKE_COLOR
                         Line stroke color (str; default: "gray")
   --line_stroke_width LINE_STROKE_WIDTH
                         Line stroke width (float; default: 1.0)
+  --definition_font_size DEFINITION_FONT_SIZE
+                        Definition font size (optional; default: 10)
   --label_font_size LABEL_FONT_SIZE
                         Label font size (optional; default: 16 for short genomes, 5 for long genomes)
   -f, --format FORMAT   Comma-separated list of output file formats (default: png)
@@ -360,8 +375,6 @@ tblastx -query MellatMJNV.fasta -subject MeenMJNV.fasta -outfmt 7 -out MellatMJN
 tblastx -query MeenMJNV.fasta -subject MejoMJNV.fasta -outfmt 7 -out MeenMJNV.MejoMJNV.tblastx.out 
 
 # gbdraw
-
-# gbdraw
 gbdraw linear \
 -i \
 ./in_gbk/MjeNMV.gb \
@@ -395,7 +408,12 @@ gbdraw linear \
 ![majaniviruses](https://github.com/satoshikawato/gbdraw/blob/main/examples/majani.svg)
 
 ### Feature labels
-
+`gbdraw` can draw feature labels. By default, most genic features have the value of `product` qualifer as the label text.
+| feature type | priority of qualifiers used for the label |
+| ------ | ------- |
+| 'CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'gene' | 'product', 'gene', 'note' |
+| repeat_region |'rpt_family', 'note'|
+| other features | note |
 ```bash
 gbdraw circular -i AP027280.gb -f svg --block_stroke_width 1 --block_stroke_color gray --track_type spreadout --show_labels
 ```
@@ -406,12 +424,68 @@ gbdraw circular -i NC_012920.gb -f svg --block_stroke_width 2 --block_stroke_col
 ![HsmtDMA](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920.svg)
 
 #### Label size adjustment
-
+The font size of the Label text can be adjusted via `--label_font_size` option.
 #### Label text blacklist 
+You can selectively hide some labels via `--label_blacklist` option. For example, supressing `hypothetical protein` and other less-informative labels reduces label redundancy and makes it easier to visualize larger genomes without layout issues.
+`--label_blacklist` accepts comma-separated keywords or path to a file containing single keyword per line.
+```bash
+gbdraw circular -i AP027280.gb \
+-f svg --block_stroke_width 1 \
+--track_type middle \
+--show_labels \
+--label_blacklist hypothetical \
+--outer_label_x_radius_offset 0.95 \
+--outer_label_y_radius_offset 0.95 \
+-o AP027280_middle_blacklist_ox0.95_oy0.95
+```
+![AP027280_middle_blacklist_ox0.95_oy0.95](https://github.com/satoshikawato/gbdraw/blob/main/examples/AP027280_middle_blacklist_ox0.95_oy0.95.svg)
+
+```bash
+gbdraw circular \
+-i AP027078.gb \
+-f svg \
+--track_type middle \
+--separate_strands \
+--show_labels \
+--label_font_size 4 \
+--label_blacklist hypothetical \
+--outer_label_y_radius_offset 1.05 \
+-o AP027078_middle_separate_strands_show_labels_label_blacklist_oy1.05
+```
+![AP027078_middle_separate_strands_show_labels_label_blacklist_oy1.05](https://github.com/satoshikawato/gbdraw/blob/main/examples/AP027078_middle_separate_strands_show_labels_label_blacklist_oy1.05.svg)
+
+#### Feature qualifier priority
+The following `qualifier_priority.tsv` designated by `--qualifier_priority` opton specifies which qualifier should be used for the label text of a given feature type. Other features remain the same as default:
+
+```modified_default_colors.tsv
+CDS gene
+```
+| feature type | qualifier |
+| ------ | ------- |
+| CDS | gene |
+
+```bash
+gbdraw circular \
+-i NC_012920.gb \
+-f svg --track_type middle \
+--species "<i>Homo sapiens</i>" \
+--block_stroke_width 2 \
+--axis_stroke_width 5 \
+--allow_inner_labels \
+--show_labels \
+--qualifier_priority qualifier_priority.tsv \
+-o NC_012920_middle_qualifier_priority_inner_axis5_def28_italic \
+--definition_font_size 28
+```
+![NC_012920_middle_qualifier_priority_inner_axis5_def28_italic](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920_middle_qualifier_priority_inner_axis5_def28_italic.svg)
 
 ## Planned features
-- Multiple tracks to visualize overlapping features (planned; overlapping genes, transcript isoforms etc.)
-
+- Feature label whitelist (display labels only for specified features)
+- GFF3 support (will require additonal dependencies; GC content/skew will not be displayed unless the sequence is included in the GFF3 file or is provided separately as a FASTA file; species/strain must be explicitly designated by the user)
+- PAF/MAF support (pairwise matches) 
+- Caching (particularly relevant for the webapp; unsure how to impelement)
+- Feature overlap resolution (overlapping genes, transcript isoforms etc.;unsure how to impelment mutiple tracks with label overlap resolution)
+- Custom tracks (read depth, motifs, etc.)
 ## Known issues
 - **Trans-introns** are not currently visualized.
 - **Mixed-format text** (e.g., combining italic and block elements like `<i>Ca.</i> Tyloplasma litorale`) cannot be reliably converted from SVG to PDF/PNG/EPS/PS.  
@@ -453,4 +527,7 @@ The core functionality of gbdraw has evolved from [a set of Python scripts](http
 [plot_circular_genome.py](https://github.com/satoshikawato/bio_small_scripts/blob/main/plot_circular_genome.py)
 
 [plot_linear_genome.py](https://github.com/satoshikawato/bio_small_scripts/blob/main/plot_linear_genome.py)
+
+
+
 

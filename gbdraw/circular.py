@@ -7,7 +7,7 @@ import logging
 from typing import Optional
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
-from .file_processing import load_gbks, load_default_colors, read_color_table, load_config_toml, parse_formats, read_qualifier_priority_file
+from .file_processing import load_gbks, load_gff_fasta, load_default_colors, read_color_table, load_config_toml, parse_formats, read_qualifier_priority_file
 from .circular_diagram_components import plot_circular_diagram
 from .data_processing import skew_df
 from .canvas_generator import CircularCanvasConfigurator
@@ -38,11 +38,28 @@ def _get_args(args) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description='Generate genome diagrams in PNG/PDF/SVG/PS/EPS. Diagrams for multiple entries are saved separately.')
     parser.add_argument(
-        '-i',
-        '--input',
-        help='Genbank/DDBJ flatfile (required)',
+        "--gbk",
+        metavar="GBK_FILE",
+        help='Genbank/DDBJ flatfile',
         type=str,
-        required=True,
+        nargs='*')
+    parser.add_argument(
+        '-i', '--input',
+        dest='gbk',  
+        help=argparse.SUPPRESS,
+        type=str,
+        nargs='*')
+    parser.add_argument(
+        "--gff",
+        metavar="GFF3_FILE",
+        help="GFF3 file (instead of --gbk; --fasta is required)",
+        type=str,
+        nargs='*')
+    parser.add_argument(
+        "--fasta",
+        metavar="FASTA_FILE",
+        help="FASTA file (required with --gff)",
+        type=str,
         nargs='*')
     parser.add_argument(
         '-o',
@@ -111,6 +128,16 @@ def _get_args(args) -> argparse.Namespace:
         type=float,
         default=0)
     parser.add_argument(
+        '--axis_stroke_color',
+        help='Axis stroke color (str; default: "gray")',
+        type=str,
+        default="gray")
+    parser.add_argument(
+        '--axis_stroke_width',
+        help='Axis stroke width (float; default: 1.0)',
+        type=float,
+        default=1.0)
+    parser.add_argument(
         '--line_stroke_color',
         help='Line stroke color (str; default: "gray")',
         type=str,
@@ -120,6 +147,10 @@ def _get_args(args) -> argparse.Namespace:
         help='Line stroke width (float; default: 1.0)',
         type=float,
         default=1.0)
+    parser.add_argument(
+        '--definition_font_size',
+        help='Definition font size (optional; default: 18)',
+        type=float)
     parser.add_argument(
         '--label_font_size',
         help='Label font size (optional; default: 16 for short genomes, 8 for long genomes)',
@@ -161,10 +192,15 @@ def _get_args(args) -> argparse.Namespace:
         '--allow_inner_labels',
         help='Place labels inside the circle (default: False). If enabled, labels are placed both inside and outside the circle, and gc and skew tracks are not shown.',
         action='store_true')
-
+    label_list_group = parser.add_mutually_exclusive_group()
+    label_list_group.add_argument(
+        '--label_whitelist',
+        help='path to a file for label whitelisting (optional); mutually exclusive with --label_blacklist',
+        type=str,
+        default="")
     parser.add_argument(
         '--label_blacklist',
-        help='Comma-separated keywords or path to a file for label blacklisting (optional)',
+        help='Comma-separated keywords or path to a file for label blacklisting (optional); mutually exclusive with --label_whitelist',
         type=str,
         default="")
         
@@ -194,9 +230,25 @@ def _get_args(args) -> argparse.Namespace:
         help='Inner label y-radius offset factor (float; default from config)',
         type=float)
     args = parser.parse_args(args)
+    if args.gbk and (args.gff or args.fasta):
+        parser.error("Error: --gbk cannot be used with --gff or --fasta.")
+    
+    # Check if both --gff and --fasta are provided together
+    if args.gff and not args.fasta:
+        parser.error("Error: --gff requires --fasta.")
+    
+    if args.fasta and not args.gff:
+        parser.error("Error: --fasta requires --gff.")
+        
+    # Ensure that either --gbk or both --gff and --fasta are provided
+    if not args.gbk and not (args.gff and args.fasta):
+        parser.error("Error: Either --gbk or both --gff and --fasta must be provided.")
+    if args.label_whitelist and args.label_blacklist:
+        parser.error("Error: --label_whitelist and --label_blacklist are mutually exclusive.")
     return args
 
 
+    
 def circular_main(cmd_args) -> None:
     """
     Main function for generating circular genome diagrams.
@@ -216,7 +268,9 @@ def circular_main(cmd_args) -> None:
     - Generating output files in specified formats.
     """
     args: argparse.Namespace = _get_args(cmd_args)
-    input_file: str = args.input
+    if '-i' in cmd_args or '--input' in cmd_args:
+        logger.warning(
+            "WARNING: The -i/--input option is deprecated and will be removed in a future version. Please use --gbk instead.")    
     output_prefix = args.output
     dinucleotide: str = args.nt
     window: int = args.window
@@ -226,25 +280,46 @@ def circular_main(cmd_args) -> None:
     species: str = args.species
     strain: str = args.strain
     legend: str = args.legend
+    definition_font_size: Optional[float] = args.definition_font_size
     label_font_size: Optional[float] = args.label_font_size
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
     show_labels: bool = args.show_labels
     allow_inner_labels: bool = args.allow_inner_labels
+    label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
+    # Unified record loading at the beginning
+    print(args.gff, args.fasta)
+    if args.gbk:
+        gb_records = load_gbks(args.gbk, "circular")
+    elif args.gff and args.fasta:
+        gb_records = load_gff_fasta(args.gff, args.fasta, "circular", selected_features_set)
+    else:
+        # This case should not be reached due to arg validation
+        logger.error("Invalid input file configuration.")
+        sys.exit(1)
+
     outer_label_x_radius_offset: Optional[float] = args.outer_label_x_radius_offset
     outer_label_y_radius_offset: Optional[float] = args.outer_label_y_radius_offset
     inner_label_x_radius_offset: Optional[float] = args.inner_label_x_radius_offset
     inner_label_y_radius_offset: Optional[float] = args.inner_label_y_radius_offset
-
     if allow_inner_labels and not show_labels:
         show_labels = True  # If inner labels are allowed, labels must be shown
         logger.warning(
             "WARNING: Inner labels are allowed, but labels are not shown. Enabling labels.")
+    if allow_inner_labels and not (suppress_gc and suppress_skew):
+
+        suppress_gc = True 
+        suppress_skew = True
+        logger.warning(
+            "WARNING: Inner labels are allowed, but GC and skew tracks are not suppressed. Suppressing GC and skew tracks.")  # 
+
     user_defined_default_colors: str = args.default_colors
     block_stroke_color: str = args.block_stroke_color
     block_stroke_width: str = args.block_stroke_width
+    axis_stroke_color: str = args.axis_stroke_color
+    axis_stroke_width: str = args.axis_stroke_width
     line_stroke_color: str = args.line_stroke_color
     line_stroke_width: str = args.line_stroke_width   
     track_type: str = args.track_type
@@ -267,7 +342,9 @@ def circular_main(cmd_args) -> None:
     config_dict = modify_config_dict(
         config_dict, 
         block_stroke_color=block_stroke_color, 
-        block_stroke_width=block_stroke_width, 
+        block_stroke_width=block_stroke_width,
+        circular_axis_stroke_color=axis_stroke_color, 
+        circular_axis_stroke_width=axis_stroke_width, 
         line_stroke_color=line_stroke_color, 
         line_stroke_width=line_stroke_width, 
         show_labels=show_labels, 
@@ -275,9 +352,13 @@ def circular_main(cmd_args) -> None:
         strandedness=strandedness, 
         show_gc=show_gc, 
         show_skew=show_skew, 
-        allow_inner_labels=allow_inner_labels, 
+        allow_inner_labels=allow_inner_labels,
+        circular_definition_font_size=definition_font_size,
         label_font_size=label_font_size,
         label_blacklist=label_blacklist,
+
+        label_whitelist=label_whitelist,
+
         outer_label_x_radius_offset=outer_label_x_radius_offset,
         outer_label_y_radius_offset=outer_label_y_radius_offset,
         inner_label_x_radius_offset=inner_label_x_radius_offset,
@@ -286,7 +367,6 @@ def circular_main(cmd_args) -> None:
 
     out_formats: list[str] = parse_formats(args.format)
     record_count: int = 0
-    gb_records: list[SeqRecord] = load_gbks(input_file, "circular")
     gc_config = GcContentConfigurator(
         window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
     skew_config = GcSkewConfigurator(
@@ -298,7 +378,7 @@ def circular_main(cmd_args) -> None:
 
     for gb_record in gb_records:
         record_count += 1 
-        accession = str(gb_record.annotations["accessions"][0])  # type: ignore
+        accession = gb_record.id
         outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
         gc_df: DataFrame = skew_df(gb_record, window, step, dinucleotide)
         canvas_config = CircularCanvasConfigurator(

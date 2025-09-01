@@ -121,7 +121,8 @@ class CircularCanvasConfigurator:
             filename=self.output_prefix + ".svg",
             size=(str(self.total_width) + 'px', str(self.total_height) + 'px'),
             viewBox=('0 0 ' + str(self.total_width) +
-                     ' ' + str(self.total_height))
+                     ' ' + str(self.total_height)),
+            debug=False
         )
 
     def get_track_ids(self) -> None:
@@ -288,5 +289,6 @@ class LinearCanvasConfigurator:
             filename=self.output_prefix + ".svg",
             size=(str(self.total_width) + 'px', str(self.total_height) + 'px'),
             viewBox=('0 0 ' + str(self.total_width) +
-                     ' ' + str(self.total_height))
+                     ' ' + str(self.total_height)),
+            debug=False
         )
