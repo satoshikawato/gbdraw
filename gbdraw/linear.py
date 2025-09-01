@@ -204,6 +204,7 @@ def _get_args(args) -> argparse.Namespace:
         '--resolve_overlaps',
         help='Resolve overlaps (experimental; default: False). ',
         action='store_true')
+
     label_list_group = parser.add_mutually_exclusive_group()
     label_list_group.add_argument(
         '--label_whitelist',
@@ -221,7 +222,6 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         default="")
     args = parser.parse_args(args)
-
     if args.gbk and (args.gff or args.fasta):
         parser.error("Error: --gbk cannot be used with --gff or --fasta.")
     if args.gff and not args.fasta:
@@ -232,7 +232,6 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("Error: Either --gbk or both --gff and --fasta must be provided.")
     if args.label_whitelist and args.label_blacklist:
         parser.error("Error: --label_whitelist and --label_blacklist are mutually exclusive.")
-
     return args
 
 

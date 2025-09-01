@@ -48,8 +48,6 @@ def sanitize_filename(filename: str) -> str:
     """
     # 1. Strip path traversal characters
     sanitized = os.path.basename(filename)
-    print(sanitized)
-    
     # 2. Remove illegal characters for most filesystems
     #    (allows letters, numbers, underscore, hyphen, and dot)
     sanitized = re.sub(r'[^a-zA-Z0-9_.-]', '', sanitized)
@@ -305,7 +303,6 @@ if selected_mode == "🔵 Circular":
 
         st.button("➕ Add Row", on_click=add_priority_row, use_container_width=True)
 
-    ########## 変更箇所 ここから ##########
     # Label Content Filtering
     st.markdown("##### Label Content Filtering")
     c_filter_mode = st.radio(
@@ -494,7 +491,6 @@ if selected_mode == "🔵 Circular":
                     f.write(prio_content)
                 circular_args += ["--qualifier_priority", str(save_path)]
 
-        ########## 変更箇所 ここから ##########
         if c_filter_mode == "Blacklist (exclude keywords)":
             selected_blacklist_file = st.session_state.get("c_blacklist_file_manual", "")
             if selected_blacklist_file:
@@ -516,7 +512,6 @@ if selected_mode == "🔵 Circular":
                 with open(save_path, "w", encoding="utf-8") as f:
                     f.write(whitelist_content)
                 circular_args += ["--label_whitelist", str(save_path)]
-        ########## 変更箇所 ここまで ##########
 
         selected_t_color_file = st.session_state.get("c_t_color_manual", "")
         if selected_t_color_file: circular_args += ["-t", st.session_state.uploaded_files[selected_t_color_file]]
@@ -756,7 +751,6 @@ if selected_mode == "📏 Linear":
                 wl_col4.button("➖", key=f"l_wl_remove_{row['id']}", on_click=remove_whitelist_row, args=(row['id'],))
 
         st.button("➕ Add Whitelist Row", on_click=add_whitelist_row, use_container_width=True, key="l_add_wl")
-    ########## 変更箇所 ここまで ##########
     st.markdown("---")
 
 
@@ -898,7 +892,7 @@ if selected_mode == "📏 Linear":
                 with open(save_path, "w", encoding="utf-8") as f:
                     f.write(prio_content)
                 linear_args += ["--qualifier_priority", str(save_path)]
-        
+
         if l_filter_mode == "Blacklist (exclude keywords)":
             selected_blacklist_file = st.session_state.get("l_blacklist_file_manual", "")
             if selected_blacklist_file:
