@@ -429,8 +429,9 @@ class SeqRecordGroup:
         separate_strands = self.canvas_config.strandedness
         resolve_overlaps = self.canvas_config.resolve_overlaps
         label_filtering = self.label_filtering  # type: ignore
-        # type: ignore
-        track_id = str(self.gb_record.annotations["accessions"][0])
+        track_id = self.gb_record.id
+        
+        record_group: Group = Group(id=track_id)
         record_group = Group(id=track_id)
         record_length: int = len(self.gb_record.seq)
         genome_size_normalization_factor: float = record_length / longest_genome
