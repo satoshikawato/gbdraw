@@ -4,6 +4,7 @@
 import subprocess
 import os
 import io
+import re 
 import logging
 import shutil
 import uuid
@@ -39,6 +40,24 @@ FEATURE_KEYS = [
 QUALIFIER_KEYS = ["product", "gene", "note", "rpt_family"]
 
 # --- Helper functions and Session State for Dynamic Priority Input ---
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Strips directory traversal characters and removes characters that are unsafe
+    for filenames.
+    """
+    # 1. Strip path traversal characters
+    sanitized = os.path.basename(filename)
+    
+    # 2. Remove illegal characters for most filesystems
+    #    (allows letters, numbers, underscore, hyphen, and dot)
+    sanitized = re.sub(r'[^a-zA-Z0-9_.-]', '', sanitized)
+    
+    # 3. If the name is empty after sanitizing, provide a default
+    if not sanitized:
+        return "sanitized_output"
+        
+    return sanitized
 
 def add_priority_row():
     """Appends a new empty row to the list in session_state."""
@@ -367,7 +386,7 @@ if selected_mode == "🔵 Circular":
             st.error("Please select an input file.")
             st.stop()
 
-        sanitized_prefix = os.path.basename(c_prefix.strip())
+        sanitized_prefix = sanitize_filename(c_prefix) # Use the new function
         prefix = sanitized_prefix or Path(selected_file_for_prefix).stem
         
         circular_args.extend(["-o", prefix, "-f", c_fmt, "--track_type", c_track_type])
@@ -737,7 +756,7 @@ if selected_mode == "📏 Linear":
             st.error(f"Please provide {num_sequences - 1} comparison file(s) for {num_sequences} sequence files.")
             st.stop()
 
-        sanitized_prefix = os.path.basename(l_prefix.strip())
+        sanitized_prefix = sanitize_filename(l_prefix) # Use the new function
         prefix = sanitized_prefix or "linear"
         output_path = Path(f"{prefix}.{l_fmt}")
         
