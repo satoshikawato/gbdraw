@@ -356,9 +356,7 @@ def circular_main(cmd_args) -> None:
         circular_definition_font_size=definition_font_size,
         label_font_size=label_font_size,
         label_blacklist=label_blacklist,
-
         label_whitelist=label_whitelist,
-
         outer_label_x_radius_offset=outer_label_x_radius_offset,
         outer_label_y_radius_offset=outer_label_y_radius_offset,
         inner_label_x_radius_offset=inner_label_x_radius_offset,
