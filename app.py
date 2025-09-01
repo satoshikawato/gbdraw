@@ -48,14 +48,13 @@ def sanitize_filename(filename: str) -> str:
     """
     # 1. Strip path traversal characters
     sanitized = os.path.basename(filename)
-    
     # 2. Remove illegal characters for most filesystems
     #    (allows letters, numbers, underscore, hyphen, and dot)
     sanitized = re.sub(r'[^a-zA-Z0-9_.-]', '', sanitized)
     
     # 3. If the name is empty after sanitizing, provide a default
     if not sanitized:
-        return "sanitized_output"
+        return ""
         
     return sanitized
 
@@ -73,10 +72,27 @@ def remove_priority_row(row_id):
         row for row in st.session_state.manual_priorities if row['id'] != row_id
     ]
 
+# --- Whitelist Rows Functions ---
+def add_whitelist_row():
+    """Appends a new empty row to the whitelist in session_state."""
+    if st.session_state.manual_whitelist:
+        new_id = max(row['id'] for row in st.session_state.manual_whitelist) + 1
+    else:
+        new_id = 0
+    st.session_state.manual_whitelist.append({'id': new_id, 'feature': 'CDS', 'qualifier': 'product', 'keyword': ''})
+
+def remove_whitelist_row(row_id):
+    """Removes a specific whitelist row by its ID."""
+    st.session_state.manual_whitelist = [
+        row for row in st.session_state.manual_whitelist if row['id'] != row_id
+    ]
+
 # Initialize session state for manual priorities if it doesn't exist.
 # This runs only once per session.
 if 'manual_priorities' not in st.session_state:
     st.session_state.manual_priorities = [{'id': 0, 'feature': 'CDS', 'qualifiers': 'product,gene'}]
+if 'manual_whitelist' not in st.session_state:
+    st.session_state.manual_whitelist = []
 
 
 st.markdown(
@@ -289,18 +305,42 @@ if selected_mode == "🔵 Circular":
 
     # Label Content Filtering
     st.markdown("##### Label Content Filtering")
-    st.info("Select a file with blacklist keywords (one per line) OR enter them manually below. If a file is selected, manual entry is ignored.")
-    create_manual_selectbox(
-        "Blacklist File (optional)",
-        file_options,
-        "c_blacklist_file"
+    c_filter_mode = st.radio(
+        "Select label filtering mode:",
+        ("None", "Blacklist (exclude keywords)", "Whitelist (include keywords)"),
+        key="c_filter_mode",
+        horizontal=True
     )
-    st.text_area(
-        "Or, enter keywords manually (comma-separated):",
-        value="hypothetical, uncharacterized, putative, unknown",
-        help="Features with these keywords in their labels will be hidden.",
-        key="c_blacklist_manual"
-    )
+
+    if c_filter_mode == "Blacklist (exclude keywords)":
+        st.info("Select a file with blacklist keywords (one per line) OR enter them manually below. If a file is selected, manual entry is ignored.")
+        create_manual_selectbox(
+            "Blacklist File (optional)",
+            file_options,
+            "c_blacklist_file"
+        )
+        st.text_area(
+            "Or, enter keywords manually (comma-separated):",
+            value="hypothetical, uncharacterized, putative, unknown",
+            help="Features with these keywords in their labels will be hidden.",
+            key="c_blacklist_manual"
+        )
+    elif c_filter_mode == "Whitelist (include keywords)":
+        st.info("Define rules to ONLY show labels containing specific keywords. For example, show 'CDS' features where the 'product' contains 'DNA polymerase'.")
+        with st.container():
+            wl_col1, wl_col2, wl_col3, _ = st.columns([3, 3, 4, 1])
+            wl_col1.markdown("**Feature Type**")
+            wl_col2.markdown("**Qualifier**")
+            wl_col3.markdown("**Keyword to Include**")
+
+            for row in st.session_state.manual_whitelist:
+                wl_col1, wl_col2, wl_col3, wl_col4 = st.columns([3, 3, 4, 1])
+                row['feature'] = wl_col1.selectbox("Feature", options=FEATURE_KEYS, index=FEATURE_KEYS.index(row['feature']) if row['feature'] in FEATURE_KEYS else 0, key=f"wl_feature_{row['id']}", label_visibility="collapsed")
+                row['qualifier'] = wl_col2.selectbox("Qualifier", options=QUALIFIER_KEYS, index=QUALIFIER_KEYS.index(row['qualifier']) if row['qualifier'] in QUALIFIER_KEYS else 0, key=f"wl_qualifier_{row['id']}", label_visibility="collapsed")
+                row['keyword'] = wl_col3.text_input("Keyword", value=row['keyword'], key=f"wl_keyword_{row['id']}", label_visibility="collapsed")
+                wl_col4.button("➖", key=f"wl_remove_{row['id']}", on_click=remove_whitelist_row, args=(row['id'],))
+
+        st.button("➕ Add Whitelist Row", on_click=add_whitelist_row, use_container_width=True)
     st.markdown("---")
 
     # --- Main Drawing Form ---
@@ -451,14 +491,27 @@ if selected_mode == "🔵 Circular":
                     f.write(prio_content)
                 circular_args += ["--qualifier_priority", str(save_path)]
 
-        selected_blacklist_file = st.session_state.get("c_blacklist_file_manual", "")
-        if selected_blacklist_file:
-            blacklist_path = st.session_state.uploaded_files[selected_blacklist_file]
-            circular_args += ["--label_blacklist", blacklist_path]
-        else:
-            blacklist_keywords = st.session_state.get("c_blacklist_manual", "")
-            if blacklist_keywords:
-                circular_args += ["--label_blacklist", blacklist_keywords]
+        if c_filter_mode == "Blacklist (exclude keywords)":
+            selected_blacklist_file = st.session_state.get("c_blacklist_file_manual", "")
+            if selected_blacklist_file:
+                blacklist_path = st.session_state.uploaded_files[selected_blacklist_file]
+                circular_args += ["--label_blacklist", blacklist_path]
+            else:
+                blacklist_keywords = st.session_state.get("c_blacklist_manual", "")
+                if blacklist_keywords:
+                    circular_args += ["--label_blacklist", blacklist_keywords]
+        elif c_filter_mode == "Whitelist (include keywords)":
+            whitelist_lines = []
+            for row in st.session_state.manual_whitelist:
+                if row['feature'] and row['qualifier'] and row['keyword']:
+                    whitelist_lines.append(f"{row['feature']}\t{row['qualifier']}\t{row['keyword']}")
+            
+            if whitelist_lines:
+                whitelist_content = "\n".join(whitelist_lines)
+                save_path = UPLOAD_DIR / f"label_whitelist_c_{uuid.uuid4().hex}.tsv"
+                with open(save_path, "w", encoding="utf-8") as f:
+                    f.write(whitelist_content)
+                circular_args += ["--label_whitelist", str(save_path)]
 
         selected_t_color_file = st.session_state.get("c_t_color_manual", "")
         if selected_t_color_file: circular_args += ["-t", st.session_state.uploaded_files[selected_t_color_file]]
@@ -662,18 +715,42 @@ if selected_mode == "📏 Linear":
 
     # Label Content Filtering
     st.markdown("##### Label Content Filtering")
-    st.info("Select a file with blacklist keywords (one per line) OR enter them manually below. If a file is selected, manual entry is ignored.")
-    create_manual_selectbox(
-        "Blacklist File (optional)",
-        file_options,
-        "l_blacklist_file"
+    l_filter_mode = st.radio(
+        "Select label filtering mode:",
+        ("None", "Blacklist (exclude keywords)", "Whitelist (include keywords)"),
+        key="l_filter_mode",
+        horizontal=True
     )
-    st.text_area(
-        "Or, enter keywords manually (comma-separated):",
-        value="hypothetical, uncharacterized, putative, unknown",
-        help="Features with these keywords in their labels will be hidden.",
-        key="l_blacklist_manual"
-    )
+
+    if l_filter_mode == "Blacklist (exclude keywords)":
+        st.info("Select a file with blacklist keywords (one per line) OR enter them manually below. If a file is selected, manual entry is ignored.")
+        create_manual_selectbox(
+            "Blacklist File (optional)",
+            file_options,
+            "l_blacklist_file"
+        )
+        st.text_area(
+            "Or, enter keywords manually (comma-separated):",
+            value="hypothetical, uncharacterized, putative, unknown",
+            help="Features with these keywords in their labels will be hidden.",
+            key="l_blacklist_manual"
+        )
+    elif l_filter_mode == "Whitelist (include keywords)":
+        st.info("Define rules to ONLY show labels containing specific keywords. For example, show 'CDS' features where the 'product' contains 'DNA polymerase'.")
+        with st.container():
+            wl_col1, wl_col2, wl_col3, _ = st.columns([3, 3, 4, 1])
+            wl_col1.markdown("**Feature Type**")
+            wl_col2.markdown("**Qualifier**")
+            wl_col3.markdown("**Keyword to Include**")
+
+            for row in st.session_state.manual_whitelist:
+                wl_col1, wl_col2, wl_col3, wl_col4 = st.columns([3, 3, 4, 1])
+                row['feature'] = wl_col1.selectbox("Feature", options=FEATURE_KEYS, index=FEATURE_KEYS.index(row['feature']) if row['feature'] in FEATURE_KEYS else 0, key=f"l_wl_feature_{row['id']}", label_visibility="collapsed")
+                row['qualifier'] = wl_col2.selectbox("Qualifier", options=QUALIFIER_KEYS, index=QUALIFIER_KEYS.index(row['qualifier']) if row['qualifier'] in QUALIFIER_KEYS else 0, key=f"l_wl_qualifier_{row['id']}", label_visibility="collapsed")
+                row['keyword'] = wl_col3.text_input("Keyword", value=row['keyword'], key=f"l_wl_keyword_{row['id']}", label_visibility="collapsed")
+                wl_col4.button("➖", key=f"l_wl_remove_{row['id']}", on_click=remove_whitelist_row, args=(row['id'],))
+
+        st.button("➕ Add Whitelist Row", on_click=add_whitelist_row, use_container_width=True, key="l_add_wl")
     st.markdown("---")
 
 
@@ -815,15 +892,28 @@ if selected_mode == "📏 Linear":
                 with open(save_path, "w", encoding="utf-8") as f:
                     f.write(prio_content)
                 linear_args += ["--qualifier_priority", str(save_path)]
-        
-        selected_blacklist_file = st.session_state.get("l_blacklist_file_manual", "")
-        if selected_blacklist_file:
-            blacklist_path = st.session_state.uploaded_files[selected_blacklist_file]
-            linear_args += ["--label_blacklist", blacklist_path]
-        else:
-            blacklist_keywords = st.session_state.get("l_blacklist_manual", "")
-            if blacklist_keywords:
-                linear_args += ["--label_blacklist", blacklist_keywords]
+
+        if l_filter_mode == "Blacklist (exclude keywords)":
+            selected_blacklist_file = st.session_state.get("l_blacklist_file_manual", "")
+            if selected_blacklist_file:
+                blacklist_path = st.session_state.uploaded_files[selected_blacklist_file]
+                linear_args += ["--label_blacklist", blacklist_path]
+            else:
+                blacklist_keywords = st.session_state.get("l_blacklist_manual", "")
+                if blacklist_keywords:
+                    linear_args += ["--label_blacklist", blacklist_keywords]
+        elif l_filter_mode == "Whitelist (include keywords)":
+            whitelist_lines = []
+            for row in st.session_state.manual_whitelist:
+                if row['feature'] and row['qualifier'] and row['keyword']:
+                    whitelist_lines.append(f"{row['feature']}\t{row['qualifier']}\t{row['keyword']}")
+            
+            if whitelist_lines:
+                whitelist_content = "\n".join(whitelist_lines)
+                save_path = UPLOAD_DIR / f"label_whitelist_l_{uuid.uuid4().hex}.tsv"
+                with open(save_path, "w", encoding="utf-8") as f:
+                    f.write(whitelist_content)
+                linear_args += ["--label_whitelist", str(save_path)]
 
         selected_t_color_file = st.session_state.get("l_t_color_manual", "")
         if selected_t_color_file: linear_args += ["-t", st.session_state.uploaded_files[selected_t_color_file]]
