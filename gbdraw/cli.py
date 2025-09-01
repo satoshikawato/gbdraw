@@ -24,7 +24,6 @@ from .linear import linear_main
 from importlib import resources
 from .version import __version__
 
-
 def print_version() -> None:
     print(f"gbdraw version {__version__}")
 
@@ -107,8 +106,10 @@ def main() -> None:
         
         # Launch the Streamlit app
         print("Launching gbdraw GUI...")
+        print("If the GUI does not open automatically, please open your web browser and navigate to one of the URLs provided below.")
+        print("When you are finished using the GUI, return to this terminal and press Ctrl+C to stop the server.")
         subprocess.run([sys.executable, "-m", "streamlit", "run", str(app_path)])
- 
+        
     else:
         print("Oops! It seems like you entered an invalid command.")
         print("Please use 'circular' or 'linear' followed by the respective options.")
