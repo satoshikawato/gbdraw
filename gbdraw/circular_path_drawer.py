@@ -4,6 +4,7 @@
 import logging
 import sys
 import math
+import numpy as np
 from typing import Literal, Tuple, Dict, Union
 from pandas import DataFrame
 from svgwrite.shapes import Circle
@@ -59,7 +60,7 @@ def generate_circle_path_desc(radius: float, norm_factor: float) -> str:
 
 def generate_circular_gc_content_path_desc(radius: float, record_len: int, gc_df: DataFrame, track_width: float, norm_factor: float) -> str:
     """
-    Generates the SVG path description for circular GC content representation.
+    Generates the SVG path description for circular GC content representation using vectorization.
 
     This function creates a path description that visually represents GC content variation along a circular genome plot.
     The path is adjusted based on the GC content data, radius, track width, and normalization factor.
@@ -75,79 +76,74 @@ def generate_circular_gc_content_path_desc(radius: float, record_len: int, gc_df
         str: A string representing the SVG path description for the GC content.
     """
     norm_radius: float = radius * norm_factor
-    coodinates_list: list[str] = []
-    skew_start_x: float = norm_radius * \
-        math.cos(math.radians(360.0 * (0 / record_len) - 90))
-    skew_start_y: float = norm_radius * \
-        math.sin(math.radians(360.0 * (0 / record_len) - 90))
-    skew_start_position: str = "M{} {}".format(skew_start_x, skew_start_y)
-    coodinates_list.append(skew_start_position)
+    
     column: str = 'GC content'
-    mean = float(gc_df[column].mean())
-    max_diff = float((gc_df[column] - mean).abs().max())
-    for index, row in gc_df.iterrows():
-        value = float(row[column])
-        diff: float = (value - mean)
-        radius_of_coordinate: float = (
-            norm_radius + (0.5 * track_width * (diff / max_diff)))
-        x_corrdinate: float = radius_of_coordinate * \
-            math.cos(math.radians(360.0 * (index / record_len) - 90)
-                     )  # type: ignore
-        y_corrdinate: float = radius_of_coordinate * \
-            math.sin(math.radians(360.0 * (index / record_len) - 90)
-                     )  # type: ignore
-        corrdinate: str = "L{} {}".format(str(x_corrdinate), str(y_corrdinate))
-        coodinates_list.append(corrdinate)
+    mean = gc_df[column].mean()
+    max_diff = (gc_df[column] - mean).abs().max()
 
-    gc_desc: str = "{}".format(''.join(coodinates_list))
+    # --- Vectorized Calculation ---
+    # 1. Calculate the difference for the entire column at once.
+    diff = gc_df[column] - mean
+    
+    # 2. Calculate the radius for all coordinates in one go.
+    # Use np.full for the case where max_diff is zero to avoid division by zero.
+    if max_diff == 0:
+        radius_of_coordinate = np.full(len(gc_df), norm_radius)
+    else:
+        radius_of_coordinate = norm_radius + (0.5 * track_width * (diff / max_diff))
+        
+    # 3. Calculate all angles at once using the DataFrame index.
+    angles_rad = np.radians(360.0 * (gc_df.index / record_len) - 90)
+    
+    # 4. Compute all X and Y coordinates using NumPy's fast trigonometric functions.
+    x_coords = radius_of_coordinate * np.cos(angles_rad)
+    y_coords = radius_of_coordinate * np.sin(angles_rad)
+    # --- End of Vectorized Calculation ---
+
+    # 5. Efficiently construct the SVG path string.
+    # Start with the Move 'M' command at the zero-degree position on the baseline radius.
+    start_x = norm_radius * math.cos(math.radians(-90))
+    start_y = norm_radius * math.sin(math.radians(-90))
+    path_segments = [f"M{start_x} {start_y}"]
+    
+    # Create all Line 'L' commands using a list comprehension and zip.
+    path_segments.extend([f"L{x} {y}" for x, y in zip(x_coords, y_coords)])
+    
+    # Join all segments, add the closing 'z' path command, and append the baseline circle.
+    gc_desc: str = "".join(path_segments)
     gc_desc += "z"
     circle_desc: str = generate_circle_path_desc(radius, norm_factor)
     gc_desc += circle_desc
     return gc_desc
 
-
 def generate_circular_gc_skew_path_desc(radius: float, df: DataFrame, total_len: int, track_width: float, norm_factor: float) -> str:
-    """
-    Generates the SVG path description for circular GC skew representation.
-
-    This function creates a path description that visually represents GC skew variation along a circular genome plot.
-    The path is adjusted based on the GC skew data, radius, track width, and normalization factor.
-
-    Args:
-        radius (float): The radius of the circular plot.
-        df (DataFrame): DataFrame containing GC skew data.
-        total_len (int): The total length of the genomic sequence.
-        track_width (float): The width of the GC skew track.
-        norm_factor (float): The normalization factor to adjust the path.
-
-    Returns:
-        str: A string representing the SVG path description for the GC skew.
-    """
     norm_radius: float = radius * norm_factor
-    skew_desc_list: list[str] = []
-    skew_start_x: float = norm_radius * \
-        math.cos(math.radians(360.0 * (0 / total_len) - 90))
-    skew_start_y: float = norm_radius * \
-        math.sin(math.radians(360.0 * (0 / total_len) - 90))
-    skew_start_position: str = "M{} {}".format(skew_start_x, skew_start_y)
-    skew_desc_list.append(skew_start_position)
+    
     column: str = 'GC skew'
-    mean = float(df[column].mean())
-    max_diff = float((df[column] - mean).abs().max())
-    for index, row in df.iterrows():
-        value = float(row[column])
-        diff: float = (value - mean)
-        radius_of_coordinate: float = (
-            norm_radius + (0.5 * track_width * (diff / max_diff)))
-        x_corrdinate: float = radius_of_coordinate * \
-            math.cos(math.radians(360.0 * (index / total_len) - 90)
-                     )  # type: ignore
-        y_corrdinate: float = radius_of_coordinate * \
-            math.sin(math.radians(360.0 * (index / total_len) - 90)
-                     )  # type: ignore
-        corrdinate: str = "L{} {}".format(str(x_corrdinate), str(y_corrdinate))
-        skew_desc_list.append(corrdinate)
-    skew_desc: str = "{}".format(''.join(skew_desc_list))
+    mean = df[column].mean()
+    max_diff = (df[column] - mean).abs().max()
+
+
+    diff = df[column] - mean
+    if max_diff == 0:
+        radius_of_coordinate = np.full(len(df), norm_radius)
+    else:
+        radius_of_coordinate = norm_radius + (0.5 * track_width * (diff / max_diff))
+
+    angles_rad = np.radians(360.0 * (df.index / total_len) - 90)
+    
+    x_coords = radius_of_coordinate * np.cos(angles_rad)
+    y_coords = radius_of_coordinate * np.sin(angles_rad)
+
+
+    skew_start_x = norm_radius * math.cos(math.radians(-90))
+    skew_start_y = norm_radius * math.sin(math.radians(-90))
+    
+    path_segments = [f"M{skew_start_x} {skew_start_y}"]
+    
+    path_segments.extend([f"L{x} {y}" for x, y in zip(x_coords, y_coords)])
+    
+    skew_desc: str = "".join(path_segments)
     skew_desc += "z"
     circle_desc: str = generate_circle_path_desc(radius, norm_factor)
     skew_desc += circle_desc
