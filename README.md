@@ -510,6 +510,13 @@ gbdraw circular \
 ![NC_012920_middle_qualifier_priority_inner_axis5_def28_italic](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920_middle_qualifier_priority_inner_axis5_def28_italic.svg)
 
 ## Planned features
+### Short-term plans
+- Automatic adjustment of GC content/skew windows and steps (10kb window-1kb step for genomes larger than 1Mb; window size makes a huge difference in PNG/PDF processing time!)
+- Tick label configuration (e.g. per Mb)
+- `--separate_strands` by default (change in args)
+- Legend placement adjustment
+- Feature-wise SVG element grouping (for the ease of manual editing)
+### Long-term plans
 - PAF/MAF support (pairwise matches) 
 - Feature overlap resolution (overlapping genes, transcript isoforms etc.;unsure how to impelment mutiple tracks with label overlap resolution)
 - Custom tracks (read depth, motifs, etc.)
@@ -554,6 +561,7 @@ The core functionality of gbdraw has evolved from [a set of Python scripts](http
 [plot_circular_genome.py](https://github.com/satoshikawato/bio_small_scripts/blob/main/plot_circular_genome.py)
 
 [plot_linear_genome.py](https://github.com/satoshikawato/bio_small_scripts/blob/main/plot_linear_genome.py)
+
 
 
 
