@@ -118,11 +118,10 @@ class CircularCanvasConfigurator:
         Drawing: An SVG Drawing object.
         """
         return Drawing(
-            filename=self.output_prefix + ".svg",
+            filename=self.output_prefix + ".svg", debug=False,
             size=(str(self.total_width) + 'px', str(self.total_height) + 'px'),
             viewBox=('0 0 ' + str(self.total_width) +
                      ' ' + str(self.total_height)),
-            debug=False
         )
 
     def get_track_ids(self) -> None:
@@ -286,9 +285,8 @@ class LinearCanvasConfigurator:
         Drawing: An SVG Drawing object representing the linear canvas.
         """
         return Drawing(
-            filename=self.output_prefix + ".svg",
+            filename=self.output_prefix + ".svg", debug=False,
             size=(str(self.total_width) + 'px', str(self.total_height) + 'px'),
             viewBox=('0 0 ' + str(self.total_width) +
                      ' ' + str(self.total_height)),
-            debug=False
         )
