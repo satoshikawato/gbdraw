@@ -37,7 +37,8 @@ FEATURE_KEYS = [
     "telomere", "tmRNA", "transit_peptide", "tRNA", "unsure", "V_region",
     "V_segment", "variation", "3'UTR", "5'UTR"
 ]
-QUALIFIER_KEYS = ["product", "gene", "note", "rpt_family"]
+QUALIFIER_KEYS = ["allele", "anticodon", "artificial_location", "bound_moiety", "codon_start", "direction", "EC_number", "estimated_length", "exception", "experiment", "frequency", "function", "gap_type", "gene", "gene_synonym", "GO_function", "GO_process",  "inference", "linkage_evidence", "locus_tag", "mobile_element_type", "mod_base", "ncRNA_class", "note", "number","old_locus_tag",  "operon", "PCR_conditions", "product", "protein_id", "pseudo", "pseudogene", "regulatory_class", "replace", "ribosomal_slippage", "rpt_family", "rpt_type", "rpt_unit_seq", "satellite", "tag_peptide", "translation", "transl_except", "transl_table", "trans_splicing"]
+
 
 # --- Helper functions and Session State for Dynamic Priority Input ---
 
@@ -1010,4 +1011,5 @@ st.markdown(
     "Source: [gbdraw](https://github.com/satoshikawato/gbdraw)",
     unsafe_allow_html=True
 )
+
 
