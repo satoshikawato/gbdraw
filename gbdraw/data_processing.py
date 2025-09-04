@@ -2,13 +2,15 @@
 # coding: utf-8
 
 
+import numpy as np
 import pandas as pd
 import random
 import math
 from dataclasses import dataclass
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
-from collections import defaultdict
+from collections import defaultdict, Counter
+
 from Bio.SeqFeature import SimpleLocation
 from pandas import DataFrame
 from typing import Generator, Any, Dict, List, Optional
@@ -20,73 +22,97 @@ from .linear_path_drawer import calculate_feature_position_factors_linear, norma
 
 
 
-def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
+def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> pd.DataFrame:
     """
-    Calculates dinucleotide skew and content in a DNA sequence, returning a DataFrame.
+    Calculates dinucleotide skew and content in a DNA sequence using NumPy vectorization.
 
     Args:
-        record (SeqRecord): BioPython SeqRecord object containing the DNA sequence.
-        window (int): Window size for calculating skew and content.
+        record (SeqRecord): BioPython SeqRecord object.
+        window (int): Window size for calculation.
         step (int): Step size for the sliding window.
         nt (str): Dinucleotide pair for skew calculation (e.g., 'GC').
 
     Returns:
-        DataFrame: A pandas DataFrame containing columns for dinucleotide content,
-                   skew, and cumulative skew, each indexed by sequence position.
-
-    This function calculates the skew and content of a specified dinucleotide pair across
-    a DNA sequence. The skew is calculated for each window of the sequence, and both the
-    cumulative and individual skews are normalized and returned along with the content in a DataFrame.
+        pd.DataFrame: A DataFrame with content, skew, and cumulative skew.
     """
-    nt_list = list(nt)
-    nt_1: str = nt_list[0]
-    nt_2: str = nt_list[1]
-    skew_sum: float = 0
-    skew_dict: dict[int, float] = {}
-    content_dict: dict[int, float] = {}
-    skew_cumulative_dict: dict[int, float] = {}
-    seq: str = record.seq.upper()
-    for start, seq_part in sliding_window(seq, window, step):
-        skew: float = calculate_dinucleotide_skew(seq_part, nt_1, nt_2)
-        dinucleotide_content: float = (seq_part.count(
-            nt_1) + seq_part.count(nt_2)) / len(seq_part)
-        content_dict[start] = dinucleotide_content
-        skew_dict[start] = skew
-        skew_sum = (skew_sum + skew)
-        skew_cumulative_dict[start] = (skew_sum)
-    max_skew_abs: float = abs(max(skew_dict.values(), key=abs))
-    max_skew_cumulative_abs: float = abs(
-        max(skew_cumulative_dict.values(), key=abs))
-    factor: float = (max_skew_abs / max_skew_cumulative_abs)
-    skew_cumulative_dict.update((x, (y * factor))
-                                for x, y in skew_cumulative_dict.items())
-    content_legend: str = "{} content".format(nt)
-    skew_legend: str = "{} skew".format(nt)
-    cumulative_skew_legend: str = "Cumulative {} skew, normalized".format(nt)
-    df = pd.DataFrame({content_legend: pd.Series(content_dict), skew_legend: pd.Series(
-        skew_dict), cumulative_skew_legend: pd.Series(skew_cumulative_dict)})
+    nt1, nt2 = nt[0].upper(), nt[1].upper()
+    seq = np.array(list(record.seq.upper()))
+
+    # Create indices for the start of each window
+    starts = np.arange(0, len(seq), step)
+    # Ensure windows don't go out of bounds (for non-circular)
+    starts = starts[starts + window <= len(seq)]
+
+    # Create a 2D array representing all sliding windows
+    # This is a view, so it's memory-efficient
+    windows = np.lib.stride_tricks.as_strided(
+        seq,
+        shape=(len(starts), window),
+        strides=(seq.strides[0] * step, seq.strides[0])
+    )
+
+    # Vectorized counting of nucleotides in all windows at once
+    nt1_counts = np.sum(windows == nt1, axis=1)
+    nt2_counts = np.sum(windows == nt2, axis=1)
+
+    # Vectorized calculation of content and skew
+    total_counts = nt1_counts + nt2_counts
+    # Avoid division by zero where total_counts is 0
+    content = total_counts / window
+    skew = np.divide(nt1_counts - nt2_counts, total_counts, where=total_counts != 0, out=np.zeros_like(total_counts, dtype=float))
+
+    # Calculate cumulative skew and normalize
+    cumulative_skew = np.cumsum(skew)
+    max_abs_skew = np.max(np.abs(skew))
+    max_abs_cumulative_skew = np.max(np.abs(cumulative_skew))
+
+    if max_abs_cumulative_skew > 0:
+        factor = max_abs_skew / max_abs_cumulative_skew
+        cumulative_skew *= factor
+
+    # Create the final DataFrame
+    df = pd.DataFrame({
+        f"{nt} content": content,
+        f"{nt} skew": skew,
+        f"Cumulative {nt} skew, normalized": cumulative_skew
+    }, index=starts)
+
     return df
 
-
-def calculate_dinucleotide_skew(seq: str, base1: str, base2: str) -> float:
+def calculate_gc_stats(sequence: str) -> dict:
     """
-    Calculate the skew of two nucleotides in a DNA sequence.
-
-    The skew is calculated as (Count(Base1) - Count(Base2)) / (Count(Base1) + Count(Base2)).
-    This metric helps identify biases in the occurrence of specific nucleotides.
+    DNAシーケンスのGC含量とGCスキューを一度のスキャンで効率的に計算します。
 
     Args:
-        seq (str): DNA sequence to analyze.
-        base1 (str): First nucleotide for skew calculation.
-        base2 (str): Second nucleotide for skew calculation.
+        sequence (str): DNAシーケンスの文字列。
 
     Returns:
-        float: Skew value for the two nucleotides in the given sequence.
+        dict: 'gc_percent'と'gc_skew'を含む辞書。
     """
-    base1_count: int = seq.count(base1)
-    base2_count: int = seq.count(base2)
-    skew: float = (base1_count - base2_count) / (base1_count + base2_count)
-    return skew
+    # 一度のスキャンで全塩基の数を数える
+    counts = Counter(sequence.upper())
+    g_count = counts['G']
+    c_count = counts['C']
+
+    # --- GC含量の計算 ---
+    try:
+        gc_percent = round(100 * (g_count + c_count) / len(sequence), 2)
+    except ZeroDivisionError:
+        # シーケンスが空の場合
+        gc_percent = 0.0
+
+    # --- GCスキューの計算 ---
+    total_gc = g_count + c_count
+    try:
+        gc_skew = (g_count - c_count) / total_gc
+    except ZeroDivisionError:
+        # GとCが一つもない場合
+        gc_skew = 0.0
+
+    return {
+        "gc_percent": gc_percent,
+        "gc_skew": gc_skew
+    }
 
 
 def calculate_gc_percent(sequence: str) -> float:
@@ -104,36 +130,6 @@ def calculate_gc_percent(sequence: str) -> float:
     gc_percent: float = round(100 * ((g_count + c_count) / len(sequence)), 2)
     return gc_percent
 
-
-def sliding_window(seq: str, window: int, step: int) -> Generator[tuple[int, str], Any, None]:
-    """
-    Generate a sequence of substrings from a given sequence using a sliding window approach.
-
-    This generator function iterates over a sequence and yields substrings of a specified length (window),
-    moving a certain number of bases each time (step). It is designed to handle circular sequences, so when
-    the window extends beyond the end of the sequence, it wraps around to the beginning.
-
-    Args:
-        seq (str): The sequence to be processed.
-        window (int): The length of the window (substring) to be extracted.
-        step (int): The number of bases to move the window each time.
-
-    Yields:
-        tuple: A tuple containing the start position of the window and the extracted substring.
-
-    For each iteration, the function calculates the end position of the window. If the end extends beyond the
-    sequence length, it wraps around, combining the end of the sequence with the beginning to form a circular
-    sequence. This approach is particularly useful for genomes with circular topology.
-    """
-    for start in range(0, len(seq), step):
-        end: int = start + window
-        if end > len(seq):
-            overhang_length: int = (end - len(seq))
-            # assuming circular sequence
-            out_seq: str = seq[start:len(seq)] + seq[0:overhang_length]
-        else:
-            out_seq = seq[start:end]
-        yield start, out_seq
 
 def prepare_legend_table(gc_config, skew_config, feature_config, features_present):
     legend_table = dict()

@@ -11,7 +11,7 @@ from svgwrite.shapes import Circle, Line
 from .canvas_generator import CircularCanvasConfigurator
 from svgwrite.path import Path
 from svgwrite.text import Text
-from .data_processing import calculate_gc_percent, prepare_label_list
+from .data_processing import prepare_label_list, calculate_gc_stats 
 from .utility_functions import parse_mixed_content_text, determine_length_parameter
 from .create_feature_objects import create_feature_dict
 from .feature_objects import FeatureObject
@@ -282,7 +282,8 @@ class DefinitionGroup:
         """
         record_length: int = len(self.gb_record.seq)
         accession: str = self.gb_record.id
-        gc_percent: float = calculate_gc_percent(self.gb_record.seq)
+        gc_stats: dict = calculate_gc_stats(self.gb_record.seq)
+        gc_percent: float = gc_stats["gc_percent"]
         self.definition_group: Group = DefinitionDrawer(self.config_dict).draw(
             self.definition_group, self.title_x, self.title_y, self.species_parts, self.strain_parts, self.organelle_parts, self.replicon_parts, gc_percent, accession, record_length)
 
