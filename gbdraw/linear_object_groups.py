@@ -13,8 +13,8 @@ from svgwrite.text import Text
 from .canvas_generator import LinearCanvasConfigurator
 from .linear_feature_drawer import FeatureDrawer, GcContentDrawer, LabelDrawer
 from .data_processing import skew_df, prepare_label_list_linear
-from .create_feature_objects import create_feature_dict
-from .utility_functions import create_text_element, normalize_position_linear
+from .create_feature_objects import create_feature_dict, preprocess_color_tables
+from .utility_functions import create_text_element, normalize_position_linear, preprocess_label_filtering
 from .object_configurators import GcContentConfigurator, FeatureDrawingConfigurator
 from .circular_path_drawer import generate_text_path
 # Logging setup
@@ -426,6 +426,7 @@ class SeqRecordGroup:
         longest_genome: int = self.canvas_config.longest_genome
         arrow_length: float = self.canvas_config.arrow_length
         color_table: DataFrame | None = self.feature_config.color_table
+
         separate_strands = self.canvas_config.strandedness
         resolve_overlaps = self.canvas_config.resolve_overlaps
         label_filtering = self.label_filtering  # type: ignore
@@ -438,6 +439,8 @@ class SeqRecordGroup:
         selected_features_set: str = self.feature_config.selected_features_set
         
         default_colors: DataFrame | None = self.feature_config.default_colors
+        label_filtering = preprocess_label_filtering(self.label_filtering)
+        color_table, default_colors = preprocess_color_tables(color_table, default_colors)
         feature_dict: dict = create_feature_dict(self.gb_record, color_table, selected_features_set, default_colors, separate_strands, resolve_overlaps, label_filtering)
         record_group: Group = self.draw_record(feature_dict, record_length, cds_height, alignment_width, genome_size_normalization_factor, separate_strands, arrow_length, record_group)
         return record_group
@@ -630,12 +633,15 @@ class PairWiseMatchGroup:
         return self.match_group
 
 class LegendGroup:
-    def __init__(self, canvas_config, legend_config, legend_table):
+    def __init__(self, config_dict, canvas_config, legend_config, legend_table):
         self.legend_group = Group(id="legend")
+        self.config_dict = config_dict
         self.canvas_config = canvas_config
         self.legend_config = legend_config
         self.legend_table = legend_table
+        self.font_family: str = self.config_dict['objects']['text']['font_family']
         self.add_elements_to_group()
+
     def create_rectangle_path_for_legend(self) -> str:
         # Normalize start and end positions
         normalized_start: float = 0
@@ -652,7 +658,7 @@ class LegendGroup:
     def add_elements_to_group(self):
         count = 0
         path_desc = self.create_rectangle_path_for_legend()
-        font = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+        font = self.font_family
         for key in self.legend_table.keys():
             rect_path = Path(
                 d=path_desc,

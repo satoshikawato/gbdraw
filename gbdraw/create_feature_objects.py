@@ -14,41 +14,46 @@ logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
 
 
-def get_color(feature: SeqFeature, color_table: DataFrame, default_colors: DataFrame) -> str:
+def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -> tuple[dict, dict]:
     """
-    Determines the color for a genomic feature based on a color table and default colors.
-
-    Args:
-        feature (SeqFeature): Genomic feature object containing qualifiers.
-        color_table (DataFrame): Table mapping feature types and qualifiers to specific colors.
-        default_colors (DataFrame): Table containing default colors for feature types.
-
-    Returns:
-        str: Hex color code for the feature.
-
-    This function searches the color table for a color matching the feature's type and qualifiers.
-    If no specific match is found, it uses the default color for the feature's type. A fallback color
-    is returned if the feature type is not in the default color table.
+    Preprocesses color tables to create mappings for feature coloring.
     """
-    # Check each row in color_table against feature's qualifiers
-    if isinstance(color_table, DataFrame):
-        for _, row in color_table.iterrows():
-            if row['feature_type'] != feature.type:
-                continue
-            qualifier_key: str = row['qualifier_key']
-            qualifier_value: str = row['value']
-            if qualifier_key in feature.qualifiers:
-                for value in feature.qualifiers[qualifier_key]:
-                    if re.search(qualifier_value, value, re.IGNORECASE):
-                        return row['color']
+    # Create a mapping for default colors
+    default_color_map = default_colors.set_index('feature_type')['color'].to_dict()
 
-    # Default color if no specific match is found
-    default_color_row = default_colors[default_colors['feature_type']
-                                       == feature.type]
-    if not default_color_row.empty:
-        return default_color_row.iloc[0]['color']
+    # Create a nested dictionary for specific color rules
+    # feature_type -> qualifier_key -> list of (pattern, color)
+    color_map = {}
+    if isinstance(color_table, DataFrame) and not color_table.empty:
+        for row in color_table.itertuples(index=False):
+            # Compile regex pattern for case-insensitive matching
+            pattern = re.compile(row.value, re.IGNORECASE)
+            
+            # Build nested dictionary structure
+            qualifier_rules = color_map.setdefault(row.feature_type, {})
+            rule_list = qualifier_rules.setdefault(row.qualifier_key, [])
+            
+            rule_list.append((pattern, row.color))
+            
+    return color_map, default_color_map
 
-    return "#d3d3d3"  # Fallback color
+def get_color(feature: SeqFeature, color_map: dict, default_color_map: dict) -> str:
+    """
+    Determines the color for a given feature based on its type and qualifiers.
+    """
+    # Check for specific rules first
+    rules_for_feature_type = color_map.get(feature.type)
+    if rules_for_feature_type:
+        for qualifier_key, qualifier_values in feature.qualifiers.items():
+            if qualifier_key in rules_for_feature_type:
+                # Check each pattern for this qualifier
+                for pattern, color in rules_for_feature_type[qualifier_key]:
+                    for value in qualifier_values:
+                        if pattern.search(value):
+                            return color
+
+    # Fallback to default color if no specific rule matched
+    return default_color_map.get(feature.type, "#d3d3d3") # Fallback color
 
 
 def create_repeat_object(repeat_id: str, feature: SeqFeature, color_table: DataFrame, default_colors: DataFrame, genome_length: int, label_filtering) -> RepeatObject:
@@ -337,6 +342,7 @@ def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_f
     separate_strands: bool = separate_strands
     resolve_overlaps: bool = resolve_overlaps
     label_filtering = label_filtering
+    
     for feature in gb_record.features:
         if feature.type not in selected_features_set:
             continue

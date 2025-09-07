@@ -12,8 +12,8 @@ from .canvas_generator import CircularCanvasConfigurator
 from svgwrite.path import Path
 from svgwrite.text import Text
 from .data_processing import calculate_gc_percent, prepare_label_list
-from .utility_functions import parse_mixed_content_text, determine_length_parameter
-from .create_feature_objects import create_feature_dict
+from .utility_functions import parse_mixed_content_text, determine_length_parameter, preprocess_label_filtering
+from .create_feature_objects import create_feature_dict, preprocess_color_tables
 from .feature_objects import FeatureObject
 from .circular_feature_drawer import LabelDrawer, FeatureDrawer, SkewDrawer, GcContentDrawer, DefinitionDrawer
 from .circular_path_drawer import generate_text_path, draw_circle_path, generate_circular_tick_paths, generate_circular_tick_labels
@@ -628,8 +628,10 @@ class SeqRecordGroup:
         selected_features_set: str = self.feature_config.selected_features_set
         color_table: Optional[DataFrame] = self.feature_config.color_table
         default_colors: Optional[DataFrame] = self.feature_config.default_colors
+        label_filtering = preprocess_label_filtering(self.label_filtering)
+        color_table, default_colors = preprocess_color_tables(color_table, default_colors)
         feature_dict: Dict[str, FeatureObject] = create_feature_dict(
-            self.gb_record, color_table, selected_features_set, default_colors, self.strandedness, self.resolve_overlaps, self.label_filtering)
+            self.gb_record, color_table, selected_features_set, default_colors, self.strandedness, self.resolve_overlaps, label_filtering)
         track_id: str = self.gb_record.id
         record_group = Group(id=track_id)
         record_length: int = len(self.gb_record.seq)
