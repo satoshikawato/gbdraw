@@ -14,122 +14,91 @@ logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
 
 
-def get_color(feature: SeqFeature, color_table: DataFrame, default_colors: DataFrame) -> str:
+def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -> tuple[dict, dict]:
     """
-    Determines the color for a genomic feature based on a color table and default colors.
-
-    Args:
-        feature (SeqFeature): Genomic feature object containing qualifiers.
-        color_table (DataFrame): Table mapping feature types and qualifiers to specific colors.
-        default_colors (DataFrame): Table containing default colors for feature types.
-
-    Returns:
-        str: Hex color code for the feature.
-
-    This function searches the color table for a color matching the feature's type and qualifiers.
-    If no specific match is found, it uses the default color for the feature's type. A fallback color
-    is returned if the feature type is not in the default color table.
+    Preprocesses color tables to create mappings for feature coloring.
     """
-    # Check each row in color_table against feature's qualifiers
-    if isinstance(color_table, DataFrame):
-        for _, row in color_table.iterrows():
-            if row['feature_type'] != feature.type:
-                continue
-            qualifier_key: str = row['qualifier_key']
-            qualifier_value: str = row['value']
-            if qualifier_key in feature.qualifiers:
-                for value in feature.qualifiers[qualifier_key]:
-                    if re.search(qualifier_value, value, re.IGNORECASE):
-                        return row['color']
+    # Create a mapping for default colors
+    default_color_map = default_colors.set_index('feature_type')['color'].to_dict()
 
-    # Default color if no specific match is found
-    default_color_row = default_colors[default_colors['feature_type']
-                                       == feature.type]
-    if not default_color_row.empty:
-        return default_color_row.iloc[0]['color']
+    # Create a nested dictionary for specific color rules
+    # feature_type -> qualifier_key -> list of (pattern, color)
+    color_map = {}
+    if isinstance(color_table, DataFrame) and not color_table.empty:
+        for row in color_table.itertuples(index=False):
+            # Compile regex pattern for case-insensitive matching
+            pattern = re.compile(row.value, re.IGNORECASE)
+            
+            # Build nested dictionary structure
+            qualifier_rules = color_map.setdefault(row.feature_type, {})
+            rule_list = qualifier_rules.setdefault(row.qualifier_key, [])
+            
+            rule_list.append((pattern, row.color))
+            
+    return color_map, default_color_map
 
-    return "#d3d3d3"  # Fallback color
+def get_color(feature: SeqFeature, color_map: dict, default_color_map: dict) -> str:
+    """
+    Determines the color for a given feature based on its type and qualifiers.
+    """
+    # Check for specific rules first
+    rules_for_feature_type = color_map.get(feature.type)
+    if rules_for_feature_type:
+        for qualifier_key, qualifier_values in feature.qualifiers.items():
+            if qualifier_key in rules_for_feature_type:
+                # Check each pattern for this qualifier
+                for pattern, color in rules_for_feature_type[qualifier_key]:
+                    for value in qualifier_values:
+                        if pattern.search(value):
+                            return color
+
+    # Fallback to default color if no specific rule matched
+    return default_color_map.get(feature.type, "#d3d3d3") # Fallback color
 
 
 def create_repeat_object(repeat_id: str, feature: SeqFeature, color_table: DataFrame, default_colors: DataFrame, genome_length: int, label_filtering) -> RepeatObject:
     """
     Creates a RepeatObject representing a repeat region in a genome.
-
-    Args:
-        repeat_id (str): Identifier for the repeat region.
-        feature (SeqFeature): BioPython SeqFeature object representing the repeat region.
-        color_table (DataFrame): Table mapping feature types and qualifiers to specific colors.
-        default_colors (DataFrame): Table containing default colors for feature types.
-        genome_length (int): Length of the genome sequence.
-
-    Returns:
-        RepeatObject: An object encapsulating data about the repeat region.
-
-    This function constructs a RepeatObject by extracting and processing information from the feature,
-    including its location, directional status, color, and other properties such as repeat family and type.
     """
     coordinates = feature.location.parts
     is_directional: bool = False
     rpt_family: str = feature.qualifiers.get('rpt_family', ["undefined"])[0]
     rpt_type: str = feature.qualifiers.get('rpt_type', ["undefined"])[0]
-    note: str = feature.qualifiers.get('note', [""])
-    location: list[Tuple[str, str, str, int, int, bool]
-                   ] = get_exon_and_intron_coordinates(coordinates, genome_length)
+    note: str = feature.qualifiers.get('note', [""])[0]
+    location: list[Tuple[str, str, str, int, int, bool]] = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors)
     feature_type = feature.type
     label_text = get_label_text(feature, label_filtering)
 
     repeat_object = RepeatObject(
-        repeat_id, location, is_directional, color, note, rpt_family, rpt_type, label_text, coordinates, feature_type)
+        repeat_id, location, is_directional, color, note, rpt_family, rpt_type, label_text, coordinates, feature_type,
+        qualifiers=feature.qualifiers
+    )
     return repeat_object
 
 
 def create_feature_object(feature_id: str, feature: SeqFeature, color_table: DataFrame, default_colors: DataFrame, genome_length: int, label_filtering) -> FeatureObject:
     """
     Creates a FeatureObject representing a generic genomic feature.
-
-    Args:
-        feature_id (str): Identifier for the feature.
-        feature (SeqFeature): BioPython SeqFeature object representing the genomic feature.
-        color_table (DataFrame): Table mapping feature types and qualifiers to specific colors.
-        default_colors (DataFrame): Table containing default colors for feature types.
-        genome_length (int): Length of the genome sequence.
-
-    Returns:
-        FeatureObject: An object encapsulating data about the genomic feature.
-
-    This function constructs a FeatureObject by extracting information from the feature,
-    including its location, directional status, color, and additional notes.
     """
     coordinates = feature.location.parts
     is_directional: bool = False
-    note: str = feature.qualifiers.get('note', [""])
-    location: list[Tuple[str, str, str, int, int, bool]
-                   ] = get_exon_and_intron_coordinates(coordinates, genome_length)
+    note: str = feature.qualifiers.get('note', [""])[0]
+    location: list[Tuple[str, str, str, int, int, bool]] = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors)
     feature_type = feature.type
     label_text = get_label_text(feature, label_filtering)
+    
     feature_object = FeatureObject(
-        feature_id, location, is_directional, color, note, label_text, coordinates, feature_type)
+        feature_id, location, is_directional, color, note, label_text, coordinates, feature_type,
+        qualifiers=feature.qualifiers
+    )
     return feature_object
 
 
 def create_gene_object(feature_id: str, feature: SeqFeature, color_table: DataFrame, default_colors: DataFrame, genome_length: int, label_filtering) -> GeneObject:
     """
     Creates a GeneObject representing a gene in a genome.
-
-    Args:
-        feature_id (str): Identifier for the gene.
-        feature (SeqFeature): BioPython SeqFeature object representing the gene.
-        color_table (DataFrame): Table mapping feature types and qualifiers to specific colors.
-        default_colors (DataFrame): Table containing default colors for feature types.
-        genome_length (int): Length of the genome sequence.
-
-    Returns:
-        GeneObject: An object encapsulating data about the gene.
-
-    This function constructs a GeneObject by extracting and processing information from the feature,
-    including its location, directional status, color, and other properties such as product and gene biotype.
     """
     is_directional: bool = True
     coordinates: List[SimpleLocation] = feature.location.parts
@@ -141,8 +110,11 @@ def create_gene_object(feature_id: str, feature: SeqFeature, color_table: DataFr
     location: list[Tuple[str, str, str, int, int, bool]] = get_exon_and_intron_coordinates(coordinates, genome_length, is_trans_spliced)
     color: str = get_color(feature, color_table, default_colors)
     label_text = get_label_text(feature, label_filtering)
+    
     gene_object = GeneObject(
-        feature_id, location, is_directional, color, note, product, feature.type, gene, label_text, coordinates, feature_type)
+        feature_id, location, is_directional, color, note, product, feature.type, gene, label_text, coordinates, feature_type,
+        qualifiers=feature.qualifiers
+    )
     return gene_object
 
 
@@ -370,6 +342,7 @@ def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_f
     separate_strands: bool = separate_strands
     resolve_overlaps: bool = resolve_overlaps
     label_filtering = label_filtering
+    
     for feature in gb_record.features:
         if feature.type not in selected_features_set:
             continue

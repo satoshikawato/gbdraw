@@ -14,7 +14,7 @@ from pandas import DataFrame
 from typing import Generator, Any, Dict, List, Optional
 from Bio.SeqRecord import SeqRecord
 from .create_feature_objects import get_strand
-from .utility_functions import calculate_bbox_dimensions, get_label_text , determine_length_parameter, calculate_cds_ratio
+from .utility_functions import calculate_bbox_dimensions, get_label_text , determine_length_parameter, calculate_cds_ratio, preprocess_label_filtering
 from .circular_path_drawer import calculate_feature_position_factors_circular
 from .linear_path_drawer import calculate_feature_position_factors_linear, normalize_position_to_linear_track, generate_text_path
 
@@ -574,6 +574,7 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
     inner_labels = []
     label_list = []
     label_filtering = config_dict['labels']['filtering']
+    label_filtering = preprocess_label_filtering(label_filtering)
     length_threshold = config_dict['labels']['length_threshold']['circular']
     length_param = determine_length_parameter(total_length, length_threshold)
     track_type = config_dict['canvas']['circular']['track_type']

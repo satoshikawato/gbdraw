@@ -4,13 +4,16 @@ import os
 import math
 import logging
 from Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import SeqFeature
 from svgwrite.text import Text
+import pandas as pd
 from pandas import DataFrame
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Union, Literal
 from .find_font_files import get_text_bbox_size_pixels, get_font_dict
 from .feature_objects import FeatureObject, GeneObject, RepeatObject
 from .file_processing import read_filter_list_file 
+
 
 logger = logging.getLogger(__name__)
 
@@ -330,72 +333,59 @@ def edit_available_tracks(available_tracks, bbox_start, bbox_end):
         track_factor = len(available_tracks.keys())
     return available_tracks, track_factor
 
+def preprocess_label_filtering(label_filtering: dict):
+    whitelist_df = label_filtering.get('whitelist_df')
+    if whitelist_df is not None and not whitelist_df.empty:
+        whitelist_map = {}
+        for row in whitelist_df.itertuples(index=False):
+            whitelist_map.setdefault(row.feature_type, {}).setdefault(row.qualifier, set()).add(row.keyword)
+    else:
+        whitelist_map = None
 
-def get_label_text(seq_feature, filtering_config) -> str:
-    """
-    Extracts a label for a feature based on a priority list of qualifiers.
-    The priority is determined first by a user-provided TSV file for the specific feature type.
-    If not specified in the file, it falls back to default priorities defined in config.toml.
-    The final label is filtered against a blacklist.
-    """
-    feature_type = seq_feature.type
-    whitelist_df = filtering_config.get('whitelist_df')
-    blacklist = filtering_config.get('blacklist_keywords', [])
-    
-    priority_list = None
-    priority_df = filtering_config.get('qualifier_priority_df')
+    priority_df = label_filtering.get('qualifier_priority_df')
     if priority_df is not None and not priority_df.empty:
-        match = priority_df[priority_df['feature_type'] == feature_type]
-        if not match.empty:
-            priorities_str = match.iloc[0]['priorities']
-            priority_list = [p.strip() for p in priorities_str.split(',')]
+        priority_map = {}
+        for row in priority_df.itertuples(index=False):
+            priority_map[row.feature_type] = [p.strip() for p in row.priorities.split(',')]
+    else:
+        priority_map = {}
 
-    if priority_list is None:
-        priority_config = filtering_config.get('qualifier_priority', {})
-        if feature_type in ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'gene']:
-            priority_list = priority_config.get('gene', ['product', 'gene', 'note'])
-        elif feature_type == 'repeat_region':
-            priority_list = priority_config.get('repeat', ['rpt_family', 'note'])
-        else:
-            priority_list = priority_config.get('feature', ['note'])
+    label_filtering['whitelist_map'] = whitelist_map
+    label_filtering['priority_map'] = priority_map
+    return label_filtering
 
-    text = ''
-    for priority_qualifier in priority_list or []:
-        if hasattr(seq_feature, priority_qualifier) and getattr(seq_feature, priority_qualifier):
-            potential_text = getattr(seq_feature, priority_qualifier)
-            if isinstance(potential_text, list):
-                potential_text = ', '.join(potential_text)
-            
-            potential_text_str = str(potential_text)
+def get_label_text(feature: SeqFeature, label_filtering: dict) -> str:
+    feature_type = feature.type
+    qualifiers = feature.qualifiers
+    whitelist_map = label_filtering.get('whitelist_map')
+    blacklist = label_filtering.get('blacklist_keywords', [])
+    priority_map = label_filtering.get('priority_map', {})
 
-            # Whitelist check
-            if whitelist_df is not None and not whitelist_df.empty:
-                scoped_filter = whitelist_df[
-                    (whitelist_df['feature_type'] == feature_type) &
-                    (whitelist_df['qualifier'] == priority_qualifier)
-                ]
-                if scoped_filter.empty: continue
-
-                is_whitelisted = any(keyword.lower() in potential_text_str.lower() for keyword in scoped_filter['keyword'])
-                
-                if is_whitelisted:
-                    text = potential_text_str
-                    break 
-                else:
-                    continue 
-
-            # Blacklist check
-            elif blacklist:
-                is_blacklisted = any(keyword.lower() in potential_text_str.lower() for keyword in blacklist)
-                if not is_blacklisted:
-                    text = potential_text_str
-                    break
-            
-            else:
-                text = potential_text_str
+    # --- Step 1: whitelist check ---
+    if whitelist_map:
+        is_eligible = False
+        rules = whitelist_map.get(feature_type, {})
+        for key, values in qualifiers.items():
+            if key in rules and any(v in rules[key] for v in values):
+                is_eligible = True
                 break
-                
-    return text
+        if not is_eligible:
+            return ""
+
+    # --- Step 2: priority-based label extraction ---
+    priority_list = priority_map.get(feature_type, ['product', 'gene', 'locus_tag',
+                                                    'protein_id', 'old_locus_tag', 'note'])
+    final_label = ""
+    for key in priority_list:
+        if key in qualifiers and qualifiers[key]:
+            final_label = qualifiers[key][0]
+            break
+
+    # --- Step 3: blacklist fallback ---
+    if not whitelist_map and any(bl in final_label.lower() for bl in blacklist):
+        return ""
+
+    return final_label
 
 def get_coordinates_of_longest_segment(feature_object):
     coords: list[List[Union[str, int, bool]]] = feature_object.coordinates
