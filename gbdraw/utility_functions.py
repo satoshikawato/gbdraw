@@ -333,66 +333,57 @@ def edit_available_tracks(available_tracks, bbox_start, bbox_end):
         track_factor = len(available_tracks.keys())
     return available_tracks, track_factor
 
+def preprocess_label_filtering(label_filtering: dict):
+    whitelist_df = label_filtering.get('whitelist_df')
+    if whitelist_df is not None and not whitelist_df.empty:
+        whitelist_map = {}
+        for row in whitelist_df.itertuples(index=False):
+            whitelist_map.setdefault(row.feature_type, {}).setdefault(row.qualifier, set()).add(row.keyword)
+    else:
+        whitelist_map = None
+
+    priority_df = label_filtering.get('qualifier_priority_df')
+    if priority_df is not None and not priority_df.empty:
+        priority_map = {}
+        for row in priority_df.itertuples(index=False):
+            priority_map[row.feature_type] = [p.strip() for p in row.priorities.split(',')]
+    else:
+        priority_map = {}
+
+    label_filtering['whitelist_map'] = whitelist_map
+    label_filtering['priority_map'] = priority_map
+    return label_filtering
 
 def get_label_text(feature: SeqFeature, label_filtering: dict) -> str:
-    """
-    Extracts a label by first filtering features with a whitelist, then applying priority rules.
-
-    Corrected Logic:
-    1.  If a whitelist is present, check if the feature is "eligible" for labeling by seeing
-        if it matches AT LEAST ONE rule in the whitelist. If not eligible, return "" immediately.
-    2.  If the feature is eligible (or if no whitelist is provided), determine the qualifier
-        search order using --qualifier_priority or a default list.
-    3.  Find the single highest-priority qualifier that exists on the feature and return its value.
-    4.  The blacklist is only used as a fallback when no whitelist is active.
-    """
     feature_type = feature.type
     qualifiers = feature.qualifiers
-    whitelist_df = label_filtering.get('whitelist_df')
+    whitelist_map = label_filtering.get('whitelist_map')
     blacklist = label_filtering.get('blacklist_keywords', [])
-    priority_df = label_filtering.get('qualifier_priority_df')
+    priority_map = label_filtering.get('priority_map', {})
 
-    # --- Step 1: Filter eligible features using the whitelist (if provided) ---
-    if whitelist_df is not None and not whitelist_df.empty:
+    # --- Step 1: whitelist check ---
+    if whitelist_map:
         is_eligible = False
-        # Iterate through all qualifiers on the feature to see if any match a whitelist rule.
+        rules = whitelist_map.get(feature_type, {})
         for key, values in qualifiers.items():
-            for value in values:
-                is_match = not whitelist_df[
-                    (whitelist_df['feature_type'] == feature_type) &
-                    (whitelist_df['qualifier'] == key) &
-                    (whitelist_df['keyword'] == value)
-                ].empty
-                if is_match:
-                    is_eligible = True
-                    break  # Found a reason to whitelist this feature, no need to check other qualifiers
-            if is_eligible:
+            if key in rules and any(v in rules[key] for v in values):
+                is_eligible = True
                 break
-        
-        # If the feature is not eligible after checking all its qualifiers, it gets no label.
         if not is_eligible:
             return ""
 
-    # --- Step 2: Generate the label text based on priority for eligible features ---
-    priority_list = []
-    if priority_df is not None and not priority_df.empty:
-        match = priority_df[priority_df['feature_type'] == feature_type]
-        if not match.empty:
-            priority_list = [p.strip() for p in match.iloc[0]['priorities'].split(',')]
-
-    if not priority_list:
-        priority_list = ['gene', 'product', 'locus_tag', 'protein_id', 'old_locus_tag', 'note']
-
+    # --- Step 2: priority-based label extraction ---
+    priority_list = priority_map.get(feature_type, ['product', 'gene', 'locus_tag',
+                                                    'protein_id', 'old_locus_tag', 'note'])
     final_label = ""
     for key in priority_list:
-        if key in qualifiers and qualifiers[key][0]:
+        if key in qualifiers and qualifiers[key]:
             final_label = qualifiers[key][0]
-            break  # Found the highest-priority label text
+            break
 
-    # If no whitelist was used, the blacklist is the final check.
-    if whitelist_df is None or whitelist_df.empty:
-        if any(bl_keyword.lower() in final_label.lower() for bl_keyword in blacklist):
-            return ""
+    # --- Step 3: blacklist fallback ---
+    if not whitelist_map and any(bl in final_label.lower() for bl in blacklist):
+        return ""
 
     return final_label
 
