@@ -94,15 +94,13 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-w',
         '--window',
-        help='window size (default: 1000) ',
-        type=int,
-        default="1000")
+        help='window size (optional; default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb)',
+        type=int)
     parser.add_argument(
         '-s',
         '--step',
-        help='step size (default: 100) ',
-        type=int,
-        default="100")
+        help='step size (optional; default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb)',
+        type=int)
     parser.add_argument(
         '--species',
         help='Species name (optional; e.g. "<i>Escherichia coli</i>", "<i>Ca.</i> Hepatoplasma crinochetorum")',
@@ -273,8 +271,8 @@ def circular_main(cmd_args) -> None:
             "WARNING: The -i/--input option is deprecated and will be removed in a future version. Please use --gbk instead.")    
     output_prefix = args.output
     dinucleotide: str = args.nt
-    window: int = args.window
-    step: int = args.step
+    manual_window: int = args.window
+    manual_step: int = args.step
     color_table_path: str = args.table
     selected_features_set: str = args.features.split(',')
     species: str = args.species
@@ -289,8 +287,6 @@ def circular_main(cmd_args) -> None:
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
-    # Unified record loading at the beginning
-    print(args.gff, args.fasta)
     if args.gbk:
         gb_records = load_gbks(args.gbk, "circular")
     elif args.gff and args.fasta:
@@ -365,18 +361,40 @@ def circular_main(cmd_args) -> None:
 
     out_formats: list[str] = parse_formats(args.format)
     record_count: int = 0
-    gc_config = GcContentConfigurator(
-        window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
-    skew_config = GcSkewConfigurator(
-        window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
+
     feature_config = FeatureDrawingConfigurator(
         color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict)
-    legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config)
-
 
     for gb_record in gb_records:
         record_count += 1 
         accession = gb_record.id
+        seq_length = len(gb_record.seq)
+        if not manual_window:
+            if seq_length < 1000000:
+                window = config_dict['objects']['sliding_window']['default'][0]
+            elif seq_length < 10000000:
+                window = config_dict['objects']['sliding_window']['up1m'][0]
+            else:
+                window = config_dict['objects']['sliding_window']['up10m'][0]
+        else:
+            window = manual_window
+        if not manual_step:
+            if seq_length < 1000000:
+                step = config_dict['objects']['sliding_window']['default'][1]
+            elif seq_length < 10000000:
+                step = config_dict['objects']['sliding_window']['up1m'][1]
+            else:
+                step = config_dict['objects']['sliding_window']['up10m'][1]
+        else:
+            step = manual_step
+
+        gc_config = GcContentConfigurator(
+            window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
+        skew_config = GcSkewConfigurator(
+            window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
+
+        legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config)
+
         outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
         gc_df: DataFrame = skew_df(gb_record, window, step, dinucleotide)
         canvas_config = CircularCanvasConfigurator(

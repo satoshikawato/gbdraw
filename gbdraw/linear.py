@@ -107,15 +107,13 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-w',
         '--window',
-        help='window size (default: 1000) ',
-        type=int,
-        default="1000")
+        help='window size (optional; default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb)',
+        type=int)
     parser.add_argument(
         '-s',
         '--step',
-        help='step size (default: 100) ',
-        type=int,
-        default="100")
+        help='step size (optional; default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb)',
+        type=int)
     parser.add_argument(
         '--separate_strands',
         help='separate forward and reverse strands (default: False). Features of undefined strands are shown on the forward strand.',
@@ -268,8 +266,8 @@ def linear_main(cmd_args) -> None:
     resolve_overlaps: bool = args.resolve_overlaps
     dinucleotide: str = args.nt
     show_gc: bool = args.show_gc
-    window: int = args.window
-    step: int = args.step
+    manual_window: int = args.window
+    manual_step: int = args.step
     align_center: bool = args.align_center
     evalue: float = args.evalue
     legend: str = args.legend
@@ -335,6 +333,24 @@ def linear_main(cmd_args) -> None:
     sequence_length_dict: dict[str,
                                int] = create_dict_for_sequence_lengths(records)
     longest_genome: int = max(sequence_length_dict.values())
+    if not manual_window:
+        if longest_genome < 1000000:
+            window = config_dict['objects']['sliding_window']['default'][0]
+        elif longest_genome < 10000000:
+            window = config_dict['objects']['sliding_window']['up1m'][0]
+        else:
+            window = config_dict['objects']['sliding_window']['up10m'][0]
+    else:
+        window = manual_window
+    if not manual_step:
+        if longest_genome < 1000000:
+            step = config_dict['objects']['sliding_window']['default'][1]
+        elif longest_genome < 10000000:
+            step = config_dict['objects']['sliding_window']['up1m'][1]
+        else:
+            step = config_dict['objects']['sliding_window']['up10m'][1]
+    else:
+        step = manual_step
     num_of_entries: int = len(sequence_length_dict)
     config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness, show_labels=show_labels, resolve_overlaps=resolve_overlaps, label_blacklist=label_blacklist, label_whitelist=label_whitelist)
 

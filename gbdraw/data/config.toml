@@ -283,6 +283,11 @@ fill_opacity = 0.7
 stroke_color = 'none'
 stroke_width = 0
 
+[objects.sliding_window]
+up10m = [100000, 10000]
+up1m = [10000, 1000]
+default = [1000, 100]
+
 [objects.gc_content]
 stroke_color = 'none'
 stroke_width = 0
