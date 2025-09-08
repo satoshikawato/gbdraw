@@ -37,7 +37,7 @@ FEATURE_KEYS = [
     "telomere", "tmRNA", "transit_peptide", "tRNA", "unsure", "V_region",
     "V_segment", "variation", "3'UTR", "5'UTR"
 ]
-QUALIFIER_KEYS = ["product", "gene", "note", "rpt_family"]
+QUALIFIER_KEYS = ["allele", "anticodon", "artificial_location", "bound_moiety", "codon_start", "direction", "EC_number", "estimated_length", "exception", "experiment", "frequency", "function", "gap_type", "gene", "gene_synonym", "inference", "linkage_evidence", "locus_tag", "mobile_element_type", "mod_base", "ncRNA_class", "note", "number", "operon", "PCR_conditions", "product", "pseudo", "pseudogene", "regulatory_class", "replace", "ribosomal_slippage", "rpt_family", "rpt_type", "rpt_unit_seq", "satellite", "tag_peptide", "translation", "transl_except", "transl_table", "trans_splicing"]
 
 # --- Helper functions and Session State for Dynamic Priority Input ---
 
@@ -329,6 +329,12 @@ if selected_mode == "🔵 Circular":
             key="c_blacklist_manual"
         )
     elif c_filter_mode == "Whitelist (include keywords)":
+        st.info("Select a file with label whitelist (one per line) OR enter them manually below. If a file is selected, manual entry is ignored.")        
+        create_manual_selectbox(
+            "Whitelist File (optional)",
+            file_options,
+            "c_whitelist_file"
+        )
         st.info("Define rules to ONLY show labels containing specific keywords. For example, show 'CDS' features where the 'product' contains 'DNA polymerase'.")
         with st.container():
             wl_col1, wl_col2, wl_col3, _ = st.columns([3, 3, 4, 1])
@@ -494,7 +500,6 @@ if selected_mode == "🔵 Circular":
                     f.write(prio_content)
                 circular_args += ["--qualifier_priority", str(save_path)]
 
-        ########## 変更箇所 ここから ##########
         if c_filter_mode == "Blacklist (exclude keywords)":
             selected_blacklist_file = st.session_state.get("c_blacklist_file_manual", "")
             if selected_blacklist_file:
@@ -505,6 +510,10 @@ if selected_mode == "🔵 Circular":
                 if blacklist_keywords:
                     circular_args += ["--label_blacklist", blacklist_keywords]
         elif c_filter_mode == "Whitelist (include keywords)":
+            selected_whitelist_file = st.session_state.get("c_whitelist_file_manual", "")
+            if selected_whitelist_file:
+                whitelist_path = st.session_state.uploaded_files[selected_whitelist_file]
+                circular_args += ["--label_whitelist", whitelist_path]
             whitelist_lines = []
             for row in st.session_state.manual_whitelist:
                 if row['feature'] and row['qualifier'] and row['keyword']:
@@ -516,7 +525,6 @@ if selected_mode == "🔵 Circular":
                 with open(save_path, "w", encoding="utf-8") as f:
                     f.write(whitelist_content)
                 circular_args += ["--label_whitelist", str(save_path)]
-        ########## 変更箇所 ここまで ##########
 
         selected_t_color_file = st.session_state.get("c_t_color_manual", "")
         if selected_t_color_file: circular_args += ["-t", st.session_state.uploaded_files[selected_t_color_file]]
