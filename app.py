@@ -384,8 +384,8 @@ if selected_mode == "🔵 Circular":
             with adv_cols1:
                 c_adv_feat = st.multiselect("Features (-k):", options=FEATURE_KEYS, default=["CDS","rRNA","tRNA","tmRNA","ncRNA","misc_RNA","repeat_region"], key="c_feat", help="Select which features to include in the circular map. Default includes CDS, tRNA, rRNA, and repeat regions.")
                 c_adv_nt = st.text_input("Dinucleotide (--nt):", value="GC", key="c_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'.")
-                c_adv_win = st.number_input("Window size:", value=1000, min_value=1, step=1, key="c_win", help="Window size for GC content and skew calculations. Default is 1000 bp.")
-                c_adv_step = st.number_input("Step size:", value=100, min_value=1, step=1, key="c_step", help="Step size for GC content and skew calculations. Default is 100 bp.")
+                c_adv_win = st.number_input("Window size:", key="c_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb")
+                c_adv_step = st.number_input("Step size:", key="c_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb")
                 c_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="c_b_color", help="Color for block strokes in the circular map.")
                 c_adv_blk_width = st.number_input("Block stroke width:", value=0.0, min_value=0.0, step=0.1, key="c_b_width", help="Width of block strokes in the circular map. Set to 0 for no block strokes.")
                 c_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="c_l_color", help="Color for line strokes in the circular map.")
@@ -469,7 +469,9 @@ if selected_mode == "🔵 Circular":
                 for feature, color in st.session_state.custom_circular_colors.items():
                     f.write(f"{feature}\t{color}\n")
             circular_args += ["-d", str(save_path)]
-        circular_args += ["-k", ",".join(c_adv_feat), "-n", c_adv_nt, "-w", str(c_adv_win), "-s", str(c_adv_step)]
+        circular_args += ["-k", ",".join(c_adv_feat), "-n", c_adv_nt]
+        if c_adv_win: circular_args += ["--window", str(c_adv_win)]
+        if c_adv_step: circular_args += ["--step", str(c_adv_step)]
         circular_args += ["--block_stroke_color", c_adv_blk_color, "--block_stroke_width", str(c_adv_blk_width)]
         circular_args += ["--line_stroke_color", c_adv_line_color, "--line_stroke_width", str(c_adv_line_width)]
         circular_args += ["--axis_stroke_color", c_adv_axis_color, "--axis_stroke_width", str(c_adv_axis_width)]
@@ -789,8 +791,8 @@ if selected_mode == "📏 Linear":
             with adv_cols1:
                 l_adv_feat = st.multiselect("Features (-k):", options=FEATURE_KEYS, default=["CDS","rRNA","tRNA","tmRNA","ncRNA","misc_RNA","repeat_region"], key="l_feat", help="Select which features to include in the linear map. Default includes CDS, tRNA, rRNA, and repeat regions.")
                 l_adv_nt = st.text_input("nt (--nt):", value="GC", key="l_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'.")
-                l_adv_win = st.number_input("Window size:", value=1000, key="l_win", help="Window size for GC content and skew calculations. Default is 1000 bp.")
-                l_adv_step = st.number_input("Step size:", value=100, key="l_step", help="Step size for GC content and skew calculations. Default is 100 bp.")
+                l_adv_win = st.number_input("Window size:", key="l_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb")
+                l_adv_step = st.number_input("Step size:", key="l_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb")
                 l_adv_def_font_size = st.number_input("Definition font size (default: 10 pt):", value=10.0, key="l_def_font_size", help="Font size for the definition text above each sequence.")
                 l_adv_label_font_size = st.number_input("Label font size (default: 5 pt (>=50 kb) or 16 pt (<50 kb):", key="l_label_font_size", help="Font size for feature labels. Default is 5 pt for genomes >= 50 kb, 16 pt for smaller genomes.")
             with adv_cols2:
@@ -879,7 +881,9 @@ if selected_mode == "📏 Linear":
                     f.write(f"{feature}\t{color}\n")
             linear_args += ["-d", str(save_path)]
         
-        linear_args += ["-k", ",".join(l_adv_feat), "-n", l_adv_nt, "-w", str(l_adv_win), "-s", str(l_adv_step)]
+        linear_args += ["-k", ",".join(l_adv_feat), "-n", l_adv_nt]
+        if l_adv_win: linear_args += ["--window", str(l_adv_win)]
+        if l_adv_step: linear_args += ["--step", str(l_adv_step)]
         linear_args += ["--bitscore", str(l_adv_bitscore), "--evalue", l_adv_evalue, "--identity", str(l_adv_identity)]
         linear_args += ["--block_stroke_color", l_adv_blk_color, "--block_stroke_width", str(l_adv_blk_width)]
         linear_args += ["--line_stroke_color", l_adv_line_color, "--line_stroke_width", str(l_adv_line_width)]
