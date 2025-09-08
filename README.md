@@ -516,7 +516,7 @@ CDS	old_locus_tag	sce4133
 CDS	old_locus_tag	sce4132
 ...
 ```
-[NC_010162.whitelist.tsv](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_010162.feature-specific_table.tsv) (part)
+[NC_010162.feature-specific_table.tsv](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_010162.feature-specific_table.tsv) (part)
 ```
 CDS	old_locus_tag	sce4138	#a4d8a7	Chivosazol biosynthesis
 CDS	old_locus_tag	sce4137	#a4d8a7	Chivosazol biosynthesis
@@ -607,6 +607,7 @@ The core functionality of gbdraw has evolved from [a set of Python scripts](http
 [plot_circular_genome.py](https://github.com/satoshikawato/bio_small_scripts/blob/main/plot_circular_genome.py)
 
 [plot_linear_genome.py](https://github.com/satoshikawato/bio_small_scripts/blob/main/plot_linear_genome.py)
+
 
 
 
