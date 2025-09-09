@@ -1,12 +1,12 @@
 package:
   name: gbdraw
-  version: 0.5.0
+  version: 0.5.2
 
 source:
   path: ../
 
 build:
-  number: 1
+  number: 0
   noarch: python
 
 requirements:
