@@ -47,10 +47,10 @@ You can try `gbdraw` (latest release) on Google Colaboratory without any local i
 ### Bioconda (recommended)
 `gbdraw` is available on the Bioconda channel.
 ```bash
-mamba create -n gbdraw-0.5.1 -y -c conda-forge -c bioconda gbdraw=0.5.1
-mamba create -n gbdraw-0.5.1 -c conda-forge -c bioconda gbdraw=0.5.1 streamlit # Install streamlit if you want to use GUI mode. Streamlit can also be installed later
+mamba create -n gbdraw-0.5.2 -y -c conda-forge -c bioconda gbdraw=0.5.2
+mamba create -n gbdraw-0.5.2 -c conda-forge -c bioconda gbdraw=0.5.2 streamlit # Install streamlit if you want to use GUI mode. Streamlit can also be installed later
 
-mamba activate gbdraw-0.5.1
+mamba activate gbdraw-0.5.2
 ```
 ### Local build (development version)
 To use the latest development version, clone the repository yourself using `git` and build the package locally with [conda-build](https://anaconda.org/anaconda/conda-build).
@@ -76,7 +76,7 @@ mamba activate gbdraw
 ## Usage
 ```bash
 $ gbdraw -h
-gbdraw v. 0.5.0: A diagram generator for small genomes
+gbdraw v. 0.5.2: A diagram generator for small genomes
 
 Usage:
   gbdraw <subcommand> [options]
@@ -607,6 +607,7 @@ The core functionality of gbdraw has evolved from [a set of Python scripts](http
 [plot_circular_genome.py](https://github.com/satoshikawato/bio_small_scripts/blob/main/plot_circular_genome.py)
 
 [plot_linear_genome.py](https://github.com/satoshikawato/bio_small_scripts/blob/main/plot_linear_genome.py)
+
 
 
 
