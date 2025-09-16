@@ -1,6 +1,7 @@
 # Tutorials
 
 These tutorials are step-by-step lessons designed to teach core concepts.
+
 ## Customizing Your Plot
 
 **Goal**: Learn the basics of customizing plot appearance, including colors, labels, and output files. We'll build on the plot from the Quickstart.

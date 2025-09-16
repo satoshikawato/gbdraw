@@ -1,6 +1,7 @@
 # Tutorials
 
 These tutorials are step-by-step lessons designed to teach core concepts.
+
 ## Quickstart: Your First Plot in 5 Minutes
 
 **Goal**: This tutorial will guide you from installation to generating your first circular genome plot.
