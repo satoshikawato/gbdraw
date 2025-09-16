@@ -1,5 +1,18 @@
 [Home](../README.md) | [Installation](./INSTALL.md) | [Usage](./USAGE.md) | [Gallery](./GALLERY.md) | [RECIPES](./RECIPES.md) | [Advanced](./ADVANCED.md) | [FAQ](./FAQ.md)
-# Install gbdraw
+# Install `gbdraw`
+
+**Prerequisite:** Make sure you have a [conda](https://docs.conda.io/en/latest/)-compatible package manager—[mamba](https://github.com/mamba-org/mamba) ,[micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html), [miniforge](https://github.com/conda-forge/miniforge) or plain conda—already installed and on your `$PATH`. All steps below assume you run the commands in such an environment.
+
+### Which Installation Method is Right for You?
+`gbdraw` offers several installation methods to suit different needs. Use this table to choose the best option for your use case.
+| Method | Ease of Use | Access to Latest Version | Performance | Customization | Ideal User / Use Case |
+| ------ | ------- | ------- | ------- | ------- | ------- |
+| Streamlit Web App | ★★★★★ | Stable | Medium | Low | Researchers wanting quick visualization with zero installation; educational use. | 
+| Google Colab | ★★★★☆ | Stable | Medium | Medium | Users with a Google account who want to try gbdraw in a cloud environment. | 
+| Bioconda | ★★★☆☆ | Stable | High | High | Bioinformaticians needing a reproducible environment; pipeline integration. | 
+ | Local Build | ★☆☆☆☆ | Development | High | High | Developers wanting to test the latest features or contribute to the project. | 
+ 
+
 ## Dependencies
 - [Python](https://www.python.org/) >=3.10
 - [Biopython](https://biopython.org/)
@@ -10,7 +23,7 @@
 - [Liberation Fonts](https://github.com/liberationfonts/liberation-fonts) (bundled; SIL Open Font_License 1.1)
 
 ## Local Installation
-**Prerequisite:** Make sure you have a [conda](https://docs.conda.io/en/latest/)-compatible package manager—[mamba](https://github.com/mamba-org/mamba) ,[micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html), [miniforge](https://github.com/conda-forge/miniforge) or plain conda—already installed and on your `$PATH`. All steps below assume you run the commands in such an environment.
+
 ### Bioconda (recommended)
 `gbdraw` is available on the Bioconda channel.
 ```bash
