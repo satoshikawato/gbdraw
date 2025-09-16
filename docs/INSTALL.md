@@ -13,27 +13,33 @@
  | Local Build | ★☆☆☆☆ | Development | High | High | Developers wanting to test the latest features or contribute to the project. | 
  
 
-## Dependencies
-- [Python](https://www.python.org/) >=3.10
-- [Biopython](https://biopython.org/)
-- [bcbio-gff](https://github.com/chapmanb/bcbb/tree/master/gff)
-- [pandas](https://pandas.pydata.org/)
-- [svgwrite](https://github.com/mozman/svgwrite)
-- [CairoSVG](https://cairosvg.org/)
-- [Liberation Fonts](https://github.com/liberationfonts/liberation-fonts) (bundled; SIL Open Font_License 1.1)
+## Installation Instructions
 
-## Local Installation
+### gbdraw Web App
+The gbdraw GUI is available as a web app, ready to use without any local installation.
 
-### Bioconda (recommended)
+**Simply visit**: [https://gbdraw.streamlit.app/](https://gbdraw.streamlit.app/)
+
+### Colab Notebook
+`gbdraw` also provides a Google Colaboratory notebook. A Google account is required.
+
+**Open in Colab**: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
+
+### Local installation
+For regular use and integration into analysis pipelines, we recommend installing `gbdraw` into a dedicated conda environment.
+
+#### Bioconda (recommended)
 `gbdraw` is available on the Bioconda channel.
 ```bash
 mamba create -n gbdraw-0.5.1 -y -c conda-forge -c bioconda gbdraw=0.5.1
-mamba create -n gbdraw-0.5.1 -c conda-forge -c bioconda gbdraw=0.5.1 streamlit # Install streamlit if you want to use GUI mode. Streamlit can also be installed later
-
-mamba activate gbdraw-0.5.1
 ```
-### Local build (development version)
-To use the latest development version, clone the repository yourself using `git` and build the package locally with [conda-build](https://anaconda.org/anaconda/conda-build).
+If you also want to use the graphical interface (`gbdraw gui`), install streamlit into the same environment.
+```bash
+mamba create -n gbdraw-0.5.1 -c conda-forge -c bioconda gbdraw=0.5.1 streamlit # Install streamlit if you want to use GUI mode. Streamlit can also be installed later
+```
+
+#### Local build (development version)
+To use the latest development version locally, clone the repository yourself using `git` and build the package locally with [conda-build](https://anaconda.org/anaconda/conda-build).
 ```bash
 # 1. Clone the source
 git clone https://github.com/satoshikawato/gbdraw.git
