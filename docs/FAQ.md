@@ -65,3 +65,17 @@ Then, use it in your command:
 ```bash
 gbdraw circular --show_labels --qualifier_priority priority.tsv ...
 ```
+
+### Q: How can I make the GC content graph smoother/finer?
+A: You have a few options for customizing the GC content tracks:
+**Adjust Smoothness**: Use `--window` and `--step` to change the calculation resolution. A larger `--window` value will result in a smoother graph.
+
+```bash
+gbdraw circular --window 20000 --step 2000 ...
+```
+
+### Q: Can I plot the AT content instead of GC content?
+**A:** Yes. Use the --nt option to switch from the default GC to AT or any other dinucleotide.
+```bash
+gbdraw circular --nt AT ...
+```
