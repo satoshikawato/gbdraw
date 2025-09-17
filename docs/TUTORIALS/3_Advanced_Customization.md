@@ -18,49 +18,60 @@ While `--palette` is great for general styling, you often need to highlight spec
 
 This method replaces the default color for an entire feature type (e.g., make all `CDS` features gray).
 
-1.  **Create a default-override TSV file.** Let's call it `modified_defaults.tsv`. This file has two columns: `FeatureType` and `Color`.
+1.  **Create a default-override TSV file.** Let's call it `modified_default_colors.tsv`. This file has two columns: `feature type` and `color`.
 
     ```tsv
-    # modified_defaults.tsv
     CDS	#d3d3d3
-    rRNA	#a83232
     ```
 
 2.  **Use it in your command.**
+
+    ```bash
+    # MAG: Marsupenaeus japonicus endogenous nimavirus Ginoza2017 (LC738868.1)
+    wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738868.1&rettype=gbwithparts&retmode=text" -O MjeNMV.gbk
+    ```
     ```bash
     gbdraw circular \
-      --gbk your_genome.gbk \
-      -d modified_defaults.tsv \
-      -o plot_custom_defaults.svg
+      --gbk MjeNMV.gbk \
+      --separate_strands \
+      --track middle \
+      -f svg \
+      --block_stroke_width 1 \
+      -d modified_default_colors.tsv \
+      -o MjeNMV_modified_default_colors
     ```
-    In the output, all CDS features will be gray and all rRNA features will be dark red.
+    In the output, all CDS features will be gray.
+    ![MjeNMV_modified_default_colors.svg](../../examples/MjeNMV_modified_default_colors.svg)
+    
 
 ### Method 2: Feature-Specific Colors (`-t`)
 
 This method is more powerful. It colors individual features that match a specific rule, such as a gene's product name. This is perfect for highlighting genes of interest.
 
-1.  **Create a feature-specific color TSV file.** Let's call it `feature_colors.tsv`. The file has 5 columns: `FeatureType`, `Qualifier`, `RegexPattern`, `Color`, and `LegendLabel`.
+1.  **Create a feature-specific color TSV file.** Let's call it `feature_specifc_colors.tsv`. The file has 5 columns: `FeatureType`, `Qualifier`, `RegexPattern`, `Color`, and `LegendLabel`.
 
     ```tsv
-    # feature_colors.tsv
-    # This colors all tyrosine recombinases red and all BIRP proteins yellow.
-    CDS	product	tyrosine recombinase	red	Tyrosine Recombinase
+    CDS	product	wsv.*-like protein	#47b8f8	WSSV-like proteins
     CDS	product	baculoviral IAP repeat-containing protein	yellow	BIRP
+    CDS	product	tyrosine recombinase	red	tyrosine recombinase
     ```
 2.  **Combine both methods for maximum control.** Let's make all CDS features gray *except* for the specific ones we want to highlight.
 
     ```bash
     gbdraw circular \
-      --gbk your_genome.gbk \
-      -d modified_defaults.tsv \
-      -t feature_colors.tsv \
-      --legend right \
-      -o plot_highlighted.svg
+      --gbk MjeNMV.gbk \
+      --separate_strands \
+      --track middle \
+      -f svg \
+      --block_stroke_width 1 \
+      -d modified_default_colors.tsv \
+      -t feature_specifc_colors.tsv \
+      --show_labels \
+      -o MjeNMV_feature_specifc_colors_with_labels
     ```
 The result is a plot where most genes are gray, but specific genes of interest are colored and labeled in the legend.
 
-![Plot with custom colors](https://github.com/satoshikawato/gbdraw/blob/main/examples/LC738868_middle_separate_strands.png)
-
+![MjeNMV_feature_specifc_colors_with_labels](../../examples/MjeNMV_feature_specifc_colors_with_labels.svg)
 ---
 
 ## Part 2: Advanced Label Control
@@ -74,11 +85,21 @@ This is the most common use case: hiding uninformative labels like "hypothetical
 * **As a command-line argument:**
     ```bash
     gbdraw circular \
-      --gbk your_genome.gbk \
+      --gbk MjeNMV.gbk \
+      --separate_strands \
+      --track middle \
+      -f svg \
+      --block_stroke_width 1 \
+      -d modified_default_colors.tsv \
+      -t feature_specifc_colors.tsv \
       --show_labels \
-      --label_blacklist "hypothetical protein,uncharacterized protein" \
-      -o plot_filtered_labels.svg
+      --label_blacklist "hypothetical" \
+      -o MjeNMV_feature_specifc_colors_with_labels_blacklist
     ```
+![MjeNMV_feature_specifc_colors_with_labels_blacklist.svg](../../examples/MjeNMV_feature_specifc_colors_with_labels_blacklist.svg)
+
+
+
 * **As a file:** Create a file `blacklist.txt` with one term per line, then use `--label_blacklist blacklist.txt`.
 
 ### Whitelisting Labels (`--label_whitelist`)
