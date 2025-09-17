@@ -13,7 +13,7 @@
 ### 1. Changing the Color Scheme
 
 `gbdraw` comes with [55 built-in color palettes](../../examples/color_palette_examples.md). You can specify one using the `-p` or `--palette` option. Let's try the [`orchid`](../../examples/color_palette_examples.md#orchid) palette.
-.
+
 ```bash
 gbdraw circular \
   --gbk NC_000913.gbk \
@@ -32,6 +32,8 @@ You can see examples of all available palettes [here](../examples/color_palette_
 
 ### 2. Adding a Title
 Use the `--species` and `--strain` options to add a title to the center of your plot. You can use HTML `<i>` tags for *italics*.
+[!CAUTION]
+Mixed-format text (e.g., combining italic and block elements like <i>Ca.</i> Tyloplasma litorale) cannot be reliably converted from SVG to PDF/PNG/EPS/PS.
 
 ```bash
 gbdraw circular \
