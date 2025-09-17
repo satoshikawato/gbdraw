@@ -108,39 +108,56 @@ This is the opposite: you specify exactly which genes should be labeled, and all
 
 1.  **Create a whitelist TSV file.** The format is `FeatureType`, `Qualifier`, `RegexPattern`.
     ```tsv
-    # whitelist.tsv
-    # Only show labels for these two genes
-    CDS	locus_tag	ABC_00123
-    CDS	gene	dnaA
+    CDS	gene	stx1A
+    CDS	gene	stx1B
+    CDS	gene	stx2A
+    CDS	gene	stx2B
     ```
 2.  **Use it in your command.**
     ```bash
     gbdraw circular \
-      --gbk your_genome.gbk \
+      --gbk O157_H7.gbk \
+      -o O157_H7_stx_whitelist \
       --show_labels \
-      --label_whitelist whitelist.tsv \
-      -o plot_whitelisted.svg
+      --separate_strands \
+      --species "<i>Escherichia coli</i> O157_H7" \
+      --strain "Sakai" \
+      --label_whitelist stx_whitelist.tsv \
+      --label_font_size 16 \
+      -f svg
     ```
+![O157_H7_stx_whitelist.svg](../../examples/O157_H7_stx_whitelist.svg)
 
 ### Changing Label Content (`--qualifier_priority`)
 
 By default, `gbdraw` uses the `product` qualifier for labels. If you prefer to use the `gene` name or `locus_tag`, you can specify a new priority.
 
+
 1.  **Create a priority file.**
+    `qualifier_priority.tsv` specifies the 'gene' qualifier first for CDS features.
     ```tsv
-    # priority.tsv
-    # For CDS features, use the 'gene' qualifier first.
     CDS	gene
     ```
 2.  **Use it in your command.**
     ```bash
     gbdraw circular \
-      --gbk your_genome.gbk \
-      --show_labels \
-      --qualifier_priority priority.tsv \
-      -o plot_gene_labels.svg
+    --gbk HmmtDNA.gbk \
+    -f svg --track_type middle \
+    --species "<i>Homo sapiens</i>" \
+    --block_stroke_width 2 \
+    --axis_stroke_width 5 \
+    --allow_inner_labels \
+    --show_labels \
+    --palette soft_pastels \
+    --definition_font_size 28 \
+    --label_font_size 18 \
+    --qualifier_priority qualifier_priority.tsv \
+    -o HmmtDNA_qualifier_priority_soft_pastels
     ```
-    
+![HmmtDNA_qualifier_priority_soft_pastels.svg](../../examples/HmmtDNA_qualifier_priority_soft_pastels.svg)
+
+
+
 [< Back to the Index of Tutorials](./TUTORIALS.md)
 [< Back to Tutorial 2: Comparative Genomics with BLAST](./2_Comparative_Genomics.md)
 
