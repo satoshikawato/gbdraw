@@ -93,6 +93,10 @@ blastn -query Shigella_flexneri.fasta -subject Shigella_sonnei.fasta -outfmt 7 -
 ```
 > [!IMPORTANT]
 > The order of the `--gbk` and `-b` files must correspond correctly.
+
+> [!TIP]
+> You can filter BLAST ribbons by setting thresholds for E-value (`--evalue`), bitscore (`--bitscore`), or identity (`--identity`).
+
 ```bash
 gbdraw linear \
   --gbk Escherichia_coli.gbk Shigella_dysenteriae.gbk Shigella_flexneri.gbk Shigella_sonnei.gbk \

@@ -7,6 +7,14 @@ Here are answers to some common questions about `gbdraw`.
 
 ---
 
+### Q: Can I generate a plot if I only have a GFF3 file?
+**A:** Yes. You can use a GFF3 file by providing the annotation with `--gff` and the corresponding sequence with `--fasta`.
+```bash
+gbdraw circular --gff my_genome.gff --fasta my_genome.fasta -o my_plot
+```
+### Q: How can I make the GC content graph smoother or more detailed?
+**A:** You can control the graph's resolution with the --window and --step options. A larger window size will produce a smoother plot, while a smaller size will show more detail.
+
 ### Q: My feature labels are overlapping and unreadable. How can I fix this?
 
 **A:** You have several options to deal with label clutter:
