@@ -1,16 +1,14 @@
+[Home](./README.md) | **Installation** | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md)
 # `gbdraw` Installation
 
-[Home](./README.md) | **Installation** | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/) | [Gallery](./GALLERY.md)
-
 `gbdraw` offers several installation methods to suit different needs. Use this table to choose the best option for your use case.
-
 | Method | Ease of Use | Access to Latest Version | Performance | Customization | Ideal User / Use Case |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| **Streamlit Web App** | ★★★★★ | Stable | Medium | Low | Researchers wanting quick visualization with zero installation; educational use. |
-| **Google Colab** | ★★★★☆ | Stable | Medium | Medium | Users with a Google account who want to try `gbdraw` in a cloud environment. |
-| **Bioconda** | ★★★☆☆ | Stable | High | High | Bioinformaticians needing a reproducible environment; pipeline integration. |
-| **Local Build** | ★☆☆☆☆ | Development | High | High | Developers wanting to test the latest features or contribute to the project. |
-
+| ------ | ------- | ------- | ------- | ------- | ------- |
+| Streamlit Web App | ★★★★★ | Development | Medium | High | Researchers wanting quick visualization with zero installation; educational use. | 
+| Google Colab | ★★★★★ | Stable | Medium | Medium | Users with a Google account who want to try gbdraw in a cloud environment. | 
+| Bioconda | ★★★★☆ | Stable | High | High | Bioinformaticians needing a reproducible environment; pipeline integration. | 
+ | Local Build | ★☆☆☆☆ | Development | High | High | Developers wanting to test the latest features or contribute to the project. | 
+ 
 ---
 
 ## 1. Use Without Installation
@@ -23,8 +21,7 @@ The `gbdraw` GUI is available as a web app, ready to use without any local insta
 
 ### Google Colab
 
-If you have a Google account, you can run `gbdraw` on Google Colaboratory.
-
+`gbdraw` also provides a Google Colaboratory notebook, although the functionality is limited. A Google account is required.
 **Open in Colab**: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
 
 ---
@@ -39,7 +36,7 @@ You must have a [conda](https://docs.conda.io/en/latest/)-compatible package man
 
 ### Bioconda (Recommended)
 
-`gbdraw` is available from the Bioconda channel. Creating a dedicated environment prevents dependency conflicts.
+`gbdraw` is available from the Bioconda channel. Creating a dedicated environment prevents dependency conflicts. If you also want to use the graphical interface (`gbdraw gui`), install streamlit into the same environment.
 
 1.  **Create and activate a new conda environment for `gbdraw`.**
     * **For both CLI and GUI:**
@@ -61,7 +58,7 @@ Installation is complete!
 
 ### Build from Source (For Developers)
 
-To use the latest development version, clone the repository and build the package locally.
+To use the latest development version locally, clone the repository yourself using `git` and build the package locally with [conda-build](https://anaconda.org/anaconda/conda-build).
 
 ```bash
 # 1. Clone the source code
@@ -80,3 +77,6 @@ mamba create -n gbdraw-dev -y -c conda-forge -c bioconda -c local gbdraw
 
 # 5. Activate the environment
 conda activate gbdraw-dev
+```
+
+[Home](./README.md) | **Installation** | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md)

@@ -1,6 +1,10 @@
+[Home](../README.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [**Tutorials**](../TUTORIALS/TUTORIALS.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [ABOUT](../ABOUT.md)
+
+[< Back to the Index of Tutorials](./TUTORIALS.md)
+[< Back to Tutorial 2: Comparative Genomics with BLAST](./2_Comparative_Genomics.md)
+
 # Tutorial 3: Advanced Customization
 
-[< Back to Tutorials](./)
 
 **Goal**: Go beyond the basics to gain fine-grained control over plot aesthetics using configuration files for colors and labels.
 
@@ -116,3 +120,8 @@ By default, `gbdraw` uses the `product` qualifier for labels. If you prefer to u
       -o plot_gene_labels.svg
     ```
     
+[< Back to the Index of Tutorials](./TUTORIALS.md)
+[< Back to Tutorial 2: Comparative Genomics with BLAST](./2_Comparative_Genomics.md)
+
+
+[Home](../README.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [**Tutorials**](../TUTORIALS/TUTORIALS.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [ABOUT](../ABOUT.md)

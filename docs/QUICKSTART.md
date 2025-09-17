@@ -1,6 +1,7 @@
-# Quickstart: Your First Plot in 5 Minutes
+[Home](./README.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)
 
-[Home](./README.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/) | [Gallery](./GALLERY.md)
+[< Back to Installation](./INSTALLATION.md)　　　　　　[Go to Tutorials >](./TUTORIALS/TUTORIALS.md)
+# Quickstart: Your First Plot in 5 Minutes
 
 This tutorial will guide you from a fresh installation to generating your first circular genome plot.
 
@@ -10,20 +11,20 @@ Ensure you have `gbdraw` installed locally via one of the methods described on t
 
 ### 2. Get Sample Data
 
-For this tutorial, we will use the GenBank file for *Escherichia coli* K-12. Download and decompress it with the following commands:
+For this tutorial, we will use the GenBank file for [*Escherichia coli* K-12](https://www.ncbi.nlm.nih.gov/nuccore/NC_000913.3/). Download and decompress it with the following commands:
 
 ```bash
-wget [https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/005/845/GCF_000005845.2_ASM584v2/GCF_000005845.2_ASM584v2_genomic.gbff.gz](https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/005/845/GCF_000005845.2_ASM584v2/GCF_000005845.2_ASM584v2_genomic.gbff.gz)
-gunzip GCF_000005845.2_ASM584v2_genomic.gbff.gz
+# Escherichia coli str. K-12 substr. MG1655 (NC_000913.3)
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_000913.3&rettype=gbwithparts&retmode=text" -O NC_000913.gbk
 ```
 
-This will give you the file GCF_000005845.2_ASM584v2_genomic.gbff.
+This will give you the file `NC_000913.gbk`.
 
 
 ### 3. Generate the Plot
 In the same directory as the downloaded file, run the following command:
 ```bash
-gbdraw circular --gbk GCF_000005845.2_ASM584v2_genomic.gbff -o ecoli_k12_plot -f svg
+gbdraw circular --gbk NC_000913.gbk -o ecoli_k12_plot -f svg --separate_strands
 ```
 
 This command tells gbdraw to:
@@ -35,15 +36,23 @@ This command tells gbdraw to:
 - `-o ecoli_k12_plot`: Set the prefix for the output filename.
 
 - `-f svg`: Set the output format to SVG (a scalable vector format).
+- `--separate_strands`: Place forward and reverse-oriented features on different strands.
 
 ### 4. Check Your Output
 
 A new file named `ecoli_k12_plot.svg` will appear in your directory. Open it in a web browser or vector graphics editor (like Inkscape or Illustrator). You should see a complete genome map of *E. coli*!
 
+![ecoli_k12_plot.svg](../examples/ecoli_k12_plot.svg)
+
+
 ### 5. Next Steps
 
 Congratulations on creating your first plot!
 
-To learn how to change colors, add titles, and show labels, continue to [Tutorial 1: Customizing Your Plot](./TUTORIALS.md).
+To learn how to change colors, add titles, and show labels, continue to [Tutorial 1: Customizing Your Plot](./TUTORIALS/1_Customizing_Plots.md).
 
 To see more examples of what `gbdraw` can do, check out the [Gallery](./GALLERY.md).
+
+[< Back to Installation](./INSTALLATION.md)　　　　　　[Go to Tutorials >](./TUTORIALS/TUTORIALS.md)
+
+[Home](./README.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)

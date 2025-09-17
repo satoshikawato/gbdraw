@@ -1,7 +1,11 @@
+[Home](../README.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [**Tutorials**](../TUTORIALS/TUTORIALS.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [ABOUT](../ABOUT.md)
+
+
+[< Back to the Index of Tutorials](./TUTORIALS.md)
+[< Back to Tutorial 1: Customizing Your Plot](./1_Customizing_Plots.md)　　　　　　[Go to Tutorial 3: Advanced Customization >](./3_Advanced_Customization.md) 
+
+
 # Tutorial 2: Comparative Genomics with BLAST
-
-[< Back to Tutorials](./)
-
 **Goal**: Learn how to use `gbdraw linear` to visualize sequence similarity between two or more genomes using BLAST results.
 
 ---
@@ -10,36 +14,35 @@
 
 To create a comparative plot, you need two types of files:
 
-1.  **Genome Files**: Two or more genome annotation files in GenBank (`.gbk`) or GFF3+FASTA format.
-2.  **BLAST Result File**: A file containing the results of a BLAST comparison between the genomes.
+1.  **Genome Files**: Two or more genome annotation files in GenBank or GFF3+FASTA format.
+2.  **BLAST Result File**: A tab- or comma-separated file (`-outfmt 7` or `-outfmt 6`) containing the results of a BLAST comparison between the genomes.
 
 ---
 
 ### 2. BLAST Output Format
 
-This is a critical step. `gbdraw` requires the BLAST output to be in the tabular format with comment lines, specified as **`outfmt 7`**. These comment lines contain the names of the query and subject sequences, which `gbdraw` uses to map the results to the correct genomes.
-
-Let's prepare an example using two Human herpesvirus genomes.
+Let's prepare an example using *Shigella*, the causative agent of bacterial dysentery and is genetically nested within the species *E.coli*.
 
 1.  **Download the sample data (GenBank and FASTA).**
     ```bash
-    # HHV-6A
-    wget "[https://www.ncbi.nlm.nih.gov/sviewer/viewer.fcgi?db=nuccore&dopt=gbwithparts&id=NC_001664.4](https://www.ncbi.nlm.nih.gov/sviewer/viewer.fcgi?db=nuccore&dopt=gbwithparts&id=NC_001664.4)" -O NC_001664.gbk
-    wget "[https://www.ncbi.nlm.nih.gov/sviewer/viewer.fcgi?db=nuccore&dopt=fasta&id=NC_001664.4](https://www.ncbi.nlm.nih.gov/sviewer/viewer.fcgi?db=nuccore&dopt=fasta&id=NC_001664.4)" -O NC_001664.fasta
-    # HHV-6B
-    wget "[https://www.ncbi.nlm.nih.gov/sviewer/viewer.fcgi?db=nuccore&dopt=gbwithparts&id=NC_000898.1](https://www.ncbi.nlm.nih.gov/sviewer/viewer.fcgi?db=nuccore&dopt=gbwithparts&id=NC_000898.1)" -O NC_000898.gbk
-    wget "[https://www.ncbi.nlm.nih.gov/sviewer/viewer.fcgi?db=nuccore&dopt=fasta&id=NC_000898.1](https://www.ncbi.nlm.nih.gov/sviewer/viewer.fcgi?db=nuccore&dopt=fasta&id=NC_000898.1)" -O NC_000898.fasta
+    # Escherichia coli str. K-12 substr. MG1655 (NC_000913.3)
+    wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_000913.3&rettype=gbwithparts&retmode=text" -O Escherichia_coli.gbk
+    wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_000913.3&rettype=fasta&retmode=text" -O Escherichia_coli.fasta
+
+    # Shigella dysenteriae SWHEFF_49 (NZ_CP055055.1)
+    wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NZ_CP055055.1&rettype=gbwithparts&retmode=text" -O Shigella_dysenteriae.gbk
+    wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NZ_CP055055.1&rettype=fasta&retmode=text" -O Shigella_dysenteriae.fasta
     ```
 
 2.  **Run BLAST.**
     ```bash
-    # Create a BLAST database for the subject genome
-    makeblastdb -in NC_000898.fasta -dbtype nucl
+    # Run blastn and save the results in outfmt 7 or 6
+    blastn -query Escherichia_coli.fasta -subject Shigella_dysenteriae.fasta -outfmt 7 -out Escherichia_coli-Shigella_dysenteriae.blastn.out
 
-    # Run blastn and save the results in outfmt 7
-    blastn -query NC_001664.fasta -db NC_000898.fasta -outfmt 7 -out hhv6a_vs_hhv6b.blast
+    # blastn -query Escherichia_coli.fasta -subject Shigella_dysenteriae.fasta -outfmt 6 -out Escherichia_coli-Shigella_dysenteriae.blastn.out
+
     ```
-This creates the `hhv6a_vs_hhv6b.blast` file we need.
+This creates the `Escherichia_coli-Shigella_dysenteriae.blastn.out` file we need.
 
 ---
 
@@ -52,14 +55,16 @@ Now, provide both the GenBank files and the BLAST result file to `gbdraw linear`
 
 ```bash
 gbdraw linear \
-  --gbk NC_001664.gbk NC_000898.gbk \
-  -b hhv6a_vs_hhv6b.blast \
+  --gbk Escherichia_coli.gbk Shigella_dysenteriae.gbk \
+  -b Escherichia_coli-Shigella_dysenteriae.blastn.out \
   --align_center \
-  -o HHV6_comparison \
+  --separate_strands \
+  -o Escherichia_Shigella_pairwise \
   -f svg
 ```
 
-The resulting file, `HHV6_comparison.svg`, will show the two genomes as tracks, with ribbons connecting the regions of sequence similarity identified by BLAST.
+The resulting file, `Escherichia_Shigella_pair.svg`, will show the two genomes as tracks, with ribbons connecting the regions of sequence similarity identified by BLAST.
+![Escherichia_Shigella_pair.svg](../../examples/Escherichia_Shigella_pair.svg)
 
 ### 4. Comparing Multiple Genomes
 You can compare more than two genomes by providing them in sequence. Ensure that you provide a BLAST file for each adjacent pair.
@@ -71,10 +76,37 @@ You can compare more than two genomes by providing them in sequence. Ensure that
 - BLAST result for Genome2 vs. Genome3
 
 The order of the `--gbk` and `-b` files must correspond correctly.
+
 ```bash
-gbdraw linear \
-  --gbk genome1.gbk genome2.gbk genome3.gbk \
-  -b g1_vs_g2.blast g2_vs_g3.blast \
-  -o multi_comparison
+# Shigella flexneri 2a str. 301 (NC_004337.2)
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_004337.2&rettype=gbwithparts&retmode=text" -O Shigella_flexneri.gbk
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_004337.2&rettype=fasta&retmode=text" -O Shigella_flexneri.fasta
+
+# Shigella sonnei ATCC 29930 (NZ_CP026802.1)
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NZ_CP026802.1&rettype=gbwithparts&retmode=text" -O Shigella_sonnei.gbk
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NZ_CP026802.1&rettype=fasta&retmode=text" -O Shigella_sonnei.fasta
 ```
 
+
+```bash
+blastn -query Shigella_dysenteriae.fasta -subject Shigella_flexneri.fasta -outfmt 7 -out Shigella_dysenteriae-Shigella_flexneri.blastn.out
+blastn -query Shigella_flexneri.fasta -subject Shigella_sonnei.fasta -outfmt 7 -out Shigella_flexneri-Shigella_sonnei.blastn.out
+```
+
+```bash
+gbdraw linear \
+  --gbk Escherichia_coli.gbk Shigella_dysenteriae.gbk Shigella_flexneri.gbk Shigella_sonnei.gbk \
+  -b Escherichia_coli-Shigella_dysenteriae.blastn.out Shigella_dysenteriae-Shigella_flexneri.blastn.out Shigella_flexneri-Shigella_sonnei.blastn.out \
+  --align_center \
+  --separate_strands \
+  --evalue 1e-99 --bitscore 5000 \
+  -o Escherichia_Shigella_multi \
+  -f svg
+```
+
+![Escherichia_Shigella_multi.svg](../../examples/Escherichia_Shigella_multi.svg)
+
+[< Back to the Index of Tutorials](./TUTORIALS.md)
+[< Back to Tutorial 1: Customizing Your Plot](./1_Customizing_Plots.md)　　　　　　[Go to Tutorial 3: Advanced Customization >](./3_Advanced_Customization.md) 
+
+[Home](../README.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [**Tutorials**](../TUTORIALS/TUTORIALS.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [ABOUT](../ABOUT.md)

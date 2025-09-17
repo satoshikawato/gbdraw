@@ -1,4 +1,4 @@
-[Home](../README.md) | [Installation](./INSTALL.md) | [Usage](./USAGE.md) | [Gallery](./GALLERY.md) | [RECIPES](./RECIPES.md) | [Advanced](./ADVANCED.md) | [FAQ](./FAQ.md)
+[Home](../README.md) | [**Installation**](./INSTALL.md) | [Usage](./USAGE.md) | [Gallery](./GALLERY.md) | [RECIPES](./RECIPES.md) | [Advanced](./ADVANCED.md) | [FAQ](./FAQ.md)
 # Install `gbdraw`
 
 **Prerequisite:** Make sure you have a [conda](https://docs.conda.io/en/latest/)-compatible package manager—[mamba](https://github.com/mamba-org/mamba) ,[micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html), [miniforge](https://github.com/conda-forge/miniforge) or plain conda—already installed and on your `$PATH`. All steps below assume you run the commands in such an environment.
@@ -7,9 +7,9 @@
 `gbdraw` offers several installation methods to suit different needs. Use this table to choose the best option for your use case.
 | Method | Ease of Use | Access to Latest Version | Performance | Customization | Ideal User / Use Case |
 | ------ | ------- | ------- | ------- | ------- | ------- |
-| Streamlit Web App | ★★★★★ | Stable | Medium | Low | Researchers wanting quick visualization with zero installation; educational use. | 
-| Google Colab | ★★★★☆ | Stable | Medium | Medium | Users with a Google account who want to try gbdraw in a cloud environment. | 
-| Bioconda | ★★★☆☆ | Stable | High | High | Bioinformaticians needing a reproducible environment; pipeline integration. | 
+| Streamlit Web App | ★★★★★ | Development | Medium | High | Researchers wanting quick visualization with zero installation; educational use. | 
+| Google Colab | ★★★★★ | Stable | Medium | Medium | Users with a Google account who want to try gbdraw in a cloud environment. | 
+| Bioconda | ★★★★☆ | Stable | High | High | Bioinformaticians needing a reproducible environment; pipeline integration. | 
  | Local Build | ★☆☆☆☆ | Development | High | High | Developers wanting to test the latest features or contribute to the project. | 
  
 
@@ -21,7 +21,7 @@ The gbdraw GUI is available as a web app, ready to use without any local install
 **Simply visit**: [https://gbdraw.streamlit.app/](https://gbdraw.streamlit.app/)
 
 ### Colab Notebook
-`gbdraw` also provides a Google Colaboratory notebook. A Google account is required.
+`gbdraw` also provides a Google Colaboratory notebook, although the functionality is limited. A Google account is required.
 
 **Open in Colab**: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
 
@@ -31,11 +31,11 @@ For regular use and integration into analysis pipelines, we recommend installing
 #### Bioconda (recommended)
 `gbdraw` is available on the Bioconda channel.
 ```bash
-mamba create -n gbdraw-0.5.1 -y -c conda-forge -c bioconda gbdraw=0.5.1
+mamba create -n gbdraw-0.5.2 -y -c conda-forge -c bioconda gbdraw=0.5.2
 ```
 If you also want to use the graphical interface (`gbdraw gui`), install streamlit into the same environment.
 ```bash
-mamba create -n gbdraw-0.5.1 -c conda-forge -c bioconda gbdraw=0.5.1 streamlit # Install streamlit if you want to use GUI mode. Streamlit can also be installed later
+mamba create -n gbdraw-0.5.2 -c conda-forge -c bioconda gbdraw=0.5.2 streamlit
 ```
 
 #### Local build (development version)
@@ -57,4 +57,4 @@ mamba create -n gbdraw -y  -c conda-forge -c bioconda -c local gbdraw
 # 5. Activate the environment
 mamba activate gbdraw
 ```
-[Home](../README.md) | [Installation](./INSTALL.md) | [Usage](./USAGE.md) | [Gallery](./GALLERY.md) | [RECIPES](./RECIPES.md) | [Advanced](./ADVANCED.md) | [FAQ](./FAQ.md)
+[Home](../README.md) | [**Installation**](./INSTALL.md) | [Usage](./USAGE.md) | [Gallery](./GALLERY.md) | [RECIPES](./RECIPES.md) | [Advanced](./ADVANCED.md) | [FAQ](./FAQ.md)
