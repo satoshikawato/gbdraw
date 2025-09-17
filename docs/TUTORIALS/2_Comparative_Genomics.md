@@ -75,7 +75,6 @@ You can compare more than two genomes by providing them in sequence. Ensure that
 
 - BLAST result for Genome2 vs. Genome3
 
-The order of the `--gbk` and `-b` files must correspond correctly.
 
 ```bash
 # Shigella flexneri 2a str. 301 (NC_004337.2)
@@ -92,7 +91,8 @@ wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NZ
 blastn -query Shigella_dysenteriae.fasta -subject Shigella_flexneri.fasta -outfmt 7 -out Shigella_dysenteriae-Shigella_flexneri.blastn.out
 blastn -query Shigella_flexneri.fasta -subject Shigella_sonnei.fasta -outfmt 7 -out Shigella_flexneri-Shigella_sonnei.blastn.out
 ```
-
+> [!IMPORTANT]
+> The order of the `--gbk` and `-b` files must correspond correctly.
 ```bash
 gbdraw linear \
   --gbk Escherichia_coli.gbk Shigella_dysenteriae.gbk Shigella_flexneri.gbk Shigella_sonnei.gbk \

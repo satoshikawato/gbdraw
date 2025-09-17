@@ -51,6 +51,8 @@ The plot will now have a formatted title in the center.
 ### 3. Showing Feature Labels
 By default, gene labels are hidden. Use the `--show_labels` option to display them.
 As the *E.coli* genome is a little bit too large for this purpose, we will use the genome of white spot syndrome virus, a large DNA virus infecting crustaceans.
+> [!WARNING]
+> Do not use `--show_labels` for genomes with more than a few hundred genes unless you downsample labels with `--lablel_blacklist` or `--label_whitelist`.
 
 ```bash
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027280.1&rettype=gbwithparts&retmode=text" -O AP027280.gb
@@ -67,13 +69,9 @@ gbdraw circular \
 ```
 
 ![WSSV_with_labels.svg](../../examples/WSSV_with_labels.svg)
+> [!TIP]
+> To prevent clutters, you can adjust label text size with `--label_font_size` or use advanced filtering techniques covered in [a later tutorial](./3_Advanced_Customization.md).
 
-For large genomes, labels may overlap. You can adjust their size with `--label_font_size` or use advanced filtering techniques covered in [a later tutorial](./3_Advanced_Customization.md).
-
-### Next Steps
-[**Tutorial 2**: Comparative Genomics: Learn how to compare multiple genomes.](./2_Comparative_Genomics.md)
-
-[**Tutorial 3**: Advanced Customization: Learn how to control colors and labels with configuration files.](./3_Advanced_Customization.md)
 
 [< Back to Quickstart](../QUICKSTART.md)
 
