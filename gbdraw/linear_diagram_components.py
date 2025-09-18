@@ -259,7 +259,7 @@ def add_length_bar_on_linear_canvas(canvas: Drawing, canvas_config: LinearCanvas
     (snip)
     """
     length_bar_group: Group = LengthBarGroup(
-        canvas_config.fig_width, canvas_config.longest_genome, config_dict).get_group()
+        canvas_config.fig_width, canvas_config.alignment_width, canvas_config.longest_genome, config_dict).get_group()
     
     offset_for_length_bar: float = position_length_bar_group(
         canvas_config.total_height, canvas_config.original_vertical_offset, canvas_config.vertical_padding)

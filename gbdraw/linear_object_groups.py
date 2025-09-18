@@ -116,15 +116,10 @@ class LengthBarGroup:
         group_id (str): Identifier for the SVG group.
     """
 
-    def __init__(self, fig_width: int, longest_genome: int, config_dict: dict, group_id="length_bar") -> None:
+    def __init__(self, fig_width: int, alignment_width: float, longest_genome: int, config_dict: dict, group_id="length_bar") -> None:
         """
         Initializes the LengthBarGroup with the given parameters.
-
-        Args:
-            fig_width (int): The width of the figure.
-            longest_genome (int): The length of the longest genome in the dataset.
-            config_dict (dict): Configuration dictionary with styling parameters.
-            group_id (str): Identifier for the SVG group.
+        (snip)
         """
         self.length_bar_stroke_color: str = config_dict['objects']['length_bar']['stroke_color']
         self.length_bar_stroke_width: float = config_dict['objects']['length_bar']['stroke_width']
@@ -133,12 +128,12 @@ class LengthBarGroup:
         self.length_bar_font_family: str = config_dict['objects']['text']['font_family']
         self.longest_genome: int = longest_genome
         self.fig_width: int = fig_width
+        self.alignment_width: float = alignment_width # (追加) alignment_widthを保存
         self.group_id: str = group_id
         self.define_ticks_by_length()
         self.config_bar()
         self.length_bar_group = Group(id=self.group_id)
         self.add_elements_to_group()
-
     def define_ticks_by_length(self) -> None:
         """
         Defines the scale ticks for the length bar based on the length of the longest genome.
@@ -155,27 +150,30 @@ class LengthBarGroup:
             (250000, 50000, "{} kbp"),
             (1000000, 100000, "{} kbp"),
             (2000000, 200000, "{} kbp"),
-            (float('inf'), 500000, "{} kbp")
+            (5000000, 500000, "{} kbp"),
+            (float('inf'), 1000000, "{} Mbp"),
         ]
         # Find the appropriate tick and format
         for threshold, tick, label_format in thresholds:
             if self.longest_genome < threshold:
-                self.tick: int = tick
-                self.label_text: str = label_format.format(
-                    int(self.tick / 1000) if self.tick >= 1000 else self.tick)
+                if self.longest_genome < 5000000:
+                    self.tick: int = tick
+                    self.label_text: str = label_format.format(
+                        int(self.tick / 1000) if self.tick >= 1000 else self.tick)
+                else:
+                    self.tick: int = tick
+                    self.label_text: str = label_format.format(
+                        int(self.tick / 1000000) if self.tick >= 1000000 else self.tick)
                 break
 
     def config_bar(self) -> None:
         """
         Configures the length bar dimensions and positions based on the tick scale.
-
-        This method calculates the length of the bar and its start and end positions on the canvas.
         """
-        self.bar_length: float = self.fig_width * \
-            (self.tick / self.longest_genome)
-        self.start_x: float = (0.96 * self.fig_width - self.bar_length + 1)
+        self.bar_length: float = self.alignment_width * (self.tick / self.longest_genome)
+        self.end_x: float = self.alignment_width
+        self.start_x: float = self.end_x - self.bar_length
         self.start_y: float = 0
-        self.end_x: float = 0.96 * self.fig_width
         self.end_y: float = 0
 
     def create_length_bar_path_linear(self) -> Line:
