@@ -13,14 +13,15 @@ from typing import List, Dict, Union, Literal
 from .find_font_files import get_text_bbox_size_pixels, get_font_dict
 from .feature_objects import FeatureObject, GeneObject, RepeatObject
 from .file_processing import read_filter_list_file 
-
+import functools 
 
 logger = logging.getLogger(__name__)
 
+@functools.lru_cache(maxsize=4096)
 def calculate_bbox_dimensions(text, font_family, font_size, dpi):
     fonts = [font.strip("'") for font in font_family.split(', ')]
     primary_font_family = fonts[0]
-    font_file_dict = get_font_dict(fonts, ["Regular"]) 
+    font_file_dict = get_font_dict(tuple(fonts), ("Regular",)) 
     font_path = font_file_dict[primary_font_family]["Regular"]
     bbox_width_px, bbox_height_px = get_text_bbox_size_pixels(font_path, text, font_size, dpi)
     return bbox_width_px, bbox_height_px

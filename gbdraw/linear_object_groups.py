@@ -3,7 +3,7 @@
 
 import logging
 import sys
-from typing import List, Union, Tuple, Dict
+from typing import List, Union, Tuple, Dict, Optional
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
 from svgwrite.container import Group
@@ -320,11 +320,12 @@ class SeqRecordGroup:
     """Manages the visualization of a SeqRecord in a linear layout."""
 
     def __init__(self, gb_record: SeqRecord, canvas_config: LinearCanvasConfigurator, 
-                 feature_config: FeatureDrawingConfigurator, config_dict: dict) -> None:
+                 feature_config: FeatureDrawingConfigurator, config_dict: dict, precalculated_labels: Optional[list] = None) -> None:
         self.gb_record = gb_record
         self.canvas_config = canvas_config
         self.feature_config = feature_config
         self.config_dict = config_dict
+        self.precalculated_labels = precalculated_labels
         self.show_labels = self.config_dict['canvas']['show_labels']
         self.label_stroke_color = self.config_dict['labels']['stroke_color']['label_stroke_color']
         self.label_stroke_width = self.config_dict['labels']['stroke_width']['long']
@@ -367,7 +368,7 @@ class SeqRecordGroup:
 
     def draw_record(self, feature_dict: dict, record_length: int, cds_height: float, 
                    alignment_width: float, genome_size_normalization_factor: float, 
-                   separate_strands: bool, arrow_length: float, group: Group) -> Group:
+                   separate_strands: bool, arrow_length: float, group: Group, label_list: list) -> Group:
         """Draws the genomic features onto the provided SVG group."""
         # Draw the axis
         axis_path = self.draw_linear_axis(alignment_width, genome_size_normalization_factor)
@@ -375,13 +376,6 @@ class SeqRecordGroup:
 
         # Process labels if enabled
         if self.show_labels:
-            label_list = prepare_label_list_linear(
-                feature_dict, record_length, alignment_width,
-                genome_size_normalization_factor, cds_height,
-                separate_strands, self.config_dict
-            )
-            
-            # Add connector lines for non-embedded labels
             for label in label_list:
                 if not label["is_embedded"]:
                     line_path = Line(
@@ -442,7 +436,18 @@ class SeqRecordGroup:
         label_filtering = preprocess_label_filtering(self.label_filtering)
         color_table, default_colors = preprocess_color_tables(color_table, default_colors)
         feature_dict: dict = create_feature_dict(self.gb_record, color_table, selected_features_set, default_colors, separate_strands, resolve_overlaps, label_filtering)
-        record_group: Group = self.draw_record(feature_dict, record_length, cds_height, alignment_width, genome_size_normalization_factor, separate_strands, arrow_length, record_group)
+        label_list = []
+        if self.show_labels:
+            if self.precalculated_labels is not None:
+                label_list = self.precalculated_labels
+            else:
+                label_list = prepare_label_list_linear(
+                    feature_dict, record_length, alignment_width,
+                    genome_size_normalization_factor, cds_height,
+                    separate_strands, self.config_dict
+                )
+        
+        record_group: Group = self.draw_record(feature_dict, record_length, cds_height, alignment_width, genome_size_normalization_factor, separate_strands, arrow_length, record_group, label_list)
         return record_group
 
     def get_group(self) -> Group:
@@ -468,7 +473,7 @@ class PairWiseMatchGroup:
         config_dict (dict): Configuration dictionary with styling parameters.
     """
 
-    def __init__(self, canvas_config: LinearCanvasConfigurator, sequence_length_dict: dict, comparison_df: DataFrame, comparison_height: float, comparison_count: int, blast_config, records) -> None:
+    def __init__(self, canvas_config: LinearCanvasConfigurator, sequence_length_dict: dict, comparison_df: DataFrame, actual_comparison_height: float, comparison_count: int, blast_config, records) -> None:
         """
         Initializes the PairWiseMatchGroup with necessary data and configurations.
 
@@ -483,7 +488,7 @@ class PairWiseMatchGroup:
         self.canvas_config: LinearCanvasConfigurator = canvas_config
         self.sequence_length_dict: Dict[str, int] = sequence_length_dict
         self.comparison_df: DataFrame = comparison_df
-        self.comparison_height: float = comparison_height
+        self.comparison_height: float = actual_comparison_height
         self.match_fill_color: str = blast_config.fill_color
         self.match_fill_opacity: float = blast_config.fill_opacity
         self.match_stroke_color: str = blast_config.stroke_color

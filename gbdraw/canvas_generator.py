@@ -185,6 +185,7 @@ class LinearCanvasConfigurator:
         self.config_dict = config_dict
         self.longest_genome: int = longest_genome
         self.fig_width: int = self.config_dict['canvas']['linear']['width']
+        self.original_vertical_offset: float = self.config_dict['canvas']['linear']['vertical_offset']
         self.vertical_offset: float = self.config_dict['canvas']['linear']['vertical_offset']
         self.horizontal_offset: float = self.config_dict['canvas']['linear']['horizontal_offset']
         self.vertical_padding: float = self.config_dict['canvas']['linear']['vertical_padding']
@@ -231,15 +232,6 @@ class LinearCanvasConfigurator:
         else:
             self.cds_height: float = 0.5 * self.default_cds_height
             self.cds_padding: float = 0.75 * self.cds_height
-    def set_label_padding(self) -> None:
-        """
-        Sets the padding for labels based on configuration settings.
-        This method adjusts the label_padding attribute.
-        """
-        if self.show_labels:
-            self.vertical_offset: float = self.vertical_offset + 3.0 * self.cds_height
-        else:
-            self.vertical_offset: float = self.vertical_offset
     def set_arrow_length(self) -> None:
         """
         Sets the length of the arrow used in the representation based on the longest genome.
@@ -255,7 +247,6 @@ class LinearCanvasConfigurator:
         
         self.set_gc_height_and_gc_padding()
         self.set_cds_height_and_cds_padding()
-        self.set_label_padding()
         self.add_margin: float | Literal[0] = 2 * self.cds_height if (
             self.show_gc and not self.strandedness) else 0
         self.alignment_width: float = self.fig_width - self.horizontal_offset
@@ -267,11 +258,19 @@ class LinearCanvasConfigurator:
             self.total_width = self.total_width + (legend_config.legend_width * 1.1)
             self.legend_offset_x = self.canvas_padding + self.fig_width + (legend_config.legend_width * 0.05)
             self.legend_offset_y = (self.total_height - legend_config.legend_height) / 2
+            genome_area_top = self.vertical_offset
+            genome_area_bottom = self.total_height - self.original_vertical_offset
+            genome_area_center_y = genome_area_top + (genome_area_bottom - genome_area_top) / 2
+            self.legend_offset_y = genome_area_center_y - (legend_config.legend_height / 2)
         elif self.legend_position == "left":
             self.total_width = self.total_width + (legend_config.legend_width * 1.1)
             self.legend_offset_x = self.canvas_padding + (legend_config.legend_width * 0.05)       
             self.horizontal_offset: float = self.canvas_padding + (legend_config.legend_width * 1.1)
             self.legend_offset_y = (self.total_height - legend_config.legend_height) / 2
+            genome_area_top = self.vertical_offset
+            genome_area_bottom = self.total_height - self.original_vertical_offset
+            genome_area_center_y = genome_area_top + (genome_area_bottom - genome_area_top) / 2
+            self.legend_offset_y = genome_area_center_y - (legend_config.legend_height / 2)
         elif self.legend_position == "none":
             self.legend_offset_x: float = 0
             self.legend_offset_y: float = 0
