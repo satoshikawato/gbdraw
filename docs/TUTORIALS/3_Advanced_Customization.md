@@ -158,6 +158,24 @@ By default, `gbdraw` uses the `product` qualifier for labels. If you prefer to u
 
 
 
+## Part 3: Fine-Tuning Plot Aesthetics
+Beyond colors and labels, gbdraw provides command-line options to control nearly every visual aspect of your plot for publication-quality results.
+
+### Adjusting Line Styles
+You can change the color and thickness of feature borders (`--block_stroke`), the circular axis (`--axis_stroke`), and other lines (`--line_stroke`). Let's make the axis thicker and add a thin border to our features.
+```bash
+```
+### Tweaking Fonts and Label Positions
+
+You can adjust the font size of the title (`--definition_font_size`) and feature labels (`--label_font_size`).
+
+If labels are still slightly overlapping even after adjusting font size, you can manually nudge their positions using the `--*_label_*_radius_offset` options. These values are multipliers, so a value like 1.05 pushes the label slightly further out.
+
+Let's combine these options for a final polished plot:
+
+```bash
+```
+
 [< Back to the Index of Tutorials](./TUTORIALS.md)
 [< Back to Tutorial 2: Comparative Genomics with BLAST](./2_Comparative_Genomics.md)
 
