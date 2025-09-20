@@ -351,6 +351,17 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     features_present = check_feature_presence(records, feature_config.selected_features_set)
     legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present)
     legend_config = legend_config.recalculate_legend_dimensions(legend_table)
+    padding = canvas_config.canvas_padding * 2  
+    required_legend_height = legend_config.legend_height + padding
+
+    if required_legend_height > canvas_config.total_height:
+        height_difference = required_legend_height - canvas_config.total_height
+        canvas_config.total_height = int(required_legend_height)
+        vertical_shift = height_difference / 2
+        record_offsets = [offset + vertical_shift for offset in record_offsets]
+        if has_blast and 'comparison_offsets' in locals():
+            comparison_offsets = [offset + vertical_shift for offset in comparison_offsets]
+
     canvas_config.recalculate_canvas_dimensions(legend_config)
     canvas: Drawing = canvas_config.create_svg_canvas()
 

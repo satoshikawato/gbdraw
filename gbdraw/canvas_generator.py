@@ -254,26 +254,35 @@ class LinearCanvasConfigurator:
         self.total_height = int(2 * self.vertical_offset + (self.cds_height + self.gc_padding) + (self.vertical_padding +
                                 self.comparison_height + self.vertical_padding + self.cds_height + self.gc_padding) * (self.num_of_entries - 1))
     def recalculate_canvas_dimensions(self, legend_config):
-        if self.legend_position == "right":
-            self.total_width = self.total_width + (legend_config.legend_width * 1.1)
-            self.legend_offset_x = self.canvas_padding + self.fig_width + (legend_config.legend_width * 0.05)
-            self.legend_offset_y = (self.total_height - legend_config.legend_height) / 2
+        """
+        Calculates final canvas dimensions and legend offsets, ensuring the legend fits within the canvas.
+        """
+        def calculate_optimal_legend_y():
             genome_area_top = self.vertical_offset
             genome_area_bottom = self.total_height - self.original_vertical_offset
             genome_area_center_y = genome_area_top + (genome_area_bottom - genome_area_top) / 2
-            self.legend_offset_y = genome_area_center_y - (legend_config.legend_height / 2)
+            legend_y = genome_area_center_y - (legend_config.legend_height / 2)
+
+            if legend_y < 0 or (legend_y + legend_config.legend_height) > self.total_height:
+                legend_y = (self.total_height - legend_config.legend_height) / 2
+            
+            return legend_y
+
+        if self.legend_position == "right":
+            self.total_width = self.total_width + (legend_config.legend_width * 1.1)
+            self.legend_offset_x = self.canvas_padding + self.fig_width + (legend_config.legend_width * 0.05)
+            self.legend_offset_y = calculate_optimal_legend_y()
+
         elif self.legend_position == "left":
             self.total_width = self.total_width + (legend_config.legend_width * 1.1)
             self.legend_offset_x = self.canvas_padding + (legend_config.legend_width * 0.05)       
             self.horizontal_offset: float = self.canvas_padding + (legend_config.legend_width * 1.1)
-            self.legend_offset_y = (self.total_height - legend_config.legend_height) / 2
-            genome_area_top = self.vertical_offset
-            genome_area_bottom = self.total_height - self.original_vertical_offset
-            genome_area_center_y = genome_area_top + (genome_area_bottom - genome_area_top) / 2
-            self.legend_offset_y = genome_area_center_y - (legend_config.legend_height / 2)
+            self.legend_offset_y = calculate_optimal_legend_y()
+
         elif self.legend_position == "none":
             self.legend_offset_x: float = 0
             self.legend_offset_y: float = 0
+            
         else:
             self.legend_offset_x: float = 0
             self.legend_offset_y: float = 0
