@@ -14,7 +14,7 @@ from .canvas_generator import LinearCanvasConfigurator
 from .linear_feature_drawer import FeatureDrawer, GcContentDrawer, LabelDrawer
 from .data_processing import skew_df, prepare_label_list_linear
 from .create_feature_objects import create_feature_dict, preprocess_color_tables
-from .utility_functions import create_text_element, normalize_position_linear, preprocess_label_filtering
+from .utility_functions import create_text_element, normalize_position_linear, preprocess_label_filtering, calculate_bbox_dimensions
 from .object_configurators import GcContentConfigurator, FeatureDrawingConfigurator
 from .circular_path_drawer import generate_text_path
 # Logging setup
@@ -58,19 +58,34 @@ class DefinitionGroup:
         self.title_start_y: float = title_start_y
         self.length_start_x: float = length_start_x
         self.length_start_y: float = length_start_y
+        self.definition_bounding_box_width: float = 0
+        self.definition_bounding_box_height: float = 0
         self.linear_definition_stroke: float = config_dict['objects']['definition']['linear']['stroke']
         self.linear_definition_fill: str = config_dict['objects']['definition']['linear']['fill']
-        self.linear_definition_font_size: str = config_dict[
-            'objects']['definition']['linear']['font_size']
-        self.linear_definition_font_weight: str = config_dict[
-            'objects']['definition']['linear']['font_weight']
+        self.linear_definition_font_size: str = config_dict['objects']['definition']['linear']['font_size']
+        self.linear_definition_font_weight: str = config_dict['objects']['definition']['linear']['font_weight']
         self.linear_definition_font_family: str = config_dict['objects']['text']['font_family']
+        self.interval: int = config_dict['objects']['definition']['linear']['interval']
+        self.dpi: int = config_dict['canvas']['dpi']
         self.linear_text_anchor: str = config_dict['objects']['definition']['linear']['text_anchor']
-        self.linear_dominant_baseline: str = config_dict[
-            'objects']['definition']['linear']['dominant_baseline']
+        self.linear_dominant_baseline: str = config_dict['objects']['definition']['linear']['dominant_baseline']
         self.get_id_and_length()
+        self.name_bounding_box_width, self.name_bounding_box_height = calculate_bbox_dimensions(self.record_name, self.linear_definition_font_family, self.linear_definition_font_size, self.dpi)
+        self.length_bounding_box_width, self.length_bounding_box_height = calculate_bbox_dimensions(self.length_label, self.linear_definition_font_family, self.linear_definition_font_size, self.dpi)
+        self.calculate_start_coordinates()
         self.definition_group = Group(id=self.track_id)
         self.add_elements_to_group()
+
+    def calculate_start_coordinates(self) -> None:
+        max_width = max(self.name_bounding_box_width, self.length_bounding_box_width)
+        total_height = self.name_bounding_box_height + self.length_bounding_box_height + self.interval
+        self.definition_bounding_box_width = max_width
+        self.definition_bounding_box_height = total_height
+        self.title_start_x = 0
+        self.title_start_y = - (total_height / 2) + (self.name_bounding_box_height / 2)
+        self.length_start_x = 0
+        self.length_start_y = (total_height / 2) - (self.length_bounding_box_height / 2)
+
 
     def get_id_and_length(self) -> None:
         """
@@ -86,9 +101,9 @@ class DefinitionGroup:
         Adds the definition elements (like record name and length) to the group.
         """
         self.name_path: Text = create_text_element(self.record_name, self.title_start_x, self.title_start_y,
-                                                   self.linear_definition_font_size, self.linear_definition_font_weight, self.linear_definition_font_family)
+                                                   self.linear_definition_font_size, self.linear_definition_font_weight, self.linear_definition_font_family, text_anchor=self.linear_text_anchor, dominant_baseline=self.linear_dominant_baseline)
         self.length_path: Text = create_text_element(self.length_label, self.length_start_x, self.length_start_y,
-                                                     self.linear_definition_font_size, self.linear_definition_font_weight, self.linear_definition_font_family)
+                                                     self.linear_definition_font_size, self.linear_definition_font_weight, self.linear_definition_font_family, text_anchor=self.linear_text_anchor, dominant_baseline=self.linear_dominant_baseline)
         self.definition_group.add(self.name_path)
         self.definition_group.add(self.length_path)
 

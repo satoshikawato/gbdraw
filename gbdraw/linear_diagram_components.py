@@ -145,7 +145,7 @@ def position_record_definition_group(record_definition_group: Group, offset: flo
     This function aligns the record's definition with the rest of the record's visualization on the canvas.
     """
     record_definition_group.translate(
-        offset_x + canvas_config.horizontal_offset - 45, offset)
+        canvas_config.horizontal_offset - offset_x, offset)
     return record_definition_group
 
 
@@ -208,27 +208,19 @@ def add_gc_content_group(canvas: Drawing, record: SeqRecord, offset: float, offs
     return canvas
 
 
-def add_record_definition_group(canvas: Drawing, record: SeqRecord, offset: float, offset_x: float, canvas_config: LinearCanvasConfigurator, config_dict: dict) -> Drawing:
+def add_record_definition_group(canvas: Drawing, record: SeqRecord, record_offset_y: float, record_offset_x: float, canvas_config: LinearCanvasConfigurator, config_dict: dict) -> Drawing:
     """
     Adds a record definition group to the linear canvas.
-
-    This function creates a group that contains definition details of the SeqRecord, such as annotations, and positions it on the canvas.
-
-    Args:
-        canvas (Drawing): The SVG drawing canvas.
-        record (SeqRecord): The GenBank record with definition details.
-        offset (float): Vertical offset for the group's position.
-        offset_x (float): Horizontal offset for the group's position.
-        canvas_config (LinearCanvasConfigurator): Configuration for the linear canvas.
-        config_dict (dict): Configuration dictionary for drawing parameters.
-
-    Returns:
-        Drawing: The updated SVG drawing with the record definition group added.
     """
-    record_definition_group: Group = DefinitionGroup(
-        record, config_dict).get_group()
+    definition_group_obj = DefinitionGroup(record, config_dict)
+
+    definition_offset_x = definition_group_obj.definition_bounding_box_width / 2
+
+    record_definition_group: Group = definition_group_obj.get_group()
+    
     position_record_definition_group(
-        record_definition_group, offset, offset_x, canvas_config)
+        record_definition_group, record_offset_y, (definition_offset_x - record_offset_x), canvas_config)
+    
     canvas.add(record_definition_group)
     return canvas
 
@@ -296,18 +288,18 @@ def add_records_on_linear_canvas(canvas: Drawing, records: list[SeqRecord], feat
         Drawing: The updated SVG drawing with the SeqRecord groups added.
     """
     for count, record in enumerate(records, start=1):
-        offset, offset_x = calculate_record_offsets(count, record, canvas_config)
+        record_offset_y, record_offset_x = calculate_record_offsets(count, record, canvas_config)
         labels_for_record = precalculated_labels.get(record.id)
-        add_record_group(canvas, record, offset, offset_x,
+        add_record_group(canvas, record, record_offset_y, record_offset_x,
                          canvas_config, feature_config, config_dict, precalculated_labels=labels_for_record)
 
         # Add record definition group
         add_record_definition_group(
-            canvas, record, offset, offset_x, canvas_config, config_dict)
+            canvas, record, record_offset_y, record_offset_x, canvas_config, config_dict)
         # Add GC content group if configured to show
         if canvas_config.show_gc:
-            add_gc_content_group(canvas, record, offset,
-                                 offset_x, canvas_config, gc_config, config_dict)
+            add_gc_content_group(canvas, record, record_offset_y,
+                                 record_offset_x, canvas_config, gc_config, config_dict)
     return canvas
 
 
@@ -322,7 +314,6 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     if required_label_height > 0:
         if canvas_config.vertical_offset < required_label_height:
             canvas_config.vertical_offset = required_label_height
-        # canvas_config.vertical_offset += required_label_height
     
     has_blast = bool(blast_files)
     record_ids = [r.id for r in records]

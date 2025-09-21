@@ -76,7 +76,7 @@ def normalize_position_to_linear_track(
     return normalized_position
 
 
-def create_text_element(text: str, x: float, y: float, font_size: str, font_weight: str, font_family: str) -> Text:
+def create_text_element(text: str, x: float, y: float, font_size: str, font_weight: str, font_family: str, text_anchor: str = "middle", dominant_baseline:str = "middle") -> Text:
     """
     Creates an SVG text element.
 
@@ -99,8 +99,8 @@ def create_text_element(text: str, x: float, y: float, font_size: str, font_weig
         font_size=font_size,
         font_weight=font_weight,
         font_family=font_family,
-        text_anchor="middle",
-        dominant_baseline="middle")
+        text_anchor=text_anchor,
+        dominant_baseline=dominant_baseline)
 
 
 def parse_mixed_content_text(input_text: str) -> List[Dict[str, Union[str, bool, None]]]:
