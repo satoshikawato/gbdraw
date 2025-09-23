@@ -69,6 +69,7 @@ font_size = 10
 font_weight = 'normal'
 text_anchor = 'middle'
 dominant_baseline = 'middle'
+interval = 5
 
 [objects.definition.circular]
 interval = 20
