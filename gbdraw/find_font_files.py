@@ -4,7 +4,7 @@
 import logging
 import subprocess
 from fontTools.ttLib import TTFont
-
+import functools 
 logger = logging.getLogger()
 
 

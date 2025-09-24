@@ -13,14 +13,15 @@ from typing import List, Dict, Union, Literal
 from .find_font_files import get_text_bbox_size_pixels, get_font_dict
 from .feature_objects import FeatureObject, GeneObject, RepeatObject
 from .file_processing import read_filter_list_file 
-
+import functools 
 
 logger = logging.getLogger(__name__)
 
+@functools.lru_cache(maxsize=4096)
 def calculate_bbox_dimensions(text, font_family, font_size, dpi):
     fonts = [font.strip("'") for font in font_family.split(', ')]
     primary_font_family = fonts[0]
-    font_file_dict = get_font_dict(fonts, ["Regular"]) 
+    font_file_dict = get_font_dict(tuple(fonts), ("Regular",)) 
     font_path = font_file_dict[primary_font_family]["Regular"]
     bbox_width_px, bbox_height_px = get_text_bbox_size_pixels(font_path, text, font_size, dpi)
     return bbox_width_px, bbox_height_px
@@ -75,7 +76,7 @@ def normalize_position_to_linear_track(
     return normalized_position
 
 
-def create_text_element(text: str, x: float, y: float, font_size: str, font_weight: str, font_family: str) -> Text:
+def create_text_element(text: str, x: float, y: float, font_size: str, font_weight: str, font_family: str, text_anchor: str = "middle", dominant_baseline:str = "middle") -> Text:
     """
     Creates an SVG text element.
 
@@ -98,8 +99,8 @@ def create_text_element(text: str, x: float, y: float, font_size: str, font_weig
         font_size=font_size,
         font_weight=font_weight,
         font_family=font_family,
-        text_anchor="middle",
-        dominant_baseline="middle")
+        text_anchor=text_anchor,
+        dominant_baseline=dominant_baseline)
 
 
 def parse_mixed_content_text(input_text: str) -> List[Dict[str, Union[str, bool, None]]]:

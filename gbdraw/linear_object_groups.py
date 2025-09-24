@@ -3,7 +3,7 @@
 
 import logging
 import sys
-from typing import List, Union, Tuple, Dict
+from typing import List, Union, Tuple, Dict, Optional
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
 from svgwrite.container import Group
@@ -14,7 +14,7 @@ from .canvas_generator import LinearCanvasConfigurator
 from .linear_feature_drawer import FeatureDrawer, GcContentDrawer, LabelDrawer
 from .data_processing import skew_df, prepare_label_list_linear
 from .create_feature_objects import create_feature_dict, preprocess_color_tables
-from .utility_functions import create_text_element, normalize_position_linear, preprocess_label_filtering
+from .utility_functions import create_text_element, normalize_position_linear, preprocess_label_filtering, calculate_bbox_dimensions
 from .object_configurators import GcContentConfigurator, FeatureDrawingConfigurator
 from .circular_path_drawer import generate_text_path
 # Logging setup
@@ -58,19 +58,34 @@ class DefinitionGroup:
         self.title_start_y: float = title_start_y
         self.length_start_x: float = length_start_x
         self.length_start_y: float = length_start_y
+        self.definition_bounding_box_width: float = 0
+        self.definition_bounding_box_height: float = 0
         self.linear_definition_stroke: float = config_dict['objects']['definition']['linear']['stroke']
         self.linear_definition_fill: str = config_dict['objects']['definition']['linear']['fill']
-        self.linear_definition_font_size: str = config_dict[
-            'objects']['definition']['linear']['font_size']
-        self.linear_definition_font_weight: str = config_dict[
-            'objects']['definition']['linear']['font_weight']
+        self.linear_definition_font_size: str = config_dict['objects']['definition']['linear']['font_size']
+        self.linear_definition_font_weight: str = config_dict['objects']['definition']['linear']['font_weight']
         self.linear_definition_font_family: str = config_dict['objects']['text']['font_family']
+        self.interval: int = config_dict['objects']['definition']['linear']['interval']
+        self.dpi: int = config_dict['canvas']['dpi']
         self.linear_text_anchor: str = config_dict['objects']['definition']['linear']['text_anchor']
-        self.linear_dominant_baseline: str = config_dict[
-            'objects']['definition']['linear']['dominant_baseline']
+        self.linear_dominant_baseline: str = config_dict['objects']['definition']['linear']['dominant_baseline']
         self.get_id_and_length()
+        self.name_bounding_box_width, self.name_bounding_box_height = calculate_bbox_dimensions(self.record_name, self.linear_definition_font_family, self.linear_definition_font_size, self.dpi)
+        self.length_bounding_box_width, self.length_bounding_box_height = calculate_bbox_dimensions(self.length_label, self.linear_definition_font_family, self.linear_definition_font_size, self.dpi)
+        self.calculate_start_coordinates()
         self.definition_group = Group(id=self.track_id)
         self.add_elements_to_group()
+
+    def calculate_start_coordinates(self) -> None:
+        max_width = max(self.name_bounding_box_width, self.length_bounding_box_width)
+        total_height = self.name_bounding_box_height + self.length_bounding_box_height + self.interval
+        self.definition_bounding_box_width = max_width
+        self.definition_bounding_box_height = total_height
+        self.title_start_x = 0
+        self.title_start_y = - (total_height / 2) + (self.name_bounding_box_height / 2)
+        self.length_start_x = 0
+        self.length_start_y = (total_height / 2) - (self.length_bounding_box_height / 2)
+
 
     def get_id_and_length(self) -> None:
         """
@@ -86,9 +101,9 @@ class DefinitionGroup:
         Adds the definition elements (like record name and length) to the group.
         """
         self.name_path: Text = create_text_element(self.record_name, self.title_start_x, self.title_start_y,
-                                                   self.linear_definition_font_size, self.linear_definition_font_weight, self.linear_definition_font_family)
+                                                   self.linear_definition_font_size, self.linear_definition_font_weight, self.linear_definition_font_family, text_anchor=self.linear_text_anchor, dominant_baseline=self.linear_dominant_baseline)
         self.length_path: Text = create_text_element(self.length_label, self.length_start_x, self.length_start_y,
-                                                     self.linear_definition_font_size, self.linear_definition_font_weight, self.linear_definition_font_family)
+                                                     self.linear_definition_font_size, self.linear_definition_font_weight, self.linear_definition_font_family, text_anchor=self.linear_text_anchor, dominant_baseline=self.linear_dominant_baseline)
         self.definition_group.add(self.name_path)
         self.definition_group.add(self.length_path)
 
@@ -116,15 +131,10 @@ class LengthBarGroup:
         group_id (str): Identifier for the SVG group.
     """
 
-    def __init__(self, fig_width: int, longest_genome: int, config_dict: dict, group_id="length_bar") -> None:
+    def __init__(self, fig_width: int, alignment_width: float, longest_genome: int, config_dict: dict, group_id="length_bar") -> None:
         """
         Initializes the LengthBarGroup with the given parameters.
-
-        Args:
-            fig_width (int): The width of the figure.
-            longest_genome (int): The length of the longest genome in the dataset.
-            config_dict (dict): Configuration dictionary with styling parameters.
-            group_id (str): Identifier for the SVG group.
+        (snip)
         """
         self.length_bar_stroke_color: str = config_dict['objects']['length_bar']['stroke_color']
         self.length_bar_stroke_width: float = config_dict['objects']['length_bar']['stroke_width']
@@ -133,12 +143,12 @@ class LengthBarGroup:
         self.length_bar_font_family: str = config_dict['objects']['text']['font_family']
         self.longest_genome: int = longest_genome
         self.fig_width: int = fig_width
+        self.alignment_width: float = alignment_width # (追加) alignment_widthを保存
         self.group_id: str = group_id
         self.define_ticks_by_length()
         self.config_bar()
         self.length_bar_group = Group(id=self.group_id)
         self.add_elements_to_group()
-
     def define_ticks_by_length(self) -> None:
         """
         Defines the scale ticks for the length bar based on the length of the longest genome.
@@ -155,27 +165,30 @@ class LengthBarGroup:
             (250000, 50000, "{} kbp"),
             (1000000, 100000, "{} kbp"),
             (2000000, 200000, "{} kbp"),
-            (float('inf'), 500000, "{} kbp")
+            (5000000, 500000, "{} kbp"),
+            (float('inf'), 1000000, "{} Mbp"),
         ]
         # Find the appropriate tick and format
         for threshold, tick, label_format in thresholds:
             if self.longest_genome < threshold:
-                self.tick: int = tick
-                self.label_text: str = label_format.format(
-                    int(self.tick / 1000) if self.tick >= 1000 else self.tick)
+                if self.longest_genome < 5000000:
+                    self.tick: int = tick
+                    self.label_text: str = label_format.format(
+                        int(self.tick / 1000) if self.tick >= 1000 else self.tick)
+                else:
+                    self.tick: int = tick
+                    self.label_text: str = label_format.format(
+                        int(self.tick / 1000000) if self.tick >= 1000000 else self.tick)
                 break
 
     def config_bar(self) -> None:
         """
         Configures the length bar dimensions and positions based on the tick scale.
-
-        This method calculates the length of the bar and its start and end positions on the canvas.
         """
-        self.bar_length: float = self.fig_width * \
-            (self.tick / self.longest_genome)
-        self.start_x: float = (0.96 * self.fig_width - self.bar_length + 1)
+        self.bar_length: float = self.alignment_width * (self.tick / self.longest_genome)
+        self.end_x: float = self.alignment_width
+        self.start_x: float = self.end_x - self.bar_length
         self.start_y: float = 0
-        self.end_x: float = 0.96 * self.fig_width
         self.end_y: float = 0
 
     def create_length_bar_path_linear(self) -> Line:
@@ -320,11 +333,12 @@ class SeqRecordGroup:
     """Manages the visualization of a SeqRecord in a linear layout."""
 
     def __init__(self, gb_record: SeqRecord, canvas_config: LinearCanvasConfigurator, 
-                 feature_config: FeatureDrawingConfigurator, config_dict: dict) -> None:
+                 feature_config: FeatureDrawingConfigurator, config_dict: dict, precalculated_labels: Optional[list] = None) -> None:
         self.gb_record = gb_record
         self.canvas_config = canvas_config
         self.feature_config = feature_config
         self.config_dict = config_dict
+        self.precalculated_labels = precalculated_labels
         self.show_labels = self.config_dict['canvas']['show_labels']
         self.label_stroke_color = self.config_dict['labels']['stroke_color']['label_stroke_color']
         self.label_stroke_width = self.config_dict['labels']['stroke_width']['long']
@@ -367,7 +381,7 @@ class SeqRecordGroup:
 
     def draw_record(self, feature_dict: dict, record_length: int, cds_height: float, 
                    alignment_width: float, genome_size_normalization_factor: float, 
-                   separate_strands: bool, arrow_length: float, group: Group) -> Group:
+                   separate_strands: bool, arrow_length: float, group: Group, label_list: list) -> Group:
         """Draws the genomic features onto the provided SVG group."""
         # Draw the axis
         axis_path = self.draw_linear_axis(alignment_width, genome_size_normalization_factor)
@@ -375,13 +389,6 @@ class SeqRecordGroup:
 
         # Process labels if enabled
         if self.show_labels:
-            label_list = prepare_label_list_linear(
-                feature_dict, record_length, alignment_width,
-                genome_size_normalization_factor, cds_height,
-                separate_strands, self.config_dict
-            )
-            
-            # Add connector lines for non-embedded labels
             for label in label_list:
                 if not label["is_embedded"]:
                     line_path = Line(
@@ -442,7 +449,18 @@ class SeqRecordGroup:
         label_filtering = preprocess_label_filtering(self.label_filtering)
         color_table, default_colors = preprocess_color_tables(color_table, default_colors)
         feature_dict: dict = create_feature_dict(self.gb_record, color_table, selected_features_set, default_colors, separate_strands, resolve_overlaps, label_filtering)
-        record_group: Group = self.draw_record(feature_dict, record_length, cds_height, alignment_width, genome_size_normalization_factor, separate_strands, arrow_length, record_group)
+        label_list = []
+        if self.show_labels:
+            if self.precalculated_labels is not None:
+                label_list = self.precalculated_labels
+            else:
+                label_list = prepare_label_list_linear(
+                    feature_dict, record_length, alignment_width,
+                    genome_size_normalization_factor, cds_height,
+                    separate_strands, self.config_dict
+                )
+        
+        record_group: Group = self.draw_record(feature_dict, record_length, cds_height, alignment_width, genome_size_normalization_factor, separate_strands, arrow_length, record_group, label_list)
         return record_group
 
     def get_group(self) -> Group:
@@ -468,7 +486,7 @@ class PairWiseMatchGroup:
         config_dict (dict): Configuration dictionary with styling parameters.
     """
 
-    def __init__(self, canvas_config: LinearCanvasConfigurator, sequence_length_dict: dict, comparison_df: DataFrame, comparison_height: float, comparison_count: int, blast_config, records) -> None:
+    def __init__(self, canvas_config: LinearCanvasConfigurator, sequence_length_dict: dict, comparison_df: DataFrame, actual_comparison_height: float, comparison_count: int, blast_config, records) -> None:
         """
         Initializes the PairWiseMatchGroup with necessary data and configurations.
 
@@ -483,7 +501,7 @@ class PairWiseMatchGroup:
         self.canvas_config: LinearCanvasConfigurator = canvas_config
         self.sequence_length_dict: Dict[str, int] = sequence_length_dict
         self.comparison_df: DataFrame = comparison_df
-        self.comparison_height: float = comparison_height
+        self.comparison_height: float = actual_comparison_height
         self.match_fill_color: str = blast_config.fill_color
         self.match_fill_opacity: float = blast_config.fill_opacity
         self.match_stroke_color: str = blast_config.stroke_color
