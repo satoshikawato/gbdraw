@@ -15,16 +15,25 @@
 **Try gbdraw on Colab Notebook!** [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
 
 ## Features
-- Circular and linear diagrams: Generates both circular and linear representations of genome structures.
+- **Circular and linear diagrams:** Generates both circular and linear representations of genome structures.
 - **Multiple Input Formats:** Supports standard **GenBank/DDBJ** files as well as **GFF3 + FASTA** file pairs.
 - **Dual Interface:** Available as a powerful command-line tool and an interactive **local/web GUI**.
-- Various output formats: Vector and raster graphics suitable for publication and further editing.
+- **Various output formats:** Vector and raster graphics suitable for publication and further editing.
 - **Flexible Label Control:** Provides advanced control over feature labels, including priority rules, blacklists, and **whitelists**.
-- Comparative genomics: Visualizes sequence similarity between genomes using BLAST results.
+- **Comparative genomics:** Visualizes sequence similarity between genomes using BLAST results.
 
+## 📖 Documentation & Tutorials
 
-### Optional dependencies (GUI)
-- [Streamlit](https://streamlit.io/) (for the `gbdraw gui` command)
+For detailed instructions on how to use `gbdraw`, please visit our main documentation page. You'll find step-by-step guides covering everything from installation to advanced customization.
+
+**[➡️ Go to Full Documentation](./DOCS.md)**
+
+| Section | Description |
+| :--- | :--- |
+| **[Quickstart](./QUICKSTART.md)** | Create your first plot in under 5 minutes. |
+| **[Tutorials](./TUTORIALS/)** | Learn everything from basic customization to comparative genomics. |
+| **[FAQ](./FAQ.md)** | Find answers to common questions. |
+
 ## Use without local installation
 ### Streamlit Web App
 A GUI web app of `gbdraw` (latest commit on `main` branch) is available on Streamlit without any local installation:

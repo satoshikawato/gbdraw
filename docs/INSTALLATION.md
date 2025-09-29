@@ -1,4 +1,7 @@
 [Home](./README.md) | **Installation** | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md)
+
+[< Back to gbdraw Documentation](./DOCS.md)　　　　　　[Go to Quickstart >](./QUICKSTART.md)
+
 # `gbdraw` Installation
 
 `gbdraw` offers several installation methods to suit different needs. Use this table to choose the best option for your use case.
@@ -78,5 +81,8 @@ mamba create -n gbdraw-dev -y -c conda-forge -c bioconda -c local gbdraw
 # 5. Activate the environment
 conda activate gbdraw-dev
 ```
+
+[< Back to gbdraw Documentation](./DOCS.md)　　　　　　[Go to Quickstart >](./QUICKSTART.md)
+
 
 [Home](./README.md) | **Installation** | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md)
