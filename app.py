@@ -25,6 +25,9 @@ st.set_page_config(layout="wide")
 st.title("🧬 gbdraw Web App")
 st.caption("A genome diagram generator for microbes and organelles")
 
+st.markdown(
+    "📖 **Documentation:** For detailed usage and examples, please refer to the [**Official Documentation**](https://github.com/satoshikawato/gbdraw/blob/main/docs/DOCS.md)."
+)
 
 # --- Define the list of selectable feature keys ---
 FEATURE_KEYS = [
