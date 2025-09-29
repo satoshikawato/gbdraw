@@ -226,4 +226,124 @@ gbdraw linear \
 ```
 ![NC_001416.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_001416.svg)
 
+
+#### <i>Ca.</i> Sukunaarchaeum mirabile M16-5
+```bash
+gbdraw circular \
+--gbk M16-5.gb \
+--separate_strands \
+-f svg \
+-o M16-5_fugaku \
+--block_stroke_width 1 \
+--axis_stroke_width 1 \
+-p fugaku \
+--track middle \
+--species "<i>Ca.</i> Sukunaarchaeum mirabile" \
+--definition_font_size 22 \
+--legend upper_right
+```
+![M16-5_fugaku.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/M16-5_fugaku.svg)
+
+
+#### <i>Pandoravirus_salinus</i>
+```bash
+gbdraw circular \
+--gbk Pandoravirus_salinus.gb \
+--separate_strands \
+-f svg \
+-o Pandoravirus_salinus_forest \
+-p forest \
+--track tuckin \
+--species "<i>Pandoravirus salinus</i>" \
+--definition_font_size 22 \
+--legend upper_right
+```
+![Pandoravirus_salinus_forest.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/Pandoravirus_salinus_forest.svg)
+
+#### Candidatus Pelagibacter ubique HTCC1062
+```bash
+gbdraw circular \
+--gbk NC_007205.gb \
+-f svg \
+--separate_strands \
+--species "<i>Ca. </i> Pelagibacter ubique" \
+--strain "HTCC1062" \
+--legend none \
+--palette oceanic_voyage \
+-o NC_007205_oceanic_voyage
+```
+![NC_007205_oceanic_voyage.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_007205_oceanic_voyage.svg)
+
+#### <i>Prochlorococcus marinus</i> CCMP1375
+```bash
+gbdraw circular \
+--gbk NC_005042.gb \
+-f svg \
+--separate_strands \
+--species "<i>Prochlorococcus marinus</i>" \
+--strain "CCMP1375" \
+--legend none \
+--palette pine_reflection \
+-o NC_005042_pine_reflection
+```
+![NC_005042_pine_reflection.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_005042_pine_reflection.svg)
+
+#### <i>Flavobacterium columnare</i> ATCC 49512
+```bash
+gbdraw circular \
+--gbk NC_016510.gb \
+-f svg \
+--separate_strands \
+--species "<i>Flavobacterium columnare</i>" \
+--strain "ATCC 49512" \
+--legend none \
+--palette mint \
+-o NC_016510_mint
+```
+![NC_016510_mint.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_016510_mint.svg)
+
+#### <i>Thermus aquaticus</i> Y51MC23
+```bash
+gbdraw circular \
+--gbk NZ_CP010822.gb \
+-f svg \
+--separate_strands \
+--species "<i>Thermus aquaticus</i>" \
+--strain "Y51MC23" \
+--legend none \
+--palette orange \
+-o NZ_CP010822_orange
+```
+![NZ_CP010822_orange.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NZ_CP010822_orange.svg)
+
+#### <i>Helicobacter pylori</i> J99
+```bash
+gbdraw circular \
+--gbk NC_000921.gb \
+-f svg \
+--separate_strands \
+--species "<i>Helicobacter pylori</i>" \
+--strain "J99" \
+--legend none \
+--palette spring \
+-o NC_000921_spring
+```
+![NC_000921_spring.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_000921_spring.svg)
+
+
+#### <i>Mycobacterium tuberculosis</i> H37Rv
+```bash
+gbdraw circular \
+--gbk NC_000962.gb \
+-f svg \
+--separate_strands \
+--species "<i>Mycobacterium tuberculosis</i>" \
+--strain "H37Rv" \
+--legend none \
+--palette psyche \
+-o NC_000962_psyche
+```
+![NC_000962_psyche.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_000962_psyche.svg)
+
+
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | **Gallery** | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)

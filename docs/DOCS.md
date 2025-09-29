@@ -24,14 +24,6 @@ Learn how to use `gbdraw`'s features step-by-step, from basic customization to a
 
 ---
 
-### **🍳 Recipes**
-
-Find solutions to common tasks and create publication-quality figures.
-
-* **[Go to Recipes](./RECIPES.md)**: Practical examples for specific goals.
-
----
-
 ### **🔧 Reference**
 
 Look here for detailed information, examples, and answers to specific questions.
