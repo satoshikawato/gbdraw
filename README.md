@@ -44,14 +44,6 @@ You can try `gbdraw` (latest release) on Google Colaboratory without any local i
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
 
-
-
-
 ## Bug reports and suggestions
 Please feel free to submit a new issue if you find a bug or have a suggestion:
 https://github.com/satoshikawato/gbdraw/issues
-
-
-
-
-
