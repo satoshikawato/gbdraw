@@ -1,0 +1,5950 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   height="1000px"
+   version="1.1"
+   viewBox="0 0 1400 1000"
+   width="1400px"
+   id="svg471"
+   sodipodi:docname="NC_001879_color.svg"
+   inkscape:export-filename="NC_001879_color.png"
+   inkscape:export-xdpi="300"
+   inkscape:export-ydpi="300"
+   inkscape:version="1.4 (86a8ad7, 2024-10-11)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview471"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.508"
+     inkscape:cx="642.71654"
+     inkscape:cy="429.13386"
+     inkscape:window-width="1280"
+     inkscape:window-height="730"
+     inkscape:window-x="-6"
+     inkscape:window-y="-6"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg471" />
+  <defs
+     id="defs1" />
+  <g
+     id="Axis"
+     transform="translate(700.0,500.0)">
+    <circle
+       cx="0"
+       cy="0"
+       fill="none"
+       r="390"
+       stroke="gray"
+       stroke-width="3.0"
+       id="circle1" />
+  </g>
+  <g
+     id="NC_001879.2"
+     transform="translate(700.0,500.0)">
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="108.48064862283015"
+       y="-406.36842079669606"
+       id="text1">psbK</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="124.96550714901896"
+       x2="108.48064862283015"
+       y1="-377.6618355393996"
+       y2="-406.36842079669606"
+       id="line1" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="124.96550714901896"
+       x2="117.30830695606436"
+       y1="-377.6618355393996"
+       y2="-354.5207916950736"
+       id="line2" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="133.31920517943252"
+       y="-398.58630493256425"
+       id="text2">psbI</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="132.5932603533405"
+       x2="133.31920517943252"
+       y1="-375.05181949814784"
+       y2="-398.58630493256425"
+       id="line3" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="132.5932603533405"
+       x2="124.4686733218858"
+       y1="-375.05181949814784"
+       y2="-352.07070310732996"
+       id="line4" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="152.82715116501657"
+       y="-391.2145836696454"
+       id="text4">tRNA-Gly</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="148.77549510195072"
+       x2="152.82715116501657"
+       y1="-368.93182575805173"
+       y2="-391.2145836696454"
+       id="line5" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="148.77549510195072"
+       x2="139.65934956874295"
+       y1="-368.93182575805173"
+       y2="-346.32570898366134"
+       id="line6" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="175.08080510328142"
+       y="-381.36318633518886"
+       id="text6">tRNA-Arg</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="162.87972052762015"
+       x2="175.08080510328142"
+       y1="-362.9256626925745"
+       y2="-381.36318633518886"
+       id="line7" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="162.87972052762015"
+       x2="152.89934549529048"
+       y1="-362.9256626925745"
+       y2="-340.68757061582363"
+       id="line8" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="379.6954420693575"
+       y="-164.44060265571986"
+       id="text8">tRNA-Cys</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="364.9970889461926"
+       x2="379.6954420693575"
+       y1="-158.18332737935802"
+       y2="-164.44060265571986"
+       id="line9" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="364.9970889461926"
+       x2="342.6320712411563"
+       y1="-158.18332737935802"
+       y2="-148.49072153503462"
+       id="line10" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="384.2788961405763"
+       y="-152.932924278206"
+       id="text10">petN</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="369.6157369826796"
+       x2="384.2788961405763"
+       y1="-147.06817118177077"
+       y2="-152.932924278206"
+       id="line11" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="369.6157369826796"
+       x2="346.96771388325067"
+       y1="-147.06817118177077"
+       y2="-138.05664108484854"
+       id="line12" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="401.8221647499658"
+       y="-94.89263656983415"
+       id="text12">tRNA-Thr</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="387.11756341582833"
+       x2="401.8221647499658"
+       y1="-91.56872880515567"
+       y2="-94.89263656983415"
+       id="line13" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="387.11756341582833"
+       x2="363.3971244810349"
+       y1="-91.56872880515567"
+       y2="-85.95789983425152"
+       id="line14" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="407.35861809089204"
+       y="-65.81758747395399"
+       id="text14">psbD</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="392.6942289781544"
+       x2="407.35861809089204"
+       y1="-63.53017021268582"
+       y2="-65.81758747395399"
+       id="line15" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="392.6942289781544"
+       x2="368.63208259468905"
+       y1="-63.53017021268582"
+       y2="-59.63739017514379"
+       id="line16" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="409.95011981232295"
+       y="-46.0739503822231"
+       id="text16">psbC</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="395.31832271688825"
+       x2="409.95011981232295"
+       y1="-44.365118328549265"
+       y2="-46.0739503822231"
+       id="line17" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="395.31832271688825"
+       x2="371.09538627590246"
+       y1="-44.365118328549265"
+       y2="-41.646667450574434"
+       id="line18" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="411.7033237369653"
+       y="-24.906460297995434"
+       id="text18">psbZ</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="397.26007994701183"
+       x2="411.7033237369653"
+       y1="-20.718804996759886"
+       y2="-24.906460297995434"
+       id="line19" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="397.26007994701183"
+       x2="372.91816328359204"
+       y1="-20.718804996759886"
+       y2="-19.449270376860383"
+       id="line20" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="412.1762676821291"
+       y="-14.62619930176726"
+       id="text20">tRNA-Gly</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="397.5452660520571"
+       x2="412.1762676821291"
+       y1="-14.233813248708856"
+       y2="-14.62619930176726"
+       id="line21" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="397.5452660520571"
+       x2="373.18587474984776"
+       y1="-14.233813248708856"
+       y2="-13.361643319253657"
+       id="line22" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="391.1352176831245"
+       y="133.5790048714989"
+       id="text22">tRNA-Ser</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="376.3956057165892"
+       x2="391.1352176831245"
+       y1="128.72912645257068"
+       y2="133.5790048714989"
+       id="line23" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="376.3956057165892"
+       x2="353.33214948395505"
+       y1="128.72912645257068"
+       y2="120.8413123317024"
+       id="line24" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="378.4477536452913"
+       y="167.41361562512407"
+       id="text24">tRNA-Leu</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="363.82083614274643"
+       x2="378.4477536452913"
+       y1="160.87025576032653"
+       y2="167.41361562512407"
+       id="line25" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="363.82083614274643"
+       x2="341.52789275164673"
+       y1="160.87025576032653"
+       y2="151.013009696581"
+       id="line26" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="371.9693763222748"
+       y="181.92821796751622"
+       id="text26">tRNA-Phe</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="357.30668184251994"
+       x2="371.9693763222748"
+       y1="174.86216031688576"
+       y2="181.92821796751622"
+       id="line27" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="357.30668184251994"
+       x2="335.41289006295375"
+       y1="174.86216031688576"
+       y2="164.14756716021384"
+       id="line28" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="335.6361466079134"
+       y="244.77159628617812"
+       id="text28">tRNA-Met</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="321.36045296224916"
+       x2="335.6361466079134"
+       y1="234.46172240239574"
+       y2="244.77159628617812"
+       id="line29" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="321.36045296224916"
+       x2="301.6692487366211"
+       y1="234.46172240239574"
+       y2="220.0951952944058"
+       id="line30" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="260.72046303511615"
+       y="326.36015113140934"
+       id="text30">psaI</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="236.85380662646048"
+       x2="260.72046303511615"
+       y1="319.6014929354293"
+       y2="326.36015113140934"
+       id="line31" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="236.85380662646048"
+       x2="222.3407057302313"
+       y1="319.6014929354293"
+       y2="300.0180681232094"
+       id="line32" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="248.31852014967893"
+       y="336.29677356167247"
+       id="text32">ycf4</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="226.73376501993442"
+       x2="248.31852014967893"
+       y1="326.8587459436953"
+       y2="336.29677356167247"
+       id="line33" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="226.73376501993442"
+       x2="212.84076471234042"
+       y1="326.8587459436953"
+       y2="306.8306365108708"
+       id="line34" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="236.2623517709566"
+       y="345.2375370429768"
+       id="text34">cemA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="215.4829035252017"
+       x2="236.2623517709566"
+       y1="334.38295155158346"
+       y2="345.2375370429768"
+       id="line35" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="215.4829035252017"
+       x2="202.27929424056924"
+       y1="334.38295155158346"
+       y2="313.89380010847174"
+       id="line36" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="223.6559759540231"
+       y="353.88727616273405"
+       id="text36">petA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="201.0579786051884"
+       x2="223.6559759540231"
+       y1="343.2499515501723"
+       y2="353.88727616273405"
+       id="line37" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="201.0579786051884"
+       x2="188.73824952398812"
+       y1="343.2499515501723"
+       y2="322.2174790287157"
+       id="line38" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="208.26622286673106"
+       y="363.55088764721245"
+       id="text38">petL</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="150.4536736949768"
+       x2="208.26622286673106"
+       y1="368.25063757132244"
+       y2="363.55088764721245"
+       id="line39" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="150.4536736949768"
+       x2="141.23469859111793"
+       y1="368.25063757132244"
+       y2="345.6862602691581"
+       id="line40" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="191.01107389729475"
+       y="373.30300029243455"
+       id="text40">petG</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="146.2002851384397"
+       x2="191.01107389729475"
+       y1="369.9598851570788"
+       y2="373.30300029243455"
+       id="line41" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="146.2002851384397"
+       x2="137.24193433338826"
+       y1="369.9598851570788"
+       y2="347.2907745469637"
+       id="line42" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="171.5536984935945"
+       y="383.03143012046314"
+       id="text42">psaJ</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="131.09617894960536"
+       x2="171.5536984935945"
+       y1="375.57773078926425"
+       y2="383.03143012046314"
+       id="line43" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="131.09617894960536"
+       x2="123.06332484730112"
+       y1="375.57773078926425"
+       y2="352.5643894418829"
+       id="line44" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="148.6059857814618"
+       y="392.9070758453359"
+       id="text44">rpl33</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="121.99444732665243"
+       x2="148.6059857814618"
+       y1="378.63200448649957"
+       y2="392.9070758453359"
+       id="line45" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="121.99444732665243"
+       x2="114.51929736791148"
+       y1="378.63200448649957"
+       y2="355.4315140155131"
+       id="line46" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="121.81985991157083"
+       y="402.40669854199484"
+       id="text46">rps18</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="115.27080359545646"
+       x2="121.81985991157083"
+       y1="380.7328221186843"
+       y2="402.40669854199484"
+       id="line47" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="115.27080359545646"
+       x2="108.20764161044075"
+       y1="380.7328221186843"
+       y2="357.40360507709823"
+       id="line48" />
+    <text
+       alignment-baseline="hanging"
+       dominant-baseline="hanging"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="55.40191454504422"
+       y="417.3823987659565"
+       id="text48">psbT</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="19.8184024167586"
+       x2="55.40191454504422"
+       y1="397.30601672469976"
+       y2="417.3823987659565"
+       id="line49" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="19.8184024167586"
+       x2="18.604039523574862"
+       y1="397.30601672469976"
+       y2="372.96128530774513"
+       id="line50" />
+    <text
+       alignment-baseline="hanging"
+       dominant-baseline="hanging"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="30.851321818058477"
+       y="420.0198837748113"
+       id="text50">psbH</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="12.139309146848689"
+       x2="30.851321818058477"
+       y1="397.6147346030291"
+       y2="420.0198837748113"
+       id="line51" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="12.139309146848689"
+       x2="11.395478929517274"
+       y1="397.6147346030291"
+       y2="373.2510866494121"
+       id="line52" />
+    <text
+       alignment-baseline="hanging"
+       dominant-baseline="hanging"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="8.853074191248112"
+       y="421.10294751811165"
+       id="text52">petB</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="8.245804537282318"
+       x2="8.853074191248112"
+       y1="397.71452916323403"
+       y2="421.10294751811165"
+       id="line53" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="8.245804537282318"
+       x2="7.740546906321392"
+       y1="397.71452916323403"
+       y2="373.3447663468594"
+       id="line54" />
+    <text
+       alignment-baseline="hanging"
+       dominant-baseline="hanging"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-18.349285093564415"
+       y="420.78291768531204"
+       id="text54">petD</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-17.264722692395402"
+       x2="-18.349285093564415"
+       y1="397.42517453019343"
+       y2="420.78291768531204"
+       id="line55" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-17.264722692395402"
+       x2="-16.20683527251823"
+       y1="397.42517453019343"
+       y2="373.0731417771178"
+       id="line56" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-346.5146245760227"
+       y="228.41461374025948"
+       id="text56">tRNA-Val</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-332.18005826187056"
+       x2="-346.5146245760227"
+       y1="218.86353943299994"
+       y2="228.41461374025948"
+       id="line57" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-332.18005826187056"
+       x2="-311.8258880252363"
+       y1="218.86353943299994"
+       y2="205.4527833402916"
+       id="line58" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-355.21118592721655"
+       y="214.02847106459654"
+       id="text58">16S ribosomal RNA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-340.7967209893098"
+       x2="-355.21118592721655"
+       y1="205.1887788426418"
+       y2="214.02847106459654"
+       id="line59" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-340.7967209893098"
+       x2="-319.914568967906"
+       y1="205.1887788426418"
+       y2="192.61593700179364"
+       id="line60" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-362.0676660523042"
+       y="201.68955089111935"
+       id="text60">tRNA-Ile</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-349.277393339489"
+       x2="-362.0676660523042"
+       y1="190.39470187474205"
+       y2="201.68955089111935"
+       id="line61" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-349.277393339489"
+       x2="-327.8755922770203"
+       y1="190.39470187474205"
+       y2="178.72835984810342"
+       id="line62" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-366.2565879644197"
+       y="193.640324157904"
+       id="text62">oriA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-354.8198165405958"
+       x2="-366.2565879644197"
+       y1="179.85476860538884"
+       y2="193.640324157904"
+       id="line63" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-354.8198165405958"
+       x2="-333.0784062133534"
+       y1="179.85476860538884"
+       y2="168.8342558231959"
+       id="line64" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-370.1788143642593"
+       y="185.6983783190248"
+       id="text64">tRNA-Ala</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-355.54519166133605"
+       x2="-370.1788143642593"
+       y1="178.4165258223123"
+       y2="185.6983783190248"
+       id="line65" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-355.54519166133605"
+       x2="-333.7593343291463"
+       y1="178.4165258223123"
+       y2="167.48414066163141"
+       id="line66" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-385.3919009109463"
+       y="149.98330302274474"
+       id="text66">23S ribosomal RNA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-370.6522511749119"
+       x2="-385.3919009109463"
+       y1="144.4359674699139"
+       y2="149.98330302274474"
+       id="line67" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-370.6522511749119"
+       x2="-347.94071617644914"
+       y1="144.4359674699139"
+       y2="135.58572436513975"
+       id="line68" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-391.94930779142487"
+       y="131.0665207665857"
+       id="text68">4.5S ribosomal RNA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-378.9806621543489"
+       x2="-391.94930779142487"
+       y1="120.90697958782725"
+       y2="131.0665207665857"
+       id="line69" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-378.9806621543489"
+       x2="-355.75880785567557"
+       y1="120.90697958782725"
+       y2="113.49846368171038"
+       id="line70" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-394.4460557978252"
+       y="123.00635235357082"
+       id="text70">5S ribosomal RNA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-380.73166098950935"
+       x2="-394.4460557978252"
+       y1="115.27463866856993"
+       y2="123.00635235357082"
+       id="line71" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-380.73166098950935"
+       x2="-357.4025150955443"
+       y1="115.27463866856993"
+       y2="108.21124169132914"
+       id="line72" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-396.97965422332754"
+       y="114.18920406080318"
+       id="text72">tRNA-Arg</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-382.3392768871042"
+       x2="-396.97965422332754"
+       y1="109.82493956040354"
+       y2="114.18920406080318"
+       id="line73" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-382.3392768871042"
+       x2="-358.911625117061"
+       y1="109.82493956040354"
+       y2="103.0954702245945"
+       id="line74" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-404.2456006175333"
+       y="83.4694491584432"
+       id="text74">NitaCp079</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-389.5718379483172"
+       x2="-404.2456006175333"
+       y1="80.48989425741662"
+       y2="83.4694491584432"
+       id="line75" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-389.5718379483172"
+       x2="-365.7010145446213"
+       y1="80.48989425741662"
+       y2="75.55791544262394"
+       id="line76" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-411.3695149003091"
+       y="30.114723552719703"
+       id="text76">rpl32</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-396.74116864994056"
+       x2="-411.3695149003091"
+       y1="29.004915071059997"
+       y2="30.114723552719703"
+       id="line77" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-396.74116864994056"
+       x2="-372.4310480218805"
+       y1="29.004915071059997"
+       y2="27.22765311817642"
+       id="line78" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-412.23701251683815"
+       y="12.71586302142928"
+       id="text78">tRNA-Leu</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-397.6158334702078"
+       x2="-412.23701251683815"
+       y1="12.103262939884505"
+       y2="12.71586302142928"
+       id="line79" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-397.6158334702078"
+       x2="-373.2521181840431"
+       y1="12.103262939884505"
+       y2="11.361641436215113"
+       id="line80" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-412.41856766654644"
+       y="2.3524123490180586"
+       id="text80">ccsA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-397.79355773640094"
+       x2="-412.41856766654644"
+       y1="2.2639397996911685"
+       y2="2.3524123490180586"
+       id="line81" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-397.79355773640094"
+       x2="-373.41895248294503"
+       y1="2.2639397996911685"
+       y2="2.125217998239504"
+       id="line82" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-352.5123223775333"
+       y="-218.6329777537421"
+       id="text82">oriR</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-338.1186865077684"
+       x2="-352.5123223775333"
+       y1="-209.57240713954076"
+       y2="-218.6329777537421"
+       id="line83" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-338.1186865077684"
+       x2="-317.4006297364591"
+       y1="-209.57240713954076"
+       y2="-196.73096062363751"
+       id="line84" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-341.6741233539626"
+       y="-235.89759329835"
+       id="text84">tRNA-Asn</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-327.30802327539976"
+       x2="-341.6741233539626"
+       y1="-226.08471398913815"
+       y2="-235.89759329835"
+       id="line85" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-327.30802327539976"
+       x2="-307.2523845943091"
+       y1="-226.08471398913815"
+       y2="-212.2314839652939"
+       id="line86" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-278.364832780832"
+       y="-310.7894202080282"
+       id="text86">oriA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-265.3650225281095"
+       x2="-278.364832780832"
+       y1="-296.3549304780603"
+       y2="-310.7894202080282"
+       id="line87" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-265.3650225281095"
+       x2="-249.10491085359294"
+       y1="-296.3549304780603"
+       y2="-278.1959273850419"
+       id="line88" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-212.7229990999908"
+       y="-360.8494189460941"
+       id="text88">rps7</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-200.18603721141903"
+       x2="-212.7229990999908"
+       y1="-343.7592042485384"
+       y2="-360.8494189460941"
+       id="line89" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-200.18603721141903"
+       x2="-187.91973591169975"
+       y1="-343.7592042485384"
+       y2="-322.6955275176231"
+       id="line90" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-197.67723635418392"
+       y="-369.6655783306916"
+       id="text90">ndhB</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-187.57043145062676"
+       x2="-197.67723635418392"
+       y1="-350.80218534870295"
+       y2="-369.6655783306916"
+       id="line91" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-187.57043145062676"
+       x2="-176.07714520977953"
+       y1="-350.80218534870295"
+       y2="-329.30695340331675"
+       id="line92" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-161.27979493176133"
+       y="-387.65917280998167"
+       id="text92">tRNA-Leu</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-152.78011805234584"
+       x2="-161.27979493176133"
+       y1="-367.2915402346089"
+       y2="-387.65917280998167"
+       id="line93" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-152.78011805234584"
+       x2="-143.4185912109031"
+       y1="-367.2915402346089"
+       y2="-344.78593115160584"
+       id="line94" />
+    <text
+       alignment-baseline="text-after-edge"
+       dominant-baseline="text-after-edge"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-64.44638773467176"
+       y="-416.02582273116275"
+       id="text94">tRNA-Ile</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-32.80403526921058"
+       x2="-64.44638773467176"
+       y1="-396.44512264632084"
+       y2="-416.02582273116275"
+       id="line95" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-32.80403526921058"
+       x2="-30.79398408849915"
+       y1="-396.44512264632084"
+       y2="-372.153142092012"
+       id="line96" />
+    <text
+       alignment-baseline="text-after-edge"
+       dominant-baseline="text-after-edge"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-40.89032133125098"
+       y="-419.1247010035244"
+       id="text96">rpl23</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-27.32220470112979"
+       x2="-40.89032133125098"
+       y1="-396.860601635221"
+       y2="-419.1247010035244"
+       id="line97" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-27.32220470112979"
+       x2="-25.648050001305663"
+       y1="-396.860601635221"
+       y2="-372.54316280953344"
+       id="line98" />
+    <text
+       alignment-baseline="text-after-edge"
+       dominant-baseline="text-after-edge"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="-23.02218419655699"
+       y="-420.54324987346456"
+       id="text98">rpl2</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-21.651109666259114"
+       x2="-23.02218419655699"
+       y1="-397.2103591929843"
+       y2="-420.54324987346456"
+       id="line99" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-21.651109666259114"
+       x2="-20.324448534748136"
+       y1="-397.2103591929843"
+       y2="-372.8714891443946"
+       id="line100" />
+    <text
+       alignment-baseline="hanging"
+       dominant-baseline="hanging"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="0.5407136360621771"
+       y="-299.81204335956505"
+       id="text100">tRNA-His</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="0.5676573089814805"
+       x2="0.5407136360621771"
+       y1="-331.4995139742735"
+       y2="-299.81204335956505"
+       id="line101" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="0.5676573089814805"
+       x2="0.6010489153921558"
+       y1="-331.4995139742735"
+       y2="-350.99948538452486"
+       id="line102" />
+    <text
+       alignment-baseline="hanging"
+       dominant-baseline="hanging"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="25.223389907285682"
+       y="-298.8171684018839"
+       id="text102">psbA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="14.233810637190818"
+       x2="25.223389907285682"
+       y1="-331.19427627111037"
+       y2="-298.8171684018839"
+       id="line103" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="14.233810637190818"
+       x2="15.071093615849101"
+       y1="-331.19427627111037"
+       y2="-350.6762925223522"
+       id="line104" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="71.42870002109427"
+       y="-291.7350372576248"
+       id="text104">tRNA-Lys</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="58.33699063013724"
+       x2="71.42870002109427"
+       y1="-326.32659334510157"
+       y2="-291.7350372576248"
+       id="line105" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="58.33699063013724"
+       x2="61.76857831426295"
+       y1="-326.32659334510157"
+       y2="-345.52227530657814"
+       id="line106" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="98.09783305241345"
+       y="-284.38563118097375"
+       id="text106">rps16</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="81.87496322857888"
+       x2="98.09783305241345"
+       y1="-321.2300427984886"
+       y2="-284.38563118097375"
+       id="line107" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="81.87496322857888"
+       x2="86.69113753614234"
+       y1="-321.2300427984886"
+       y2="-340.12592766898797"
+       id="line108" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="122.34379231289711"
+       y="-275.4444296752635"
+       id="text108">tRNA-Gln</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="98.08323046128511"
+       x2="122.34379231289711"
+       y1="-316.6574330444154"
+       y2="-275.4444296752635"
+       id="line109" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="98.08323046128511"
+       x2="103.85283225312541"
+       y1="-316.6574330444154"
+       y2="-335.2843408705575"
+       id="line110" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="139.63641460611802"
+       y="-267.6319747565318"
+       id="text110">tRNA-Ser</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="113.57419813056022"
+       x2="139.63641460611802"
+       y1="-311.4372352802411"
+       y2="-267.6319747565318"
+       id="line111" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="113.57419813056022"
+       x2="120.25503331471081"
+       y1="-311.4372352802411"
+       y2="-329.75707264966707"
+       id="line112" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="156.21243163785113"
+       y="-258.909563732716"
+       id="text112">atpF</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="170.23196252664144"
+       x2="156.21243163785113"
+       y1="-284.45268312028304"
+       y2="-258.909563732716"
+       id="line113" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="170.23196252664144"
+       x2="180.24560738114977"
+       y1="-284.45268312028304"
+       y2="-301.1851938920644"
+       id="line114" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="172.16408660024882"
+       y="-249.25590793338526"
+       id="text114">atpH</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="177.0186515074938"
+       x2="172.16408660024882"
+       y1="-280.2795872311583"
+       y2="-249.25590793338526"
+       id="line115" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="177.0186515074938"
+       x2="187.43151336087575"
+       y1="-280.2795872311583"
+       y2="-296.7666217741676"
+       id="line116" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="186.4028693439165"
+       y="-239.47239647556853"
+       id="text116">atpI</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="195.26875685016049"
+       x2="186.4028693439165"
+       y1="-267.8849801653555"
+       y2="-239.47239647556853"
+       id="line117" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="195.26875685016049"
+       x2="206.75515431193463"
+       y1="-267.8849801653555"
+       y2="-283.6429201750823"
+       id="line118" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="199.2224489467991"
+       y="-229.6024151209608"
+       id="text118">rps2</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="205.41374389985504"
+       x2="199.2224489467991"
+       y1="-260.1873244742041"
+       y2="-229.6024151209608"
+       id="line119" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="205.41374389985504"
+       x2="217.49690530572886"
+       y1="-260.1873244742041"
+       y2="-275.4924612079808"
+       id="line120" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="252.8757679811563"
+       y="-173.2062302157131"
+       id="text120">rpoC1</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="273.42676174859594"
+       x2="252.8757679811563"
+       y1="-187.43013620993966"
+       y2="-173.2062302157131"
+       id="line121" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="273.42676174859594"
+       x2="289.5106889102781"
+       y1="-187.43013620993966"
+       y2="-198.45543833993614"
+       id="line122" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="287.75100453942815"
+       y="-111.09775173341639"
+       id="text122">psbM</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="313.70404312945016"
+       x2="287.75100453942815"
+       y1="-107.15420348374603"
+       y2="-111.09775173341639"
+       id="line123" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="313.70404312945016"
+       x2="332.1572221370649"
+       y1="-107.15420348374603"
+       y2="-113.4573919239664"
+       id="line124" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="291.6734589736744"
+       y="-101.06537216597032"
+       id="text124">tRNA-Asp</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="318.3659788195284"
+       x2="291.6734589736744"
+       y1="-92.38697705999257"
+       y2="-101.06537216597032"
+       id="line125" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="318.3659788195284"
+       x2="337.0933893383242"
+       y1="-92.38697705999257"
+       y2="-97.82150512234507"
+       id="line126" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="295.1075840652365"
+       y="-91.25260664882794"
+       id="text126">tRNA-Tyr</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="319.0530271448804"
+       x2="295.1075840652365"
+       y1="-89.9856425752921"
+       y2="-91.25260664882794"
+       id="line127" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="319.0530271448804"
+       x2="337.82085227104983"
+       y1="-89.9856425752921"
+       y2="-95.27891566795634"
+       id="line128" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="297.9089876726007"
+       y="-82.28736254115238"
+       id="text128">tRNA-Glu</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="319.54665672712594"
+       x2="297.9089876726007"
+       y1="-88.21668875284516"
+       y2="-82.28736254115238"
+       id="line129" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="319.54665672712594"
+       x2="338.3435188875451"
+       y1="-88.21668875284516"
+       y2="-93.40590573830663"
+       id="line130" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="308.9341867731654"
+       y="-22.47955953661789"
+       id="text130">tRNA-Ser</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="330.6326711675946"
+       x2="308.9341867731654"
+       y1="-23.96428084840566"
+       y2="-22.47955953661789"
+       id="line131" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="330.6326711675946"
+       x2="350.08165182451194"
+       y1="-23.96428084840566"
+       y2="-25.37394442772364"
+       id="line132" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="309.56951872671135"
+       y="-11.718296522955361"
+       id="text132">tRNA-Met</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="331.40673407993074"
+       x2="309.56951872671135"
+       y1="-7.862989665137895"
+       y2="-11.718296522955361"
+       id="line133" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="331.40673407993074"
+       x2="350.90124784933846"
+       y1="-7.862989665137895"
+       y2="-8.325518468969536"
+       id="line134" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="309.78982463231506"
+       y="-3.087247444290928"
+       id="text134">rps14</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="331.48301404629467"
+       x2="309.78982463231506"
+       y1="-3.3558007664335454"
+       y2="-3.087247444290928"
+       id="line135" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="331.48301404629467"
+       x2="350.9820148725473"
+       y1="-3.3558007664335454"
+       y2="-3.5532008115178715"
+       id="line136" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="302.23858159217684"
+       y="65.86159219390873"
+       id="text136">ycf3</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="323.8743878835622"
+       x2="302.23858159217684"
+       y1="70.69392387644015"
+       y2="65.86159219390873"
+       id="line137" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="323.8743878835622"
+       x2="342.92582246494817"
+       y1="70.69392387644015"
+       y2="74.85238998681899"
+       id="line138" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="289.4609459289463"
+       y="106.85673638672269"
+       id="text138">rps4</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="310.604190717952"
+       x2="289.4609459289463"
+       y1="115.83301217030525"
+       y2="106.85673638672269"
+       id="line139" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="310.604190717952"
+       x2="328.87502546606686"
+       y1="115.83301217030525"
+       y2="122.6467187685585"
+       id="line140" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="285.7454273719322"
+       y="115.84426082217844"
+       id="text140">tRNA-Thr</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="307.1664346279839"
+       x2="285.7454273719322"
+       y1="124.66367328910408"
+       y2="115.84426082217844"
+       id="line141" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="307.1664346279839"
+       x2="325.23504842963"
+       y1="124.66367328910408"
+       y2="131.99683054140434"
+       id="line142" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="272.2888306006147"
+       y="143.01217263448163"
+       id="text142">ndhJ</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="291.95484379534184"
+       x2="272.2888306006147"
+       y1="157.0178944720555"
+       y2="143.01217263448163"
+       id="line143" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="291.95484379534184"
+       x2="309.12865813624427"
+       y1="157.0178944720555"
+       y2="166.25424120570582"
+       id="line144" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="267.6761016981098"
+       y="150.94732218839508"
+       id="text144">ndhK</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="287.30755222981253"
+       x2="267.6761016981098"
+       y1="165.36813608344733"
+       y2="150.94732218839508"
+       id="line145" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="287.30755222981253"
+       x2="304.20799647862503"
+       y1="165.36813608344733"
+       y2="175.09567350012068"
+       id="line146" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="262.7019430166199"
+       y="158.9207929300463"
+       id="text146">ndhC</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="283.6176491596035"
+       x2="262.7019430166199"
+       y1="171.61957663734066"
+       y2="158.9207929300463"
+       id="line147" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="283.6176491596035"
+       x2="300.301040286639"
+       y1="171.61957663734066"
+       y2="181.71484585130187"
+       id="line148" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="250.8608106671811"
+       y="175.92889961720556"
+       id="text148">tRNA-Val</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="269.7199080611449"
+       x2="250.8608106671811"
+       y1="192.72628568902468"
+       y2="175.92889961720556"
+       id="line149" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="269.7199080611449"
+       x2="285.5857850059181"
+       y1="192.72628568902468"
+       y2="204.0631260236732"
+       id="line150" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="243.9307846771256"
+       y="184.83031097081172"
+       id="text150">atpE</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="264.1454121338316"
+       x2="243.9307846771256"
+       y1="200.29840550700413"
+       y2="184.83031097081172"
+       id="line151" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="264.1454121338316"
+       x2="279.68337755346874"
+       y1="200.29840550700413"
+       y2="212.08066465447496"
+       id="line152" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="200.46198099396966"
+       y="228.58979533262297"
+       id="text152">psbJ</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="148.67745370539396"
+       x2="200.46198099396966"
+       y1="296.28915734410606"
+       y2="228.58979533262297"
+       id="line153" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="148.67745370539396"
+       x2="157.42318627629948"
+       y1="296.28915734410606"
+       y2="313.7179313055241"
+       id="line154" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="187.39471207696087"
+       y="238.7463375994679"
+       id="text154">psbL</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="145.75745604050252"
+       x2="187.39471207696087"
+       y1="297.7364841745146"
+       y2="238.7463375994679"
+       id="line155" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="145.75745604050252"
+       x2="154.33142404288503"
+       y1="297.7364841745146"
+       y2="315.25039500830957"
+       id="line156" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="172.70315030581312"
+       y="248.90641349017994"
+       id="text156">psbF</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="144.06965435342673"
+       x2="172.70315030581312"
+       y1="298.5568366232536"
+       y2="248.90641349017994"
+       id="line157" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="144.06965435342673"
+       x2="152.5443399036283"
+       y1="298.5568366232536"
+       y2="316.119003483445"
+       id="line158" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="156.07232667605933"
+       y="258.9886824040936"
+       id="text158">psbE</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="141.71951479012762"
+       x2="156.07232667605933"
+       y1="299.67954405940156"
+       y2="258.9886824040936"
+       id="line159" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="141.71951479012762"
+       x2="150.05595683660573"
+       y1="299.67954405940156"
+       y2="317.307752533484"
+       id="line160" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="137.0722936036587"
+       y="268.87051101759954"
+       id="text160">tRNA-Trp</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="119.03367953233727"
+       x2="137.0722936036587"
+       y1="309.3917147193713"
+       y2="268.87051101759954"
+       id="line161" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="119.03367953233727"
+       x2="126.0356606812983"
+       y1="309.3917147193713"
+       y2="327.5912273499225"
+       id="line162" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="117.357751685223"
+       y="277.4687945304778"
+       id="text162">tRNA-Pro</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="116.06137455714446"
+       x2="117.357751685223"
+       y1="310.51893233087446"
+       y2="277.4687945304778"
+       id="line163" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="116.06137455714446"
+       x2="122.88851423697649"
+       y1="310.51893233087446"
+       y2="328.7847518797495"
+       id="line164" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="91.97370622688294"
+       y="286.295865301653"
+       id="text164">rpl20</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="89.06291145191032"
+       x2="91.97370622688294"
+       y1="319.3118347379395"
+       y2="286.295865301653"
+       id="line165" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="89.06291145191032"
+       x2="94.30190624319917"
+       y1="319.3118347379395"
+       y2="338.09488384017124"
+       id="line166" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="68.32070557148744"
+       y="292.43136348195924"
+       id="text166">clpP</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="71.32994541013566"
+       x2="68.32070557148744"
+       y1="323.7349052663106"
+       y2="292.43136348195924"
+       id="line167" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="71.32994541013566"
+       x2="75.52582455190834"
+       y1="323.7349052663106"
+       y2="342.77813498785827"
+       id="line168" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="47.44940240339157"
+       y="296.27521178662647"
+       id="text168">psbN</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="13.960247027197308"
+       x2="47.44940240339157"
+       y1="331.2059200904169"
+       y2="296.27521178662647"
+       id="line169" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="13.960247027197308"
+       x2="14.78143802879715"
+       y1="331.2059200904169"
+       y2="350.68862127220615"
+       id="line170" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="22.959273440598643"
+       y="298.9880711201395"
+       id="text170">rpoA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-39.872997888194746"
+       x2="22.959273440598643"
+       y1="329.0932907845555"
+       y2="298.9880711201395"
+       id="line171" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-39.872997888194746"
+       x2="-42.2184683522062"
+       y1="329.0932907845555"
+       y2="348.45171965423526"
+       id="line172" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="end"
+       x="1.8970161620917233e-14"
+       y="299.8125"
+       id="text172">rps11</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-50.20075711527308"
+       x2="1.8970161620917233e-14"
+       y1="327.6768743519344"
+       y2="299.8125"
+       id="line173" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-50.20075711527308"
+       x2="-53.1537428279362"
+       y1="327.6768743519344"
+       y2="346.95198460793046"
+       id="line174" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-49.745682440404785"
+       y="295.92225484303276"
+       id="text174">rpl36</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-55.03386432894542"
+       x2="-49.745682440404785"
+       y1="326.89986812022914"
+       y2="295.92225484303276"
+       id="line175" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-55.03386432894542"
+       x2="-58.271150465942206"
+       y1="326.89986812022914"
+       y2="346.1292721273015"
+       id="line176" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-70.58658876621638"
+       y="291.9269316567145"
+       id="text176">rps8</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-64.17169945893703"
+       x2="-70.58658876621638"
+       y1="325.2295235499875"
+       y2="291.9269316567145"
+       id="line177" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-64.17169945893703"
+       x2="-67.94650530946274"
+       y1="325.2295235499875"
+       y2="344.3606719941044"
+       id="line178" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-94.29436020383447"
+       y="285.587984579247"
+       id="text178">rpl14</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-71.42777051220875"
+       x2="-94.29436020383447"
+       y1="323.71333552953183"
+       y2="285.587984579247"
+       id="line179" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-71.42777051220875"
+       x2="-75.62940407175044"
+       y1="323.71333552953183"
+       y2="342.75529644303367"
+       id="line180" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-117.9079936365421"
+       y="277.25024068621263"
+       id="text180">rpl16</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-93.78747737373783"
+       x2="-117.9079936365421"
+       y1="317.9562219675385"
+       y2="277.25024068621263"
+       id="line181" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-93.78747737373783"
+       x2="-99.30438780748712"
+       y1="317.9562219675385"
+       y2="336.6595291420996"
+       id="line182" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-138.62185913075012"
+       y="268.1254607154034"
+       id="text182">rps3</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-99.90607485654067"
+       x2="-138.62185913075012"
+       y1="316.0870547914914"
+       y2="268.1254607154034"
+       id="line183" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-99.90607485654067"
+       x2="-105.78290278927837"
+       y1="316.0870547914914"
+       y2="334.6804109556968"
+       id="line184" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-157.47144449490463"
+       y="258.1943041310529"
+       id="text184">rpl22</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-106.84131960222291"
+       x2="-157.47144449490463"
+       y1="313.81074300548676"
+       y2="258.1943041310529"
+       id="line185" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-106.84131960222291"
+       x2="-113.12610310823602"
+       y1="313.81074300548676"
+       y2="332.27019847639775"
+       id="line186" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-173.82376381689065"
+       y="248.17479511991698"
+       id="text186">rps19</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-112.21791188800081"
+       x2="-173.82376381689065"
+       y1="311.92850182613466"
+       y2="248.17479511991698"
+       id="line187" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-112.21791188800081"
+       x2="-118.81896552847145"
+       y1="311.92850182613466"
+       y2="330.27723722767195"
+       id="line188" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-188.08290957598044"
+       y="238.23898340399248"
+       id="text188">rpl2</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-130.79231383716194"
+       x2="-188.08290957598044"
+       y1="304.60732204121643"
+       y2="238.23898340399248"
+       id="line189" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-130.79231383716194"
+       x2="-138.48597935699502"
+       y1="304.60732204121643"
+       y2="322.52539980834683"
+       id="line190" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-201.03855057114063"
+       y="228.11509306183"
+       id="text190">rpl23</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-135.12963882465414"
+       x2="-201.03855057114063"
+       y1="302.7081609588987"
+       y2="228.11509306183"
+       id="line191" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-135.12963882465414"
+       x2="-143.0784411084573"
+       y1="302.7081609588987"
+       y2="320.5145233682457"
+       id="line192" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-211.56401386590323"
+       y="219.01900885959913"
+       id="text192">tRNA-Ile</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-139.3000288610226"
+       x2="-211.56401386590323"
+       y1="300.81182150859405"
+       y2="219.01900885959913"
+       id="line193" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-139.3000288610226"
+       x2="-147.49414820578866"
+       y1="300.81182150859405"
+       y2="318.5066345385114"
+       id="line194" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-219.94372051295434"
+       y="211.1467256722345"
+       id="text194">tRNA-Leu</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-224.82394252421324"
+       x2="-219.94372051295434"
+       y1="243.61125767884633"
+       y2="211.1467256722345"
+       id="line195" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-224.82394252421324"
+       x2="-238.04888031975517"
+       y1="243.61125767884633"
+       y2="257.9413316599549"
+       id="line196" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-227.75445899451597"
+       y="203.2438216604446"
+       id="text196">ndhB</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-247.32074358562352"
+       x2="-227.75445899451597"
+       y1="220.73672053433762"
+       y2="203.2438216604446"
+       id="line197" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-247.32074358562352"
+       x2="-261.869022620072"
+       y1="220.73672053433762"
+       y2="233.7212335069457"
+       id="line198" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-235.96436844036822"
+       y="194.27459574682345"
+       id="text198">rps7</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-255.17363055670413"
+       x2="-235.96436844036822"
+       y1="211.60970740613644"
+       y2="194.27459574682345"
+       id="line199" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-255.17363055670413"
+       x2="-270.1838441188632"
+       y1="211.60970740613644"
+       y2="224.05733725355623"
+       id="line200" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-244.29701191736694"
+       y="184.37676401830618"
+       id="text200">rps12</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-263.2063718007129"
+       x2="-244.29701191736694"
+       y1="201.53078137968132"
+       y2="184.37676401830618"
+       id="line201" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-263.2063718007129"
+       x2="-278.689099553696"
+       y1="201.53078137968132"
+       y2="213.38553322554492"
+       id="line202" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-299.27782920047025"
+       y="77.49609193801935"
+       id="text202">tRNA-Asn</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-320.9168089184318"
+       x2="-299.27782920047025"
+       y1="83.09423417789442"
+       y2="77.49609193801935"
+       id="line203" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-320.9168089184318"
+       x2="-339.7942682665748"
+       y1="83.09423417789442"
+       y2="87.98213030600586"
+       id="line204" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-308.6131634836109"
+       y="-26.286761629618965"
+       id="text204">psaC</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-330.06426698012905"
+       x2="-308.6131634836109"
+       y1="-30.819306657841633"
+       y2="-26.286761629618965"
+       id="line205" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-330.06426698012905"
+       x2="-349.47981209660725"
+       y1="-30.819306657841633"
+       y2="-32.632207049479376"
+       id="line206" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-307.66516536712373"
+       y="-35.18721599419399"
+       id="text206">ndhE</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-329.3217687918593"
+       x2="-307.66516536712373"
+       y1="-37.939723243602636"
+       y2="-35.18721599419399"
+       id="line207" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-329.3217687918593"
+       x2="-348.69363754432163"
+       y1="-37.939723243602636"
+       y2="-40.17147166969691"
+       id="line208" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-306.55346377999047"
+       y="-43.33157192019754"
+       id="text208">ndhG</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-328.23125011702916"
+       x2="-306.55346377999047"
+       y1="-46.43809262461424"
+       y2="-43.33157192019754"
+       id="line209" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-328.23125011702916"
+       x2="-347.5389707121485"
+       y1="-46.43809262461424"
+       y2="-49.16974513194449"
+       id="line210" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-304.6185157064786"
+       y="-54.63648848664981"
+       id="text210">ndhI</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-326.30011683403944"
+       x2="-304.6185157064786"
+       y1="-58.484901932825345"
+       y2="-54.63648848664981"
+       id="line211" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-326.30011683403944"
+       x2="-345.49424135368884"
+       y1="-58.484901932825345"
+       y2="-61.92519028181507"
+       id="line212" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-297.8644250902239"
+       y="-82.43830426856168"
+       id="text212">ndhA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-319.4897201352874"
+       x2="-297.8644250902239"
+       y1="-88.42267089313533"
+       y2="-82.43830426856168"
+       id="line213" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-319.4897201352874"
+       x2="-338.28323308442197"
+       y1="-88.42267089313533"
+       y2="-93.62400447508448"
+       id="line214" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-294.64325285145725"
+       y="-92.6471576260632"
+       id="text214">ndhH</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-316.20056673064073"
+       x2="-294.64325285145725"
+       y1="-99.54622845302384"
+       y2="-92.6471576260632"
+       id="line215" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-316.20056673064073"
+       x2="-334.8006000677372"
+       y1="-99.54622845302384"
+       y2="-105.40188895026054"
+       id="line216" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-291.1411360691221"
+       y="-102.49274122009128"
+       id="text216">rps15</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-312.67762343678163"
+       x2="-291.1411360691221"
+       y1="-110.11336795287926"
+       y2="-102.49274122009128"
+       id="line217" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-312.67762343678163"
+       x2="-331.07042481541583"
+       y1="-110.11336795287926"
+       y2="-116.59062489128391"
+       id="line218" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-254.76691026424191"
+       y="-170.59106580868396"
+       id="text218">tRNA-Arg</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-267.6980001175502"
+       x2="-254.76691026424191"
+       y1="-195.52501306243175"
+       y2="-170.59106580868396"
+       id="line219" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-267.6980001175502"
+       x2="-283.44494130093545"
+       y1="-195.52501306243175"
+       y2="-207.0264844190454"
+       id="line220" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-248.1687193991647"
+       y="-179.46903803924386"
+       id="text220">5S ribosomal RNA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-264.8780353151885"
+       x2="-248.1687193991647"
+       y1="-199.32856395300132"
+       y2="-179.46903803924386"
+       id="line221" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-264.8780353151885"
+       x2="-280.459096216082"
+       y1="-199.32856395300132"
+       y2="-211.0537735972955"
+       id="line222" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-241.71458767425958"
+       y="-187.5372278826448"
+       id="text222">4.5S ribosomal RNA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-261.8935250535471"
+       x2="-241.71458767425958"
+       y1="-203.2339330304541"
+       y2="-187.5372278826448"
+       id="line223" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-261.8935250535471"
+       x2="-277.29902652728515"
+       y1="-203.2339330304541"
+       y2="-215.18887026753964"
+       id="line224" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-228.9238659804596"
+       y="-202.0096702624994"
+       id="text224">23S ribosomal RNA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-248.63262460859445"
+       x2="-228.9238659804596"
+       y1="-219.25799410794983"
+       y2="-202.0096702624994"
+       id="line225" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-248.63262460859445"
+       x2="-263.2580731149824"
+       y1="-219.25799410794983"
+       y2="-232.15552317312336"
+       id="line226" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-210.73308987458893"
+       y="-219.76794504896424"
+       id="text226">tRNA-Ala</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-227.07181586146984"
+       x2="-210.73308987458893"
+       y1="-241.5173708894967"
+       y2="-219.76794504896424"
+       id="line227" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-227.07181586146984"
+       x2="-240.42898150037985"
+       y1="-241.5173708894967"
+       y2="-255.72427505946712"
+       id="line228" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-201.40856882610296"
+       y="-227.80920793920677"
+       id="text228">tRNA-Ile</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-218.7340788802859"
+       x2="-201.40856882610296"
+       y1="-249.09366257773974"
+       y2="-227.80920793920677"
+       id="line229" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-218.7340788802859"
+       x2="-231.60078940265566"
+       y1="-249.09366257773974"
+       y2="-263.7462309646656"
+       id="line230" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-191.3742511334498"
+       y="-235.77142780355945"
+       id="text230">16S ribosomal RNA</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-207.85768195592684"
+       x2="-191.3742511334498"
+       y1="-258.23910248432315"
+       y2="-235.77142780355945"
+       id="line231" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-207.85768195592684"
+       x2="-220.08460442392254"
+       y1="-258.23910248432315"
+       y2="-273.42963792457743"
+       id="line232" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-180.34533442330576"
+       y="-243.77777192140226"
+       id="text232">tRNA-Val</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-197.1956983378057"
+       x2="-180.34533442330576"
+       y1="-266.4697103932549"
+       y2="-243.77777192140226"
+       id="line233" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-197.1956983378057"
+       x2="-208.7954452988531"
+       y1="-266.4697103932549"
+       y2="-282.14439923991694"
+       id="line234" />
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="8"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       x="-162.24199057311247"
+       y="-255.41320326527736"
+       id="text234">rps12</text>
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-177.83099423942272"
+       x2="-162.24199057311247"
+       y1="-279.76487893911633"
+       y2="-255.41320326527736"
+       id="line235" />
+    <line
+       stroke="gray"
+       stroke-width="0.5"
+       x1="-177.83099423942272"
+       x2="-200.3213846873497"
+       y1="-279.76487893911633"
+       y2="-315.1469077461222"
+       id="line236" />
+    <path
+       d="M 76.9174776323921,332.9687981491967A390,390 0 0 0 78.44606539443069,332.61198675090276 L82.69849119327286,350.6423084292684A390,390 0 0 1 81.087041327158,351.0184619575696 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path236" />
+    <path
+       d="M -272.30284397914113,206.48409155942628A390,390 0 0 0 -270.36083657551364,209.02042233341317 L-285.0166308549281,220.3510586367936A390,390 0 0 1 -287.0639111277964,217.67723774952356 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path237" />
+    <path
+       d="M -265.78408017379104,214.81001287747696 L-272.7566485253922,220.91810854974213 L-280.1917763886328,226.45449289080665 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path238" />
+    <path
+       d="M 1.1015288000074577,-341.7357247063186 L0.07071167118441915,-350.99999287729275 L1.161240774900872,-360.26062847071245 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path239" />
+    <path
+       d="M 21.974135958215722,-341.03028641916814A390,390 0 0 0 13.687609663491036,-341.4632751086856 L7.565562933408002,-350.9184552819938 L14.429591357089693,-359.97340985066853A390,390 0 0 1 23.165315938832265,-359.5169495916765 z"
+       fill="#328925"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path240" />
+    <path
+       d="M 60.38931109636664,-336.35940601023225A390,390 0 0 0 59.88780381854286,-336.44905982933244 L63.134218290874706,-354.68738261608655A390,390 0 0 1 63.662911412574815,-354.59286881820486 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path241" />
+    <path
+       d="M 26.0967881157853,-350.02850976747567A390,390 0 0 0 61.49708752524176,-345.5706993162365"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path242" />
+    <path
+       d="M 25.39439182928933,-340.79266977132966 L25.589045947367985,-350.0659948174108 L26.770977976954086,-359.26645215551014 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path243" />
+    <path
+       d="M 50.2125754573554,-338.0284250949754A390,390 0 0 0 35.58839818980748,-339.87936804185944 L30.08620832154801,-349.7081927390784 L37.517583826344826,-358.3036419157405A390,390 0 0 1 52.93451250069278,-356.3523625466288 z"
+       fill="#e95d0f"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path244" />
+    <path
+       d="M 84.67027855599912,-331.0822599226656A390,390 0 0 0 84.13657611556985,-331.21828975133445 L88.69747467818277,-349.17306152102157A390,390 0 0 1 89.26010820668094,-349.0296577501425 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path245" />
+    <path
+       d="M 74.59329965375419,-342.98227307947747A390,390 0 0 0 86.40331831538637,-340.1991572360079"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path246" />
+    <path
+       d="M 72.61141068635564,-333.93427788172244 L71.56401101419155,-343.6271123289905 L76.547549924703,-352.0362786798757 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path247" />
+    <path
+       d="M 101.58565973720653,-326.2895533755356 L103.36639463575617,-335.43462620905007 L107.09244300398804,-343.97714685381 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path248" />
+    <path
+       d="M 113.10229149740717,-346.15343139175366 L118.6359101948312,-354.0787362116567 L118.85582172083619,-363.7623074197144 z"
+       fill="#328925"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path249" />
+    <path
+       d="M 120.30171057979302,-343.71765278761245 L125.5745238440611,-351.67779228483755 L126.42147631209843,-361.2026203992982 z"
+       fill="#328925"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path250" />
+    <path
+       d="M 117.6506279499039,-320.84707985151323 L119.67024199579258,-329.9697458565989 L124.02826541366473,-338.2396462343342 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path251" />
+    <path
+       d="M 136.03870900376265,-337.7984547904853A390,390 0 0 1 136.35169028793874,-337.6722419179166 L143.28792085144835,-354.8496785884399A390,390 0 0 0 142.95901816325795,-354.98231192842167 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path252" />
+    <path
+       d="M 139.83375684726926,-346.2553264153185A390,390 0 0 1 149.40478444269303,-342.23448249793944"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path253" />
+    <path
+       d="M 145.71236865424714,-333.73976692539765 L150.08016157237995,-341.93884793542884 L153.124778304664,-350.71715801397215 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path254" />
+    <path
+       d="M 148.6247377748329,-332.453024843529 L153.39335037681647,-340.4654324379719 L156.18530007127688,-349.36495917291876 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path255" />
+    <path
+       d="M 160.72895641290071,-301.58037316222993A390,390 0 0 0 147.64829552419368,-308.1955543726262 L145.76593538433752,-319.3012559974187 L155.65205476801586,-324.9023033971052A390,390 0 0 1 169.44179570489817,-317.92852463179446 z"
+       fill="#97be0d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path256" />
+    <path
+       d="M 176.34496244092415,-292.7233730469076A390,390 0 0 0 174.63179225423966,-293.7486272994685 L184.09828027943382,-309.67223334423284A390,390 0 0 1 185.90431846482585,-308.5914018283377 z"
+       fill="#97be0d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path257" />
+    <path
+       d="M 170.85948963089908,-306.60729737413084A390,390 0 0 0 179.3528797401169,-301.71765697242046"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path258" />
+    <path
+       d="M 166.3386697248746,-298.52297375647504 L165.75893108592655,-309.3945325393632 L175.3556018925568,-314.7053888816477 z"
+       fill="#97be0d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path259" />
+    <path
+       d="M 183.9150801671437,-288.02736361908933 L185.95848362238507,-297.691858082923 L193.8847992061615,-303.64082983524537 z"
+       fill="#97be0d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path260" />
+    <path
+       d="M 205.41553041416086,-273.1098291364098A390,390 0 0 0 202.2697420262576,-275.4477634087473 L202.4807200724347,-286.70988472487016 L213.234435602574,-290.3793112112186A390,390 0 0 1 216.55075174902265,-287.91464155749907 z"
+       fill="#97be0d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path261" />
+    <path
+       d="M 215.57747436624362,-265.16197210784503A390,390 0 0 0 212.87781229271795,-267.3341653057393 L213.52867246661873,-278.5794429505585 L224.41755104753003,-281.8258889599734A390,390 0 0 1 227.2635571421598,-279.535944918256 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path262" />
+    <path
+       d="M 258.90751843586384,-223.05025398692737A390,390 0 0 0 222.8268806837693,-259.09978801803607 L223.90217303476862,-270.31244312888845 L234.905941262918,-273.1451402929082A390,390 0 0 1 272.942448108564,-235.14142324727436 z"
+       fill="#bd1220"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path263" />
+    <path
+       d="M 283.6223796781654,-190.63804618161774A390,390 0 0 0 280.0957920204743,-195.78270147965884 L295.2793014309993,-206.39574378526086A390,390 0 0 1 298.9970593183512,-200.97220560373108 z"
+       fill="#bd1220"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path264" />
+    <path
+       d="M 281.59871786065725,-209.5308141998068A390,390 0 0 0 287.6794442955917,-201.10081384663653"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path265" />
+    <path
+       d="M 274.15942082327496,-204.0125752989174A390,390 0 0 0 264.3749630156647,-216.54190780704766 L267.37802390338317,-227.3983120727194 L278.70627342164937,-228.2802708550759A390,390 0 0 1 289.0211297980031,-215.07174485863047 z"
+       fill="#bd1220"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path266" />
+    <path
+       d="M 305.8902840425825,-152.36683705648747A390,390 0 0 0 287.1392173710064,-185.29864746893315 L291.34916004744485,-195.74643531785802 L302.70453871208804,-195.34336730319768A390,390 0 0 1 322.47206834160977,-160.62638029207451 z"
+       fill="#bd1220"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path267" />
+    <path
+       d="M 333.92297036881456,-145.292037862774 L342.84709589957896,-147.99357911147666 L350.9096810435334,-152.68306522393254 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path268" />
+    <path
+       d="M 338.1168046602246,-135.24552788395437 L347.2174566624166,-137.42732047843626 L355.3168563029135,-142.1254878030846 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path269" />
+    <path
+       d="M 323.6249023134786,-109.77905769700095 L331.91648204482567,-114.1597518698552 L341.1680496571479,-115.72999092451312 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path270" />
+    <path
+       d="M 328.33948733371415,-94.7507253992484 L336.9471837410048,-98.32393080530079 L346.138204193459,-99.8869986733874 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path271" />
+    <path
+       d="M 329.06264477957956,-92.20788858290953 L337.6591333590212,-95.85045466368291 L346.9005627562186,-97.20631906243956 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path272" />
+    <path
+       d="M 329.54839474483293,-90.45647808395927 L338.20578644361694,-93.90338660588644 L347.41264438863266,-95.35996762346063 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path273" />
+    <path
+       d="M 354.2613959769317,-84.33972804512455 L363.5214237300221,-85.4307035807254 L372.28272535728433,-88.63010243028484 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path274" />
+    <path
+       d="M 358.1620068332305,-65.83542562665572A390,390 0 0 1 359.6548759058429,-57.12001963762523 L369.8235508496476,-51.73752856445849 L377.9505724043999,-60.0257234478391A390,390 0 0 0 376.38176086223024,-69.18448342292469 z"
+       fill="#328925"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path275" />
+    <path
+       d="M 360.6157382939504,-50.70123963927384A390,390 0 0 1 362.25697757370546,-37.20495404396893 L372.1134441772617,-31.27003817611882 L380.68504336728085,-39.097575534826795A390,390 0 0 0 378.96031400368287,-53.2804191657697 z"
+       fill="#328925"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path276" />
+    <path
+       d="M 340.8885878953477,-24.072589162070003 L350.03402220672166,-26.022745777190785 L359.3675698354664,-25.377522668715734 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path277" />
+    <path
+       d="M 341.1824496050864,-19.469334547505685 L350.1449323145191,-24.485227678354136 L359.67736128125364,-20.524733567199288 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path278" />
+    <path
+       d="M 363.5933817498042,-20.351391942348467 L372.98951402652386,-18.02922769442852 L382.0894306206109,-21.386670247313987 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path279" />
+    <path
+       d="M 363.91029600562945,-13.550751541708502 L373.20460481990494,-12.827843397024282 L382.42246635129743,-14.240080268060476 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path280" />
+    <path
+       d="M 341.6530582146757,-7.596493849760008 L350.8884463464295,-8.84862817553625 L360.17348077124865,-8.0082866690052 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path281" />
+    <path
+       d="M 341.7347399570934,-1.3734674032455072 L350.95378673468167,-5.695575176184095 L360.2595903399315,-1.44792070042572 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path282" />
+    <path
+       d="M 340.36239116707486,30.62615851328926A390,390 0 0 0 341.67316589480436,6.63073251394673 L350.9998589525986,0.314666896750087 L360.19467845400914,6.990173078183499A390,390 0 0 1 358.81284889082497,32.286349702312066 z"
+       fill="#00662c"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path283" />
+    <path
+       d="M 336.12268380643405,61.69327627067622A390,390 0 0 0 339.6999499790272,37.26208381849344 L349.5557571516502,31.80837377384372 L358.1144979094167,39.281997064003775A390,390 0 0 1 354.34331431234625,65.03756228820218 z"
+       fill="#00662c"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path284" />
+    <path
+       d="M 327.1204756079909,98.87726404109206A390,390 0 0 0 327.61039671637445,97.24169306213138 L345.36959083224065,102.51299739360212A390,390 0 0 1 344.8531119462272,104.2372298521641 z"
+       fill="#dadada"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path285" />
+    <path
+       d="M 339.30705790279353,89.84275406147306A390,390 0 0 0 336.4940177143055,99.86378744311997"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path286" />
+    <path
+       d="M 330.35664576307903,87.45859309649074A390,390 0 0 0 331.1529327638661,84.39344777967293 L349.10416164407565,88.96827091180926A390,390 0 0 1 348.2647092994513,92.19957246548738 z"
+       fill="#dadada"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path287" />
+    <path
+       d="M 342.690417267027,75.92284184190497A390,390 0 0 0 340.1320394341342,86.66715496874563"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path288" />
+    <path
+       d="M 333.65017597579083,73.90587918138718 L343.1549108949765,73.79503457998189 L351.73677610001346,77.91218932246095 z"
+       fill="#dadada"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path289" />
+    <path
+       d="M 326.28853009803987,101.58894641008209 L336.06444139740097,101.30000606245216 L343.9760681062075,107.09590784172704 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path290" />
+    <path
+       d="M 344.75515020514257,117.29540832138139 L353.13938117043006,121.40349291336597 L362.2928954632355,123.26224301510628 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path291" />
+    <path
+       d="M 318.71475345714595,123.31027870782187A390,390 0 0 0 319.43781939611483,121.42486749305158 L330.34779305341976,118.62266067128547 L336.75399220218094,128.00709996771056A390,390 0 0 1 335.99173010674866,129.99471607001476 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path292" />
+    <path
+       d="M 316.46311709745004,128.97912398219964 L325.4288166833375,131.51838377992146 L333.6180364265557,135.97085966169118 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path293" />
+    <path
+       d="M 335.22925586829047,142.25214380192034 L342.49131901851854,148.8150765949316 L352.2824174787256,149.48853130456155 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path294" />
+    <path
+       d="M 333.16032991908037,147.03238070050926A390,390 0 0 1 332.95265302157134,147.5020584674908 L349.8900035099512,155.00550990224937A390,390 0 0 0 350.1082449618181,154.5119395580988 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path295" />
+    <path
+       d="M 341.4152337390998,151.26754045688668A390,390 0 0 1 338.2923872904295,158.1280851915373"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path296" />
+    <path
+       d="M 329.89510939317813,154.21914020222326 L337.96674078706315,158.8228974259382 L346.6769221869409,162.06429057395619 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path297" />
+    <path
+       d="M 327.32830984291974,159.59481188819242 L335.17112519523863,164.64066162512134 L343.979549165585,167.71342347018884 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path298" />
+    <path
+       d="M 299.4017577049216,164.7516506425761A390,390 0 0 0 299.51887632765676,164.5386326358277 L310.71198662691256,163.27602814362345 L315.7552776121802,173.45798789996672A390,390 0 0 1 315.63181019106565,173.68255324516937 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path299" />
+    <path
+       d="M 293.5919541466962,174.89506387138042A390,390 0 0 0 295.5785041384762,171.5163747212225 L306.79814206354587,170.51656818724777 L311.60130464812255,180.8139813394913A390,390 0 0 1 309.50706721028314,184.37582339650515 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path300" />
+    <path
+       d="M 291.0748248997701,179.05296762639315 L301.6218641056567,179.5139300818428 L306.85348873171193,188.75911993709633 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path301" />
+    <path
+       d="M 277.8973160494587,198.89092648674867A390,390 0 0 0 278.2015079137582,198.4652108072373 L293.2823314525924,209.2236673131931A390,390 0 0 1 292.96164987239655,209.67246030486055 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path302" />
+    <path
+       d="M 290.34768369071014,197.2288583738175A390,390 0 0 0 285.7501326598077,203.8329259096829"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path303" />
+    <path
+       d="M 282.6934676503205,192.01281794215515 L290.6334577900892,196.8075029387254 L298.01779257287706,202.42150136840604 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path304" />
+    <path
+       d="M 294.5019253921146,214.20304000314133 L301.34524147910724,220.53860447300053 L309.4832817038955,225.0995801907175 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path305" />
+    <path
+       d="M 270.62170007914983,208.68256839640603 L281.39174381672757,209.80869026754152 L285.2916353188184,219.99489022103288 z"
+       fill="#97be0d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path306" />
+    <path
+       d="M 257.5864142112765,224.57461592982116A390,390 0 0 0 266.7477629184154,213.61214826004365 L277.99120824814133,214.2939293044452 L281.20769871142505,225.19169410010306A390,390 0 0 1 271.5497291043272,236.74841821988278 z"
+       fill="#97be0d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path307" />
+    <path
+       d="M 266.4643937116334,248.2157394085669A390,390 0 0 1 256.5139399412974,258.4858313758076 L258.0879551308933,269.88300806340885 L269.5628418392483,271.6350436814043A390,390 0 0 0 280.01947665814225,260.84251062346056 z"
+       fill="#1fa12d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path308" />
+    <path
+       d="M 243.46666528340316,270.8104674897728A390,390 0 0 1 231.45953946273096,281.1419712493147 L231.97073971613173,292.6359624867571 L243.23392031893417,295.4437047265221A390,390 0 0 0 255.85185039822156,284.5866358493597 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path309" />
+    <path
+       d="M 217.47943845810923,292.0907739970495 L221.6692556571088,300.5145116652827 L228.54264951755792,306.94947468230777 z"
+       fill="#00662c"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path310" />
+    <path
+       d="M 210.89393111813504,296.88057569297A390,390 0 0 1 209.74816597834112,297.69117097248994 L209.39688813124687,309.1911607176862 L220.41808606827016,312.83476467657914A390,390 0 0 0 221.62213644944583,311.98293429582526 z"
+       fill="#dadada"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path311" />
+    <path
+       d="M 201.4978071014463,303.3363811671101A390,390 0 0 1 198.67010780883803,305.195862798752 L197.8965847772448,316.6751843111531 L208.77648544837734,320.7212212811517A390,390 0 0 0 211.7480302203954,318.76714754508896 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path312" />
+    <path
+       d="M 190.11782165113505,310.5954608439685A390,390 0 0 1 183.7761855964925,314.3893128174899 L182.4519825102582,325.81820805945824 L193.12490721987498,330.3823434561307A390,390 0 0 0 199.7891432344592,326.3954976740499 z"
+       fill="#799c13"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path313" />
+    <path
+       d="M 166.5771906198462,323.83076748735505 L166.78785958891228,334.1078276825452 L175.05099683611684,340.30408631535977 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path314" />
+    <path
+       d="M 152.51163630450554,305.81811538555434 L158.20007337191004,313.3268848744427 L160.77902885738885,322.39598754625484 z"
+       fill="#328925"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path315" />
+    <path
+       d="M 149.53491836740926,307.28460276281703 L155.07405739204177,314.88575185925725 L157.64094817905197,323.9419706729269 z"
+       fill="#328925"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path316" />
+    <path
+       d="M 147.7743823042487,308.1351178312004 L153.30810889746536,315.7493052190027 L155.78497649477856,324.83859069508856 z"
+       fill="#328925"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path317" />
+    <path
+       d="M 144.52589295072332,309.67206069170345 L151.66490370729963,316.54187240151265 L152.36039214063413,326.45884857513386 z"
+       fill="#328925"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path318" />
+    <path
+       d="M 138.77448471985963,312.2917887120753 L146.55669334418644,318.9390782516594 L146.29720999711304,329.2205875295629 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path319" />
+    <path
+       d="M 138.383202404775,336.84479467322785 L140.5658795705888,345.9587607295799 L145.4227762888198,353.98013898056746 z"
+       fill="#799c13"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path320" />
+    <path
+       d="M 134.61521809207056,338.36824535448693 L136.44397871487237,347.60505073640036 L141.46311405927096,355.581087822319 z"
+       fill="#799c13"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path321" />
+    <path
+       d="M 122.23410209808314,319.12903846332347 L126.52388931410094,327.40297102016825 L128.86020178385655,336.42847278801145 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path322" />
+    <path
+       d="M 119.16827641934904,320.2864980006051 L123.37852565760929,328.6011859481865 L125.62818298701703,337.64867620891175 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path323" />
+    <path
+       d="M 120.94547371364493,343.4916575325113 L122.1040086953854,352.8977779549161 L127.09798777136717,360.96512873229096 z"
+       fill="#00662c"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path324" />
+    <path
+       d="M 113.08137070300639,346.16026635964334 L113.07911329131318,355.8923218647044 L118.83383668254353,363.7694900834271 z"
+       fill="#9e7742"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path325" />
+    <path
+       d="M 107.6702243670669,347.8813722966429 L106.00234663431233,358.06386739382 L113.14742453567271,365.57814893288446 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path326" />
+    <path
+       d="M 89.24425049541411,329.87873932668316 L96.93494157746143,337.34939914186026 L94.0820272697732,347.7608963800554 z"
+       fill="#9e7742"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path327" />
+    <path
+       d="M 76.9174776323921,332.9687981491967A390,390 0 0 0 78.44606539443069,332.61198675090276 L82.69849119327286,350.6423084292684A390,390 0 0 1 81.087041327158,351.0184619575696 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path328" />
+    <path
+       d="M -196.78684339522317,-306.41355171205123A390,390 0 0 1 -193.91404420584843,-308.23963058955 L-203.77848018954623,-323.91982598767976A390,390 0 0 0 -206.7974190967205,-322.00085420878213 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path329" />
+    <path
+       d="M -187.21251608949638,-312.3552468355383 L-191.63863493948065,-320.5009582256073 L-196.7360443510772,-328.24480423814936 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path330" />
+    <path
+       d="M 47.50748998141529,338.4192035064141A390,390 0 0 0 48.4754101215668,338.28191426648266 L51.103178430581835,356.6195929285744A390,390 0 0 1 50.08278901036505,356.7643243812268 z"
+       fill="#e95d0f"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path331" />
+    <path
+       d="M 61.044518599133944,345.6509319371206A390,390 0 0 0 49.803293565347026,347.4487472276219"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path332" />
+    <path
+       d="M 59.44718083128768,336.5271929539457A390,390 0 0 0 63.402262377061945,335.80451460890185 L66.83918958152464,354.0078977118095A390,390 0 0 1 62.66970989204222,354.76975120251905 z"
+       fill="#e95d0f"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path333" />
+    <path
+       d="M 73.9367472788789,343.1244051387473A390,390 0 0 0 65.13462273235918,344.90358206535524"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path334" />
+    <path
+       d="M 71.99909879932923,334.06683265229196 L77.09948344278483,342.42761228156786 L75.90204566719586,352.17601901575426 z"
+       fill="#e95d0f"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path335" />
+    <path
+       d="M 44.15122791994711,361.4761340384879A390,390 0 0 1 28.56539058798563,363.0404176766077 L22.39737641104802,372.7527171663566 L30.018516213612745,381.50833718358376A390,390 0 0 0 46.39720738575433,379.8644782064431 z"
+       fill="#328925"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path336" />
+    <path
+       d="M 18.911899165641127,363.6710965641875 L17.815071089649283,372.9998041113035 L19.873950261082044,382.1710987990458 z"
+       fill="#328925"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path337" />
+    <path
+       d="M 13.483365835399985,341.4714010748173 L15.713950700171884,350.64807393367005 L14.214275823624234,359.981976311398 z"
+       fill="#328925"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path338" />
+    <path
+       d="M 12.740614947600047,363.9395597307429 L9.726056499925518,373.2983183058293 L13.3887319061125,382.4532187264166 z"
+       fill="#328925"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path339" />
+    <path
+       d="M 7.592557509255679,364.0833413886422A390,390 0 0 1 7.504540393567273,364.0851662451126 L7.886297468474311,382.6062322656137A390,390 0 0 0 7.978792027798806,382.60431457842594 z"
+       fill="#799c13"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path340" />
+    <path
+       d="M 7.680376247569212,373.34600901267953A390,390 0 0 1 -3.6184756736314205,373.40746813474334"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path341" />
+    <path
+       d="M -3.5433943407149133,364.1452605249671A390,390 0 0 1 -6.223181403958077,364.10932207163194 L-13.290220946230486,373.1884251315954 L-6.539755558376293,382.63161690258517A390,390 0 0 0 -3.723647332612058,382.6693835503336 z"
+       fill="#799c13"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path342" />
+    <path
+       d="M -15.746202461544149,363.82191181165825A390,390 0 0 1 -15.863473233862429,363.8168174001973 L-16.6704504532557,382.32423247544165A390,390 0 0 0 -16.5472140994808,382.3295860403638 z"
+       fill="#799c13"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path343" />
+    <path
+       d="M -16.281993420360283,373.0698692138771A390,390 0 0 1 -27.396465840805128,372.4186680128073"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path344" />
+    <path
+       d="M -26.73155214719566,363.18005248919127A390,390 0 0 1 -26.960625011546387,363.16311914239964 L-34.533524600775415,371.82477903395255 L-28.33211597598918,381.637280491009A390,390 0 0 0 -28.091390141296646,381.6550752396455 z"
+       fill="#799c13"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path345" />
+    <path
+       d="M -48.02558060758856,338.34606915635067A390,390 0 0 0 -40.45289286120124,339.33476445158135 L-35.0920472113669,349.24138961829135 L-42.64577435724353,357.7295163048767A390,390 0 0 1 -50.62896443510406,356.68722554428405 z"
+       fill="#bd1220"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path346" />
+    <path
+       d="M -54.5869704064683,337.3496429049442 L-50.23723131793114,347.38627000719055 L-57.546035849329634,355.6367847457257 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path347" />
+    <path
+       d="M -57.50723886886074,336.86412154447345 L-57.47607063677806,346.26218578435055 L-60.62460702437672,355.124944110365 z"
+       fill="#9e7742"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path348" />
+    <path
+       d="M -68.88674884385752,334.72247420807184 L-65.1346227323592,344.90358206535524 L-72.6209805928826,352.8672017685664 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path349" />
+    <path
+       d="M -76.11230389837796,333.15377245580004 L-73.07936658069788,343.3080339580826 L-80.23822051483782,351.2134634020488 z"
+       fill="#9e7742"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path350" />
+    <path
+       d="M -96.74328337881285,327.7579229055138A390,390 0 0 0 -96.62442414571149,327.79298278755095 L-101.86226739469441,345.56207457917276A390,390 0 0 1 -101.9875697816586,345.5251141614475 z"
+       fill="#9e7742"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path351" />
+    <path
+       d="M -85.34059454881273,340.46730081177424A390,390 0 0 0 -99.22978042989854,336.68152707838624"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path352" />
+    <path
+       d="M -83.07519506016934,331.48609453786264 L-79.88388087855984,341.7887733319807 L-87.57855798782472,349.4553835427682 z"
+       fill="#9e7742"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path353" />
+    <path
+       d="M -107.29512054774293,324.45689392104975A390,390 0 0 0 -104.70782951044511,325.30107492208134 L-101.3440120057392,336.05117352953937 L-110.38386021143927,342.9350846896121A390,390 0 0 1 -113.11140382993155,342.0451420936601 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path354" />
+    <path
+       d="M -113.18593906318563,322.44916204672455A390,390 0 0 0 -113.07348909996678,322.48861215399484 L-109.98840409871627,333.3219929194854 L-119.20300776729735,339.97016316947526A390,390 0 0 1 -119.32155344892179,339.92857453998494 z"
+       fill="#9e7742"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path355" />
+    <path
+       d="M -117.48902020501298,320.90629323451424 L-116.96071864600502,330.93985902851 L-123.8578971918753,338.30206947261917 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path356" />
+    <path
+       d="M -137.30076989823263,312.9425146757829A390,390 0 0 0 -132.3538407122898,315.0666274852921 L-139.52851396060223,332.1458455230112A390,390 0 0 1 -144.743607638793,329.9065882245414 z"
+       fill="#9e7742"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path357" />
+    <path
+       d="M -127.22275369084487,327.1320390046175A390,390 0 0 0 -135.9281386289866,323.61171352233066"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path358" />
+    <path
+       d="M -123.85265364474805,318.5043784493458 L-121.46992111529723,329.31149124232434 L-130.56649221607532,335.76995103290517 z"
+       fill="#9e7742"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path359" />
+    <path
+       d="M -141.073329388,311.26007556645436 L-141.2552641459385,321.32219087865866 L-148.72067106666475,328.13294699516365 z"
+       fill="#9e7742"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path360" />
+    <path
+       d="M -144.06407732123355,309.88717387435 L-147.01915881158632,318.72616293980883 L-151.87354228301226,326.68562267210365 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path361" />
+    <path
+       d="M -155.00625014530482,329.52600629106826A390,390 0 0 1 -233.73226479232656,279.2553576948878 L-244.93575269565818,281.8735668281284 L-245.62225952071802,293.46111886276697A390,390 0 0 0 -162.89144091574875,346.2890427556742 z"
+       fill="#dadada"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path362" />
+    <path
+       d="M -232.17652942458858,250.75601306968326 L-237.6276528898305,258.32943808646786 L-244.76241832349635,264.34906370684155 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path363" />
+    <path
+       d="M -247.8961573208001,266.76173187290397 L-256.8346785228299,271.07596450639926 L-260.5066713478288,280.33194045546134 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path364" />
+    <path
+       d="M -258.48916688000526,223.5349402485679A390,390 0 0 0 -251.36554337976543,231.51648431082674 L-264.9916356029196,244.06659330342504A390,390 0 0 1 -272.5014184369813,235.65238351453874 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path365" />
+    <path
+       d="M -251.5871587026513,244.75477845371466A390,390 0 0 0 -258.1690082919136,237.80194102986172"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path366" />
+    <path
+       d="M -244.93845161269863,238.3058409435734A390,390 0 0 0 -242.07262886678873,241.2164199630116 L-244.00610727093854,252.31333618039935 L-255.19496823474586,254.29234572420194A390,390 0 0 1 -258.21614228499897,251.22398924008664 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path367" />
+    <path
+       d="M -265.098987652531,215.6549226237445A390,390 0 0 0 -265.0237692794655,215.74735368748938 L-268.0594044805973,226.59469470732873 L-279.3902503531027,227.44264532818067A390,390 0 0 1 -279.4695461843372,227.34520373601595 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path368" />
+    <path
+       d="M -284.2162814131426,189.7514803260711 L-288.7730624628241,199.5272372280083 L-299.6231554412444,200.0375805434615 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path369" />
+    <path
+       d="M -300.8559504692408,205.18290248824266 L-310.3025493126765,207.74638026943808 L-316.1605369723615,215.62058695216936 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path370" />
+    <path
+       d="M -303.8003669907383,200.7975682684994 L-312.12356829489147,205.00026521900944 L-319.2547363958897,211.01217013490233 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path371" />
+    <path
+       d="M -306.19730598393085,197.12314986939768A390,390 0 0 1 -314.1242713249501,184.22884836751035 L-325.55506212232507,182.92110909222336 L-330.10381926383644,193.60059701271172A390,390 0 0 0 -321.7736080286288,207.1508335307593 z"
+       fill="#71ee7d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path372" />
+    <path
+       d="M -319.6129005539604,174.53343578161235A390,390 0 0 1 -319.87273753969464,174.05676713391986 L-336.1447108014194,182.91106050887163A390,390 0 0 0 -335.87165586995843,183.4119773608644 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path373" />
+    <path
+       d="M -328.01591529799055,178.4706976963487A390,390 0 0 1 -332.95246570494464,169.08248343928966"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path374" />
+    <path
+       d="M -324.70049698241,164.87544894745824 L-333.197368800291,168.5993595763723 L-341.2180590779008,173.26268731426336 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path375" />
+    <path
+       d="M -324.70049698241,164.87544894745824A390,390 0 0 1 -324.9326821068111,164.41739112735002 L-341.4620554937708,172.7813280253946A390,390 0 0 0 -341.2180590779008,173.26268731426336 z"
+       fill="#d3d3d3"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path376" />
+    <path
+       d="M -325.35557774702045,163.57895474403944A390,390 0 0 1 -325.6056485906289,163.0806181375514 L-342.1692558817185,171.3765531967575A390,390 0 0 0 -341.9064638974713,171.90024025980048 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path377" />
+    <path
+       d="M -333.89418986420935,167.21513268817307A390,390 0 0 1 -338.521395464949,157.6372273210348"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path378" />
+    <path
+       d="M -330.13084430675633,153.71386418784152 L-338.74969141151485,157.14603779161428 L-346.9246489702861,161.53331109431807 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path379" />
+    <path
+       d="M -331.2857156856223,151.20879931047338A390,390 0 0 1 -344.1007794461191,119.2014261274725 L-355.0547095934575,115.68225369738244 L-361.6052367673407,125.26522022766522A390,390 0 0 0 -348.13826882625636,158.90081319775317 z"
+       fill="#71ee7d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path380" />
+    <path
+       d="M -346.70408714880926,111.40288308908714 L-355.9935527934208,112.7600150519586 L-364.3409751162186,117.06996415653737 z"
+       fill="#71ee7d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path381" />
+    <path
+       d="M -348.27916731205863,106.37644486759763 L-357.66523290103333,107.33970280771973 L-365.996179839312,111.78783028254905 z"
+       fill="#71ee7d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path382" />
+    <path
+       d="M -349.8588473747757,101.05994913833769 L-359.06491965509497,102.56029493951445 L-367.65621845943633,106.20088363265742 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path383" />
+    <path
+       d="M -331.3627205434366,83.56594007310855 L-339.5411877501643,88.9538184745752 L-349.3253216570608,88.09590544083767 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path384" />
+    <path
+       d="M -330.95137703580997,85.18042582865604 L-339.66629314529183,88.47490774754544 L-348.89167992790806,89.79790968242055 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path385" />
+    <path
+       d="M -353.82692673946843,86.14425297344448A390,390 0 0 1 -355.7860252017083,77.65713539282366 L-366.2467159860837,72.86682135518849 L-373.8849126952357,81.60756530571163A390,390 0 0 0 -371.8261546057333,90.52642380743497 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path386" />
+    <path
+       d="M -356.2651165282306,75.42872895241074A390,390 0 0 1 -356.9865400900841,71.93703219316737 L-375.14649795276574,75.59647961397107A390,390 0 0 0 -374.3883754680871,79.26579950152936 z"
+       fill="#d3d3d3"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path387" />
+    <path
+       d="M -339.7718883810464,36.600311094685466A390,390 0 0 0 -336.31575288093075,60.63194925435534 L-344.21963232851755,68.65744475015212 L-354.54684932811386,63.91870256628901A390,390 0 0 1 -358.19033596803604,38.58435078312775 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path388" />
+    <path
+       d="M -363.1012562294856,27.78136301226819 L-372.5210665181637,25.967010324060467 L-381.5722706026054,29.19460503966604 z"
+       fill="#9e7742"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path389" />
+    <path
+       d="M -363.9755767206244,11.66644578004999 L-373.2699445496491,10.76007067364888 L-382.49106790587706,12.259919594831652 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path390" />
+    <path
+       d="M -364.0517028071954,8.982432267012628A390,390 0 0 1 -364.15753556332186,1.9014990659902364 L-373.39204171681695,-4.961230446859722 L-382.68228302169706,1.998228603483716A390,390 0 0 0 -382.57106653768193,9.439369919149817 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path391" />
+    <path
+       d="M -340.5498877001848,-28.465644093213992A390,390 0 0 0 -341.44548574466006,-14.124417539961023 L-350.90848984867256,-8.014471418882346 L-359.9546561559255,-14.890077834566611A390,390 0 0 1 -359.010509287356,-30.008717524800485 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path392" />
+    <path
+       d="M -340.09579731841353,-33.45695073676915 L-349.63724040826384,-30.899840124083322 L-358.5318034497968,-35.2705942859806 z"
+       fill="#00662c"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path393" />
+    <path
+       d="M -339.244444315503,-41.20346960288149 L-348.93465174868936,-38.02116264688485 L-357.6343000701237,-43.43703856851558 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path394" />
+    <path
+       d="M -337.83634440023866,-51.489060085937915A390,390 0 0 0 -337.98358942985624,-50.51348515357439 L-348.0450644068007,-45.44923698001931 L-356.3050964174946,-53.25173399214191A390,390 0 0 1 -356.14986948898195,-54.28019315764353 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path395" />
+    <path
+       d="M -335.74754037100075,-63.70328124259559A390,390 0 0 0 -335.86161255242797,-63.09909761583575 L-346.1051773012334,-58.414092865350284 L-354.0680908362971,-66.51959078188676A390,390 0 0 1 -353.9478349988153,-67.15652616016853 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path396" />
+    <path
+       d="M -328.3203924026459,-94.81687001173695A390,390 0 0 0 -330.3513593962196,-87.47855880911472 L-348.2591363677693,-92.22062048492977A390,390 0 0 1 -346.1180741591374,-99.95672887114637 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path397" />
+    <path
+       d="M -343.09384085942105,-74.07844736716774A390,390 0 0 0 -339.30886778588393,-89.8359184394613"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path398" />
+    <path
+       d="M -334.04288131504865,-72.11014040334649A390,390 0 0 0 -334.27259196406567,-71.03768836241278 L-344.6242661610478,-66.59666037392029 L-352.39293218465696,-74.88851882999008A390,390 0 0 1 -352.1507693178615,-76.01910664489736 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path399" />
+    <path
+       d="M -323.42977443883314,-110.35261624762471A390,390 0 0 0 -326.5053536169576,-100.88990517249721 L-337.2153091419929,-97.40038644825874 L-344.2046452538255,-106.35897278527166A390,390 0 0 1 -340.9623442372292,-116.33464109414359 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path400" />
+    <path
+       d="M -321.7255661156728,-115.2266419444733 L-331.68582498321894,-114.8281912476264 L-339.16575372251384,-121.47287931093547 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path401" />
+    <path
+       d="M -283.9752230516962,-190.11205011516074A390,390 0 0 0 -317.55914875412554,-126.2565085403725 L-328.51037432312097,-123.62011956830875 L-334.7734820674733,-133.10065593628426A390,390 0 0 1 -299.36902972211624,-200.4176961984362 z"
+       fill="#dadada"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path402" />
+    <path
+       d="M -310.46324838835216,-190.3336486446954A390,390 0 0 1 -308.58487006745014,-193.3641755126965 L-324.2826278486591,-203.20063959500237A390,390 0 0 0 -326.2565595513473,-200.0159493789637 z"
+       fill="#d3d3d3"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path403" />
+    <path
+       d="M -300.93446623244853,-205.06772890838104 L-306.6439975782401,-213.10957128725187 L-316.2430468440055,-215.4995544753402 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path404" />
+    <path
+       d="M -299.9311317298506,-206.53242511891685 L-306.9442206000355,-212.67692885039676 L-315.1886725675137,-217.0387599977908 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path405" />
+    <path
+       d="M -275.6643496889445,-201.97446674473815 L-283.7532586862456,-206.6036983815551 L-290.6076382598145,-212.92315395771968 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path406" />
+    <path
+       d="M -272.55638501274865,-206.14930486187026 L-280.97273532377847,-210.36948924374445 L-287.33119618319716,-217.3243028429702 z"
+       fill="#71ee7d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path407" />
+    <path
+       d="M -269.54609547628564,-210.0700390815861 L-277.74494933060623,-214.61300781019537 L-284.15772404704006,-221.45757329713567 z"
+       fill="#71ee7d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path408" />
+    <path
+       d="M -243.1118053299955,-240.16904258342785A390,390 0 0 0 -264.7350151938384,-216.10157481279063 L-275.9715805054029,-216.88865058676978 L-279.0858434069138,-227.81606816926143A390,390 0 0 1 -256.2904766602948,-253.18819182475488 z"
+       fill="#71ee7d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path409" />
+    <path
+       d="M -233.89365829735252,-249.155123396111A390,390 0 0 0 -234.2748601611715,-248.79672184880883 L-246.97449594736906,-262.283562690827A390,390 0 0 1 -246.57262978850713,-262.6613925673695 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path410" />
+    <path
+       d="M -247.81543602343183,-248.57294637292364A390,390 0 0 0 -240.63497396757637,-255.53044692095665"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path411" />
+    <path
+       d="M -241.2856129159075,-242.00366093521157 L-248.17572922478303,-248.21322975165359 L-254.36528950763997,-255.12226167064387 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path412" />
+    <path
+       d="M -225.2976324214739,-256.95426778228153A390,390 0 0 0 -225.6804461031968,-256.61811150601216 L-237.9141935381775,-270.5289363808031A390,390 0 0 1 -237.51062818754522,-270.88331510856784 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path413" />
+    <path
+       d="M -239.2001027942694,-256.8741147395178A390,390 0 0 0 -231.80793941856408,-263.5641842559784"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path414" />
+    <path
+       d="M -232.8979544056146,-250.0861086504612 L-239.57244586455215,-256.52688588620924 L-245.5229505074881,-263.6428449253792 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path415" />
+    <path
+       d="M -243.37390433042532,-270.89383362715176A390,390 0 0 1 -242.47756957102905,-271.6964384403608 L-254.812439241309,-285.5176762726683A390,390 0 0 0 -255.75437068190615,-284.6742428344232 z"
+       fill="#d3d3d3"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path416" />
+    <path
+       d="M -206.1849936824809,-272.52938793166015A390,390 0 0 0 -217.33185434386013,-263.7259638217466 L-228.197194114038,-266.6965327830117 L-229.11303903011787,-278.02209310167007A390,390 0 0 1 -217.36192629294348,-287.3027356369427 z"
+       fill="#71ee7d"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path417" />
+    <path
+       d="M -202.88690214134294,-274.9934978244743 L-209.20447478330163,-281.8412456164692 L-213.88505090221457,-289.9004206737325 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path418" />
+    <path
+       d="M -214.8403314214911,-294.03734184785753 L-215.46614561911048,-304.9927387939659 L-225.7692907173635,-308.9950647263296 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path419" />
+    <path
+       d="M -198.8769300922183,-277.90733272683707 L-206.709437974432,-283.67623843440686 L-209.65770518994196,-292.97220953656574 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path420" />
+    <path
+       d="M -186.21733247256324,-312.94956701208713A390,390 0 0 1 -186.1081907267567,-313.0144848895385 L-184.8689834664171,-324.4529081039244 L-195.57554179451677,-328.9375778290331A390,390 0 0 0 -195.69023559700423,-328.8693575695963 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path421" />
+    <path
+       d="M -176.7153260134467,-318.41171454299734A390,390 0 0 1 -166.66199459102532,-323.7871306355319 L-175.1401147977977,-340.25822965045865A390,390 0 0 0 -185.70486067008792,-334.6093653497362 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path422" />
+    <path
+       d="M -170.88767684700855,-332.029565742017A390,390 0 0 1 -161.76833233086452,-336.5668392457745"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path423" />
+    <path
+       d="M -157.7425773309974,-328.2249315686185A390,390 0 0 1 -153.80823446664417,-330.0868876773263 L-151.42915825242787,-341.3435815362011 L-161.63248200309997,-346.8784562606441A390,390 0 0 0 -165.76696546831724,-344.92178217050275 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path424" />
+    <path
+       d="M -132.33479868603646,-315.0746260221159 L-139.0445583188546,-322.28498382939694 L-139.50843969897423,-332.1542776467099 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path425" />
+    <path
+       d="M -140.40969349624007,-336.00512552421264 L-142.85577613895646,-345.01950357731425 L-147.55235528052003,-353.0977557382958 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path426" />
+    <path
+       d="M -30.22501077654204,-340.39824857041776A390,390 0 0 0 -115.82150038764861,-321.5118955096435 L-125.05175703300424,-327.9680747617952 L-122.09998400352686,-338.9405004017497A390,390 0 0 1 -31.86345643917912,-358.8506500621094 z"
+       fill="#dadada"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path427" />
+    <path
+       d="M -30.571170889127202,-362.87701761990627 L-30.239148867431144,-372.19863581261734 L-32.126330854035956,-381.3366249419363 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path428" />
+    <path
+       d="M -27.07541767012713,-363.15457888375596 L-23.5311893020638,-372.6828594864948 L-28.452748154015797,-381.62830578815056 z"
+       fill="#9e7742"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path429" />
+    <path
+       d="M -22.683928284543217,-363.4553147277278A390,390 0 0 1 -16.955476538146378,-363.767560705479 L-17.81800412643227,-382.2724700854097A390,390 0 0 0 -23.83786305671543,-381.9443401087903 z"
+       fill="#9e7742"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path430" />
+    <path
+       d="M -17.371710763278873,-373.0207156313936A390,390 0 0 1 -7.387041458240919,-373.35192813683744"
+       fill="none"
+       stroke="gray"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="2.0"
+       id="path431" />
+    <path
+       d="M -7.1891421638106205,-364.0915305815263 L-0.8425681372020347,-373.42404944504335 L-7.554854884325754,-382.6129203567579 z"
+       fill="#9e7742"
+       stroke="black"
+       stroke-linecap="round"
+       stroke-linejoin="round"
+       stroke-miterlimit="4"
+       stroke-width="1.0"
+       id="path432" />
+    <path
+       d="M 29.91523989945978,-347.85535101312763A388.1393229166667,388.1393229166667 0 0 1 51.311545294871856,-345.3482186520741"
+       fill="none"
+       id="id1"
+       stroke="none" />
+    <text
+       id="text432"><textPath
+         dominant-baseline="auto"
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="8"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id1"
+         id="textPath432">matK</textPath></text>
+    <path
+       d="M 145.7813619081217,-316.6671857624558A387.6119791666667,387.6119791666667 0 0 1 162.98365469261327,-308.166578852314"
+       fill="none"
+       id="id2"
+       stroke="none" />
+    <text
+       id="text433"><textPath
+         dominant-baseline="auto"
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="8"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id2"
+         id="textPath433">atpA</textPath></text>
+    <path
+       d="M 235.06254758114085,-257.4040535291438A387.5846354166667,387.5846354166667 0 0 1 252.80285047495624,-240.00409754899465"
+       fill="none"
+       id="id3"
+       stroke="none" />
+    <text
+       id="text434"><textPath
+         dominant-baseline="auto"
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="8"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id3"
+         id="textPath434">rpoC2</textPath></text>
+    <path
+       d="M 296.44713659714756,-183.4377475381024A387.6119791666667,387.6119791666667 0 0 1 306.00171302504003,-167.01276491406722"
+       fill="none"
+       id="id4"
+       stroke="none" />
+    <text
+       id="text435"><textPath
+         dominant-baseline="auto"
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="8"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id4"
+         id="textPath435">rpoB</textPath></text>
+    <path
+       d="M 352.3976195479509,26.438816263933752A392.3880208333333,392.3880208333333 1 0 0 353.34418716365417,5.565848197438764"
+       fill="none"
+       id="id5"
+       stroke="none" />
+    <text
+       id="text436"><textPath
+         dominant-baseline="auto"
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="8"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id5"
+         id="textPath436">psaB</textPath></text>
+    <path
+       d="M 348.5070115719683,58.531667955700755A392.3880208333333,392.3880208333333 1 0 0 351.4092785998969,37.344506723218295"
+       fill="none"
+       id="id6"
+       stroke="none" />
+    <text
+       id="text437"><textPath
+         dominant-baseline="auto"
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="8"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id6"
+         id="textPath437">psaA</textPath></text>
+    <path
+       d="M 267.13958855289843,231.34289160527186A392.3880208333333,392.3880208333333 1 0 0 279.16280763134,216.68230223967964"
+       fill="none"
+       id="id7"
+       stroke="none" />
+    <text
+       id="text438"><textPath
+         dominant-baseline="auto"
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="8"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id7"
+         id="textPath438">atpB</textPath></text>
+    <path
+       d="M 260.4295779399614,270.34992487229954A391.9583333333333,391.9583333333333 1 0 0 273.739497584276,256.86442806810084"
+       fill="none"
+       id="id8"
+       stroke="none" />
+    <text
+       id="text439"><textPath
+         dominant-baseline="auto"
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="8"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id8"
+         id="textPath439">rbcL</textPath></text>
+    <path
+       d="M 233.44499655962565,293.8414079144944A391.8606770833333,391.8606770833333 1 0 0 250.60081070323739,279.35384926429083"
+       fill="none"
+       id="id9"
+       stroke="none" />
+    <text
+       id="text440"><textPath
+         dominant-baseline="auto"
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="8"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id9"
+         id="textPath440">accD</textPath></text>
+    <path
+       d="M 22.99496060573198,375.2067016085813A392.4856770833333,392.4856770833333 1 0 0 45.129541626630655,373.19185631229993"
+       fill="none"
+       id="id10"
+       stroke="none" />
+    <text
+       id="text441"><textPath
+         dominant-baseline="auto"
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="8"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id10"
+         id="textPath441">psbB</textPath></text>
+    <path
+       d="M -212.84215620946372,309.84689093813455A392.4830729166667,392.4830729166667 1 0 0 -197.5004878418753,319.84439433284314"
+       fill="none"
+       id="id11"
+       stroke="none" />
+    <text
+       id="text442"><textPath
+         dominant-baseline="auto"
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="8"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id11"
+         id="textPath442">ycf2</textPath></text>
+    <path
+       d="M -350.3186843959514,43.08601202866466A391.9583333333333,391.9583333333333 1 0 0 -347.14122307246396,63.81658337139525"
+       fill="none"
+       id="id12"
+       stroke="none" />
+    <text
+       id="text443"><textPath
+         dominant-baseline="auto"
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="8"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id12"
+         id="textPath443">ndhF</textPath></text>
+    <path
+       d="M -348.9573207381331,-7.672898585812882A388.0416666666667,388.0416666666667 0 0 1 -347.803811424122,-29.36994770676759"
+       fill="none"
+       id="id13"
+       stroke="none" />
+    <text
+       id="text444"><textPath
+         dominant-baseline="auto"
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="8"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id13"
+         id="textPath444">ndhD</textPath></text>
+    <path
+       d="M -313.7380014900421,-151.76466942158768A387.5169270833333,387.5169270833333 0 0 1 -305.9683317278004,-166.875487844429"
+       fill="none"
+       id="id14"
+       stroke="none" />
+    <text
+       id="text445"><textPath
+         dominant-baseline="auto"
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="8"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id14"
+         id="textPath445">ycf1</textPath></text>
+    <path
+       d="M -86.48693695820513,-337.61525172775725A387.5169270833333,387.5169270833333 0 0 1 -69.94290460577315,-341.42647606610296"
+       fill="none"
+       id="id15"
+       stroke="none" />
+    <text
+       id="text446"><textPath
+         dominant-baseline="auto"
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="8"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id15"
+         id="textPath446">ycf2</textPath></text>
+  </g>
+  <g
+     id="g451"
+     transform="translate(700.0,500.0)">
+    <text
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="28.0"
+       font-weight="bold"
+       stroke="none"
+       text-anchor="middle"
+       x="2.388061258337339e-14"
+       y="-90.0"
+       id="text447"><tspan
+         font-style="italic"
+         id="tspan446">Nicotiana tabacum</tspan></text>
+    <text
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="28.0"
+       font-weight="bold"
+       stroke="none"
+       text-anchor="middle"
+       x="2.388061258337339e-14"
+       y="-30.0"
+       id="text448"><tspan
+         font-style="normal"
+         id="tspan447">plastid</tspan></text>
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="28.0"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="middle"
+       x="2.388061258337339e-14"
+       y="30.0"
+       id="text449">NC_001879.2</text>
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="28.0"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="middle"
+       x="2.388061258337339e-14"
+       y="90.0"
+       id="text450">155,943 bp</text>
+    <text
+       alignment-baseline="middle"
+       dominant-baseline="middle"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="28.0"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="middle"
+       x="2.388061258337339e-14"
+       y="150.0"
+       id="text451">37.85% GC</text>
+  </g>
+  <g
+     id="tick"
+     transform="translate(700.0,500.0)">
+    <path
+       d="M 2.0059714570033644e-14,-327.59999999999997 L2.053732682170111e-14,-335.4 z"
+       stroke="gray"
+       stroke-width="2.0"
+       id="path451" />
+    <path
+       d="M 295.8669051655016,140.65750754150335 L302.91135528848974,144.00649581630105 z"
+       stroke="gray"
+       stroke-width="2.0"
+       id="path452" />
+    <path
+       d="M -254.065332384602,206.81529653365027 L-260.11450696518773,211.73947026064195 z"
+       stroke="gray"
+       stroke-width="2.0"
+       id="path453" />
+    <path
+       d="M -77.69720793765228,-318.25289296201726 L-79.54714145997734,-325.8303427944462 z"
+       stroke="gray"
+       stroke-width="2.0"
+       id="path454" />
+    <path
+       d="M 282.31720265871337,159.28018513277763A390,390 1 0 0 301.75546142384786,118.39265937486836"
+       fill="none"
+       id="id16"
+       stroke="none" />
+    <text
+       id="text454"><textPath
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="14"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id16"
+         id="textPath454">50 kbp</textPath></text>
+    <path
+       d="M -267.36786591682875,183.2692133667126A390,390 1 0 0 -233.70828080679289,224.6188321920186"
+       fill="none"
+       id="id17"
+       stroke="none" />
+    <text
+       id="text455"><textPath
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="14"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id17"
+         id="textPath455">100 kbp</textPath></text>
+    <path
+       d="M -99.76520230629937,-299.2584969269981A390,390 0 0 1 -49.359096778751834,-311.564476696893"
+       fill="none"
+       id="id18"
+       stroke="none" />
+    <text
+       id="text456"><textPath
+         font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+         font-size="14"
+         font-style="normal"
+         font-weight="normal"
+         startOffset="50%"
+         text-anchor="middle"
+         xlink:href="#id18"
+         id="textPath456">150 kbp</textPath></text>
+  </g>
+  <g
+     id="legend"
+     transform="translate(35.0,50.0)">
+    <path
+       d="M 0,-8.0 L 440.9032738095238,-8.0 L 440.9032738095238,392.0 L 0,392.0 z"
+       fill="none"
+       stroke="none"
+       stroke-width="0"
+       id="path456" />
+    <path
+       d="M 0,-8.0 L 16,-8.0 L 16,8.0 L 0,8.0 z"
+       fill="#00662c"
+       stroke="black"
+       stroke-width="1.0"
+       transform="translate(0,0.0)"
+       id="path457" />
+    <text
+       alignment-baseline="central"
+       dominant-baseline="central"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="16"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       transform="translate(25.142857142857142,0.0)"
+       x="0"
+       y="0"
+       id="text457">photosystem I</text>
+    <path
+       d="M 0,-8.0 L 16,-8.0 L 16,8.0 L 0,8.0 z"
+       fill="#328925"
+       stroke="black"
+       stroke-width="1.0"
+       transform="translate(0,27.428571428571427)"
+       id="path458" />
+    <text
+       alignment-baseline="central"
+       dominant-baseline="central"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="16"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       transform="translate(25.142857142857142,27.428571428571427)"
+       x="0"
+       y="0"
+       id="text458">photosystem II</text>
+    <path
+       d="M 0,-8.0 L 16,-8.0 L 16,8.0 L 0,8.0 z"
+       fill="#799c13"
+       stroke="black"
+       stroke-width="1.0"
+       transform="translate(0,54.857142857142854)"
+       id="path459" />
+    <text
+       alignment-baseline="central"
+       dominant-baseline="central"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="16"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       transform="translate(25.142857142857142,54.857142857142854)"
+       x="0"
+       y="0"
+       id="text459">cytochrome b/f complex</text>
+    <path
+       d="M 0,-8.0 L 16,-8.0 L 16,8.0 L 0,8.0 z"
+       fill="#bd1220"
+       stroke="black"
+       stroke-width="1.0"
+       transform="translate(0,82.28571428571428)"
+       id="path460" />
+    <text
+       alignment-baseline="central"
+       dominant-baseline="central"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="16"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       transform="translate(25.142857142857142,82.28571428571428)"
+       x="0"
+       y="0"
+       id="text460">RNA polymerase</text>
+    <path
+       d="M 0,-8.0 L 16,-8.0 L 16,8.0 L 0,8.0 z"
+       fill="#9e7742"
+       stroke="black"
+       stroke-width="1.0"
+       transform="translate(0,109.71428571428571)"
+       id="path461" />
+    <text
+       alignment-baseline="central"
+       dominant-baseline="central"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="16"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       transform="translate(25.142857142857142,109.71428571428571)"
+       x="0"
+       y="0"
+       id="text461">ribosomal proteins (LSU)</text>
+    <path
+       d="M 0,-8.0 L 16,-8.0 L 16,8.0 L 0,8.0 z"
+       fill="#dadada"
+       stroke="black"
+       stroke-width="1.0"
+       transform="translate(0,137.14285714285714)"
+       id="path462" />
+    <text
+       alignment-baseline="central"
+       dominant-baseline="central"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="16"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       transform="translate(25.142857142857142,137.14285714285714)"
+       x="0"
+       y="0"
+       id="text462">hypothetical chloroplast reading frames (ycf)</text>
+    <path
+       d="M 0,-8.0 L 16,-8.0 L 16,8.0 L 0,8.0 z"
+       fill="#dbaa73"
+       stroke="black"
+       stroke-width="1.0"
+       transform="translate(0,164.57142857142856)"
+       id="path463" />
+    <text
+       alignment-baseline="central"
+       dominant-baseline="central"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="16"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       transform="translate(25.142857142857142,164.57142857142856)"
+       x="0"
+       y="0"
+       id="text463">ribosomal proteins (SSU)</text>
+    <path
+       d="M 0,-8.0 L 16,-8.0 L 16,8.0 L 0,8.0 z"
+       fill="#97be0d"
+       stroke="black"
+       stroke-width="1.0"
+       transform="translate(0,192.0)"
+       id="path464" />
+    <text
+       alignment-baseline="central"
+       dominant-baseline="central"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="16"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       transform="translate(25.142857142857142,192.0)"
+       x="0"
+       y="0"
+       id="text464">ATP synthase</text>
+    <path
+       d="M 0,-8.0 L 16,-8.0 L 16,8.0 L 0,8.0 z"
+       fill="#e95d0f"
+       stroke="black"
+       stroke-width="1.0"
+       transform="translate(0,219.42857142857142)"
+       id="path465" />
+    <text
+       alignment-baseline="central"
+       dominant-baseline="central"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="16"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       transform="translate(25.142857142857142,219.42857142857142)"
+       x="0"
+       y="0"
+       id="text465">clpP, matK</text>
+    <path
+       d="M 0,-8.0 L 16,-8.0 L 16,8.0 L 0,8.0 z"
+       fill="#1fa12d"
+       stroke="black"
+       stroke-width="1.0"
+       transform="translate(0,246.85714285714283)"
+       id="path466" />
+    <text
+       alignment-baseline="central"
+       dominant-baseline="central"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="16"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       transform="translate(25.142857142857142,246.85714285714283)"
+       x="0"
+       y="0"
+       id="text466">RubisCO large subunit</text>
+    <path
+       d="M 0,-8.0 L 16,-8.0 L 16,8.0 L 0,8.0 z"
+       fill="#ffec00"
+       stroke="black"
+       stroke-width="1.0"
+       transform="translate(0,274.2857142857143)"
+       id="path467" />
+    <text
+       alignment-baseline="central"
+       dominant-baseline="central"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="16"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       transform="translate(25.142857142857142,274.2857142857143)"
+       x="0"
+       y="0"
+       id="text467">NADH dehydrogenase</text>
+    <path
+       d="M 0,-8.0 L 16,-8.0 L 16,8.0 L 0,8.0 z"
+       fill="#89d1fa"
+       stroke="black"
+       stroke-width="1.0"
+       transform="translate(0,301.7142857142857)"
+       id="path468" />
+    <text
+       alignment-baseline="central"
+       dominant-baseline="central"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="16"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       transform="translate(25.142857142857142,301.7142857142857)"
+       x="0"
+       y="0"
+       id="text468">other proteins</text>
+    <path
+       d="M 0,-8.0 L 16,-8.0 L 16,8.0 L 0,8.0 z"
+       fill="#e8b441"
+       stroke="black"
+       stroke-width="1.0"
+       transform="translate(0,329.1428571428571)"
+       id="path469" />
+    <text
+       alignment-baseline="central"
+       dominant-baseline="central"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="16"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       transform="translate(25.142857142857142,329.1428571428571)"
+       x="0"
+       y="0"
+       id="text469">tRNA</text>
+    <path
+       d="M 0,-8.0 L 16,-8.0 L 16,8.0 L 0,8.0 z"
+       fill="#71ee7d"
+       stroke="black"
+       stroke-width="1.0"
+       transform="translate(0,356.57142857142856)"
+       id="path470" />
+    <text
+       alignment-baseline="central"
+       dominant-baseline="central"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="16"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       transform="translate(25.142857142857142,356.57142857142856)"
+       x="0"
+       y="0"
+       id="text470">rRNA</text>
+    <path
+       d="M 0,-8.0 L 16,-8.0 L 16,8.0 L 0,8.0 z"
+       fill="#d3d3d3"
+       stroke="black"
+       stroke-width="1.0"
+       transform="translate(0,384.0)"
+       id="path471" />
+    <text
+       alignment-baseline="central"
+       dominant-baseline="central"
+       fill="black"
+       font-family="'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
+       font-size="16"
+       font-style="normal"
+       font-weight="normal"
+       stroke="none"
+       text-anchor="start"
+       transform="translate(25.142857142857142,384.0)"
+       x="0"
+       y="0"
+       id="text471">rep_origin</text>
+  </g>
+</svg>

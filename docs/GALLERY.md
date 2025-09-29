@@ -105,7 +105,7 @@ gbdraw linear \
 ```
 ![majaniviruses](https://github.com/satoshikawato/gbdraw/blob/main/examples/majani.svg)
 
-#### Lable whitelist
+#### <i>Sorangium cellulosum</i> So ce56 (label whitelist)
 
 ```bash
 gbdraw circular \
@@ -151,7 +151,7 @@ CDS	old_locus_tag	sce4132	#a4d8a7	Chivosazol biosynthesis
 ![NC_010162_edelweiss](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_010162_edelweiss.svg)
 
 
-#### Feature qualifier priority
+#### Human mitochondrial genome (feature qualifier priority)
 The following `qualifier_priority.tsv` designated by `--qualifier_priority` opton specifies which qualifier should be used for the label text of a given feature type. Other features remain the same as default:
 
 ```modified_default_colors.tsv
@@ -175,5 +175,55 @@ gbdraw circular \
 --definition_font_size 28
 ```
 ![NC_012920_middle_qualifier_priority_inner_axis5_def28_italic](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920_middle_qualifier_priority_inner_axis5_def28_italic.svg)
+
+#### <i>Nicotiana tabacum</i> chloroplast genome
+
+```bash
+gbdraw circular \
+--gbk NC_001879.gbk \
+--separate_strands \
+-f svg \
+-o NC_001879_color \
+-k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin \
+-t 2025-09-19_chloroplast.tsv \
+--block_stroke_width 1 \
+--block_stroke_color black \
+--axis_stroke_width 3 \
+--line_stroke_width 2 \
+--suppress_gc \
+--suppress_skew \
+-p default \
+--track tuckin \
+--show_labels \
+--allow_inner_labels \
+--qualifier_priority qualifier_priority.tsv \
+--outer_label_x_radius_offset 0.90 \
+--outer_label_y_radius_offset 0.90 \
+--inner_label_x_radius_offset 0.975 \
+--inner_label_y_radius_offset 0.975 \
+--species "<i>Nicotiana tabacum</i>" \
+--definition_font_size 28 \
+--legend upper_left
+```
+
+![NC_001879_color.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_001879_color.svg)
+
+#### Lambda phage
+
+```bash
+gbdraw linear \
+--gbk NC_001416.gb \
+-o NC_001416 \
+-f svg \
+--show_labels \
+--separate_strands \
+--legend left \
+-d cds_white.tsv \
+-t lambda_specific_table.tsv \
+--block_stroke_width 2 \
+--axis_stroke_width 5 \
+--definition_font_size 24 
+```
+![NC_001416.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_001416.svg)
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | **Gallery** | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)
