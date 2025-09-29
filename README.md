@@ -26,13 +26,13 @@
 
 For detailed instructions on how to use `gbdraw`, please visit our main documentation page. You'll find step-by-step guides covering everything from installation to advanced customization.
 
-**[➡️ Go to Full Documentation](./DOCS.md)**
+**[➡️ Go to Full Documentation](./docs/DOCS.md)**
 
 | Section | Description |
 | :--- | :--- |
-| **[Quickstart](./QUICKSTART.md)** | Create your first plot in under 5 minutes. |
-| **[Tutorials](./TUTORIALS/)** | Learn everything from basic customization to comparative genomics. |
-| **[FAQ](./FAQ.md)** | Find answers to common questions. |
+| **[Quickstart](./docs/QUICKSTART.md)** | Create your first plot in under 5 minutes. |
+| **[Tutorials](./docs/TUTORIALS/)** | Learn everything from basic customization to comparative genomics. |
+| **[FAQ](./docs/FAQ.md)** | Find answers to common questions. |
 
 ## Use without local installation
 ### Streamlit Web App
