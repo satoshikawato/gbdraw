@@ -1,9 +1,9 @@
-[Home](../README.md) | [**Installation**](./INSTALL.md) | [Usage](./USAGE.md) | [Gallery](./GALLERY.md) | [RECIPES](./RECIPES.md) | [Advanced](./ADVANCED.md) | [FAQ](./FAQ.md)
-# Install `gbdraw`
+[Home](./README.md) | **Installation** | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md)
 
-**Prerequisite:** Make sure you have a [conda](https://docs.conda.io/en/latest/)-compatible package manager—[mamba](https://github.com/mamba-org/mamba) ,[micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html), [miniforge](https://github.com/conda-forge/miniforge) or plain conda—already installed and on your `$PATH`. All steps below assume you run the commands in such an environment.
+[< Back to gbdraw Documentation](./DOCS.md)　　　　　　[Go to Quickstart >](./QUICKSTART.md)
 
-### Which Installation Method is Right for You?
+# `gbdraw` Installation
+
 `gbdraw` offers several installation methods to suit different needs. Use this table to choose the best option for your use case.
 | Method | Ease of Use | Access to Latest Version | Performance | Customization | Ideal User / Use Case |
 | ------ | ------- | ------- | ------- | ------- | ------- |
@@ -12,49 +12,77 @@
 | Bioconda | ★★★★☆ | Stable | High | High | Bioinformaticians needing a reproducible environment; pipeline integration. | 
  | Local Build | ★☆☆☆☆ | Development | High | High | Developers wanting to test the latest features or contribute to the project. | 
  
+---
 
-## Installation Instructions
+## 1. Use Without Installation
 
-### gbdraw Web App
-The gbdraw GUI is available as a web app, ready to use without any local installation.
+### Streamlit Web App
+
+The `gbdraw` GUI is available as a web app, ready to use without any local installation.
 
 **Simply visit**: [https://gbdraw.streamlit.app/](https://gbdraw.streamlit.app/)
 
-### Colab Notebook
-`gbdraw` also provides a Google Colaboratory notebook, although the functionality is limited. A Google account is required.
+### Google Colab
 
+`gbdraw` also provides a Google Colaboratory notebook, although the functionality is limited. A Google account is required.
 **Open in Colab**: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
 
-### Local installation
-For regular use and integration into analysis pipelines, we recommend installing `gbdraw` into a dedicated conda environment.
+---
 
-#### Bioconda (recommended)
-`gbdraw` is available on the Bioconda channel.
-```bash
-mamba create -n gbdraw-0.5.2 -y -c conda-forge -c bioconda gbdraw=0.5.2
-```
-If you also want to use the graphical interface (`gbdraw gui`), install streamlit into the same environment.
-```bash
-mamba create -n gbdraw-0.5.2 -c conda-forge -c bioconda gbdraw=0.5.2 streamlit
-```
+## 2. Local Installation
 
-#### Local build (development version)
+For regular use and integration into analysis pipelines, installing `gbdraw` into a dedicated conda environment is recommended.
+
+### Prerequisite
+
+You must have a [conda](https://docs.conda.io/en/latest/)-compatible package manager installed, such as [mamba](https://github.com/mamba-org/mamba), miniforge, or micromamba. We recommend `mamba` or `micromamba` for its speed.
+
+### Bioconda (Recommended)
+
+`gbdraw` is available from the Bioconda channel. Creating a dedicated environment prevents dependency conflicts. If you also want to use the graphical interface (`gbdraw gui`), install streamlit into the same environment.
+
+1.  **Create and activate a new conda environment for `gbdraw`.**
+    * **For both CLI and GUI:**
+        ```bash
+        mamba create -n gbdraw -c conda-forge -c bioconda gbdraw streamlit
+        conda activate gbdraw
+        ```
+    * **For CLI only:**
+        ```bash
+        mamba create -n gbdraw -c conda-forge -c bioconda gbdraw
+        conda activate gbdraw
+        ```
+2.  **Verify the installation.**
+    ```bash
+    gbdraw -h
+    ```
+
+Installation is complete!
+
+### Build from Source (For Developers)
+
 To use the latest development version locally, clone the repository yourself using `git` and build the package locally with [conda-build](https://anaconda.org/anaconda/conda-build).
+
 ```bash
-# 1. Clone the source
+# 1. Clone the source code
 git clone https://github.com/satoshikawato/gbdraw.git
+
 cd gbdraw/
 
-# 2. Make sure conda-build is installed
-mamba install -y conda-build             # or: conda install conda-build
+# 2. Install conda-build
+mamba install -y conda-build
 
 # 3. Build the package locally
-conda-build .
+conda build .
 
-# 4. Create an isolated environment from the locally built package
-mamba create -n gbdraw -y  -c conda-forge -c bioconda -c local gbdraw
+# 4. Create an environment from the locally built package
+mamba create -n gbdraw-dev -y -c conda-forge -c bioconda -c local gbdraw
 
 # 5. Activate the environment
-mamba activate gbdraw
+conda activate gbdraw-dev
 ```
-[Home](../README.md) | [**Installation**](./INSTALL.md) | [Usage](./USAGE.md) | [Gallery](./GALLERY.md) | [RECIPES](./RECIPES.md) | [Advanced](./ADVANCED.md) | [FAQ](./FAQ.md)
+
+[< Back to gbdraw Documentation](./DOCS.md)　　　　　　[Go to Quickstart >](./QUICKSTART.md)
+
+
+[Home](./README.md) | **Installation** | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md)
