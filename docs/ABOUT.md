@@ -1,6 +1,6 @@
 # About `gbdraw`
 
-[Home](./README.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | **ABOUT**
+[Home](./README.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | **ABOUT**
 
 ---
 
@@ -30,4 +30,4 @@ The development of `gbdraw` was inspired by many excellent tools in the bioinfor
 The core functionality of `gbdraw` evolved from a set of Python scripts originally written in 2022, which can be found at [satoshikawato/bio_small_scripts](https://github.com/satoshikawato/bio_small_scripts/).
 
 
-[Home](./README.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | **ABOUT**
+[Home](./README.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | **ABOUT**

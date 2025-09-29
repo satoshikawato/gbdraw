@@ -1,4 +1,4 @@
-[Home](./README.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/) | **Gallery**
+[Home](./README.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | **Gallery**
 # Gallery
 This gallery showcases a variety of plots created with `gbdraw` and the commands used to generate them.
 

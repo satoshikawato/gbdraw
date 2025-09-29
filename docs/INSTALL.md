@@ -1,4 +1,4 @@
-[Home](./README.md) | **Installation** | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md)
+[Home](./README.md) | **Installation** | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md)) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md)
 
 [< Back to gbdraw Documentation](./DOCS.md)　　　　　　[Go to Quickstart >](./QUICKSTART.md)
 
@@ -85,4 +85,4 @@ conda activate gbdraw-dev
 [< Back to gbdraw Documentation](./DOCS.md)　　　　　　[Go to Quickstart >](./QUICKSTART.md)
 
 
-[Home](./README.md) | **Installation** | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md)
+[Home](./README.md) | **Installation** | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md)) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md)
