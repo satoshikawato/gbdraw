@@ -30,8 +30,10 @@ For detailed instructions on how to use `gbdraw`, please visit our main document
 
 | Section | Description |
 | :--- | :--- |
+| **[Installation](./docs/INSTALL.md)** | Get started instantly with the web app or a full local installation. |
 | **[Quickstart](./docs/QUICKSTART.md)** | Create your first plot in under 5 minutes. |
 | **[Tutorials](./docs/TUTORIALS/TUTORIALS.md)** | Learn everything from basic customization to comparative genomics. |
+| **[Gallery](./docs/GALLERY.md)** | See example plots and the commands used to create them. |
 | **[FAQ](./docs/FAQ.md)** | Find answers to common questions. |
 
 ## Use without local installation
@@ -47,3 +49,4 @@ You can try `gbdraw` (latest release) on Google Colaboratory without any local i
 ## Bug reports and suggestions
 Please feel free to submit a new issue if you find a bug or have a suggestion:
 https://github.com/satoshikawato/gbdraw/issues
+
