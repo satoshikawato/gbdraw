@@ -1,4 +1,4 @@
-[Home](../README.md) | [Installation](./INSTALL.md) | [Usage](./USAGE.md) | [Gallery](./GALLERY.md) | [RECIPES](./RECIPES.md) | [Advanced](./ADVANCED.md) | [FAQ](./FAQ.md)
+
 # Usage
 
 ```bash
@@ -195,5 +195,3 @@ options:
   --qualifier_priority QUALIFIER_PRIORITY
                         Path to a TSV file defining qualifier priority for labels (optional)
 ```
-
-[Home](../README.md) | [Installation](./INSTALL.md) | [Usage](./USAGE.md) | [Gallery](./GALLERY.md) | [RECIPES](./RECIPES.md) | [Advanced](./ADVANCED.md) | [FAQ](./FAQ.md)

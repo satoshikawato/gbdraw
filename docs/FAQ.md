@@ -1,9 +1,16 @@
-[Home](./README.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/) | **FAQ**
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | **FAQ** | [ABOUT](./ABOUT.md)
 
 
 # Frequently Asked Questions (FAQ)
 
 Here are answers to some common questions about `gbdraw`.
+
+---
+
+## Known issues
+- **Trans-introns** are not currently visualized.
+- **Mixed-format text** (e.g., combining italic and block elements like `<i>Ca.</i> Tyloplasma litorale`) cannot be reliably converted from SVG to PDF/PNG/EPS/PS.  
+  → As a workaround, export to **SVG format** and convert to other formats using external tools like [**Inkscape**](https://inkscape.org/).
 
 ---
 
@@ -79,3 +86,5 @@ gbdraw circular --window 20000 --step 2000 ...
 ```bash
 gbdraw circular --nt AT ...
 ```
+
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) |[Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | **FAQ** | [ABOUT](./ABOUT.md)

@@ -31,7 +31,7 @@ For detailed instructions on how to use `gbdraw`, please visit our main document
 | Section | Description |
 | :--- | :--- |
 | **[Quickstart](./docs/QUICKSTART.md)** | Create your first plot in under 5 minutes. |
-| **[Tutorials](./docs/TUTORIALS/)** | Learn everything from basic customization to comparative genomics. |
+| **[Tutorials](./docs/TUTORIALS/TUTORIALS.md)** | Learn everything from basic customization to comparative genomics. |
 | **[FAQ](./docs/FAQ.md)** | Find answers to common questions. |
 
 ## Use without local installation
@@ -43,6 +43,8 @@ A GUI web app of `gbdraw` (latest commit on `main` branch) is available on Strea
 You can try `gbdraw` (latest release) on Google Colaboratory without any local installation:
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
+
+
 
 
 ## Bug reports and suggestions

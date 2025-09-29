@@ -1,4 +1,4 @@
-[Home](../README.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | **Tutorials** | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [ABOUT](../ABOUT.md)
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | **Tutorials** | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [ABOUT](../ABOUT.md)
 # Tutorials
 
 
@@ -8,4 +8,4 @@
 
 [**Tutorial 3**: Advanced Customization](./3_Advanced_Customization.md): Go beyond the basics to gain fine-grained control over plot aesthetics using configuration files for colors and labels.
 
-[Home](../README.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | **Tutorials** | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [ABOUT](../ABOUT.md)
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | **Tutorials** | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [ABOUT](../ABOUT.md)

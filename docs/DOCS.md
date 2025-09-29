@@ -5,7 +5,7 @@ Here you will find all the information you need to make the most of `gbdraw`, fr
 
 ---
 
-### **🔰 For New Users**
+### **🔰 Getting Started**
 
 Start here! This section will guide you through installing `gbdraw` and creating your first plot.
 
@@ -16,21 +16,27 @@ Start here! This section will guide you through installing `gbdraw` and creating
 
 ### **📚 Tutorials**
 
-Once you've mastered the basics, learn how to customize your plots and perform comparative genomic analysis.
+Learn how to use `gbdraw`'s features step-by-step, from basic customization to advanced comparative genomics.
 
 * **[Tutorial 1: Customizing Your Plot](./TUTORIALS/1_Customizing_Plots.md)**
-    * Learn the basics of customizing plot appearance, including colors, titles, and labels.
 * **[Tutorial 2: Comparative Genomics](./TUTORIALS/2_Comparative_Genomics.md)**
-    * Use BLAST results to visualize sequence similarity between two or more genomes.
 * **[Tutorial 3: Advanced Customization](./TUTORIALS/3_Advanced_Customization.md)**
-    * Gain fine-grained control over colors and labels using configuration files.
+
+---
+
+### **🍳 Recipes**
+
+Find solutions to common tasks and create publication-quality figures.
+
+* **[Go to Recipes](./RECIPES.md)**: Practical examples for specific goals.
 
 ---
 
 ### **🔧 Reference**
 
-Look here for answers to specific questions or to explore what's possible.
+Look here for detailed information, examples, and answers to specific questions.
 
-* **[FAQ](./FAQ.md)**: Frequently Asked Questions and answers.
+* **[Command-Line Reference](./CLI_Reference.md)**: A complete list of all command-line options.
 * **[Gallery](./GALLERY.md)**: A gallery of examples created with `gbdraw`.
-* **[Citation & About](./ABOUT.md)**: Information on how to cite `gbdraw` and acknowledgments.
+* **[FAQ](./FAQ.md)**: Frequently Asked Questions and solutions to known issues.
+* **[About](./ABOUT.md)**: Information on how to cite `gbdraw`.

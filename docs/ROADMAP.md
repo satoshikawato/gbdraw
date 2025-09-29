@@ -12,9 +12,6 @@
 - PAF/MAF support (pairwise matches) 
 - Feature overlap resolution (overlapping genes, transcript isoforms etc.;unsure how to impelment mutiple tracks with label overlap resolution)
 - Custom tracks (read depth, motifs, etc.)
-## Known issues
-- **Trans-introns** are not currently visualized.
-- **Mixed-format text** (e.g., combining italic and block elements like `<i>Ca.</i> Tyloplasma litorale`) cannot be reliably converted from SVG to PDF/PNG/EPS/PS.  
-  → As a workaround, export to **SVG format** and convert to other formats using external tools like [**Inkscape**](https://inkscape.org/).
+
 
 [Home](../README.md) | [Installation](./INSTALL.md) | [Usage](./USAGE.md) | [Gallery](./GALLERY.md) | [RECIPES](./RECIPES.md) | [Advanced](./ADVANCED.md) | [FAQ](./FAQ.md)

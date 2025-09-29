@@ -12,17 +12,28 @@
 
 ## Part 1: Advanced Color Control
 
-While `--palette` is great for general styling, you often need to highlight specific features. `gbdraw` offers two ways to do this with simple tab-separated value (TSV) files.
+While `--palette` is great for general styling, you often need to highlight specific features. `gbdraw`  two complementary mechanisms for overriding the default colours:
+
+| Method | Purpose |
+| ------ | ------- |
+| **Default-override table** (`-d`) | Replace colors for *entire* feature classes |
+| **Feature-specific table** (`-t`) | Color *individual* features that match user-defined rules |
+
+Both tables are tab separated. Colours may be given as any of the [147 color names defined by the SVG specification](https://johndecember.com/html/spec/colorsvg.html) or in [hexadecimal format](https://htmlcolorcodes.com/) (`#RRGGBB`).
 
 ### Method 1: Override Default Colors (`-d`)
 
-This method replaces the default color for an entire feature type (e.g., make all `CDS` features gray).
+This method replaces the default color for an entire feature type (e.g., make all `CDS` features gray). Other features remain the same as default:
 
 1.  **Create a default-override TSV file.** Let's call it `modified_default_colors.tsv`. This file has two columns: `feature type` and `color`.
 
     ```tsv
     CDS	#d3d3d3
     ```
+    | feature type | color |
+    | ------ | ------- |
+    | CDS | #d3d3d3 |
+
 
 2.  **Use it in your command.**
 
@@ -46,15 +57,21 @@ This method replaces the default color for an entire feature type (e.g., make al
 
 ### Method 2: Feature-Specific Colors (`-t`)
 
-This method is more powerful. It colors individual features that match a specific rule, such as a gene's product name. This is perfect for highlighting genes of interest.
+This method colors individual features that match a specific rule, such as a gene's product name. This is perfect for highlighting genes of interest.
 
-1.  **Create a feature-specific color TSV file.** Let's call it `feature_specifc_colors.tsv`. The file has 5 columns: `FeatureType`, `Qualifier`, `RegexPattern`, `Color`, and `LegendLabel`.
+1.  **Create a feature-specific color TSV file.** Let's call it `feature_specifc_colors.tsv`. The file has 5 columns: `FeatureType`, `Qualifier`, `RegexPattern`, `Color`, and `LegendLabel`. This `custom_color_table.tsv` color only those CDS whose `product` qualifier matches the given regex:
 
     ```tsv
     CDS	product	wsv.*-like protein	#47b8f8	WSSV-like proteins
     CDS	product	baculoviral IAP repeat-containing protein	yellow	BIRP
     CDS	product	tyrosine recombinase	red	tyrosine recombinase
     ```
+    | feature type | target qualifier | qualifier value regex (Python) | color | legend text |
+    | ------ | ------- | ------- | ------- | ------- |
+    | CDS | product | wsv.*-like protein | #47b8f8 | WSSV-like proteins |
+    | CDS | product | baculoviral IAP repeat-containing protein | yellow | BIRP |
+    | CDS | product | tyrosine recombinase | red | tyrosine recombinase |
+
 2.  **Combine both methods for maximum control.** Let's make all CDS features gray *except* for the specific ones we want to highlight.
 
     ```bash
