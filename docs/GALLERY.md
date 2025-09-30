@@ -103,6 +103,7 @@ CDS	old_locus_tag	sce4132	#a4d8a7	Chivosazol biosynthesis
 ```
 
 </details>
+
 ![NC_010162_edelweiss](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_010162_edelweiss.svg)
 
 
