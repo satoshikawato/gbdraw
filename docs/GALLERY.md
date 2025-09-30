@@ -5,6 +5,8 @@ This gallery showcases a variety of plots created with `gbdraw` and the commands
 
 #### Majaniviruses Multi-Genome Comparison
 
+<details><summary>Expand to see the script</summary>
+
 ```bash
 # Pairwise TBLASTX search 
 tblastx -query MjeNMV.fasta -subject MelaMJNV.fasta -outfmt 7 -out MjeNMV.MelaMJNV.tblastx.out 
@@ -48,9 +50,14 @@ gbdraw linear \
 --separate_strands \
 -o majani -f svg
 ```
+
+</details>
+
 ![majaniviruses](https://github.com/satoshikawato/gbdraw/blob/main/examples/majani.svg)
 
 #### <i>Sorangium cellulosum</i> So ce56 (label whitelist)
+
+<details><summary>Expand to see the script</summary>
 
 ```bash
 gbdraw circular \
@@ -82,6 +89,7 @@ CDS	old_locus_tag	sce4133
 CDS	old_locus_tag	sce4132
 ...
 ```
+
 [NC_010162.feature-specific_table.tsv](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_010162.feature-specific_table.tsv) (part)
 ```
 CDS	old_locus_tag	sce4138	#a4d8a7	Chivosazol biosynthesis
@@ -93,10 +101,15 @@ CDS	old_locus_tag	sce4133	#a4d8a7	Chivosazol biosynthesis
 CDS	old_locus_tag	sce4132	#a4d8a7	Chivosazol biosynthesis
 ...
 ```
+
+</details>
 ![NC_010162_edelweiss](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_010162_edelweiss.svg)
 
 
 #### Human mitochondrial genome (feature qualifier priority)
+
+<details><summary>Expand to see the script</summary>
+
 The following `qualifier_priority.tsv` designated by `--qualifier_priority` opton specifies which qualifier should be used for the label text of a given feature type. Other features remain the same as default:
 
 ```modified_default_colors.tsv
@@ -119,9 +132,14 @@ gbdraw circular \
 -o NC_012920_middle_qualifier_priority_inner_axis5_def28_italic \
 --definition_font_size 28
 ```
+</details>
+
 ![NC_012920_middle_qualifier_priority_inner_axis5_def28_italic](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_012920_middle_qualifier_priority_inner_axis5_def28_italic.svg)
 
 #### <i>Nicotiana tabacum</i> chloroplast genome
+
+<details><summary>Expand to see the script</summary>
+
 
 ```bash
 gbdraw circular \
@@ -150,10 +168,14 @@ gbdraw circular \
 --definition_font_size 28 \
 --legend upper_left
 ```
+</details>
 
 ![NC_001879_color.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_001879_color.svg)
 
 #### Lambda phage
+
+<details><summary>Expand to see the script</summary>
+
 
 ```bash
 gbdraw linear \
@@ -169,10 +191,17 @@ gbdraw linear \
 --axis_stroke_width 5 \
 --definition_font_size 24 
 ```
+
+</details>
+
 ![NC_001416.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_001416.svg)
 
 
 #### <i>Ca.</i> Sukunaarchaeum mirabile M16-5
+
+<details><summary>Expand to see the script</summary>
+
+
 ```bash
 gbdraw circular \
 --gbk M16-5.gb \
@@ -187,10 +216,16 @@ gbdraw circular \
 --definition_font_size 22 \
 --legend upper_right
 ```
+
+</details>
+
 ![M16-5_fugaku.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/M16-5_fugaku.svg)
 
 
-#### <i>Pandoravirus_salinus</i>
+#### <i>Pandoravirus salinus</i>
+
+<details><summary>Expand to see the script</summary>
+
 ```bash
 gbdraw circular \
 --gbk Pandoravirus_salinus.gb \
@@ -203,9 +238,15 @@ gbdraw circular \
 --definition_font_size 22 \
 --legend upper_right
 ```
+
+</details>
+
 ![Pandoravirus_salinus_forest.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/Pandoravirus_salinus_forest.svg)
 
-#### Candidatus Pelagibacter ubique HTCC1062
+#### <i>Candidatus</i> Pelagibacter ubique HTCC1062
+
+<details><summary>Expand to see the script</summary>
+
 ```bash
 gbdraw circular \
 --gbk NC_007205.gb \
@@ -217,9 +258,16 @@ gbdraw circular \
 --palette oceanic_voyage \
 -o NC_007205_oceanic_voyage
 ```
+
+</details>
+
 ![NC_007205_oceanic_voyage.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_007205_oceanic_voyage.svg)
 
 #### <i>Prochlorococcus marinus</i> CCMP1375
+
+<details><summary>Expand to see the script</summary>
+
+
 ```bash
 gbdraw circular \
 --gbk NC_005042.gb \
@@ -231,9 +279,16 @@ gbdraw circular \
 --palette pine_reflection \
 -o NC_005042_pine_reflection
 ```
+
+</details>
+
 ![NC_005042_pine_reflection.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_005042_pine_reflection.svg)
 
 #### <i>Flavobacterium columnare</i> ATCC 49512
+
+<details><summary>Expand to see the script</summary>
+
+
 ```bash
 gbdraw circular \
 --gbk NC_016510.gb \
@@ -245,9 +300,15 @@ gbdraw circular \
 --palette mint \
 -o NC_016510_mint
 ```
+
+</details>
+
 ![NC_016510_mint.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_016510_mint.svg)
 
 #### <i>Thermus aquaticus</i> Y51MC23
+
+<details><summary>Expand to see the script</summary>
+
 ```bash
 gbdraw circular \
 --gbk NZ_CP010822.gb \
@@ -259,9 +320,14 @@ gbdraw circular \
 --palette orange \
 -o NZ_CP010822_orange
 ```
+</details>
+
 ![NZ_CP010822_orange.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NZ_CP010822_orange.svg)
 
 #### <i>Helicobacter pylori</i> J99
+
+<details><summary>Expand to see the script</summary>
+
 ```bash
 gbdraw circular \
 --gbk NC_000921.gb \
@@ -273,10 +339,16 @@ gbdraw circular \
 --palette spring \
 -o NC_000921_spring
 ```
+
+</details>
+
 ![NC_000921_spring.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_000921_spring.svg)
 
 
 #### <i>Mycobacterium tuberculosis</i> H37Rv
+
+<details><summary>Expand to see the script</summary>
+
 ```bash
 gbdraw circular \
 --gbk NC_000962.gb \
@@ -288,6 +360,9 @@ gbdraw circular \
 --palette psyche \
 -o NC_000962_psyche
 ```
+
+</details>
+
 ![NC_000962_psyche.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_000962_psyche.svg)
 
 
