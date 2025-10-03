@@ -58,7 +58,7 @@ def generate_circle_path_desc(radius: float, norm_factor: float) -> str:
     return circle_desc
 
 
-def generate_circular_gc_content_path_desc(radius: float, record_len: int, gc_df: DataFrame, track_width: float, norm_factor: float) -> str:
+def generate_circular_gc_content_path_desc(radius: float, record_len: int, gc_df: DataFrame, track_width: float, norm_factor: float, dinucleotide: str) -> str:
     """
     Generates the SVG path description for circular GC content representation using vectorization.
 
@@ -77,7 +77,7 @@ def generate_circular_gc_content_path_desc(radius: float, record_len: int, gc_df
     """
     norm_radius: float = radius * norm_factor
     
-    column: str = 'GC content'
+    column: str = f'{dinucleotide} content'
     mean = gc_df[column].mean()
     max_diff = (gc_df[column] - mean).abs().max()
 
@@ -116,10 +116,10 @@ def generate_circular_gc_content_path_desc(radius: float, record_len: int, gc_df
     gc_desc += circle_desc
     return gc_desc
 
-def generate_circular_gc_skew_path_desc(radius: float, df: DataFrame, total_len: int, track_width: float, norm_factor: float) -> str:
+def generate_circular_gc_skew_path_desc(radius: float, df: DataFrame, total_len: int, track_width: float, norm_factor: float, dinucleotide: str) -> str:
     norm_radius: float = radius * norm_factor
     
-    column: str = 'GC skew'
+    column: str = f'{dinucleotide} skew'
     mean = df[column].mean()
     max_diff = (df[column] - mean).abs().max()
 

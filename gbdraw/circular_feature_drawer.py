@@ -42,7 +42,7 @@ class SkewDrawer:
         self.skew_stroke_color: str = skew_config.stroke_color
         self.skew_fill_opacity: float = skew_config.fill_opacity
 
-    def draw(self, radius: float, group: Group, gc_df: DataFrame, record_len: int, track_width: float, norm_factor: float) -> Group:
+    def draw(self, radius: float, group: Group, gc_df: DataFrame, record_len: int, track_width: float, norm_factor: float, dinucleotide: str) -> Group:
         """
         Draws the GC skew path on the provided SVG group.
 
@@ -58,7 +58,7 @@ class SkewDrawer:
             Group: The updated SVG group with the GC skew path added.
         """
         skew_desc: str = generate_circular_gc_skew_path_desc(
-            radius, gc_df, record_len, track_width, norm_factor)
+            radius, gc_df, record_len, track_width, norm_factor, dinucleotide)
         circle_desc: str = generate_circle_path_desc(radius, norm_factor)
         circle_path: ClipPath = ClipPath(id='clipper_circle')
         circle_path.add(Path(d=circle_desc, fill="white", stroke='none'))
@@ -105,7 +105,7 @@ class GcContentDrawer:
         self.gc_path_stroke_color: str = gc_config.stroke_color
         self.gc_path_stroke_width: float = gc_config.stroke_width
         self.gc_path_fill_opacity: float = gc_config.fill_opacity
-    def draw(self, radius: float, group: Group, gc_df: DataFrame, record_len: int, track_width: float, norm_factor: float) -> Group:
+    def draw(self, radius: float, group: Group, gc_df: DataFrame, record_len: int, track_width: float, norm_factor: float, dinucleotide: str) -> Group:
         """
         Draws the GC content path on the provided SVG group.
 
@@ -121,7 +121,7 @@ class GcContentDrawer:
             Group: The updated SVG group with the GC content path added.
         """
         gc_path_desc: str = generate_circular_gc_content_path_desc(
-            radius, record_len, gc_df, track_width, norm_factor)
+            radius, record_len, gc_df, track_width, norm_factor, dinucleotide)
         gc_path: Path = Path(
             d=gc_path_desc,
             fill=self.gc_path_fill_color,
