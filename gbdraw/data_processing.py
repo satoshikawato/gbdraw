@@ -152,6 +152,7 @@ def prepare_legend_table(gc_config, skew_config, feature_config, features_presen
     skew_low_fill_color: str = skew_config.low_fill_color
     skew_stroke_color: str = skew_config.stroke_color
     skew_stroke_width: float = skew_config.stroke_width
+    dinucleotide = gc_config.dinucleotide
     feature_specific_colors = dict()
     if color_table is not None and not color_table.empty:
         for _, row in color_table.iterrows():
@@ -180,16 +181,16 @@ def prepare_legend_table(gc_config, skew_config, feature_config, features_presen
             legend_table[selected_feature] = (block_stroke_color, block_stroke_width, feature_fill_color)        
     if show_gc:
         if gc_high_fill_color == gc_low_fill_color:
-            legend_table['GC content'] = (gc_stroke_color, gc_stroke_width, gc_high_fill_color)
+            legend_table[f'{dinucleotide} content'] = (gc_stroke_color, gc_stroke_width, gc_high_fill_color)
         else:
-            legend_table['GC content (+)'] = (gc_stroke_color, gc_stroke_width, gc_high_fill_color)
-            legend_table['GC content (-)'] = (gc_stroke_color, gc_stroke_width, gc_low_fill_color)
+            legend_table[f'{dinucleotide} content (+)'] = (gc_stroke_color, gc_stroke_width, gc_high_fill_color)
+            legend_table[f'{dinucleotide} content (-)'] = (gc_stroke_color, gc_stroke_width, gc_low_fill_color)
     if show_skew:
         if skew_high_fill_color == skew_low_fill_color:
-            legend_table['GC skew'] = (skew_stroke_color, skew_stroke_width, skew_high_fill_color)
+            legend_table[f'{dinucleotide} skew'] = (skew_stroke_color, skew_stroke_width, skew_high_fill_color)
         else:
-            legend_table['GC skew (+)'] = (skew_stroke_color, skew_stroke_width, skew_high_fill_color)
-            legend_table['GC skew (-)'] = (skew_stroke_color, skew_stroke_width, skew_low_fill_color)
+            legend_table[f'{dinucleotide} skew (+)'] = (skew_stroke_color, skew_stroke_width, skew_high_fill_color)
+            legend_table[f'{dinucleotide} skew (-)'] = (skew_stroke_color, skew_stroke_width, skew_low_fill_color)
     return legend_table
 
 def y_overlap(label1, label2, total_len, minimum_margin):

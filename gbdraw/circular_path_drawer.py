@@ -77,10 +77,7 @@ def generate_circular_gc_content_path_desc(radius: float, record_len: int, gc_df
     """
     norm_radius: float = radius * norm_factor
     
-    column: str = f"{dinucleotide} content"
-    if column not in gc_df.columns:
-        # 念のため、カラムが存在しない場合はエラーを発生させます
-        raise KeyError(f"Column '{column}' not found in the DataFrame.")
+    column: str = f'{dinucleotide} content'
     mean = gc_df[column].mean()
     max_diff = (gc_df[column] - mean).abs().max()
 
@@ -122,10 +119,7 @@ def generate_circular_gc_content_path_desc(radius: float, record_len: int, gc_df
 def generate_circular_gc_skew_path_desc(radius: float, df: DataFrame, total_len: int, track_width: float, norm_factor: float, dinucleotide: str) -> str:
     norm_radius: float = radius * norm_factor
     
-    column: str = f"{dinucleotide} content"
-    if column not in df.columns:
-        # 念のため、カラムが存在しない場合はエラーを発生させます
-        raise KeyError(f"Column '{column}' not found in the DataFrame.")
+    column: str = f'{dinucleotide} skew'
     mean = df[column].mean()
     max_diff = (df[column] - mean).abs().max()
 

@@ -61,7 +61,7 @@ class GcContentGroup:
         self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
         self.track_type: str = self.config_dict['canvas']['circular']['track_type']
         self.norm_factor: float = self.config_dict['canvas']['circular']['track_dict'][self.length_param][self.track_type][str(track_id)]
-
+        self.dinucleotide: str = self.gc_config.dinucleotide
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
@@ -69,7 +69,7 @@ class GcContentGroup:
         Adds GC content visualization elements to the group.
         """
         self.gc_group: Group = GcContentDrawer(self.gc_config).draw(
-            self.radius, self.gc_group, self.gc_df, self.record_len, self.track_width, self.norm_factor)
+            self.radius, self.gc_group, self.gc_df, self.record_len, self.track_width, self.norm_factor, self.dinucleotide)
 
     def get_group(self) -> Group:
         """
@@ -123,6 +123,7 @@ class GcSkewGroup:
         self.length_threshold = self.config_dict['labels']['length_threshold']['circular']
         self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
         self.norm_factor: float = self.config_dict['canvas']['circular']['track_dict'][self.length_param][self.track_type][str(track_id)]
+        self.dinucleotide: str = self.skew_config.dinucleotide
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
@@ -130,7 +131,7 @@ class GcSkewGroup:
         Adds the visual elements representing the GC skew data to the group.
         """
         self.skew_group: Group = SkewDrawer(self.skew_config).draw(
-            self.radius, self.skew_group, self.gc_df, self.record_len, self.track_width, self.norm_factor)
+            self.radius, self.skew_group, self.gc_df, self.record_len, self.track_width, self.norm_factor, self.dinucleotide)
 
     def get_group(self) -> Group:
         """
