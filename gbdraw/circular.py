@@ -270,7 +270,7 @@ def circular_main(cmd_args) -> None:
         logger.warning(
             "WARNING: The -i/--input option is deprecated and will be removed in a future version. Please use --gbk instead.")    
     output_prefix = args.output
-    dinucleotide: str = args.nt
+    dinucleotide: str = args.nt.upper()
     manual_window: int = args.window
     manual_step: int = args.step
     color_table_path: str = args.table

@@ -268,7 +268,7 @@ def linear_main(cmd_args) -> None:
     color_table_path: str = args.table
     strandedness: bool = args.separate_strands
     resolve_overlaps: bool = args.resolve_overlaps
-    dinucleotide: str = args.nt
+    dinucleotide: str = args.nt.upper()
     show_gc: bool = args.show_gc
     manual_window: int = args.window
     manual_step: int = args.step
