@@ -216,10 +216,22 @@ class LinearCanvasConfigurator:
         """
         if self.show_gc:
             self.gc_height: float = self.default_gc_height
-            self.gc_padding: float = self.gc_height + self.vertical_padding
+            if self.show_skew:
+                self.gc_padding: float = self.gc_height
+            else:
+                self.gc_padding: float = self.gc_height
         else:
             self.gc_height: float = 0
             self.gc_padding: float = 0
+        if self.show_skew:
+            self.skew_height: float = self.default_gc_height
+            if self.show_gc:
+                self.skew_padding: float = self.skew_height
+            else:
+                self.skew_padding: float = self.skew_height 
+        else:
+            self.skew_height: float = 0
+            self.skew_padding: float = 0
 
     def set_cds_height_and_cds_padding(self) -> None:
         """

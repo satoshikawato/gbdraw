@@ -123,6 +123,10 @@ def _get_args(args) -> argparse.Namespace:
         help='plot GC content below genome (default: False). ',
         action='store_true')
     parser.add_argument(
+        '--show_skew',
+        help='plot GC skew below genome (default: False). ',
+        action='store_true')
+    parser.add_argument(
         '--align_center',
         help='Align genomes to the center (default: False). ',
         action='store_true')
@@ -272,7 +276,7 @@ def linear_main(cmd_args) -> None:
     evalue: float = args.evalue
     legend: str = args.legend
 
-    show_skew: bool = False
+    show_skew: bool = args.show_skew
     bitscore: float = args.bitscore
     identity: float = args.identity
     show_labels: bool = args.show_labels
