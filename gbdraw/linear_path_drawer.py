@@ -249,7 +249,7 @@ def calculate_corrdinate(index: int, value: float, mean: float, max_diff: float,
     return corrdinate, x_corrdinate
 
 
-def calculate_gc_content_path_desc(start_x: float, start_y: float, gc_df: DataFrame, record_len: int, alignment_width: float, genome_size_normalization_factor: float, track_height: float) -> str:
+def calculate_gc_content_path_desc(start_x: float, start_y: float, gc_df: DataFrame, record_len: int, alignment_width: float, genome_size_normalization_factor: float, track_height: float, dinucleotide: str) -> str:
     """
     Calculates the SVG path description for GC content visualization.
 
@@ -268,7 +268,7 @@ def calculate_gc_content_path_desc(start_x: float, start_y: float, gc_df: DataFr
     coodinates_list: list = []
     start_position: str = "M{} {}".format(start_x, start_y)
     coodinates_list.append(start_position)
-    column = 'GC content'
+    column: str = f'{dinucleotide} content'
     mean = float(gc_df[column].mean())
     max_diff = float((gc_df[column] - mean).abs().max())
     for index, row in gc_df.iterrows():

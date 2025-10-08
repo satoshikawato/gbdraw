@@ -244,7 +244,7 @@ class GcContentDrawer:
         self.gc_path_stroke_width: float = gc_config.stroke_width
         self.gc_path_fill_opacity: float = gc_config.fill_opacity
 
-    def draw(self, group, gc_df: DataFrame, record_len: int, alignment_width: float, genome_size_normalization_factor: float, track_height: float, start_x: float, start_y: float) -> Group:
+    def draw(self, group, gc_df: DataFrame, record_len: int, alignment_width: float, genome_size_normalization_factor: float, track_height: float, start_x: float, start_y: float, dinucleotide: str) -> Group:
         """
         Draws the GC content path on the provided SVG group.
 
@@ -265,7 +265,7 @@ class GcContentDrawer:
             Group: The updated SVG group with the GC content path added.
         """
         gc_path_desc: str = calculate_gc_content_path_desc(
-            start_x, start_y, gc_df, record_len, alignment_width, genome_size_normalization_factor, track_height)
+            start_x, start_y, gc_df, record_len, alignment_width, genome_size_normalization_factor, track_height, dinucleotide)
         gc_path = Path(
             d=gc_path_desc,
             fill=self.gc_path_fill_color,
@@ -291,7 +291,7 @@ class SkewDrawer:
         self.skew_stroke_width: float = skew_config.stroke_width
         self.skew_fill_opacity: float = skew_config.fill_opacity
 
-    def draw(self, group: Group, gc_df: DataFrame, record_len: int, alignment_width: float, genome_size_normalization_factor: float, track_height: float, start_x: float, start_y: float) -> Group:
+    def draw(self, group: Group, gc_df: DataFrame, record_len: int, alignment_width: float, genome_size_normalization_factor: float, track_height: float, start_x: float, start_y: float, dinucleotide: str) -> Group:
         """
         Draws the GC skew path on the provided SVG group.
         """

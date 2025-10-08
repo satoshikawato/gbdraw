@@ -317,7 +317,7 @@ class GcContentGroup:
         This method calls the GcContentDrawer to draw the GC content based on the calculated 
         DataFrame and adds the resulting SVG elements to the group.
         """
-        self.gc_group: Group = GcContentDrawer(self.gc_config).draw(self.gc_group, self.gc_df, self.record_len, self.alignment_width, self.genome_size_normalization_factor, self.track_height, self.start_x, self.start_y)
+        self.gc_group: Group = GcContentDrawer(self.gc_config).draw(self.gc_group, self.gc_df, self.record_len, self.alignment_width, self.genome_size_normalization_factor, self.track_height, self.start_x, self.start_y, self.dinucleotide)
 
     def get_group(self) -> Group:
         """
@@ -370,7 +370,7 @@ class GcSkewGroup:
         """
         self.skew_group: Group = SkewDrawer(self.skew_config).draw(
             self.skew_group, self.skew_df, self.record_len, self.alignment_width,
-            self.genome_size_normalization_factor, self.track_height, self.start_x, self.start_y
+            self.genome_size_normalization_factor, self.track_height, self.start_x, self.start_y, self.dinucleotide
         )
 
     def get_group(self) -> Group:
