@@ -10,7 +10,7 @@ import shutil
 import uuid
 import tomllib
 import time
-import gbdraw
+import gbdraw.version
 import streamlit as st
 from pathlib import Path
 from importlib import resources
@@ -33,7 +33,7 @@ st.set_page_config(
 def get_version_info():
     """gbdrawのバージョンとGitのコミットIDを取得する"""
     try:
-        version = gbdraw.__version__
+        version = gbdraw.version.__version__
     except AttributeError:
         version = "N/A"
     
