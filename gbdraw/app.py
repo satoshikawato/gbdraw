@@ -814,7 +814,7 @@ if selected_mode == "📏 Linear":
             l_legend = st.selectbox("Legend:", ["right", "left", "none"], index=0, key="l_legend", help="Position of the legend. 'none' hides the legend.")
         with col2:
             l_show_labels = st.checkbox("Show labels", value=False, key="l_labels", help="Display feature labels on the linear map.")
-            l_separate_strands = st.checkbox("Separate strands", value=False, key="l_strands", help="Display features on separate strands for better distinction of forward and reverse strands.")
+            l_separate_strands = st.checkbox("Separate strands", value=True, key="l_strands", help="Display features on separate strands for better distinction of forward and reverse strands.")
             l_align_center = st.checkbox("Align center", value=False, key="l_align", help="Align the linear map to the center of the page. This can help with aesthetics, especially for long sequences.")
             l_show_gc = st.checkbox("Show GC content", value=False, key="l_gc", help="Display the GC content track on the linear map.")
             l_show_skew = st.checkbox("Show GC skew", value=False, key="l_skew", help="Display the GC skew track on the linear map.")
