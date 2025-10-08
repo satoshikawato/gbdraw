@@ -31,7 +31,7 @@ st.set_page_config(
     })
 
 def get_version_info():
-    """gbdrawのバージョンとGitのコミットIDを取得する"""
+    """Retrieves the gbdraw version and commit ID."""
     try:
         version = gbdraw.version.__version__
     except AttributeError:

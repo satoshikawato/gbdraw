@@ -31,23 +31,16 @@ st.set_page_config(
     })
 
 def get_version_info():
-    """gbdrawのバージョンとGitのコミットIDを取得する"""
+    """Retrieve the version information of the gbdraw package."""
     try:
         version = gbdraw.version.__version__
     except AttributeError:
         version = "N/A"
     
-    try:
-        # Gitリポジトリのルートでコマンドを実行し、短いコミットハッシュを取得
-        commit_id = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"]
-        ).strip().decode("utf-8")
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        commit_id = "N/A"
         
-    return version, commit_id
+    return version
 
-VERSION, COMMIT_ID = get_version_info()
+VERSION = get_version_info()
 
 st.title("🧬 gbdraw Web App")
 st.caption("A genome diagram generator for microbes and organelles")
@@ -1069,8 +1062,7 @@ st.markdown(
     f"""
     Author: [Satoshi Kawato](https://github.com/satoshikawato)  |
     Source: [gbdraw](https://github.com/satoshikawato/gbdraw)  |
-    Version: {VERSION} |
-    Commit ID: {COMMIT_ID}
+    Version: {VERSION}
     """,
     unsafe_allow_html=True
 )
