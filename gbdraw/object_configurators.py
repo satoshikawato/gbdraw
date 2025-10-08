@@ -36,6 +36,7 @@ class GcContentConfigurator:
         self.stroke_width: float = config_dict['objects']['gc_content']['stroke_width']
         self.fill_opacity: float = config_dict['objects']['gc_content']['fill_opacity']
         self.show_gc: bool = config_dict['canvas']['show_gc']
+
 class GcSkewConfigurator:
     """
     Configurator for GC skew calculation parameters.
@@ -67,6 +68,7 @@ class GcSkewConfigurator:
         self.stroke_width: float = config_dict['objects']['gc_skew']['stroke_width']
         self.fill_opacity: float = config_dict['objects']['gc_skew']['fill_opacity']
         self.show_skew: bool = config_dict['canvas']['show_skew']
+        
 class FeatureDrawingConfigurator:
     """
     Configurator for drawing genomic features.

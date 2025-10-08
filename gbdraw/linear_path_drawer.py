@@ -249,7 +249,7 @@ def calculate_corrdinate(index: int, value: float, mean: float, max_diff: float,
     return corrdinate, x_corrdinate
 
 
-def calculate_gc_content_path_desc(start_x: float, start_y: float, gc_df: DataFrame, record_len: int, alignment_width: float, genome_size_normalization_factor: float, track_height: float) -> str:
+def calculate_gc_content_path_desc(start_x: float, start_y: float, gc_df: DataFrame, record_len: int, alignment_width: float, genome_size_normalization_factor: float, track_height: float, dinucleotide: str) -> str:
     """
     Calculates the SVG path description for GC content visualization.
 
@@ -268,7 +268,7 @@ def calculate_gc_content_path_desc(start_x: float, start_y: float, gc_df: DataFr
     coodinates_list: list = []
     start_position: str = "M{} {}".format(start_x, start_y)
     coodinates_list.append(start_position)
-    column = 'GC content'
+    column: str = f'{dinucleotide} content'
     mean = float(gc_df[column].mean())
     max_diff = float((gc_df[column] - mean).abs().max())
     for index, row in gc_df.iterrows():
@@ -284,49 +284,28 @@ def calculate_gc_content_path_desc(start_x: float, start_y: float, gc_df: DataFr
     gc_content_desc += "z"
     return gc_content_desc
 
-def generate_gc_skew_path_desc(start_x: float, start_y: float, gc_df: DataFrame, record_len: int, alignment_width: float, genome_size_normalization_factor: float, track_height: float) -> str:
+def calculate_gc_skew_path_desc(start_x: float, start_y: float, skew_df: DataFrame, record_len: int, alignment_width: float, genome_size_normalization_factor: float, track_height: float) -> str:
     """
-    Generates the SVG path description for circular GC skew representation.
-
-    This function creates a path description that visually represents GC skew variation along a circular genome plot.
-    The path is adjusted based on the GC skew data, radius, track width, and normalization factor.
-
-    Args:
-        radius (float): The radius of the circular plot.
-        df (DataFrame): DataFrame containing GC skew data.
-        total_len (int): The total length of the genomic sequence.
-        track_width (float): The width of the GC skew track.
-        norm_factor (float): The normalization factor to adjust the path.
-
-    Returns:
-        str: A string representing the SVG path description for the GC skew.
+    Generates the SVG path description for linear GC skew representation.
+    (This is the new function to be added)
     """
-    norm_radius: float = radius * norm_factor
-    skew_desc_list: list[str] = []
-    skew_start_x: float = norm_radius * \
-        math.cos(math.radians(360.0 * (0 / total_len) - 90))
-    skew_start_y: float = norm_radius * \
-        math.sin(math.radians(360.0 * (0 / total_len) - 90))
-    skew_start_position: str = "M{} {}".format(skew_start_x, skew_start_y)
-    skew_desc_list.append(skew_start_position)
-    column: str = 'GC skew'
-    mean = float(df[column].mean())
-    max_diff = float((df[column] - mean).abs().max())
-    for index, row in df.iterrows():
+    coodinates_list: list = []
+    start_position: str = "M{} {}".format(start_x, start_y)
+    coodinates_list.append(start_position)
+    column = [col for col in skew_df.columns if 'skew' in col and 'cumulative' not in col.lower()][0]
+    mean = float(skew_df[column].mean())
+    max_diff = float((skew_df[column] - mean).abs().max()) if float((skew_df[column] - mean).abs().max()) > 0 else 1.0
+
+    for index, row in skew_df.iterrows():
         value = float(row[column])
-        diff: float = (value - mean)
-        radius_of_coordinate: float = (
-            norm_radius + (0.5 * track_width * (diff / max_diff)))
-        x_corrdinate: float = radius_of_coordinate * \
-            math.cos(math.radians(360.0 * (index / total_len) - 90)
-                     )  # type: ignore
-        y_corrdinate: float = radius_of_coordinate * \
-            math.sin(math.radians(360.0 * (index / total_len) - 90)
-                     )  # type: ignore
-        corrdinate: str = "L{} {}".format(str(x_corrdinate), str(y_corrdinate))
-        skew_desc_list.append(corrdinate)
-    skew_desc: str = "{}".format(''.join(skew_desc_list))
-    skew_desc += "z"
-    circle_desc: str = generate_circle_path_desc(radius, norm_factor)
-    skew_desc += circle_desc
-    return skew_desc
+        corrdinate, x_corrdinate = calculate_corrdinate(
+            index, value, mean, max_diff, record_len, alignment_width, genome_size_normalization_factor, track_height)
+        coodinates_list.append(corrdinate)
+
+    penultimate_coordinate: str = "L{} {}".format(str(x_corrdinate), str(start_y))
+    coodinates_list.append(penultimate_coordinate)
+    end_coordinate: str = "L{} {}".format(str(start_x), str(start_y))
+    coodinates_list.append(end_coordinate)
+    gc_skew_desc: str = "{}".format(''.join(coodinates_list))
+    gc_skew_desc += "z"
+    return gc_skew_desc
