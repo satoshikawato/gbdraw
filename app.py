@@ -38,7 +38,6 @@ def get_version_info():
         version = "N/A"
     
     try:
-        # Gitリポジトリのルートでコマンドを実行し、短いコミットハッシュを取得
         commit_id = subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"]
         ).strip().decode("utf-8")
