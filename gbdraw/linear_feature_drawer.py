@@ -301,7 +301,7 @@ class SkewDrawer:
         # We need to create a clipping path to show two different colors for positive and negative skew
         clip_id = f'clipper_line_{abs(hash(skew_desc))}' # Unique ID for the clipper
         clip_path = ClipPath(id=clip_id)
-        clip_path.add(Path(d=f"M{start_x},{start_y} L{alignment_width * genome_size_normalization_factor},{start_y} L{alignment_width * genome_size_normalization_factor},{start_y-track_height} L{start_x},{start_y-track_height} z"))
+        clip_path.add(Path(d=f"M{start_x},{start_y} L{alignment_width * genome_size_normalization_factor},{start_y} L{alignment_width * genome_size_normalization_factor},{start_y + track_height} L{start_x},{start_y + track_height} z", fill="white", stroke='none'))
 
         # Path for positive skew (high fill color)
         skew_high = Path(
@@ -320,6 +320,7 @@ class SkewDrawer:
             stroke_width=self.skew_stroke_width,
             fill_opacity=self.skew_fill_opacity,
             clip_path=f"url(#{clip_id})",
+            clip_rule="nonzero",
             fill_rule="evenodd")
 
         group.add(clip_path)
