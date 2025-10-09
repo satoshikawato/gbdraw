@@ -75,16 +75,17 @@ gbdraw circular --show_labels --qualifier_priority priority.tsv ...
 
 ### Q: How can I make the GC content graph smoother/finer?
 A: You have a few options for customizing the GC content tracks:
-**Adjust Smoothness**: Use `--window` and `--step` to change the calculation resolution. A larger `--window` value will result in a smoother graph.
+**Adjust Smoothness**: Use `--window (-w)` and `--step (-s)` to change the calculation resolution. A larger `--window` value will result in a smoother graph.
 
 ```bash
-gbdraw circular --window 20000 --step 2000 ...
+gbdraw circular --window 10000 --step 1000 ...
 ```
+![window_step_comparison.png](../examples/window_step_comparison.png)
 
 ### Q: Can I plot the AT content instead of GC content?
 **A:** Yes. Use the --nt option to switch from the default GC to AT or any other dinucleotide.
 ```bash
 gbdraw circular --nt AT ...
 ```
-
+![skew_comparison.png](../examples/skew_comparison.png)
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) |[Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | **FAQ** | [ABOUT](./ABOUT.md)

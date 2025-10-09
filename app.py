@@ -318,7 +318,7 @@ if selected_mode == "🔵 Circular":
     
     # Qualifier Priority
     st.markdown("##### Qualifier Priority")
-    st.info("Select a TSV file from the sidebar OR define priorities manually below. If a file is selected, manual entries are ignored.")
+    st.markdown("Select a TSV file from the sidebar OR define priorities manually below. If a file is selected, manual entries are ignored.")
     create_manual_selectbox(
         "Qualifier Priority File (optional)",
         file_options,
@@ -655,7 +655,7 @@ if selected_mode == "🔵 Circular":
 # --- LINEAR MODE ---
 if selected_mode == "📏 Linear":
     st.header("Linear Genome Map")
-    st.subheader("Input Files")
+    st.subheader("Input Genome Files")
 
     l_input_type = st.radio(
         "Input file type for all sequences",
@@ -744,7 +744,7 @@ if selected_mode == "📏 Linear":
     
     # Qualifier Priority
     st.markdown("##### Qualifier Priority")
-    st.info("Select a TSV file from the sidebar OR define priorities manually below. If a file is selected, manual entries are ignored.")
+    st.markdown("Select a TSV file from the sidebar OR define priorities manually below. If a file is selected, manual entries are ignored.")
     create_manual_selectbox(
         "Qualifier Priority File (optional)",
         file_options,
@@ -807,7 +807,6 @@ if selected_mode == "📏 Linear":
                 wl_col4.button("➖", key=f"l_wl_remove_{row['id']}", on_click=remove_whitelist_row, args=(row['id'],))
 
         st.button("➕ Add Whitelist Row", on_click=add_whitelist_row, use_container_width=True, key="l_add_wl")
-    ########## 変更箇所 ここまで ##########
     st.markdown("---")
 
 
@@ -835,15 +834,15 @@ if selected_mode == "📏 Linear":
                 l_adv_nt = st.text_input("nt (--nt):", value="GC", key="l_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'.")
                 l_adv_win = st.number_input("Window size:", key="l_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb")
                 l_adv_step = st.number_input("Step size:", key="l_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb")
-                l_adv_def_font_size = st.number_input("Definition font size (default: 10 pt):", value=10.0, key="l_def_font_size", help="Font size for the definition text above each sequence.")
+                l_adv_def_font_size = st.number_input("Definition font size (default: 10 pt):", value=10.0, key="l_def_font_size", help="Font size for the definition text beside each sequence.")
                 l_adv_label_font_size = st.number_input("Label font size (default: 5 pt (>=50 kb) or 16 pt (<50 kb):", key="l_label_font_size", help="Font size for feature labels. Default is 5 pt for genomes >= 50 kb, 16 pt for smaller genomes.")
             with adv_cols2:
-                l_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="l_b_color", help="Color for block strokes in the linear map.")
-                l_adv_blk_width = st.number_input("Block stroke width:", value=0.0, min_value=0.0, step=0.1, key="l_b_width", help="Width of block strokes in the linear map. Set to 0 for no block strokes.")
-                l_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="l_l_color", help="Color for line strokes in the linear map.")
-                l_adv_line_width = st.number_input("Line stroke width:", value=1.0, min_value=0.0, step=0.1, key="l_l_width", help="Width of line strokes in the linear map. Default is 1.0.")
-                l_adv_axis_color = st.color_picker("Axis stroke color:", value="#808080", key="l_axis_color", help="Color for the linear axis line.")
-                l_adv_axis_width = st.number_input("Axis stroke width:", value=1.0, min_value=0.0, step=0.1, key="l_axis_width", help="Width of the linear axis line. Default is 1.0.")
+                l_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="l_b_color", help="Color of the outline for feature blocks.")
+                l_adv_blk_width = st.number_input("Block stroke width:", value=0.0, min_value=0.0, step=0.1, key="l_b_width", help="Width of the outline for feature blocks. Set to 0 to remove outlines.")
+                l_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="l_l_color", help="Color of the lines representing introns.")
+                l_adv_line_width = st.number_input("Line stroke width:", value=1.0, min_value=0.0, step=0.1, key="l_l_width", help="Width of the lines representing introns.")
+                l_adv_axis_color = st.color_picker("Axis stroke color:", value="#808080", key="l_axis_color", help="Color of the main axis line.")
+                l_adv_axis_width = st.number_input("Axis stroke width:", value=1.0, min_value=0.0, step=0.1, key="l_axis_width", help="Width of the main axis line.")
             st.subheader("Comparison Filters")
             l_adv_bitscore = st.number_input("Min bitscore:", value=50.0, key="l_bitscore", help="Minimum bitscore for BLAST comparisons. Default is 50.0.")
             l_adv_evalue = st.text_input("Max E-value:", value="1e-2", key="l_evalue", help="Maximum E-value for BLAST comparisons. Default is '1e-2'.")
