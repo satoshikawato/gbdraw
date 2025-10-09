@@ -188,10 +188,8 @@ You can adjust the font size of the title (`--definition_font_size`) and feature
 
 If labels are still slightly overlapping even after adjusting font size, you can manually nudge their positions using the `--*_label_*_radius_offset` options. These values are multipliers, so a value like 1.05 pushes the label slightly further out.
 
-Let's combine these options for a final polished plot:
+![outer_label_offset_comparison.png](../../examples/outer_label_offset_comparison.png)
 
-```bash
-```
 
 [< Back to the Index of Tutorials](./TUTORIALS.md)
 [< Back to Tutorial 2: Comparative Genomics with BLAST](./2_Comparative_Genomics.md)
