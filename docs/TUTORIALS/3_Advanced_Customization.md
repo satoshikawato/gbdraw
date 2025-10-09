@@ -186,6 +186,11 @@ You can change the color and thickness of feature borders (`--block_stroke`), th
 
 You can adjust the font size of the title (`--definition_font_size`) and feature labels (`--label_font_size`).
 
+#### `--definition_font_size`
+![definition_font_size_comparison.png](../../examples/definition_font_size_comparison.png)
+#### `--label_font_size`
+![label_font_size_comparison.png](../../examples/label_font_size_comparison.png)
+
 If labels are still slightly overlapping even after adjusting font size, you can manually nudge their positions using the `--*_label_*_radius_offset` options. These values are multipliers, so a value like 1.05 pushes the label slightly further out.
 
 ![outer_label_offset_comparison.png](../../examples/outer_label_offset_comparison.png)
