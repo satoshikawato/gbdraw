@@ -1075,8 +1075,7 @@ st.markdown(
     f"""
     Author: [Satoshi Kawato](https://github.com/satoshikawato)  |
     Source: [gbdraw](https://github.com/satoshikawato/gbdraw)  |
-    Version: {VERSION} |
-    GitHub Commit ID: {COMMIT_ID}
+    Version: {VERSION}-{COMMIT_ID}
     """,
     unsafe_allow_html=True
 )
