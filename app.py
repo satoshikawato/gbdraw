@@ -253,13 +253,14 @@ selected_mode = st.radio(
     horizontal=True,
     label_visibility="collapsed"
 )
-st.markdown("---")
+
 
 
 # --- CIRCULAR MODE ---
 if selected_mode == "🔵 Circular":
-    st.header("Circular Genome Map")
-    st.subheader("Input Genome Files")
+    st.header("Circular Mode")
+    st.markdown("---")
+    st.subheader("Input Genome File")
 
     c_input_type = st.radio(
         "Input file type",
@@ -660,7 +661,8 @@ if selected_mode == "🔵 Circular":
 
 # --- LINEAR MODE ---
 if selected_mode == "📏 Linear":
-    st.header("Linear Genome Map")
+    st.header("Linear Mode")
+    st.markdown("---")
     st.subheader("Input Genome Files")
 
     l_input_type = st.radio(
@@ -673,7 +675,7 @@ if selected_mode == "📏 Linear":
     input_container = st.container()
     with input_container:
         for i in range(st.session_state.linear_seq_count):
-            st.markdown(f"--- \n#### Sequence {i+1}")
+            st.markdown(f"#### Sequence {i+1}")
             if l_input_type == "GenBank":
                 cols = st.columns([3, 3])
                 with cols[0]:
