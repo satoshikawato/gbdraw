@@ -307,6 +307,7 @@ def linear_main(cmd_args) -> None:
     block_stroke_color: str = args.block_stroke_color
     block_stroke_width: str = args.block_stroke_width
     definition_font_size: Optional[float] = args.definition_font_size
+    label_font_size: Optional[float] = args.label_font_size
     axis_stroke_color: str = args.axis_stroke_color
     axis_stroke_width: str = args.axis_stroke_width
     line_stroke_color: str = args.line_stroke_color
@@ -318,6 +319,7 @@ def linear_main(cmd_args) -> None:
         linear_axis_stroke_color=axis_stroke_color, 
         linear_axis_stroke_width=axis_stroke_width, 
         linear_definition_font_size=definition_font_size,
+        label_font_size=label_font_size,
         line_stroke_color=line_stroke_color, 
         line_stroke_width=line_stroke_width, 
         show_gc=show_gc, 
