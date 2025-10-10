@@ -253,13 +253,14 @@ selected_mode = st.radio(
     horizontal=True,
     label_visibility="collapsed"
 )
-st.markdown("---")
+
 
 
 # --- CIRCULAR MODE ---
 if selected_mode == "🔵 Circular":
-    st.header("Circular Genome Map")
-    st.subheader("Input Genome Files")
+    st.header("Circular Mode")
+    st.markdown("---")
+    st.subheader("Input Genome File")
 
     c_input_type = st.radio(
         "Input file type",
@@ -391,7 +392,7 @@ if selected_mode == "🔵 Circular":
         with col1:
             st.subheader("Basic Settings")
             c_prefix = st.text_input("Output prefix (optional):", help="Default is the basename of the input file name")
-            c_species = st.text_input("Species name (optional):", help='e.g., "<i>Escherichia coli</i>"')
+            c_species = st.text_input("Species name (optional):", help='e.g., "<i>Escherichia coli</i>". Combining italic and block elements like "<i>Ca.</i> Tyloplasma litorale" cannot be reliably converted from SVG to PDF/PNG/EPS/PS. As a workaround, export to SVG format and convert to other formats using external tools like [Inkscape](https://inkscape.org/).')
             c_strain = st.text_input("Strain/isolate name (optional):", help='e.g., "K-12"')
             c_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="c_fmt", help="Output file format. Default is SVG, which is the fastest and most flexible for web display.")
             c_track_type = st.selectbox("Track type:", ["tuckin", "middle", "spreadout"], index=0, key="c_track", help="Choose how features are displayed in the circular track. 'tuckin' is the default and most compact, 'middle' places features along the middle of the circle, and 'spreadout' spreads them around the circle.")
@@ -414,29 +415,35 @@ if selected_mode == "🔵 Circular":
             st.subheader("Advanced Drawing")
             adv_cols1, adv_cols2 = st.columns(2)
             with adv_cols1:
+                st.markdown("##### Feature Selection")
                 c_adv_feat = st.multiselect("Features (-k):", options=FEATURE_KEYS, default=["CDS","rRNA","tRNA","tmRNA","ncRNA","misc_RNA","repeat_region"], key="c_feat", help="Select which features to include in the circular map. Default includes CDS, tRNA, rRNA, and repeat regions.")
+                st.markdown("##### Dinucleotide and Window/Step Size")
                 c_adv_nt = st.text_input("Dinucleotide (--nt):", value="GC", key="c_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'.")
-                c_adv_win = st.number_input("Window size:", key="c_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb")
-                c_adv_step = st.number_input("Step size:", key="c_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb")
+                c_adv_win = st.number_input("Window size (-w):", key="c_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb")
+                c_adv_step = st.number_input("Step size (-s):", key="c_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb")
+                st.markdown("##### Stroke Customization")
                 c_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="c_b_color", help="Color of the outline for feature blocks.")
                 c_adv_blk_width = st.number_input("Block stroke width:", value=0.0, min_value=0.0, step=0.1, key="c_b_width", help="Width of the outline for feature blocks. Set to 0 to remove outlines.")
                 c_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="c_l_color", help="Color of the lines representing introns.")
                 c_adv_line_width = st.number_input("Line stroke width:", value=1.0, min_value=0.0, step=0.1, key="c_l_width", help="Width of the lines representing introns.")
+                st.markdown("##### Axis Customization")
                 c_adv_axis_color = st.color_picker("Axis stroke color:", value="#808080", key="c_axis_color", help="Color of the main axis line.")
                 c_adv_axis_width = st.number_input("Axis stroke width:", value=1.0, min_value=0.0, step=0.1, key="c_axis_width", help="Width of the main axis line.")
             with adv_cols2:
+                st.markdown("##### Font Sizes")
                 c_adv_def_font_size = st.number_input("Definition font size (default: 18 pt):", value=18.0, min_value=1.0, step=0.5, key="c_def_font_size", help="Font size for the species and strain definition text.")
                 c_adv_label_font_size = st.number_input("Label font size (default: 8 pt (>=50 kb) or 16 pt (<50 kb):", key="c_label_font_size", help="Font size for feature labels. Default is 8 pt for genomes >= 50 kb, 16 pt for smaller genomes.")
-                st.subheader("Label Radius Offsets")
+                st.markdown("##### Label Radius Offsets")
+                st.markdown("Adjust the radius offsets for label placement. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#part-3-fine-tuning-plot-aesthetics) for details.")
                 col_outer, col_inner = st.columns(2)
                 with col_outer:
                     st.write("Outer Labels")
-                    c_adv_outer_x_offset = st.number_input("X Radius Offset", value=1.0, key="c_outer_x_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the X radius offset for outer labels.")
-                    c_adv_outer_y_offset = st.number_input("Y Radius Offset", value=1.0, key="c_outer_y_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the Y radius offset for outer labels.")
+                    c_adv_outer_x_offset = st.number_input("X Radius Offset", value=1.0, key="c_outer_x_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the X radius offset for outer labels. Increasing this value moves labels further from the genome circle.")
+                    c_adv_outer_y_offset = st.number_input("Y Radius Offset", value=1.0, key="c_outer_y_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the Y radius offset for outer labels. Increasing this value moves labels further from the genome circle.")
                 with col_inner:
                     st.write("Inner Labels")
-                    c_adv_inner_x_offset = st.number_input("X Radius Offset", value=1.0, key="c_inner_x_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the X radius offset for inner labels.")
-                    c_adv_inner_y_offset = st.number_input("Y Radius Offset", value=1.0, key="c_inner_y_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the Y radius offset for inner labels.")
+                    c_adv_inner_x_offset = st.number_input("X Radius Offset", value=1.0, key="c_inner_x_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the X radius offset for inner labels. Increasing this value moves labels further into the center.")
+                    c_adv_inner_y_offset = st.number_input("Y Radius Offset", value=1.0, key="c_inner_y_offset", min_value=0.5, max_value=2.0, step=0.1, help="Adjust the Y radius offset for inner labels. Increasing this value moves labels further into the center.")
 
         c_submitted = st.form_submit_button("🚀 Run gbdraw Circular", type="primary")
 
@@ -654,7 +661,8 @@ if selected_mode == "🔵 Circular":
 
 # --- LINEAR MODE ---
 if selected_mode == "📏 Linear":
-    st.header("Linear Genome Map")
+    st.header("Linear Mode")
+    st.markdown("---")
     st.subheader("Input Genome Files")
 
     l_input_type = st.radio(
@@ -667,7 +675,7 @@ if selected_mode == "📏 Linear":
     input_container = st.container()
     with input_container:
         for i in range(st.session_state.linear_seq_count):
-            st.markdown(f"--- \n#### Sequence {i+1}")
+            st.markdown(f"#### Sequence {i+1}")
             if l_input_type == "GenBank":
                 cols = st.columns([3, 3])
                 with cols[0]:
@@ -832,8 +840,8 @@ if selected_mode == "📏 Linear":
             with adv_cols1:
                 l_adv_feat = st.multiselect("Features (-k):", options=FEATURE_KEYS, default=["CDS","rRNA","tRNA","tmRNA","ncRNA","misc_RNA","repeat_region"], key="l_feat", help="Select which features to include in the linear map. Default includes CDS, tRNA, rRNA, and repeat regions.")
                 l_adv_nt = st.text_input("nt (--nt):", value="GC", key="l_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'.")
-                l_adv_win = st.number_input("Window size:", key="l_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb")
-                l_adv_step = st.number_input("Step size:", key="l_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb")
+                l_adv_win = st.number_input("Window size (-w):", key="l_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb")
+                l_adv_step = st.number_input("Step size (-s):", key="l_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb")
                 l_adv_def_font_size = st.number_input("Definition font size (default: 10 pt):", value=10.0, key="l_def_font_size", help="Font size for the definition text beside each sequence.")
                 l_adv_label_font_size = st.number_input("Label font size (default: 5 pt (>=50 kb) or 16 pt (<50 kb):", key="l_label_font_size", help="Font size for feature labels. Default is 5 pt for genomes >= 50 kb, 16 pt for smaller genomes.")
             with adv_cols2:
@@ -1068,7 +1076,7 @@ st.markdown(
     Author: [Satoshi Kawato](https://github.com/satoshikawato)  |
     Source: [gbdraw](https://github.com/satoshikawato/gbdraw)  |
     Version: {VERSION} |
-    Commit ID: {COMMIT_ID}
+    GitHub Commit ID: {COMMIT_ID}
     """,
     unsafe_allow_html=True
 )
