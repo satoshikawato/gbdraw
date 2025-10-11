@@ -279,110 +279,110 @@ if selected_mode == "🔵 Circular":
             create_manual_selectbox("FASTA file:", file_options, "c_fasta")
 
     st.markdown("---")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("🎨 Color Customization")
+        create_manual_selectbox("Default-override color file (optional):", file_options, "c_d_color", help="Tab-separated value (TSV) file that overrides the color palette. Feature types not specified will use the selected palette colors. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#method-1-override-default-colors--d) for details.")
+        create_manual_selectbox("Feature-specific color file (optional):", file_options, "c_t_color", help="TSV file that overrides the color palette for specific features. Features not specified will use the selected palette colors or the default-override colors if provided. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#method-2-feature-specific-colors--t) for details.")
 
-    st.subheader("🎨 Color Customization")
-    create_manual_selectbox("Default-override color file (optional):", file_options, "c_d_color", help="Tab-separated value (TSV) file that overrides the color palette. Feature types not specified will use the selected palette colors. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#method-1-override-default-colors--d) for details.")
-    create_manual_selectbox("Feature-specific color file (optional):", file_options, "c_t_color", help="TSV file that overrides the color palette for specific features. Features not specified will use the selected palette colors or the default-override colors if provided. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#method-2-feature-specific-colors--t) for details.")
+        # Color Palette Selection and Customization
+        def circular_palette_changed():
+            new_palette = st.session_state.c_palette_selector
+            st.session_state.custom_circular_colors = get_palette_colors(new_palette).copy()
 
-    # Color Palette Selection and Customization
-    def circular_palette_changed():
-        new_palette = st.session_state.c_palette_selector
-        st.session_state.custom_circular_colors = get_palette_colors(new_palette).copy()
+        if 'custom_circular_colors' not in st.session_state:
+            default_palette = PALETTES[0] if PALETTES and PALETTES[0] != "" else "default"
+            st.session_state.custom_circular_colors = get_palette_colors(default_palette).copy()
 
-    if 'custom_circular_colors' not in st.session_state:
-        default_palette = PALETTES[0] if PALETTES and PALETTES[0] != "" else "default"
-        st.session_state.custom_circular_colors = get_palette_colors(default_palette).copy()
+        st.selectbox(
+            "Base color palette:", 
+            PALETTES, 
+            key="c_palette_selector", index=11,
+            on_change=circular_palette_changed,
+            help="Select a base color palette. You can further customize individual feature colors below. See [here](https://github.com/satoshikawato/gbdraw/blob/main/examples/color_palette_examples.md) for palette examples.",
+        )
 
-    st.selectbox(
-        "Base color palette:", 
-        PALETTES, 
-        key="c_palette_selector",
-        on_change=circular_palette_changed,
-        help="Select a base color palette. You can further customize individual feature colors below. See [here](https://github.com/satoshikawato/gbdraw/blob/main/examples/color_palette_examples.md) for palette examples.",
-    )
-
-    st.write("Click on the color boxes below to customize the default colors for each feature.")
-    cols = st.columns(5)
-    color_keys = sorted(st.session_state.custom_circular_colors.keys())
-    for i, feature in enumerate(color_keys):
-        col = cols[i % 5]
-        with col:
-            st.session_state.custom_circular_colors[feature] = st.color_picker(
-                label=feature,
-                value=st.session_state.custom_circular_colors[feature],
-                key=f"c_color_picker_{feature}"
-            )
-    
+        st.write("Click on the color boxes below to customize the default colors for each feature.")
+        cols = st.columns(5)
+        color_keys = sorted(st.session_state.custom_circular_colors.keys())
+        for i, feature in enumerate(color_keys):
+            col = cols[i % 5]
+            with col:
+                st.session_state.custom_circular_colors[feature] = st.color_picker(
+                    label=feature,
+                    value=st.session_state.custom_circular_colors[feature],
+                    key=f"c_color_picker_{feature}"
+                )
+    with col2:
     # --- Qualifier Priority & Label Filtering Section (OUTSIDE the form) ---
-    st.markdown("---")
-    st.subheader("Label Content Customization")
-    
-    # Qualifier Priority
-    st.markdown("##### Qualifier Priority")
-    st.markdown("Select a TSV file from the sidebar OR define priorities manually below. If a file is selected, manual entries are ignored.")
-    create_manual_selectbox(
-        "Qualifier Priority File (optional)",
-        file_options,
-        "c_qualifier_priority_file",
-        help="Tab-separated value (TSV) file defining qualifier priorities for feature labels. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#changing-label-content---qualifier_priority) for details."
-    )
-    with st.expander("Or, define priorities manually:", expanded=False):
-        col1, col2, _ = st.columns([3, 5, 1])
-        col1.markdown("**Feature Type**")
-        col2.markdown("**Qualifier Priority (comma-separated)**")
-
-        for row in st.session_state.manual_priorities:
-            col1, col2, col3 = st.columns([3, 5, 1])
-            col1.text_input("Feature", value=row['feature'], key=f"feature_{row['id']}", label_visibility="collapsed", help="Feature type (e.g., CDS, tRNA, rRNA, misc_feature). See [here](https://docs.google.com/spreadsheets/d/1qosakEKo-y9JjwUO_OFcmGCUfssxhbFAm5NXUAnT3eM/edit?gid=0#gid=0) for a list of common feature types and asssociated qualifiers.")
-            col2.text_input("Qualifiers", value=row['qualifiers'], key=f"qualifiers_{row['id']}", label_visibility="collapsed", help="Type of qualifiers to use for label content, in order of priority (e.g., product,gene,locus_tag).See [here](https://docs.google.com/spreadsheets/d/1qosakEKo-y9JjwUO_OFcmGCUfssxhbFAm5NXUAnT3eM/edit?gid=0#gid=0) for a list of common feature types and asssociated qualifiers.")
-            col3.button("➖", key=f"remove_{row['id']}", on_click=remove_priority_row, args=(row['id'],))
-
-        st.button("➕ Add Row", on_click=add_priority_row, use_container_width=True)
-
-    # Label Content Filtering
-    st.markdown("##### Label Content Filtering")
-    c_filter_mode = st.radio(
-        "Select label filtering mode:",
-        ("None", "Blacklist (exclude keywords)", "Whitelist (include keywords)"),
-        key="c_filter_mode",
-        horizontal=True, help="Choose how to filter feature labels based on keywords. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#part-2-advanced-label-control) for details.")
-
-
-    if c_filter_mode == "Blacklist (exclude keywords)":
-        st.info("Select a file with blacklist keywords (one per line) OR enter them manually below. If a file is selected, manual entry is ignored. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#part-2-advanced-label-control) for details.")
+        st.subheader("✏️ Label Content Customization")
+        
+        # Qualifier Priority
+        st.markdown("##### Qualifier Priority")
+        st.markdown("Select a TSV file from the sidebar OR define priorities manually below. If a file is selected, manual entries are ignored.")
         create_manual_selectbox(
-            "Blacklist File (optional)",
+            "Qualifier Priority File (optional)",
             file_options,
-            "c_blacklist_file"
+            "c_qualifier_priority_file",
+            help="Tab-separated value (TSV) file defining qualifier priorities for feature labels. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#changing-label-content---qualifier_priority) for details."
         )
-        st.text_area(
-            "Or, enter keywords manually (comma-separated):",
-            value="hypothetical, uncharacterized, putative, unknown",
-            help="Features with these keywords in their labels will be hidden.",
-            key="c_blacklist_manual"
-        )
-    elif c_filter_mode == "Whitelist (include keywords)":
-        st.info("Select a file with label whitelist (one per line) OR enter them manually below. If a file is selected, manual entry is ignored. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#whitelisting-labels---label_whitelist) for details.")        
-        create_manual_selectbox(
-            "Whitelist File (optional)",
-            file_options,
-            "c_whitelist_file"
-        )
-        st.info("Define rules to ONLY show labels containing specific keywords. For example, show 'CDS' features where the 'product' contains 'DNA polymerase'.")
-        with st.container():
-            wl_col1, wl_col2, wl_col3, _ = st.columns([3, 3, 4, 1])
-            wl_col1.markdown("**Feature Type**")
-            wl_col2.markdown("**Qualifier**")
-            wl_col3.markdown("**Keyword to Include**")
+        with st.expander("Or, define priorities manually:", expanded=False):
+            col1, col2, _ = st.columns([3, 5, 1])
+            col1.markdown("**Feature Type**")
+            col2.markdown("**Qualifier Priority (comma-separated)**")
 
-            for row in st.session_state.manual_whitelist:
-                wl_col1, wl_col2, wl_col3, wl_col4 = st.columns([3, 3, 4, 1])
-                row['feature'] = wl_col1.selectbox("Feature", options=FEATURE_KEYS, index=FEATURE_KEYS.index(row['feature']) if row['feature'] in FEATURE_KEYS else 0, key=f"wl_feature_{row['id']}", label_visibility="collapsed")
-                row['qualifier'] = wl_col2.selectbox("Qualifier", options=QUALIFIER_KEYS, index=QUALIFIER_KEYS.index(row['qualifier']) if row['qualifier'] in QUALIFIER_KEYS else 0, key=f"wl_qualifier_{row['id']}", label_visibility="collapsed")
-                row['keyword'] = wl_col3.text_input("Keyword", value=row['keyword'], key=f"wl_keyword_{row['id']}", label_visibility="collapsed")
-                wl_col4.button("➖", key=f"wl_remove_{row['id']}", on_click=remove_whitelist_row, args=(row['id'],))
+            for row in st.session_state.manual_priorities:
+                col1, col2, col3 = st.columns([3, 5, 1])
+                col1.text_input("Feature", value=row['feature'], key=f"feature_{row['id']}", label_visibility="collapsed", help="Feature type (e.g., CDS, tRNA, rRNA, misc_feature). See [here](https://docs.google.com/spreadsheets/d/1qosakEKo-y9JjwUO_OFcmGCUfssxhbFAm5NXUAnT3eM/edit?gid=0#gid=0) for a list of common feature types and asssociated qualifiers.")
+                col2.text_input("Qualifiers", value=row['qualifiers'], key=f"qualifiers_{row['id']}", label_visibility="collapsed", help="Type of qualifiers to use for label content, in order of priority (e.g., product,gene,locus_tag).See [here](https://docs.google.com/spreadsheets/d/1qosakEKo-y9JjwUO_OFcmGCUfssxhbFAm5NXUAnT3eM/edit?gid=0#gid=0) for a list of common feature types and asssociated qualifiers.")
+                col3.button("➖", key=f"remove_{row['id']}", on_click=remove_priority_row, args=(row['id'],))
 
-        st.button("➕ Add Whitelist Row", on_click=add_whitelist_row, use_container_width=True)
+            st.button("➕ Add Row", on_click=add_priority_row, use_container_width=True)
+
+        # Label Content Filtering
+        st.markdown("##### Label Content Filtering")
+        c_filter_mode = st.radio(
+            "Select label filtering mode:",
+            ("None", "Blacklist (exclude keywords)", "Whitelist (include keywords)"),
+            key="c_filter_mode",
+            horizontal=True, help="Choose how to filter feature labels based on keywords. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#part-2-advanced-label-control) for details.")
+
+
+        if c_filter_mode == "Blacklist (exclude keywords)":
+            st.info("Select a file with blacklist keywords (one per line) OR enter them manually below. If a file is selected, manual entry is ignored. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#part-2-advanced-label-control) for details.")
+            create_manual_selectbox(
+                "Blacklist File (optional)",
+                file_options,
+                "c_blacklist_file"
+            )
+            st.text_area(
+                "Or, enter keywords manually (comma-separated):",
+                value="hypothetical, uncharacterized, putative, unknown",
+                help="Features with these keywords in their labels will be hidden.",
+                key="c_blacklist_manual"
+            )
+        elif c_filter_mode == "Whitelist (include keywords)":
+            st.info("Select a file with label whitelist (one per line) OR enter them manually below. If a file is selected, manual entry is ignored. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#whitelisting-labels---label_whitelist) for details.")        
+            create_manual_selectbox(
+                "Whitelist File (optional)",
+                file_options,
+                "c_whitelist_file"
+            )
+            st.info("Define rules to ONLY show labels containing specific keywords. For example, show 'CDS' features where the 'product' contains 'DNA polymerase'.")
+            with st.container():
+                wl_col1, wl_col2, wl_col3, _ = st.columns([3, 3, 4, 1])
+                wl_col1.markdown("**Feature Type**")
+                wl_col2.markdown("**Qualifier**")
+                wl_col3.markdown("**Keyword to Include**")
+
+                for row in st.session_state.manual_whitelist:
+                    wl_col1, wl_col2, wl_col3, wl_col4 = st.columns([3, 3, 4, 1])
+                    row['feature'] = wl_col1.selectbox("Feature", options=FEATURE_KEYS, index=FEATURE_KEYS.index(row['feature']) if row['feature'] in FEATURE_KEYS else 0, key=f"wl_feature_{row['id']}", label_visibility="collapsed")
+                    row['qualifier'] = wl_col2.selectbox("Qualifier", options=QUALIFIER_KEYS, index=QUALIFIER_KEYS.index(row['qualifier']) if row['qualifier'] in QUALIFIER_KEYS else 0, key=f"wl_qualifier_{row['id']}", label_visibility="collapsed")
+                    row['keyword'] = wl_col3.text_input("Keyword", value=row['keyword'], key=f"wl_keyword_{row['id']}", label_visibility="collapsed")
+                    wl_col4.button("➖", key=f"wl_remove_{row['id']}", on_click=remove_whitelist_row, args=(row['id'],))
+
+            st.button("➕ Add Whitelist Row", on_click=add_whitelist_row, use_container_width=True)
     st.markdown("---")
 
     # --- Main Drawing Form ---
@@ -402,12 +402,12 @@ if selected_mode == "🔵 Circular":
         with col2:
             st.subheader("Display Options")
             st.markdown("##### Track layout")
-            c_track_type = st.selectbox("Track type:", ["tuckin", "middle", "spreadout"], index=0, key="c_track", help="Choose how features are displayed in the circular track. 'tuckin' is the default and most compact, 'middle' places features along the middle of the circle, and 'spreadout' spreads them around the circle. See [here](https://github.com/satoshikawato/gbdraw/blob/docs/docs/TUTORIALS/1_Customizing_Plots.md#track-layout-style---track_type) for examples.")
-            c_separate_strands = st.checkbox("Separate strands", value=True, key="c_strands", help="Display features on separate strands for better distinction of forward and reverse strands. See [here](https://github.com/satoshikawato/gbdraw/blob/docs/docs/TUTORIALS/1_Customizing_Plots.md#strand-separation---separate_strands) for examples.")
+            c_track_type = st.selectbox("Track type:", ["tuckin", "middle", "spreadout"], index=0, key="c_track", help="Choose how features are displayed in the circular track. 'tuckin' is the default and most compact, 'middle' places features along the middle of the circle, and 'spreadout' spreads them around the circle. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/1_Customizing_Plots.md#track-layout-style---track_type) for examples.")
+            c_separate_strands = st.checkbox("Separate strands", value=True, key="c_strands", help="Display features on separate strands for better distinction of forward and reverse strands. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/1_Customizing_Plots.md#strand-separation---separate_strands) for examples.")
             st.markdown("##### Label layout")
             c_show_labels = st.checkbox("Show labels", value=False, key="c_labels", help="Display feature labels on the circular map.")
             c_allow_inner_labels = st.checkbox("Allow inner labels", value=False, key="c_inner_labels", help="Enable inner labels as well as outer labels. This can help avoid label overlap in some casees but suppresses GC content and GC skew tracks.")
-        
+            st.markdown("##### Dinucleotide Tracks")        
             if c_allow_inner_labels:
                 st.info("💡 Inner labels are enabled. GC content and GC skew tracks will be automatically suppressed to avoid overlap.")
                 c_suppress_gc = True
@@ -423,9 +423,9 @@ if selected_mode == "🔵 Circular":
                 st.markdown("##### Feature Selection")
                 c_adv_feat = st.multiselect("Features (-k):", options=FEATURE_KEYS, default=["CDS","rRNA","tRNA","tmRNA","ncRNA","misc_RNA","repeat_region"], key="c_feat", help="Select which features to include in the circular map. Default includes CDS, tRNA, rRNA, and repeat regions.")
                 st.markdown("##### Dinucleotide and Window/Step Size")
-                c_adv_nt = st.text_input("Dinucleotide (--nt):", value="GC", key="c_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'.")
-                c_adv_win = st.number_input("Window size (-w):", key="c_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb")
-                c_adv_step = st.number_input("Step size (-s):", key="c_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb")
+                c_adv_nt = st.text_input("Dinucleotide (--nt):", value="GC", key="c_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md#q-can-i-plot-the-at-content-instead-of-gc-content) for details.")
+                c_adv_win = st.number_input("Window size (-w):", key="c_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md#q-how-can-i-make-the-gc-content-graph-smootherfiner) for details.")
+                c_adv_step = st.number_input("Step size (-s):", key="c_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md#q-how-can-i-make-the-gc-content-graph-smootherfiner) for details.")
                 st.markdown("##### Stroke Customization")
                 c_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="c_b_color", help="Color of the outline for feature blocks.")
                 c_adv_blk_width = st.number_input("Block stroke width:", value=0.0, min_value=0.0, step=0.1, key="c_b_width", help="Width of the outline for feature blocks. Set to 0 to remove outlines.")
@@ -717,143 +717,157 @@ if selected_mode == "📏 Linear":
             if manual_key in st.session_state: del st.session_state[manual_key]
             if key in st.session_state: del st.session_state[key]
         st.rerun()
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("🎨 Color Customization")
+        create_manual_selectbox("Default-override color file (optional):", file_options, "l_d_color", help="Tab-separated value (TSV) file that overrides the color palette. Feature types not specified will use the selected palette colors. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#method-1-override-default-colors--d) for details.")
+        create_manual_selectbox("Feature-specific color file (optional):", file_options, "l_t_color", help="TSV file that overrides the color palette for specific features. Features not specified will use the selected palette colors or the default-override colors if provided. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#method-2-feature-specific-colors--t) for details.")
 
-    st.subheader("Color Options")
-    create_manual_selectbox("Default-override color file (optional):", file_options, "l_d_color", help="Tab-separated value (TSV) file that overrides the color palette. Feature types not specified will use the selected palette colors. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#method-1-override-default-colors--d) for details.")
-    create_manual_selectbox("Feature-specific color file (optional):", file_options, "l_t_color", help="TSV file that overrides the color palette for specific features. Features not specified will use the selected palette colors or the default-override colors if provided. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#method-2-feature-specific-colors--t) for details.")
+        def linear_palette_changed():
+            new_palette = st.session_state.l_palette_selector
+            st.session_state.custom_linear_colors = get_palette_colors(new_palette).copy()
 
-    def linear_palette_changed():
-        new_palette = st.session_state.l_palette_selector
-        st.session_state.custom_linear_colors = get_palette_colors(new_palette).copy()
+        if 'custom_linear_colors' not in st.session_state:
+            default_palette = PALETTES[0] if PALETTES and PALETTES[0] != "" else "default"
+            st.session_state.custom_linear_colors = get_palette_colors(default_palette).copy()
 
-    if 'custom_linear_colors' not in st.session_state:
-        default_palette = PALETTES[0] if PALETTES and PALETTES[0] != "" else "default"
-        st.session_state.custom_linear_colors = get_palette_colors(default_palette).copy()
+        st.selectbox(
+            "Base color palette:",
+            PALETTES, index=11,
+            key="l_palette_selector",
+            on_change=linear_palette_changed,
+            help="Select a base color palette. You can further customize individual feature colors below. See [here](https://github.com/satoshikawato/gbdraw/blob/main/examples/color_palette_examples.md) for palette examples.",
+        )
 
-    st.selectbox(
-        "Base color palette:",
-        PALETTES,
-        key="l_palette_selector",
-        on_change=linear_palette_changed,
-        help="Select a base color palette. You can further customize individual feature colors below. See [here](https://github.com/satoshikawato/gbdraw/blob/main/examples/color_palette_examples.md) for palette examples.",
-    )
-
-    st.write("Click on the color boxes below to customize the default colors for each feature.")
-    l_cols = st.columns(5)
-    
-    l_color_keys = sorted(st.session_state.custom_linear_colors.keys())
-    for i, feature in enumerate(l_color_keys):
-        col = l_cols[i % 5]
-        with col:
-            st.session_state.custom_linear_colors[feature] = st.color_picker(
-                label=feature,
-                value=st.session_state.custom_linear_colors[feature],
-                key=f"l_color_picker_{feature}"
-            )
+        st.write("Click on the color boxes below to customize the default colors for each feature.")
+        l_cols = st.columns(5)
+        
+        l_color_keys = sorted(st.session_state.custom_linear_colors.keys())
+        for i, feature in enumerate(l_color_keys):
+            col = l_cols[i % 5]
+            with col:
+                st.session_state.custom_linear_colors[feature] = st.color_picker(
+                    label=feature,
+                    value=st.session_state.custom_linear_colors[feature],
+                    key=f"l_color_picker_{feature}"
+                )
     
     # --- Qualifier Priority & Label Filtering Section (OUTSIDE the form) ---
-    st.markdown("---")
-    st.subheader("Label Content Customization")
-    
-    # Qualifier Priority
-    st.markdown("##### Qualifier Priority")
-    st.markdown("Select a TSV file from the sidebar OR define priorities manually below. If a file is selected, manual entries are ignored.")
-    create_manual_selectbox(
-        "Qualifier Priority File (optional)",
-        file_options,
-        "l_qualifier_priority_file",
-        help="Tab-separated value (TSV) file defining qualifier priorities for feature labels. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#changing-label-content---qualifier_priority) for details."
-    )
-    with st.expander("Or, define priorities manually:", expanded=False):
-        col1, col2, _ = st.columns([3, 5, 1])
-        col1.markdown("**Feature Type**")
-        col2.markdown("**Qualifier Priority (comma-separated)**")
-
-        for row in st.session_state.manual_priorities:
-            col1, col2, col3 = st.columns([3, 5, 1])
-            col1.text_input("Feature", value=row['feature'], key=f"feature_{row['id']}", label_visibility="collapsed")
-            col2.text_input("Qualifiers", value=row['qualifiers'], key=f"qualifiers_{row['id']}", label_visibility="collapsed")
-            col3.button("➖", key=f"remove_{row['id']}", on_click=remove_priority_row, args=(row['id'],))
-
-        st.button("➕ Add Row", on_click=add_priority_row, use_container_width=True)
-
-    # Label Content Filtering
-    st.markdown("##### Label Content Filtering")
-    l_filter_mode = st.radio(
-        "Select label filtering mode:",
-        ("None", "Blacklist (exclude keywords)", "Whitelist (include keywords)"),
-        key="l_filter_mode",
-        horizontal=True, help="Choose how to filter feature labels based on keywords. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#part-2-advanced-label-control) for details.")
-
-
-    if l_filter_mode == "Blacklist (exclude keywords)":
-        st.info("Select a file with blacklist keywords (one per line) OR enter them manually below. If a file is selected, manual entry is ignored. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#part-2-advanced-label-control) for details.")
+    with col2:
+        st.subheader("✏️ Label Content Customization")
+        
+        # Qualifier Priority
+        st.markdown("##### Qualifier Priority")
+        st.markdown("Select a TSV file from the sidebar OR define priorities manually below. If a file is selected, manual entries are ignored.")
         create_manual_selectbox(
-            "Blacklist File (optional)",
+            "Qualifier Priority File (optional)",
             file_options,
-            "l_blacklist_file"
+            "l_qualifier_priority_file",
+            help="Tab-separated value (TSV) file defining qualifier priorities for feature labels. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#changing-label-content---qualifier_priority) for details."
         )
-        st.text_area(
-            "Or, enter keywords manually (comma-separated):",
-            value="hypothetical, uncharacterized, putative, unknown",
-            help="Features with these keywords in their labels will be hidden.",
-            key="l_blacklist_manual"
-        )
-    elif l_filter_mode == "Whitelist (include keywords)":
-        st.info("Select a file with label whitelist (one per line) OR enter them manually below. If a file is selected, manual entry is ignored. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#whitelisting-labels---label_whitelist) for details.")  
-        create_manual_selectbox(
-            "Whitelist File (optional)",
-            file_options,
-            "l_whitelist_file"
-        )
-        st.info("Define rules to ONLY show labels containing specific keywords. For example, show 'CDS' features where the 'product' contains 'DNA polymerase'.")
-        with st.container():
-            wl_col1, wl_col2, wl_col3, _ = st.columns([3, 3, 4, 1])
-            wl_col1.markdown("**Feature Type**")
-            wl_col2.markdown("**Qualifier**")
-            wl_col3.markdown("**Keyword to Include**")
-            for row in st.session_state.manual_whitelist:
-                wl_col1, wl_col2, wl_col3, wl_col4 = st.columns([3, 3, 4, 1])
-                row['feature'] = wl_col1.selectbox("Feature", options=FEATURE_KEYS, index=FEATURE_KEYS.index(row['feature']) if row['feature'] in FEATURE_KEYS else 0, key=f"l_wl_feature_{row['id']}", label_visibility="collapsed")
-                row['qualifier'] = wl_col2.selectbox("Qualifier", options=QUALIFIER_KEYS, index=QUALIFIER_KEYS.index(row['qualifier']) if row['qualifier'] in QUALIFIER_KEYS else 0, key=f"l_wl_qualifier_{row['id']}", label_visibility="collapsed")
-                row['keyword'] = wl_col3.text_input("Keyword", value=row['keyword'], key=f"l_wl_keyword_{row['id']}", label_visibility="collapsed")
-                wl_col4.button("➖", key=f"l_wl_remove_{row['id']}", on_click=remove_whitelist_row, args=(row['id'],))
+        with st.expander("Or, define priorities manually:", expanded=False):
+            col1, col2, _ = st.columns([3, 5, 1])
+            col1.markdown("**Feature Type**")
+            col2.markdown("**Qualifier Priority (comma-separated)**")
 
-        st.button("➕ Add Whitelist Row", on_click=add_whitelist_row, use_container_width=True, key="l_add_wl")
+            for row in st.session_state.manual_priorities:
+                col1, col2, col3 = st.columns([3, 5, 1])
+                col1.text_input("Feature", value=row['feature'], key=f"feature_{row['id']}", label_visibility="collapsed")
+                col2.text_input("Qualifiers", value=row['qualifiers'], key=f"qualifiers_{row['id']}", label_visibility="collapsed")
+                col3.button("➖", key=f"remove_{row['id']}", on_click=remove_priority_row, args=(row['id'],))
+
+            st.button("➕ Add Row", on_click=add_priority_row, use_container_width=True)
+
+        # Label Content Filtering
+        st.markdown("##### Label Content Filtering")
+        l_filter_mode = st.radio(
+            "Select label filtering mode:",
+            ("None", "Blacklist (exclude keywords)", "Whitelist (include keywords)"),
+            key="l_filter_mode",
+            horizontal=True, help="Choose how to filter feature labels based on keywords. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#part-2-advanced-label-control) for details.")
+
+
+        if l_filter_mode == "Blacklist (exclude keywords)":
+            st.info("Select a file with blacklist keywords (one per line) OR enter them manually below. If a file is selected, manual entry is ignored. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#part-2-advanced-label-control) for details.")
+            create_manual_selectbox(
+                "Blacklist File (optional)",
+                file_options,
+                "l_blacklist_file"
+            )
+            st.text_area(
+                "Or, enter keywords manually (comma-separated):",
+                value="hypothetical, uncharacterized, putative, unknown",
+                help="Features with these keywords in their labels will be hidden.",
+                key="l_blacklist_manual"
+            )
+        elif l_filter_mode == "Whitelist (include keywords)":
+            st.info("Select a file with label whitelist (one per line) OR enter them manually below. If a file is selected, manual entry is ignored. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#whitelisting-labels---label_whitelist) for details.")  
+            create_manual_selectbox(
+                "Whitelist File (optional)",
+                file_options,
+                "l_whitelist_file"
+            )
+            st.info("Define rules to ONLY show labels containing specific keywords. For example, show 'CDS' features where the 'product' contains 'DNA polymerase'.")
+            with st.container():
+                wl_col1, wl_col2, wl_col3, _ = st.columns([3, 3, 4, 1])
+                wl_col1.markdown("**Feature Type**")
+                wl_col2.markdown("**Qualifier**")
+                wl_col3.markdown("**Keyword to Include**")
+                for row in st.session_state.manual_whitelist:
+                    wl_col1, wl_col2, wl_col3, wl_col4 = st.columns([3, 3, 4, 1])
+                    row['feature'] = wl_col1.selectbox("Feature", options=FEATURE_KEYS, index=FEATURE_KEYS.index(row['feature']) if row['feature'] in FEATURE_KEYS else 0, key=f"l_wl_feature_{row['id']}", label_visibility="collapsed")
+                    row['qualifier'] = wl_col2.selectbox("Qualifier", options=QUALIFIER_KEYS, index=QUALIFIER_KEYS.index(row['qualifier']) if row['qualifier'] in QUALIFIER_KEYS else 0, key=f"l_wl_qualifier_{row['id']}", label_visibility="collapsed")
+                    row['keyword'] = wl_col3.text_input("Keyword", value=row['keyword'], key=f"l_wl_keyword_{row['id']}", label_visibility="collapsed")
+                    wl_col4.button("➖", key=f"l_wl_remove_{row['id']}", on_click=remove_whitelist_row, args=(row['id'],))
+
+            st.button("➕ Add Whitelist Row", on_click=add_whitelist_row, use_container_width=True, key="l_add_wl")
     st.markdown("---")
-
 
     with st.form("linear_form"):
         st.header("Drawing Options")
         col1, col2 = st.columns(2)
         with col1:
+            st.subheader("Basic Settings")
+            st.markdown("##### Output Settings")
             l_prefix = st.text_input("Output prefix:", value="linear", key="l_prefix", help="Prefix for output files. Default is 'linear'.")
             l_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="l_fmt", help="Output file format. Default is SVG, which is the fastest and most flexible for web display.")
+            st.markdown("##### Legend")
             l_legend = st.selectbox("Legend:", ["right", "left", "none"], index=0, key="l_legend", help="Position of the legend. 'none' hides the legend.")
         with col2:
-            l_show_labels = st.checkbox("Show labels", value=False, key="l_labels", help="Display feature labels on the linear map.")
+            st.subheader("Display Options")
+            st.markdown("##### Track layout")
             l_separate_strands = st.checkbox("Separate strands", value=True, key="l_strands", help="Display features on separate strands for better distinction of forward and reverse strands.")
             l_align_center = st.checkbox("Align center", value=False, key="l_align", help="Align the linear map to the center of the page. This can help with aesthetics, especially for long sequences.")
+            l_resolve_overlaps = st.checkbox("Resolve overlaps (experimental)", value=False, key="l_overlaps", help="Attempt to resolve label overlaps. This is experimental and may not work well for all genomes.")
+            st.markdown("##### Label layout")
+            l_show_labels = st.checkbox("Show labels", value=False, key="l_labels", help="Display feature labels on the linear map.")
+            st.markdown("##### Dinucleotide Tracks")     
             l_show_gc = st.checkbox("Show GC content", value=False, key="l_gc", help="Display the GC content track on the linear map.")
             l_show_skew = st.checkbox("Show GC skew", value=False, key="l_skew", help="Display the GC skew track on the linear map.")
-            l_resolve_overlaps = st.checkbox("Resolve overlaps (experimental)", value=False, key="l_overlaps", help="Attempt to resolve label overlaps. This is experimental and may not work well for all genomes.")
+
 
         with st.expander("🔧 Advanced Options"):
 
             st.subheader("Advanced Drawing")
             adv_cols1, adv_cols2 = st.columns(2)
             with adv_cols1:
+                st.markdown("##### Feature Selection")
                 l_adv_feat = st.multiselect("Features (-k):", options=FEATURE_KEYS, default=["CDS","rRNA","tRNA","tmRNA","ncRNA","misc_RNA","repeat_region"], key="l_feat", help="Select which features to include in the linear map. Default includes CDS, tRNA, rRNA, and repeat regions.")
+                st.markdown("##### Dinucleotide and Window/Step Size")
                 l_adv_nt = st.text_input("nt (--nt):", value="GC", key="l_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'.")
                 l_adv_win = st.number_input("Window size (-w):", key="l_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb")
                 l_adv_step = st.number_input("Step size (-s):", key="l_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb")
+                st.markdown("##### Font Sizes")
                 l_adv_def_font_size = st.number_input("Definition font size (default: 10 pt):", value=10.0, key="l_def_font_size", help="Font size for the definition text beside each sequence.")
                 l_adv_label_font_size = st.number_input("Label font size (default: 5 pt (>=50 kb) or 16 pt (<50 kb):", key="l_label_font_size", help="Font size for feature labels. Default is 5 pt for genomes >= 50 kb, 16 pt for smaller genomes.")
             with adv_cols2:
+                st.markdown("##### Stroke Customization")
                 l_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="l_b_color", help="Color of the outline for feature blocks.")
                 l_adv_blk_width = st.number_input("Block stroke width:", value=0.0, min_value=0.0, step=0.1, key="l_b_width", help="Width of the outline for feature blocks. Set to 0 to remove outlines.")
                 l_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="l_l_color", help="Color of the lines representing introns.")
                 l_adv_line_width = st.number_input("Line stroke width:", value=1.0, min_value=0.0, step=0.1, key="l_l_width", help="Width of the lines representing introns.")
+                st.markdown("##### Axis Customization")
                 l_adv_axis_color = st.color_picker("Axis stroke color:", value="#808080", key="l_axis_color", help="Color of the main axis line.")
                 l_adv_axis_width = st.number_input("Axis stroke width:", value=1.0, min_value=0.0, step=0.1, key="l_axis_width", help="Width of the main axis line.")
             st.subheader("Comparison Filters")
