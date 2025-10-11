@@ -19,7 +19,7 @@
 ```bash
 gbdraw circular \
   --gbk NC_000913.gbk \
-  -o ecoli_ajisai \
+  -o ecoli_orchid \
   -f svg \
   --separate_strands \
   -p orchid
@@ -29,10 +29,18 @@ The new file `ecoli_orchid.svg` will be generated with a different color scheme.
 ![ecoli_orchid.svg](../../examples/ecoli_orchid.svg)
 
 
-You can see examples of all available palettes [here](../examples/color_palette_examples.md).
+You can see examples of all available palettes [here](../../examples/color_palette_examples.md).
+
+### 2. Changing the track layout
+You have precise control over how genomic features are arranged in the plot. The two main options for this are `--track_type` and `--separate_strands`.
+![track_layout_separate_strands.png](../../examples/track_layout_separate_strands.png)
+#### Track layout style (`--track_type`)
+You can choose how features are displayed in the circular track. `tuckin` is the default and most compact, `middle` places features along the middle of the circle, and `spreadout` spreads them around the circle.
+#### Strand separation (`--separate_strands`)
+By default, features from both the forward (+) and reverse (-) strands are drawn on a single, combined track. For genomes with many genes, this can look crowded. Using the `--separate_strands` flag tells gbdraw to place features on two distinct tracks: an outer track for the forward strand and an inner track for the reverse strand. This separation is recommended for relatively large genomes (e.g. bacteria) as it makes it easier to distinguish features.
 
 
-### 2. Adding a Title
+### 3. Adding a Title
 Use the `--species` and `--strain` options to add a title to the center of your plot. You can use HTML `<i>` tags for *italics*.
 > [!CAUTION]
 > Mixed-format text (e.g., combining italic and block elements like <i>Ca.</i> Tyloplasma litorale) cannot be reliably converted from SVG to PDF/PNG/EPS/PS.
@@ -50,7 +58,7 @@ gbdraw circular \
 The plot will now have a formatted title in the center.
 ![ecoli_with_title.svg](../../examples/ecoli_with_title.svg)
 
-### 3. Showing Feature Labels
+### 4. Showing Feature Labels
 By default, gene labels are hidden. Use the `--show_labels` option to display them.
 As the *E.coli* genome is a little bit too large for this purpose, we will use the genome of white spot syndrome virus, a large DNA virus infecting crustaceans.
 > [!WARNING]
@@ -74,7 +82,7 @@ gbdraw circular \
 ![WSSV_with_labels.svg](../../examples/WSSV_with_labels.svg)
 
 
-### 4. Filtering Plot Elements
+### 5. Filtering Plot Elements
 You can simplify the plot by showing only the elements you are interested in.
 
 Select Feature Types: Use the `--features` (or `-k`) option to specify a comma-separated list of features to draw.

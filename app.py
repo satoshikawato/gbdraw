@@ -391,7 +391,7 @@ if selected_mode == "🔵 Circular":
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("Basic Settings")
-            c_prefix = st.text_input("Output prefix (optional):", help="Default is the basename of the input file name")
+            c_prefix = st.text_input("Output prefix (optional):", help="Default is the basename of the input file name.")
             c_species = st.text_input("Species name (optional):", help='e.g., "<i>Escherichia coli</i>". Combining italic and block elements like "<i>Ca.</i> Tyloplasma litorale" cannot be reliably converted from SVG to PDF/PNG/EPS/PS. As a workaround, export to SVG format and convert to other formats using external tools like [Inkscape](https://inkscape.org/).')
             c_strain = st.text_input("Strain/isolate name (optional):", help='e.g., "K-12"')
             c_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="c_fmt", help="Output file format. Default is SVG, which is the fastest and most flexible for web display.")
