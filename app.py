@@ -391,15 +391,20 @@ if selected_mode == "🔵 Circular":
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("Basic Settings")
+            st.markdown("##### Output Settings")
             c_prefix = st.text_input("Output prefix (optional):", help="Default is the basename of the input file name.")
+            c_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="c_fmt", help="Output file format. Default is SVG, which is the fastest and most flexible for web display.")
+            st.markdown("##### Definition Text")
             c_species = st.text_input("Species name (optional):", help='e.g., "<i>Escherichia coli</i>". Combining italic and block elements like "<i>Ca.</i> Tyloplasma litorale" cannot be reliably converted from SVG to PDF/PNG/EPS/PS. As a workaround, export to SVG format and convert to other formats using external tools like [Inkscape](https://inkscape.org/).')
             c_strain = st.text_input("Strain/isolate name (optional):", help='e.g., "K-12"')
-            c_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="c_fmt", help="Output file format. Default is SVG, which is the fastest and most flexible for web display.")
-            c_track_type = st.selectbox("Track type:", ["tuckin", "middle", "spreadout"], index=0, key="c_track", help="Choose how features are displayed in the circular track. 'tuckin' is the default and most compact, 'middle' places features along the middle of the circle, and 'spreadout' spreads them around the circle.")
+            st.markdown("##### Legend")
             c_legend = st.selectbox("Legend:", ["right", "left", "upper_left", "upper_right", "lower_left", "lower_right", "none"], index=0, key="c_legend", help="Position of the legend. 'none' hides the legend.")
         with col2:
             st.subheader("Display Options")
-            c_separate_strands = st.checkbox("Separate strands", value=True, key="c_strands", help="Display features on separate strands for better distinction of forward and reverse strands.")
+            st.markdown("##### Track layout")
+            c_track_type = st.selectbox("Track type:", ["tuckin", "middle", "spreadout"], index=0, key="c_track", help="Choose how features are displayed in the circular track. 'tuckin' is the default and most compact, 'middle' places features along the middle of the circle, and 'spreadout' spreads them around the circle. See [here](https://github.com/satoshikawato/gbdraw/blob/docs/docs/TUTORIALS/1_Customizing_Plots.md#track-layout-style---track_type) for examples.")
+            c_separate_strands = st.checkbox("Separate strands", value=True, key="c_strands", help="Display features on separate strands for better distinction of forward and reverse strands. See [here](https://github.com/satoshikawato/gbdraw/blob/docs/docs/TUTORIALS/1_Customizing_Plots.md#strand-separation---separate_strands) for examples.")
+            st.markdown("##### Label layout")
             c_show_labels = st.checkbox("Show labels", value=False, key="c_labels", help="Display feature labels on the circular map.")
             c_allow_inner_labels = st.checkbox("Allow inner labels", value=False, key="c_inner_labels", help="Enable inner labels as well as outer labels. This can help avoid label overlap in some casees but suppresses GC content and GC skew tracks.")
         
