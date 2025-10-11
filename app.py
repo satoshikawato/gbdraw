@@ -436,8 +436,8 @@ if selected_mode == "🔵 Circular":
                 c_adv_axis_width = st.number_input("Axis stroke width:", value=1.0, min_value=0.0, step=0.1, key="c_axis_width", help="Width of the main axis line.")
             with adv_cols2:
                 st.markdown("##### Font Sizes")
-                c_adv_def_font_size = st.number_input("Definition font size (default: 18 pt):", value=18.0, min_value=1.0, step=0.5, key="c_def_font_size", help="Font size for the species and strain definition text.")
-                c_adv_label_font_size = st.number_input("Label font size (default: 8 pt (>=50 kb) or 16 pt (<50 kb):", key="c_label_font_size", help="Font size for feature labels. Default is 8 pt for genomes >= 50 kb, 16 pt for smaller genomes.")
+                c_adv_def_font_size = st.number_input("Definition font size (default: 18 pt):", value=18.0, min_value=1.0, step=0.5, key="c_def_font_size", help="Font size for the species and strain definition text. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#definition-font-size---definition_font_size) for details.")
+                c_adv_label_font_size = st.number_input("Label font size (default: 8 pt (>=50 kb) or 16 pt (<50 kb):", key="c_label_font_size", help="Font size for feature labels. Default is 8 pt for genomes >= 50 kb, 16 pt for smaller genomes. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#label-font-size---label_font_size) for details.")
                 st.markdown("##### Label Radius Offsets")
                 st.markdown("Adjust the radius offsets for label placement. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#part-3-fine-tuning-plot-aesthetics) for details.")
                 col_outer, col_inner = st.columns(2)
