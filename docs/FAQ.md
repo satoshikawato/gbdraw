@@ -14,13 +14,12 @@ Here are answers to some common questions about `gbdraw`.
 
 ---
 
-### Q: Can I generate a plot if I only have a GFF3 file?
-**A:** Yes. You can use a GFF3 file by providing the annotation with `--gff` and the corresponding sequence with `--fasta`.
+### Q: Can I generate a plot if I only have a GFF3 file containing the genome sequence?
+**A:** No. The genome sequence must be provided in a separate file. gbdraw cannot read the embedded sequence from the `##FASTA` section of a GFF3 file.
+To generate a diagram, you must provide the GFF3 annotation with `--gff` and the corresponding sequence in a FASTA file with `--fasta`.
 ```bash
 gbdraw circular --gff my_genome.gff --fasta my_genome.fasta -o my_plot
 ```
-### Q: How can I make the GC content graph smoother or more detailed?
-**A:** You can control the graph's resolution with the --window and --step options. A larger window size will produce a smoother plot, while a smaller size will show more detail.
 
 ### Q: My feature labels are overlapping and unreadable. How can I fix this?
 
@@ -74,9 +73,7 @@ gbdraw circular --show_labels --qualifier_priority priority.tsv ...
 ```
 
 ### Q: How can I make the GC content graph smoother/finer?
-A: You have a few options for customizing the GC content tracks:
-**Adjust Smoothness**: Use `--window (-w)` and `--step (-s)` to change the calculation resolution. A larger `--window` value will result in a smoother graph.
-
+**A:** You can control the graph's resolution with the `--window (-w)` and `--step (-s)` options. A larger window size will produce a smoother plot, while a smaller size will show more detail.
 ```bash
 gbdraw circular --window 10000 --step 1000 ...
 ```
