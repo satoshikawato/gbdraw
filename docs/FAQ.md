@@ -21,6 +21,8 @@ To generate a diagram, you must provide the GFF3 annotation with `--gff` and the
 gbdraw circular --gff my_genome.gff --fasta my_genome.fasta -o my_plot
 ```
 
+---
+
 ### Q: My feature labels are overlapping and unreadable. How can I fix this?
 
 **A:** You have several options to deal with label clutter:
@@ -72,6 +74,8 @@ Then, use it in your command:
 gbdraw circular --show_labels --qualifier_priority priority.tsv ...
 ```
 
+---
+
 ### Q: How can I make the GC content graph smoother/finer?
 **A:** You can control the graph's resolution with the `--window (-w)` and `--step (-s)` options. A larger window size will produce a smoother plot, while a smaller size will show more detail.
 ```bash
@@ -79,10 +83,15 @@ gbdraw circular --window 10000 --step 1000 ...
 ```
 ![window_step_comparison.png](../examples/window_step_comparison.png)
 
+---
+
 ### Q: Can I plot the AT content instead of GC content?
 **A:** Yes. Use the --nt option to switch from the default GC to AT or any other dinucleotide.
 ```bash
 gbdraw circular --nt AT ...
 ```
 ![skew_comparison.png](../examples/skew_comparison.png)
+
+---
+
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) |[Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | **FAQ** | [ABOUT](./ABOUT.md)
