@@ -108,13 +108,13 @@ def position_record_group(record_group: Group, offset: float, offset_x: float, c
     return record_group
 
 
-def position_gc_content_group(gc_content_group: Group, offset: float, offset_x: float, canvas_config: LinearCanvasConfigurator) -> Group:
+def position_gc_content_group(gc_content_group: Group, offset_y: float, offset_x: float, canvas_config: LinearCanvasConfigurator) -> Group:
     """
     Positions the GC content group on the canvas.
 
     Args:
         gc_content_group (Group): The SVG group element containing the GC content visualization.
-        offset (float): Vertical offset for the position.
+        offset_y (float): Vertical offset for the position.
         offset_x (float): Horizontal offset for the position.
         canvas_config (LinearCanvasConfigurator): Configuration object for the canvas.
 
@@ -125,14 +125,14 @@ def position_gc_content_group(gc_content_group: Group, offset: float, offset_x: 
     """
     gc_content_group.translate(
         offset_x + canvas_config.horizontal_offset,
-        offset + 2 * canvas_config.cds_padding + canvas_config.vertical_padding)
+        offset_y + canvas_config.cds_padding + canvas_config.vertical_padding)
     return gc_content_group
 
-def position_gc_skew_group(gc_skew_group: Group, offset: float, offset_x: float, canvas_config: LinearCanvasConfigurator) -> Group:
+def position_gc_skew_group(gc_skew_group: Group, offset_y: float, offset_x: float, canvas_config: LinearCanvasConfigurator) -> Group:
     """
     Positions the GC skew group on the canvas.
     """
-    y_offset = offset + 2 * canvas_config.cds_padding + canvas_config.vertical_padding
+    y_offset = offset_y + canvas_config.cds_padding + canvas_config.vertical_padding
     if canvas_config.show_gc:
         y_offset += canvas_config.gc_height
         
@@ -187,17 +187,17 @@ def position_comparison_group(comparison_count: int, canvas_config: LinearCanvas
               canvas_config.gc_padding + canvas_config.skew_padding) * (comparison_count - 1)))
 
 
-def add_record_group(canvas: Drawing, record: SeqRecord, offset: float, offset_x: float, canvas_config: LinearCanvasConfigurator, feature_config: FeatureDrawingConfigurator, config_dict: dict, precalculated_labels: Optional[list]) -> Drawing:
+def add_record_group(canvas: Drawing, record: SeqRecord, offset_y: float, offset_x: float, canvas_config: LinearCanvasConfigurator, feature_config: FeatureDrawingConfigurator, config_dict: dict, precalculated_labels: Optional[list]) -> Drawing:
     """Adds a record group to the linear canvas."""
     record_group: Group = SeqRecordGroup(
         gb_record=record, canvas_config=canvas_config, feature_config=feature_config, config_dict=config_dict, precalculated_labels=precalculated_labels
     ).get_group()
-    position_record_group(record_group, offset, offset_x, canvas_config)
+    position_record_group(record_group, offset_y, offset_x, canvas_config)
     canvas.add(record_group)
     return canvas
 
 
-def add_gc_content_group(canvas: Drawing, record: SeqRecord, offset: float, offset_x: float, canvas_config: LinearCanvasConfigurator, gc_config: GcContentConfigurator, config_dict: dict) -> Drawing:
+def add_gc_content_group(canvas: Drawing, record: SeqRecord, offset_y: float, offset_x: float, canvas_config: LinearCanvasConfigurator, gc_config: GcContentConfigurator, config_dict: dict) -> Drawing:
     """
     Adds a GC content group to the linear canvas.
 
@@ -216,9 +216,9 @@ def add_gc_content_group(canvas: Drawing, record: SeqRecord, offset: float, offs
         Drawing: The updated SVG drawing with the GC content group added.
     """
     gc_content_group: Group = GcContentGroup(gb_record=record, alignment_width=canvas_config.alignment_width, longest_record_len=canvas_config.longest_genome,
-                                             track_height=canvas_config.cds_height, gc_config=gc_config, config_dict=config_dict).get_group()
+                                             track_height=canvas_config.gc_height, gc_config=gc_config, config_dict=config_dict).get_group()
     position_gc_content_group(
-        gc_content_group, offset, offset_x, canvas_config)
+        gc_content_group, offset_y, offset_x, canvas_config)
     canvas.add(gc_content_group)
     return canvas
 
@@ -241,7 +241,7 @@ def add_gc_skew_group(canvas: Drawing, record: SeqRecord, offset: float, offset_
         Drawing: The updated SVG drawing with the GC skew group added.
     """
     gc_skew_group: Group = GcSkewGroup(gb_record=record, alignment_width=canvas_config.alignment_width, longest_record_len=canvas_config.longest_genome,
-                                             track_height=canvas_config.cds_height, skew_config=skew_config, config_dict=config_dict).get_group()
+                                             track_height=canvas_config.skew_height, skew_config=skew_config, config_dict=config_dict).get_group()
     position_gc_skew_group(
         gc_skew_group, offset, offset_x, canvas_config)
     canvas.add(gc_skew_group)
@@ -366,16 +366,16 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
         record_offsets.append(current_y)
         
         if i < len(record_ids) - 1:
-            height_below_axis = canvas_config.cds_height + canvas_config.gc_padding + canvas_config.skew_padding
-            padding = canvas_config.vertical_padding
+            height_below_axis = canvas_config.cds_padding + canvas_config.gc_padding + canvas_config.skew_padding
+            vertical_padding = canvas_config.vertical_padding
             next_record_id = record_ids[i+1]
             next_label_height = record_label_heights.get(next_record_id, 0)
             
-            inter_record_space = height_below_axis + padding + next_label_height
+            inter_record_space = height_below_axis + vertical_padding + next_label_height
             
-            if required_label_height == 0:
-                inter_record_space += canvas_config.comparison_height + padding
-            
+            if has_blast:
+                inter_record_space += canvas_config.comparison_height
+
             current_y += inter_record_space
 
     final_height = current_y + canvas_config.cds_height + canvas_config.gc_padding + canvas_config.skew_padding + canvas_config.original_vertical_offset + canvas_config.vertical_padding
@@ -407,14 +407,14 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
         comparison_offsets = []
         actual_comparison_heights = []
         for i in range(len(records) - 1):
-            height_below_axis = canvas_config.cds_height + canvas_config.gc_padding + canvas_config.skew_padding
+            height_below_axis = canvas_config.cds_padding + canvas_config.gc_padding + canvas_config.skew_padding
             
             ribbon_start_y = record_offsets[i] + height_below_axis
             comparison_offsets.append(ribbon_start_y)
             
             next_record_id = records[i+1].id
             next_label_height = record_label_heights.get(next_record_id, 0)
-            ribbon_end_y = record_offsets[i+1] - canvas_config.cds_height
+            ribbon_end_y = record_offsets[i+1] - canvas_config.cds_padding
 
             height = ribbon_end_y - ribbon_start_y
             actual_comparison_heights.append(height)

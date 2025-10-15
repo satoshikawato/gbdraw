@@ -240,10 +240,10 @@ class LinearCanvasConfigurator:
         """
         if self.strandedness:
             self.cds_height: float = self.default_cds_height
-            self.cds_padding: float = 0.5 * self.cds_height
+            self.cds_padding: float = 1 * self.cds_height
         else:
             self.cds_height: float = 0.5 * self.default_cds_height
-            self.cds_padding: float = 0.75 * self.cds_height
+            self.cds_padding: float = 1 * self.cds_height
     def set_arrow_length(self) -> None:
         """
         Sets the length of the arrow used in the representation based on the longest genome.
