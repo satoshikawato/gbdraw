@@ -854,7 +854,9 @@ if selected_mode == "📏 Linear":
             with adv_cols1:
                 st.markdown("##### Feature Selection")
                 l_adv_feat = st.multiselect("Features (-k):", options=FEATURE_KEYS, default=["CDS","rRNA","tRNA","tmRNA","ncRNA","misc_RNA","repeat_region"], key="l_feat", help="Select which features to include in the linear map. Default includes CDS, tRNA, rRNA, and repeat regions.")
+                l_adv_feat_height = st.number_input("Feature height:", key="l_feat_height", help="Height of the feature blocks in pixels. Default: 20 pixels for genomes >= 50 kb, 80 pixels for smaller genomes.")
                 st.markdown("##### Dinucleotide and Window/Step Size")
+                l_adv_gc_height = st.number_input("GC content and skew height:", key="l_gc_height", help="Height of the GC content track in pixels. Default: 20 pixels.")
                 l_adv_nt = st.text_input("nt (--nt):", value="GC", key="l_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'.")
                 l_adv_win = st.number_input("Window size (-w):", key="l_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb")
                 l_adv_step = st.number_input("Step size (-s):", key="l_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb")
@@ -871,6 +873,7 @@ if selected_mode == "📏 Linear":
                 l_adv_axis_color = st.color_picker("Axis stroke color:", value="#808080", key="l_axis_color", help="Color of the main axis line.")
                 l_adv_axis_width = st.number_input("Axis stroke width:", value=1.0, min_value=0.0, step=0.1, key="l_axis_width", help="Width of the main axis line.")
             st.subheader("Comparison Filters")
+            l_adv_comp_height = st.number_input("Comparison height:", key="l_comp_height", help="Height of the comparison blocks in pixels. Default: 60 pixels.")
             l_adv_bitscore = st.number_input("Min bitscore:", value=50.0, key="l_bitscore", help="Minimum bitscore for BLAST comparisons. Default is 50.0.")
             l_adv_evalue = st.text_input("Max E-value:", value="1e-2", key="l_evalue", help="Maximum E-value for BLAST comparisons. Default is '1e-2'.")
             l_adv_identity = st.number_input("Min identity (%):", value=0.0, key="l_identity", help="Minimum identity percentage for BLAST comparisons. Default is 0.0%.")
@@ -933,11 +936,16 @@ if selected_mode == "📏 Linear":
         if l_show_skew: linear_args.append("--show_skew")
         if l_resolve_overlaps: linear_args.append("--resolve_overlaps")
         if l_legend != "right": linear_args += ["-l", l_legend]
-        
+        if l_adv_gc_height:
+            linear_args += ["--gc_height", str(l_adv_gc_height)]
         if l_adv_def_font_size:
             linear_args += ["--definition_font_size", str(l_adv_def_font_size)]
         if l_adv_label_font_size:
             linear_args += ["--label_font_size", str(l_adv_label_font_size)]
+        if l_adv_feat_height:
+            linear_args += ["--feature_height", str(l_adv_feat_height)]
+        if l_adv_comp_height:
+            linear_args += ["--comparison_height", str(l_adv_comp_height)]
         
         selected_palette = st.session_state.get("l_palette_selector")
         if selected_palette: linear_args += ["--palette", selected_palette]

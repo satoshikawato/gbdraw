@@ -222,6 +222,18 @@ def _get_args(args) -> argparse.Namespace:
         help='Path to a TSV file defining qualifier priority for labels (optional)',
         type=str,
         default="")
+    parser.add_argument(
+        '--feature_height',
+        help='Feature vertical width (pixels; optional; default: 80 for short genomes, 20 for long genomes)',
+        type=float),
+    parser.add_argument(
+        '--gc_height',
+        help='GC content/skew vertical width (pixels; optional; default: 20)',
+        type=float),
+    parser.add_argument(
+        '--comparison_height',
+        help='Comparison block height (pixels; optional; default: 60)',
+        type=float)
     args = parser.parse_args(args)
     if args.gbk and (args.gff or args.fasta):
         parser.error("Error: --gbk cannot be used with --gff or --fasta.")
@@ -275,7 +287,7 @@ def linear_main(cmd_args) -> None:
     align_center: bool = args.align_center
     evalue: float = args.evalue
     legend: str = args.legend
-
+    gc_height: Optional[float] = args.gc_height
     show_skew: bool = args.show_skew
     bitscore: float = args.bitscore
     identity: float = args.identity
@@ -285,9 +297,13 @@ def linear_main(cmd_args) -> None:
     qualifier_priority_path: str = args.qualifier_priority
     selected_features_set: str = args.features.split(',')
 
+    feature_height: Optional[float] = args.feature_height
+    comparison_height: Optional[float] = args.comparison_height
+
     out_formats: list[str] = parse_formats(args.format)
     user_defined_default_colors: str = args.default_colors
-    
+
+
     if blast_files:
         load_comparison = True
     else:
@@ -327,8 +343,12 @@ def linear_main(cmd_args) -> None:
         align_center=align_center, 
         strandedness=strandedness,
         label_blacklist=label_blacklist,
-        label_whitelist=label_whitelist
-    )
+        label_whitelist=label_whitelist,
+        default_cds_height=feature_height,
+        comparison_height=comparison_height,
+        gc_height=gc_height
+        )
+
     if args.gbk:
         records = load_gbks(args.gbk, "linear", load_comparison)
     elif args.gff and args.fasta:

@@ -193,13 +193,24 @@ def modify_config_dict(config_dict,
                        outer_label_x_radius_offset=None,
                        outer_label_y_radius_offset=None,
                        inner_label_x_radius_offset=None,
-                       inner_label_y_radius_offset=None) -> dict:
+                       inner_label_y_radius_offset=None,
+                       comparison_height=None,
+                       font_family=None,
+                       default_cds_height=None,
+                       gc_height=None) -> dict:
     # Mapping of parameter names to their paths in the config_dict
     label_font_size_circular_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['long']
     label_font_size_circular_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['short']
     label_font_size_linear_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['long']
     label_font_size_linear_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['short']
+    
     circular_definition_font_interval = None
+    if default_cds_height is not None:
+        default_cds_height_short = default_cds_height
+        default_cds_height_long = default_cds_height
+    else:
+        default_cds_height_short = config_dict['canvas']['linear']['default_cds_height']['short']
+        default_cds_height_long = config_dict['canvas']['linear']['default_cds_height']['long']
     if circular_definition_font_size is not None:
         circular_definition_font_interval = float(circular_definition_font_size) + 2
     # Process label_blacklist only if the argument was explicitly passed
@@ -272,6 +283,11 @@ def modify_config_dict(config_dict,
         'outer_label_y_radius_offset': 'labels.unified_adjustment.outer_labels.y_radius_offset',
         'inner_label_x_radius_offset': 'labels.unified_adjustment.inner_labels.x_radius_offset',
         'inner_label_y_radius_offset': 'labels.unified_adjustment.inner_labels.y_radius_offset',
+        'comparison_height': 'canvas.linear.comparison_height',
+        'font_family': 'objects.text.font_family',
+        'default_cds_height_long': 'canvas.linear.default_cds_height.long',
+        'default_cds_height_short': 'canvas.linear.default_cds_height.short',
+        'gc_height': 'canvas.linear.default_gc_height'
     }
     # Update the config_dict for each specified parameter
     for param, path in param_paths.items():
