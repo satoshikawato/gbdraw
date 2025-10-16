@@ -17,6 +17,7 @@ from .create_feature_objects import create_feature_dict, preprocess_color_tables
 from .utility_functions import create_text_element, normalize_position_linear, preprocess_label_filtering, calculate_bbox_dimensions
 from .object_configurators import GcContentConfigurator, FeatureDrawingConfigurator, GcSkewConfigurator
 from .circular_path_drawer import generate_text_path
+import math
 # Logging setup
 logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -145,10 +146,121 @@ class LengthBarGroup:
         self.fig_width: int = fig_width
         self.alignment_width: float = alignment_width # (追加) alignment_widthを保存
         self.group_id: str = group_id
+        self.style: str = 'ruler' if config_dict.get('objects', {}).get('length_bar', {}).get('style') else 'default'
         self.define_ticks_by_length()
         self.config_bar()
         self.length_bar_group = Group(id=self.group_id)
-        self.add_elements_to_group()
+
+        if self.style == 'ruler':
+            self.setup_ruler_bar()
+        else:
+            self.setup_default_bar()
+        # self.add_elements_to_group()
+    def setup_default_bar(self) -> None:
+            """
+            Sets up the original, single-tick length bar.
+            """
+            self.define_ticks_by_length()
+            self.config_bar()
+            self.add_elements_to_group()
+    def setup_ruler_bar(self) -> None:
+            """
+            Sets up the new ruler-style length bar using the interval from define_ticks_by_length.
+            """
+            self.define_ticks_by_length()
+            tick_interval = self.tick
+
+            if tick_interval == 0:
+                return 
+
+            main_axis = Line(
+                start=(0, 0),
+                end=(self.alignment_width, 0),
+                stroke=self.length_bar_stroke_color,
+                stroke_width=self.length_bar_stroke_width,
+            )
+            self.length_bar_group.add(main_axis)
+
+            num_ticks = int(self.longest_genome / tick_interval)
+            
+            for i in range(num_ticks + 2):
+                position = i * tick_interval
+
+                if position > self.longest_genome:
+                    position = self.longest_genome
+                
+                x_pos = (position / self.longest_genome) * self.alignment_width
+
+                tick_line = Line(
+                    start=(x_pos, 0),
+                    end=(x_pos, 5), 
+                    stroke=self.length_bar_stroke_color,
+                    stroke_width=self.length_bar_stroke_width,
+                )
+                self.length_bar_group.add(tick_line)
+
+
+                label_text = self._format_tick_label(position)
+                
+
+                text_element = Text(
+                    label_text,
+                    insert=(x_pos, 15), 
+                    stroke='none',
+                    fill='black',
+                    font_size=self.length_bar_font_size,
+                    font_weight=self.length_bar_font_weight,
+                    font_family=self.length_bar_font_family,
+                    text_anchor="middle",
+                    dominant_baseline="middle"
+                )
+                self.length_bar_group.add(text_element)
+
+
+                if position == self.longest_genome:
+                    break
+
+    def _calculate_ruler_ticks(self) -> List[int]:
+            """
+            Calculates the positions for ticks on the ruler based on the genome length.
+            """
+
+            magnitude = 10 ** (math.floor(math.log10(self.longest_genome)) -1)
+            
+            res = self.longest_genome / magnitude
+            if res > 5:
+                interval = magnitude
+            elif res > 2:
+                interval = magnitude / 2
+            else:
+                interval = magnitude / 5
+
+            interval = round(interval / magnitude) * magnitude
+            if interval == 0:
+                interval = magnitude
+
+            num_ticks = int(self.longest_genome / interval)
+            ticks = [i * interval for i in range(num_ticks + 1)]
+
+            if len(ticks) > 1 and (self.longest_genome - ticks[-1]) < interval / 2:
+                ticks[-1] = self.longest_genome
+            else:
+                ticks.append(self.longest_genome)
+
+            return [int(t) for t in ticks]
+
+    def _format_tick_label(self, position: int) -> str:
+        """
+        Formats the tick position into a human-readable label (e.g., 10k, 1.5M).
+        """
+        if position == 0:
+            return "0"
+        if position >= 1_000_000:
+            return f"{position / 1_000_000:.1f} Mb"
+        if position >= 1_000:
+            return f"{position / 1_000:.0f} kb"
+        return str(position)
+    
     def define_ticks_by_length(self) -> None:
         """
         Defines the scale ticks for the length bar based on the length of the longest genome.

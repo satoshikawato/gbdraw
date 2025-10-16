@@ -234,6 +234,10 @@ def _get_args(args) -> argparse.Namespace:
         '--comparison_height',
         help='Comparison block height (pixels; optional; default: 60)',
         type=float)
+    parser.add_argument(
+            '--ruler_style_length_bar',
+            help='Use ruler-style for the length bar (default: False).',
+            action='store_true')
     args = parser.parse_args(args)
     if args.gbk and (args.gff or args.fasta):
         parser.error("Error: --gbk cannot be used with --gff or --fasta.")
@@ -302,7 +306,7 @@ def linear_main(cmd_args) -> None:
 
     out_formats: list[str] = parse_formats(args.format)
     user_defined_default_colors: str = args.default_colors
-
+    ruler_style_length_bar: bool = args.ruler_style_length_bar
 
     if blast_files:
         load_comparison = True
@@ -346,7 +350,8 @@ def linear_main(cmd_args) -> None:
         label_whitelist=label_whitelist,
         default_cds_height=feature_height,
         comparison_height=comparison_height,
-        gc_height=gc_height
+        gc_height=gc_height,
+        ruler_style_length_bar=ruler_style_length_bar
         )
 
     if args.gbk:
