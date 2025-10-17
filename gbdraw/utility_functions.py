@@ -201,7 +201,8 @@ def modify_config_dict(config_dict,
                        scale_style=None,
                        scale_stroke_color=None,
                        scale_stroke_width=None,
-                       scale_font_size=None) -> dict:
+                       scale_font_size=None,
+                       scale_interval=None) -> dict:
     # Mapping of parameter names to their paths in the config_dict
     label_font_size_circular_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['long']
     label_font_size_circular_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['short']
@@ -295,7 +296,9 @@ def modify_config_dict(config_dict,
         'scale_style': 'objects.scale.style',
         'scale_stroke_color': 'objects.scale.stroke_color',
         'scale_stroke_width': 'objects.scale.stroke_width',
-        'scale_font_size': 'objects.scale.font_size'
+        'scale_font_size': 'objects.scale.font_size',
+        'scale_interval': 'objects.scale.interval'
+        
     }
     # Update the config_dict for each specified parameter
     for param, path in param_paths.items():

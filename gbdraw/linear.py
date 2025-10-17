@@ -252,6 +252,10 @@ def _get_args(args) -> argparse.Namespace:
         '--scale_font_size',
         help='Scale bar/ruler font size (float; default: 16)',
         type=float)
+    parser.add_argument(
+            '--scale_interval',
+            help='Manual tick interval for "ruler" scale style (in bp). Overrides automatic calculation.',
+            type=int)
     args = parser.parse_args(args)
     if args.gbk and (args.gff or args.fasta):
         parser.error("Error: --gbk cannot be used with --gff or --fasta.")
@@ -324,7 +328,7 @@ def linear_main(cmd_args) -> None:
     scale_stroke_color: Optional[str] = args.scale_stroke_color
     scale_stroke_width: Optional[float] = args.scale_stroke_width
     scale_font_size: Optional[float] = args.scale_font_size
-    
+    scale_interval: Optional[int] = args.scale_interval
     if blast_files:
         load_comparison = True
     else:
@@ -371,7 +375,8 @@ def linear_main(cmd_args) -> None:
         scale_style=scale_style,
         scale_stroke_color=scale_stroke_color,
         scale_stroke_width=scale_stroke_width,
-        scale_font_size=scale_font_size
+        scale_font_size=scale_font_size,
+        scale_interval=scale_interval
         )
 
     if args.gbk:
