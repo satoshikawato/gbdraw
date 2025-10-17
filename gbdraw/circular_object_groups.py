@@ -400,11 +400,13 @@ class TickGroup:
         self.tick_group = Group(id="tick")
         self.total_len: int = len(self.gb_record.seq)
         self.config_dict: dict = config_dict
-        self.tick_width: float = self.config_dict['objects']['ticks']['tick_width']
-        self.stroke: str = self.config_dict['objects']['ticks']['tick_labels']['stroke']
-        self.fill: str = self.config_dict['objects']['ticks']['tick_labels']['fill']
-        self.font_size: str = self.config_dict['objects']['ticks']['tick_labels']['font_size']
-        self.font_weight: str = self.config_dict['objects']['ticks']['tick_labels']['font_weight']
+        ticks_config = self.config_dict['objects']['ticks']
+        self.tick_width: float = ticks_config['tick_width']
+        self.stroke: str = ticks_config['tick_labels']['stroke']
+        self.fill: str = ticks_config['tick_labels']['fill']
+        self.font_size: str = ticks_config['tick_labels']['font_size']
+        self.font_weight: str = ticks_config['tick_labels']['font_weight']
+        self.manual_interval: Optional[int] = config_dict['objects']['scale'].get('interval')
         self.font_family: str = self.config_dict['objects']['text']['font_family']
         self.track_type: str = self.config_dict['canvas']['circular']['track_type']
         self.separate_strands: bool = self.config_dict['canvas']['strandedness']
@@ -420,20 +422,24 @@ class TickGroup:
         scaled relative to the length of the genomic sequence. Larger ticks are used for 
         longer sequences, and smaller ticks for shorter sequences.
         """
-        if self.total_len <= 30000:
-            tick_large, tick_small = 1000, 100
-        elif 30000 < self.total_len <= 50000:
-            tick_large, tick_small = 5000, 1000
-        elif 50000 < self.total_len <= 150000:
-            tick_large, tick_small = 10000, 1000
-        elif 150000 < self.total_len <= 1000000:
-            tick_large, tick_small = 50000, 10000
-        elif 1000000 < self.total_len <= 5000000:
-            tick_large, tick_small = 200000, 50000
+        if self.manual_interval is not None and self.manual_interval > 0:
+            self.tick_large = self.manual_interval
+            self.tick_small = self.manual_interval // 10
         else:
-            tick_large, tick_small = 1000000, 200000
-        self.tick_large: Literal[10000, 50000, 200000, 1000000] = tick_large
-        self.tick_small: Literal[1000, 10000, 50000, 200000] = tick_small
+            if self.total_len <= 30000:
+                tick_large, tick_small = 1000, 100
+            elif 30000 < self.total_len <= 50000:
+                tick_large, tick_small = 5000, 1000
+            elif 50000 < self.total_len <= 150000:
+                tick_large, tick_small = 10000, 1000
+            elif 150000 < self.total_len <= 1000000:
+                tick_large, tick_small = 50000, 10000
+            elif 1000000 < self.total_len <= 10000000:
+                tick_large, tick_small = 500000, 100000
+            else:
+                tick_large, tick_small = 1000000, 200000
+            self.tick_large: Literal[10000, 50000, 200000, 1000000] = tick_large
+            self.tick_small: Literal[1000, 10000, 50000, 200000] = tick_small
 
     def add_elements_to_group(self) -> Group:
         """

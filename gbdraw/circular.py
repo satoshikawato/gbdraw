@@ -227,6 +227,12 @@ def _get_args(args) -> argparse.Namespace:
         '--inner_label_y_radius_offset',
         help='Inner label y-radius offset factor (float; default from config)',
         type=float)
+    
+    parser.add_argument(
+        '--scale_interval',
+        help='Manual scale interval for circular mode (in bp). Overrides automatic calculation.',
+        type=int)
+    
     args = parser.parse_args(args)
     if args.gbk and (args.gff or args.fasta):
         parser.error("Error: --gbk cannot be used with --gff or --fasta.")
@@ -287,6 +293,7 @@ def circular_main(cmd_args) -> None:
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
+    scale_interval: Optional[int] = args.scale_interval
     if args.gbk:
         gb_records = load_gbks(args.gbk, "circular")
     elif args.gff and args.fasta:
@@ -320,6 +327,7 @@ def circular_main(cmd_args) -> None:
     line_stroke_width: str = args.line_stroke_width   
     track_type: str = args.track_type
     strandedness = args.separate_strands
+    scale_interval: Optional[int] = args.scale_interval
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
     if qualifier_priority_path:
@@ -356,7 +364,8 @@ def circular_main(cmd_args) -> None:
         outer_label_x_radius_offset=outer_label_x_radius_offset,
         outer_label_y_radius_offset=outer_label_y_radius_offset,
         inner_label_x_radius_offset=inner_label_x_radius_offset,
-        inner_label_y_radius_offset=inner_label_y_radius_offset
+        inner_label_y_radius_offset=inner_label_y_radius_offset,
+        scale_interval=scale_interval
     )    
 
     out_formats: list[str] = parse_formats(args.format)
