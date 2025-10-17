@@ -270,8 +270,8 @@ class LinearCanvasConfigurator:
         Calculates final canvas dimensions and legend offsets, ensuring the legend fits within the canvas.
         """
         def calculate_optimal_legend_y():
-            genome_area_top = self.vertical_offset
-            genome_area_bottom = self.total_height - self.original_vertical_offset
+            genome_area_top = self.original_vertical_offset
+            genome_area_bottom = self.total_height - self.original_vertical_offset - self.vertical_padding
             genome_area_center_y = genome_area_top + (genome_area_bottom - genome_area_top) / 2
             legend_y = genome_area_center_y - (legend_config.legend_height / 2)
 

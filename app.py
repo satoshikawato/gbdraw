@@ -435,6 +435,8 @@ if selected_mode == "🔵 Circular":
                 c_adv_axis_color = st.color_picker("Axis stroke color:", value="#808080", key="c_axis_color", help="Color of the main axis line.")
                 c_adv_axis_width = st.number_input("Axis stroke width:", value=1.0, min_value=0.0, step=0.1, key="c_axis_width", help="Width of the main axis line.")
             with adv_cols2:
+                st.markdown("##### Scale Customization")
+                c_adv_scale_interval = st.number_input("Scale interval (bp):", key="c_scale_interval", help="Interval between scale marks on the circular map.")
                 st.markdown("##### Font Sizes")
                 c_adv_def_font_size = st.number_input("Definition font size (default: 18 pt):", value=18.0, min_value=1.0, step=0.5, key="c_def_font_size", help="Font size for the species and strain definition text. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#definition-font-size---definition_font_size) for details.")
                 c_adv_label_font_size = st.number_input("Label font size (default: 8 pt (>=50 kb) or 16 pt (<50 kb):", key="c_label_font_size", help="Font size for feature labels. Default is 8 pt for genomes >= 50 kb, 16 pt for smaller genomes. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#label-font-size---label_font_size) for details.")
@@ -516,6 +518,7 @@ if selected_mode == "🔵 Circular":
         circular_args += ["-k", ",".join(c_adv_feat), "-n", c_adv_nt]
         if c_adv_win: circular_args += ["--window", str(c_adv_win)]
         if c_adv_step: circular_args += ["--step", str(c_adv_step)]
+        if c_adv_scale_interval: circular_args += ["--scale_interval", str(c_adv_scale_interval)]
         circular_args += ["--block_stroke_color", c_adv_blk_color, "--block_stroke_width", str(c_adv_blk_width)]
         circular_args += ["--line_stroke_color", c_adv_line_color, "--line_stroke_width", str(c_adv_line_width)]
         circular_args += ["--axis_stroke_color", c_adv_axis_color, "--axis_stroke_width", str(c_adv_axis_width)]
@@ -845,7 +848,7 @@ if selected_mode == "📏 Linear":
             st.markdown("##### Dinucleotide Tracks")     
             l_show_gc = st.checkbox("Show GC content", value=False, key="l_gc", help="Display the GC content track on the linear map.")
             l_show_skew = st.checkbox("Show GC skew", value=False, key="l_skew", help="Display the GC skew track on the linear map.")
-
+            
 
         with st.expander("🔧 Advanced Options"):
 
@@ -864,6 +867,12 @@ if selected_mode == "📏 Linear":
                 l_adv_def_font_size = st.number_input("Definition font size (default: 10 pt):", value=10.0, key="l_def_font_size", help="Font size for the definition text beside each sequence.")
                 l_adv_label_font_size = st.number_input("Label font size (default: 5 pt (>=50 kb) or 16 pt (<50 kb):", key="l_label_font_size", help="Font size for feature labels. Default is 5 pt for genomes >= 50 kb, 16 pt for smaller genomes.")
             with adv_cols2:
+                st.markdown("##### Scale Customization")
+                l_adv_scale_style = st.selectbox("Scale style (--scale_style):", ["bar", "ruler"], index=0, key="l_scale_style", help="Style of the scale bar on the linear map. 'bar' draws a simple line, 'ruler' draws a ruler with ticks and labels.")
+                l_adv_scale_font_size = st.number_input("Scale font size (--scale_font_size):", value=16, key="l_scale_font_size", help="Font size for the scale labels on the linear map. Default is 16 pt.")
+                l_adv_scale_interval = st.number_input("Scale interval (bp):", key="l_scale_interval", help="Interval between scale marks on the linear map.")
+                l_adv_scale_stroke_color = st.color_picker("Scale stroke color:", value="#000000", key="l_scale_color", help="Color of the scale bar.")
+                l_adv_scale_stroke_width = st.number_input("Scale stroke width:", key="l_scale_width", help="Width of the scale bar. Default: 3 pt.")
                 st.markdown("##### Stroke Customization")
                 l_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="l_b_color", help="Color of the outline for feature blocks.")
                 l_adv_blk_width = st.number_input("Block stroke width:", value=0.0, min_value=0.0, step=0.1, key="l_b_width", help="Width of the outline for feature blocks. Set to 0 to remove outlines.")
@@ -946,7 +955,16 @@ if selected_mode == "📏 Linear":
             linear_args += ["--feature_height", str(l_adv_feat_height)]
         if l_adv_comp_height:
             linear_args += ["--comparison_height", str(l_adv_comp_height)]
-        
+        if l_adv_scale_style != "bar":
+            linear_args += ["--scale_style", l_adv_scale_style]
+        if l_adv_scale_font_size:
+            linear_args += ["--scale_font_size", str(l_adv_scale_font_size)]
+        if l_adv_scale_interval:
+            linear_args += ["--scale_interval", str(l_adv_scale_interval)]
+        if l_adv_scale_stroke_width:
+            linear_args += ["--scale_stroke_width", str(l_adv_scale_stroke_width)]
+        if l_adv_scale_stroke_color:
+            linear_args += ["--scale_stroke_color", l_adv_scale_stroke_color]
         selected_palette = st.session_state.get("l_palette_selector")
         if selected_palette: linear_args += ["--palette", selected_palette]
 

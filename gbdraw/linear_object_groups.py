@@ -234,7 +234,10 @@ class LengthBarGroup:
         if position >= 1_000_000:
             label = f"{position / 1_000_000:.1f} " + ("M" + unit)
         elif not for_bar_style and position >= 100_000: # For ruler style, use M for values like 500k
-             label = f"{position / 1_000_000:.1f} " + "Mbp"
+            if self.longest_genome >= 1_000_000:
+                label = f"{position / 1_000_000:.1f} " + "Mbp"
+            else:
+                label = f"{position // 1_000} k" + (unit)
         elif position >= 1_000:
             label = f"{position // 1_000} k" + (unit)
         else:
