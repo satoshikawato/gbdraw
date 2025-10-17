@@ -235,9 +235,23 @@ def _get_args(args) -> argparse.Namespace:
         help='Comparison block height (pixels; optional; default: 60)',
         type=float)
     parser.add_argument(
-            '--ruler_style_length_bar',
-            help='Use ruler-style for the length bar (default: False).',
-            action='store_true')
+            '--scale_style',
+            help='Style for the length scale (default: bar)',
+            type=str,
+            choices=["bar", "ruler"],
+            default="bar")
+    parser.add_argument(
+            '--scale_stroke_color',
+            help='Scale bar/ruler stroke color (str; default: "black")',
+            type=str)
+    parser.add_argument(
+        '--scale_stroke_width',
+        help='Scale bar/ruler stroke width (float; default: 3)',
+        type=float)
+    parser.add_argument(
+        '--scale_font_size',
+        help='Scale bar/ruler font size (float; default: 16)',
+        type=float)
     args = parser.parse_args(args)
     if args.gbk and (args.gff or args.fasta):
         parser.error("Error: --gbk cannot be used with --gff or --fasta.")
@@ -306,8 +320,11 @@ def linear_main(cmd_args) -> None:
 
     out_formats: list[str] = parse_formats(args.format)
     user_defined_default_colors: str = args.default_colors
-    ruler_style_length_bar: bool = args.ruler_style_length_bar
-
+    scale_style: str = args.scale_style
+    scale_stroke_color: Optional[str] = args.scale_stroke_color
+    scale_stroke_width: Optional[float] = args.scale_stroke_width
+    scale_font_size: Optional[float] = args.scale_font_size
+    
     if blast_files:
         load_comparison = True
     else:
@@ -351,7 +368,10 @@ def linear_main(cmd_args) -> None:
         default_cds_height=feature_height,
         comparison_height=comparison_height,
         gc_height=gc_height,
-        ruler_style_length_bar=ruler_style_length_bar
+        scale_style=scale_style,
+        scale_stroke_color=scale_stroke_color,
+        scale_stroke_width=scale_stroke_width,
+        scale_font_size=scale_font_size
         )
 
     if args.gbk:

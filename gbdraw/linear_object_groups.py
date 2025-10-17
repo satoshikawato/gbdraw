@@ -137,33 +137,34 @@ class LengthBarGroup:
         Initializes the LengthBarGroup with the given parameters.
         (snip)
         """
-        self.length_bar_stroke_color: str = config_dict['objects']['length_bar']['stroke_color']
-        self.length_bar_stroke_width: float = config_dict['objects']['length_bar']['stroke_width']
-        self.length_bar_font_size: str = config_dict['objects']['length_bar']['font_size']
-        self.length_bar_font_weight: str = config_dict['objects']['length_bar']['font_weight']
-        self.length_bar_font_family: str = config_dict['objects']['text']['font_family']
+        scale_config = config_dict['objects']['scale']
+        self.scale_stroke_color: str = scale_config['stroke_color']
+        self.scale_stroke_width: float = scale_config['stroke_width']
+        self.scale_font_size: str = scale_config['font_size']
+        self.scale_font_weight: str = scale_config['font_weight']
+        self.scale_font_family: str = config_dict['objects']['text']['font_family']
+        self.scale_style: str = scale_config.get('style', 'bar')
         self.longest_genome: int = longest_genome
         self.fig_width: int = fig_width
-        self.alignment_width: float = alignment_width # (追加) alignment_widthを保存
+        self.alignment_width: float = alignment_width
         self.group_id: str = group_id
-        self.style: str = 'ruler' if config_dict.get('objects', {}).get('length_bar', {}).get('style') else 'default'
+        self.style: str = config_dict.get('objects', {}).get('scale', {}).get('style', 'bar')
         self.define_ticks_by_length()
         self.config_bar()
-        self.length_bar_group = Group(id=self.group_id)
+        self.scale_group = Group(id=self.group_id)
 
         if self.style == 'ruler':
-            self.setup_ruler_bar()
+            self.setup_scale_ruler()
         else:
-            self.setup_default_bar()
-        # self.add_elements_to_group()
-    def setup_default_bar(self) -> None:
+            self.setup_scale_bar() 
+    def setup_scale_bar(self) -> None:
             """
             Sets up the original, single-tick length bar.
             """
             self.define_ticks_by_length()
             self.config_bar()
             self.add_elements_to_group()
-    def setup_ruler_bar(self) -> None:
+    def setup_scale_ruler(self) -> None:
             """
             Sets up the new ruler-style length bar using the interval from define_ticks_by_length.
             """
@@ -176,10 +177,10 @@ class LengthBarGroup:
             main_axis = Line(
                 start=(0, 0),
                 end=(self.alignment_width, 0),
-                stroke=self.length_bar_stroke_color,
-                stroke_width=self.length_bar_stroke_width,
+                stroke=self.scale_stroke_color,
+                stroke_width=self.scale_stroke_width,
             )
-            self.length_bar_group.add(main_axis)
+            self.scale_group.add(main_axis)
 
             num_ticks = int(self.longest_genome / tick_interval)
             
@@ -194,10 +195,10 @@ class LengthBarGroup:
                 tick_line = Line(
                     start=(x_pos, 0),
                     end=(x_pos, 5), 
-                    stroke=self.length_bar_stroke_color,
-                    stroke_width=self.length_bar_stroke_width,
+                    stroke=self.scale_stroke_color,
+                    stroke_width=self.scale_stroke_width,
                 )
-                self.length_bar_group.add(tick_line)
+                self.scale_group.add(tick_line)
 
 
                 label_text = self._format_tick_label(position)
@@ -208,13 +209,13 @@ class LengthBarGroup:
                     insert=(x_pos, 15), 
                     stroke='none',
                     fill='black',
-                    font_size=self.length_bar_font_size,
-                    font_weight=self.length_bar_font_weight,
-                    font_family=self.length_bar_font_family,
+                    font_size=self.scale_font_size,
+                    font_weight=self.scale_font_weight,
+                    font_family=self.scale_font_family,
                     text_anchor="middle",
                     dominant_baseline="middle"
                 )
-                self.length_bar_group.add(text_element)
+                self.scale_group.add(text_element)
 
 
                 if position == self.longest_genome:
@@ -303,7 +304,7 @@ class LengthBarGroup:
         self.start_y: float = 0
         self.end_y: float = 0
 
-    def create_length_bar_path_linear(self) -> Line:
+    def create_scale_path_linear(self) -> Line:
         """
         Creates the SVG line element for the length bar.
 
@@ -313,11 +314,11 @@ class LengthBarGroup:
         return Line(
             start=(self.start_x, self.start_y),
             end=(self.end_x, self.end_y),
-            stroke=self.length_bar_stroke_color,
-            stroke_width=self.length_bar_stroke_width,
+            stroke=self.scale_stroke_color,
+            stroke_width=self.scale_stroke_width,
             fill='none')
 
-    def create_length_bar_text_linear(self) -> Text:
+    def create_scale_text_linear(self) -> Text:
         """
         Creates the SVG text element for the length bar label.
 
@@ -329,9 +330,9 @@ class LengthBarGroup:
             insert=(self.start_x - 10, self.start_y),
             stroke='none',
             fill='black',
-            font_size=self.length_bar_font_size,
-            font_weight=self.length_bar_font_weight,
-            font_family=self.length_bar_font_family,
+            font_size=self.scale_font_size,
+            font_weight=self.scale_font_weight,
+            font_family=self.scale_font_family,
             text_anchor="end",
             dominant_baseline="middle")
 
@@ -342,10 +343,10 @@ class LengthBarGroup:
         This method calls the functions to create the line and text elements for the length bar
         and adds them to the group.
         """
-        length_bar_path: Line = self.create_length_bar_path_linear()
-        length_bar_text_path: Text = self.create_length_bar_text_linear()
-        self.length_bar_group.add(length_bar_path)
-        self.length_bar_group.add(length_bar_text_path)
+        scale_path: Line = self.create_scale_path_linear()
+        scale_text_path: Text = self.create_scale_text_linear()
+        self.scale_group.add(scale_path)
+        self.scale_group.add(scale_text_path)
 
     def get_group(self) -> Group:
         """
@@ -354,7 +355,7 @@ class LengthBarGroup:
         Returns:
             Group: The SVG group with the length bar elements.
         """
-        return self.length_bar_group
+        return self.scale_group
 
 
 class GcContentGroup:
