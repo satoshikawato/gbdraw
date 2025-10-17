@@ -14,7 +14,7 @@ from .canvas_generator import LinearCanvasConfigurator
 from .linear_feature_drawer import FeatureDrawer, GcContentDrawer, SkewDrawer, LabelDrawer
 from .data_processing import skew_df, prepare_label_list_linear
 from .create_feature_objects import create_feature_dict, preprocess_color_tables
-from .utility_functions import create_text_element, normalize_position_linear, preprocess_label_filtering, calculate_bbox_dimensions
+from .utility_functions import create_text_element, normalize_position_linear, preprocess_label_filtering, calculate_bbox_dimensions, interpolate_color
 from .object_configurators import GcContentConfigurator, FeatureDrawingConfigurator, GcSkewConfigurator
 from .circular_path_drawer import generate_text_path
 import math
@@ -608,6 +608,9 @@ class PairWiseMatchGroup:
         self.comparison_df: DataFrame = comparison_df
         self.comparison_height: float = actual_comparison_height
         self.match_fill_color: str = blast_config.fill_color
+        self.min_identity: float = blast_config.identity
+        self.match_min_color: str = blast_config.min_color
+        self.match_max_color: str = blast_config.max_color
         self.match_fill_opacity: float = blast_config.fill_opacity
         self.match_stroke_color: str = blast_config.stroke_color
         self.match_stroke_width: float = blast_config.stroke_width
@@ -663,6 +666,11 @@ class PairWiseMatchGroup:
         subject_start_y: float
         subject_end_x: float
         subject_end_y: float
+        identity_percent = float(row.identity)
+        factor = (identity_percent - self.min_identity) / (100 - self.min_identity)
+        print(factor)
+        # 色を補間
+        dynamic_fill_color = interpolate_color(self.match_min_color, self.match_max_color, factor)
         query_start, query_end, subject_start, subject_end = self.calculate_offsets(row)
         query_start_x, query_start_y, query_end_x, query_end_y = self.normalize_positions(
             query_start, query_end, 0)
@@ -673,7 +681,7 @@ class PairWiseMatchGroup:
             query_start_x, query_start_y, query_end_x, query_end_y, subject_start_x, subject_start_y, subject_end_x, subject_end_y)
         return Path(
             d=match_path_desc,
-            fill=self.match_fill_color,
+            fill=dynamic_fill_color,
             fill_opacity=self.match_fill_opacity,
             stroke=self.match_stroke_color,
             stroke_width=self.match_stroke_width)
