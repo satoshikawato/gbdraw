@@ -234,6 +234,28 @@ def _get_args(args) -> argparse.Namespace:
         '--comparison_height',
         help='Comparison block height (pixels; optional; default: 60)',
         type=float)
+    parser.add_argument(
+            '--scale_style',
+            help='Style for the length scale (default: bar)',
+            type=str,
+            choices=["bar", "ruler"],
+            default="bar")
+    parser.add_argument(
+            '--scale_stroke_color',
+            help='Scale bar/ruler stroke color (str; default: "black")',
+            type=str)
+    parser.add_argument(
+        '--scale_stroke_width',
+        help='Scale bar/ruler stroke width (float; default: 3)',
+        type=float)
+    parser.add_argument(
+        '--scale_font_size',
+        help='Scale bar/ruler font size (float; default: 16)',
+        type=float)
+    parser.add_argument(
+            '--scale_interval',
+            help='Manual tick interval for "ruler" scale style (in bp). Overrides automatic calculation.',
+            type=int)
     args = parser.parse_args(args)
     if args.gbk and (args.gff or args.fasta):
         parser.error("Error: --gbk cannot be used with --gff or --fasta.")
@@ -302,8 +324,11 @@ def linear_main(cmd_args) -> None:
 
     out_formats: list[str] = parse_formats(args.format)
     user_defined_default_colors: str = args.default_colors
-
-
+    scale_style: str = args.scale_style
+    scale_stroke_color: Optional[str] = args.scale_stroke_color
+    scale_stroke_width: Optional[float] = args.scale_stroke_width
+    scale_font_size: Optional[float] = args.scale_font_size
+    scale_interval: Optional[int] = args.scale_interval
     if blast_files:
         load_comparison = True
     else:
@@ -346,7 +371,12 @@ def linear_main(cmd_args) -> None:
         label_whitelist=label_whitelist,
         default_cds_height=feature_height,
         comparison_height=comparison_height,
-        gc_height=gc_height
+        gc_height=gc_height,
+        scale_style=scale_style,
+        scale_stroke_color=scale_stroke_color,
+        scale_stroke_width=scale_stroke_width,
+        scale_font_size=scale_font_size,
+        scale_interval=scale_interval
         )
 
     if args.gbk:

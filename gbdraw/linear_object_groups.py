@@ -17,6 +17,7 @@ from .create_feature_objects import create_feature_dict, preprocess_color_tables
 from .utility_functions import create_text_element, normalize_position_linear, preprocess_label_filtering, calculate_bbox_dimensions
 from .object_configurators import GcContentConfigurator, FeatureDrawingConfigurator, GcSkewConfigurator
 from .circular_path_drawer import generate_text_path
+import math
 # Logging setup
 logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -119,130 +120,184 @@ class DefinitionGroup:
 
 class LengthBarGroup:
     """
-    Handles the creation and display of a length bar in a linear layout.
-
-    This class is responsible for visualizing a scale bar that represents the length 
-    of the genomic sequence in comparison to the longest sequence in the dataset.
-
-    Attributes:
-        fig_width (int): The width of the figure.
-        longest_genome (int): The length of the longest genome in the dataset.
-        config_dict (dict): Configuration dictionary with styling parameters.
-        group_id (str): Identifier for the SVG group.
+    Handles the creation and display of a length scale in a linear layout.
+    Supports two styles: 'bar' (a single scale bar) and 'ruler' (a full-axis ruler).
     """
 
     def __init__(self, fig_width: int, alignment_width: float, longest_genome: int, config_dict: dict, group_id="length_bar") -> None:
         """
         Initializes the LengthBarGroup with the given parameters.
-        (snip)
         """
-        self.length_bar_stroke_color: str = config_dict['objects']['length_bar']['stroke_color']
-        self.length_bar_stroke_width: float = config_dict['objects']['length_bar']['stroke_width']
-        self.length_bar_font_size: str = config_dict['objects']['length_bar']['font_size']
-        self.length_bar_font_weight: str = config_dict['objects']['length_bar']['font_weight']
-        self.length_bar_font_family: str = config_dict['objects']['text']['font_family']
+        # --- 1. Load all settings from the 'scale' section of the config ---
+        scale_config = config_dict['objects']['scale']
+        self.stroke_color: str = scale_config['stroke_color']
+        self.stroke_width: float = scale_config['stroke_width']
+        self.font_size: str = scale_config['font_size']
+        self.font_weight: str = scale_config['font_weight']
+        self.font_family: str = config_dict['objects']['text']['font_family']
+        self.style: str = scale_config.get('style', 'bar')
+        self.manual_interval: Optional[int] = scale_config.get('interval')
+        
+        # --- 2. Set other properties ---
         self.longest_genome: int = longest_genome
-        self.fig_width: int = fig_width
-        self.alignment_width: float = alignment_width # (追加) alignment_widthを保存
+        self.alignment_width: float = alignment_width
         self.group_id: str = group_id
-        self.define_ticks_by_length()
-        self.config_bar()
-        self.length_bar_group = Group(id=self.group_id)
-        self.add_elements_to_group()
-    def define_ticks_by_length(self) -> None:
-        """
-        Defines the scale ticks for the length bar based on the length of the longest genome.
+        
+        self.scale_group = Group(id=self.group_id)
 
-        This method sets the appropriate tick intervals and the label format based on 
-        predefined thresholds. It adapts the scale to fit the length of the longest genome.
+        # --- 3. Branch to the appropriate setup method based on style ---
+        if self.style == 'ruler':
+            self.setup_scale_ruler()
+        else:
+            self.setup_scale_bar()
+
+    def setup_scale_bar(self) -> None:
         """
-        # Define a list of (threshold, tick, format) tuples
-        thresholds: List[Tuple[Union[float, int], int, str]] = [
-            (2000, 100, "{} bp"),
-            (20000, 1000, "{} kbp"),
-            (50000, 5000, "{} kbp"),
-            (150000, 10000, "{} kbp"),
-            (250000, 50000, "{} kbp"),
-            (1000000, 100000, "{} kbp"),
-            (2000000, 200000, "{} kbp"),
-            (5000000, 500000, "{} kbp"),
-            (float('inf'), 1000000, "{} Mbp"),
+        Sets up the 'bar' style.
+        Uses manual_interval if provided, otherwise calculates an automatic interval.
+        """
+        if self.manual_interval is not None and self.manual_interval > 0:
+            # Use the user-provided interval for the bar length
+            self.tick = self.manual_interval
+            self.label_text = self._format_tick_label(self.manual_interval, for_bar_style=True)
+        else:
+            # Automatically determine the best interval and label
+            self.define_ticks_by_length_for_bar()
+        
+        # Configure geometry and add elements to the SVG group
+        self.config_bar_geometry()
+        self.add_bar_elements_to_group()
+
+    def setup_scale_ruler(self) -> None:
+        """
+        Sets up the 'ruler' style.
+        Uses manual_interval if provided, otherwise falls back to an automatic interval.
+        """
+        # Determine the tick interval
+        if self.manual_interval is not None and self.manual_interval > 0:
+            tick_interval = self.manual_interval
+        else:
+            self.define_ticks_by_length_for_bar() # Use the same auto-logic to get a sensible interval
+            tick_interval = self.tick
+
+        if tick_interval <= 0 or self.longest_genome <= 0:
+            return 
+
+        # Draw the main axis line
+        main_axis = Line(
+            start=(0, 0),
+            end=(self.alignment_width, 0),
+            stroke=self.stroke_color,
+            stroke_width=self.stroke_width,
+        )
+        self.scale_group.add(main_axis)
+
+        # Draw ticks and labels from 0 up to the end of the genome
+        position = 0
+        while True:
+            x_pos = (position / self.longest_genome) * self.alignment_width
+
+            # Draw tick line
+            tick_line = Line(
+                start=(x_pos, 0-(0.5 * self.stroke_width)), end=(x_pos, 10), 
+                stroke=self.stroke_color, stroke_width=self.stroke_width
+            )
+            self.scale_group.add(tick_line)
+
+            # Draw label
+            label_text = self._format_tick_label(position)
+            text_element = Text(
+                label_text, insert=(x_pos, 15), stroke='none', fill='black',
+                font_size=self.font_size, font_weight=self.font_weight,
+                font_family=self.font_family, text_anchor="middle",
+                dominant_baseline="hanging"
+            )
+            self.scale_group.add(text_element)
+
+            if position >= self.longest_genome:
+                break # Exit after drawing the last tick
+            
+            position += tick_interval
+            # Ensure the final tick is exactly at the end
+            if position > self.longest_genome:
+                position = self.longest_genome
+
+    def _format_tick_label(self, position: int, for_bar_style: bool = False) -> str:
+        """
+        Formats a position number into a readable label (e.g., "0.5M", "10kbp").
+        """
+        if position == 0:
+            return "0"
+
+        unit = "bp"
+        
+        if position >= 1_000_000:
+            label = f"{position / 1_000_000:.1f} " + ("M" + unit)
+        elif not for_bar_style and position >= 100_000: # For ruler style, use M for values like 500k
+            if self.longest_genome >= 1_000_000:
+                label = f"{position / 1_000_000:.1f} " + "Mbp"
+            else:
+                label = f"{position // 1_000} k" + (unit)
+        elif position >= 1_000:
+            label = f"{position // 1_000} k" + (unit)
+        else:
+            label = f"{position} {unit}".strip()
+
+        return label
+
+    def define_ticks_by_length_for_bar(self) -> None:
+        """
+        Automatically determines a sensible tick interval for the 'bar' style
+        or as a fallback for the 'ruler' style.
+        """
+        thresholds = [
+            (2000, 100), (20000, 1000), (50000, 5000), (150000, 10000),
+            (250000, 50000), (1000000, 100000), (2000000, 200000), 
+            (5000000, 500000), (float('inf'), 1000000),
         ]
-        # Find the appropriate tick and format
-        for threshold, tick, label_format in thresholds:
+        for threshold, tick_val in thresholds:
             if self.longest_genome < threshold:
-                if self.longest_genome < 5000000:
-                    self.tick: int = tick
-                    self.label_text: str = label_format.format(
-                        int(self.tick / 1000) if self.tick >= 1000 else self.tick)
-                else:
-                    self.tick: int = tick
-                    self.label_text: str = label_format.format(
-                        int(self.tick / 1000000) if self.tick >= 1000000 else self.tick)
-                break
+                self.tick = tick_val
+                self.label_text = self._format_tick_label(tick_val, for_bar_style=True)
+                return
 
-    def config_bar(self) -> None:
-        """
-        Configures the length bar dimensions and positions based on the tick scale.
-        """
-        self.bar_length: float = self.alignment_width * (self.tick / self.longest_genome)
-        self.end_x: float = self.alignment_width
-        self.start_x: float = self.end_x - self.bar_length
-        self.start_y: float = 0
-        self.end_y: float = 0
+    def config_bar_geometry(self) -> None:
+        """Configures the geometry (length and position) for the 'bar' style."""
+        if self.longest_genome > 0:
+            self.bar_length = self.alignment_width * (self.tick / self.longest_genome)
+        else:
+            self.bar_length = 0
+        self.end_x = self.alignment_width
+        self.start_x = self.end_x - self.bar_length
+        self.start_y = 0
+        self.end_y = 0
 
-    def create_length_bar_path_linear(self) -> Line:
-        """
-        Creates the SVG line element for the length bar.
-
-        Returns:
-            Line: An SVG line element representing the length bar.
-        """
+    def create_scale_path_linear(self) -> Line:
+        """Creates the SVG line element for the 'bar' style."""
         return Line(
-            start=(self.start_x, self.start_y),
-            end=(self.end_x, self.end_y),
-            stroke=self.length_bar_stroke_color,
-            stroke_width=self.length_bar_stroke_width,
-            fill='none')
+            start=(self.start_x, self.start_y), end=(self.end_x, self.end_y),
+            stroke=self.stroke_color, stroke_width=self.stroke_width, fill='none'
+        )
 
-    def create_length_bar_text_linear(self) -> Text:
-        """
-        Creates the SVG text element for the length bar label.
-
-        Returns:
-            Text: An SVG text element representing the label for the length bar.
-        """
+    def create_scale_text_linear(self) -> Text:
+        """Creates the SVG text element for the 'bar' style label."""
         return Text(
-            self.label_text,
-            insert=(self.start_x - 10, self.start_y),
-            stroke='none',
-            fill='black',
-            font_size=self.length_bar_font_size,
-            font_weight=self.length_bar_font_weight,
-            font_family=self.length_bar_font_family,
-            text_anchor="end",
-            dominant_baseline="middle")
+            self.label_text, insert=(self.start_x - 10, self.start_y),
+            stroke='none', fill='black', font_size=self.font_size,
+            font_weight=self.font_weight, font_family=self.font_family,
+            text_anchor="end", dominant_baseline="middle"
+        )
 
-    def add_elements_to_group(self) -> None:
-        """
-        Adds the length bar elements (line and text) to the SVG group.
-
-        This method calls the functions to create the line and text elements for the length bar
-        and adds them to the group.
-        """
-        length_bar_path: Line = self.create_length_bar_path_linear()
-        length_bar_text_path: Text = self.create_length_bar_text_linear()
-        self.length_bar_group.add(length_bar_path)
-        self.length_bar_group.add(length_bar_text_path)
+    def add_bar_elements_to_group(self) -> None:
+        """Adds the line and text elements for the 'bar' style to the SVG group."""
+        scale_path = self.create_scale_path_linear()
+        scale_text = self.create_scale_text_linear()
+        self.scale_group.add(scale_path)
+        self.scale_group.add(scale_text)
 
     def get_group(self) -> Group:
-        """
-        Retrieves the SVG group containing the length bar.
-
-        Returns:
-            Group: The SVG group with the length bar elements.
-        """
-        return self.length_bar_group
+        """Retrieves the final SVG group containing the scale visualization."""
+        return self.scale_group
 
 
 class GcContentGroup:

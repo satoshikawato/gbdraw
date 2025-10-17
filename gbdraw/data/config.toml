@@ -47,7 +47,57 @@ align_center = false
   short = 0.008
   long = 0.0012
 [objects]
-# Fill colors are defined in `default_colors.txt`.
+
+[objects.scale]
+style = "bar"
+stroke_color = 'black'
+stroke_width = 3
+font_size = 16
+font_weight = 'normal'
+
+[objects.blast_match]
+fill_opacity = 0.7
+stroke_color = 'none'
+stroke_width = 0
+
+[objects.sliding_window]
+up10m = [100000, 10000]
+up1m = [10000, 1000]
+default = [1000, 100]
+
+[objects.gc_content]
+stroke_color = 'none'
+stroke_width = 0
+fill_opacity = 1
+[objects.gc_content.circular]
+norm_factor = 0.65
+[objects.gc_content.linear]
+height = 20
+
+[objects.gc_skew]
+stroke_color = 'none'
+stroke_width = 0
+fill_opacity = 1
+[objects.gc_skew.circular]
+norm_factor = 0.80
+
+[objects.ticks]
+tick_width = 2.0
+[objects.ticks.tick_labels]
+stroke = 'none'
+fill = 'black'
+font_size = 14
+font_weight = 'normal'
+
+[objects.legends]
+stroke = 'none'
+fill = 'black'
+font_size = 16
+color_rect_size = 16
+font_weight = 'normal'
+dominant_baseline = 'central'
+text_anchor = 'start'
+
 
 [objects.text]
 font_family = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
@@ -83,8 +133,6 @@ line_stroke_color = 'gray'
 line_stroke_width = 1.0
 font_size = 10
 font_weight = 'normal'
-
-
 
 [labels]
 
@@ -273,54 +321,7 @@ feature = ["note"]
     x_radius_offset = 1.0
     y_radius_offset = 1.0
     
-[objects.length_bar]
-stroke_color = 'black'
-stroke_width = 3
-font_size = 16
-font_weight = 'normal'
 
-[objects.blast_match]
-fill_opacity = 0.7
-stroke_color = 'none'
-stroke_width = 0
-
-[objects.sliding_window]
-up10m = [100000, 10000]
-up1m = [10000, 1000]
-default = [1000, 100]
-
-[objects.gc_content]
-stroke_color = 'none'
-stroke_width = 0
-fill_opacity = 1
-[objects.gc_content.circular]
-norm_factor = 0.65
-[objects.gc_content.linear]
-height = 20
-
-[objects.gc_skew]
-stroke_color = 'none'
-stroke_width = 0
-fill_opacity = 1
-[objects.gc_skew.circular]
-norm_factor = 0.80
-
-[objects.ticks]
-tick_width = 2.0
-[objects.ticks.tick_labels]
-stroke = 'none'
-fill = 'black'
-font_size = 14
-font_weight = 'normal'
-
-[objects.legends]
-stroke = 'none'
-fill = 'black'
-font_size = 16
-color_rect_size = 16
-font_weight = 'normal'
-dominant_baseline = 'central'
-text_anchor = 'start'
 [png_output]
-dpi = 96 # fixed value; higher or lower values lead to abberant text sizes in CairoSVG output
+dpi = 96
 

@@ -352,16 +352,17 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     required_label_height, all_labels, record_label_heights = _precalculate_label_dimensions(
         records, feature_config, canvas_config, config_dict
     )
-
+    
     if required_label_height > 0:
         if canvas_config.vertical_offset < required_label_height:
             canvas_config.vertical_offset = required_label_height
-    
+    else:
+        canvas_config.vertical_offset = canvas_config.original_vertical_offset + canvas_config.cds_padding
     has_blast = bool(blast_files)
     record_ids = [r.id for r in records]
     record_offsets = []
     
-    current_y = canvas_config.vertical_offset
+    current_y = canvas_config.vertical_offset 
     for i, record_id in enumerate(record_ids):
         record_offsets.append(current_y)
         
@@ -370,12 +371,8 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
             vertical_padding = canvas_config.vertical_padding
             next_record_id = record_ids[i+1]
             next_label_height = record_label_heights.get(next_record_id, 0)
+            inter_record_space = height_below_axis + vertical_padding + next_label_height + canvas_config.comparison_height
             
-            inter_record_space = height_below_axis + vertical_padding + next_label_height
-            
-            if has_blast:
-                inter_record_space += canvas_config.comparison_height
-
             current_y += inter_record_space
 
     final_height = current_y + canvas_config.cds_height + canvas_config.gc_padding + canvas_config.skew_padding + canvas_config.original_vertical_offset + canvas_config.vertical_padding

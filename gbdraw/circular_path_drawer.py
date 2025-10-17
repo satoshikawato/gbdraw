@@ -629,10 +629,10 @@ def generate_circular_tick_labels(radius: float, total_len: int, size: str, tick
         #factors: list[float] = calculate_feature_position_factors_circular(
         #record_length, label["strand"], track_ratio, cds_ratio, offset, self.track_type)
         angle = 360.0 * (tick / total_len)
-        if total_len < 5000000:
+        if total_len < 1000000:
             label_text: str = str(int(tick / 1000)) + " kbp"
         else:
-            label_text = str(int(tick / 1000000)) + " Mbp"
+            label_text = str((tick / 1000000)) + " Mbp"
 
         bbox_width_px, bbox_height_px = calculate_bbox_dimensions(label_text, font_family, font_size, dpi)
         center_offset = (bbox_height_px/4) 
