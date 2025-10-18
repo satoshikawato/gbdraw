@@ -256,6 +256,16 @@ def _get_args(args) -> argparse.Namespace:
             '--scale_interval',
             help='Manual tick interval for "ruler" scale style (in bp). Overrides automatic calculation.',
             type=int)
+    parser.add_argument(
+            '--blast_color_min',
+            help='BLAST match color for minimum identity (str, hex format; default: "#D3D3D3")',
+            type=str,
+            default="#FFE7E7") 
+    parser.add_argument(
+            '--blast_color_max',
+            help='BLAST match color for maximum identity (str, hex format; default: "#4682B4")',
+            type=str,
+            default="#FF7272") 
     args = parser.parse_args(args)
     if args.gbk and (args.gff or args.fasta):
         parser.error("Error: --gbk cannot be used with --gff or --fasta.")
@@ -318,7 +328,8 @@ def linear_main(cmd_args) -> None:
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
     selected_features_set: str = args.features.split(',')
-
+    blast_color_min = args.blast_color_min
+    blast_color_max = args.blast_color_max
     feature_height: Optional[float] = args.feature_height
     comparison_height: Optional[float] = args.comparison_height
 
@@ -376,7 +387,9 @@ def linear_main(cmd_args) -> None:
         scale_stroke_color=scale_stroke_color,
         scale_stroke_width=scale_stroke_width,
         scale_font_size=scale_font_size,
-        scale_interval=scale_interval
+        scale_interval=scale_interval,
+        blast_color_min=blast_color_min,
+        blast_color_max=blast_color_max
         )
 
     if args.gbk:
@@ -420,7 +433,7 @@ def linear_main(cmd_args) -> None:
         window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
     skew_config = GcSkewConfigurator(
         window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
-    legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config)
+    legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config, blast_config=blast_config)    
     plot_linear_diagram(records, blast_files, canvas_config, blast_config,
                         feature_config, gc_config, config_dict, out_formats, legend_config, skew_config)
 

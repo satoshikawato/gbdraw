@@ -9,8 +9,7 @@ from svgwrite import Drawing
 from svgwrite.container import Group
 from Bio.SeqRecord import SeqRecord
 from .canvas_generator import LinearCanvasConfigurator
-from .circular_object_groups import LegendGroup
-from .linear_object_groups import SeqRecordGroup, DefinitionGroup, GcContentGroup, GcSkewGroup, PairWiseMatchGroup, LengthBarGroup
+from .linear_object_groups import SeqRecordGroup, DefinitionGroup, GcContentGroup, GcSkewGroup, PairWiseMatchGroup, LengthBarGroup, LegendGroup
 from .file_processing import load_comparisons, save_figure
 from .object_configurators import LegendDrawingConfigurator, GcContentConfigurator, GcSkewConfigurator, FeatureDrawingConfigurator
 from .data_processing import prepare_legend_table
@@ -300,48 +299,12 @@ def add_length_bar_on_linear_canvas(canvas: Drawing, canvas_config: LinearCanvas
     canvas.add(length_bar_group)
     return canvas
 
-def add_legends_on_linear_canvas(canvas: Drawing, canvas_config: LinearCanvasConfigurator, legend_config, legend_table):
-    legend_group: Group = LegendGroup(canvas_config, legend_config, legend_table).get_group()
+def add_legends_on_linear_canvas(canvas: Drawing, config_dict, canvas_config: LinearCanvasConfigurator, legend_config, legend_table):
+    legend_group: Group = LegendGroup(config_dict, canvas_config, legend_config, legend_table).get_group()
     offset_x = canvas_config.legend_offset_x
     offset_y = canvas_config.legend_offset_y
     legend_group.translate(offset_x, offset_y) 
     canvas.add(legend_group)
-    return canvas
-
-def add_records_on_linear_canvas(canvas: Drawing, records: list[SeqRecord], feature_config: FeatureDrawingConfigurator, gc_config: GcContentConfigurator, canvas_config: LinearCanvasConfigurator, config_dict: dict, precalculated_labels: dict) -> Drawing:
-    """
-    Adds multiple SeqRecord groups to the linear canvas.
-
-    This function iterates over a list of SeqRecords and adds each as a group to the canvas.
-    It includes options to add associated features like GC content and record definitions.
-
-    Args:
-        canvas (Drawing): The SVG drawing canvas for adding the SeqRecords.
-        records (list[SeqRecord]): A list of SeqRecords to be visualized.
-        feature_config (FeatureDrawingConfigurator): Configuration for feature drawing.
-        gc_config (GcContentConfigurator): Configuration for GC content representation.
-        canvas_config (LinearCanvasConfigurator): Configuration settings for the linear canvas.
-        config_dict (dict): Configuration dictionary for drawing parameters.
-
-    Returns:
-        Drawing: The updated SVG drawing with the SeqRecord groups added.
-    """
-    for count, record in enumerate(records, start=1):
-        record_offset_y, record_offset_x = calculate_record_offsets(count, record, canvas_config)
-        labels_for_record = precalculated_labels.get(record.id)
-        add_record_group(canvas, record, record_offset_y, record_offset_x,
-                         canvas_config, feature_config, config_dict, precalculated_labels=labels_for_record)
-
-        # Add record definition group
-        add_record_definition_group(
-            canvas, record, record_offset_y, record_offset_x, canvas_config, config_dict)
-        # Add GC content group if configured to show
-        if canvas_config.show_gc:
-            add_gc_content_group(canvas, record, record_offset_y,
-                                 record_offset_x, canvas_config, gc_config, config_dict)
-        if canvas_config.show_skew:
-            add_gc_skew_group(canvas, record, record_offset_y,
-                             record_offset_x, canvas_config, gc_config, config_dict)
     return canvas
 
 
@@ -368,18 +331,20 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
         
         if i < len(record_ids) - 1:
             height_below_axis = canvas_config.cds_padding + canvas_config.gc_padding + canvas_config.skew_padding
-            vertical_padding = canvas_config.vertical_padding
             next_record_id = record_ids[i+1]
             next_label_height = record_label_heights.get(next_record_id, 0)
-            inter_record_space = height_below_axis + vertical_padding + next_label_height + canvas_config.comparison_height
-            
+            if next_label_height > canvas_config.comparison_height:
+                inter_record_space = height_below_axis + next_label_height + canvas_config.cds_padding
+            else:
+                inter_record_space = height_below_axis + canvas_config.comparison_height + canvas_config.cds_padding
             current_y += inter_record_space
+        
 
     final_height = current_y + canvas_config.cds_height + canvas_config.gc_padding + canvas_config.skew_padding + canvas_config.original_vertical_offset + canvas_config.vertical_padding
     canvas_config.total_height = int(final_height)
 
     features_present = check_feature_presence(records, feature_config.selected_features_set)
-    legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present)
+    legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present, blast_config, has_blast)
     legend_config = legend_config.recalculate_legend_dimensions(legend_table)
     padding = canvas_config.canvas_padding * 2  
     required_legend_height = legend_config.legend_height + padding
@@ -389,14 +354,12 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
         canvas_config.total_height = int(required_legend_height)
         vertical_shift = height_difference / 2
         record_offsets = [offset + vertical_shift for offset in record_offsets]
-        if has_blast and 'comparison_offsets' in locals():
-            comparison_offsets = [offset + vertical_shift for offset in comparison_offsets]
 
     canvas_config.recalculate_canvas_dimensions(legend_config)
     canvas: Drawing = canvas_config.create_svg_canvas()
 
     if canvas_config.legend_position != 'none':
-        canvas = add_legends_on_linear_canvas(canvas, canvas_config, legend_config, legend_table)
+        canvas = add_legends_on_linear_canvas(canvas, config_dict, canvas_config, legend_config, legend_table)
     canvas = add_length_bar_on_linear_canvas(canvas, canvas_config, config_dict)
     
     if blast_files:
@@ -405,14 +368,11 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
         actual_comparison_heights = []
         for i in range(len(records) - 1):
             height_below_axis = canvas_config.cds_padding + canvas_config.gc_padding + canvas_config.skew_padding
-            
-            ribbon_start_y = record_offsets[i] + height_below_axis
+            ribbon_start_y =  record_offsets[i] + height_below_axis
             comparison_offsets.append(ribbon_start_y)
-            
             next_record_id = records[i+1].id
             next_label_height = record_label_heights.get(next_record_id, 0)
             ribbon_end_y = record_offsets[i+1] - canvas_config.cds_padding
-
             height = ribbon_end_y - ribbon_start_y
             actual_comparison_heights.append(height)
 
@@ -421,6 +381,7 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
             comparison_offsets, actual_comparison_heights
         )
 
+    
     for count, record in enumerate(records, start=1):
         offset_y = record_offsets[count-1]
         offset_x = (canvas_config.alignment_width *
