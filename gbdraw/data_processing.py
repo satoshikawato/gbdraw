@@ -772,6 +772,7 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
        feature_track_positions[feature_id] = track_y_position
    
    # Second pass: Process labels
+   max_bbox_height = 0
    for feature_id, feature_object in reversed(list(feature_dict.items())):
        feature_label_text = get_label_text(feature_object, label_filtering)
        feature_track_id = feature_object.feature_track_id
@@ -781,7 +782,8 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
        # Calculate label dimensions and positions
        bbox_width_px, bbox_height_px = calculate_bbox_dimensions(
            feature_label_text, font_family, font_size, interval)
-       
+       if bbox_height_px > max_bbox_height:
+            max_bbox_height = bbox_height_px
        # Find the longest segment and its middle point
        longest_segment_length = 0
        label_middle = 0
@@ -856,10 +858,7 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
            embedded_labels.append(label)
    
    # Adjust track height based on strandedness
-   if strandedness:
-       track_height = 0.275 * cds_height  # Reduced height for separate strands mode
-   else:
-       track_height = 0.50 * cds_height  # Original height for default mode
+   track_height = max_bbox_height * 1.1  # Reduced height for separate strands mode
    for track_id in sorted(track_dict.keys()):
        if track_id == "track_0":
            continue

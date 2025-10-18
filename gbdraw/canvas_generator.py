@@ -239,11 +239,11 @@ class LinearCanvasConfigurator:
         This method adjusts the cds_height and cds_padding attributes.
         """
         if self.strandedness:
-            self.cds_height: float = self.default_cds_height
-            self.cds_padding: float = 1 * self.cds_height
+            self.cds_height: float = 1 *  self.default_cds_height
+            self.cds_padding: float = 0.6 * self.cds_height + 5
         else:
-            self.cds_height: float = 0.5 * self.default_cds_height
-            self.cds_padding: float = 1 * self.cds_height
+            self.cds_height: float =  0.5 * self.default_cds_height
+            self.cds_padding: float = 0.6 * self.cds_height + 5
     def set_arrow_length(self) -> None:
         """
         Sets the length of the arrow used in the representation based on the longest genome.

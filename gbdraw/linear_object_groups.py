@@ -670,8 +670,6 @@ class PairWiseMatchGroup:
         subject_end_y: float
         identity_percent = float(row.identity)
         factor = (identity_percent - self.min_identity) / (100 - self.min_identity)
-        print(factor)
-        # 色を補間
         dynamic_fill_color = interpolate_color(self.match_min_color, self.match_max_color, factor)
         query_start, query_end, subject_start, subject_end = self.calculate_offsets(row)
         query_start_x, query_start_y, query_end_x, query_end_y = self.normalize_positions(
