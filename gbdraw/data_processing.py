@@ -135,7 +135,7 @@ def sliding_window(seq: str, window: int, step: int) -> Generator[tuple[int, str
             out_seq = seq[start:end]
         yield start, out_seq
 
-def prepare_legend_table(gc_config, skew_config, feature_config, features_present):
+def prepare_legend_table(gc_config, skew_config, feature_config, features_present, blast_config=None, has_blast=False):
     legend_table = dict()
     color_table: Optional[DataFrame] = feature_config.color_table
     default_colors: DataFrame = feature_config.default_colors
@@ -165,32 +165,61 @@ def prepare_legend_table(gc_config, skew_config, feature_config, features_presen
             for entry in feature_specific_colors[selected_feature]:
                 specific_caption = entry[0]
                 specific_fill_color = entry[1]
-                legend_table[specific_caption] = (block_stroke_color, block_stroke_width, specific_fill_color)
+                legend_table[specific_caption] = {
+                                    'type': 'solid', 
+                                    'fill': specific_fill_color, 
+                                    'stroke': block_stroke_color, 
+                                    'width': block_stroke_width
+                                }
             if selected_feature == 'CDS':
                 new_selected_key_name = 'other proteins'
             else:
                 new_selected_key_name = f'other {selected_feature}s'
             feature_fill_color = default_colors[default_colors['feature_type'] == selected_feature]['color'].values[0]
-            legend_table[new_selected_key_name] = (block_stroke_color, block_stroke_width, feature_fill_color)
+            legend_table[new_selected_key_name] = {
+                            'type': 'solid',
+                            'fill': feature_fill_color,
+                            'stroke': block_stroke_color,
+                            'width': block_stroke_width
+                        }
         else:
             matching_rows = default_colors[default_colors['feature_type'] == selected_feature]
             if not matching_rows.empty:
                 feature_fill_color = default_colors[default_colors['feature_type'] == selected_feature]['color'].values[0]
             else:
                feature_fill_color = default_colors[default_colors['feature_type'] == "default"]['color'].values[0]
-            legend_table[selected_feature] = (block_stroke_color, block_stroke_width, feature_fill_color)        
+            legend_table[selected_feature] = {
+                            'type': 'solid',
+                            'fill': feature_fill_color,
+                            'stroke': block_stroke_color,
+                            'width': block_stroke_width
+                        }    
     if show_gc:
         if gc_high_fill_color == gc_low_fill_color:
-            legend_table[f'{dinucleotide} content'] = (gc_stroke_color, gc_stroke_width, gc_high_fill_color)
+            legend_table[f'{dinucleotide} content'] = {
+                            'type': 'solid',
+                            'fill': gc_high_fill_color,
+                            'stroke': gc_stroke_color,
+                            'width': gc_stroke_width
+                        }
         else:
-            legend_table[f'{dinucleotide} content (+)'] = (gc_stroke_color, gc_stroke_width, gc_high_fill_color)
-            legend_table[f'{dinucleotide} content (-)'] = (gc_stroke_color, gc_stroke_width, gc_low_fill_color)
+            legend_table[f'{dinucleotide} content (+)'] = {'type': 'solid', 'fill': gc_high_fill_color, 'stroke': gc_stroke_color, 'width': gc_stroke_width}
+            legend_table[f'{dinucleotide} content (-)'] = {'type': 'solid', 'fill': gc_low_fill_color, 'stroke': gc_stroke_color, 'width': gc_stroke_width}
     if show_skew:
         if skew_high_fill_color == skew_low_fill_color:
-            legend_table[f'{dinucleotide} skew'] = (skew_stroke_color, skew_stroke_width, skew_high_fill_color)
+            legend_table[f'{dinucleotide} skew'] = {'type': 'solid', 'fill': skew_high_fill_color, 'stroke': skew_stroke_color, 'width': skew_stroke_width}
         else:
-            legend_table[f'{dinucleotide} skew (+)'] = (skew_stroke_color, skew_stroke_width, skew_high_fill_color)
-            legend_table[f'{dinucleotide} skew (-)'] = (skew_stroke_color, skew_stroke_width, skew_low_fill_color)
+            legend_table[f'{dinucleotide} skew (+)'] = {'type': 'solid', 'fill': skew_high_fill_color, 'stroke': skew_stroke_color, 'width': skew_stroke_width}
+            legend_table[f'{dinucleotide} skew (-)'] = {'type': 'solid', 'fill': skew_low_fill_color, 'stroke': skew_stroke_color, 'width': skew_stroke_width}
+    if has_blast and blast_config:
+        legend_table['Pairwise match identity'] = {
+            'type': 'gradient',
+            'min_color': blast_config.min_color,
+            'max_color': blast_config.max_color,
+            'stroke': 'none',
+            'width': 0,
+            'min_value': blast_config.identity
+        }
     return legend_table
 
 def y_overlap(label1, label2, total_len, minimum_margin):

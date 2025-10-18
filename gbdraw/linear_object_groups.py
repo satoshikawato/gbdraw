@@ -10,6 +10,8 @@ from svgwrite.container import Group
 from svgwrite.path import Path
 from svgwrite.shapes import Line
 from svgwrite.text import Text
+from svgwrite.gradients import LinearGradient
+from .canvas_generator import LinearCanvasConfigurator
 from .canvas_generator import LinearCanvasConfigurator
 from .linear_feature_drawer import FeatureDrawer, GcContentDrawer, SkewDrawer, LabelDrawer
 from .data_processing import skew_df, prepare_label_list_linear
@@ -771,37 +773,92 @@ class LegendGroup:
         self.legend_config = legend_config
         self.legend_table = legend_table
         self.font_family: str = self.config_dict['objects']['text']['font_family']
+        self.font_size: float = self.legend_config.font_size
+        self.rect_size: float = self.legend_config.color_rect_size
+        self.line_height: float = (24/14) * self.rect_size
+        self.text_x_offset: float = (22/14) * self.rect_size
         self.add_elements_to_group()
 
     def create_rectangle_path_for_legend(self) -> str:
-        # Normalize start and end positions
-        normalized_start: float = 0
-        normalized_end: float = 16
-        # Construct the rectangle path
-        start_y_top: float
-        start_y_bottom: float
-        end_y_top: float
-        end_y_bottom: float
-        start_y_top, start_y_bottom = -8, 8
-        end_y_top, end_y_bottom = -8, 8
-        rectangle_path: str = f"M {normalized_start},{start_y_top} L {normalized_end},{end_y_top} " f"L {normalized_end},{end_y_bottom} L {normalized_start},{start_y_bottom} z"
-        return rectangle_path
+        start_y_top = -self.rect_size / 2
+        start_y_bottom = self.rect_size / 2
+        return f"M 0,{start_y_top} L {self.rect_size},{start_y_top} L {self.rect_size},{start_y_bottom} L 0,{start_y_bottom} z"
+
     def add_elements_to_group(self):
-        count = 0
+        y_offset = self.rect_size / 2 
         path_desc = self.create_rectangle_path_for_legend()
         font = self.font_family
-        for key in self.legend_table.keys():
-            rect_path = Path(
-                d=path_desc,
-                fill=self.legend_table[key][2],
-                stroke=self.legend_table[key][0],
-                stroke_width=self.legend_table[key][1])
-            rect_path.translate(0, count * 25)
-            self.legend_group.add(rect_path)
-            legend_path = generate_text_path(key,0, 0, 0, 16, "normal", font, dominant_baseline='central', text_anchor="start")
-            legend_path.translate(23, count * 25)
-            self.legend_group.add(legend_path)
-            count += 1
+
+        for key, properties in self.legend_table.items():
+            if properties['type'] == 'solid':
+                rect_path = Path(
+                    d=path_desc,
+                    fill=properties['fill'],
+                    stroke=properties['stroke'],
+                    stroke_width=properties['width'])
+                rect_path.translate(0, y_offset)
+                self.legend_group.add(rect_path)
+
+                legend_path = generate_text_path(
+                    key, 0, 0, 0, self.font_size, "normal", font, 
+                    dominant_baseline='central', text_anchor="start"
+                )
+                legend_path.translate(self.text_x_offset, y_offset) 
+                self.legend_group.add(legend_path)
+                
+                y_offset += self.line_height 
+
+            elif properties['type'] == 'gradient':
+                gradient_id = f"blast_legend_grad_{abs(hash(properties['min_color'] + properties['max_color']))}"
+                
+                gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
+                gradient.add_stop_color(offset="0%", color=properties['min_color'])
+                gradient.add_stop_color(offset="100%", color=properties['max_color'])
+                self.legend_group.add(gradient)
+
+                title_path = generate_text_path(
+                    key, 0, 0, 0, self.font_size, "normal", font, 
+                    dominant_baseline='hanging', text_anchor="start"
+                )
+                title_path.translate(self.text_x_offset, y_offset) 
+                self.legend_group.add(title_path)
+                
+                y_offset += self.line_height 
+
+                grad_bar_x_start = 0 
+                grad_bar_width = self.legend_config.legend_width - self.text_x_offset
+                
+                grad_rect_path_desc = f"M 0,{-self.rect_size / 2} L {grad_bar_width},{-self.rect_size / 2} L {grad_bar_width},{self.rect_size / 2} L 0,{self.rect_size / 2} z"
+                grad_rect = Path(
+                    d=grad_rect_path_desc,
+                    fill=f"url(#{gradient_id})",
+                    stroke=properties['stroke'],
+                    stroke_width=properties['width']
+                )
+                grad_rect.translate(grad_bar_x_start, y_offset) 
+                self.legend_group.add(grad_rect)
+
+                min_identity = properties.get('min_value', 0)
+                if min_identity == int(min_identity):
+                    min_label_text = f"{int(min_identity)}%"
+                else:
+                    min_label_text = f"{min_identity}%"
+                label_0 = generate_text_path(
+                    min_label_text, 0, 0, 0, self.font_size, "normal", font,
+                    dominant_baseline='hanging', text_anchor="start"
+                 )
+                label_0.translate(grad_bar_x_start, y_offset + self.rect_size / 2 + 2) 
+                self.legend_group.add(label_0)
+                
+                label_100 = generate_text_path(
+                    "100%", 0, 0, 0, self.font_size, "normal", font,
+                    dominant_baseline='hanging', text_anchor="end"
+                )
+                label_100.translate(grad_bar_x_start + grad_bar_width, y_offset + self.rect_size / 2 + 2) 
+                self.legend_group.add(label_100)
+
+                y_offset += self.line_height 
+                
         return self.legend_group
     def get_group(self) -> Group:
         """

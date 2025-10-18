@@ -9,8 +9,7 @@ from svgwrite import Drawing
 from svgwrite.container import Group
 from Bio.SeqRecord import SeqRecord
 from .canvas_generator import LinearCanvasConfigurator
-from .circular_object_groups import LegendGroup
-from .linear_object_groups import SeqRecordGroup, DefinitionGroup, GcContentGroup, GcSkewGroup, PairWiseMatchGroup, LengthBarGroup
+from .linear_object_groups import SeqRecordGroup, DefinitionGroup, GcContentGroup, GcSkewGroup, PairWiseMatchGroup, LengthBarGroup, LegendGroup
 from .file_processing import load_comparisons, save_figure
 from .object_configurators import LegendDrawingConfigurator, GcContentConfigurator, GcSkewConfigurator, FeatureDrawingConfigurator
 from .data_processing import prepare_legend_table
@@ -300,8 +299,8 @@ def add_length_bar_on_linear_canvas(canvas: Drawing, canvas_config: LinearCanvas
     canvas.add(length_bar_group)
     return canvas
 
-def add_legends_on_linear_canvas(canvas: Drawing, canvas_config: LinearCanvasConfigurator, legend_config, legend_table):
-    legend_group: Group = LegendGroup(canvas_config, legend_config, legend_table).get_group()
+def add_legends_on_linear_canvas(canvas: Drawing, config_dict, canvas_config: LinearCanvasConfigurator, legend_config, legend_table):
+    legend_group: Group = LegendGroup(config_dict, canvas_config, legend_config, legend_table).get_group()
     offset_x = canvas_config.legend_offset_x
     offset_y = canvas_config.legend_offset_y
     legend_group.translate(offset_x, offset_y) 
@@ -379,7 +378,7 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     canvas_config.total_height = int(final_height)
 
     features_present = check_feature_presence(records, feature_config.selected_features_set)
-    legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present)
+    legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present, blast_config, has_blast)
     legend_config = legend_config.recalculate_legend_dimensions(legend_table)
     padding = canvas_config.canvas_padding * 2  
     required_legend_height = legend_config.legend_height + padding
@@ -396,7 +395,7 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     canvas: Drawing = canvas_config.create_svg_canvas()
 
     if canvas_config.legend_position != 'none':
-        canvas = add_legends_on_linear_canvas(canvas, canvas_config, legend_config, legend_table)
+        canvas = add_legends_on_linear_canvas(canvas, config_dict, canvas_config, legend_config, legend_table)
     canvas = add_length_bar_on_linear_canvas(canvas, canvas_config, config_dict)
     
     if blast_files:
