@@ -726,25 +726,219 @@
 
 
 ## forest_canopy
+
+<details><summary>Expand to see the color codes</summary>
+
+
+| feature type | color code |
+| ------ | ------- |
+| CDS | #a3be8c |
+| rRNA | #88c0d0 |
+| tRNA | #edbc58 |
+| tmRNA | #e18dd7 |
+| repeat_region | #e5e5e5 |
+| misc_feature | #e5e5e5 |
+| default | #e5e5e5 |
+| skew_high | #4c566a |
+| skew_low | #a1a8a4 |
+| gc_content | #70a2df |
+| pairwise_match | #d8dee9 |
+| pairwise_match_min | #d8dee9 |
+| pairwise_match_max | #88c0d0 |
+
+
+</details>
+
+
+
+
+### Circular mode
 ![forest_canopy](./AP027078_tuckin_separate_strands_forest_canopy.svg)
+### Linear mode
+![hepatoplasmataceae_forest_canopy.svg](./hepatoplasmataceae_forest_canopy.svg)
 
 ## forest_morning
+
+<details><summary>Expand to see the color codes</summary>
+
+
+| feature type | color code |
+| ------ | ------- |
+| CDS | #48a787 |
+| rRNA | #eee8a5 |
+| tRNA | #e47460 |
+| tmRNA | #f4e4d7 |
+| repeat_region | #f0f0f0 |
+| misc_feature | #f0f0f0 |
+| default | #f0f0f0 |
+| skew_high | #f4c63f |
+| skew_low | #e9940b |
+| gc_content | #5ea3d6 |
+| pairwise_match | #a5bfa1 |
+| pairwise_match_min | #f0f0f0 |
+| pairwise_match_max | #a5bfa1 |
+
+
+</details>
+
+
+### Circular mode
 ![forest_morning](./AP027078_tuckin_separate_strands_forest_morning.svg)
+### Linear mode
+![hepatoplasmataceae_forest_morning.svg](./hepatoplasmataceae_forest_morning.svg)
 
 ## fugaku
+
+<details><summary>Expand to see the color codes</summary>
+
+
+| feature type | color code |
+| ------ | ------- |
+| CDS | #5f91d3 |
+| rRNA | #cddbe5 |
+| tRNA | #6593a6 |
+| tmRNA | #a7d2e4 |
+| repeat_region | #e4e4e4 |
+| misc_feature | #e4e4e4 |
+| default | #e4e4e4 |
+| skew_high | #6ca2d8 |
+| skew_low | #b0ced7 |
+| gc_content | #a9d4ee |
+| pairwise_match | #a1b9d1 |
+| pairwise_match_min | #e4e4e4 |
+| pairwise_match_max | #a1b9d1 |
+
+
+</details>
+
+### Circular mode
 ![fugaku](./AP027078_tuckin_separate_strands_fugaku.svg)
+### Linear mode
+![hepatoplasmataceae_fugaku.svg](./hepatoplasmataceae_fugaku.svg)
+
+
 
 ## galaxy
+
+<details><summary>Expand to see the color codes</summary>
+
+
+| feature type | color code |
+| ------ | ------- |
+| CDS | #44506e |
+| rRNA | #adbccc |
+| tRNA | #6b7b8b |
+| tmRNA | #abc0d5 |
+| repeat_region | #f0f0f0 |
+| misc_feature | #f0f0f0 |
+| default | #f0f0f0 |
+| skew_high | #2a3132 |
+| skew_low | #90b1bb |
+| gc_content | #9baeb8 |
+| pairwise_match | #c2c2d6 |
+| pairwise_match_min | #f0f0f0 |
+| pairwise_match_max | #c2c2d6 |
+
+
+</details>
+
+
+### Circular mode
 ![galaxy](./AP027078_tuckin_separate_strands_galaxy.svg)
+### Linear mode
+![hepatoplasmataceae_galaxy.svg](./hepatoplasmataceae_galaxy.svg)
+
+
 
 ## hearbal_garden
+
+
+<details><summary>Expand to see the color codes</summary>
+
+
+| feature type | color code |
+| ------ | ------- |
+| CDS | #addc7f |
+| rRNA | #acb1e4 |
+| tRNA | #e6c03a |
+| tmRNA | #ec7de1 |
+| repeat_region | #dce1de |
+| misc_feature | #dce1de |
+| default | #dce1de |
+| skew_high | #daad62 |
+| skew_low | #88a989 |
+| gc_content | #cf99c0 |
+| pairwise_match | #cde0c9 |
+| pairwise_match_min | #fff2fc |
+| pairwise_match_max | #eb95ce |
+
+
+</details>
+
+
+### Circular mode
 ![hearbal_garden](./AP027078_tuckin_separate_strands_hearbal_garden.svg)
+### Linear mode
+![hepatoplasmataceae_hearbal_garden.svg](./hepatoplasmataceae_hearbal_garden.svg)
 
 ## kuroshio
+
+
+<details><summary>Expand to see the color codes</summary>
+
+
+| feature type | color code |
+| ------ | ------- |
+| CDS | #30609f |
+| rRNA | #99d984 |
+| tRNA | #e8b31d |
+| tmRNA | #bd5b80 |
+| repeat_region | #d3d3d3 |
+| misc_feature | #d3d3d3 |
+| default | #d3d3d3 |
+| skew_high | #aadee9 |
+| skew_low | #6c98bc |
+| gc_content | #8fadd1 |
+| pairwise_match | #bedde8 |
+| pairwise_match_min | #e8f9ff |
+| pairwise_match_max | #5a83b9 |
+
+
+</details>
+
+### Circular mode
 ![kuroshio](./AP027078_tuckin_separate_strands_kuroshio.svg)
+### Linear mode
+![hepatoplasmataceae_kuroshio.svg](./hepatoplasmataceae_kuroshio.svg)
 
 ## lavender_fields
+
+<details><summary>Expand to see the color codes</summary>
+
+
+| feature type | color code |
+| ------ | ------- |
+| CDS | #9892ed |
+| rRNA | #f1d15b |
+| tRNA | #56c268 |
+| tmRNA | #ba4ab4 |
+| repeat_region | #d8d8d8 |
+| misc_feature | #d8d8d8 |
+| default | #d8d8d8 |
+| skew_high | #a4d8a7 |
+| skew_low | #5b9e60 |
+| gc_content | #7daa76 |
+| pairwise_match | #ba55d3 |
+| pairwise_match_min | #f7f0ff |
+| pairwise_match_max | #d8ade2 |
+
+
+</details>
+
+### Circular mode
 ![lavender_fields](./AP027078_tuckin_separate_strands_lavender_fields.svg)
+### Linear mode
+![hepatoplasmataceae_lavender_fields.svg](./hepatoplasmataceae_lavender_fields.svg)
 
 ## majestic_sunrise
 ![majestic_sunrise](./AP027078_tuckin_separate_strands_majestic_sunrise.svg)
