@@ -15,6 +15,8 @@ skew_high = "#6dded3"
 skew_low = "#ad72e3"
 gc_content = "#a1a1a1"
 pairwise_match = "#d3d3d3"
+pairwise_match_min = "#FFE7E7"
+pairwise_match_max = "#FF7272"
 
 [mint]
 CDS = "#9cd9cf"
@@ -29,6 +31,8 @@ skew_high = "#80b1d3"
 skew_low = "#c7dfef"
 gc_content = "#a1a1a1"
 pairwise_match = "#d3d3d3"
+pairwise_match_min = "#e0f2f1"
+pairwise_match_max = "#6ca5ce"
 
 [orange]
 CDS = "#fba651"
@@ -43,6 +47,9 @@ skew_high = "#87b5d6"
 skew_low = "#cbe1f1"
 gc_content = "#a1a1a1"
 pairwise_match = "#d3d3d3"
+pairwise_match_min = "#e0f2f1"
+pairwise_match_max = "#6ca5ce"
+
 
 [soil]
 CDS = "#c6a76c"
@@ -57,6 +64,8 @@ skew_high = "#80b1d3"
 skew_low = "#c9e0f0"
 gc_content = "#a1a1a1"
 pairwise_match = "#d3d3d3"
+pairwise_match_min = "#f1ebe6"
+pairwise_match_max = "#9c9288"
 
 [spring]
 CDS = "#dabcff"
@@ -71,6 +80,8 @@ skew_high = "#8dd3c7"
 skew_low = "#d1ebe6"
 gc_content = "#a1a1a1"
 pairwise_match = "#d3d3d3"
+pairwise_match_min = "#e0ebfc"
+pairwise_match_max = "#82acd3"
 
 [ajisai]
 CDS = "#84b9ec"
@@ -84,6 +95,8 @@ skew_high = "#f6a8f1"
 skew_low = "#bd96df"
 gc_content = "#8daf38"
 pairwise_match = "#cfdcf0"
+pairwise_match_min = "#f0f8e7"
+pairwise_match_max = "#86c293"
 
 [alpine_retreat]
 CDS = "#2b4865"
@@ -97,6 +110,8 @@ skew_high = "#1d3557"
 skew_low = "#a8dadc"
 gc_content = "#457b9d"
 pairwise_match = "#f4a261"
+pairwise_match_min = "#fdf0e9"
+pairwise_match_max = "#e9967a"
 
 [arctic]
 CDS = "#5a5a66"
@@ -110,6 +125,8 @@ skew_high = "#2d3e50"
 skew_low = "#a0b9d0"
 gc_content = "#3d7199"
 pairwise_match = "#b2c4d6"
+pairwise_match_min = "#eaf0f5"
+pairwise_match_max = "#b2c4d6"
 
 [arctic_dawn]
 CDS = "#bdd4e7"
@@ -123,6 +140,8 @@ skew_high = "#3c5379"
 skew_low = "#a1b8d6"
 gc_content = "#738aae"
 pairwise_match = "#dce1eb"
+pairwise_match_min = "#ffede3"
+pairwise_match_max = "#f0a980"
 
 [autumn]
 CDS = "#f2994a"
@@ -136,6 +155,8 @@ skew_high = "#333333"
 skew_low = "#828282"
 gc_content = "#27ae60"
 pairwise_match = "#f2c94c"
+pairwise_match_min = "#e0fbff"
+pairwise_match_max = "#7ac0db"
 
 [autumn_harvest]
 CDS = "#8b4513"
@@ -149,6 +170,8 @@ skew_high = "#a0522d"
 skew_low = "#deb887"
 gc_content = "#cd853f"
 pairwise_match = "#e9967a"
+pairwise_match_min = "#ebf5df"
+pairwise_match_max = "#e2b85c"
 
 [berry_field]
 CDS = "#6b2d5c"
@@ -163,6 +186,8 @@ skew_high = "#331832"
 skew_low = "#966b9d"
 gc_content = "#503b31"
 pairwise_match = "#c4dbc7"
+pairwise_match_min = "#e8fced"
+pairwise_match_max = "#93b98f"
 
 [citrine_verdure]
 CDS = "#94df5f"
@@ -176,6 +201,9 @@ skew_high = "#394a2f"
 skew_low = "#a5b893"
 gc_content = "#afd73f"
 pairwise_match = "#b9cc90"
+pairwise_match_min = "#eaf0f5"
+pairwise_match_max = "#b2c4d6"
+
 
 [citrus_grove]
 CDS = "#ffc13b"
@@ -189,6 +217,8 @@ skew_high = "#324a1f"
 skew_low = "#d3e4cd"
 gc_content = "#a3be8c"
 pairwise_match = "#ebf5df"
+pairwise_match_min = "#dfffe4"
+pairwise_match_max = "#88af84"
 
 [deep_saturates]
 CDS = "#2f67a0"
@@ -202,6 +232,8 @@ skew_high = "#e0d951"
 skew_low = "#7675cb"
 gc_content = "#5ba277"
 pairwise_match = "#afafaf"
+pairwise_match_min = "#FFE7E7"
+pairwise_match_max = "#FF7272"
 
 [desert_mirage]
 CDS = "#e3ac9d"
@@ -215,6 +247,8 @@ skew_high = "#a77e65"
 skew_low = "#cec2b2"
 gc_content = "#b39887"
 pairwise_match = "#f4e3d7"
+pairwise_match_min = "#e0f2f1"
+pairwise_match_max = "#6ca5ce"
 
 [dune]
 CDS = "#daac6e"
@@ -228,6 +262,8 @@ skew_high = "#b0adb3"
 skew_low = "#6c6357"
 gc_content = "#99c7da"
 pairwise_match = "#cfdcf0"
+pairwise_match_min = "#cfdcf0"
+pairwise_match_max = "#99c7da"
 
 [earth]
 CDS = "#785e2f"
@@ -241,6 +277,8 @@ skew_high = "#56433d"
 skew_low = "#a79b82"
 gc_content = "#5d663d"
 pairwise_match = "#dcd7a0"
+pairwise_match_min = "#eaeaea"
+pairwise_match_max = "#dcd7a0"
 
 [earth_and_clay]
 CDS = "#b87333"
@@ -254,6 +292,8 @@ skew_high = "#734a12"
 skew_low = "#d2b48c"
 gc_content = "#a0522d"
 pairwise_match = "#e3dac9"
+pairwise_match_min = "#eef3fa"
+pairwise_match_max = "#a4bace"
 
 [earthtones]
 CDS = "#8a7f8d"
@@ -267,6 +307,8 @@ skew_high = "#5e5a4e"
 skew_low = "#776c61"
 gc_content = "#9d9280"
 pairwise_match = "#ada093"
+pairwise_match_min = "#e6e2cf"
+pairwise_match_max = "#ada093"
 
 [edelweiss]
 CDS = "#d5ebe1"
@@ -280,6 +322,8 @@ skew_high = "#6e7f6e"
 skew_low = "#b2c1b2"
 gc_content = "#c9d1c8"
 pairwise_match = "#f1f3f1"
+pairwise_match_min = "#f1f3f1"
+pairwise_match_max = "#8bb68b"
 
 [emerald_twilight]
 CDS = "#147517"
@@ -293,6 +337,8 @@ skew_high = "#022d01"
 skew_low = "#88a09e"
 gc_content = "#3f9f76"
 pairwise_match = "#a5c9a1"
+pairwise_match_min = "#f5f4e1"
+pairwise_match_max = "#d2d394"
 
 [forest]
 CDS = "#609d4b"
@@ -306,6 +352,8 @@ skew_high = "#97b8e9"
 skew_low = "#6d5435"
 gc_content = "#ad7557"
 pairwise_match = "#cfdcf0"
+pairwise_match_min = "#cfdcf0"
+pairwise_match_max = "#97b8e9"
 
 [forest_canopy]
 CDS = "#a3be8c"
@@ -319,6 +367,8 @@ skew_high = "#4c566a"
 skew_low = "#a1a8a4"
 gc_content = "#70a2df"
 pairwise_match = "#d8dee9"
+pairwise_match_min = "#d8dee9"
+pairwise_match_max = "#88c0d0"
 
 [forest_morning]
 CDS = "#48a787"
@@ -332,6 +382,8 @@ skew_high = "#f4c63f"
 skew_low = "#e9940b"
 gc_content = "#5ea3d6"
 pairwise_match = "#a5bfa1"
+pairwise_match_min = "#f0f0f0"
+pairwise_match_max = "#a5bfa1"
 
 [fugaku]
 CDS = "#5f91d3"
@@ -345,6 +397,8 @@ skew_high = "#6ca2d8"
 skew_low = "#b0ced7"
 gc_content = "#a9d4ee"
 pairwise_match = "#a1b9d1"
+pairwise_match_min = "#e4e4e4"
+pairwise_match_max = "#a1b9d1"
 
 [galaxy]
 CDS = "#44506e"
@@ -358,6 +412,8 @@ skew_high = "#2a3132"
 skew_low = "#90b1bb"
 gc_content = "#9baeb8"
 pairwise_match = "#c2c2d6"
+pairwise_match_min = "#f0f0f0"
+pairwise_match_max = "#c2c2d6"
 
 [hearbal_garden]
 CDS = "#addc7f"
@@ -371,6 +427,8 @@ skew_high = "#daad62"
 skew_low = "#88a989"
 gc_content = "#cf99c0"
 pairwise_match = "#cde0c9"
+pairwise_match_min = "#fff2fc"
+pairwise_match_max = "#eb95ce"
 
 [kuroshio]
 CDS = "#30609f"
@@ -384,6 +442,8 @@ skew_high = "#aadee9"
 skew_low = "#6c98bc"
 gc_content = "#8fadd1"
 pairwise_match = "#bedde8"
+pairwise_match_min = "#e8f9ff"
+pairwise_match_max = "#5a83b9"
 
 [lavender_fields]
 CDS = "#9892ed"
@@ -397,6 +457,8 @@ skew_high = "#a4d8a7"
 skew_low = "#5b9e60"
 gc_content = "#7daa76"
 pairwise_match = "#ba55d3"
+pairwise_match_min = "#f7f0ff"
+pairwise_match_max = "#d8ade2"
 
 [majestic_sunrise]
 CDS = "#5992d1"
@@ -410,6 +472,8 @@ skew_high = "#e5c853"
 skew_low = "#ef8926"
 gc_content = "#d54f36"
 pairwise_match = "#f08080"
+pairwise_match_min = "#fdf0e9"
+pairwise_match_max = "#f08080"
 
 [marine]
 CDS = "#0077be"
@@ -423,6 +487,8 @@ skew_high = "#334d5c"
 skew_low = "#88b3c7"
 gc_content = "#005c5f"
 pairwise_match = "#7db8da"
+pairwise_match_min = "#e0f7fa"
+pairwise_match_max = "#0077be"
 
 [matcha_whispers]
 CDS = "#cbe2b0"
@@ -436,6 +502,8 @@ skew_high = "#435f4c"
 skew_low = "#b0cc99"
 gc_content = "#506c42"
 pairwise_match = "#d9e2cd"
+pairwise_match_min = "#fbffe9"
+pairwise_match_max = "#e1e293"
 
 [metallic_sheen]
 CDS = "#cacfd0"
@@ -449,6 +517,8 @@ skew_high = "#8c7853"
 skew_low = "#e5e4e2"
 gc_content = "#aaaaaa"
 pairwise_match = "#ffd700"
+pairwise_match_min = "#e9eef8"
+pairwise_match_max = "#aeb7ca"
 
 [metropolitan_blues]
 CDS = "#274c77"
@@ -462,6 +532,8 @@ skew_high = "#102a43"
 skew_low = "#8d93ab"
 gc_content = "#2c699a"
 pairwise_match = "#e63946"
+pairwise_match_min = "#eef0f2"
+pairwise_match_max = "#e63946"
 
 [misty_mountains]
 CDS = "#708090"
@@ -475,12 +547,14 @@ skew_high = "#2f4f4f"
 skew_low = "#a9a9a9"
 gc_content = "#696969"
 pairwise_match = "#c0c0c0"
+pairwise_match_min = "#e3f4fa"
+pairwise_match_max = "#9bbd91"
 
 [oceanic_voyage]
 CDS = "#1a659e"
 rRNA = "#a2d2ff"
 tRNA = "#ffb91a"
-tmRNA ="#92e59f"
+tmRNA = "#92e59f"
 repeat_region = "#e8e8e8"
 misc_feature = "#e8e8e8"
 default = "#e8e8e8"
@@ -488,6 +562,8 @@ skew_high = "#005377"
 skew_low = "#7cb4b8"
 gc_content = "#ff9770"
 pairwise_match = "#ffcdb2"
+pairwise_match_min = "#ffcdb2"
+pairwise_match_max = "#ff9770"
 
 [orchid]
 CDS = "#c25792"
@@ -501,6 +577,8 @@ skew_high = "#5c53a5"
 skew_low = "#f4bfe9"
 gc_content = "#569d6a"
 pairwise_match = "#ffe6f0"
+pairwise_match_min = "#fdeff5"
+pairwise_match_max = "#d87daf"
 
 [pbt]
 CDS = "#2c76f9"
@@ -514,6 +592,8 @@ skew_high = "#acd4f9"
 skew_low = "#035384"
 gc_content = "#fec514"
 pairwise_match = "#e4f1f5"
+pairwise_match_min = "#fbffe9"
+pairwise_match_max = "#e1e293"
 
 [pine_reflection]
 CDS = "#318058"
@@ -527,6 +607,8 @@ skew_high = "#1c2826"
 skew_low = "#97a89b"
 gc_content = "#567572"
 pairwise_match = "#bfc5bf"
+pairwise_match_min = "#e3ebe7"
+pairwise_match_max = "#bfc5bf"
 
 [psyche]
 CDS = "#ff4500"
@@ -540,6 +622,8 @@ skew_high = "#ba55d3"
 skew_low = "#ff69b4"
 gc_content = "#0000ff"
 pairwise_match = "#3cb371"
+pairwise_match_min = "#FFE7E7"
+pairwise_match_max = "#FF7272"
 
 [royal_gala]
 CDS = "#dc7078"
@@ -553,6 +637,8 @@ skew_high = "#eee5b2"
 skew_low = "#c7be22"
 gc_content = "#e4d761"
 pairwise_match = "#9932cc"
+pairwise_match_min = "#f0f0f0"
+pairwise_match_max = "#a5bfa1"
 
 [sakura]
 CDS = "#e1cdff"
@@ -566,6 +652,8 @@ skew_high = "#d3b2bd"
 skew_low = "#91d378"
 gc_content = "#c8e16e"
 pairwise_match = "#fbf098"
+pairwise_match_min = "#e0f2f1"
+pairwise_match_max = "#6ca5ce"
 
 [savannah]
 CDS = "#e9c77b"
@@ -579,6 +667,8 @@ skew_high = "#746b50"
 skew_low = "#bbcdb4"
 gc_content = "#b4a170"
 pairwise_match = "#f0e6c0"
+pairwise_match_min = "#f0f0f0"
+pairwise_match_max = "#a5bfa1"
 
 [seaside]
 CDS = "#9cb6e8"
@@ -592,6 +682,8 @@ skew_high = "#f1e8c0"
 skew_low = "#af9b67"
 gc_content = "#6fb3b8"
 pairwise_match = "#a4c3b2"
+pairwise_match_min = "#e8e8e8"
+pairwise_match_max = "#6fb3b8"
 
 [soft_pastels]
 CDS = "#fad2e1"
@@ -605,6 +697,8 @@ skew_high = "#f9e2ae"
 skew_low = "#b5d8eb"
 gc_content = "#fdd7aa"
 pairwise_match = "#e4c1f9"
+pairwise_match_min = "#e4c1f9"
+pairwise_match_max = "#a091d6"
 
 [sunset]
 CDS = "#ff9e15"
@@ -618,6 +712,8 @@ skew_high = "#663d00"
 skew_low = "#ffc68a"
 gc_content = "#ffc68a"
 pairwise_match = "#f4eda4"
+pairwise_match_min = "#FFE7E7"
+pairwise_match_max = "#FF7272"
 
 [sunset_desert]
 CDS = "#f4a261"
@@ -631,6 +727,8 @@ skew_high = "#264653"
 skew_low = "#e9c46a"
 gc_content = "#e76f51"
 pairwise_match = "#f2f2f2"
+pairwise_match_min = "#f2f2f2"
+pairwise_match_max = "#f4a261"
 
 [tropical]
 CDS = "#348781"
@@ -644,6 +742,8 @@ skew_high = "#2d5d34"
 skew_low = "#98d9b6"
 gc_content = "#f18d9e"
 pairwise_match = "#a6dcef"
+pairwise_match_min = "#a6dcef"
+pairwise_match_max = "#348781"
 
 [tropical_sunset]
 CDS = "#ffaf87"
@@ -657,6 +757,8 @@ skew_high = "#bf616a"
 skew_low = "#a3be8c"
 gc_content = "#88c0d0"
 pairwise_match = "#eceff4"
+pairwise_match_min = "#eceff4"
+pairwise_match_max = "#d08770"
 
 [urban]
 CDS = "#7a7fa1"
@@ -670,6 +772,8 @@ skew_high = "#8ebea0"
 skew_low = "#e9e594"
 gc_content = "#b0c7f0"
 pairwise_match = "#9a8f97"
+pairwise_match_min = "#f2e9e4"
+pairwise_match_max = "#9a8f97"
 
 [loess]
 CDS = "#d7b232"
@@ -683,6 +787,8 @@ skew_high = "#474747"
 skew_low = "#d19c7a"
 gc_content = "#828282"
 pairwise_match = "#e0e0e0"
+pairwise_match_min = "#e0e0e0"
+pairwise_match_max = "#d7b232"
 
 [vintage_postcard]
 CDS = "#a8a495"
@@ -696,6 +802,8 @@ skew_high = "#8c8a7f"
 skew_low = "#b2afa4"
 gc_content = "#d8d7cd"
 pairwise_match = "#efece0"
+pairwise_match_min = "#efece0"
+pairwise_match_max = "#a8a495"
 
 [volcano]
 CDS = "#e28b85"
@@ -709,6 +817,8 @@ skew_high = "#772403"
 skew_low = "#ffad60"
 gc_content = "#d13c31"
 pairwise_match = "#ffc1a8"
+pairwise_match_min = "#ffc1a8"
+pairwise_match_max = "#d13c31"
 
 [zen]
 CDS = "#a0a5a9"
@@ -723,3 +833,5 @@ skew_high = "#68776d"
 skew_low = "#d4d4d4"
 gc_content = "#87919e"
 pairwise_match = "#e8eff5"
+pairwise_match_min = "#e8eff5"
+pairwise_match_max = "#87919e"

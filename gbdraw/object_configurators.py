@@ -129,13 +129,15 @@ class BlastMatchConfigurator:
         self.bitscore: float = bitscore
         self.identity: float = identity
         self.sequence_length_dict: dict = sequence_length_dict
+        self.min_color: str = default_colors_df[default_colors_df['feature_type'] == 'pairwise_match_min']['color'].values[0]
+        self.max_color: str = default_colors_df[default_colors_df['feature_type'] == 'pairwise_match_max']['color'].values[0]
         self.fill_color: str =  default_colors_df[default_colors_df['feature_type'] == 'pairwise_match']['color'].values[0]
         self.fill_opacity: float = config_dict['objects']['blast_match']['fill_opacity']
         self.stroke_color: str = config_dict['objects']['blast_match']['stroke_color']
         self.stroke_width: float = config_dict['objects']['blast_match']['stroke_width']
 
 class LegendDrawingConfigurator:
-    def __init__(self, color_table, default_colors, selected_features_set, config_dict, gc_config, skew_config, feature_config, legend_table=None):
+    def __init__(self, color_table, default_colors, selected_features_set, config_dict, gc_config, skew_config, feature_config, legend_table=None, blast_config=None) -> None:
         self.color_table = color_table
         self.default_colors = default_colors
         self.selected_features_set = selected_features_set
@@ -145,6 +147,7 @@ class LegendDrawingConfigurator:
         self.gc_config = gc_config
         self.skew_config = skew_config
         self.feature_config = feature_config
+        self.blast_config = blast_config
         self.color_rect_size = 16 # move to config
         self.font_size: float = config_dict['objects']['legends']['font_size']
         self.font_weight: str = config_dict['objects']['legends']['font_weight']
@@ -166,5 +169,20 @@ class LegendDrawingConfigurator:
         x_margin = (22/14) * self.color_rect_size # move to config
         bbox_width_px, _ = self.calculate_bbox_dimensions(legend_table)
         self.legend_width = x_margin + bbox_width_px
-        self.legend_height = (self.color_rect_size + (len(legend_table.keys()) -1) * line_margin)
+        num_lines = 0
+        has_gradient = False
+        for key, properties in legend_table.items():
+            if properties.get('type') == 'gradient':
+                has_gradient = True
+            else:
+                num_lines += 1
+        
+        if has_gradient:
+            num_lines += 2 # グラデーションはタイトルとバーで2行分とみなす
+        
+        if num_lines > 0:
+            self.legend_height = (self.color_rect_size + (num_lines - 1) * line_margin)
+        else:
+            self.legend_height = 0
+        # self.legend_height = (self.color_rect_size + (len(legend_table.keys()) -1) * line_margin)
         return self

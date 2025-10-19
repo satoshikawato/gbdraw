@@ -337,19 +337,20 @@ class LegendGroup:
         font = self.font_family
         line_margin = (24/14) * self.color_rect_size
         x_margin = (22/14) * self.color_rect_size
-        for key in self.legend_table.keys():
-            rect_path = Path(
-                d=path_desc,
-                fill=self.legend_table[key][2],
-                stroke=self.legend_table[key][0],
-                stroke_width=self.legend_table[key][1])
-            rect_path.translate(0, count * line_margin)
-            self.legend_group.add(rect_path)
-            legend_path = generate_text_path(key,0, 0, 0, self.font_size, "normal", font, dominant_baseline='central', text_anchor="start")
-            legend_path.translate(x_margin, count * line_margin)
-            self.legend_group.add(legend_path)
-            count += 1
-
+        for key, properties in self.legend_table.items():
+            if properties['type'] == 'solid':
+                rect_path = Path(
+                    d=path_desc,
+                    fill=properties['fill'],
+                    stroke=properties['stroke'],
+                    stroke_width=properties['width']
+                )
+                rect_path.translate(0, count * line_margin)
+                self.legend_group.add(rect_path)
+                legend_path = generate_text_path(key,0, 0, 0, self.font_size, "normal", font, dominant_baseline='central', text_anchor="start")
+                legend_path.translate(x_margin, count * line_margin)
+                self.legend_group.add(legend_path)
+                count += 1
         return self.legend_group
     def get_group(self) -> Group:
         """

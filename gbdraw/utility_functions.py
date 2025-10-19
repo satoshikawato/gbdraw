@@ -14,8 +14,34 @@ from .find_font_files import get_text_bbox_size_pixels, get_font_dict
 from .feature_objects import FeatureObject, GeneObject, RepeatObject
 from .file_processing import read_filter_list_file 
 import functools 
+import math
 
 logger = logging.getLogger(__name__)
+
+
+def interpolate_color(color_min: str, color_max: str, factor: float) -> str:
+    """
+    Calculates an intermediate color between two hex colors.
+
+    Args:
+        color_min (str): The starting hex color string (e.g., "#RRGGBB").
+        color_max (str): The ending hex color string (e.g., "#RRGGBB").
+        factor (float): The interpolation factor, from 0.0 to 1.0.
+
+    Returns:
+        str: The calculated intermediate hex color string.
+    """
+    # Convert hex colors to RGB components
+    r_min, g_min, b_min = int(color_min[1:3], 16), int(color_min[3:5], 16), int(color_min[5:7], 16)
+    r_max, g_max, b_max = int(color_max[1:3], 16), int(color_max[3:5], 16), int(color_max[5:7], 16)
+
+    # Interpolate each RGB component
+    r = int(r_min + (r_max - r_min) * factor)
+    g = int(g_min + (g_max - g_min) * factor)
+    b = int(b_min + (b_max - b_min) * factor)
+
+    # Convert back to hex color string
+    return f"#{r:02x}{g:02x}{b:02x}"
 
 @functools.lru_cache(maxsize=4096)
 def calculate_bbox_dimensions(text, font_family, font_size, dpi):
@@ -202,7 +228,9 @@ def modify_config_dict(config_dict,
                        scale_stroke_color=None,
                        scale_stroke_width=None,
                        scale_font_size=None,
-                       scale_interval=None) -> dict:
+                       scale_interval=None,
+                       blast_color_min=None,
+                       blast_color_max=None)-> dict:
     # Mapping of parameter names to their paths in the config_dict
     label_font_size_circular_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['long']
     label_font_size_circular_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['short']
@@ -297,8 +325,9 @@ def modify_config_dict(config_dict,
         'scale_stroke_color': 'objects.scale.stroke_color',
         'scale_stroke_width': 'objects.scale.stroke_width',
         'scale_font_size': 'objects.scale.font_size',
-        'scale_interval': 'objects.scale.interval'
-        
+        'scale_interval': 'objects.scale.interval',
+        'blast_color_min': 'objects.blast_match.min_color',
+        'blast_color_max': 'objects.blast_match.max_color'
     }
     # Update the config_dict for each specified parameter
     for param, path in param_paths.items():
