@@ -801,9 +801,7 @@ class LegendGroup:
                     stroke_width=properties['width'])
                 rect_path.translate(0, y_offset)
                 feature_legend_group.add(rect_path)
-                # self.legend_group.add(rect_path)
                 bbox_width, _ = calculate_bbox_dimensions(key, self.font_family, self.font_size, self.dpi)
-                print(self.font_size, key, bbox_width)
                 max_bbox_width = max(max_bbox_width, bbox_width)
                 legend_path = generate_text_path(
                     key, 0, 0, 0, self.font_size, "normal", font, 
@@ -811,7 +809,6 @@ class LegendGroup:
                 )
                 legend_path.translate(self.text_x_offset, y_offset)
 
-                # self.legend_group.add(legend_path)
                 feature_legend_group.add(legend_path)
                 
                 y_offset += self.line_height 
@@ -829,7 +826,6 @@ class LegendGroup:
                     dominant_baseline='hanging', text_anchor="start"
                 )
                 title_path.translate(self.text_x_offset, y_offset) 
-                #self.legend_group.add(title_path)
                 pairwise_legend_group.add(title_path) 
                 y_offset += self.line_height 
 
@@ -844,7 +840,6 @@ class LegendGroup:
                     stroke_width=properties['width']
                 )
                 grad_rect.translate(grad_bar_x_start, y_offset) 
-                # self.legend_group.add(grad_rect)
                 pairwise_legend_group.add(grad_rect)
                 min_identity = properties.get('min_value', 0)
                 if min_identity == int(min_identity):
@@ -856,14 +851,12 @@ class LegendGroup:
                     dominant_baseline='hanging', text_anchor="start"
                  )
                 label_0.translate(grad_bar_x_start, y_offset + self.rect_size / 2 + 2) 
-                # self.legend_group.add(label_0)
                 pairwise_legend_group.add(label_0)
                 label_100 = generate_text_path(
                     "100%", 0, 0, 0, self.font_size, "normal", font,
                     dominant_baseline='hanging', text_anchor="end"
                 )
                 label_100.translate(grad_bar_x_start + grad_bar_width, y_offset + self.rect_size / 2 + 2) 
-                #self.legend_group.add(label_100)
                 pairwise_legend_group.add(label_100)
                 self.legend_group.add(pairwise_legend_group)
                 y_offset += self.line_height
