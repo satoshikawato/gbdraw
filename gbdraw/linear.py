@@ -50,12 +50,6 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         nargs='*')
     parser.add_argument(
-        '-i', '--input',
-        dest='gbk',  
-        help=argparse.SUPPRESS,
-        type=str,
-        nargs='*')
-    parser.add_argument(
         "--gff",
         metavar="GFF3_FILE",
         help="GFF3 file (instead of --gbk; --fasta is required)",
@@ -192,9 +186,9 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-f',
         '--format',
-        help='Comma-separated list of output file formats (default: png)',
+        help='Comma-separated list of output file formats (svg, png, pdf, eps, ps; default: svg).',
         type=str,
-        default="png")
+        default="svg")
     parser.add_argument(
         '-l',
         '--legend',

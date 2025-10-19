@@ -25,21 +25,17 @@ handler = logging.StreamHandler(sys.stdout)
 
 def _precalculate_definition_widths(records: list[SeqRecord], config_dict: dict) -> float:
     """
-    全レコードのDefinition幅を事前に計算し、その最大値を返す。
-    これにより、凡例とDefinitionが重ならないようにキャンバスのオフセットを決定できる。
+    Pre-calculates the maximum definition width among all records.
     """
     max_definition_width = 0
     if not records:
         return 0
 
     for record in records:
-        # DefinitionGroupをインスタンス化して幅を計算
         def_group = DefinitionGroup(record, config_dict)
         if def_group.definition_bounding_box_width > max_definition_width:
             max_definition_width = def_group.definition_bounding_box_width
-    
-    # 少しパディングを追加して見栄えを良くする
-    return max_definition_width + 10  # 10pxのパディング
+    return max_definition_width
 
 def _precalculate_label_dimensions(records: list[SeqRecord], feature_config: FeatureDrawingConfigurator, canvas_config: LinearCanvasConfigurator, config_dict: dict) -> tuple[float, dict, dict]:
     """Pre-calculates label placements for all records to determine the required canvas height."""

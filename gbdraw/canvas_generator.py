@@ -195,7 +195,7 @@ class LinearCanvasConfigurator:
         self.length_param = determine_length_parameter(self.longest_genome, self.length_threshold)
         self.default_cds_height: float = self.config_dict['canvas']['linear']['default_cds_height'][self.length_param]
         self.default_gc_height: float = self.config_dict['canvas']['linear']['default_gc_height']
-        self.dpi: int = self.config_dict['png_output']['dpi']
+        self.dpi: int = self.config_dict['canvas']['dpi']
         self.show_gc: bool = self.config_dict['canvas']['show_gc']
         self.show_skew: bool = self.config_dict['canvas']['show_skew']
         self.strandedness: bool = self.config_dict['canvas']['strandedness']
@@ -281,7 +281,7 @@ class LinearCanvasConfigurator:
             return legend_y
 
         padding = self.canvas_padding
-        legend_width_with_padding = legend_config.legend_width + 20
+        legend_width_with_padding = legend_config.legend_width + padding
 
         if self.legend_position == "right":
             self.horizontal_offset = padding + max_definition_width
