@@ -129,8 +129,8 @@ class BlastMatchConfigurator:
         self.bitscore: float = bitscore
         self.identity: float = identity
         self.sequence_length_dict: dict = sequence_length_dict
-        self.min_color: str = config_dict['objects']['blast_match']['min_color']
-        self.max_color: str = config_dict['objects']['blast_match']['max_color']
+        self.min_color: str = default_colors_df[default_colors_df['feature_type'] == 'pairwise_match_min']['color'].values[0]
+        self.max_color: str = default_colors_df[default_colors_df['feature_type'] == 'pairwise_match_max']['color'].values[0]
         self.fill_color: str =  default_colors_df[default_colors_df['feature_type'] == 'pairwise_match']['color'].values[0]
         self.fill_opacity: float = config_dict['objects']['blast_match']['fill_opacity']
         self.stroke_color: str = config_dict['objects']['blast_match']['stroke_color']
