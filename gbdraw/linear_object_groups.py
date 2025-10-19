@@ -803,12 +803,14 @@ class LegendGroup:
                 feature_legend_group.add(rect_path)
                 # self.legend_group.add(rect_path)
                 bbox_width, _ = calculate_bbox_dimensions(key, self.font_family, self.font_size, self.dpi)
+                print(self.font_size, key, bbox_width)
                 max_bbox_width = max(max_bbox_width, bbox_width)
                 legend_path = generate_text_path(
                     key, 0, 0, 0, self.font_size, "normal", font, 
                     dominant_baseline='central', text_anchor="start"
                 )
-                legend_path.translate(self.text_x_offset, y_offset) 
+                legend_path.translate(self.text_x_offset, y_offset)
+
                 # self.legend_group.add(legend_path)
                 feature_legend_group.add(legend_path)
                 
@@ -867,7 +869,7 @@ class LegendGroup:
                 y_offset += self.line_height
         if grad_bar_width > 0:
             feature_legend_width = self.text_x_offset + max_bbox_width
-            feature_legend_group.translate(grad_bar_width/2 - feature_legend_width/2, 0)
+            feature_legend_group.translate(grad_bar_width/2 - feature_legend_width/2 + self.text_x_offset, 0)
         self.legend_group.add(feature_legend_group)
 
         return self.legend_group
