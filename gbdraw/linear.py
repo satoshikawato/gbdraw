@@ -334,7 +334,7 @@ def linear_main(cmd_args) -> None:
         load_comparison = False
     palette: str = args.palette
     default_colors: Optional[DataFrame] = load_default_colors(
-        user_defined_default_colors, palette)
+        user_defined_default_colors, palette, load_comparison)
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 

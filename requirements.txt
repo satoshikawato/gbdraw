@@ -1,7 +1,6 @@
 streamlit>=1.25
 pandas>=2.0
 numpy>=1.23
-matplotlib>=3.7
 svgwrite>=1.4.3
 bcbio-gff>=0.7.1
 cairosvg
