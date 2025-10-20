@@ -448,13 +448,11 @@ def get_intron_coordinate(previous_exon: Tuple[str, str, str, int, int, bool], c
         elif intron_strand == "negative":
             intron_start_1: int = int(previous_exon_start) - 1
             intron_end_1: int = 0
-            print(intron_start_1, intron_end_1)
             intron_coordinate_1: Tuple[str, str, str, int, int, bool] = (
                 "line", intron_id, intron_strand, intron_start_1, intron_end_1, False)
             intron_parts.append(intron_coordinate_1)
             intron_start_2: int = genome_length
             intron_end_2: int = min(int(current_exon_end) + 1, genome_length)
-            print(intron_start_2, intron_end_2)
             intron_coordinate_2: Tuple[str, str, str, int, int, bool] = (
                 "line", intron_id, intron_strand, intron_start_2, intron_end_2, False)
             intron_parts.append(intron_coordinate_2)
