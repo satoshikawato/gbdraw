@@ -9,7 +9,7 @@
 
 | feature type | color code |
 | ------ | ------- |
-| CDS | #89d1fa |
+| CDS | #54bcf8 |
 | rRNA | #71ee7d |
 | tRNA | #e8b441 |
 | tmRNA | #ded44e |
