@@ -3,7 +3,7 @@
 title = "gbdraw color palettes"
 
 [default]
-CDS = "#89d1fa"
+CDS = "#54bcf8"
 rRNA = "#71ee7d"
 tRNA = "#e8b441"
 tmRNA = "#ded44e"
