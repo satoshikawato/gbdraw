@@ -772,6 +772,8 @@ class LegendGroup:
         self.rect_size: float = self.legend_config.color_rect_size
         self.line_height: float = (24/14) * self.rect_size
         self.text_x_offset: float = (22/14) * self.rect_size
+        self.num_of_columns = self.legend_config.num_of_columns
+        self.has_gradient = self.legend_config.has_gradient
         self.dpi: int = self.config_dict['canvas']['dpi']
         self.add_elements_to_group()
 
@@ -789,78 +791,157 @@ class LegendGroup:
         feature_legend_width = 0
         grad_bar_width = 0
         pairwise_legend_group = Group(id="pairwise_legend")
-        for key, properties in self.legend_table.items():
-            if properties['type'] == 'solid':
-                rect_path = Path(
-                    d=path_desc,
-                    fill=properties['fill'],
-                    stroke=properties['stroke'],
-                    stroke_width=properties['width'])
-                rect_path.translate(0, y_offset)
-                feature_legend_group.add(rect_path)
-                bbox_width, _ = calculate_bbox_dimensions(key, self.font_family, self.font_size, self.dpi)
-                max_bbox_width = max(max_bbox_width, bbox_width)
-                legend_path = generate_text_path(
-                    key, 0, 0, 0, self.font_size, "normal", font, 
-                    dominant_baseline='central', text_anchor="start"
-                )
-                legend_path.translate(self.text_x_offset, y_offset)
+        if self.num_of_columns > 1:
+            if self.has_gradient:
+                max_items_per_column = self.num_of_columns - 1
+            else:
+                max_items_per_column = self.num_of_columns
+            current_column = 0
+            current_x_offset = 0
+            for key, properties in self.legend_table.items():
+                if properties['type'] == 'solid':
+                    rect_path = Path(
+                        d=path_desc,
+                        fill=properties['fill'],
+                        stroke=properties['stroke'],
+                        stroke_width=properties['width'])
+                    rect_path.translate(current_x_offset, y_offset)
+                    feature_legend_group.add(rect_path)
+                    bbox_width, _ = calculate_bbox_dimensions(key, self.font_family, self.font_size, self.dpi)
+                    max_bbox_width = max(max_bbox_width, bbox_width)
+                    legend_path = generate_text_path(
+                        key, 0, 0, 0, self.font_size, "normal", font, 
+                        dominant_baseline='central', text_anchor="start"
+                    )
+                    legend_path.translate(current_x_offset, y_offset)
+                    feature_legend_group.add(legend_path)
+                    current_x_offset += 2* self.text_x_offset + bbox_width
+                    current_column += 1
+                    if current_column >= max_items_per_column:
+                        current_column = 0
+                        current_x_offset = 0
+                        y_offset += self.line_height
+                elif properties['type'] == 'gradient':
+                    gradient_id = f"blast_legend_grad_{abs(hash(properties['min_color'] + properties['max_color']))}"
+                    
+                    gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
+                    gradient.add_stop_color(offset="0%", color=properties['min_color'])
+                    gradient.add_stop_color(offset="100%", color=properties['max_color'])
+                    pairwise_legend_group.add(gradient)
+                    title_path = generate_text_path(
+                        key, 0, 0, 0, self.font_size, "normal", font, 
+                        dominant_baseline='hanging', text_anchor="start"
+                    )
+                    title_path.translate(self.text_x_offset, y_offset) 
+                    pairwise_legend_group.add(title_path) 
+                    y_offset += self.line_height 
 
-                feature_legend_group.add(legend_path)
-                
-                y_offset += self.line_height 
+                    grad_bar_x_start = 0 
+                    grad_bar_width = self.legend_config.legend_width - self.text_x_offset
+                    
+                    grad_rect_path_desc = f"M 0,{-self.rect_size / 2} L {grad_bar_width},{-self.rect_size / 2} L {grad_bar_width},{self.rect_size / 2} L 0,{self.rect_size / 2} z"
+                    grad_rect = Path(
+                        d=grad_rect_path_desc,
+                        fill=f"url(#{gradient_id})",
+                        stroke=properties['stroke'],
+                        stroke_width=properties['width']
+                    )
+                    grad_rect.translate(grad_bar_x_start, y_offset) 
+                    pairwise_legend_group.add(grad_rect)
+                    min_identity = properties.get('min_value', 0)
+                    if min_identity == int(min_identity):
+                        min_label_text = f"{int(min_identity)}%"
+                    else:
+                        min_label_text = f"{min_identity}%"
+                    label_0 = generate_text_path(
+                        min_label_text, 0, 0, 0, self.font_size, "normal", font,
+                        dominant_baseline='hanging', text_anchor="start"
+                     )
+                    label_0.translate(grad_bar_x_start, y_offset + self.rect_size / 2 + 2) 
+                    pairwise_legend_group.add(label_0)
+                    label_100 = generate_text_path(
+                        "100%", 0, 0, 0, self.font_size, "normal", font,
+                        dominant_baseline='hanging', text_anchor="end"
+                    )
+                    label_100.translate(grad_bar_x_start + grad_bar_width, y_offset + self.rect_size / 2 + 2) 
+                    pairwise_legend_group.add(label_100)
 
-            elif properties['type'] == 'gradient':
-                gradient_id = f"blast_legend_grad_{abs(hash(properties['min_color'] + properties['max_color']))}"
-                
-                gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
-                gradient.add_stop_color(offset="0%", color=properties['min_color'])
-                gradient.add_stop_color(offset="100%", color=properties['max_color'])
-                # self.legend_group.add(gradient)
-                pairwise_legend_group.add(gradient)
-                title_path = generate_text_path(
-                    key, 0, 0, 0, self.font_size, "normal", font, 
-                    dominant_baseline='hanging', text_anchor="start"
-                )
-                title_path.translate(self.text_x_offset, y_offset) 
-                pairwise_legend_group.add(title_path) 
-                y_offset += self.line_height 
 
-                grad_bar_x_start = 0 
-                grad_bar_width = self.legend_config.legend_width - self.text_x_offset
-                
-                grad_rect_path_desc = f"M 0,{-self.rect_size / 2} L {grad_bar_width},{-self.rect_size / 2} L {grad_bar_width},{self.rect_size / 2} L 0,{self.rect_size / 2} z"
-                grad_rect = Path(
-                    d=grad_rect_path_desc,
-                    fill=f"url(#{gradient_id})",
-                    stroke=properties['stroke'],
-                    stroke_width=properties['width']
-                )
-                grad_rect.translate(grad_bar_x_start, y_offset) 
-                pairwise_legend_group.add(grad_rect)
-                min_identity = properties.get('min_value', 0)
-                if min_identity == int(min_identity):
-                    min_label_text = f"{int(min_identity)}%"
-                else:
-                    min_label_text = f"{min_identity}%"
-                label_0 = generate_text_path(
-                    min_label_text, 0, 0, 0, self.font_size, "normal", font,
-                    dominant_baseline='hanging', text_anchor="start"
-                 )
-                label_0.translate(grad_bar_x_start, y_offset + self.rect_size / 2 + 2) 
-                pairwise_legend_group.add(label_0)
-                label_100 = generate_text_path(
-                    "100%", 0, 0, 0, self.font_size, "normal", font,
-                    dominant_baseline='hanging', text_anchor="end"
-                )
-                label_100.translate(grad_bar_x_start + grad_bar_width, y_offset + self.rect_size / 2 + 2) 
-                pairwise_legend_group.add(label_100)
-                self.legend_group.add(pairwise_legend_group)
-                y_offset += self.line_height
-        if grad_bar_width > 0:
-            feature_legend_width = self.text_x_offset + max_bbox_width
-            feature_legend_group.translate(grad_bar_width/2 - feature_legend_width/2 + self.text_x_offset, 0)
-        self.legend_group.add(feature_legend_group)
+
+                    self.legend_group.add(pairwise_legend_group)
+        else:
+            for key, properties in self.legend_table.items():
+                if properties['type'] == 'solid':
+                    rect_path = Path(
+                        d=path_desc,
+                        fill=properties['fill'],
+                        stroke=properties['stroke'],
+                        stroke_width=properties['width'])
+                    rect_path.translate(0, y_offset)
+                    feature_legend_group.add(rect_path)
+                    bbox_width, _ = calculate_bbox_dimensions(key, self.font_family, self.font_size, self.dpi)
+                    max_bbox_width = max(max_bbox_width, bbox_width)
+                    legend_path = generate_text_path(
+                        key, 0, 0, 0, self.font_size, "normal", font, 
+                        dominant_baseline='central', text_anchor="start"
+                    )
+                    legend_path.translate(self.text_x_offset, y_offset)
+
+                    feature_legend_group.add(legend_path)
+                    
+                    y_offset += self.line_height 
+
+                elif properties['type'] == 'gradient':
+                    gradient_id = f"blast_legend_grad_{abs(hash(properties['min_color'] + properties['max_color']))}"
+                    
+                    gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
+                    gradient.add_stop_color(offset="0%", color=properties['min_color'])
+                    gradient.add_stop_color(offset="100%", color=properties['max_color'])
+                    # self.legend_group.add(gradient)
+                    pairwise_legend_group.add(gradient)
+                    title_path = generate_text_path(
+                        key, 0, 0, 0, self.font_size, "normal", font, 
+                        dominant_baseline='hanging', text_anchor="start"
+                    )
+                    title_path.translate(self.text_x_offset, y_offset) 
+                    pairwise_legend_group.add(title_path) 
+                    y_offset += self.line_height 
+
+                    grad_bar_x_start = 0 
+                    grad_bar_width = self.legend_config.legend_width - self.text_x_offset
+                    
+                    grad_rect_path_desc = f"M 0,{-self.rect_size / 2} L {grad_bar_width},{-self.rect_size / 2} L {grad_bar_width},{self.rect_size / 2} L 0,{self.rect_size / 2} z"
+                    grad_rect = Path(
+                        d=grad_rect_path_desc,
+                        fill=f"url(#{gradient_id})",
+                        stroke=properties['stroke'],
+                        stroke_width=properties['width']
+                    )
+                    grad_rect.translate(grad_bar_x_start, y_offset) 
+                    pairwise_legend_group.add(grad_rect)
+                    min_identity = properties.get('min_value', 0)
+                    if min_identity == int(min_identity):
+                        min_label_text = f"{int(min_identity)}%"
+                    else:
+                        min_label_text = f"{min_identity}%"
+                    label_0 = generate_text_path(
+                        min_label_text, 0, 0, 0, self.font_size, "normal", font,
+                        dominant_baseline='hanging', text_anchor="start"
+                    )
+                    label_0.translate(grad_bar_x_start, y_offset + self.rect_size / 2 + 2) 
+                    pairwise_legend_group.add(label_0)
+                    label_100 = generate_text_path(
+                        "100%", 0, 0, 0, self.font_size, "normal", font,
+                        dominant_baseline='hanging', text_anchor="end"
+                    )
+                    label_100.translate(grad_bar_x_start + grad_bar_width, y_offset + self.rect_size / 2 + 2) 
+                    pairwise_legend_group.add(label_100)
+                    self.legend_group.add(pairwise_legend_group)
+                    y_offset += self.line_height
+            if grad_bar_width > 0:
+                feature_legend_width = self.text_x_offset + max_bbox_width
+                feature_legend_group.translate(grad_bar_width/2 - feature_legend_width/2 + self.text_x_offset, 0)
+            self.legend_group.add(feature_legend_group)
 
         return self.legend_group
     def get_group(self) -> Group:

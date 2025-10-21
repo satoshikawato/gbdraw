@@ -341,7 +341,7 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     record_offsets = []
     
     current_y = canvas_config.vertical_offset 
-    for i, record_id in enumerate(record_ids):
+    for i, _ in enumerate(record_ids):
         record_offsets.append(current_y)
         
         if i < len(record_ids) - 1:
@@ -360,7 +360,10 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
 
     features_present = check_feature_presence(records, feature_config.selected_features_set)
     legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present, blast_config, has_blast)
-    legend_config = legend_config.recalculate_legend_dimensions(legend_table)
+    
+    # Calculate legend dimensions
+    legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
+    # Adjust canvas height if legend height exceeds current canvas height
     padding = canvas_config.canvas_padding * 2  
     required_legend_height = legend_config.legend_height + padding
 

@@ -33,7 +33,7 @@ allow_inner_labels = false
 [canvas.linear]
 # Note that only the width is defined here, as the height of the figure is dependent on the number of sequences displayed.
 width = 2000 # pixel
-vertical_offset = 40
+vertical_offset = 50
 horizontal_offset = 120
 vertical_padding = 8
 comparison_height = 60

@@ -2,7 +2,7 @@
 # coding: utf-8
 from typing import Dict, Optional, List
 from pandas import DataFrame
-from .find_font_files import get_text_bbox_size_pixels, get_font_dict
+from .utility_functions import calculate_bbox_dimensions
 
 class GcContentConfigurator:
     """
@@ -155,34 +155,77 @@ class LegendDrawingConfigurator:
         self.text_anchor: str = config_dict['objects']['legends']['text_anchor']
         self.color_rect_size: float = config_dict['objects']['legends']['color_rect_size']
         self.dominant_baseline: str = config_dict['objects']['legends']['dominant_baseline']
+        self.num_of_columns: int = 1
+        self.has_gradient: bool = False
         self.dpi: int = config_dict['png_output']['dpi']    
-    def calculate_bbox_dimensions(self, legend_table):
-        fonts = [font.strip("'") for font in self.font_family.split(', ')]
-        primary_font_family = fonts[0]
-        font_file_dict = get_font_dict(fonts, ["Regular"]) 
-        font_path = font_file_dict[primary_font_family]["Regular"]
+    def calculate_max_bbox_dimensions(self, legend_table):
         longest_key = max(legend_table.keys(), key=len)
-        bbox_width_px, bbox_height_px = get_text_bbox_size_pixels(font_path, longest_key, self.font_size, self.dpi)
+        bbox_width_px, bbox_height_px = calculate_bbox_dimensions(longest_key, self.font_family, self.font_size, self.dpi)
         return bbox_width_px, bbox_height_px
-    def recalculate_legend_dimensions(self, legend_table):
+    def recalculate_legend_dimensions(self, legend_table, canvas_config):
         line_margin = (24/14) * self.color_rect_size # move to config
         x_margin = (22/14) * self.color_rect_size # move to config
-        bbox_width_px, _ = self.calculate_bbox_dimensions(legend_table)
-        self.legend_width = x_margin + bbox_width_px
-        num_lines = 0
-        has_gradient = False
+        total_width = canvas_config.fig_width
         for key, properties in legend_table.items():
             if properties.get('type') == 'gradient':
-                has_gradient = True
+                self.has_gradient = True
+        if canvas_config.legend_position == 'top' or canvas_config.legend_position == 'bottom':
+            bbox_list = [calculate_bbox_dimensions(item, self.font_family, self.font_size, self.dpi) for item in legend_table]
+            print(bbox_list)
+            total_feature_legend_width = sum([bbox[0] for bbox in bbox_list]) + x_margin * (len(legend_table) - 1)
+            pairwise_legend_width = (10 * self.color_rect_size) if self.has_gradient else 0
+            if self.has_gradient:
+                total_legend_width = total_feature_legend_width + pairwise_legend_width
+                self.num_of_columns = len(legend_table) - 1
             else:
-                num_lines += 1
-        
-        if has_gradient:
-            num_lines += 2 # グラデーションはタイトルとバーで2行分とみなす
-        
-        if num_lines > 0:
-            self.legend_height = (self.color_rect_size + (num_lines - 1) * line_margin)
+                total_legend_width = total_feature_legend_width
+                self.num_of_columns = len(legend_table)
+            if total_legend_width <= total_width:
+                self.legend_width = total_legend_width
+                self.legend_height = self.color_rect_size + 2 * line_margin
+                return self
+            else:
+                # Split into two rows or more. Add one item at a time until width exceeds total_width
+                current_width = x_margin
+                num_lines = 1
+                per_line_item_count = 0
+                for item in bbox_list:
+                    item_width = item[0]
+                    if current_width + item_width + pairwise_legend_width + x_margin <= total_width:
+                        per_line_item_count += 1
+                        current_width += item_width + x_margin + pairwise_legend_width
+                        if self.has_gradient:
+                            current_num_columns = per_line_item_count + 1
+                        else:
+                            current_num_columns = per_line_item_count
+                        if current_num_columns > self.num_of_columns:
+                            self.num_of_columns = current_num_columns
+                    else:
+                        num_lines += 1
+                        per_line_item_count = 0
+                        current_width = x_margin + item_width + x_margin + pairwise_legend_width
+                self.legend_width = current_width
+                self.legend_height = num_lines * (self.color_rect_size + line_margin) + line_margin
+
+                return self
+            
         else:
-            self.legend_height = 0
-        # self.legend_height = (self.color_rect_size + (len(legend_table.keys()) -1) * line_margin)
-        return self
+            bbox_width_px, _ = self.calculate_max_bbox_dimensions(legend_table)
+            self.legend_width = x_margin + bbox_width_px
+            num_lines = 0
+            for key, properties in legend_table.items():
+                if properties.get('type') == 'gradient':
+                    self.has_gradient = True
+                else:
+                    num_lines += 1
+            
+            if self.has_gradient:
+                num_lines += 2 # グラデーションはタイトルとバーで2行分とみなす
+            
+            if num_lines > 0:
+                self.legend_height = (self.color_rect_size + (num_lines - 1) * line_margin)
+            else:
+                self.legend_height = 0
+            # self.legend_height = (self.color_rect_size + (len(legend_table.keys()) -1) * line_margin)
+            return self
+        

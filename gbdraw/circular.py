@@ -7,12 +7,12 @@ import logging
 from typing import Optional
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
-from .file_processing import load_gbks, load_gff_fasta, load_default_colors, read_color_table, load_config_toml, parse_formats, read_qualifier_priority_file
+from .file_processing import load_gbks, load_gff_fasta, load_default_colors, read_color_table, load_config_toml, parse_formats
 from .circular_diagram_components import plot_circular_diagram
 from .data_processing import skew_df
 from .canvas_generator import CircularCanvasConfigurator
 from .object_configurators import LegendDrawingConfigurator, GcSkewConfigurator,GcContentConfigurator, FeatureDrawingConfigurator
-from .utility_functions import suppress_gc_content_and_skew, modify_config_dict, determine_output_file_prefix
+from .utility_functions import suppress_gc_content_and_skew, modify_config_dict, determine_output_file_prefix, read_qualifier_priority_file
 
 # Setup the logging system. Configures a stream handler to output log messages to stdout.
 # Default logging level is set to INFO.

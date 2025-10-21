@@ -8,9 +8,9 @@ import sys
 from Bio.SeqRecord import SeqRecord
 from typing import Any, Optional
 from pandas import DataFrame
-from .file_processing import load_default_colors, load_gbks, load_gff_fasta, read_color_table, load_config_toml, parse_formats, read_qualifier_priority_file
+from .file_processing import load_default_colors, load_gbks, load_gff_fasta, read_color_table, load_config_toml, parse_formats
 from .linear_diagram_components import plot_linear_diagram
-from .utility_functions import create_dict_for_sequence_lengths, modify_config_dict
+from .utility_functions import create_dict_for_sequence_lengths, modify_config_dict, read_qualifier_priority_file
 from .canvas_generator import LinearCanvasConfigurator
 from .object_configurators import GcSkewConfigurator, LegendDrawingConfigurator, GcContentConfigurator, FeatureDrawingConfigurator, BlastMatchConfigurator
 
@@ -192,7 +192,7 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-l',
         '--legend',
-        help='Legend position (default: "right"; "right", "left", "none")',
+        help='Legend position (default: "right"; "right", "left", "top", "bottom", "none")',
         type=str,
         default="right")
     parser.add_argument("--show_labels", help="Show labels", action="store_true")
