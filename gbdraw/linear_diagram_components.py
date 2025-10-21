@@ -308,7 +308,6 @@ def add_length_bar_on_linear_canvas(canvas: Drawing, canvas_config: LinearCanvas
     
     offset_for_length_bar: float = position_length_bar_group(
         canvas_config.total_height, canvas_config.original_vertical_offset, canvas_config.vertical_padding)
-    
     length_bar_group.translate(
         canvas_config.horizontal_offset, offset_for_length_bar)
     canvas.add(length_bar_group)
@@ -356,7 +355,7 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
             current_y += inter_record_space
         
 
-    final_height = current_y + canvas_config.cds_height + canvas_config.gc_padding + canvas_config.skew_padding + canvas_config.original_vertical_offset + canvas_config.vertical_padding
+    final_height = current_y + canvas_config.cds_padding + canvas_config.gc_padding + canvas_config.skew_padding + canvas_config.original_vertical_offset + canvas_config.vertical_padding
     canvas_config.total_height = int(final_height)
 
     features_present = check_feature_presence(records, feature_config.selected_features_set)
