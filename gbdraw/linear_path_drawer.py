@@ -25,31 +25,38 @@ def calculate_feature_position_factors_linear(strand: str, track_id: int, separa
     Returns:
         list[float]: Three position factors [top, middle, bottom] for feature placement
     """
-    if not separate_strands:
-        # Simple stacking without strand separation - use positive numbering for all features
-        track = track_id # Convert negative track numbers to positive
-        return [-track - 0.5,    # Top
-                -track + 0,      # Middle
-                -track + 0.5]    # Bottom
+
     
     # Constants for strand-separated layout
     INITIAL_OFFSET = 0.1           # Base offset from axis
     TRACK_SPACING = 0.5            # Vertical space per track
     FEATURE_HEIGHT = 0.5           # Height of feature
     FEATURE_OFFSET = 0.25          # Half of feature height
-    
+
+
+        
     def calculate_base_position(track_num: int) -> float:
         """Calculate base y-position for track"""
         return -INITIAL_OFFSET - track_num * TRACK_SPACING
     
     def calculate_track_offset(track_num: int) -> float:
         """Calculate cumulative offset based on track number"""
-        return track_num * -INITIAL_OFFSET if strand == "positive" else (track_num-1) * -INITIAL_OFFSET
-    
+        if separate_strands:
+            return track_num * -1.5 * INITIAL_OFFSET if strand == "positive" else (track_num-1) * -1.5 *INITIAL_OFFSET
+        else:
+            return track_num * - 3* INITIAL_OFFSET if strand == "positive" else (track_num-1) * - 3* INITIAL_OFFSET
+
     # Calculate base position and offsets
     base_pos = calculate_base_position(track_id)
     track_offset = calculate_track_offset(track_id)
     
+    if not separate_strands:
+        # Simple stacking without strand separation - use positive numbering for all features
+        track = track_id # Convert negative track numbers to positive
+        return [-track - FEATURE_HEIGHT + track_offset,    # Top
+                -track - 0 + track_offset,      # Middle
+                -track + FEATURE_HEIGHT + track_offset]    # Bottom
+
     # Return [top, middle, bottom] positions
     return [
         base_pos - FEATURE_HEIGHT + track_offset,      # Top
