@@ -558,14 +558,11 @@ class SeqRecordGroup:
         feature_dict: dict = create_feature_dict(self.gb_record, color_table, selected_features_set, default_colors, separate_strands, resolve_overlaps, label_filtering)
         label_list = []
         if self.show_labels:
-            if self.precalculated_labels is not None:
-                label_list = self.precalculated_labels
-            else:
-                label_list = prepare_label_list_linear(
-                    feature_dict, record_length, alignment_width,
-                    genome_size_normalization_factor, cds_height,
-                    separate_strands, self.config_dict
-                )
+            label_list = prepare_label_list_linear(
+                feature_dict, record_length, alignment_width,
+                genome_size_normalization_factor, cds_height,
+                separate_strands, self.config_dict
+            )
         
         record_group: Group = self.draw_record(feature_dict, record_length, cds_height, alignment_width, genome_size_normalization_factor, separate_strands, arrow_length, record_group, label_list)
         return record_group

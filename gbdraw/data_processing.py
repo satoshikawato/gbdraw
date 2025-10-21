@@ -753,6 +753,24 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
    font_size = config_dict['labels']['font_size']['linear'][length_param]
    interval = config_dict['canvas']['dpi']
    label_filtering = config_dict['labels']['filtering']
+   # Find the maximum feature track ID (positive tracks grow upwards, same as labels)
+   max_feature_track = 0
+   for feature_object in feature_dict.values():
+       # Only consider positive (upward) tracks
+       if feature_object.feature_track_id > max_feature_track:
+           max_feature_track = feature_object.feature_track_id
+   
+   # Get the y-coordinate of the top of the highest feature track
+   # We can safely assume 'positive' strand, as positive track IDs 
+   # are used for 'positive' strand (if separate) or all strands (if not separate).
+   top_factors = calculate_feature_position_factors_linear(
+       strand='positive', 
+       track_id=max_feature_track, 
+       separate_strands=strandedness
+   )
+   # top_factors[0] is the 'top' y-factor. This will be a negative number (i.e., high on the canvas).
+   top_feature_y_limit = cds_height * top_factors[0]
+
    # First pass: Calculate feature track positions
    for feature_id, feature_object in feature_dict.items():
        if len(feature_object.coordinates) == 0:
@@ -868,7 +886,7 @@ def prepare_label_list_linear(feature_dict, genome_length, alignment_width,
        
        for label in track_labels:
            # Compact vertical positioning for external labels
-           label["middle_y"] = (-0.75 * cds_height - (track_height * track_num))
+           label["middle_y"] = top_feature_y_limit - (track_height * track_num)
            external_labels.append(label)
 
    return embedded_labels + external_labels
