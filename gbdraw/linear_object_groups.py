@@ -799,6 +799,7 @@ class LegendGroup:
             current_column = 0
             current_x_offset = 0
             for key, properties in self.legend_table.items():
+                print(key, properties)
                 if properties['type'] == 'solid':
                     rect_path = Path(
                         d=path_desc,
@@ -837,7 +838,7 @@ class LegendGroup:
                     y_offset += self.line_height 
 
                     grad_bar_x_start = 0 
-                    grad_bar_width = self.legend_config.legend_width - self.text_x_offset
+                    grad_bar_width = self.legend_config.pairwise_legend_width
                     
                     grad_rect_path_desc = f"M 0,{-self.rect_size / 2} L {grad_bar_width},{-self.rect_size / 2} L {grad_bar_width},{self.rect_size / 2} L 0,{self.rect_size / 2} z"
                     grad_rect = Path(

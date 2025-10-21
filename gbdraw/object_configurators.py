@@ -157,7 +157,8 @@ class LegendDrawingConfigurator:
         self.dominant_baseline: str = config_dict['objects']['legends']['dominant_baseline']
         self.num_of_columns: int = 1
         self.has_gradient: bool = False
-        self.dpi: int = config_dict['png_output']['dpi']    
+        self.dpi: int = config_dict['png_output']['dpi']
+        self.pairwise_legend_width: float = 0
     def calculate_max_bbox_dimensions(self, legend_table):
         longest_key = max(legend_table.keys(), key=len)
         bbox_width_px, bbox_height_px = calculate_bbox_dimensions(longest_key, self.font_family, self.font_size, self.dpi)
@@ -173,9 +174,9 @@ class LegendDrawingConfigurator:
             bbox_list = [calculate_bbox_dimensions(item, self.font_family, self.font_size, self.dpi) for item in legend_table]
             print(bbox_list)
             total_feature_legend_width = sum([bbox[0] for bbox in bbox_list]) + x_margin * (len(legend_table) - 1)
-            pairwise_legend_width = (10 * self.color_rect_size) if self.has_gradient else 0
+            self.pairwise_legend_width = (10 * self.color_rect_size) if self.has_gradient else 0
             if self.has_gradient:
-                total_legend_width = total_feature_legend_width + pairwise_legend_width
+                total_legend_width = total_feature_legend_width + self.pairwise_legend_width
                 self.num_of_columns = len(legend_table) - 1
             else:
                 total_legend_width = total_feature_legend_width
@@ -191,9 +192,9 @@ class LegendDrawingConfigurator:
                 per_line_item_count = 0
                 for item in bbox_list:
                     item_width = item[0]
-                    if current_width + item_width + pairwise_legend_width + x_margin <= total_width:
+                    if current_width + item_width + self.pairwise_legend_width + x_margin <= total_width:
                         per_line_item_count += 1
-                        current_width += item_width + x_margin + pairwise_legend_width
+                        current_width += item_width + x_margin + self.pairwise_legend_width
                         if self.has_gradient:
                             current_num_columns = per_line_item_count + 1
                         else:
@@ -203,7 +204,7 @@ class LegendDrawingConfigurator:
                     else:
                         num_lines += 1
                         per_line_item_count = 0
-                        current_width = x_margin + item_width + x_margin + pairwise_legend_width
+                        current_width = x_margin + item_width + x_margin + self.pairwise_legend_width
                 self.legend_width = current_width
                 self.legend_height = num_lines * (self.color_rect_size + line_margin) + line_margin
 
