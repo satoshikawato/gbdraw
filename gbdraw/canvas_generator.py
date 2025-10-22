@@ -295,6 +295,19 @@ class LinearCanvasConfigurator:
             self.legend_offset_x = padding
             self.legend_offset_y = calculate_optimal_legend_y()
 
+        elif self.legend_position == "top":
+            self.horizontal_offset = padding + max_definition_width
+            self.total_width = self.horizontal_offset + self.fig_width + padding
+            self.legend_offset_x = padding
+            self.legend_offset_y = self.original_vertical_offset # atode naosu
+
+        elif self.legend_position == "bottom":
+            self.horizontal_offset = padding + max_definition_width
+            self.total_width = self.horizontal_offset + self.fig_width + padding
+            self.legend_offset_x = padding
+            self.legend_offset_y = self.total_height -  self.original_vertical_offset # atode naosu
+
+
         elif self.legend_position == "none":
             self.horizontal_offset = padding + max_definition_width
             self.total_width = self.horizontal_offset + self.fig_width + padding

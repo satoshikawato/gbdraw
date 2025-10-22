@@ -148,7 +148,6 @@ class LegendDrawingConfigurator:
         self.skew_config = skew_config
         self.feature_config = feature_config
         self.blast_config = blast_config
-        self.color_rect_size = 16 # move to config
         self.font_size: float = config_dict['objects']['legends']['font_size']
         self.font_weight: str = config_dict['objects']['legends']['font_weight']
         self.font_family: str = config_dict['objects']['text']['font_family']
@@ -158,6 +157,7 @@ class LegendDrawingConfigurator:
         self.num_of_columns: int = 1
         self.has_gradient: bool = False
         self.dpi: int = config_dict['png_output']['dpi']
+        self.total_feature_legend_width : float = 0
         self.pairwise_legend_width: float = 0
     def calculate_max_bbox_dimensions(self, legend_table):
         longest_key = max(legend_table.keys(), key=len)
@@ -184,6 +184,7 @@ class LegendDrawingConfigurator:
             if total_legend_width <= total_width:
                 self.legend_width = total_legend_width
                 self.legend_height = self.color_rect_size + 2 * line_margin
+                self.total_feature_legend_width = self.legend_width - self.pairwise_legend_width
                 return self
             else:
                 # Split into two rows or more. Add one item at a time until width exceeds total_width
@@ -206,6 +207,7 @@ class LegendDrawingConfigurator:
                         per_line_item_count = 0
                         current_width = x_margin + item_width + x_margin + self.pairwise_legend_width
                 self.legend_width = current_width
+                self.total_feature_legend_width = self.legend_width - self.pairwise_legend_width
                 self.legend_height = num_lines * (self.color_rect_size + line_margin) + line_margin
 
                 return self
