@@ -139,7 +139,9 @@ class LengthBarGroup:
         self.font_family: str = config_dict['objects']['text']['font_family']
         self.style: str = scale_config.get('style', 'bar')
         self.manual_interval: Optional[int] = scale_config.get('interval')
-        
+        self.scale_group_width: float = 0
+        self.scale_group_height: float = 0
+        self.dpi =  config_dict['canvas']['dpi']
         # --- 2. Set other properties ---
         self.longest_genome: int = longest_genome
         self.alignment_width: float = alignment_width
@@ -193,9 +195,13 @@ class LengthBarGroup:
             stroke_width=self.stroke_width,
         )
         self.scale_group.add(main_axis)
+        scale_ruler_length = self.alignment_width
 
         # Draw ticks and labels from 0 up to the end of the genome
         position = 0
+        first_tick_bbox_width = 0
+        last_tick_bbox_width = 0
+        max_tick_bbox_height = 0
         while True:
             x_pos = (position / self.longest_genome) * self.alignment_width
 
@@ -215,8 +221,14 @@ class LengthBarGroup:
                 dominant_baseline="hanging"
             )
             self.scale_group.add(text_element)
-
+            bbox_width, bbox_height = calculate_bbox_dimensions(label_text, self.font_family, self.font_size, self.dpi)
+            max_tick_bbox_height = max(max_tick_bbox_height, bbox_height)
+            if first_tick_bbox_width == 0:
+                first_tick_bbox_width = bbox_width
             if position >= self.longest_genome:
+                last_tick_bbox_width = bbox_width
+                self.scale_group_width = (0.5 * first_tick_bbox_width) + scale_ruler_length + (0.5 * last_tick_bbox_width)
+                self.scale_group_height: float = (0.5 * self.stroke_width) + 15 + max_tick_bbox_height
                 break # Exit after drawing the last tick
             
             position += tick_interval
@@ -283,6 +295,9 @@ class LengthBarGroup:
 
     def create_scale_text_linear(self) -> Text:
         """Creates the SVG text element for the 'bar' style label."""
+        self.tick_bbox_width, self.tick_bbox_height = calculate_bbox_dimensions(self.label_text, self.font_family, self.font_size, self.dpi)
+        self.scale_group_width =  self.tick_bbox_width + 10 + self.bar_length
+        self.scale_group_height = self.tick_bbox_height
         return Text(
             self.label_text, insert=(self.start_x - 10, self.start_y),
             stroke='none', fill='black', font_size=self.font_size,
@@ -294,6 +309,7 @@ class LengthBarGroup:
         """Adds the line and text elements for the 'bar' style to the SVG group."""
         scale_path = self.create_scale_path_linear()
         scale_text = self.create_scale_text_linear()
+
         self.scale_group.add(scale_path)
         self.scale_group.add(scale_text)
 
@@ -450,10 +466,9 @@ class SeqRecordGroup:
         self.label_stroke_color = self.config_dict['labels']['stroke_color']['label_stroke_color']
         self.label_stroke_width = self.config_dict['labels']['stroke_width']['long']
         self.label_filtering = self.config_dict['labels']['filtering']
-        self.record_group: Group = self.setup_record_group()
         self.separate_strands = self.canvas_config.strandedness
         self.resolve_overlaps = self.canvas_config.resolve_overlaps
-
+        self.record_group: Group = self.setup_record_group()
     def draw_linear_axis(self,
                          alignment_width: float,
                          genome_size_normalization_factor: float) -> Line:
@@ -779,6 +794,8 @@ class LegendGroup:
         self.total_feature_legend_width = self.legend_config.total_feature_legend_width
         self.dpi: int = self.config_dict['canvas']['dpi']
         self.legend_width: float = 0
+        self.feature_legend_width: float = 0
+        self.pairwise_legend_width: float = 0
         self.legend_height: float = 0
         self.add_elements_to_group()
 
@@ -794,6 +811,7 @@ class LegendGroup:
         font = self.font_family
         feature_legend_group = Group(id="feature_legend")
         max_bbox_width = 0
+        gradient_y_offset = 0
         feature_legend_width = 0
         grad_bar_width = 0
         pairwise_legend_group = Group(id="pairwise_legend")
@@ -805,8 +823,6 @@ class LegendGroup:
             current_column = 0
             current_x_offset = 0
             for key, properties in self.legend_table.items():
-  
-                print(key, properties)
                 if properties['type'] == 'solid':
                     rect_path = Path(
                         d=path_desc,
@@ -815,8 +831,9 @@ class LegendGroup:
                         stroke_width=properties['width'])
                     rect_path.translate(current_x_offset, y_offset)
                     feature_legend_group.add(rect_path)
+
                     current_x_offset +=  self.text_x_offset
-                    print("key for bbox:", key)
+                    feature_legend_width = current_x_offset
                     bbox_width, _ = calculate_bbox_dimensions(key, self.font_family, self.font_size, self.dpi)
                     max_bbox_width = max(max_bbox_width, bbox_width)
                     legend_path = generate_text_path(
@@ -826,10 +843,12 @@ class LegendGroup:
                     legend_path.translate(current_x_offset, y_offset)
                     feature_legend_group.add(legend_path)
                     current_x_offset += (bbox_width) # + self.text_x_offset)
-                    feature_legend_width = max(feature_legend_width, current_x_offset)
+                    feature_legend_width = current_x_offset
+                    self.feature_legend_width = max(feature_legend_width, self.feature_legend_width)
                     current_column += 1
+                    
                     if current_column >= max_items_per_column:
-                        
+                        feature_legend_width = 0
                         current_column = 0
                         current_x_offset = 0
                         y_offset += self.line_height
@@ -844,14 +863,11 @@ class LegendGroup:
                     gradient.add_stop_color(offset="0%", color=properties['min_color'])
                     gradient.add_stop_color(offset="100%", color=properties['max_color'])
                     pairwise_legend_group.add(gradient)
-                    print(key)
                     title_path = generate_text_path(
                         key, 0, 0, 0, self.font_size, "normal", font, 
                         dominant_baseline='hanging', text_anchor="middle"
                     )
                     title_path_bbox_width, _ = calculate_bbox_dimensions(str(key), self.font_family, self.font_size, self.dpi)
-                    print("key:", key, "font:", font, "font_size:", self.font_size, "dpi:", self.dpi)
-                    print("title_path_bbox_width:", title_path_bbox_width, "grad_bar_width:", grad_bar_width)
                     title_x_offset = grad_bar_x_start + (grad_bar_width / 2)
                     title_path.translate(title_x_offset, gradient_y_offset) 
                     pairwise_legend_group.add(title_path) 
@@ -879,18 +895,24 @@ class LegendGroup:
                      )
                     label_0.translate(grad_bar_x_start, gradient_y_offset + self.rect_size / 2 + 2) 
                     pairwise_legend_group.add(label_0)
+                    _, min_label_bbox_height = calculate_bbox_dimensions(min_label_text, self.font_family, self.font_size, self.dpi)
+
                     label_100 = generate_text_path(
                         "100%", 0, 0, 0, self.font_size, "normal", font,
                         dominant_baseline='hanging', text_anchor="end"
                     )
                     label_100.translate(grad_bar_x_start + grad_bar_width, gradient_y_offset + self.rect_size / 2 + 2) 
                     pairwise_legend_group.add(label_100)
-
-
-                    pairwise_legend_group.translate(feature_legend_width, 0)
+                    _, max_label_bbox_height = calculate_bbox_dimensions("100%", self.font_family, self.font_size, self.dpi)
+                    pairwise_legend_group.add(label_100)
+                    label_bbox_height = max(min_label_bbox_height, max_label_bbox_height)
+                    gradient_y_offset += label_bbox_height
+                    pairwise_legend_group.translate(self.feature_legend_width, 0)
                     self.legend_group.add(pairwise_legend_group)
+                    self.pairwise_legend_width = grad_bar_width
+            self.legend_width = self.feature_legend_width + self.pairwise_legend_width
+            self.legend_height = max(y_offset, gradient_y_offset) + initial_y_offset
         else:
-            print("hey")
             for key, properties in self.legend_table.items():
                 if properties['type'] == 'solid':
                     rect_path = Path(
@@ -907,11 +929,11 @@ class LegendGroup:
                         dominant_baseline='central', text_anchor="start"
                     )
                     legend_path.translate(self.text_x_offset, y_offset)
-
+                    feature_legend_width = self.text_x_offset + bbox_width
                     feature_legend_group.add(legend_path)
                     
                     y_offset += self.line_height 
-
+                    self.feature_legend_width = max(feature_legend_width, self.feature_legend_width)
                 elif properties['type'] == 'gradient':
                     grad_bar_x_start = 0
                     if self.legend_position == 'top' or self.legend_position == 'bottom':
@@ -957,24 +979,28 @@ class LegendGroup:
                         min_label_text, 0, 0, 0, self.font_size, "normal", font,
                         dominant_baseline='hanging', text_anchor="start"
                     )
-                    label_0.translate(grad_bar_x_start, gradient_y_offset + self.rect_size / 2 + 2) 
+                    label_0.translate(grad_bar_x_start, gradient_y_offset + self.rect_size / 2 + 2)
+                    _, min_label_bbox_height = calculate_bbox_dimensions(min_label_text, self.font_family, self.font_size, self.dpi)
                     pairwise_legend_group.add(label_0)
                     label_100 = generate_text_path(
                         "100%", 0, 0, 0, self.font_size, "normal", font,
                         dominant_baseline='hanging', text_anchor="end"
                     )
                     label_100.translate(grad_bar_x_start + grad_bar_width, gradient_y_offset + self.rect_size / 2 + 2) 
+                    _, max_label_bbox_height = calculate_bbox_dimensions("100%", self.font_family, self.font_size, self.dpi)
                     pairwise_legend_group.add(label_100)
-                    pairwise_legend_group.translate(self.total_feature_legend_width, 0)
+                    label_bbox_height = max(min_label_bbox_height, max_label_bbox_height)
+                    pairwise_legend_group.translate(0, 0)
                     self.legend_group.add(pairwise_legend_group)
-                    gradient_y_offset += self.line_height
+                    gradient_y_offset += label_bbox_height 
+                    self.pairwise_legend_width = grad_bar_width
             if grad_bar_width > 0:
                 feature_legend_width = self.text_x_offset + max_bbox_width
                 feature_legend_group.translate(grad_bar_width/2 - feature_legend_width/2 + self.text_x_offset, 0)
+            self.legend_width = max(self.feature_legend_width, self.pairwise_legend_width)
+            self.legend_height = max(gradient_y_offset, y_offset) + initial_y_offset
+            print("legend_heigtht:", self.legend_height)
         self.legend_group.add(feature_legend_group)
-        self.legend_width = feature_legend_width + grad_bar_width
-        self.legend_height = max(gradient_y_offset, y_offset)
-
         return self.legend_group
     def get_group(self) -> Group:
         """

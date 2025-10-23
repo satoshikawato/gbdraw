@@ -156,7 +156,7 @@ class LegendDrawingConfigurator:
         self.dominant_baseline: str = config_dict['objects']['legends']['dominant_baseline']
         self.num_of_columns: int = 1
         self.has_gradient: bool = False
-        self.dpi: int = config_dict['png_output']['dpi']
+        self.dpi: int = config_dict['canvas']['dpi']
         self.total_feature_legend_width : float = 0
         self.pairwise_legend_width: float = 0
     def calculate_max_bbox_dimensions(self, legend_table):
@@ -166,18 +166,17 @@ class LegendDrawingConfigurator:
     def recalculate_legend_dimensions(self, legend_table, canvas_config):
         line_margin = (24/14) * self.color_rect_size # move to config
         x_margin = (22/14) * self.color_rect_size # move to config
-        total_width = canvas_config.fig_width
+        total_width = canvas_config.total_width
         for key, properties in legend_table.items():
             if properties.get('type') == 'gradient':
                 self.has_gradient = True
         if canvas_config.legend_position == 'top' or canvas_config.legend_position == 'bottom':
             bbox_list = [calculate_bbox_dimensions(item, self.font_family, self.font_size, self.dpi) for item in legend_table]
-            print(bbox_list)
             total_feature_legend_width = sum([bbox[0] for bbox in bbox_list]) + x_margin * (len(legend_table) - 1)
             self.pairwise_legend_width = (10 * self.color_rect_size) if self.has_gradient else 0
             if self.has_gradient:
                 total_legend_width = total_feature_legend_width + self.pairwise_legend_width
-                self.num_of_columns = len(legend_table) - 1
+                self.num_of_columns = len(legend_table) 
             else:
                 total_legend_width = total_feature_legend_width
                 self.num_of_columns = len(legend_table)
@@ -208,7 +207,7 @@ class LegendDrawingConfigurator:
                         current_width = x_margin + item_width + x_margin + self.pairwise_legend_width
                 self.legend_width = current_width
                 self.total_feature_legend_width = self.legend_width - self.pairwise_legend_width
-                self.legend_height = num_lines * (self.color_rect_size + line_margin) + line_margin
+                self.legend_height = num_lines * (self.color_rect_size + line_margin) 
 
                 return self
             
