@@ -836,7 +836,7 @@ if selected_mode == "📏 Linear":
             l_prefix = st.text_input("Output prefix:", value="linear", key="l_prefix", help="Prefix for output files. Default is 'linear'.")
             l_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="l_fmt", help="Output file format. Default is SVG, which is the fastest and most flexible for web display.")
             st.markdown("##### Legend")
-            l_legend = st.selectbox("Legend:", ["right", "left", "none"], index=0, key="l_legend", help="Position of the legend. 'none' hides the legend.")
+            l_legend = st.selectbox("Legend:", ["right", "left", "top", "bottom", "none"], index=0, key="l_legend", help="Position of the legend. 'none' hides the legend.")
         with col2:
             st.subheader("Display Options")
             st.markdown("##### Track layout")
