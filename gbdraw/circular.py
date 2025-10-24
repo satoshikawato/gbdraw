@@ -402,13 +402,14 @@ def circular_main(cmd_args) -> None:
         skew_config = GcSkewConfigurator(
             window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
 
-        legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config)
+        
 
         outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
         gc_df: DataFrame = skew_df(gb_record, window, step, dinucleotide)
         canvas_config = CircularCanvasConfigurator(
             output_prefix=outfile_prefix, config_dict=config_dict, legend=legend, gb_record=gb_record
             )
+        legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config, canvas_config=canvas_config)
         plot_circular_diagram(gb_record, canvas_config, gc_df, gc_config, skew_config,
                               feature_config, species, strain, config_dict, out_formats, legend_config)
 

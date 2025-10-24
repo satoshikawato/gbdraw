@@ -327,24 +327,6 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     """
     Plots a linear diagram of genomic records with optional BLAST comparison data.
     """
-    # Prepare legend group
-    has_blast = bool(blast_files)
-    features_present = check_feature_presence(records, feature_config.selected_features_set)
-    legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present, blast_config, has_blast)
-    legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
-    legend_group: Group = LegendGroup(config_dict, canvas_config, legend_config, legend_table)
-    required_legend_height = legend_group.legend_height
-    vertical_shift = 0
-    if canvas_config.legend_position in ['top', 'bottom']:
-        pass
-    else:
-        if required_legend_height > canvas_config.total_height:
-            height_difference = required_legend_height - canvas_config.total_height
-            canvas_config.total_height = int(required_legend_height)
-            vertical_shift = height_difference / 2
-            # record_offsets = [offset + vertical_shift for offset in record_offsets]
-        else:
-            pass
     required_label_height, all_labels, record_label_heights = _precalculate_label_dimensions(
         records, feature_config, canvas_config, config_dict
     )
@@ -354,8 +336,31 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     else:
         canvas_config.vertical_offset = canvas_config.original_vertical_offset + canvas_config.cds_padding
 
+    # Prepare legend group
+    has_blast = bool(blast_files)
+    # Determine which features should be displayed in the legend
+    features_present = check_feature_presence(records, feature_config.selected_features_set)
+    # Prepare legend table
+    legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present, blast_config, has_blast)
+    # Predetermine legend dimensions (number of columns etc.)
+    legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
+    # Draw legend group to determine the actual dimensions
+    legend_group: Group = LegendGroup(config_dict, canvas_config, legend_config, legend_table)
+    # Get the legend height
+    required_legend_height = legend_group.legend_height
 
-    
+    # Vertical shift: how much the records should be moved downward in order to place the records in the middle of the canvas
+    vertical_shift = 0
+    if canvas_config.legend_position in ['top', 'bottom']:
+        pass # If the legend is placed at the top or bottom of the canvas, no need to care about this
+    else: # the height of the legend might be larger than that of the canvas if the legend is stacked vertically. In this case, the canvas height is adjusted to that of the legend, which makes it necessary to set 'vertical_shift' to ensure the records are displayed closer to the middle.
+        if required_legend_height > canvas_config.total_height:
+            height_difference = required_legend_height - canvas_config.total_height
+            canvas_config.total_height = int(required_legend_height)
+            vertical_shift = height_difference / 2
+        else:
+            pass
+
     record_ids = [r.id for r in records]
     record_offsets = []
     max_def_width = _precalculate_definition_widths(records, config_dict)
@@ -363,9 +368,9 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     canvas_config.recalculate_canvas_dimensions(legend_group, max_def_width)
     
     if canvas_config.legend_position == "top":
-        current_y = canvas_config.vertical_offset + legend_group.legend_height + vertical_shift
+        current_y = canvas_config.original_vertical_offset + legend_group.legend_height + canvas_config.vertical_offset + vertical_shift 
     else:
-        current_y = canvas_config.vertical_offset + vertical_shift     
+        current_y = canvas_config.vertical_offset + vertical_shift      
 
     for i, _ in enumerate(record_ids):
         record_offsets.append(current_y)

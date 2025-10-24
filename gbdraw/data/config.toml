@@ -93,11 +93,12 @@ font_weight = 'normal'
 stroke = 'none'
 fill = 'black'
 font_size = 16
-color_rect_size = 20
 font_weight = 'normal'
 dominant_baseline = 'central'
 text_anchor = 'start'
-
+[objects.legends.color_rect_size]
+short = 80
+long = 20
 
 [objects.text]
 font_family = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"

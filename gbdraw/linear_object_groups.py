@@ -785,7 +785,7 @@ class LegendGroup:
         self.font_family: str = self.legend_config.font_family
         self.font_weight: str = self.legend_config.font_weight
         self.font_size: float = self.legend_config.font_size
-        self.rect_size: float = self.canvas_config.cds_height
+        self.rect_size: float = self.legend_config.color_rect_size
         self.legend_position = self.canvas_config.legend_position
         self.line_height: float = (24/14) * self.rect_size
         self.text_x_offset: float = (22/14) * self.rect_size
@@ -795,7 +795,7 @@ class LegendGroup:
         self.dpi: int = self.config_dict['canvas']['dpi']
         self.legend_width: float = 0
         self.feature_legend_width: float = 0
-        self.pairwise_legend_width: float = 0
+        self.pairwise_legend_width = self.legend_config.pairwise_legend_width
         self.legend_height: float = 0
         self.add_elements_to_group()
 
@@ -812,8 +812,8 @@ class LegendGroup:
         feature_legend_group = Group(id="feature_legend")
         max_bbox_width = 0
         gradient_y_offset = 0
-        feature_legend_width = 0
         grad_bar_width = 0
+        current_feature_legend_width = 0
         pairwise_legend_group = Group(id="pairwise_legend")
         if self.num_of_columns > 1:
             if self.has_gradient:
@@ -824,31 +824,33 @@ class LegendGroup:
             current_x_offset = 0
             for key, properties in self.legend_table.items():
                 if properties['type'] == 'solid':
-                    rect_path = Path(
-                        d=path_desc,
-                        fill=properties['fill'],
-                        stroke=properties['stroke'],
-                        stroke_width=properties['width'])
-                    rect_path.translate(current_x_offset, y_offset)
-                    feature_legend_group.add(rect_path)
-
-                    current_x_offset +=  self.text_x_offset
-                    feature_legend_width = current_x_offset
                     bbox_width, _ = calculate_bbox_dimensions(key, self.font_family, self.font_size, self.dpi)
                     max_bbox_width = max(max_bbox_width, bbox_width)
-                    legend_path = generate_text_path(
-                        key, 0, 0, 0, self.font_size, "normal", font, 
-                        dominant_baseline='central', text_anchor="start"
-                    )
-                    legend_path.translate(current_x_offset, y_offset)
-                    feature_legend_group.add(legend_path)
-                    current_x_offset += (bbox_width) # + self.text_x_offset)
-                    feature_legend_width = current_x_offset
-                    self.feature_legend_width = max(feature_legend_width, self.feature_legend_width)
-                    current_column += 1
-                    
-                    if current_column >= max_items_per_column:
-                        feature_legend_width = 0
+                    if current_feature_legend_width + self.text_x_offset + bbox_width  <= self.total_feature_legend_width:
+                        rect_path = Path(
+                            d=path_desc,
+                            fill=properties['fill'],
+                            stroke=properties['stroke'],
+                            stroke_width=properties['width'])
+                            
+                        rect_path.translate(current_x_offset, y_offset)
+                        feature_legend_group.add(rect_path)
+
+                        current_x_offset +=  self.text_x_offset
+                        
+
+                        legend_path = generate_text_path(
+                            key, 0, 0, 0, self.font_size, "normal", font, 
+                            dominant_baseline='central', text_anchor="start"
+                        )
+                        legend_path.translate(current_x_offset, y_offset)
+                        feature_legend_group.add(legend_path)
+                        current_x_offset += (bbox_width) 
+                        current_feature_legend_width = current_x_offset
+                        self.feature_legend_width = max(current_feature_legend_width, self.feature_legend_width)
+                        current_column += 1
+                    else:
+                        current_feature_legend_width = 0
                         current_column = 0
                         current_x_offset = 0
                         y_offset += self.line_height
@@ -999,7 +1001,6 @@ class LegendGroup:
                 feature_legend_group.translate(grad_bar_width/2 - feature_legend_width/2 + self.text_x_offset, 0)
             self.legend_width = max(self.feature_legend_width, self.pairwise_legend_width)
             self.legend_height = max(gradient_y_offset, y_offset) + initial_y_offset
-            print("legend_heigtht:", self.legend_height)
         self.legend_group.add(feature_legend_group)
         return self.legend_group
     def get_group(self) -> Group:

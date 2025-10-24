@@ -137,11 +137,12 @@ class BlastMatchConfigurator:
         self.stroke_width: float = config_dict['objects']['blast_match']['stroke_width']
 
 class LegendDrawingConfigurator:
-    def __init__(self, color_table, default_colors, selected_features_set, config_dict, gc_config, skew_config, feature_config, legend_table=None, blast_config=None) -> None:
+    def __init__(self, color_table, default_colors, selected_features_set, config_dict, gc_config, skew_config, feature_config, legend_table=None, blast_config=None, canvas_config=None) -> None:
         self.color_table = color_table
         self.default_colors = default_colors
         self.selected_features_set = selected_features_set
         self.config_dict = config_dict
+        self.canvas_config = canvas_config
         self.show_gc = config_dict['canvas']['show_gc']
         self.show_skew = config_dict['canvas']['show_skew']
         self.gc_config = gc_config
@@ -152,11 +153,15 @@ class LegendDrawingConfigurator:
         self.font_weight: str = config_dict['objects']['legends']['font_weight']
         self.font_family: str = config_dict['objects']['text']['font_family']
         self.text_anchor: str = config_dict['objects']['legends']['text_anchor']
-        self.color_rect_size: float = config_dict['objects']['legends']['color_rect_size']
+        self.length_param = self.canvas_config.length_param
+        self.color_rect_size: float = config_dict['objects']['legends']['color_rect_size'][self.length_param]
         self.dominant_baseline: str = config_dict['objects']['legends']['dominant_baseline']
         self.num_of_columns: int = 1
+        self.num_of_lines: int = 1
+        self.num_of_items_per_line: int = 1
         self.has_gradient: bool = False
         self.dpi: int = config_dict['canvas']['dpi']
+        self.legend_width : float = 0
         self.total_feature_legend_width : float = 0
         self.pairwise_legend_width: float = 0
     def calculate_max_bbox_dimensions(self, legend_table):
@@ -172,18 +177,17 @@ class LegendDrawingConfigurator:
                 self.has_gradient = True
         if canvas_config.legend_position == 'top' or canvas_config.legend_position == 'bottom':
             bbox_list = [calculate_bbox_dimensions(item, self.font_family, self.font_size, self.dpi) for item in legend_table]
-            total_feature_legend_width = sum([bbox[0] for bbox in bbox_list]) + x_margin * (len(legend_table))
+            total_feature_legend_width = sum([bbox[0] for bbox in bbox_list]) + x_margin * (len(legend_table)+1)
             self.pairwise_legend_width = (10 * self.color_rect_size) if self.has_gradient else 0
             if self.has_gradient:
                 total_legend_width = total_feature_legend_width + self.pairwise_legend_width
-                self.num_of_columns = len(legend_table) 
             else:
                 total_legend_width = total_feature_legend_width
-                self.num_of_columns = len(legend_table)
             if total_legend_width <= total_width:
                 self.legend_width = total_legend_width
                 self.legend_height = self.color_rect_size + 2 * line_margin
                 self.total_feature_legend_width = self.legend_width - self.pairwise_legend_width
+                self.num_of_columns = len(legend_table) 
                 return self
             else:
                 # Split into two rows or more. Add one item at a time until width exceeds total_width
@@ -194,6 +198,7 @@ class LegendDrawingConfigurator:
                     item_width = item[0]
                     if current_width + item_width + self.pairwise_legend_width + x_margin <= total_width:
                         per_line_item_count += 1
+                        self.num_of_items_per_line = max(per_line_item_count, self.num_of_items_per_line)
                         current_width += item_width + x_margin + self.pairwise_legend_width
                         if self.has_gradient:
                             current_num_columns = per_line_item_count + 1
@@ -201,14 +206,16 @@ class LegendDrawingConfigurator:
                             current_num_columns = per_line_item_count
                         if current_num_columns > self.num_of_columns:
                             self.num_of_columns = current_num_columns
+                        self.legend_width = max(current_width, self.legend_width)
                     else:
                         num_lines += 1
+                        self.num_of_lines = max(self.num_of_lines, num_lines)
                         per_line_item_count = 0
-                        current_width = x_margin + item_width + x_margin + self.pairwise_legend_width
-                self.legend_width = current_width
+                        current_width = x_margin 
+
                 self.total_feature_legend_width = self.legend_width - self.pairwise_legend_width
                 self.legend_height = num_lines * (self.color_rect_size + line_margin) 
-
+                self.num_of_columns = len(legend_table) 
                 return self
             
         else:

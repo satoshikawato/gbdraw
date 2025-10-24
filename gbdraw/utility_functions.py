@@ -331,7 +331,9 @@ def modify_config_dict(config_dict,
                        scale_font_size=None,
                        scale_interval=None,
                        blast_color_min=None,
-                       blast_color_max=None)-> dict:
+                       blast_color_max=None,
+                       legend_box_size=None
+                       )-> dict:
     # Mapping of parameter names to their paths in the config_dict
     label_font_size_circular_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['long']
     label_font_size_circular_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['short']
@@ -339,6 +341,7 @@ def modify_config_dict(config_dict,
     label_font_size_linear_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['short']
     legend_font_size = label_font_size if label_font_size is not None else config_dict['objects']['legends']['font_size']
     circular_definition_font_interval = None
+
     if default_cds_height is not None:
         default_cds_height_short = default_cds_height
         default_cds_height_long = default_cds_height
@@ -347,6 +350,17 @@ def modify_config_dict(config_dict,
         default_cds_height_long = config_dict['canvas']['linear']['default_cds_height']['long']
     if circular_definition_font_size is not None:
         circular_definition_font_interval = float(circular_definition_font_size) + 2
+    if legend_box_size is None:
+        if default_cds_height is not None:
+            if strandedness:
+                legend_box_size = 0.5 * default_cds_height
+            else:
+                legend_box_size = default_cds_height
+        else:
+            legend_box_size_short = 0.5 * default_cds_height_short
+            legend_box_size_long = default_cds_height_long
+
+         
     # Process label_blacklist only if the argument was explicitly passed
     if label_blacklist is not None:
         if label_blacklist == "":
@@ -429,7 +443,9 @@ def modify_config_dict(config_dict,
         'scale_font_size': 'objects.scale.font_size',
         'scale_interval': 'objects.scale.interval',
         'blast_color_min': 'objects.blast_match.min_color',
-        'blast_color_max': 'objects.blast_match.max_color'
+        'blast_color_max': 'objects.blast_match.max_color',
+        'legend_box_size_short': 'objects.legends.color_rect_size.short',
+        'legend_box_size_long': 'objects.legends.color_rect_size.long'
     }
     # Update the config_dict for each specified parameter
     for param, path in param_paths.items():
