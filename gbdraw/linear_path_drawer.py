@@ -44,7 +44,7 @@ def calculate_feature_position_factors_linear(strand: str, track_id: int, separa
         if separate_strands:
             return track_num * -1.5 * INITIAL_OFFSET if strand == "positive" else (track_num-1) * -1.5 *INITIAL_OFFSET
         else:
-            return track_num * - 3* INITIAL_OFFSET if strand == "positive" else (track_num-1) * - 3* INITIAL_OFFSET
+            return track_num * - 3* INITIAL_OFFSET if strand == "positive" else (track_num) * - 3* INITIAL_OFFSET
 
     # Calculate base position and offsets
     base_pos = calculate_base_position(track_id)

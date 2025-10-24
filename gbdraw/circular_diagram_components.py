@@ -238,7 +238,7 @@ def plot_circular_diagram(gb_record: SeqRecord, canvas_config: CircularCanvasCon
     
     features_present = check_feature_presence(gb_record, feature_config.selected_features_set)
     legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present)
-    legend_config = legend_config.recalculate_legend_dimensions(legend_table)
+    legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
     canvas_config.recalculate_canvas_dimensions(legend_config)
     canvas: Drawing = canvas_config.create_svg_canvas()
     canvas = add_record_on_circular_canvas(
