@@ -827,37 +827,33 @@ class LegendGroup:
             current_x_offset = 0
             for key, properties in self.legend_table.items():
                 if properties['type'] == 'solid':
-                    bbox_width, _ = calculate_bbox_dimensions(key, self.font_family, self.font_size, self.dpi)
+                    bbox_width, _ = calculate_bbox_dimensions(str(key), self.font_family, self.font_size, self.dpi)
                     max_bbox_width = max(max_bbox_width, bbox_width)
-                    if current_feature_legend_width + self.text_x_offset + bbox_width  <= self.total_feature_legend_width:
-                        rect_path = Path(
-                            d=path_desc,
-                            fill=properties['fill'],
-                            stroke=properties['stroke'],
-                            stroke_width=properties['width'])
-                            
-                        rect_path.translate(current_x_offset, y_offset)
-                        feature_legend_group.add(rect_path)
-
-                        current_x_offset +=  self.text_x_offset
-                        
-
-                        legend_path = generate_text_path(
-                            key, 0, 0, 0, self.font_size, "normal", font, 
-                            dominant_baseline='central', text_anchor="start"
-                        )
-                        legend_path.translate(current_x_offset, y_offset)
-                        feature_legend_group.add(legend_path)
-                        current_x_offset += (bbox_width) 
-                        current_feature_legend_width = current_x_offset 
-                        self.feature_legend_width = max(current_feature_legend_width, self.feature_legend_width)
-                        current_column += 1
-                    else:
+                    if current_feature_legend_width + self.text_x_offset + bbox_width  > self.total_feature_legend_width:
                         current_feature_legend_width = 0
                         current_column = 0
                         current_x_offset = 0
                         y_offset += self.line_height
                         self.feature_legend_height += self.line_height
+                    rect_path = Path(
+                        d=path_desc,
+                        fill=properties['fill'],
+                        stroke=properties['stroke'],
+                        stroke_width=properties['width'])
+                    rect_path.translate(current_x_offset, y_offset)
+                    feature_legend_group.add(rect_path)
+                    current_x_offset +=  self.text_x_offset
+                    legend_path = generate_text_path(
+                            key, 0, 0, 0, self.font_size, "normal", font, 
+                            dominant_baseline='central', text_anchor="start"
+                        )
+                    legend_path.translate(current_x_offset, y_offset)
+                    feature_legend_group.add(legend_path)
+                    current_x_offset += (bbox_width)
+                    current_feature_legend_width = current_x_offset 
+                    self.feature_legend_width = max(current_feature_legend_width, self.feature_legend_width)
+                    current_column += 1
+
                 elif properties['type'] == 'gradient':
                     grad_bar_x_start = 0
                     title_x_offset = 0
