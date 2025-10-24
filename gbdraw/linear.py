@@ -401,7 +401,7 @@ def linear_main(cmd_args) -> None:
     else:
         step = manual_step
     num_of_entries: int = len(sequence_length_dict)
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness, show_labels=show_labels, resolve_overlaps=resolve_overlaps, label_blacklist=label_blacklist, label_whitelist=label_whitelist)
+    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness, show_labels=show_labels, resolve_overlaps=resolve_overlaps, label_blacklist=label_blacklist, label_whitelist=label_whitelist, default_cds_height=feature_height)
 
     blast_config = BlastMatchConfigurator(
         evalue=evalue, bitscore=bitscore, identity=identity, sequence_length_dict=sequence_length_dict, config_dict=config_dict, default_colors_df=default_colors)
@@ -413,7 +413,7 @@ def linear_main(cmd_args) -> None:
         window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
     skew_config = GcSkewConfigurator(
         window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
-    legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config, blast_config=blast_config, canvs_config=canvas_config)    
+    legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config, blast_config=blast_config, canvas_config=canvas_config)    
     plot_linear_diagram(records, blast_files, canvas_config, blast_config,
                         feature_config, gc_config, config_dict, out_formats, legend_config, skew_config)
 

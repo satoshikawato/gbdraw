@@ -795,7 +795,9 @@ class LegendGroup:
         self.dpi: int = self.config_dict['canvas']['dpi']
         self.legend_width: float = 0
         self.feature_legend_width: float = 0
+        self.feature_legend_height: float = 0
         self.pairwise_legend_width = self.legend_config.pairwise_legend_width
+        self.pairwise_legend_height: float = 0
         self.legend_height: float = 0
         self.add_elements_to_group()
 
@@ -805,6 +807,7 @@ class LegendGroup:
         return f"M 0,{start_y_top} L {self.rect_size},{start_y_top} L {self.rect_size},{start_y_bottom} L 0,{start_y_bottom} z"
 
     def add_elements_to_group(self):
+        self.feature_legend_height = self.rect_size
         y_offset = self.rect_size / 2
         initial_y_offset = y_offset
         path_desc = self.create_rectangle_path_for_legend()
@@ -846,7 +849,7 @@ class LegendGroup:
                         legend_path.translate(current_x_offset, y_offset)
                         feature_legend_group.add(legend_path)
                         current_x_offset += (bbox_width) 
-                        current_feature_legend_width = current_x_offset
+                        current_feature_legend_width = current_x_offset 
                         self.feature_legend_width = max(current_feature_legend_width, self.feature_legend_width)
                         current_column += 1
                     else:
@@ -854,6 +857,7 @@ class LegendGroup:
                         current_column = 0
                         current_x_offset = 0
                         y_offset += self.line_height
+                        self.feature_legend_height += self.line_height
                 elif properties['type'] == 'gradient':
                     grad_bar_x_start = 0
                     title_x_offset = 0
@@ -869,11 +873,11 @@ class LegendGroup:
                         key, 0, 0, 0, self.font_size, "normal", font, 
                         dominant_baseline='hanging', text_anchor="middle"
                     )
-                    title_path_bbox_width, _ = calculate_bbox_dimensions(str(key), self.font_family, self.font_size, self.dpi)
+                    title_path_bbox_width, title_path_bbox_height = calculate_bbox_dimensions(str(key), self.font_family, self.font_size, self.dpi)
                     title_x_offset = grad_bar_x_start + (grad_bar_width / 2)
                     title_path.translate(title_x_offset, gradient_y_offset) 
                     pairwise_legend_group.add(title_path) 
-                    gradient_y_offset += self.line_height 
+                    gradient_y_offset += title_path_bbox_height + (self.rect_size / 2)
 
 
                     
@@ -909,14 +913,27 @@ class LegendGroup:
                     pairwise_legend_group.add(label_100)
                     label_bbox_height = max(min_label_bbox_height, max_label_bbox_height)
                     gradient_y_offset += label_bbox_height
-                    pairwise_legend_group.translate(self.feature_legend_width, 0)
-                    self.legend_group.add(pairwise_legend_group)
+
                     self.pairwise_legend_width = grad_bar_width
-            self.legend_width = self.feature_legend_width + self.pairwise_legend_width
-            self.legend_height = max(y_offset, gradient_y_offset) + initial_y_offset
+                    self.pairwise_legend_height = gradient_y_offset
+            if self.pairwise_legend_width >0:
+                self.legend_width = self.feature_legend_width + self.pairwise_legend_width + self.text_x_offset
+            else:
+                self.legend_width = self.feature_legend_width
+            self.legend_height = max(self.feature_legend_height, self.pairwise_legend_height)
+            
+            if self.feature_legend_height > self.pairwise_legend_height:
+                pairwise_legend_group.translate(self.feature_legend_width + self.text_x_offset, (self.feature_legend_height - self.pairwise_legend_height)/2)
+            else:
+                pairwise_legend_group.translate(self.feature_legend_width  + self.text_x_offset, 0)
+                feature_legend_group.translate(0, (self.pairwise_legend_height - self.feature_legend_height)/2)
+
+            self.legend_group.add(pairwise_legend_group)
+            self.legend_group.add(feature_legend_group)
         else:
             for key, properties in self.legend_table.items():
                 if properties['type'] == 'solid':
+                    current_feature_legend_width = 0
                     rect_path = Path(
                         d=path_desc,
                         fill=properties['fill'],
@@ -924,25 +941,26 @@ class LegendGroup:
                         stroke_width=properties['width'])
                     rect_path.translate(0, y_offset)
                     feature_legend_group.add(rect_path)
-                    bbox_width, _ = calculate_bbox_dimensions(key, self.font_family, self.font_size, self.dpi)
+                    bbox_width, bbox_height = calculate_bbox_dimensions(key, self.font_family, self.font_size, self.dpi)
                     max_bbox_width = max(max_bbox_width, bbox_width)
                     legend_path = generate_text_path(
                         key, 0, 0, 0, self.font_size, "normal", font, 
                         dominant_baseline='central', text_anchor="start"
                     )
                     legend_path.translate(self.text_x_offset, y_offset)
-                    feature_legend_width = self.text_x_offset + bbox_width
+                    current_feature_legend_width = self.text_x_offset + bbox_width
                     feature_legend_group.add(legend_path)
                     
                     y_offset += self.line_height 
-                    self.feature_legend_width = max(feature_legend_width, self.feature_legend_width)
+                    self.feature_legend_width = max(current_feature_legend_width, self.feature_legend_width)
+                    
                 elif properties['type'] == 'gradient':
                     grad_bar_x_start = 0
                     if self.legend_position == 'top' or self.legend_position == 'bottom':
                         gradient_y_offset = 0
                     else:
                         gradient_y_offset = y_offset
-                    grad_bar_width = self.legend_config.legend_width - self.text_x_offset
+                    grad_bar_width = self.pairwise_legend_width
                     gradient_id = f"blast_legend_grad_{abs(hash(properties['min_color'] + properties['max_color']))}"
                     
                     gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
@@ -992,16 +1010,17 @@ class LegendGroup:
                     _, max_label_bbox_height = calculate_bbox_dimensions("100%", self.font_family, self.font_size, self.dpi)
                     pairwise_legend_group.add(label_100)
                     label_bbox_height = max(min_label_bbox_height, max_label_bbox_height)
-                    pairwise_legend_group.translate(0, 0)
-                    self.legend_group.add(pairwise_legend_group)
                     gradient_y_offset += label_bbox_height 
-                    self.pairwise_legend_width = grad_bar_width
-            if grad_bar_width > 0:
-                feature_legend_width = self.text_x_offset + max_bbox_width
-                feature_legend_group.translate(grad_bar_width/2 - feature_legend_width/2 + self.text_x_offset, 0)
+            if self.pairwise_legend_width > 0:
+                if self.pairwise_legend_width > self.feature_legend_width:
+                    feature_legend_group.translate((self.pairwise_legend_width - self.feature_legend_width)/2, 0)
+                    self.legend_group.add(pairwise_legend_group)
+                else:
+                    # pairwise_legend_group.translate((self.feature_legend_width - self.pairwise_legend_width)/2, 0)
+                    self.legend_group.add(pairwise_legend_group)
             self.legend_width = max(self.feature_legend_width, self.pairwise_legend_width)
             self.legend_height = max(gradient_y_offset, y_offset) + initial_y_offset
-        self.legend_group.add(feature_legend_group)
+            self.legend_group.add(feature_legend_group)
         return self.legend_group
     def get_group(self) -> Group:
         """

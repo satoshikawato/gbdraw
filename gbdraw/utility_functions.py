@@ -353,11 +353,13 @@ def modify_config_dict(config_dict,
     if legend_box_size is None:
         if default_cds_height is not None:
             if strandedness:
-                legend_box_size = 0.5 * default_cds_height
+                legend_box_size_short = 0.5 * default_cds_height
+                legend_box_size_long = 0.5 * default_cds_height
             else:
-                legend_box_size = default_cds_height
+                legend_box_size_short = 0.5 * default_cds_height
+                legend_box_size_long = 0.5 * default_cds_height
         else:
-            legend_box_size_short = 0.5 * default_cds_height_short
+            legend_box_size_short = default_cds_height_long
             legend_box_size_long = default_cds_height_long
 
          
