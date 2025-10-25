@@ -23,7 +23,7 @@ logger = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
 
 
-def _precalculate_definition_widths(records: list[SeqRecord], config_dict: dict) -> float:
+def _precalculate_definition_widths(records: list[SeqRecord], config_dict: dict, canvas_config) -> float:
     """
     Pre-calculates the maximum definition width among all records.
     """
@@ -32,7 +32,7 @@ def _precalculate_definition_widths(records: list[SeqRecord], config_dict: dict)
         return 0
 
     for record in records:
-        def_group = DefinitionGroup(record, config_dict)
+        def_group = DefinitionGroup(record, config_dict, canvas_config)
         if def_group.definition_bounding_box_width > max_definition_width:
             max_definition_width = def_group.definition_bounding_box_width
     return max_definition_width
@@ -265,7 +265,7 @@ def add_record_definition_group(canvas: Drawing, record: SeqRecord, record_offse
     """
     Adds a record definition group to the linear canvas.
     """
-    definition_group_obj = DefinitionGroup(record, config_dict)
+    definition_group_obj = DefinitionGroup(record, config_dict, canvas_config)
 
     definition_offset_x = definition_group_obj.definition_bounding_box_width / 2
 
@@ -348,7 +348,7 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     legend_group: Group = LegendGroup(config_dict, canvas_config, legend_config, legend_table)
     # Get the legend height
     required_legend_height = legend_group.legend_height
-    max_def_width = _precalculate_definition_widths(records, config_dict)
+    max_def_width = _precalculate_definition_widths(records, config_dict, canvas_config)
 
     canvas_config.recalculate_canvas_dimensions(legend_group, max_def_width)
     # Vertical shift: how much the records should be moved downward in order to place the records in the middle of the canvas
