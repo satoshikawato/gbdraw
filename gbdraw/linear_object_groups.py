@@ -44,7 +44,7 @@ class DefinitionGroup:
         linear_dominant_baseline (str): Dominant baseline position for the text.
     """
 
-    def __init__(self, record: SeqRecord, config_dict: dict, title_start_x: float = 0, title_start_y: float = -9, length_start_x: float = 0, length_start_y: float = 9) -> None:
+    def __init__(self, record: SeqRecord, config_dict: dict, canvas_config: dict, title_start_x: float = 0, title_start_y: float = -9, length_start_x: float = 0, length_start_y: float = 9) -> None:
         """
         Initializes the DefinitionGroup with the given SeqRecord and configuration.
 
@@ -63,9 +63,11 @@ class DefinitionGroup:
         self.length_start_y: float = length_start_y
         self.definition_bounding_box_width: float = 0
         self.definition_bounding_box_height: float = 0
+        self.canvas_config = canvas_config
+        self.length_param = self.canvas_config.length_param
         self.linear_definition_stroke: float = config_dict['objects']['definition']['linear']['stroke']
         self.linear_definition_fill: str = config_dict['objects']['definition']['linear']['fill']
-        self.linear_definition_font_size: str = config_dict['objects']['definition']['linear']['font_size']
+        self.linear_definition_font_size: str = config_dict['objects']['definition']['linear']['font_size'][self.length_param]
         self.linear_definition_font_weight: str = config_dict['objects']['definition']['linear']['font_weight']
         self.linear_definition_font_family: str = config_dict['objects']['text']['font_family']
         self.interval: int = config_dict['objects']['definition']['linear']['interval']

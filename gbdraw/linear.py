@@ -252,12 +252,12 @@ def _get_args(args) -> argparse.Namespace:
         type=int)
     parser.add_argument(
         '--legend_box_size',
-        help='Legend box size (float; default: 16).',
-        type=int)
+        help='Legend box size (float).',
+        type=float)
     parser.add_argument(
         '--legend_font_size',
-        help='Legend font size (float; default: 16).',
-        type=int)
+        help='Legend font size (float).',
+        type=float)
     
     args = parser.parse_args(args)
     if args.gbk and (args.gff or args.fasta):
@@ -415,7 +415,7 @@ def linear_main(cmd_args) -> None:
     else:
         step = manual_step
     num_of_entries: int = len(sequence_length_dict)
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness, show_labels=show_labels, resolve_overlaps=resolve_overlaps, label_blacklist=label_blacklist, label_whitelist=label_whitelist, default_cds_height=feature_height, legend_box_size=legend_box_size,legend_font_size=legend_font_size )
+    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness, show_labels=show_labels, resolve_overlaps=resolve_overlaps, label_blacklist=label_blacklist, label_whitelist=label_whitelist, default_cds_height=feature_height, legend_box_size=legend_box_size, legend_font_size=legend_font_size)
 
 
     blast_config = BlastMatchConfigurator(

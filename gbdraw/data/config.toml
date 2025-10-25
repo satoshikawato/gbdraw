@@ -97,11 +97,10 @@ dominant_baseline = 'central'
 text_anchor = 'start'
 [objects.legends.font_size]
 long = 16
-short = 32
+short = 20
 [objects.legends.color_rect_size]
-short = 50
 long = 20
-
+short = 24
 
 [objects.text]
 font_family = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
@@ -119,11 +118,14 @@ stroke_width = 2
 [objects.definition.linear]
 stroke = 'none'
 fill = 'black'
-font_size = 10
+
 font_weight = 'normal'
 text_anchor = 'middle'
 dominant_baseline = 'middle'
 interval = 5
+[objects.definition.linear.font_size]
+long = 12
+short = 24
 
 [objects.definition.circular]
 interval = 20
