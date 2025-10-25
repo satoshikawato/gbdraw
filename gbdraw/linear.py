@@ -247,9 +247,18 @@ def _get_args(args) -> argparse.Namespace:
         help='Scale bar/ruler font size (float; default: 16)',
         type=float)
     parser.add_argument(
-            '--scale_interval',
-            help='Manual tick interval for "ruler" scale style (in bp). Overrides automatic calculation.',
-            type=int)
+        '--scale_interval',
+        help='Manual tick interval for "ruler" scale style (in bp). Overrides automatic calculation.',
+        type=int)
+    parser.add_argument(
+        '--legend_box_size',
+        help='Legend box size (float; default: 16).',
+        type=int)
+    parser.add_argument(
+        '--legend_font_size',
+        help='Legend font size (float; default: 16).',
+        type=int)
+    
     args = parser.parse_args(args)
     if args.gbk and (args.gff or args.fasta):
         parser.error("Error: --gbk cannot be used with --gff or --fasta.")
@@ -322,6 +331,9 @@ def linear_main(cmd_args) -> None:
     scale_stroke_width: Optional[float] = args.scale_stroke_width
     scale_font_size: Optional[float] = args.scale_font_size
     scale_interval: Optional[int] = args.scale_interval
+    legend_box_size: Optional[float] = args.legend_box_size
+    legend_font_size: Optional[float] = args.legend_font_size
+
     if blast_files:
         load_comparison = True
     else:
@@ -369,7 +381,9 @@ def linear_main(cmd_args) -> None:
         scale_stroke_color=scale_stroke_color,
         scale_stroke_width=scale_stroke_width,
         scale_font_size=scale_font_size,
-        scale_interval=scale_interval
+        scale_interval=scale_interval,
+        legend_box_size=legend_box_size,
+        legend_font_size=legend_font_size
         )
 
     if args.gbk:
@@ -401,7 +415,8 @@ def linear_main(cmd_args) -> None:
     else:
         step = manual_step
     num_of_entries: int = len(sequence_length_dict)
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness, show_labels=show_labels, resolve_overlaps=resolve_overlaps, label_blacklist=label_blacklist, label_whitelist=label_whitelist, default_cds_height=feature_height)
+    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness, show_labels=show_labels, resolve_overlaps=resolve_overlaps, label_blacklist=label_blacklist, label_whitelist=label_whitelist, default_cds_height=feature_height, legend_box_size=legend_box_size,legend_font_size=legend_font_size )
+
 
     blast_config = BlastMatchConfigurator(
         evalue=evalue, bitscore=bitscore, identity=identity, sequence_length_dict=sequence_length_dict, config_dict=config_dict, default_colors_df=default_colors)

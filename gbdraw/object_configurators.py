@@ -149,11 +149,11 @@ class LegendDrawingConfigurator:
         self.skew_config = skew_config
         self.feature_config = feature_config
         self.blast_config = blast_config
-        self.font_size: float = config_dict['objects']['legends']['font_size']
+        self.length_param = self.canvas_config.length_param
+        self.font_size: float = config_dict['objects']['legends']['font_size'][self.length_param]
         self.font_weight: str = config_dict['objects']['legends']['font_weight']
         self.font_family: str = config_dict['objects']['text']['font_family']
         self.text_anchor: str = config_dict['objects']['legends']['text_anchor']
-        self.length_param = self.canvas_config.length_param
         self.color_rect_size: float = config_dict['objects']['legends']['color_rect_size'][self.length_param]
         self.dominant_baseline: str = config_dict['objects']['legends']['dominant_baseline']
         self.num_of_columns: int = 1
@@ -164,6 +164,7 @@ class LegendDrawingConfigurator:
         self.legend_width : float = 0
         self.total_feature_legend_width : float = 0
         self.pairwise_legend_width: float = 0
+
     def calculate_max_bbox_dimensions(self, legend_table):
         longest_key = max(legend_table.keys(), key=len)
         bbox_width_px, bbox_height_px = calculate_bbox_dimensions(longest_key, self.font_family, self.font_size, self.dpi)

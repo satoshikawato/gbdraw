@@ -300,7 +300,7 @@ class LinearCanvasConfigurator:
             self.total_width = self.horizontal_offset + self.alignment_width + 2 * padding
             self.legend_offset_x = (self.total_width - legend_group.legend_width)/2
             if self.legend_position == "top":
-                self.legend_offset_y = self.original_vertical_offset
+                self.legend_offset_y = self.original_vertical_offset + 2 * self.vertical_padding
             elif self.legend_position == "bottom":
                 self.legend_offset_y = self.total_height - self.original_vertical_offset - legend_group.legend_height
 

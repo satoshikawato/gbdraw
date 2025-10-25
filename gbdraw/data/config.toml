@@ -37,7 +37,7 @@ vertical_offset = 50
 horizontal_offset = 120
 vertical_padding = 8
 comparison_height = 60
-canvas_padding = 20
+canvas_padding = 50
 default_gc_height = 20
 align_center = false
 [canvas.linear.default_cds_height]
@@ -92,13 +92,16 @@ font_weight = 'normal'
 [objects.legends]
 stroke = 'none'
 fill = 'black'
-font_size = 16
 font_weight = 'normal'
 dominant_baseline = 'central'
 text_anchor = 'start'
+[objects.legends.font_size]
+long = 16
+short = 32
 [objects.legends.color_rect_size]
-short = 80
+short = 50
 long = 20
+
 
 [objects.text]
 font_family = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"

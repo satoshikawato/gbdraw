@@ -286,9 +286,11 @@ def suppress_gc_content_and_skew(suppress_gc: bool, suppress_skew: bool) -> tupl
 def update_config_value(config_dict, path, value):
     """ Helper function to update nested dictionary """
     keys = path.split('.')
+    
     for key in keys[:-1]:
         config_dict = config_dict.setdefault(key, {})
     config_dict[keys[-1]] = value
+
 
 
 def modify_config_dict(config_dict, 
@@ -332,37 +334,33 @@ def modify_config_dict(config_dict,
                        scale_interval=None,
                        blast_color_min=None,
                        blast_color_max=None,
-                       legend_box_size=None
+                       legend_box_size=None,
+                       legend_font_size=None
                        )-> dict:
     # Mapping of parameter names to their paths in the config_dict
     label_font_size_circular_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['long']
     label_font_size_circular_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['short']
     label_font_size_linear_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['long']
     label_font_size_linear_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['short']
-    legend_font_size = config_dict['objects']['legends']['font_size']
-    circular_definition_font_interval = None
+    
+    if legend_font_size is None:
+        legend_font_size_short = config_dict['objects']['legends']['font_size']['short']
+        legend_font_size_long = config_dict['objects']['legends']['font_size']['long']
 
+    circular_definition_font_interval = None
+    
     if default_cds_height is not None:
         default_cds_height_short = default_cds_height
         default_cds_height_long = default_cds_height
     else:
         default_cds_height_short = config_dict['canvas']['linear']['default_cds_height']['short']
         default_cds_height_long = config_dict['canvas']['linear']['default_cds_height']['long']
+        
     if circular_definition_font_size is not None:
         circular_definition_font_interval = float(circular_definition_font_size) + 2
     if legend_box_size is None:
-        if default_cds_height is not None:
-            if strandedness:
-                legend_box_size_short = 0.5 * default_cds_height
-                legend_box_size_long = 0.5 * default_cds_height
-            else:
-                legend_box_size_short = 0.5 * default_cds_height
-                legend_box_size_long = 0.5 * default_cds_height
-        else:
-            legend_box_size_short = default_cds_height_long
-            legend_box_size_long = default_cds_height_long
-
-         
+        legend_box_size_short = config_dict['objects']['legends']['color_rect_size']['short']
+        legend_box_size_long = config_dict['objects']['legends']['color_rect_size']['long']
     # Process label_blacklist only if the argument was explicitly passed
     if label_blacklist is not None:
         if label_blacklist == "":
@@ -403,7 +401,6 @@ def modify_config_dict(config_dict,
             for _, row in qualifier_priority.iterrows()
         }
         update_config_value(config_dict, 'labels.filtering.qualifier_priority', priority_dict)
-
     param_paths = {
         'block_stroke_width': 'objects.features.block_stroke_width',
         'block_stroke_color': 'objects.features.block_stroke_color',
@@ -447,13 +444,16 @@ def modify_config_dict(config_dict,
         'blast_color_min': 'objects.blast_match.min_color',
         'blast_color_max': 'objects.blast_match.max_color',
         'legend_box_size_short': 'objects.legends.color_rect_size.short',
-        'legend_box_size_long': 'objects.legends.color_rect_size.long'
-    }
+        'legend_box_size_long': 'objects.legends.color_rect_size.long',
+        'legend_font_size_short': 'objects.legends.font_size.short',
+        'legend_font_size_long': 'objects.legends.font_size.long'
+        }
     # Update the config_dict for each specified parameter
     for param, path in param_paths.items():
         value = locals()[param]
         if value is not None:
             update_config_value(config_dict, path, value)
+
     return config_dict
 
 def determine_output_file_prefix(gb_records, output_prefix, record_count, accession):
