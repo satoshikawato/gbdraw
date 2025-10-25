@@ -222,6 +222,7 @@ class LegendDrawingConfigurator:
         else:
             bbox_width_px, _ = self.calculate_max_bbox_dimensions(legend_table)
             self.total_feature_legend_width = x_margin + bbox_width_px
+            self.legend_width = max(self.total_feature_legend_width, self.pairwise_legend_width)
             num_lines = 0
             for key, properties in legend_table.items():
                 if properties.get('type') == 'gradient':
@@ -230,7 +231,7 @@ class LegendDrawingConfigurator:
                     num_lines += 1
             
             if self.has_gradient:
-                num_lines += 2 # グラデーションはタイトルとバーで2行分とみなす
+                num_lines += 2 
             
             if num_lines > 0:
                 self.legend_height = (self.color_rect_size + (num_lines - 1) * line_margin)

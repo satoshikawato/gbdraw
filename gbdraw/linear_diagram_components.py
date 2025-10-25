@@ -332,7 +332,7 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     )
     if required_label_height > 0:
         if canvas_config.vertical_offset < required_label_height:
-            canvas_config.vertical_offset = required_label_height
+            canvas_config.vertical_offset = required_label_height + canvas_config.original_vertical_offset + canvas_config.cds_padding
     else:
         canvas_config.vertical_offset = canvas_config.original_vertical_offset + canvas_config.cds_padding
 
@@ -348,7 +348,9 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     legend_group: Group = LegendGroup(config_dict, canvas_config, legend_config, legend_table)
     # Get the legend height
     required_legend_height = legend_group.legend_height
+    max_def_width = _precalculate_definition_widths(records, config_dict)
 
+    canvas_config.recalculate_canvas_dimensions(legend_group, max_def_width)
     # Vertical shift: how much the records should be moved downward in order to place the records in the middle of the canvas
     vertical_shift = 0
     if canvas_config.legend_position in ['top', 'bottom']:
@@ -357,20 +359,21 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
         if required_legend_height > canvas_config.total_height:
             height_difference = required_legend_height - canvas_config.total_height
             canvas_config.total_height = int(required_legend_height)
-            vertical_shift = height_difference / 2
+            vertical_shift = height_difference / 2 
         else:
             pass
 
     record_ids = [r.id for r in records]
     record_offsets = []
-    max_def_width = _precalculate_definition_widths(records, config_dict)
 
-    canvas_config.recalculate_canvas_dimensions(legend_group, max_def_width)
     
     if canvas_config.legend_position == "top":
-        current_y = canvas_config.original_vertical_offset + legend_group.legend_height + canvas_config.vertical_offset + vertical_shift 
+        current_y = canvas_config.original_vertical_offset + legend_group.legend_height + canvas_config.vertical_offset
     else:
-        current_y = canvas_config.vertical_offset + vertical_shift      
+        if canvas_config.vertical_offset > vertical_shift: 
+            current_y = canvas_config.vertical_offset
+        else:
+            current_y =  canvas_config.original_vertical_offset + vertical_shift
 
     for i, _ in enumerate(record_ids):
         record_offsets.append(current_y)
