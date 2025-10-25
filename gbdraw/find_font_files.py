@@ -4,7 +4,7 @@
 import logging
 import subprocess
 from fontTools.ttLib import TTFont
-import functools 
+
 logger = logging.getLogger()
 
 
@@ -50,7 +50,26 @@ def get_font_dict(font_families, styles):
                     #logger.info(message)
 
     return font_dict
+
 def get_text_bbox_size_pixels(font_path, text, font_size, dpi):
+    """
+    This function directly parses the font file using the `fontTools.ttLib` library
+    to read the metrics (dimensional information) of individual glyphs (characters).
+    It calculates the width and height of the entire text string by considering
+    each character's advance width, side bearings, and vertical extents (yMax, yMin).
+    Note that the width calculation does not account for kerning adjustments.
+
+    Args:
+        font_path (str): Path to the font file (e.g., .ttf) to be used.
+        text (str): The text string for which to calculate the size.
+        font_size (int or float): The font size (in points).
+        dpi (int): Dots Per Inch (DPI). Used to convert font units into pixels.
+
+    Returns:
+        tuple[float, float]:
+            text_width_pixels (float): The calculated width of the text in pixels.
+            text_height_pixels (float): The calculated height of the text in pixels.
+    """
     font = TTFont(font_path)
     hmtx = font['hmtx']
     cmap = font['cmap']
@@ -63,6 +82,7 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi):
     ymins = []
     car_count = 0
     text = str(text)
+    rsb_previous = 0
     for char in text:
         ymax = 0
         ymin = 0
@@ -86,14 +106,25 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi):
         ymaxes.append(ymax)
         ymins.append(ymin)
         advance_width, lsb = hmtx[glyph_index]
-        rsb = (advance_width - (lsb + xmax - xmin))
-        total_width += advance_width
-        if car_count == 0:
+        if xmax == 0:
+            advance_width -= rsb_previous
+        if lsb > 0:
             total_width -= lsb
         else:
+            total_width += lsb
+        rsb = (xmax -advance_width)
+        total_width += advance_width
+        if rsb > 0:
+            total_width -= rsb
+        else:
+            total_width += rsb
+        if car_count == 0:
+            total_width += lsb
+        else:
             pass
+        rsb_previous = rsb
         car_count +=1
-    total_width -= rsb  
+
     units_per_em = font['head'].unitsPerEm
     pixel = dpi * font_size / 72
     text_width_pixels = (total_width/units_per_em) * pixel

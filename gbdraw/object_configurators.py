@@ -178,7 +178,7 @@ class LegendDrawingConfigurator:
                 self.pairwise_legend_width = (10 * self.color_rect_size) if self.has_gradient else 0
         if canvas_config.legend_position == 'top' or canvas_config.legend_position == 'bottom':
             bbox_list = [calculate_bbox_dimensions(item, self.font_family, self.font_size, self.dpi) for item in legend_table]
-            total_feature_legend_width = sum([bbox[0] for bbox in bbox_list]) + x_margin * (len(legend_table)+1)
+            total_feature_legend_width = sum([bbox[0] for bbox in bbox_list]) + 2 * x_margin * (len(legend_table)+1)
             
             if self.has_gradient:
                 total_legend_width = total_feature_legend_width + self.pairwise_legend_width

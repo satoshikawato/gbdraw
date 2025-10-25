@@ -829,7 +829,7 @@ class LegendGroup:
                 if properties['type'] == 'solid':
                     bbox_width, _ = calculate_bbox_dimensions(str(key), self.font_family, self.font_size, self.dpi)
                     max_bbox_width = max(max_bbox_width, bbox_width)
-                    if current_feature_legend_width + self.text_x_offset + bbox_width  > self.total_feature_legend_width:
+                    if current_feature_legend_width + self.text_x_offset + bbox_width + self.text_x_offset > self.total_feature_legend_width:
                         current_feature_legend_width = 0
                         current_column = 0
                         current_x_offset = 0
@@ -849,7 +849,7 @@ class LegendGroup:
                         )
                     legend_path.translate(current_x_offset, y_offset)
                     feature_legend_group.add(legend_path)
-                    current_x_offset += (bbox_width)
+                    current_x_offset += (bbox_width + self.text_x_offset)
                     current_feature_legend_width = current_x_offset 
                     self.feature_legend_width = max(current_feature_legend_width, self.feature_legend_width)
                     current_column += 1
@@ -962,7 +962,6 @@ class LegendGroup:
                     gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
                     gradient.add_stop_color(offset="0%", color=properties['min_color'])
                     gradient.add_stop_color(offset="100%", color=properties['max_color'])
-                    # self.legend_group.add(gradient)
                     pairwise_legend_group.add(gradient)
                     title_path = generate_text_path(
                         key, 0, 0, 0, self.font_size, "normal", font, 
