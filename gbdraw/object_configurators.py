@@ -178,7 +178,7 @@ class LegendDrawingConfigurator:
                 self.pairwise_legend_width = (10 * self.color_rect_size) if self.has_gradient else 0
         if canvas_config.legend_position == 'top' or canvas_config.legend_position == 'bottom':
             bbox_list = [calculate_bbox_dimensions(item, self.font_family, self.font_size, self.dpi) for item in legend_table]
-            total_feature_legend_width = sum([bbox[0] for bbox in bbox_list]) + x_margin * (len(legend_table)+1)
+            total_feature_legend_width = sum([bbox[0] for bbox in bbox_list]) + 2 * x_margin * (len(legend_table)+1)
             
             if self.has_gradient:
                 total_legend_width = total_feature_legend_width + self.pairwise_legend_width
@@ -222,6 +222,7 @@ class LegendDrawingConfigurator:
         else:
             bbox_width_px, _ = self.calculate_max_bbox_dimensions(legend_table)
             self.total_feature_legend_width = x_margin + bbox_width_px
+            self.legend_width = max(self.total_feature_legend_width, self.pairwise_legend_width)
             num_lines = 0
             for key, properties in legend_table.items():
                 if properties.get('type') == 'gradient':
@@ -230,7 +231,7 @@ class LegendDrawingConfigurator:
                     num_lines += 1
             
             if self.has_gradient:
-                num_lines += 2 # グラデーションはタイトルとバーで2行分とみなす
+                num_lines += 2 
             
             if num_lines > 0:
                 self.legend_height = (self.color_rect_size + (num_lines - 1) * line_margin)

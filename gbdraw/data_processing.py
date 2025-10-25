@@ -658,7 +658,7 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
             longest_segment_length_in_pixels = (2*math.pi*radius_factor*radius) * (longest_segment_length)/total_length
             bbox_width_px, bbox_height_px = calculate_bbox_dimensions(feature_label_text, font_family, font_size, interval)
             label_middle = longeset_segment_middle
-            label_as_feature_length = total_length * bbox_width_px/(2*math.pi*radius)
+            label_as_feature_length = total_length * (1.1 * bbox_width_px)/(2*math.pi*radius)
             label_start = label_middle - (label_as_feature_length/2)
             label_end = label_middle + (label_as_feature_length/2)
             feature_middle_x: float = (radius * factors[1]) * math.cos(math.radians(360.0 * ((label_middle) / total_length) - 90))
@@ -669,7 +669,7 @@ def prepare_label_list(feature_dict, total_length, radius, track_ratio, config_d
             else:
                 middle_x: float = (inner_radius_factor * radius) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
                 middle_y: float = (inner_radius_factor * radius) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
-            if bbox_width_px  < longest_segment_length_in_pixels *1.05:
+            if label_start > longest_segment_start and label_end < longest_segment_end: 
                 is_embedded = True
             else:
                 is_embedded = False

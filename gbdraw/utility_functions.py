@@ -339,7 +339,7 @@ def modify_config_dict(config_dict,
     label_font_size_circular_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['short']
     label_font_size_linear_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['long']
     label_font_size_linear_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['short']
-    legend_font_size = label_font_size if label_font_size is not None else config_dict['objects']['legends']['font_size']
+    legend_font_size = config_dict['objects']['legends']['font_size']
     circular_definition_font_interval = None
 
     if default_cds_height is not None:

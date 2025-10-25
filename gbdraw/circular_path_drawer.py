@@ -636,7 +636,7 @@ def generate_circular_tick_labels(radius: float, total_len: int, size: str, tick
 
         bbox_width_px, bbox_height_px = calculate_bbox_dimensions(label_text, font_family, font_size, dpi)
         center_offset = (bbox_height_px/4) 
-        label_as_feature_length = total_len * bbox_width_px/(2*math.pi*radius)
+        label_as_feature_length = total_len * 1.5 * bbox_width_px/(2*math.pi*radius)
         label_start = tick - (label_as_feature_length/2)
         label_end = tick + (label_as_feature_length/2)
         if 0 <= angle < 90:
