@@ -402,6 +402,12 @@ def modify_config_dict(config_dict,
     else:
         line_stroke_color = config_dict['objects']['features']['line_stroke_color']
 
+    if block_stroke_width is not None:
+        block_stroke_width_short = block_stroke_width
+        block_stroke_width_long = block_stroke_width
+    else:
+        block_stroke_width_short = config_dict['objects']['features']['block_stroke_width']['short']
+        block_stroke_width_long = config_dict['objects']['features']['block_stroke_width']['long']        
 
     # Process label_blacklist only if the argument was explicitly passed
     if label_blacklist is not None:
@@ -445,7 +451,8 @@ def modify_config_dict(config_dict,
         update_config_value(config_dict, 'labels.filtering.qualifier_priority', priority_dict)
         
     param_paths = {
-        'block_stroke_width': 'objects.features.block_stroke_width',
+        'block_stroke_width_short': 'objects.features.block_stroke_width.short',
+        'block_stroke_width_long': 'objects.features.block_stroke_width.long',
         'block_stroke_color': 'objects.features.block_stroke_color',
         'circular_axis_stroke_color': 'objects.axis.circular.stroke_color',
         'circular_axis_stroke_width': 'objects.axis.circular.stroke_width',

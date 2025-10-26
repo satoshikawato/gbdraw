@@ -152,9 +152,8 @@ def _get_args(args) -> argparse.Namespace:
         default="gray")
     parser.add_argument(
         '--block_stroke_width',
-        help='Block stroke width (float; default: 0)',
-        type=float,
-        default=0)
+        help='Block stroke width (float)',
+        type=float)
     parser.add_argument(
         '--axis_stroke_color',
         help='Axis stroke color (str; default: "lightgray")',

@@ -128,7 +128,7 @@ text_anchor = 'middle'
 dominant_baseline = 'middle'
 interval = 5
 [objects.definition.linear.font_size]
-long = 12
+long = 10
 short = 24
 
 [objects.definition.circular]

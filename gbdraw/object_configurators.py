@@ -97,7 +97,7 @@ class FeatureDrawingConfigurator:
         self.length_param = self.canvas_config.length_param
         self.block_fill_color: str =  default_colors[default_colors['feature_type'] == 'default']['color'].values[0]
         self.block_stroke_color: str = config_dict['objects']['features']['block_stroke_color']
-        self.block_stroke_width: float = config_dict['objects']['features']['block_stroke_width']
+        self.block_stroke_width: float = config_dict['objects']['features']['block_stroke_width'][self.length_param]
         self.line_stroke_color: str = config_dict['objects']['features']['line_stroke_color']
         self.line_stroke_width: float = config_dict['objects']['features']['line_stroke_width'][self.length_param]
         self.qualifier_priority: config_dict['labels']['filtering']['qualifier_priority']

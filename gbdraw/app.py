@@ -872,7 +872,7 @@ if selected_mode == "📏 Linear":
                 l_adv_scale_stroke_width = st.number_input("Scale stroke width:", key="l_scale_width", help="Width of the scale bar. Default: 3 pt.")
                 st.markdown("##### Stroke Customization")
                 l_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="l_b_color", help="Color of the outline for feature blocks.")
-                l_adv_blk_width = st.number_input("Block stroke width:", value=0.0, min_value=0.0, step=0.1, key="l_b_width", help="Width of the outline for feature blocks. Set to 0 to remove outlines.")
+                l_adv_blk_width = st.number_input("Block stroke width:", key="l_b_width", help="Width of the outline for feature blocks. Set to 0 to remove outlines.")
                 l_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="l_l_color", help="Color of the lines representing introns.")
                 l_adv_line_width = st.number_input("Line stroke width:", key="l_l_width", help="Width of the lines representing introns.")
                 st.markdown("##### Axis Customization")
@@ -968,7 +968,8 @@ if selected_mode == "📏 Linear":
             linear_args += ["--legend_font_size", str(l_adv_legend_font_size)]
         if l_adv_axis_width:
             linear_args += ["--axis_stroke_color", l_adv_axis_color, "--axis_stroke_width", str(l_adv_axis_width)]
-
+        if l_adv_blk_width:
+            linear_args += ["--block_stroke_width", str(l_adv_blk_width)]
         selected_palette = st.session_state.get("l_palette_selector")
         if selected_palette: linear_args += ["--palette", selected_palette]
 
@@ -983,8 +984,9 @@ if selected_mode == "📏 Linear":
         linear_args += ["-k", ",".join(l_adv_feat), "-n", l_adv_nt]
         if l_adv_win: linear_args += ["--window", str(l_adv_win)]
         if l_adv_step: linear_args += ["--step", str(l_adv_step)]
+        
         linear_args += ["--bitscore", str(l_adv_bitscore), "--evalue", l_adv_evalue, "--identity", str(l_adv_identity)]
-        linear_args += ["--block_stroke_color", l_adv_blk_color, "--block_stroke_width", str(l_adv_blk_width)]
+        linear_args += ["--block_stroke_color", l_adv_blk_color]
         if l_adv_line_width:
             linear_args += ["--line_stroke_color", l_adv_line_color, "--line_stroke_width", str(l_adv_line_width)]
 
