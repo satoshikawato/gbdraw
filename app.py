@@ -46,6 +46,8 @@ def get_version_info():
         
     return version, commit_id
 
+VERSION, COMMIT_ID = get_version_info()
+
 st.title("🧬 gbdraw Web App")
 st.caption("A genome diagram generator for microbes and organelles")
 
