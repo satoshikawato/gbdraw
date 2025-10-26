@@ -261,14 +261,12 @@ def add_gc_skew_group(canvas: Drawing, record: SeqRecord, offset: float, offset_
     canvas.add(gc_skew_group)
     return canvas
 
-def add_record_definition_group(canvas: Drawing, record: SeqRecord, record_offset_y: float, record_offset_x: float, canvas_config: LinearCanvasConfigurator, config_dict: dict) -> Drawing:
+def add_record_definition_group(canvas: Drawing, record: SeqRecord, record_offset_y: float, record_offset_x: float, canvas_config: LinearCanvasConfigurator, config_dict: dict, max_def_width) -> Drawing:
     """
     Adds a record definition group to the linear canvas.
     """
     definition_group_obj = DefinitionGroup(record, config_dict, canvas_config)
-
-    definition_offset_x = definition_group_obj.definition_bounding_box_width / 2
-
+    definition_offset_x = (definition_group_obj.definition_bounding_box_width / 2) + (0.1 * max_def_width)
     record_definition_group: Group = definition_group_obj.get_group()
     
     position_record_definition_group(
@@ -432,7 +430,7 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
         
         labels_for_record = all_labels.get(record.id)
         add_record_group(canvas, record, offset_y, offset_x, canvas_config, feature_config, config_dict, precalculated_labels=labels_for_record)
-        add_record_definition_group(canvas, record, offset_y, offset_x, canvas_config, config_dict)
+        add_record_definition_group(canvas, record, offset_y, offset_x, canvas_config, config_dict, max_def_width)
         if canvas_config.show_gc:
             add_gc_content_group(canvas, record, offset_y, offset_x, canvas_config, gc_config, config_dict)
         if canvas_config.show_skew:

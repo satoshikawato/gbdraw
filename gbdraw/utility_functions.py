@@ -409,6 +409,13 @@ def modify_config_dict(config_dict,
         block_stroke_width_short = config_dict['objects']['features']['block_stroke_width']['short']
         block_stroke_width_long = config_dict['objects']['features']['block_stroke_width']['long']        
 
+    if circular_axis_stroke_width is not None:
+        circular_axis_stroke_width_short = circular_axis_stroke_width
+        circular_axis_stroke_width_long = circular_axis_stroke_width        
+    else:
+        circular_axis_stroke_width_short = config_dict['objects']['axis']['circular']['stroke_width']['short']
+        circular_axis_stroke_width_long = config_dict['objects']['axis']['circular']['stroke_width']['long']
+
     # Process label_blacklist only if the argument was explicitly passed
     if label_blacklist is not None:
         if label_blacklist == "":
@@ -453,9 +460,9 @@ def modify_config_dict(config_dict,
     param_paths = {
         'block_stroke_width_short': 'objects.features.block_stroke_width.short',
         'block_stroke_width_long': 'objects.features.block_stroke_width.long',
-        'block_stroke_color': 'objects.features.block_stroke_color',
         'circular_axis_stroke_color': 'objects.axis.circular.stroke_color',
-        'circular_axis_stroke_width': 'objects.axis.circular.stroke_width',
+        'circular_axis_stroke_width_short': 'objects.axis.circular.stroke_width.short',
+        'circular_axis_stroke_width_long': 'objects.axis.circular.stroke_width.long',
         'line_stroke_color': 'objects.features.line_stroke_color',
         'line_stroke_width_short': 'objects.features.line_stroke_width.short',
         'line_stroke_width_long': 'objects.features.line_stroke_width.long',

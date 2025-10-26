@@ -491,7 +491,7 @@ class AxisGroup:
         stroke_width (float): The width of the stroke for the axis circle.
     """
 
-    def __init__(self, radius: float, config_dict: dict) -> None:
+    def __init__(self, radius: float, config_dict: dict, canvas_config: dict) -> None:
         """
         Initializes the AxisGroup with the necessary radius and configuration settings.
 
@@ -503,8 +503,10 @@ class AxisGroup:
         self.radius: float = radius
         self.axis_group = Group(id="Axis")
         self.config_dict = config_dict
+        self.canvas_config = canvas_config
+        self.length_param = self.canvas_config.length_param
         self.stroke_color: str = self.config_dict['objects']['axis']['circular']['stroke_color']
-        self.stroke_width: float = self.config_dict['objects']['axis']['circular']['stroke_width']
+        self.stroke_width: float = self.config_dict['objects']['axis']['circular']['stroke_width'][self.length_param]
         self.add_elements_to_group()
 
     def draw_circular_axis(self) -> None:

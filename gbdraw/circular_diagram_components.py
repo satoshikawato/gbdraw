@@ -142,7 +142,7 @@ def add_axis_group_on_canvas(canvas: Drawing, canvas_config: CircularCanvasConfi
     Drawing: The updated SVG drawing with the axis group added.
     """
     axis_group: Group = AxisGroup(
-        canvas_config.radius, config_dict).get_group()
+        canvas_config.radius, config_dict, canvas_config).get_group()
     axis_group = center_group_on_canvas(axis_group, canvas_config)
     canvas.add(axis_group)
     return canvas

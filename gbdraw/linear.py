@@ -147,12 +147,11 @@ def _get_args(args) -> argparse.Namespace:
         default="CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region")
     parser.add_argument(
         '--block_stroke_color',
-        help='Block stroke color (str; default: "black")',
-        type=str,
-        default="gray")
+        help='Block stroke color (str; default: "gray")',
+        type=str)
     parser.add_argument(
         '--block_stroke_width',
-        help='Block stroke width (float)',
+        help='Block stroke width (optional; float; default: 2 pt for genomes <= 50 kb, 0 pt for genomes >= 50 kb)',
         type=float)
     parser.add_argument(
         '--axis_stroke_color',
@@ -161,23 +160,23 @@ def _get_args(args) -> argparse.Namespace:
         default="lightgray")
     parser.add_argument(
         '--axis_stroke_width',
-        help='Axis stroke width (float; default: 2.0)',
+        help='Axis stroke width (optional; float; default: 5 pt for genomes <= 50 kb, 2 pt for genomes >= 50 kb)',
         type=float)
     parser.add_argument(
         '--line_stroke_color',
-        help='Line stroke color (str; default: "lightgray")',
+        help='Line stroke color (optional; str; default: "lightgray")',
         type=str)
     parser.add_argument(
         '--line_stroke_width',
-        help='Line stroke width (float; default: 1.0)',
+        help='Line stroke width (optional; float; default: 5 pt for genomes <= 50 kb, 1 pt for genomes >= 50 kb)',
         type=float)
     parser.add_argument(
         '--definition_font_size',
-        help='Definition font size (optional; default: 10)',
+        help='Definition font size (optional; float; default: 24 pt for genomes <= 50 kb, 10 pt for genomes >= 50 kb)',
         type=float)
     parser.add_argument(
         '--label_font_size',
-        help='Label font size (optional; default: 16 for short genomes, 5 for long genomes)',
+        help='Label font size (optional; default: 24 pt for genomes <= 50 kb, 5 pt for genomes >= 50 kb)',
         type=float)
     parser.add_argument(
         '-f',
@@ -214,45 +213,45 @@ def _get_args(args) -> argparse.Namespace:
         default="")
     parser.add_argument(
         '--feature_height',
-        help='Feature vertical width (pixels; optional; default: 80 for short genomes, 20 for long genomes)',
+        help='Feature vertical width (optional; float; default: 80 (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes >= 50 kb)',
         type=float),
     parser.add_argument(
         '--gc_height',
-        help='GC content/skew vertical width (pixels; optional; default: 20)',
+        help='GC content/skew vertical width (optional; float; default: 20 (pixels, 96 dpi))',
         type=float),
     parser.add_argument(
         '--comparison_height',
-        help='Comparison block height (pixels; optional; default: 60)',
+        help='Comparison block height (optional; float; optional; default: 60 (pixels, 96 dpi))',
         type=float)
     parser.add_argument(
-            '--scale_style',
-            help='Style for the length scale (default: bar)',
-            type=str,
-            choices=["bar", "ruler"],
-            default="bar")
+        '--scale_style',
+        help='Style for the length scale (default: "bar"; "bar", "ruler")',
+        type=str,
+        choices=["bar", "ruler"],
+        default="bar")
     parser.add_argument(
-            '--scale_stroke_color',
-            help='Scale bar/ruler stroke color (str; default: "black")',
-            type=str)
+        '--scale_stroke_color',
+        help='Scale bar/ruler stroke color (optional; str; default: "black")',
+        type=str)
     parser.add_argument(
         '--scale_stroke_width',
-        help='Scale bar/ruler stroke width (float; default: 3)',
+        help='Scale bar/ruler stroke width (optional; float; default: 3 (pt))',
         type=float)
     parser.add_argument(
         '--scale_font_size',
-        help='Scale bar/ruler font size (float; default: 16)',
+        help='Scale bar/ruler font size (optional; float; default: 24 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb).',
         type=float)
     parser.add_argument(
         '--scale_interval',
-        help='Manual tick interval for "ruler" scale style (in bp). Overrides automatic calculation.',
+        help='Manual tick interval for "ruler" scale style (in bp). Overrides automatic calculation; optional',
         type=int)
     parser.add_argument(
         '--legend_box_size',
-        help='Legend box size (float).',
+        help='Legend box size (optional; float; default: 24 (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes >= 50 kb).',
         type=float)
     parser.add_argument(
         '--legend_font_size',
-        help='Legend font size (float).',
+        help='Legend font size (optional; float; default: 20 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb).',
         type=float)
     
     args = parser.parse_args(args)
