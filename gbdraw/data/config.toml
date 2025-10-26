@@ -112,7 +112,9 @@ font_family = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-se
 
 [objects.axis.circular]
 stroke_color = 'gray'
-stroke_width = 1
+[objects.axis.circular.stroke_width]
+long = 1
+short = 3
 [objects.axis.linear]
 stroke_color = 'gray'
 [objects.axis.linear.stroke_width]
@@ -144,7 +146,7 @@ font_weight = 'normal'
 short = 5
 long = 1.0
 [objects.features.block_stroke_width]
-short = 3.0
+short = 2.0
 long = 0.0
 
 
@@ -162,7 +164,7 @@ feature = ["note"]
   circular = 50000
   linear = 50000 
 [labels.font_size]
-  short = 16
+  short = 14
   long = 8
 [labels.font_size.linear]
   short = 24
