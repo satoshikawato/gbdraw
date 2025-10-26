@@ -574,7 +574,7 @@ class SeqRecordGroup:
         self.label_stroke_width = self.config_dict['labels']['stroke_width'][self.length_param]
         self.label_stroke_color = self.config_dict['labels']['stroke_color']['label_stroke_color']
         self.label_filtering = self.config_dict['labels']['filtering']
-        self.font_size = self.config_dict['objects']['features']['font_size']
+        self.font_size = self.config_dict['labels']['font_size'][self.length_param]
         self.dpi =  self.config_dict['canvas']['dpi']
         self.track_type = self.config_dict['canvas']['circular']['track_type']
         self.strandedness = self.config_dict['canvas']['strandedness']

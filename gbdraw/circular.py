@@ -371,8 +371,7 @@ def circular_main(cmd_args) -> None:
     out_formats: list[str] = parse_formats(args.format)
     record_count: int = 0
 
-    feature_config = FeatureDrawingConfigurator(
-        color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict)
+
 
     for gb_record in gb_records:
         record_count += 1 
@@ -409,6 +408,8 @@ def circular_main(cmd_args) -> None:
         canvas_config = CircularCanvasConfigurator(
             output_prefix=outfile_prefix, config_dict=config_dict, legend=legend, gb_record=gb_record
             )
+        feature_config = FeatureDrawingConfigurator(
+            color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, canvas_config=canvas_config)
         legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config, canvas_config=canvas_config)
         plot_circular_diagram(gb_record, canvas_config, gc_df, gc_config, skew_config,
                               feature_config, species, strain, config_dict, out_formats, legend_config)

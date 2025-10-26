@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import subprocess
 import os
 import io
 import re 
@@ -31,15 +30,13 @@ st.set_page_config(
     })
 
 def get_version_info():
-    """Retrieve the version information of the gbdraw package."""
+    """Retrieves the gbdraw version."""
     try:
         version = gbdraw.version.__version__
     except AttributeError:
         version = "N/A"
     
-        
     return version
-
 
 VERSION = get_version_info()
 
@@ -830,8 +827,10 @@ if selected_mode == "📏 Linear":
             st.markdown("##### Output Settings")
             l_prefix = st.text_input("Output prefix:", value="linear", key="l_prefix", help="Prefix for output files. Default is 'linear'.")
             l_fmt = st.selectbox("Output format:", ["svg", "png", "pdf", "eps", "ps"], index=0, key="l_fmt", help="Output file format. Default is SVG, which is the fastest and most flexible for web display.")
-            st.markdown("##### Legend")
-            l_legend = st.selectbox("Legend:", ["right", "left", "none"], index=0, key="l_legend", help="Position of the legend. 'none' hides the legend.")
+            st.markdown("##### Legend position")
+            l_legend = st.selectbox("Legend:", ["right", "left", "top", "bottom", "none"], index=0, key="l_legend", help="Position of the legend. 'none' hides the legend.")
+            st.markdown("##### Scale layout")
+            l_scale_style = st.selectbox("Scale style (--scale_style):", ["bar", "ruler"], index=0, key="l_scale_style", help="Style of the scale bar on the linear map. 'bar' draws a simple line, 'ruler' draws a ruler with ticks and labels.")
         with col2:
             st.subheader("Display Options")
             st.markdown("##### Track layout")
@@ -858,24 +857,27 @@ if selected_mode == "📏 Linear":
                 l_adv_nt = st.text_input("nt (--nt):", value="GC", key="l_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'.")
                 l_adv_win = st.number_input("Window size (-w):", key="l_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb")
                 l_adv_step = st.number_input("Step size (-s):", key="l_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb")
+                st.markdown("##### Legend")
+                l_adv_legend_font_size = st.number_input("Legend font size (default: 10 pt):", key="l_legend_font_size", help="Font size for the legend.")
+                l_adv_legend_box_size = st.number_input("Legend box size (default: 10 pt):", key="l_legend_box_size", help="Box size for the legend.")
                 st.markdown("##### Font Sizes")
-                l_adv_def_font_size = st.number_input("Definition font size (default: 10 pt):", value=10.0, key="l_def_font_size", help="Font size for the definition text beside each sequence.")
+                l_adv_def_font_size = st.number_input("Definition font size (default: 10 pt):", key="l_def_font_size", help="Font size for the definition text beside each sequence.")
                 l_adv_label_font_size = st.number_input("Label font size (default: 5 pt (>=50 kb) or 16 pt (<50 kb):", key="l_label_font_size", help="Font size for feature labels. Default is 5 pt for genomes >= 50 kb, 16 pt for smaller genomes.")
+
             with adv_cols2:
                 st.markdown("##### Scale Customization")
-                l_adv_scale_style = st.selectbox("Scale style (--scale_style):", ["bar", "ruler"], index=0, key="l_scale_style", help="Style of the scale bar on the linear map. 'bar' draws a simple line, 'ruler' draws a ruler with ticks and labels.")
-                l_adv_scale_font_size = st.number_input("Scale font size (--scale_font_size):", value=16, key="l_scale_font_size", help="Font size for the scale labels on the linear map. Default is 16 pt.")
                 l_adv_scale_interval = st.number_input("Scale interval (bp):", key="l_scale_interval", help="Interval between scale marks on the linear map.")
+                l_adv_scale_font_size = st.number_input("Scale font size (--scale_font_size):", key="l_scale_font_size", help="Font size for the scale labels on the linear map. Default is 16 pt.")
                 l_adv_scale_stroke_color = st.color_picker("Scale stroke color:", value="#000000", key="l_scale_color", help="Color of the scale bar.")
                 l_adv_scale_stroke_width = st.number_input("Scale stroke width:", key="l_scale_width", help="Width of the scale bar. Default: 3 pt.")
                 st.markdown("##### Stroke Customization")
                 l_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="l_b_color", help="Color of the outline for feature blocks.")
                 l_adv_blk_width = st.number_input("Block stroke width:", value=0.0, min_value=0.0, step=0.1, key="l_b_width", help="Width of the outline for feature blocks. Set to 0 to remove outlines.")
                 l_adv_line_color = st.color_picker("Line stroke color:", value="#808080", key="l_l_color", help="Color of the lines representing introns.")
-                l_adv_line_width = st.number_input("Line stroke width:", value=1.0, min_value=0.0, step=0.1, key="l_l_width", help="Width of the lines representing introns.")
+                l_adv_line_width = st.number_input("Line stroke width:", key="l_l_width", help="Width of the lines representing introns.")
                 st.markdown("##### Axis Customization")
                 l_adv_axis_color = st.color_picker("Axis stroke color:", value="#808080", key="l_axis_color", help="Color of the main axis line.")
-                l_adv_axis_width = st.number_input("Axis stroke width:", value=1.0, min_value=0.0, step=0.1, key="l_axis_width", help="Width of the main axis line.")
+                l_adv_axis_width = st.number_input("Axis stroke width:", key="l_axis_width", help="Width of the main axis line.")
             st.subheader("Comparison Filters")
             l_adv_comp_height = st.number_input("Comparison height:", key="l_comp_height", help="Height of the comparison blocks in pixels. Default: 60 pixels.")
             l_adv_bitscore = st.number_input("Min bitscore:", value=50.0, key="l_bitscore", help="Minimum bitscore for BLAST comparisons. Default is 50.0.")
@@ -950,8 +952,8 @@ if selected_mode == "📏 Linear":
             linear_args += ["--feature_height", str(l_adv_feat_height)]
         if l_adv_comp_height:
             linear_args += ["--comparison_height", str(l_adv_comp_height)]
-        if l_adv_scale_style != "bar":
-            linear_args += ["--scale_style", l_adv_scale_style]
+        if l_scale_style != "bar":
+            linear_args += ["--scale_style", l_scale_style]
         if l_adv_scale_font_size:
             linear_args += ["--scale_font_size", str(l_adv_scale_font_size)]
         if l_adv_scale_interval:
@@ -959,7 +961,14 @@ if selected_mode == "📏 Linear":
         if l_adv_scale_stroke_width:
             linear_args += ["--scale_stroke_width", str(l_adv_scale_stroke_width)]
         if l_adv_scale_stroke_color:
-            linear_args += ["--scale_stroke_color", l_adv_scale_stroke_color]
+            linear_args += ["--scale_stroke_color", str(l_adv_scale_stroke_color)]
+        if l_adv_legend_box_size:
+            linear_args += ["--legend_box_size", str(l_adv_legend_box_size)]
+        if l_adv_legend_font_size:
+            linear_args += ["--legend_font_size", str(l_adv_legend_font_size)]
+        if l_adv_axis_width:
+            linear_args += ["--axis_stroke_color", l_adv_axis_color, "--axis_stroke_width", str(l_adv_axis_width)]
+
         selected_palette = st.session_state.get("l_palette_selector")
         if selected_palette: linear_args += ["--palette", selected_palette]
 
@@ -976,8 +985,9 @@ if selected_mode == "📏 Linear":
         if l_adv_step: linear_args += ["--step", str(l_adv_step)]
         linear_args += ["--bitscore", str(l_adv_bitscore), "--evalue", l_adv_evalue, "--identity", str(l_adv_identity)]
         linear_args += ["--block_stroke_color", l_adv_blk_color, "--block_stroke_width", str(l_adv_blk_width)]
-        linear_args += ["--line_stroke_color", l_adv_line_color, "--line_stroke_width", str(l_adv_line_width)]
-        linear_args += ["--axis_stroke_color", l_adv_axis_color, "--axis_stroke_width", str(l_adv_axis_width)]
+        if l_adv_line_width:
+            linear_args += ["--line_stroke_color", l_adv_line_color, "--line_stroke_width", str(l_adv_line_width)]
+
         
         # --- QUALIFIER PRIORITY & BLACKLIST LOGIC ---
         selected_prio_file = st.session_state.get("l_qualifier_priority_file_manual", "")

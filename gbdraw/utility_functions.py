@@ -376,6 +376,32 @@ def modify_config_dict(config_dict,
         legend_font_size_short = config_dict['objects']['legends']['font_size']['short']
         legend_font_size_long = config_dict['objects']['legends']['font_size']['long']
 
+    if scale_font_size is not None:
+        scale_font_size_short = scale_font_size
+        scale_font_size_long = scale_font_size
+    else:
+        scale_font_size_short = config_dict['objects']['scale']['font_size']['short']
+        scale_font_size_long = config_dict['objects']['scale']['font_size']['long']       
+
+    if linear_axis_stroke_width is not None:
+        linear_axis_stroke_width_short = linear_axis_stroke_width
+        linear_axis_stroke_width_long = linear_axis_stroke_width
+    else:
+        linear_axis_stroke_width_short = config_dict['objects']['axis']['linear']['stroke_width']['short']
+        linear_axis_stroke_width_long = config_dict['objects']['axis']['linear']['stroke_width']['long']
+
+    if line_stroke_width is not None:
+        line_stroke_width_short = line_stroke_width
+        line_stroke_width_long = line_stroke_width
+    else:
+        line_stroke_width_short = config_dict['objects']['features']['line_stroke_width']['short']
+        line_stroke_width_long = config_dict['objects']['features']['line_stroke_width']['long']
+
+    if line_stroke_color is not None:
+        line_stroke_color = line_stroke_color
+    else:
+        line_stroke_color = config_dict['objects']['features']['line_stroke_color']
+
 
     # Process label_blacklist only if the argument was explicitly passed
     if label_blacklist is not None:
@@ -424,10 +450,12 @@ def modify_config_dict(config_dict,
         'circular_axis_stroke_color': 'objects.axis.circular.stroke_color',
         'circular_axis_stroke_width': 'objects.axis.circular.stroke_width',
         'line_stroke_color': 'objects.features.line_stroke_color',
-        'line_stroke_width': 'objects.features.line_stroke_width',
+        'line_stroke_width_short': 'objects.features.line_stroke_width.short',
+        'line_stroke_width_long': 'objects.features.line_stroke_width.long',
         'gc_stroke_color': 'objects.gc_content.stroke_color',
         'linear_axis_stroke_color': 'objects.axis.linear.stroke_color',
-        'linear_axis_stroke_width': 'objects.axis.linear.stroke_width',
+        'linear_axis_stroke_width_short': 'objects.axis.linear.stroke_width.short',
+        'linear_axis_stroke_width_long': 'objects.axis.linear.stroke_width.long',
         'linear_definition_font_size_short': 'objects.definition.linear.font_size.short',
         'linear_definition_font_size_long': 'objects.definition.linear.font_size.long',
         'circular_definition_font_size': 'objects.definition.circular.font_size',
@@ -456,7 +484,8 @@ def modify_config_dict(config_dict,
         'scale_style': 'objects.scale.style',
         'scale_stroke_color': 'objects.scale.stroke_color',
         'scale_stroke_width': 'objects.scale.stroke_width',
-        'scale_font_size': 'objects.scale.font_size',
+        'scale_font_size_short': 'objects.scale.font_size.short',
+        'scale_font_size_long': 'objects.scale.font_size.long',
         'scale_interval': 'objects.scale.interval',
         'blast_color_min': 'objects.blast_match.min_color',
         'blast_color_max': 'objects.blast_match.max_color',

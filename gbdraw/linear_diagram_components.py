@@ -389,7 +389,7 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
             current_y += inter_record_space
 
     
-    length_bar_group: Group = LengthBarGroup(canvas_config.fig_width, canvas_config.alignment_width, canvas_config.longest_genome, config_dict)
+    length_bar_group: Group = LengthBarGroup(canvas_config.fig_width, canvas_config.alignment_width, canvas_config.longest_genome, config_dict, canvas_config)
     
     final_height = current_y + canvas_config.cds_padding + canvas_config.gc_padding + canvas_config.skew_padding + length_bar_group.scale_group_height + 4 * canvas_config.vertical_padding + canvas_config.original_vertical_offset
     canvas_config.height_below_final_record = current_y + canvas_config.cds_padding + canvas_config.gc_padding + canvas_config.skew_padding + 4 * canvas_config.vertical_padding

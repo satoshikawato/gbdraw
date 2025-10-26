@@ -149,7 +149,7 @@ def _get_args(args) -> argparse.Namespace:
         '--block_stroke_color',
         help='Block stroke color (str; default: "black")',
         type=str,
-        default="black")
+        default="gray")
     parser.add_argument(
         '--block_stroke_width',
         help='Block stroke width (float; default: 0)',
@@ -163,18 +163,15 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '--axis_stroke_width',
         help='Axis stroke width (float; default: 2.0)',
-        type=float,
-        default=2.0)
+        type=float)
     parser.add_argument(
         '--line_stroke_color',
-        help='Line stroke color (str; default: "gray")',
-        type=str,
-        default="gray")
+        help='Line stroke color (str; default: "lightgray")',
+        type=str)
     parser.add_argument(
         '--line_stroke_width',
         help='Line stroke width (float; default: 1.0)',
-        type=float,
-        default=1.0)
+        type=float)
     parser.add_argument(
         '--definition_font_size',
         help='Definition font size (optional; default: 10)',
@@ -423,7 +420,7 @@ def linear_main(cmd_args) -> None:
     canvas_config = LinearCanvasConfigurator(output_prefix=out_file_prefix,
                                             num_of_entries=num_of_entries, longest_genome=longest_genome, config_dict=config_dict, legend=legend)
     feature_config = FeatureDrawingConfigurator(
-        color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict)
+        color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, canvas_config=canvas_config)
     gc_config = GcContentConfigurator(
         window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
     skew_config = GcSkewConfigurator(
