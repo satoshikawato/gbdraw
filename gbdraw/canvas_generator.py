@@ -285,20 +285,20 @@ class LinearCanvasConfigurator:
         legend_width = legend_group.legend_width
 
         if self.legend_position == "right":
-            self.horizontal_offset = padding + max_definition_width
-            self.total_width = self.horizontal_offset + self.alignment_width + padding + legend_width + self.original_horizontal_offset
-            self.legend_offset_x = self.horizontal_offset + self.alignment_width + padding
+            self.horizontal_offset = 2 *  padding + max_definition_width
+            self.total_width = self.horizontal_offset + self.alignment_width + 2 * padding + legend_width +  1 *  padding
+            self.legend_offset_x = self.horizontal_offset + self.alignment_width + 2 * padding
             self.legend_offset_y = calculate_optimal_legend_y()
 
         elif self.legend_position == "left":
-            self.horizontal_offset = padding + legend_width + padding + max_definition_width
-            self.total_width = self.horizontal_offset + self.alignment_width + padding + self.original_horizontal_offset
+            self.horizontal_offset = 1 * padding + legend_width + 2 *padding + max_definition_width
+            self.total_width = self.horizontal_offset + self.alignment_width + 2 * padding
             self.legend_offset_x = padding
             self.legend_offset_y = calculate_optimal_legend_y()
 
         elif self.legend_position in ["top", "bottom"]:
-            self.horizontal_offset = padding + max_definition_width
-            self.total_width = self.horizontal_offset + self.alignment_width + padding + self.original_horizontal_offset
+            self.horizontal_offset = 2 * padding + max_definition_width
+            self.total_width = self.horizontal_offset + self.alignment_width + 2 * padding
             self.legend_offset_x = (self.total_width - legend_group.legend_width)/2
             if self.legend_position == "top":
                 self.legend_offset_y = self.original_vertical_offset + 2 * self.vertical_padding
@@ -306,8 +306,8 @@ class LinearCanvasConfigurator:
                 self.legend_offset_y = self.total_height - self.original_vertical_offset - legend_group.legend_height
 
         else:
-            self.horizontal_offset = padding + max_definition_width
-            self.total_width = self.horizontal_offset + self.alignment_width + padding + self.original_horizontal_offset
+            self.horizontal_offset = 2 * padding + max_definition_width
+            self.total_width = self.horizontal_offset + self.alignment_width + 2 * padding
             self.legend_offset_x = 0
             self.legend_offset_y = 0
 
