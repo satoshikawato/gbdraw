@@ -52,8 +52,11 @@ align_center = false
 style = "bar"
 stroke_color = 'black'
 stroke_width = 3
-font_size = 16
 font_weight = 'normal'
+[objects.scale.font_size]
+long = 16
+short = 24
+
 
 [objects.blast_match]
 fill_opacity = 1.0
@@ -97,11 +100,10 @@ dominant_baseline = 'central'
 text_anchor = 'start'
 [objects.legends.font_size]
 long = 16
-short = 32
+short = 20
 [objects.legends.color_rect_size]
-short = 50
 long = 20
-
+short = 24
 
 [objects.text]
 font_family = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
@@ -110,20 +112,26 @@ font_family = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-se
 
 [objects.axis.circular]
 stroke_color = 'gray'
-stroke_width = 1
+[objects.axis.circular.stroke_width]
+long = 1
+short = 3
 [objects.axis.linear]
-stroke_color = 'lightgray'
-stroke_width = 2
+stroke_color = 'gray'
+[objects.axis.linear.stroke_width]
+long = 2
+short = 5
 
 [objects.definition]
 [objects.definition.linear]
 stroke = 'none'
 fill = 'black'
-font_size = 10
 font_weight = 'normal'
 text_anchor = 'middle'
 dominant_baseline = 'middle'
 interval = 5
+[objects.definition.linear.font_size]
+long = 10
+short = 24
 
 [objects.definition.circular]
 interval = 20
@@ -132,11 +140,16 @@ font_size = 18
 [objects.features]
 features_drawn = ["CDS", "rRNA", "tRNA" ,"tmRNA", "ncRNA", "misc_RNA", "repeat_region", "regulatory","rep_origin", "misc_feature"]
 block_stroke_color = 'gray'
-block_stroke_width = 0.0
-line_stroke_color = 'gray'
-line_stroke_width = 1.0
-font_size = 10
+line_stroke_color = 'lightgray'
 font_weight = 'normal'
+[objects.features.line_stroke_width]
+short = 5
+long = 1.0
+[objects.features.block_stroke_width]
+short = 2.0
+long = 0.0
+
+
 
 [labels]
 
@@ -151,10 +164,10 @@ feature = ["note"]
   circular = 50000
   linear = 50000 
 [labels.font_size]
-  short = 16
+  short = 14
   long = 8
 [labels.font_size.linear]
-  short = 16
+  short = 24
   long = 5
 [labels.stroke_width]
   short = 1.5

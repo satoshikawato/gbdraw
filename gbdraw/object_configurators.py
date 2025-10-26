@@ -81,7 +81,7 @@ class FeatureDrawingConfigurator:
         default_colors (Optional[DataFrame]): Default color settings for features.
         selected_features_set (str): Identifier for a set of features to be visualized.
     """
-    def __init__(self, color_table: Optional[DataFrame], default_colors: DataFrame, selected_features_set: List[str], config_dict: Dict) -> None:
+    def __init__(self, color_table: Optional[DataFrame], default_colors: DataFrame, selected_features_set: List[str], config_dict: Dict, canvas_config: Dict) -> None:
         """
         Initializes the FeatureDrawingConfigurator with color settings and feature selection.
 
@@ -93,11 +93,13 @@ class FeatureDrawingConfigurator:
         self.color_table: Optional[DataFrame] = color_table
         self.default_colors: DataFrame = default_colors
         self.selected_features_set: List(str) = selected_features_set
+        self.canvas_config = canvas_config
+        self.length_param = self.canvas_config.length_param
         self.block_fill_color: str =  default_colors[default_colors['feature_type'] == 'default']['color'].values[0]
         self.block_stroke_color: str = config_dict['objects']['features']['block_stroke_color']
-        self.block_stroke_width: float = config_dict['objects']['features']['block_stroke_width']
+        self.block_stroke_width: float = config_dict['objects']['features']['block_stroke_width'][self.length_param]
         self.line_stroke_color: str = config_dict['objects']['features']['line_stroke_color']
-        self.line_stroke_width: float = config_dict['objects']['features']['line_stroke_width']
+        self.line_stroke_width: float = config_dict['objects']['features']['line_stroke_width'][self.length_param]
         self.qualifier_priority: config_dict['labels']['filtering']['qualifier_priority']
         self.blacklist_keywords: List[str] = config_dict['labels']['filtering']['blacklist_keywords']
 

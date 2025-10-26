@@ -491,7 +491,7 @@ class AxisGroup:
         stroke_width (float): The width of the stroke for the axis circle.
     """
 
-    def __init__(self, radius: float, config_dict: dict) -> None:
+    def __init__(self, radius: float, config_dict: dict, canvas_config: dict) -> None:
         """
         Initializes the AxisGroup with the necessary radius and configuration settings.
 
@@ -503,8 +503,10 @@ class AxisGroup:
         self.radius: float = radius
         self.axis_group = Group(id="Axis")
         self.config_dict = config_dict
+        self.canvas_config = canvas_config
+        self.length_param = self.canvas_config.length_param
         self.stroke_color: str = self.config_dict['objects']['axis']['circular']['stroke_color']
-        self.stroke_width: float = self.config_dict['objects']['axis']['circular']['stroke_width']
+        self.stroke_width: float = self.config_dict['objects']['axis']['circular']['stroke_width'][self.length_param]
         self.add_elements_to_group()
 
     def draw_circular_axis(self) -> None:
@@ -574,7 +576,7 @@ class SeqRecordGroup:
         self.label_stroke_width = self.config_dict['labels']['stroke_width'][self.length_param]
         self.label_stroke_color = self.config_dict['labels']['stroke_color']['label_stroke_color']
         self.label_filtering = self.config_dict['labels']['filtering']
-        self.font_size = self.config_dict['objects']['features']['font_size']
+        self.font_size = self.config_dict['labels']['font_size'][self.length_param]
         self.dpi =  self.config_dict['canvas']['dpi']
         self.track_type = self.config_dict['canvas']['circular']['track_type']
         self.strandedness = self.config_dict['canvas']['strandedness']

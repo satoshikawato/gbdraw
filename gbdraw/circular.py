@@ -118,47 +118,41 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '--block_stroke_color',
         help='Block stroke color (str; default: "gray")',
-        type=str,
-        default="gray")
+        type=str)
     parser.add_argument(
         '--block_stroke_width',
-        help='Block stroke width (float; default: 0)',
-        type=float,
-        default=0)
+        help='Block stroke width (optional; float; default: 2 pt for genomes <= 50 kb, 0 pt for genomes >= 50 kb)',
+        type=float)
     parser.add_argument(
         '--axis_stroke_color',
         help='Axis stroke color (str; default: "gray")',
-        type=str,
-        default="gray")
+        type=str)
     parser.add_argument(
         '--axis_stroke_width',
-        help='Axis stroke width (float; default: 1.0)',
-        type=float,
-        default=1.0)
+        help='Axis stroke width (optional; float; default: 3 pt for genomes <= 50 kb, 1 pt for genomes >= 50 kb)',
+        type=float)
     parser.add_argument(
         '--line_stroke_color',
         help='Line stroke color (str; default: "gray")',
-        type=str,
-        default="gray")
+        type=str)
     parser.add_argument(
         '--line_stroke_width',
-        help='Line stroke width (float; default: 1.0)',
-        type=float,
-        default=1.0)
+        help='Line stroke width (optional; float; default: 5 pt for genomes <= 50 kb, 1 pt for genomes >= 50 kb)',
+        type=float)
     parser.add_argument(
         '--definition_font_size',
         help='Definition font size (optional; default: 18)',
         type=float)
     parser.add_argument(
         '--label_font_size',
-        help='Label font size (optional; default: 16 for short genomes, 8 for long genomes)',
+        help='Label font size (optional; default: 14 (pt) for genomes <= 50 kb, 8 for genomes >= 50 kb)',
         type=float)
     parser.add_argument(
         '-f',
         '--format',
-        help='Comma-separated list of output file formats (default: png)',
+        help='Comma-separated list of output file formats (svg, png, pdf, eps, ps; default: svg).',
         type=str,
-        default="png")
+        default="svg")
     parser.add_argument(
         '--suppress_gc',
         help='Suppress GC content track (default: False).',
@@ -190,13 +184,14 @@ def _get_args(args) -> argparse.Namespace:
         '--allow_inner_labels',
         help='Place labels inside the circle (default: False). If enabled, labels are placed both inside and outside the circle, and gc and skew tracks are not shown.',
         action='store_true')
+    
     label_list_group = parser.add_mutually_exclusive_group()
     label_list_group.add_argument(
         '--label_whitelist',
         help='path to a file for label whitelisting (optional); mutually exclusive with --label_blacklist',
         type=str,
         default="")
-    parser.add_argument(
+    label_list_group.add_argument(
         '--label_blacklist',
         help='Comma-separated keywords or path to a file for label blacklisting (optional); mutually exclusive with --label_whitelist',
         type=str,
@@ -207,31 +202,34 @@ def _get_args(args) -> argparse.Namespace:
         help='Path to a TSV file defining qualifier priority for labels (optional)',
         type=str,
         default="")
-        
     parser.add_argument(
         '--outer_label_x_radius_offset',
         help='Outer label x-radius offset factor (float; default from config)',
         type=float)
-
     parser.add_argument(
         '--outer_label_y_radius_offset',
         help='Outer label y-radius offset factor (float; default from config)',
         type=float)
-
     parser.add_argument(
         '--inner_label_x_radius_offset',
         help='Inner label x-radius offset factor (float; default from config)',
         type=float)
-
     parser.add_argument(
         '--inner_label_y_radius_offset',
         help='Inner label y-radius offset factor (float; default from config)',
         type=float)
-    
     parser.add_argument(
         '--scale_interval',
         help='Manual scale interval for circular mode (in bp). Overrides automatic calculation.',
         type=int)
+    parser.add_argument(
+        '--legend_box_size',
+        help='Legend box size (optional; float; default: 24 (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes >= 50 kb).',
+        type=float)
+    parser.add_argument(
+        '--legend_font_size',
+        help='Legend font size (optional; float; default: 20 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb).',
+        type=float)
     
     args = parser.parse_args(args)
     if args.gbk and (args.gff or args.fasta):
@@ -294,6 +292,8 @@ def circular_main(cmd_args) -> None:
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
     scale_interval: Optional[int] = args.scale_interval
+    legend_box_size = args.legend_box_size
+    legend_font_size = args.legend_font_size
     if args.gbk:
         gb_records = load_gbks(args.gbk, "circular")
     elif args.gff and args.fasta:
@@ -365,14 +365,15 @@ def circular_main(cmd_args) -> None:
         outer_label_y_radius_offset=outer_label_y_radius_offset,
         inner_label_x_radius_offset=inner_label_x_radius_offset,
         inner_label_y_radius_offset=inner_label_y_radius_offset,
-        scale_interval=scale_interval
+        scale_interval=scale_interval,
+        legend_box_size=legend_box_size,
+        legend_font_size=legend_font_size
     )    
 
     out_formats: list[str] = parse_formats(args.format)
     record_count: int = 0
 
-    feature_config = FeatureDrawingConfigurator(
-        color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict)
+
 
     for gb_record in gb_records:
         record_count += 1 
@@ -409,6 +410,8 @@ def circular_main(cmd_args) -> None:
         canvas_config = CircularCanvasConfigurator(
             output_prefix=outfile_prefix, config_dict=config_dict, legend=legend, gb_record=gb_record
             )
+        feature_config = FeatureDrawingConfigurator(
+            color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, canvas_config=canvas_config)
         legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config, canvas_config=canvas_config)
         plot_circular_diagram(gb_record, canvas_config, gc_df, gc_config, skew_config,
                               feature_config, species, strain, config_dict, out_formats, legend_config)

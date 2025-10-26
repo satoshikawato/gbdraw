@@ -342,13 +342,14 @@ def modify_config_dict(config_dict,
     label_font_size_circular_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['short']
     label_font_size_linear_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['long']
     label_font_size_linear_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['short']
-    
-    if legend_font_size is None:
-        legend_font_size_short = config_dict['objects']['legends']['font_size']['short']
-        legend_font_size_long = config_dict['objects']['legends']['font_size']['long']
 
-    circular_definition_font_interval = None
-    
+    if linear_definition_font_size is not None:
+        linear_definition_font_size_short = linear_definition_font_size
+        linear_definition_font_size_long = linear_definition_font_size
+    else:
+        linear_definition_font_size_short = config_dict['objects']['definition']['linear']['font_size']['short']
+        linear_definition_font_size_long = config_dict['objects']['definition']['linear']['font_size']['long']
+
     if default_cds_height is not None:
         default_cds_height_short = default_cds_height
         default_cds_height_long = default_cds_height
@@ -358,9 +359,63 @@ def modify_config_dict(config_dict,
         
     if circular_definition_font_size is not None:
         circular_definition_font_interval = float(circular_definition_font_size) + 2
-    if legend_box_size is None:
+    else:
+        circular_definition_font_interval = None
+
+    if legend_box_size is not None:
+        legend_box_size_short = legend_box_size
+        legend_box_size_long = legend_box_size
+    else:
         legend_box_size_short = config_dict['objects']['legends']['color_rect_size']['short']
         legend_box_size_long = config_dict['objects']['legends']['color_rect_size']['long']
+
+    if legend_font_size is not None:
+        legend_font_size_short = legend_font_size
+        legend_font_size_long = legend_font_size
+    else:
+        legend_font_size_short = config_dict['objects']['legends']['font_size']['short']
+        legend_font_size_long = config_dict['objects']['legends']['font_size']['long']
+
+    if scale_font_size is not None:
+        scale_font_size_short = scale_font_size
+        scale_font_size_long = scale_font_size
+    else:
+        scale_font_size_short = config_dict['objects']['scale']['font_size']['short']
+        scale_font_size_long = config_dict['objects']['scale']['font_size']['long']       
+
+    if linear_axis_stroke_width is not None:
+        linear_axis_stroke_width_short = linear_axis_stroke_width
+        linear_axis_stroke_width_long = linear_axis_stroke_width
+    else:
+        linear_axis_stroke_width_short = config_dict['objects']['axis']['linear']['stroke_width']['short']
+        linear_axis_stroke_width_long = config_dict['objects']['axis']['linear']['stroke_width']['long']
+
+    if line_stroke_width is not None:
+        line_stroke_width_short = line_stroke_width
+        line_stroke_width_long = line_stroke_width
+    else:
+        line_stroke_width_short = config_dict['objects']['features']['line_stroke_width']['short']
+        line_stroke_width_long = config_dict['objects']['features']['line_stroke_width']['long']
+
+    if line_stroke_color is not None:
+        line_stroke_color = line_stroke_color
+    else:
+        line_stroke_color = config_dict['objects']['features']['line_stroke_color']
+
+    if block_stroke_width is not None:
+        block_stroke_width_short = block_stroke_width
+        block_stroke_width_long = block_stroke_width
+    else:
+        block_stroke_width_short = config_dict['objects']['features']['block_stroke_width']['short']
+        block_stroke_width_long = config_dict['objects']['features']['block_stroke_width']['long']        
+
+    if circular_axis_stroke_width is not None:
+        circular_axis_stroke_width_short = circular_axis_stroke_width
+        circular_axis_stroke_width_long = circular_axis_stroke_width        
+    else:
+        circular_axis_stroke_width_short = config_dict['objects']['axis']['circular']['stroke_width']['short']
+        circular_axis_stroke_width_long = config_dict['objects']['axis']['circular']['stroke_width']['long']
+
     # Process label_blacklist only if the argument was explicitly passed
     if label_blacklist is not None:
         if label_blacklist == "":
@@ -401,23 +456,27 @@ def modify_config_dict(config_dict,
             for _, row in qualifier_priority.iterrows()
         }
         update_config_value(config_dict, 'labels.filtering.qualifier_priority', priority_dict)
+        
     param_paths = {
-        'block_stroke_width': 'objects.features.block_stroke_width',
-        'block_stroke_color': 'objects.features.block_stroke_color',
+        'block_stroke_width_short': 'objects.features.block_stroke_width.short',
+        'block_stroke_width_long': 'objects.features.block_stroke_width.long',
         'circular_axis_stroke_color': 'objects.axis.circular.stroke_color',
-        'circular_axis_stroke_width': 'objects.axis.circular.stroke_width',
+        'circular_axis_stroke_width_short': 'objects.axis.circular.stroke_width.short',
+        'circular_axis_stroke_width_long': 'objects.axis.circular.stroke_width.long',
         'line_stroke_color': 'objects.features.line_stroke_color',
-        'line_stroke_width': 'objects.features.line_stroke_width',
+        'line_stroke_width_short': 'objects.features.line_stroke_width.short',
+        'line_stroke_width_long': 'objects.features.line_stroke_width.long',
         'gc_stroke_color': 'objects.gc_content.stroke_color',
         'linear_axis_stroke_color': 'objects.axis.linear.stroke_color',
-        'linear_axis_stroke_width': 'objects.axis.linear.stroke_width',
-        'linear_definition_font_size': 'objects.definition.linear.font_size',
+        'linear_axis_stroke_width_short': 'objects.axis.linear.stroke_width.short',
+        'linear_axis_stroke_width_long': 'objects.axis.linear.stroke_width.long',
+        'linear_definition_font_size_short': 'objects.definition.linear.font_size.short',
+        'linear_definition_font_size_long': 'objects.definition.linear.font_size.long',
         'circular_definition_font_size': 'objects.definition.circular.font_size',
         'circular_definition_font_interval': 'objects.definition.circular.interval',
         'label_font_size_circular_long': 'labels.font_size.long',
         'label_font_size_circular_short': 'labels.font_size.short',
         'label_font_size_linear_long': 'labels.font_size.linear.long',
-        'legend_font_size': 'objects.legends.font_size',
         'label_font_size_linear_short': 'labels.font_size.linear.short',
         'strandedness': 'canvas.strandedness',
         'show_gc': 'canvas.show_gc',
@@ -439,15 +498,16 @@ def modify_config_dict(config_dict,
         'scale_style': 'objects.scale.style',
         'scale_stroke_color': 'objects.scale.stroke_color',
         'scale_stroke_width': 'objects.scale.stroke_width',
-        'scale_font_size': 'objects.scale.font_size',
+        'scale_font_size_short': 'objects.scale.font_size.short',
+        'scale_font_size_long': 'objects.scale.font_size.long',
         'scale_interval': 'objects.scale.interval',
         'blast_color_min': 'objects.blast_match.min_color',
         'blast_color_max': 'objects.blast_match.max_color',
         'legend_box_size_short': 'objects.legends.color_rect_size.short',
         'legend_box_size_long': 'objects.legends.color_rect_size.long',
         'legend_font_size_short': 'objects.legends.font_size.short',
-        'legend_font_size_long': 'objects.legends.font_size.long'
-        }
+        'legend_font_size_long': 'objects.legends.font_size.long',
+    }
     # Update the config_dict for each specified parameter
     for param, path in param_paths.items():
         value = locals()[param]

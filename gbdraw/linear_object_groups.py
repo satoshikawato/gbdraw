@@ -44,7 +44,7 @@ class DefinitionGroup:
         linear_dominant_baseline (str): Dominant baseline position for the text.
     """
 
-    def __init__(self, record: SeqRecord, config_dict: dict, title_start_x: float = 0, title_start_y: float = -9, length_start_x: float = 0, length_start_y: float = 9) -> None:
+    def __init__(self, record: SeqRecord, config_dict: dict, canvas_config: dict, title_start_x: float = 0, title_start_y: float = -9, length_start_x: float = 0, length_start_y: float = 9) -> None:
         """
         Initializes the DefinitionGroup with the given SeqRecord and configuration.
 
@@ -63,9 +63,11 @@ class DefinitionGroup:
         self.length_start_y: float = length_start_y
         self.definition_bounding_box_width: float = 0
         self.definition_bounding_box_height: float = 0
+        self.canvas_config = canvas_config
+        self.length_param = self.canvas_config.length_param
         self.linear_definition_stroke: float = config_dict['objects']['definition']['linear']['stroke']
         self.linear_definition_fill: str = config_dict['objects']['definition']['linear']['fill']
-        self.linear_definition_font_size: str = config_dict['objects']['definition']['linear']['font_size']
+        self.linear_definition_font_size: str = config_dict['objects']['definition']['linear']['font_size'][self.length_param]
         self.linear_definition_font_weight: str = config_dict['objects']['definition']['linear']['font_weight']
         self.linear_definition_font_family: str = config_dict['objects']['text']['font_family']
         self.interval: int = config_dict['objects']['definition']['linear']['interval']
@@ -126,15 +128,17 @@ class LengthBarGroup:
     Supports two styles: 'bar' (a single scale bar) and 'ruler' (a full-axis ruler).
     """
 
-    def __init__(self, fig_width: int, alignment_width: float, longest_genome: int, config_dict: dict, group_id="length_bar") -> None:
+    def __init__(self, fig_width: int, alignment_width: float, longest_genome: int, config_dict: dict, canvas_config: dict, group_id="length_bar") -> None:
         """
         Initializes the LengthBarGroup with the given parameters.
         """
         # --- 1. Load all settings from the 'scale' section of the config ---
         scale_config = config_dict['objects']['scale']
+        self.canvas_config = canvas_config
+        self.length_param = self.canvas_config.length_param
         self.stroke_color: str = scale_config['stroke_color']
         self.stroke_width: float = scale_config['stroke_width']
-        self.font_size: str = scale_config['font_size']
+        self.font_size: str = scale_config['font_size'][self.length_param]
         self.font_weight: str = scale_config['font_weight']
         self.font_family: str = config_dict['objects']['text']['font_family']
         self.style: str = scale_config.get('style', 'bar')
@@ -459,6 +463,7 @@ class SeqRecordGroup:
                  feature_config: FeatureDrawingConfigurator, config_dict: dict, precalculated_labels: Optional[list] = None) -> None:
         self.gb_record = gb_record
         self.canvas_config = canvas_config
+        self.length_param = self.canvas_config.length_param
         self.feature_config = feature_config
         self.config_dict = config_dict
         self.precalculated_labels = precalculated_labels
@@ -484,7 +489,7 @@ class SeqRecordGroup:
         """
         bar_length: float = alignment_width * genome_size_normalization_factor
         linear_axis_stroke_color: str = self.config_dict['objects']['axis']['linear']['stroke_color']
-        linear_axis_stroke_width: float = self.config_dict['objects']['axis']['linear']['stroke_width']
+        linear_axis_stroke_width: float = self.config_dict['objects']['axis']['linear']['stroke_width'][self.length_param]
         start_x: float = 0
         start_y: float = 0
         end_x: float = bar_length
