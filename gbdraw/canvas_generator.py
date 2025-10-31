@@ -58,7 +58,7 @@ class CircularCanvasConfigurator:
         self.dpi: int = self.config_dict['canvas']['dpi']
         self.length_threshold = self.config_dict['labels']['length_threshold']['circular']
         self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
-        self.track_width = self.config_dict['canvas']['circular']['track_width'][self.length_param]
+        # self.track_width = self.config_dict['canvas']['circular']['track_width'][self.length_param]
         self.track_ratio_factors = self.config_dict['canvas']['circular']['track_ratio_factors'][self.length_param]
         self.legend_position: str = legend
 
