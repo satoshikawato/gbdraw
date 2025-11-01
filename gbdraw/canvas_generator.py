@@ -202,6 +202,7 @@ class LinearCanvasConfigurator:
         self.strandedness: bool = self.config_dict['canvas']['strandedness']
         self.resolve_overlaps: bool = self.config_dict['canvas']['resolve_overlaps']
         self.align_center: bool = self.config_dict['canvas']['linear']['align_center']
+        self.normalize_length: bool = self.config_dict['canvas']['linear']['normalize_length']
         self.show_labels: bool = self.config_dict['canvas']['show_labels']
         self.legend_position = legend
         self.num_of_entries: int = num_of_entries

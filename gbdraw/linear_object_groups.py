@@ -362,6 +362,7 @@ class GcContentGroup:
         self.dinucleotide: str = self.gc_config.dinucleotide
         self.track_height: float = track_height
         self.alignment_width: float = alignment_width
+        self.normalize_length = config_dict['canvas']['linear']['normalize_length']
         self.normalize_length()
         self.generate_gc_df()
         self.add_elements_to_group()
@@ -375,7 +376,10 @@ class GcContentGroup:
         to scale the visualization appropriately.
         """
         self.record_len: int = len(self.gb_record.seq)
-        self.genome_size_normalization_factor: float = self.record_len / self.longest_record_len
+        if self.normalize_length:
+            self.genome_size_normalization_factor: float = 1.0
+        else:
+            self.genome_size_normalization_factor: float = self.record_len / self.longest_record_len
 
     def generate_gc_df(self) -> None:
         """
@@ -425,6 +429,7 @@ class GcSkewGroup:
         self.step: int = self.skew_config.step
         self.dinucleotide: str = self.skew_config.dinucleotide
         self.track_height: float = track_height
+        self.normalize_length = config_dict['canvas']['linear']['normalize_length']
         self.alignment_width: float = alignment_width
         self.generate_gc_df()
         self.normalize_length()
@@ -435,7 +440,11 @@ class GcSkewGroup:
         Normalizes the length of the genomic record relative to the longest record.
         """
         self.record_len: int = len(self.gb_record.seq)
-        self.genome_size_normalization_factor: float = self.record_len / self.longest_record_len
+        if self.normalize_length:
+            self.genome_size_normalization_factor: float = 1.0
+        else:
+            self.genome_size_normalization_factor: float = self.record_len / self.longest_record_len
+
     def generate_gc_df(self) -> None:
 
         self.skew_df: DataFrame = skew_df(
@@ -473,6 +482,7 @@ class SeqRecordGroup:
         self.label_filtering = self.config_dict['labels']['filtering']
         self.separate_strands = self.canvas_config.strandedness
         self.resolve_overlaps = self.canvas_config.resolve_overlaps
+        self.normalize_length = self.config_dict['canvas']['linear']['normalize_length']
         self.record_group: Group = self.setup_record_group()
     def draw_linear_axis(self,
                          alignment_width: float,
@@ -568,8 +578,14 @@ class SeqRecordGroup:
         
         record_group: Group = Group(id=track_id)
         record_group = Group(id=track_id)
+
         record_length: int = len(self.gb_record.seq)
-        genome_size_normalization_factor: float = record_length / longest_genome
+
+        if self.normalize_length:
+            genome_size_normalization_factor = 1.0
+        else:
+            genome_size_normalization_factor: float = record_length / longest_genome
+
         selected_features_set: str = self.feature_config.selected_features_set
         
         default_colors: DataFrame | None = self.feature_config.default_colors
@@ -655,13 +671,17 @@ class PairWiseMatchGroup:
         Returns:
             Tuple[float, float]: The x-coordinate offsets for the query and subject sequences.
         """
-        if self.canvas_config.align_center:
-            qlen = len(self.records[self.comparison_count-1].seq)
-            slen = len(self.records[self.comparison_count].seq)
-            self.query_offset_x = (self.canvas_config.longest_genome - qlen) / 2
-            self.subject_offset_x = (self.canvas_config.longest_genome - slen) / 2
+        if self.canvas_config.normalize_length:
+            self.query_offset_x = 0
+            self.subject_offset_x = 0
         else:
-            self.query_offset_x = self.subject_offset_x = 0
+            if self.canvas_config.align_center:
+                qlen = len(self.records[self.comparison_count-1].seq)
+                slen = len(self.records[self.comparison_count].seq)
+                self.query_offset_x = (self.canvas_config.longest_genome - qlen) / 2
+                self.subject_offset_x = (self.canvas_config.longest_genome - slen) / 2
+            else:
+                self.query_offset_x = self.subject_offset_x = 0
 
     def generate_linear_match_path(self, row: DataFrame) -> Path:
         """
@@ -689,10 +709,10 @@ class PairWiseMatchGroup:
         factor = (identity_percent - self.min_identity) / (100 - self.min_identity)
         dynamic_fill_color = interpolate_color(self.match_min_color, self.match_max_color, factor)
         query_start, query_end, subject_start, subject_end = self.calculate_offsets(row)
-        query_start_x, query_start_y, query_end_x, query_end_y = self.normalize_positions(
-            query_start, query_end, 0)
-        subject_start_x, subject_start_y, subject_end_x, subject_end_y = self.normalize_positions(
-            subject_start, subject_end, self.comparison_height)
+        query_start_x, query_start_y, query_end_x, query_end_y = self.normalize_positions(  
+            query_start, query_end, 0, is_query=True)  
+        subject_start_x, subject_start_y, subject_end_x, subject_end_y = self.normalize_positions(  
+            subject_start, subject_end, self.comparison_height, is_query=False)
 
         match_path_desc: str = self.construct_path_description(
             query_start_x, query_start_y, query_end_x, query_end_y, subject_start_x, subject_start_y, subject_end_x, subject_end_y)
@@ -719,22 +739,27 @@ class PairWiseMatchGroup:
         subject_end: float = row.send + self.subject_offset_x
         return query_start, query_end, subject_start, subject_end
 
-    def normalize_positions(self, start: float, end: float, y_position: float) -> tuple[float, float, float, float]:
-        """
-        Normalizes the start and end positions for display on the linear canvas.
-
-        Args:
-            start (float): The start position of the match.
-            end (float): The end position of the match.
-            y_position (float): The y-coordinate for the match.
-
-        Returns:
-            Tuple[float, float, float, float]: Normalized start and end x-coordinates and fixed y-coordinates.
-        """
-        start_x: float = normalize_position_linear(
-            start, self.canvas_config.longest_genome, self.canvas_config.alignment_width)
-        end_x: float = normalize_position_linear(
-            end, self.canvas_config.longest_genome, self.canvas_config.alignment_width)
+    def normalize_positions(self, start: float, end: float, y_position: float,   
+                        is_query: bool) -> tuple[float, float, float, float]:  
+        """  
+        Normalizes the start and end positions for display on the linear canvas.  
+        """  
+        if self.canvas_config.normalize_length:  
+            # Normalize based on the length of each record itself
+            if is_query:  
+                genome_length = len(self.records[self.comparison_count-1].seq)  
+            else:  
+                genome_length = len(self.records[self.comparison_count].seq)  
+            
+            start_x = self.canvas_config.alignment_width * (start / genome_length)  
+            end_x = self.canvas_config.alignment_width * (end / genome_length)  
+        else:  
+            # Normalize based on the longest genome as before
+            start_x = normalize_position_linear(  
+                start, self.canvas_config.longest_genome, self.canvas_config.alignment_width)  
+            end_x = normalize_position_linear(  
+                end, self.canvas_config.longest_genome, self.canvas_config.alignment_width)  
+        
         return start_x, y_position, end_x, y_position
 
     def construct_path_description(self, query_start_x: float, query_start_y: float, query_end_x: float, query_end_y: float, subject_start_x: float, subject_start_y: float, subject_end_x: float, subject_end_y: float) -> str:

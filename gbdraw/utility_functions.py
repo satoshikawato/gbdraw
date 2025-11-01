@@ -335,7 +335,8 @@ def modify_config_dict(config_dict,
                        blast_color_min=None,
                        blast_color_max=None,
                        legend_box_size=None,
-                       legend_font_size=None
+                       legend_font_size=None,
+                       normalize_length=None
                        )-> dict:
     # Mapping of parameter names to their paths in the config_dict
     label_font_size_circular_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['long']
@@ -514,6 +515,7 @@ def modify_config_dict(config_dict,
         'legend_box_size_long': 'objects.legends.color_rect_size.long',
         'legend_font_size_short': 'objects.legends.font_size.short',
         'legend_font_size_long': 'objects.legends.font_size.long',
+        'normalize_length': 'canvas.linear.normalize_length'
     }
     # Update the config_dict for each specified parameter
     for param, path in param_paths.items():
