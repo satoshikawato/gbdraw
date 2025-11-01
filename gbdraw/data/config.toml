@@ -37,6 +37,7 @@ comparison_height = 60
 canvas_padding = 50
 default_gc_height = 20
 align_center = false
+normalize_length = false
 [canvas.linear.default_cds_height]
   short = 80
   long = 20

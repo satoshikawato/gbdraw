@@ -846,6 +846,7 @@ if selected_mode == "📏 Linear":
             st.subheader("Display Options")
             st.markdown("##### Track layout")
             l_separate_strands = st.checkbox("Separate strands", value=True, key="l_strands", help="Display features on separate strands for better distinction of forward and reverse strands.")
+            l_normalize_length = st.checkbox("Normalize sequence lengths", value=False, key="l_normalize", help="Normalize the lengths of all sequences to be equal.The length bar will be suppressed when this option is enabled.")
             l_align_center = st.checkbox("Align center", value=False, key="l_align", help="Align the linear map to the center of the page. This can help with aesthetics, especially for long sequences.")
             l_resolve_overlaps = st.checkbox("Resolve overlaps (experimental)", value=False, key="l_overlaps", help="Attempt to resolve label overlaps. This is experimental and may not work well for all genomes.")
             st.markdown("##### Label layout")
@@ -953,6 +954,7 @@ if selected_mode == "📏 Linear":
         if l_show_skew: linear_args.append("--show_skew")
         if l_resolve_overlaps: linear_args.append("--resolve_overlaps")
         if l_legend != "right": linear_args += ["-l", l_legend]
+        if l_normalize_length: linear_args.append("--normalize_length")
         if l_adv_gc_height:
             linear_args += ["--gc_height", str(l_adv_gc_height)]
         if l_adv_def_font_size:

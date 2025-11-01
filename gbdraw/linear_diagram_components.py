@@ -45,7 +45,7 @@ def _precalculate_label_dimensions(records: list[SeqRecord], feature_config: Fea
     max_required_height = 0
     all_labels_by_record = {}
     record_label_heights = {} # Store height required for labels per record
-
+    normalize_length = config_dict['canvas']['linear']['normalize_length']
     for record in records:
         color_table, default_colors = preprocess_color_tables(
             feature_config.color_table, feature_config.default_colors
@@ -57,7 +57,10 @@ def _precalculate_label_dimensions(records: list[SeqRecord], feature_config: Fea
         )
 
         record_length = len(record.seq)
-        genome_size_normalization_factor = record_length / canvas_config.longest_genome
+        if normalize_length:
+            genome_size_normalization_factor = 1.0
+        else:
+            genome_size_normalization_factor = record_length / canvas_config.longest_genome
 
         label_list = prepare_label_list_linear(
             feature_dict, record_length, canvas_config.alignment_width,
@@ -334,6 +337,8 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     else:
         canvas_config.vertical_offset = canvas_config.original_vertical_offset + canvas_config.cds_padding
 
+    normalize_length = config_dict['canvas']['linear']['normalize_length']
+
     # Prepare legend group
     has_blast = bool(blast_files)
     # Determine which features should be displayed in the legend
@@ -400,7 +405,8 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
 
     if canvas_config.legend_position != 'none':
         canvas = add_legends_on_linear_canvas(canvas, config_dict, canvas_config, legend_group, legend_table)
-    canvas = add_length_bar_on_linear_canvas(canvas, canvas_config, config_dict, length_bar_group, legend_group)
+    if not canvas_config.normalize_length:
+        canvas = add_length_bar_on_linear_canvas(canvas, canvas_config, config_dict, length_bar_group, legend_group)
     
     if blast_files:
         comparisons = load_comparisons(blast_files, blast_config)
@@ -425,8 +431,11 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     for count, record in enumerate(records, start=1):
         offset_y = record_offsets[count-1]
 
-        offset_x = (canvas_config.alignment_width *
-                    ((canvas_config.longest_genome - len(record.seq)) / canvas_config.longest_genome) / 2) if canvas_config.align_center else 0
+        if normalize_length:
+            offset_x = 0
+        else:
+            offset_x = (canvas_config.alignment_width *
+                        ((canvas_config.longest_genome - len(record.seq)) / canvas_config.longest_genome) / 2) if canvas_config.align_center else 0
         
         labels_for_record = all_labels.get(record.id)
         add_record_group(canvas, record, offset_y, offset_x, canvas_config, feature_config, config_dict, precalculated_labels=labels_for_record)
