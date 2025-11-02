@@ -102,8 +102,8 @@ def generate_circular_gc_content_path_desc(radius: float, record_len: int, gc_df
 
     # 5. Efficiently construct the SVG path string.
     # Start with the Move 'M' command at the zero-degree position on the baseline radius.
-    start_x = norm_radius * math.cos(math.radians(-90))
-    start_y = norm_radius * math.sin(math.radians(-90))
+    start_x = radius_of_coordinate[0] * math.cos(math.radians(-90))
+    start_y = radius_of_coordinate[0] * math.sin(math.radians(-90))
     path_segments = [f"M{start_x} {start_y}"]
     
     # Create all Line 'L' commands using a list comprehension and zip.
@@ -136,8 +136,8 @@ def generate_circular_gc_skew_path_desc(radius: float, df: DataFrame, total_len:
     y_coords = radius_of_coordinate * np.sin(angles_rad)
 
 
-    skew_start_x = norm_radius * math.cos(math.radians(-90))
-    skew_start_y = norm_radius * math.sin(math.radians(-90))
+    skew_start_x = radius_of_coordinate[0] * math.cos(math.radians(-90))
+    skew_start_y = radius_of_coordinate[0] * math.sin(math.radians(-90))
     
     path_segments = [f"M{skew_start_x} {skew_start_y}"]
     

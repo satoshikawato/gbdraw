@@ -335,14 +335,15 @@ def modify_config_dict(config_dict,
                        blast_color_min=None,
                        blast_color_max=None,
                        legend_box_size=None,
-                       legend_font_size=None
+                       legend_font_size=None,
+                       normalize_length=None
                        )-> dict:
     # Mapping of parameter names to their paths in the config_dict
     label_font_size_circular_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['long']
     label_font_size_circular_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['short']
     label_font_size_linear_long = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['long']
     label_font_size_linear_short = label_font_size if label_font_size is not None else config_dict['labels']['font_size']['linear']['short']
-
+        
     if linear_definition_font_size is not None:
         linear_definition_font_size_short = linear_definition_font_size
         linear_definition_font_size_long = linear_definition_font_size
@@ -402,6 +403,12 @@ def modify_config_dict(config_dict,
     else:
         line_stroke_color = config_dict['objects']['features']['line_stroke_color']
 
+    if block_stroke_color is not None:
+        block_stroke_color = block_stroke_color
+    else:
+        config_dict['objects']['features']['block_stroke_color']
+
+
     if block_stroke_width is not None:
         block_stroke_width_short = block_stroke_width
         block_stroke_width_long = block_stroke_width
@@ -458,6 +465,7 @@ def modify_config_dict(config_dict,
         update_config_value(config_dict, 'labels.filtering.qualifier_priority', priority_dict)
         
     param_paths = {
+        'block_stroke_color': 'objects.features.block_stroke_color',
         'block_stroke_width_short': 'objects.features.block_stroke_width.short',
         'block_stroke_width_long': 'objects.features.block_stroke_width.long',
         'circular_axis_stroke_color': 'objects.axis.circular.stroke_color',
@@ -507,6 +515,7 @@ def modify_config_dict(config_dict,
         'legend_box_size_long': 'objects.legends.color_rect_size.long',
         'legend_font_size_short': 'objects.legends.font_size.short',
         'legend_font_size_long': 'objects.legends.font_size.long',
+        'normalize_length': 'canvas.linear.normalize_length'
     }
     # Update the config_dict for each specified parameter
     for param, path in param_paths.items():

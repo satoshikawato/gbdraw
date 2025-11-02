@@ -253,7 +253,10 @@ def _get_args(args) -> argparse.Namespace:
         '--legend_font_size',
         help='Legend font size (optional; float; default: 20 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb).',
         type=float)
-    
+    parser.add_argument(
+        '--normalize_length',
+        help='Normalize record length (experimental; default: False). ',
+        action='store_true')
     args = parser.parse_args(args)
     if args.gbk and (args.gff or args.fasta):
         parser.error("Error: --gbk cannot be used with --gff or --fasta.")
@@ -328,7 +331,7 @@ def linear_main(cmd_args) -> None:
     scale_interval: Optional[int] = args.scale_interval
     legend_box_size: Optional[float] = args.legend_box_size
     legend_font_size: Optional[float] = args.legend_font_size
-
+    normalize_length = args.normalize_length
     if blast_files:
         load_comparison = True
     else:
@@ -378,7 +381,8 @@ def linear_main(cmd_args) -> None:
         scale_font_size=scale_font_size,
         scale_interval=scale_interval,
         legend_box_size=legend_box_size,
-        legend_font_size=legend_font_size
+        legend_font_size=legend_font_size,
+        normalize_length=normalize_length
         )
 
     if args.gbk:

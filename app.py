@@ -424,8 +424,8 @@ if selected_mode == "🔵 Circular":
                 c_adv_feat = st.multiselect("Features (-k):", options=FEATURE_KEYS, default=["CDS","rRNA","tRNA","tmRNA","ncRNA","misc_RNA","repeat_region"], key="c_feat", help="Select which features to include in the circular map. Default includes CDS, tRNA, rRNA, and repeat regions.")
                 st.markdown("##### Dinucleotide and Window/Step Size")
                 c_adv_nt = st.text_input("Dinucleotide (--nt):", value="GC", key="c_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md#q-can-i-plot-the-at-content-instead-of-gc-content) for details.")
-                c_adv_win = st.number_input("Window size (-w):", key="c_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md#q-how-can-i-make-the-gc-content-graph-smootherfiner) for details.")
-                c_adv_step = st.number_input("Step size (-s):", key="c_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md#q-how-can-i-make-the-gc-content-graph-smootherfiner) for details.")
+                c_adv_win = st.number_input("Window size (-w):", key="c_win", step=1, help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md#q-how-can-i-make-the-gc-content-graph-smootherfiner) for details.")
+                c_adv_step = st.number_input("Step size (-s):", key="c_step", step=1, help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md#q-how-can-i-make-the-gc-content-graph-smootherfiner) for details.")
                 st.markdown("##### Stroke Customization")
                 c_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="c_b_color", help="Color of the outline for feature blocks.")
                 c_adv_blk_width = st.number_input("Block stroke width:", key="c_b_width", help="Block stroke width. Default: 2 pt for genomes <= 50 kb, 0 pt for genomes >= 50 kb.")
@@ -436,7 +436,7 @@ if selected_mode == "🔵 Circular":
                 c_adv_axis_width = st.number_input("Axis stroke width:", key="c_axis_width", help="Width of the main axis line. Default: 3 pt for genomes <= 50 kb, 1 pt for genomes >= 50 kb.")
             with adv_cols2:
                 st.markdown("##### Scale Customization")
-                c_adv_scale_interval = st.number_input("Scale interval (bp):", key="c_scale_interval", help="Manual scale interval (in bp). Overrides automatic calculation.")
+                c_adv_scale_interval = st.number_input("Scale interval (bp):", key="c_scale_interval", step=1, help="Manual scale interval (in bp). Overrides automatic calculation.")
                 st.markdown("##### Font Sizes")
                 c_adv_def_font_size = st.number_input("Definition font size (default: 18 pt):", value=18.0, min_value=1.0, step=0.5, key="c_def_font_size", help="Font size for the species and strain definition text. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#definition-font-size---definition_font_size) for details.")
                 c_adv_label_font_size = st.number_input("Label font size (default: 8 pt (>=50 kb) or 16 pt (<50 kb):", key="c_label_font_size", help="Font size for feature labels. Default is 8 pt for genomes >= 50 kb, 16 pt for smaller genomes. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#label-font-size---label_font_size) for details.")
@@ -846,6 +846,7 @@ if selected_mode == "📏 Linear":
             st.subheader("Display Options")
             st.markdown("##### Track layout")
             l_separate_strands = st.checkbox("Separate strands", value=True, key="l_strands", help="Display features on separate strands for better distinction of forward and reverse strands.")
+            l_normalize_length = st.checkbox("Normalize sequence lengths", value=False, key="l_normalize", help="Normalize the lengths of all sequences to be equal.The length bar will be suppressed when this option is enabled.")
             l_align_center = st.checkbox("Align center", value=False, key="l_align", help="Align the linear map to the center of the page. This can help with aesthetics, especially for long sequences.")
             l_resolve_overlaps = st.checkbox("Resolve overlaps (experimental)", value=False, key="l_overlaps", help="Attempt to resolve label overlaps. This is experimental and may not work well for all genomes.")
             st.markdown("##### Label layout")
@@ -866,8 +867,8 @@ if selected_mode == "📏 Linear":
                 st.markdown("##### Dinucleotide and Window/Step Size")
                 l_adv_gc_height = st.number_input("GC content and skew height:", key="l_gc_height", help="Height of the GC content track in pixels. Default: 20 pixels.")
                 l_adv_nt = st.text_input("nt (--nt):", value="GC", key="l_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'.")
-                l_adv_win = st.number_input("Window size (-w):", key="l_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb")
-                l_adv_step = st.number_input("Step size (-s):", key="l_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb")
+                l_adv_win = st.number_input("Window size (-w):", key="l_win", step=1, help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb")
+                l_adv_step = st.number_input("Step size (-s):", key="l_step", step=1, help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb")
                 st.markdown("##### Legend")
                 l_adv_legend_font_size = st.number_input("Legend font size:", key="l_legend_font_size", help="Font size for the legend. Default: 20 (pixels, 96 dpi) for genomes <= 50 kb, 24 for genomes >= 50 kb")
                 l_adv_legend_box_size = st.number_input("Legend box size:", key="l_legend_box_size", help="Box size for the legend. Default: 16 (pt) for genomes <= 50 kb, 20 for genomes >= 50 kb)")
@@ -877,7 +878,7 @@ if selected_mode == "📏 Linear":
 
             with adv_cols2:
                 st.markdown("##### Scale Customization")
-                l_adv_scale_interval = st.number_input("Scale interval (bp):", key="l_scale_interval", help="Manual scale interval (in bp). Overrides automatic calculation.")
+                l_adv_scale_interval = st.number_input("Scale interval (bp):", key="l_scale_interval", step=1, help="Manual scale interval (in bp). Overrides automatic calculation.")
                 l_adv_scale_font_size = st.number_input("Scale font size (--scale_font_size):", key="l_scale_font_size", help="Font size for the scale labels on the linear map. Default: 24 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb")
                 l_adv_scale_stroke_color = st.color_picker("Scale stroke color:", value="#000000", key="l_scale_color", help="Color of the scale bar.")
                 l_adv_scale_stroke_width = st.number_input("Scale stroke width:", key="l_scale_width", help="Width of the scale bar. Default: 3 pt.")
@@ -953,6 +954,7 @@ if selected_mode == "📏 Linear":
         if l_show_skew: linear_args.append("--show_skew")
         if l_resolve_overlaps: linear_args.append("--resolve_overlaps")
         if l_legend != "right": linear_args += ["-l", l_legend]
+        if l_normalize_length: linear_args.append("--normalize_length")
         if l_adv_gc_height:
             linear_args += ["--gc_height", str(l_adv_gc_height)]
         if l_adv_def_font_size:
