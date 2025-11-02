@@ -201,6 +201,24 @@ def resolve_color_to_hex(color_str: str) -> str:
         logger.error(f"Unknown color name: {color_str}. Please use a valid SVG color name or hex code.")
         exit(1)
 
+
+
+def load_track_layout_toml(track_layout_file: str) -> List[Dict]:  
+    """  
+    en: Load track layout TOML file
+    Returns:  
+        List[Dict]: List of track configurations
+    """  
+    track_list = []  
+    try:  
+        with open(track_layout_file, 'rb') as f:  
+            track_config = tomllib.load(f)  
+        track_list = track_config.get('tracks', [])  
+        logger.info(f"INFO: Loaded {len(track_list)} tracks from {track_layout_file}")  
+    except FileNotFoundError as e:  
+        logger.error(f"Failed to load track layout from {track_layout_file}: {e}")  
+    return track_list
+
 def load_gbks(gbk_list: List[str], mode: str, load_comparison=False) -> list[SeqRecord]:
     """
     Loads GenBank records from the given list of file paths based on the specified mode.

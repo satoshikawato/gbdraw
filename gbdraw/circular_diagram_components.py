@@ -215,6 +215,112 @@ def add_record_on_circular_canvas(canvas: Drawing, gb_record: SeqRecord, canvas_
             canvas, gb_record, gc_df, canvas_config, skew_config, config_dict)
     return canvas
 
+def plot_circular_diagram_with_custom_tracks(  
+    gb_record: SeqRecord,   
+    canvas_config: CircularCanvasConfigurator,  
+    track_layout: List[Dict],  
+    feature_config: FeatureDrawingConfigurator,  
+    species: str,   
+    strain: str,   
+    config_dict: dict,   
+    out_formats: list,  
+    default_colors: DataFrame,  
+    window: int,  
+    step: int  
+) -> None:  
+    """  
+    Plots a circular diagram using a custom track layout.  
+    """  
+    from .data_processing import skew_df  
+    from .circular_object_groups import GcContentGroup, GcSkewGroup  
+    from .object_configurators import GcContentConfigurator, GcSkewConfigurator  
+      
+    # Create canvas  
+    canvas: Drawing = canvas_config.create_svg_canvas()  
+      
+    # Dynamically generate each track 
+    for track in track_layout:  
+        track_id = track['track_id']  
+        track_type = track['track_type']  
+        width = track['width']  
+        radius_factor = track['radius_factor']  
+          
+        if track_type == 'nt_content':  
+            params = track.get('params', {})  
+            dinucleotide = params.get('dinucleotide', 'GC')  
+            track_window = params.get('window', window)  
+            track_step = params.get('step', step)  
+              
+            # Data calculation 
+            gc_df = skew_df(gb_record, track_window, track_step, dinucleotide)  
+              
+            # Generate Configurator
+            gc_config = GcContentConfigurator(  
+                window=track_window,   
+                step=track_step,   
+                dinucleotide=dinucleotide,  
+                config_dict=config_dict,   
+                default_colors_df=default_colors  
+            )  
+              
+            # Calculate track width and radius
+            track_width = width  
+            track_radius = canvas_config.radius * radius_factor  
+              
+            # Generate group
+            gc_group = GcContentGroup(  
+                gb_record, gc_df, track_radius, track_width,   
+                gc_config, config_dict, str(track_id)  
+            ).get_group()  
+              
+            # Add to canvas 
+            gc_group.translate(canvas_config.offset_x, canvas_config.offset_y)  
+            canvas.add(gc_group)  
+          
+        elif track_type == 'nt_skew':  
+            params = track.get('params', {})  
+            dinucleotide = params.get('dinucleotide', 'GC')  
+            track_window = params.get('window', window)  
+            track_step = params.get('step', step)  
+              
+            # Data calculation
+            skew_df_data = skew_df(gb_record, track_window, track_step, dinucleotide)  
+              
+            # Generate configurator  
+            skew_config = GcSkewConfigurator(  
+                window=track_window,   
+                step=track_step,   
+                dinucleotide=dinucleotide,  
+                config_dict=config_dict,   
+                default_colors_df=default_colors  
+            )  
+              
+            # Calculate track width and radius  
+            track_width = width  
+            track_radius = canvas_config.radius * radius_factor  
+              
+            # Generate group  
+            skew_group = GcSkewGroup(  
+                gb_record, skew_df_data, track_radius, track_width,  
+                skew_config, config_dict, str(track_id)  
+            ).get_group()  
+              
+            # Add to canvas  
+            skew_group.translate(canvas_config.offset_x, canvas_config.offset_y)  
+            canvas.add(skew_group)  
+          
+        elif track_type == 'feature':  
+            # For feature tracks, use existing logic
+            # Call add_record_on_circular_canvas()  
+            pass  
+          
+        elif track_type == 'custom_data':  
+            # en: Future extension: Custom data tracks  
+            logger.warning(f"Custom data tracks not yet implemented: track_id={track_id}")  
+      
+    # 出力  
+    save_figure(canvas, out_formats)
+
 
 def plot_circular_diagram(gb_record: SeqRecord, canvas_config: CircularCanvasConfigurator, gc_df: DataFrame, gc_config: GcContentConfigurator, skew_config: GcSkewConfigurator, feature_config: FeatureDrawingConfigurator, species: str, strain: str, config_dict: dict, out_formats: list, legend_config) -> None:
     """

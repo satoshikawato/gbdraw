@@ -30,7 +30,7 @@ class CircularCanvasConfigurator:
     create_svg_canvas(): Creates and returns an SVG canvas for drawing.
     get_track_ids(): Determines the track IDs for visualization.
     """
-    def __init__(self, output_prefix: str, config_dict: dict, legend: str, gb_record) -> None:
+    def __init__(self, output_prefix: str, config_dict: dict, legend: str, gb_record, track_layout: Optional[List[Dict]] = None) -> None:
         """
         Initializes the circular canvas configurator with given settings.
 
@@ -48,6 +48,8 @@ class CircularCanvasConfigurator:
             label_setting = 'with_labels'
         else:
             label_setting = 'without_labels'
+        self.track_layout = track_layout  
+        self.use_custom_tracks = track_layout is not None  
         self.default_width: int = self.config_dict['canvas']['circular']['width'][label_setting]
         self.default_height: int = self.config_dict['canvas']['circular']['height']
         self.radius: float = self.config_dict['canvas']['circular']['radius']
@@ -129,16 +131,41 @@ class CircularCanvasConfigurator:
         """
         Determines and assigns track IDs for the visualization based on the configurator's settings.
         """
-        self.track_ids: dict = {}
-        gc_track_id: Literal[2] | None = 2 if self.show_gc or not self.show_skew else None
-        skew_track_id: Literal[3, 2] | None = (
-            3 if self.show_gc else 2) if self.show_skew else None
+        
 
-        if gc_track_id is not None:
-            self.track_ids['gc_track'] = gc_track_id
-        if skew_track_id is not None:
-            self.track_ids['skew_track'] = skew_track_id
+        if self.use_custom_tracks:  
+            self.track_ids: dict = self._parse_custom_track_layout()
+        else:
+            self.track_ids: dict = {}
+            gc_track_id: Literal[2] | None = 2 if self.show_gc or not self.show_skew else None
+            skew_track_id: Literal[3, 2] | None = (
+                3 if self.show_gc else 2) if self.show_skew else None
 
+            if gc_track_id is not None:
+                self.track_ids['gc_track'] = gc_track_id
+            if skew_track_id is not None:
+                self.track_ids['skew_track'] = skew_track_id
+
+    def _parse_custom_track_layout(self) -> dict:  
+        """  
+        Generates track_ids from custom track layout.
+        """  
+        track_ids = {}  
+        for track in self.track_layout:  
+            track_type = track['track_type']  
+            track_id = track['track_id']  
+              
+            if track_type == 'nt_content':  
+                key = f"gc_content_{track_id}"  
+                track_ids[key] = track_id  
+            elif track_type == 'nt_skew':  
+                key = f"gc_skew_{track_id}"  
+                track_ids[key] = track_id  
+            elif track_type == 'custom_data':  
+                key = f"custom_{track_id}"  
+                track_ids[key] = track_id  
+          
+        return track_ids
 
 class LinearCanvasConfigurator:
     """

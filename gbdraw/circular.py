@@ -7,8 +7,8 @@ import logging
 from typing import Optional
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
-from .file_processing import load_gbks, load_gff_fasta, load_default_colors, read_color_table, load_config_toml, parse_formats
-from .circular_diagram_components import plot_circular_diagram
+from .file_processing import load_gbks, load_gff_fasta, load_default_colors, read_color_table, load_config_toml, parse_formats, load_track_layout_toml
+from .circular_diagram_components import plot_circular_diagram, plot_circular_diagram_with_custom_tracks
 from .data_processing import skew_df
 from .canvas_generator import CircularCanvasConfigurator
 from .object_configurators import LegendDrawingConfigurator, GcSkewConfigurator,GcContentConfigurator, FeatureDrawingConfigurator
@@ -230,6 +230,11 @@ def _get_args(args) -> argparse.Namespace:
         '--legend_font_size',
         help='Legend font size (optional; float; default: 20 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb).',
         type=float)
+    parser.add_argument(  
+        '--track_layout',  
+        help='TOML file specifying custom track layout (optional)',  
+        type=str,  
+        default="")
     
     args = parser.parse_args(args)
     if args.gbk and (args.gff or args.fasta):
@@ -329,6 +334,9 @@ def circular_main(cmd_args) -> None:
     strandedness = args.separate_strands
     scale_interval: Optional[int] = args.scale_interval
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
+    track_layout = None  
+    if args.track_layout:  
+        track_layout = load_track_layout_toml(args.track_layout) 
 
     if qualifier_priority_path:
         qualifier_priority_df = read_qualifier_priority_file(qualifier_priority_path)
@@ -408,13 +416,20 @@ def circular_main(cmd_args) -> None:
         outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
         gc_df: DataFrame = skew_df(gb_record, window, step, dinucleotide)
         canvas_config = CircularCanvasConfigurator(
-            output_prefix=outfile_prefix, config_dict=config_dict, legend=legend, gb_record=gb_record
+            output_prefix=outfile_prefix, config_dict=config_dict, legend=legend, gb_record=gb_record, track_layout=track_layout
             )
         feature_config = FeatureDrawingConfigurator(
             color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, canvas_config=canvas_config)
         legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config, canvas_config=canvas_config)
-        plot_circular_diagram(gb_record, canvas_config, gc_df, gc_config, skew_config,
-                              feature_config, species, strain, config_dict, out_formats, legend_config)
+        if track_layout:  
+            plot_circular_diagram_with_custom_tracks(  
+                gb_record, canvas_config, track_layout,   
+                feature_config, species, strain, config_dict,   
+                out_formats, default_colors, window, step  
+            )
+        else:
+            plot_circular_diagram(gb_record, canvas_config, gc_df, gc_config, skew_config,
+                                feature_config, species, strain, config_dict, out_formats, legend_config)
 
 if __name__ == "__main__":
     # Entry point for the script when run as a standalone program.
