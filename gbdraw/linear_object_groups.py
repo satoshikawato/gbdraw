@@ -362,7 +362,7 @@ class GcContentGroup:
         self.dinucleotide: str = self.gc_config.dinucleotide
         self.track_height: float = track_height
         self.alignment_width: float = alignment_width
-        self.normalize_length = config_dict['canvas']['linear']['normalize_length']
+        self.bool_normalize_length = config_dict['canvas']['linear']['normalize_length']
         self.normalize_length()
         self.generate_gc_df()
         self.add_elements_to_group()
@@ -376,7 +376,7 @@ class GcContentGroup:
         to scale the visualization appropriately.
         """
         self.record_len: int = len(self.gb_record.seq)
-        if self.normalize_length:
+        if self.bool_normalize_length:
             self.genome_size_normalization_factor: float = 1.0
         else:
             self.genome_size_normalization_factor: float = self.record_len / self.longest_record_len
@@ -429,7 +429,7 @@ class GcSkewGroup:
         self.step: int = self.skew_config.step
         self.dinucleotide: str = self.skew_config.dinucleotide
         self.track_height: float = track_height
-        self.normalize_length = config_dict['canvas']['linear']['normalize_length']
+        self.bool_normalize_length = config_dict['canvas']['linear']['normalize_length']
         self.alignment_width: float = alignment_width
         self.generate_gc_df()
         self.normalize_length()
@@ -440,7 +440,7 @@ class GcSkewGroup:
         Normalizes the length of the genomic record relative to the longest record.
         """
         self.record_len: int = len(self.gb_record.seq)
-        if self.normalize_length:
+        if self.bool_normalize_length:
             self.genome_size_normalization_factor: float = 1.0
         else:
             self.genome_size_normalization_factor: float = self.record_len / self.longest_record_len
