@@ -4,7 +4,7 @@
 import logging
 import sys
 from svgwrite import Drawing
-from typing import Literal
+from typing import Literal, Optional, List, Dict
 from .utility_functions import determine_length_parameter
 # Logging setup
 Logger = logging.getLogger()

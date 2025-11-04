@@ -36,7 +36,7 @@ class GcContentGroup:
         norm_factor (float): Normalization factor for scaling GC content values.
     """
 
-    def __init__(self, gb_record: SeqRecord, gc_df: DataFrame, radius: float, track_width: float, gc_config: GcContentConfigurator, config_dict: dict, track_id: str) -> None:
+    def __init__(self, gb_record: SeqRecord, gc_df: DataFrame, radius: float, track_width: float, gc_config: GcContentConfigurator, config_dict: dict, track_id: str, use_custom_layout: bool = False) -> None:
         """
         Initializes the GcContentGroup with necessary parameters and configurations.
 
@@ -57,11 +57,25 @@ class GcContentGroup:
         self.config_dict: dict = config_dict
         self.gc_df: DataFrame = gc_df
         self.track_width: float = track_width
-        self.length_threshold = self.config_dict['labels']['length_threshold']['circular']
-        self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
-        self.track_type: str = self.config_dict['canvas']['circular']['track_type']
-        self.norm_factor: float = self.config_dict['canvas']['circular']['track_dict'][self.length_param][self.track_type][str(track_id)]
+        #self.length_threshold = self.config_dict['labels']['length_threshold']['circular']
+        #self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
+        #self.track_type: str = self.config_dict['canvas']['circular']['track_type']
+        #self.norm_factor: float = self.config_dict['canvas']['circular']['track_dict'][self.length_param][self.track_type][str(track_id)]
         self.dinucleotide: str = self.gc_config.dinucleotide
+
+        # en: If using a custom layout, set norm_factor to 1.0  
+        if use_custom_layout:  
+            self.norm_factor: float = 1.0  
+        else:  
+            # Existing logic
+            self.length_threshold = self.config_dict['labels']['length_threshold']['circular']  
+            self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)  
+            self.track_type: str = self.config_dict['canvas']['circular']['track_type']  
+            self.norm_factor: float = self.config_dict['canvas']['circular']['track_dict'][self.length_param][self.track_type][str(track_id)]  
+          
+        self.dinucleotide: str = self.gc_config.dinucleotide  
+        self.add_elements_to_group()
+
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
@@ -99,7 +113,7 @@ class GcSkewGroup:
         norm_factor (float): Normalization factor for scaling the GC skew visualization.
     """
 
-    def __init__(self, gb_record: SeqRecord, gc_df: DataFrame, radius: float, track_width: float, skew_config: GcSkewConfigurator, config_dict: Dict, track_id: str) -> None:
+    def __init__(self, gb_record: SeqRecord, gc_df: DataFrame, radius: float, track_width: float, skew_config: GcSkewConfigurator, config_dict: Dict, track_id: str, use_custom_layout: bool = False) -> None:
         """
         Constructs the GcSkewGroup object with necessary parameters and configurations.
 
@@ -119,11 +133,23 @@ class GcSkewGroup:
         self.record_len: int = len(self.gb_record.seq)
         self.skew_group = Group(id="skew")
         self.config_dict = config_dict
-        self.track_type: str = self.config_dict['canvas']['circular']['track_type']
-        self.length_threshold = self.config_dict['labels']['length_threshold']['circular']
-        self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
-        self.norm_factor: float = self.config_dict['canvas']['circular']['track_dict'][self.length_param][self.track_type][str(track_id)]
+        #self.track_type: str = self.config_dict['canvas']['circular']['track_type']
+        #self.length_threshold = self.config_dict['labels']['length_threshold']['circular']
+        #self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
+        #self.norm_factor: float = self.config_dict['canvas']['circular']['track_dict'][self.length_param][self.track_type][str(track_id)]
         self.dinucleotide: str = self.skew_config.dinucleotide
+
+        # en: If using a custom layout, set norm_factor to 1.0
+        if use_custom_layout:  
+            self.norm_factor: float = 1.0  
+        else:  
+            # Existing logic  
+            self.length_threshold = self.config_dict['labels']['length_threshold']['circular']  
+            self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)  
+            self.track_type: str = self.config_dict['canvas']['circular']['track_type']  
+            self.norm_factor: float = self.config_dict['canvas']['circular']['track_dict'][self.length_param][self.track_type][str(track_id)]  
+          
+
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:

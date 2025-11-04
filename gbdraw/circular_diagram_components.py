@@ -3,6 +3,7 @@
 
 import logging
 import sys
+from typing import Literal, Optional, List, Dict
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from .canvas_generator import CircularCanvasConfigurator
@@ -270,7 +271,7 @@ def plot_circular_diagram_with_custom_tracks(
             # Generate group
             gc_group = GcContentGroup(  
                 gb_record, gc_df, track_radius, track_width,   
-                gc_config, config_dict, str(track_id)  
+                gc_config, config_dict, str(track_id), use_custom_layout=True  
             ).get_group()  
               
             # Add to canvas 
@@ -302,7 +303,7 @@ def plot_circular_diagram_with_custom_tracks(
             # Generate group  
             skew_group = GcSkewGroup(  
                 gb_record, skew_df_data, track_radius, track_width,  
-                skew_config, config_dict, str(track_id)  
+                skew_config, config_dict, str(track_id), use_custom_layout=True  
             ).get_group()  
               
             # Add to canvas  
@@ -311,8 +312,9 @@ def plot_circular_diagram_with_custom_tracks(
           
         elif track_type == 'feature':  
             # For feature tracks, use existing logic
-            # Call add_record_on_circular_canvas()  
-            pass  
+            # Call add_record_on_circular_canvas()
+            canvas = add_record_group_on_canvas(
+             canvas, gb_record, canvas_config, feature_config, config_dict)
           
         elif track_type == 'custom_data':  
             # en: Future extension: Custom data tracks  
