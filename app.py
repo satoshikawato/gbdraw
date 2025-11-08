@@ -168,13 +168,13 @@ if 'custom_track_layout' not in st.session_state:
             'uid': 'track_1',
             'track_type': 'nt_content',
             'width': 50.0,
-            'radius_factor': 0.75,
+            'radius_factor': 0.80,
             'params': {
                 'dinucleotide': 'GC',
                 'window': 10000,
                 'step': 1000,
-                'color_high': '#4CAF50',
-                'color_low': '#E8F5E9'
+                'color_high': "#a1a1a1",
+                'color_low': "#a1a1a1"
             }
         },
         {
@@ -186,14 +186,28 @@ if 'custom_track_layout' not in st.session_state:
                 'dinucleotide': 'GC',
                 'window': 10000,
                 'step': 1000,
-                'color_high': '#2196F3',
-                'color_low': '#FFEB3B'
+                'color_high': "#6dded3",
+                'color_low': "#ad72e3"
+            }
+        },
+        {
+            'uid': 'track_3',
+            'track_type': 'nt_skew',
+            'width': 50.0,
+            'radius_factor': 0.50,
+            'params': {
+                'dinucleotide': 'AT',
+                'window': 10000,
+                'step': 1000,
+                'color_high': "#80b1d3",
+                'color_low': "#c9e0f0"
             }
         }
     ]
-# en: Unique ID counter for the next added track
+
 if 'next_track_uid' not in st.session_state:
-    st.session_state.next_track_uid = 3
+    st.session_state.next_track_uid = 4
+
 
 
 # --- Helper Functions ---
