@@ -60,7 +60,7 @@ class SkewDrawer:
         skew_desc: str = generate_circular_gc_skew_path_desc(
             radius, gc_df, record_len, track_width, norm_factor, dinucleotide)
         circle_desc: str = generate_circle_path_desc(radius, norm_factor)
-        circle_path: ClipPath = ClipPath(id='clipper_circle')
+        circle_path: ClipPath = ClipPath(id=f'clipper_circle_{dinucleotide}')
         circle_path.add(Path(d=circle_desc, fill="white", stroke='none'))
         skew_high: Path = Path(
             d=skew_desc,
@@ -73,7 +73,7 @@ class SkewDrawer:
             fill=self.skew_low_fill_color,
             stroke=self.skew_stroke_color,
             fill_opacity=self.skew_fill_opacity,
-            clip_path="url(#clipper_circle)",
+            clip_path=f"url(#clipper_circle_{dinucleotide})",
             clip_rule="nonzero",
             fill_rule="evenodd")
         group.add(circle_path)

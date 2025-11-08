@@ -135,24 +135,13 @@ def sliding_window(seq: str, window: int, step: int) -> Generator[tuple[int, str
             out_seq = seq[start:end]
         yield start, out_seq
 
-def prepare_legend_table(gc_config, skew_config, feature_config, features_present, blast_config=None, has_blast=False):
+def prepare_legend_table(feature_config, features_present, track_layout: Optional[List[Dict]] = None, default_gc_config=None, default_skew_config=None, blast_config=None, has_blast=False):
     legend_table = dict()
     color_table: Optional[DataFrame] = feature_config.color_table
     default_colors: DataFrame = feature_config.default_colors
     features_present: List[str] = features_present
     block_stroke_color: str = feature_config.block_stroke_color
     block_stroke_width: float = feature_config.block_stroke_width
-    show_gc = gc_config.show_gc
-    gc_stroke_color: str = gc_config.stroke_color
-    gc_stroke_width: float = gc_config.stroke_width
-    gc_high_fill_color: str = gc_config.high_fill_color
-    gc_low_fill_color: str = gc_config.low_fill_color
-    show_skew = skew_config.show_skew
-    skew_high_fill_color: str = skew_config.high_fill_color
-    skew_low_fill_color: str = skew_config.low_fill_color
-    skew_stroke_color: str = skew_config.stroke_color
-    skew_stroke_width: float = skew_config.stroke_width
-    dinucleotide = gc_config.dinucleotide
     feature_specific_colors = dict()
     if color_table is not None and not color_table.empty:
         for _, row in color_table.iterrows():
@@ -194,23 +183,82 @@ def prepare_legend_table(gc_config, skew_config, feature_config, features_presen
                             'stroke': block_stroke_color,
                             'width': block_stroke_width
                         }    
-    if show_gc:
-        if gc_high_fill_color == gc_low_fill_color:
-            legend_table[f'{dinucleotide} content'] = {
-                            'type': 'solid',
-                            'fill': gc_high_fill_color,
-                            'stroke': gc_stroke_color,
-                            'width': gc_stroke_width
-                        }
-        else:
-            legend_table[f'{dinucleotide} content (+)'] = {'type': 'solid', 'fill': gc_high_fill_color, 'stroke': gc_stroke_color, 'width': gc_stroke_width}
-            legend_table[f'{dinucleotide} content (-)'] = {'type': 'solid', 'fill': gc_low_fill_color, 'stroke': gc_stroke_color, 'width': gc_stroke_width}
-    if show_skew:
-        if skew_high_fill_color == skew_low_fill_color:
-            legend_table[f'{dinucleotide} skew'] = {'type': 'solid', 'fill': skew_high_fill_color, 'stroke': skew_stroke_color, 'width': skew_stroke_width}
-        else:
-            legend_table[f'{dinucleotide} skew (+)'] = {'type': 'solid', 'fill': skew_high_fill_color, 'stroke': skew_stroke_color, 'width': skew_stroke_width}
-            legend_table[f'{dinucleotide} skew (-)'] = {'type': 'solid', 'fill': skew_low_fill_color, 'stroke': skew_stroke_color, 'width': skew_stroke_width}
+    # ★ GC と Skew の処理を track_layout に基づいて修正
+    if track_layout:
+        # カスタムトラックレイアウトの場合
+        # デフォルトのコンフィグが渡されていることを確認
+        if not default_gc_config or not default_skew_config:
+             logger.error("Default GC/Skew config missing for custom track legend preparation.")
+             # エラー処理または空のまま続行
+        
+        for track in track_layout:
+            track_type = track.get('track_type')
+            params = track.get('params', {})
+            dinucleotide = params.get('dinucleotide', 'GC') # デフォルトは 'GC'
+            
+            if track_type == 'nt_content' and default_gc_config:
+                # layout.toml から色指定を取得 (3. の問題点に対応)
+                high_fill_color = params.get('color_high', default_gc_config.high_fill_color)
+                low_fill_color = params.get('color_low', default_gc_config.low_fill_color)
+                stroke_color = params.get('stroke_color', default_gc_config.stroke_color)
+                stroke_width = params.get('stroke_width', default_gc_config.stroke_width)
+
+                if high_fill_color == low_fill_color:
+                    legend_table[f'{dinucleotide} content'] = {
+                                    'type': 'solid',
+                                    'fill': high_fill_color,
+                                    'stroke': stroke_color,
+                                    'width': stroke_width
+                                }
+                else:
+                    legend_table[f'{dinucleotide} content (+)'] = {'type': 'solid', 'fill': high_fill_color, 'stroke': stroke_color, 'width': stroke_width}
+                    legend_table[f'{dinucleotide} content (-)'] = {'type': 'solid', 'fill': low_fill_color, 'stroke': stroke_color, 'width': stroke_width}
+
+            elif track_type == 'nt_skew' and default_skew_config:
+                # layout.toml から色指定を取得 (3. の問題点に対応)
+                high_fill_color = params.get('color_high', default_skew_config.high_fill_color)
+                low_fill_color = params.get('color_low', default_skew_config.low_fill_color)
+                stroke_color = params.get('stroke_color', default_skew_config.stroke_color)
+                stroke_width = params.get('stroke_width', default_skew_config.stroke_width)
+
+                if high_fill_color == low_fill_color:
+                    legend_table[f'{dinucleotide} skew'] = {'type': 'solid', 'fill': high_fill_color, 'stroke': stroke_color, 'width': stroke_width}
+                else:
+                    legend_table[f'{dinucleotide} skew (+)'] = {'type': 'solid', 'fill': high_fill_color, 'stroke': stroke_color, 'width': stroke_width}
+                    legend_table[f'{dinucleotide} skew (-)'] = {'type': 'solid', 'fill': low_fill_color, 'stroke': stroke_color, 'width': stroke_width}
+    
+    else:
+        # デフォルトの (track_layout がない) 場合
+        if default_gc_config and default_gc_config.show_gc:
+            # ★ 既存の show_gc のロジックをここに移動
+            gc_high_fill_color: str = default_gc_config.high_fill_color
+            gc_low_fill_color: str = default_gc_config.low_fill_color
+            gc_stroke_color: str = default_gc_config.stroke_color
+            gc_stroke_width: float = default_gc_config.stroke_width
+            dinucleotide = default_gc_config.dinucleotide
+            if gc_high_fill_color == gc_low_fill_color:
+                legend_table[f'{dinucleotide} content'] = {
+                                'type': 'solid',
+                                'fill': gc_high_fill_color,
+                                'stroke': gc_stroke_color,
+                                'width': gc_stroke_width
+                            }
+            else:
+                legend_table[f'{dinucleotide} content (+)'] = {'type': 'solid', 'fill': gc_high_fill_color, 'stroke': gc_stroke_color, 'width': gc_stroke_width}
+                legend_table[f'{dinucleotide} content (-)'] = {'type': 'solid', 'fill': gc_low_fill_color, 'stroke': gc_stroke_color, 'width': gc_stroke_width}
+
+        if default_skew_config and default_skew_config.show_skew:
+            # ★ 既存の show_skew のロジックをここに移動
+            skew_high_fill_color: str = default_skew_config.high_fill_color
+            skew_low_fill_color: str = default_skew_config.low_fill_color
+            skew_stroke_color: str = default_skew_config.stroke_color
+            skew_stroke_width: float = default_skew_config.stroke_width
+            dinucleotide = default_skew_config.dinucleotide # ★ スキュー用のdinucleotideを取得
+            if skew_high_fill_color == skew_low_fill_color:
+                legend_table[f'{dinucleotide} skew'] = {'type': 'solid', 'fill': skew_high_fill_color, 'stroke': skew_stroke_color, 'width': skew_stroke_width}
+            else:
+                legend_table[f'{dinucleotide} skew (+)'] = {'type': 'solid', 'fill': skew_high_fill_color, 'stroke': skew_stroke_color, 'width': skew_stroke_width}
+                legend_table[f'{dinucleotide} skew (-)'] = {'type': 'solid', 'fill': skew_low_fill_color, 'stroke': skew_stroke_color, 'width': skew_stroke_width}
     if has_blast and blast_config:
         legend_table['Pairwise match identity'] = {
             'type': 'gradient',

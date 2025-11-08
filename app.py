@@ -22,7 +22,7 @@ from gbdraw.linear import linear_main
 
 # --- Basic Application Settings ---
 st.set_page_config(
-    page_title="gbdraw Web App",
+    page_title="gbdraw Web App (Developmant Version)",
     page_icon="🧬",
     layout="wide", menu_items={
         'Get help': 'https://github.com/satoshikawato/gbdraw/blob/main/docs/DOCS.md',
@@ -47,6 +47,7 @@ def get_version_info():
     return version, commit_id
 
 VERSION, COMMIT_ID = get_version_info()
+
 
 st.title("🧬 gbdraw Web App")
 st.caption("A genome diagram generator for microbes and organelles")
@@ -153,6 +154,48 @@ if 'linear_result' not in st.session_state:
 if 'linear_seq_count' not in st.session_state:
     st.session_state.linear_seq_count = 1
 
+
+if 'custom_track_layout' not in st.session_state:
+    st.session_state.custom_track_layout = [
+        {
+            'uid': 'track_0', 
+            'track_type': 'feature',
+            'width': 19.0,
+            'radius_factor': 1.00,
+            'params': {} 
+        },
+        {
+            'uid': 'track_1',
+            'track_type': 'nt_content',
+            'width': 50.0,
+            'radius_factor': 0.75,
+            'params': {
+                'dinucleotide': 'GC',
+                'window': 10000,
+                'step': 1000,
+                'color_high': '#4CAF50',
+                'color_low': '#E8F5E9'
+            }
+        },
+        {
+            'uid': 'track_2',
+            'track_type': 'nt_skew',
+            'width': 50.0,
+            'radius_factor': 0.65,
+            'params': {
+                'dinucleotide': 'GC',
+                'window': 10000,
+                'step': 1000,
+                'color_high': '#2196F3',
+                'color_low': '#FFEB3B'
+            }
+        }
+    ]
+# en: Unique ID counter for the next added track
+if 'next_track_uid' not in st.session_state:
+    st.session_state.next_track_uid = 3
+
+
 # --- Helper Functions ---
 @st.cache_data
 def get_palettes():
@@ -208,6 +251,68 @@ def create_manual_selectbox(label, options, key, help=None):
         help=help,
         args=(key,)
     )
+
+
+def add_track_row():
+    """カスタムトラックレイアウトに新しい（空の）トラックを追加する"""
+    uid = f"track_{st.session_state.next_track_uid}"
+    st.session_state.next_track_uid += 1
+    
+    st.session_state.custom_track_layout.append({
+        'uid': uid,
+        'track_type': 'nt_content', 
+        'width': 50.0,
+        'radius_factor': 0.5,
+        'params': { 
+            'dinucleotide': 'GC',
+            'window': 10000,
+            'step': 1000,
+            'color_high': '#A1A1A1',
+            'color_low': '#A1A1A1'
+        }
+    })
+
+def remove_track_row(uid):
+    """指定されたuidのトラックを削除する"""
+    st.session_state.custom_track_layout = [
+        track for track in st.session_state.custom_track_layout if track['uid'] != uid
+    ]
+
+def load_track_toml(toml_file: UploadedFile):
+    """アップロードされたTOMLファイルを解析し、session_stateを上書きする"""
+    try:
+        # tomllib (Python 3.11+)
+        content = tomllib.loads(toml_file.getvalue().decode("utf-8"))
+        tracks_data = content.get('tracks', [])
+        
+        new_layout = []
+        uid_counter = 0
+        for track in tracks_data:
+            uid = f"track_{uid_counter}"
+            uid_counter += 1
+            
+            
+            params_data = track.get('params', {})
+            
+            new_layout.append({
+                'uid': uid,
+                'track_type': track.get('track_type'),
+                'width': float(track.get('width', 50.0)),
+                'radius_factor': float(track.get('radius_factor', 0.5)),
+                'params': { 
+                    'dinucleotide': params_data.get('dinucleotide', 'GC'),
+                    'window': int(params_data.get('window', 10000)),
+                    'step': int(params_data.get('step', 1000)),
+                    'color_high': params_data.get('color_high', '#A1A1A1'),
+                    'color_low': params_data.get('color_low', '#A1A1A1')
+                }
+            })
+        
+        st.session_state.custom_track_layout = new_layout
+        st.session_state.next_track_uid = uid_counter
+        st.success(f"Successfully loaded and parsed '{toml_file.name}'.")
+    except Exception as e:
+        st.error(f"Failed to parse TOML file '{toml_file.name}': {e}")
 
 PALETTES = get_palettes()
 
@@ -279,6 +384,131 @@ if selected_mode == "🔵 Circular":
             create_manual_selectbox("FASTA file:", file_options, "c_fasta")
 
     st.markdown("---")
+
+    st.subheader("🛤️ Track Layout Configuration")
+    
+    c_track_mode = st.radio(
+        "Track Layout Mode:",
+        ("Use Default Layout", "Upload TOML File", "Edit Manually"),
+        key="c_track_mode",
+        horizontal=True,
+        help="Choose how to define tracks. 'Default' uses built-in settings. 'Upload' uses a TOML file. 'Edit Manually' lets you build a layout here."
+    )
+    
+
+    track_layout_path_to_pass = None 
+
+    if c_track_mode == "Upload TOML File":
+
+        create_manual_selectbox(
+            "Select Track Layout File:", 
+            file_options,  
+            "c_track_layout_file"
+        )
+        selected_file_name = st.session_state.get("c_track_layout_file_manual", "")
+        if selected_file_name:
+            track_layout_path_to_pass = st.session_state.uploaded_files.get(selected_file_name)
+            if not track_layout_path_to_pass:
+                st.error(f"File '{selected_file_name}' not found in session state. Please re-upload.")
+        
+
+        uploaded_toml = st.file_uploader("Or, upload a new track_layout.toml", type=["toml"], key="c_track_layout_uploader")
+        if uploaded_toml:
+            
+            safe_name = sanitize_filename(uploaded_toml.name)
+            if safe_name not in st.session_state.uploaded_files:
+                save_path = UPLOAD_DIR / f"{uuid.uuid4().hex[:8]}_{safe_name}"
+                with open(save_path, "wb") as f:
+                    f.write(uploaded_toml.getbuffer())
+                st.session_state.uploaded_files[safe_name] = str(save_path)
+                st.session_state['c_track_layout_file_manual'] = safe_name 
+                st.rerun() 
+            track_layout_path_to_pass = st.session_state.uploaded_files[safe_name]
+            
+            
+            if st.button("Load and Edit this file"):
+                load_track_toml(uploaded_toml) 
+                st.session_state.c_track_mode = "Edit Manually" 
+                st.rerun()
+
+    elif c_track_mode == "Edit Manually":
+        st.info("Define the tracks from top (outermost) to bottom (innermost). Use 'feature' type for the main genome track.")
+        
+        cols_header = st.columns([2, 3, 2, 1, 1, 1])
+        cols_header[0].markdown("**Track Type**")
+        cols_header[1].markdown("**Params (dinuc, window, step)**")
+        cols_header[2].markdown("**Colors (high / low)**")
+        cols_header[3].markdown("**Width**")
+        cols_header[4].markdown("**Radius**")
+        cols_header[5].markdown("**Action**")
+        
+        for track in st.session_state.custom_track_layout:
+            uid = track['uid']
+            
+            with st.container():
+                cols_edit = st.columns([2, 3, 2, 1, 1, 1])
+                
+                # Track Type
+                track['track_type'] = cols_edit[0].selectbox(
+                    "Type", 
+                    options=['feature', 'nt_content', 'nt_skew', 'custom_data'], 
+                    index=['feature', 'nt_content', 'nt_skew', 'custom_data'].index(track['track_type']),
+                    key=f"{uid}_type",
+                    label_visibility="collapsed"
+                )
+                
+                if track['track_type'] in ['nt_content', 'nt_skew']:
+                    param_cols = cols_edit[1].columns(3)
+                    track['params']['dinucleotide'] = param_cols[0].text_input("nt", value=track['params']['dinucleotide'], key=f"{uid}_nt", label_visibility="collapsed")
+                    track['params']['window'] = param_cols[1].number_input("W", value=track['params']['window'], key=f"{uid}_win", label_visibility="collapsed", step=100, format="%d")
+                    track['params']['step'] = param_cols[2].number_input("S", value=track['params']['step'], key=f"{uid}_step", label_visibility="collapsed", step=100, format="%d")
+                    
+                    color_cols = cols_edit[2].columns(2)
+                    track['params']['color_high'] = color_cols[0].color_picker("H", value=track['params']['color_high'], key=f"{uid}_c_high", label_visibility="collapsed")
+                    track['params']['color_low'] = color_cols[1].color_picker("L", value=track['params']['color_low'], key=f"{uid}_c_low", label_visibility="collapsed")
+                else:
+                    cols_edit[1].markdown("*(N/A)*", help="Params are only available for 'nt_content' or 'nt_skew' types.")
+                    cols_edit[2].markdown("*(N/A)*")
+
+                # Width & Radius Factor
+                track['width'] = cols_edit[3].number_input("Width", value=track['width'], key=f"{uid}_width", label_visibility="collapsed", step=1.0, min_value=1.0)
+                track['radius_factor'] = cols_edit[4].number_input("Radius", value=track['radius_factor'], key=f"{uid}_radius", label_visibility="collapsed", step=0.05, min_value=0.1, max_value=2.0, format="%.2f")
+                
+                # Actions
+                cols_edit[5].button("➖", key=f"{uid}_remove", on_click=remove_track_row, args=(uid,), help="Remove this track")
+
+        st.button("➕ Add Track", on_click=add_track_row, use_container_width=True)
+
+        if st.session_state.custom_track_layout:
+            toml_content_lines = []
+            for i, track in enumerate(st.session_state.custom_track_layout):
+                toml_content_lines.append("[[tracks]]")
+                toml_content_lines.append(f"track_id = {i + 1}") 
+                toml_content_lines.append(f"track_type = \"{track['track_type']}\"")
+                toml_content_lines.append(f"width = {track['width']}")
+                toml_content_lines.append(f"radius_factor = {track['radius_factor']}")
+                
+                if track['track_type'] in ['nt_content', 'nt_skew'] and track.get('params'):
+                    toml_content_lines.append("") 
+                    toml_content_lines.append("[tracks.params]")
+                    params = track['params']
+                    toml_content_lines.append(f"dinucleotide = \"{params['dinucleotide']}\"")
+                    toml_content_lines.append(f"window = {params['window']}")
+                    toml_content_lines.append(f"step = {params['step']}")
+                    toml_content_lines.append(f"color_high = \"{params['color_high']}\"")
+                    toml_content_lines.append(f"color_low = \"{params['color_low']}\"")
+                
+                toml_content_lines.append("") 
+            
+            toml_content = "\n".join(toml_content_lines)
+            
+            dynamic_toml_path = UPLOAD_DIR / f"dynamic_track_layout_{uuid.uuid4().hex[:8]}.toml"
+            with open(dynamic_toml_path, "w", encoding="utf-8") as f:
+                f.write(toml_content)
+            track_layout_path_to_pass = str(dynamic_toml_path)
+
+    st.markdown("---")
+
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("🎨 Color Customization")
@@ -401,6 +631,7 @@ if selected_mode == "🔵 Circular":
             c_legend = st.selectbox("Legend:", ["right", "left", "upper_left", "upper_right", "lower_left", "lower_right", "none"], index=0, key="c_legend", help="Position of the legend. 'none' hides the legend.")
         with col2:
             st.subheader("Display Options")
+
             st.markdown("##### Track layout")
             c_track_type = st.selectbox("Track type:", ["tuckin", "middle", "spreadout"], index=0, key="c_track", help="Choose how features are displayed in the circular track. 'tuckin' is the default and most compact, 'middle' places features along the middle of the circle, and 'spreadout' spreads them around the circle. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/1_Customizing_Plots.md#track-layout-style---track_type) for examples.")
             c_separate_strands = st.checkbox("Separate strands", value=True, key="c_strands", help="Display features on separate strands for better distinction of forward and reverse strands. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/1_Customizing_Plots.md#strand-separation---separate_strands) for examples.")
@@ -424,8 +655,8 @@ if selected_mode == "🔵 Circular":
                 c_adv_feat = st.multiselect("Features (-k):", options=FEATURE_KEYS, default=["CDS","rRNA","tRNA","tmRNA","ncRNA","misc_RNA","repeat_region"], key="c_feat", help="Select which features to include in the circular map. Default includes CDS, tRNA, rRNA, and repeat regions.")
                 st.markdown("##### Dinucleotide and Window/Step Size")
                 c_adv_nt = st.text_input("Dinucleotide (--nt):", value="GC", key="c_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md#q-can-i-plot-the-at-content-instead-of-gc-content) for details.")
-                c_adv_win = st.number_input("Window size (-w):", key="c_win", step=1, help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md#q-how-can-i-make-the-gc-content-graph-smootherfiner) for details.")
-                c_adv_step = st.number_input("Step size (-s):", key="c_step", step=1, help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md#q-how-can-i-make-the-gc-content-graph-smootherfiner) for details.")
+                c_adv_win = st.number_input("Window size (-w):", key="c_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md#q-how-can-i-make-the-gc-content-graph-smootherfiner) for details.")
+                c_adv_step = st.number_input("Step size (-s):", key="c_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md#q-how-can-i-make-the-gc-content-graph-smootherfiner) for details.")
                 st.markdown("##### Stroke Customization")
                 c_adv_blk_color = st.color_picker("Block stroke color:", value="#808080", key="c_b_color", help="Color of the outline for feature blocks.")
                 c_adv_blk_width = st.number_input("Block stroke width:", key="c_b_width", help="Block stroke width. Default: 2 pt for genomes <= 50 kb, 0 pt for genomes >= 50 kb.")
@@ -436,7 +667,7 @@ if selected_mode == "🔵 Circular":
                 c_adv_axis_width = st.number_input("Axis stroke width:", key="c_axis_width", help="Width of the main axis line. Default: 3 pt for genomes <= 50 kb, 1 pt for genomes >= 50 kb.")
             with adv_cols2:
                 st.markdown("##### Scale Customization")
-                c_adv_scale_interval = st.number_input("Scale interval (bp):", key="c_scale_interval", step=1, help="Manual scale interval (in bp). Overrides automatic calculation.")
+                c_adv_scale_interval = st.number_input("Scale interval (bp):", key="c_scale_interval", help="Manual scale interval (in bp). Overrides automatic calculation.")
                 st.markdown("##### Font Sizes")
                 c_adv_def_font_size = st.number_input("Definition font size (default: 18 pt):", value=18.0, min_value=1.0, step=0.5, key="c_def_font_size", help="Font size for the species and strain definition text. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#definition-font-size---definition_font_size) for details.")
                 c_adv_label_font_size = st.number_input("Label font size (default: 8 pt (>=50 kb) or 16 pt (<50 kb):", key="c_label_font_size", help="Font size for feature labels. Default is 8 pt for genomes >= 50 kb, 16 pt for smaller genomes. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md#label-font-size---label_font_size) for details.")
@@ -497,7 +728,18 @@ if selected_mode == "🔵 Circular":
         else:
             if c_suppress_gc: circular_args.append("--suppress_gc")
             if c_suppress_skew: circular_args.append("--suppress_skew")
-
+        if st.session_state.c_track_mode == "Use Default Layout":
+            # en: Using default layout, so no action needed
+            pass
+        
+        elif st.session_state.c_track_mode in ["Upload TOML File", "Edit Manually"]:
+            # en: track_layout_path_to_pass is set during UI rendering
+            if track_layout_path_to_pass:
+                circular_args += ["--track_layout", track_layout_path_to_pass]
+            else:
+                # en: Handle case where "Upload" is selected but no file provided
+                st.error("Please select, upload, or define a track layout.")
+                st.stop()
         if c_adv_def_font_size:
             circular_args += ["--definition_font_size", str(c_adv_def_font_size)]
         if c_adv_label_font_size:
@@ -846,7 +1088,7 @@ if selected_mode == "📏 Linear":
             st.subheader("Display Options")
             st.markdown("##### Track layout")
             l_separate_strands = st.checkbox("Separate strands", value=True, key="l_strands", help="Display features on separate strands for better distinction of forward and reverse strands.")
-            l_normalize_length = st.checkbox("Normalize sequence lengths", value=False, key="l_normalize", help="Normalize the lengths of all sequences to be equal.The length bar will be suppressed when this option is enabled.")
+            l_normalize_length = st.checkbox("Normalize sequence lengths", value=False, key="l_normalize", help="Normalize the lengths of all sequences to be equal. The length bar will be suppressed when this option is enabled.")
             l_align_center = st.checkbox("Align center", value=False, key="l_align", help="Align the linear map to the center of the page. This can help with aesthetics, especially for long sequences.")
             l_resolve_overlaps = st.checkbox("Resolve overlaps (experimental)", value=False, key="l_overlaps", help="Attempt to resolve label overlaps. This is experimental and may not work well for all genomes.")
             st.markdown("##### Label layout")
@@ -867,8 +1109,8 @@ if selected_mode == "📏 Linear":
                 st.markdown("##### Dinucleotide and Window/Step Size")
                 l_adv_gc_height = st.number_input("GC content and skew height:", key="l_gc_height", help="Height of the GC content track in pixels. Default: 20 pixels.")
                 l_adv_nt = st.text_input("nt (--nt):", value="GC", key="l_nt", help="Dinucleotide to use for GC content and skew calculations. Default is 'GC'.")
-                l_adv_win = st.number_input("Window size (-w):", key="l_win", step=1, help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb")
-                l_adv_step = st.number_input("Step size (-s):", key="l_step", step=1, help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb")
+                l_adv_win = st.number_input("Window size (-w):", key="l_win", help="Window size for GC content and skew calculations. Default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb")
+                l_adv_step = st.number_input("Step size (-s):", key="l_step", help="Step size for GC content and skew calculations. Default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb")
                 st.markdown("##### Legend")
                 l_adv_legend_font_size = st.number_input("Legend font size:", key="l_legend_font_size", help="Font size for the legend. Default: 20 (pixels, 96 dpi) for genomes <= 50 kb, 24 for genomes >= 50 kb")
                 l_adv_legend_box_size = st.number_input("Legend box size:", key="l_legend_box_size", help="Box size for the legend. Default: 16 (pt) for genomes <= 50 kb, 20 for genomes >= 50 kb)")
@@ -878,7 +1120,7 @@ if selected_mode == "📏 Linear":
 
             with adv_cols2:
                 st.markdown("##### Scale Customization")
-                l_adv_scale_interval = st.number_input("Scale interval (bp):", key="l_scale_interval", step=1, help="Manual scale interval (in bp). Overrides automatic calculation.")
+                l_adv_scale_interval = st.number_input("Scale interval (bp):", key="l_scale_interval", help="Manual scale interval (in bp). Overrides automatic calculation.")
                 l_adv_scale_font_size = st.number_input("Scale font size (--scale_font_size):", key="l_scale_font_size", help="Font size for the scale labels on the linear map. Default: 24 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb")
                 l_adv_scale_stroke_color = st.color_picker("Scale stroke color:", value="#000000", key="l_scale_color", help="Color of the scale bar.")
                 l_adv_scale_stroke_width = st.number_input("Scale stroke width:", key="l_scale_width", help="Width of the scale bar. Default: 3 pt.")
@@ -1146,7 +1388,7 @@ st.markdown(
     f"""
     Author: [Satoshi Kawato](https://github.com/satoshikawato)  |
     Source: [gbdraw](https://github.com/satoshikawato/gbdraw)  |
-    Version: {VERSION}-{COMMIT_ID}
+    Version: {VERSION}-dev-{COMMIT_ID}
     """,
     unsafe_allow_html=True
 )

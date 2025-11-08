@@ -145,6 +145,48 @@ if 'linear_result' not in st.session_state:
 if 'linear_seq_count' not in st.session_state:
     st.session_state.linear_seq_count = 1
 
+
+if 'custom_track_layout' not in st.session_state:
+    st.session_state.custom_track_layout = [
+        {
+            'uid': 'track_0', # Streamlit操作用のユニークID
+            'track_type': 'feature',
+            'width': 19.0,
+            'radius_factor': 1.00,
+            'params': {} # 'feature'にはparamsなし
+        },
+        {
+            'uid': 'track_1',
+            'track_type': 'nt_content',
+            'width': 50.0,
+            'radius_factor': 0.75,
+            'params': {
+                'dinucleotide': 'GC',
+                'window': 10000,
+                'step': 1000,
+                'color_high': '#4CAF50',
+                'color_low': '#E8F5E9'
+            }
+        },
+        {
+            'uid': 'track_2',
+            'track_type': 'nt_skew',
+            'width': 50.0,
+            'radius_factor': 0.65,
+            'params': {
+                'dinucleotide': 'GC',
+                'window': 10000,
+                'step': 1000,
+                'color_high': '#2196F3',
+                'color_low': '#FFEB3B'
+            }
+        }
+    ]
+
+if 'next_track_uid' not in st.session_state:
+    st.session_state.next_track_uid = 3
+
+
 # --- Helper Functions ---
 @st.cache_data
 def get_palettes():
@@ -200,6 +242,68 @@ def create_manual_selectbox(label, options, key, help=None):
         help=help,
         args=(key,)
     )
+
+
+def add_track_row():
+
+    uid = f"track_{st.session_state.next_track_uid}"
+    st.session_state.next_track_uid += 1
+    
+    st.session_state.custom_track_layout.append({
+        'uid': uid,
+        'track_type': 'nt_content', # デフォルト
+        'width': 50.0,
+        'radius_factor': 0.5,
+        'params': { # nt_content/nt_skew 用のデフォルトparams
+            'dinucleotide': 'GC',
+            'window': 10000,
+            'step': 1000,
+            'color_high': '#A1A1A1',
+            'color_low': '#A1A1A1'
+        }
+    })
+
+def remove_track_row(uid):
+
+    st.session_state.custom_track_layout = [
+        track for track in st.session_state.custom_track_layout if track['uid'] != uid
+    ]
+
+def load_track_toml(toml_file: UploadedFile):
+
+    try:
+        # tomllib (Python 3.11+)
+        content = tomllib.loads(toml_file.getvalue().decode("utf-8"))
+        tracks_data = content.get('tracks', [])
+        
+        new_layout = []
+        uid_counter = 0
+        for track in tracks_data:
+            uid = f"track_{uid_counter}"
+            uid_counter += 1
+            
+
+            params_data = track.get('params', {})
+            
+            new_layout.append({
+                'uid': uid,
+                'track_type': track.get('track_type'),
+                'width': float(track.get('width', 50.0)),
+                'radius_factor': float(track.get('radius_factor', 0.5)),
+                'params': { 
+                    'dinucleotide': params_data.get('dinucleotide', 'GC'),
+                    'window': int(params_data.get('window', 10000)),
+                    'step': int(params_data.get('step', 1000)),
+                    'color_high': params_data.get('color_high', '#A1A1A1'),
+                    'color_low': params_data.get('color_low', '#A1A1A1')
+                }
+            })
+        
+        st.session_state.custom_track_layout = new_layout
+        st.session_state.next_track_uid = uid_counter
+        st.success(f"Successfully loaded and parsed '{toml_file.name}'.")
+    except Exception as e:
+        st.error(f"Failed to parse TOML file '{toml_file.name}': {e}")
 
 PALETTES = get_palettes()
 
@@ -271,6 +375,131 @@ if selected_mode == "🔵 Circular":
             create_manual_selectbox("FASTA file:", file_options, "c_fasta")
 
     st.markdown("---")
+
+    st.subheader("🛤️ Track Layout Configuration")
+    
+    c_track_mode = st.radio(
+        "Track Layout Mode:",
+        ("Use Default Layout", "Upload TOML File", "Edit Manually"),
+        key="c_track_mode",
+        horizontal=True,
+        help="Choose how to define tracks. 'Default' uses built-in settings. 'Upload' uses a TOML file. 'Edit Manually' lets you build a layout here."
+    )
+    
+
+    track_layout_path_to_pass = None 
+
+    if c_track_mode == "Upload TOML File":
+        create_manual_selectbox(
+            "Select Track Layout File:", 
+            file_options,  
+            "c_track_layout_file"
+        )
+        selected_file_name = st.session_state.get("c_track_layout_file_manual", "")
+        if selected_file_name:
+            track_layout_path_to_pass = st.session_state.uploaded_files.get(selected_file_name)
+            if not track_layout_path_to_pass:
+                st.error(f"File '{selected_file_name}' not found in session state. Please re-upload.")
+        
+
+        uploaded_toml = st.file_uploader("Or, upload a new track_layout.toml", type=["toml"], key="c_track_layout_uploader")
+        if uploaded_toml:
+
+            safe_name = sanitize_filename(uploaded_toml.name)
+            if safe_name not in st.session_state.uploaded_files:
+                save_path = UPLOAD_DIR / f"{uuid.uuid4().hex[:8]}_{safe_name}"
+                with open(save_path, "wb") as f:
+                    f.write(uploaded_toml.getbuffer())
+                st.session_state.uploaded_files[safe_name] = str(save_path)
+                st.session_state['c_track_layout_file_manual'] = safe_name 
+                st.rerun() 
+            track_layout_path_to_pass = st.session_state.uploaded_files[safe_name]
+            
+
+            if st.button("Load and Edit this file"):
+                load_track_toml(uploaded_toml) 
+                st.session_state.c_track_mode = "Edit Manually" 
+                st.rerun()
+
+    elif c_track_mode == "Edit Manually":
+        st.info("Define the tracks from top (outermost) to bottom (innermost). Use 'feature' type for the main genome track.")
+        
+
+        cols_header = st.columns([2, 3, 2, 1, 1, 1])
+        cols_header[0].markdown("**Track Type**")
+        cols_header[1].markdown("**Params (dinuc, window, step)**")
+        cols_header[2].markdown("**Colors (high / low)**")
+        cols_header[3].markdown("**Width**")
+        cols_header[4].markdown("**Radius**")
+        cols_header[5].markdown("**Action**")
+        
+        for track in st.session_state.custom_track_layout:
+            uid = track['uid']
+            
+            with st.container():
+                cols_edit = st.columns([2, 3, 2, 1, 1, 1])
+                
+                # Track Type
+                track['track_type'] = cols_edit[0].selectbox(
+                    "Type", 
+                    options=['feature', 'nt_content', 'nt_skew', 'custom_data'], 
+                    index=['feature', 'nt_content', 'nt_skew', 'custom_data'].index(track['track_type']),
+                    key=f"{uid}_type",
+                    label_visibility="collapsed"
+                )
+                
+                if track['track_type'] in ['nt_content', 'nt_skew']:
+                    param_cols = cols_edit[1].columns(3)
+                    track['params']['dinucleotide'] = param_cols[0].text_input("nt", value=track['params']['dinucleotide'], key=f"{uid}_nt", label_visibility="collapsed")
+                    track['params']['window'] = param_cols[1].number_input("W", value=track['params']['window'], key=f"{uid}_win", label_visibility="collapsed", step=100, format="%d")
+                    track['params']['step'] = param_cols[2].number_input("S", value=track['params']['step'], key=f"{uid}_step", label_visibility="collapsed", step=100, format="%d")
+                    
+                    color_cols = cols_edit[2].columns(2)
+                    track['params']['color_high'] = color_cols[0].color_picker("H", value=track['params']['color_high'], key=f"{uid}_c_high", label_visibility="collapsed")
+                    track['params']['color_low'] = color_cols[1].color_picker("L", value=track['params']['color_low'], key=f"{uid}_c_low", label_visibility="collapsed")
+                else:
+                    cols_edit[1].markdown("*(N/A)*", help="Params are only available for 'nt_content' or 'nt_skew' types.")
+                    cols_edit[2].markdown("*(N/A)*")
+
+                # Width & Radius Factor
+                track['width'] = cols_edit[3].number_input("Width", value=track['width'], key=f"{uid}_width", label_visibility="collapsed", step=1.0, min_value=1.0)
+                track['radius_factor'] = cols_edit[4].number_input("Radius", value=track['radius_factor'], key=f"{uid}_radius", label_visibility="collapsed", step=0.05, min_value=0.1, max_value=2.0, format="%.2f")
+                
+                # Actions
+                cols_edit[5].button("➖", key=f"{uid}_remove", on_click=remove_track_row, args=(uid,), help="Remove this track")
+
+        st.button("➕ Add Track", on_click=add_track_row, use_container_width=True)
+
+        if st.session_state.custom_track_layout:
+            toml_content_lines = []
+            for i, track in enumerate(st.session_state.custom_track_layout):
+                toml_content_lines.append("[[tracks]]")
+                toml_content_lines.append(f"track_id = {i + 1}") 
+                toml_content_lines.append(f"track_type = \"{track['track_type']}\"")
+                toml_content_lines.append(f"width = {track['width']}")
+                toml_content_lines.append(f"radius_factor = {track['radius_factor']}")
+                
+                if track['track_type'] in ['nt_content', 'nt_skew'] and track.get('params'):
+                    toml_content_lines.append("")
+                    toml_content_lines.append("[tracks.params]")
+                    params = track['params']
+                    toml_content_lines.append(f"dinucleotide = \"{params['dinucleotide']}\"")
+                    toml_content_lines.append(f"window = {params['window']}")
+                    toml_content_lines.append(f"step = {params['step']}")
+                    toml_content_lines.append(f"color_high = \"{params['color_high']}\"")
+                    toml_content_lines.append(f"color_low = \"{params['color_low']}\"")
+                
+                toml_content_lines.append("") 
+            
+            toml_content = "\n".join(toml_content_lines)
+            
+            dynamic_toml_path = UPLOAD_DIR / f"dynamic_track_layout_{uuid.uuid4().hex[:8]}.toml"
+            with open(dynamic_toml_path, "w", encoding="utf-8") as f:
+                f.write(toml_content)
+            track_layout_path_to_pass = str(dynamic_toml_path)
+
+    st.markdown("---")
+
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("🎨 Color Customization")
@@ -393,6 +622,7 @@ if selected_mode == "🔵 Circular":
             c_legend = st.selectbox("Legend:", ["right", "left", "upper_left", "upper_right", "lower_left", "lower_right", "none"], index=0, key="c_legend", help="Position of the legend. 'none' hides the legend.")
         with col2:
             st.subheader("Display Options")
+
             st.markdown("##### Track layout")
             c_track_type = st.selectbox("Track type:", ["tuckin", "middle", "spreadout"], index=0, key="c_track", help="Choose how features are displayed in the circular track. 'tuckin' is the default and most compact, 'middle' places features along the middle of the circle, and 'spreadout' spreads them around the circle. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/1_Customizing_Plots.md#track-layout-style---track_type) for examples.")
             c_separate_strands = st.checkbox("Separate strands", value=True, key="c_strands", help="Display features on separate strands for better distinction of forward and reverse strands. See [here](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/1_Customizing_Plots.md#strand-separation---separate_strands) for examples.")
@@ -489,7 +719,18 @@ if selected_mode == "🔵 Circular":
         else:
             if c_suppress_gc: circular_args.append("--suppress_gc")
             if c_suppress_skew: circular_args.append("--suppress_skew")
-
+        if st.session_state.c_track_mode == "Use Default Layout":
+            # en: Using default layout, so no action needed
+            pass
+        
+        elif st.session_state.c_track_mode in ["Upload TOML File", "Edit Manually"]:
+            # en: track_layout_path_to_pass is set during UI rendering
+            if track_layout_path_to_pass:
+                circular_args += ["--track_layout", track_layout_path_to_pass]
+            else:
+                # en: Handle case where "Upload" is selected but no file provided
+                st.error("Please select, upload, or define a track layout.")
+                st.stop()
         if c_adv_def_font_size:
             circular_args += ["--definition_font_size", str(c_adv_def_font_size)]
         if c_adv_label_font_size:

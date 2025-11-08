@@ -10,7 +10,7 @@ from .canvas_generator import CircularCanvasConfigurator
 from .circular_object_groups import LegendGroup, GcContentGroup, GcSkewGroup, SeqRecordGroup, DefinitionGroup, TickGroup, AxisGroup
 from .object_configurators import GcSkewConfigurator, GcContentConfigurator, FeatureDrawingConfigurator
 from .file_processing import save_figure
-from .data_processing import prepare_legend_table
+from .data_processing import skew_df, prepare_legend_table # ★ prepare_legend_table をインポート
 from .utility_functions import check_feature_presence, calculate_coordinates
 from svgwrite import Drawing
 from svgwrite.container import Group
@@ -227,17 +227,22 @@ def plot_circular_diagram_with_custom_tracks(
     out_formats: list,  
     default_colors: DataFrame,  
     window: int,  
-    step: int  
+    step: int,
+    legend_config, # ★ 引数を追加
+    legend_table   # ★ 引数を追加  
 ) -> None:  
     """  
     Plots a circular diagram using a custom track layout.  
     """  
-    from .data_processing import skew_df  
-    from .circular_object_groups import GcContentGroup, GcSkewGroup  
-    from .object_configurators import GcContentConfigurator, GcSkewConfigurator  
+
       
-    # Create canvas  
+# Create canvas  
+    # ★ 凡例のサイズに基づき Canvas サイズを再計算
+    canvas_config.recalculate_canvas_dimensions(legend_config) 
     canvas: Drawing = canvas_config.create_svg_canvas()  
+    
+    # ★ Axis (軸) の描画を追加
+    canvas = add_axis_group_on_canvas(canvas, canvas_config, config_dict)
       
     # Dynamically generate each track 
     for track in track_layout:  
@@ -247,7 +252,7 @@ def plot_circular_diagram_with_custom_tracks(
         radius_factor = track['radius_factor']  
           
         if track_type == 'nt_content':  
-            params = track.get('params', {})  
+            params = track.get('params', {})  # ★ params を取得
             dinucleotide = params.get('dinucleotide', 'GC')  
             track_window = params.get('window', window)  
             track_step = params.get('step', step)  
@@ -261,7 +266,8 @@ def plot_circular_diagram_with_custom_tracks(
                 step=track_step,   
                 dinucleotide=dinucleotide,  
                 config_dict=config_dict,   
-                default_colors_df=default_colors  
+                default_colors_df=default_colors,
+                track_params=params  # ★ params を渡す (2. で対応済み)
             )  
               
             # Calculate track width and radius
@@ -279,7 +285,7 @@ def plot_circular_diagram_with_custom_tracks(
             canvas.add(gc_group)  
           
         elif track_type == 'nt_skew':  
-            params = track.get('params', {})  
+            params = track.get('params', {})  # ★ params を取得
             dinucleotide = params.get('dinucleotide', 'GC')  
             track_window = params.get('window', window)  
             track_step = params.get('step', step)  
@@ -293,7 +299,8 @@ def plot_circular_diagram_with_custom_tracks(
                 step=track_step,   
                 dinucleotide=dinucleotide,  
                 config_dict=config_dict,   
-                default_colors_df=default_colors  
+                default_colors_df=default_colors,
+                track_params=params  # ★ params を渡す (2. で対応済み)
             )  
               
             # Calculate track width and radius  
@@ -319,12 +326,26 @@ def plot_circular_diagram_with_custom_tracks(
         elif track_type == 'custom_data':  
             # en: Future extension: Custom data tracks  
             logger.warning(f"Custom data tracks not yet implemented: track_id={track_id}")  
-      
+
+    # ★ Tick (目盛り) の描画を追加
+    canvas = add_tick_group_on_canvas(
+        canvas, gb_record, canvas_config, config_dict)
+
+    # ★ Definition (中央のタイトル) の描画を追加
+    canvas = add_record_definition_group_on_canvas(
+        canvas, gb_record, canvas_config, species, strain, config_dict)
+        
+    # ★ Legend (凡例) の描画を追加
+    if canvas_config.legend_position != 'none':
+        canvas = add_legend_group_on_canvas(
+            canvas, canvas_config, legend_config, legend_table)
+            
     # 出力  
     save_figure(canvas, out_formats)
 
 
-def plot_circular_diagram(gb_record: SeqRecord, canvas_config: CircularCanvasConfigurator, gc_df: DataFrame, gc_config: GcContentConfigurator, skew_config: GcSkewConfigurator, feature_config: FeatureDrawingConfigurator, species: str, strain: str, config_dict: dict, out_formats: list, legend_config) -> None:
+def plot_circular_diagram(gb_record: SeqRecord, canvas_config: CircularCanvasConfigurator, gc_df: DataFrame, gc_config: GcContentConfigurator, skew_config: GcSkewConfigurator, feature_config: FeatureDrawingConfigurator, species: str, strain: str, config_dict: dict, out_formats: list, 
+                          legend_config, legend_table) -> None: # ★ 引数 legend_table を追加
     """
     Plots a circular diagram for a GenBank record.
 
@@ -344,10 +365,7 @@ def plot_circular_diagram(gb_record: SeqRecord, canvas_config: CircularCanvasCon
     """
     # Configure and create canvas
     
-    features_present = check_feature_presence(gb_record, feature_config.selected_features_set)
-    legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present)
-    legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
-    canvas_config.recalculate_canvas_dimensions(legend_config)
+    canvas_config.recalculate_canvas_dimensions(legend_config) # ★ これは残す
     canvas: Drawing = canvas_config.create_svg_canvas()
     canvas = add_record_on_circular_canvas(
         canvas, gb_record, canvas_config, feature_config, gc_config, skew_config, gc_df, species, strain, config_dict, legend_config, legend_table)

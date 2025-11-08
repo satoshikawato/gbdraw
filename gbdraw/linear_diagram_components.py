@@ -344,8 +344,15 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
     # Determine which features should be displayed in the legend
     features_present = check_feature_presence(records, feature_config.selected_features_set)
     # Prepare legend table
-    legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present, blast_config, has_blast)
-    # Predetermine legend dimensions (number of columns etc.)
+    legend_table = prepare_legend_table(
+        feature_config=feature_config,
+        features_present=features_present,
+        track_layout=None,  # Linearモードでは track_layout は使わない
+        default_gc_config=gc_config,
+        default_skew_config=skew_config,
+        blast_config=blast_config,
+        has_blast=has_blast
+    )    # Predetermine legend dimensions (number of columns etc.)
     legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
     # Draw legend group to determine the actual dimensions
     legend_group: Group = LegendGroup(config_dict, canvas_config, legend_config, legend_table)

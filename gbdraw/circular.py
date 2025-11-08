@@ -9,10 +9,10 @@ from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
 from .file_processing import load_gbks, load_gff_fasta, load_default_colors, read_color_table, load_config_toml, parse_formats, load_track_layout_toml
 from .circular_diagram_components import plot_circular_diagram, plot_circular_diagram_with_custom_tracks
-from .data_processing import skew_df
+from .data_processing import skew_df, prepare_legend_table
 from .canvas_generator import CircularCanvasConfigurator
 from .object_configurators import LegendDrawingConfigurator, GcSkewConfigurator,GcContentConfigurator, FeatureDrawingConfigurator
-from .utility_functions import suppress_gc_content_and_skew, modify_config_dict, determine_output_file_prefix, read_qualifier_priority_file
+from .utility_functions import suppress_gc_content_and_skew, modify_config_dict, determine_output_file_prefix, read_qualifier_priority_file, check_feature_presence
 
 # Setup the logging system. Configures a stream handler to output log messages to stdout.
 # Default logging level is set to INFO.
@@ -411,25 +411,50 @@ def circular_main(cmd_args) -> None:
         skew_config = GcSkewConfigurator(
             window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
 
-        
-
         outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
-        gc_df: DataFrame = skew_df(gb_record, window, step, dinucleotide)
+        
+        gc_df: DataFrame = skew_df(gb_record, window, step, dinucleotide) 
+
         canvas_config = CircularCanvasConfigurator(
             output_prefix=outfile_prefix, config_dict=config_dict, legend=legend, gb_record=gb_record, track_layout=track_layout
             )
         feature_config = FeatureDrawingConfigurator(
             color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, canvas_config=canvas_config)
+        
         legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config, canvas_config=canvas_config)
+
+        features_present = check_feature_presence(gb_record, feature_config.selected_features_set)
+
         if track_layout:  
+            legend_table = prepare_legend_table(
+                feature_config, 
+                features_present, 
+                track_layout=track_layout, 
+                default_gc_config=gc_config,  
+                default_skew_config=skew_config 
+            )
+            legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
+            
             plot_circular_diagram_with_custom_tracks(  
                 gb_record, canvas_config, track_layout,   
                 feature_config, species, strain, config_dict,   
-                out_formats, default_colors, window, step  
+                out_formats, default_colors, window, step,
+                legend_config, 
+                legend_table   
             )
         else:
+            legend_table = prepare_legend_table(
+                feature_config, 
+                features_present, 
+                track_layout=None,
+                default_gc_config=gc_config, 
+                default_skew_config=skew_config
+            )
+            legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
+
             plot_circular_diagram(gb_record, canvas_config, gc_df, gc_config, skew_config,
-                                feature_config, species, strain, config_dict, out_formats, legend_config)
+                                feature_config, species, strain, config_dict, out_formats, 
+                                legend_config, legend_table) # 
 
 if __name__ == "__main__":
     # Entry point for the script when run as a standalone program.

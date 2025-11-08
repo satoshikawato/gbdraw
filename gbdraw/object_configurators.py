@@ -17,7 +17,7 @@ class GcContentConfigurator:
         dinucleotide (str): Specific dinucleotide sequence to consider for GC content calculation.
     """
 
-    def __init__(self, window: int, step: int, dinucleotide: str, config_dict: Dict, default_colors_df: DataFrame) -> None:
+    def __init__(self, window: int, step: int, dinucleotide: str, config_dict: Dict, default_colors_df: DataFrame, track_params: Optional[Dict] = None) -> None:
         """
         Initializes the GcContentConfigurator with specified settings.
 
@@ -29,11 +29,23 @@ class GcContentConfigurator:
         self.window: int = window
         self.step: int = step
         self.dinucleotide: str = dinucleotide
-        self.high_fill_color: str = default_colors_df[default_colors_df['feature_type'] == 'gc_content']['color'].values[0]
-        self.low_fill_color: str = default_colors_df[default_colors_df['feature_type'] == 'gc_content']['color'].values[0]
-        self.fill_color: str = default_colors_df[default_colors_df['feature_type'] == 'gc_content']['color'].values[0]
-        self.stroke_color: str = config_dict['objects']['gc_content']['stroke_color']
-        self.stroke_width: float = config_dict['objects']['gc_content']['stroke_width']
+        if track_params:
+            # カスタムトラックのパラメータがあれば使用
+            # GcContent は high/low が同じ色 (fill_color) を参照する想定
+            default_color = default_colors_df[default_colors_df['feature_type'] == 'gc_content']['color'].values[0]
+            self.high_fill_color: str = track_params.get('color_high', default_color)
+            self.low_fill_color: str = track_params.get('color_low', default_color)
+            self.fill_color: str = self.high_fill_color # high を優先
+            self.stroke_color: str = track_params.get('stroke_color', config_dict['objects']['gc_content']['stroke_color'])
+            self.stroke_width: float = track_params.get('stroke_width', config_dict['objects']['gc_content']['stroke_width'])
+        else:
+            # デフォルト
+            self.high_fill_color: str = default_colors_df[default_colors_df['feature_type'] == 'gc_content']['color'].values[0]
+            self.low_fill_color: str = default_colors_df[default_colors_df['feature_type'] == 'gc_content']['color'].values[0]
+            self.fill_color: str = default_colors_df[default_colors_df['feature_type'] == 'gc_content']['color'].values[0]
+            self.stroke_color: str = config_dict['objects']['gc_content']['stroke_color']
+            self.stroke_width: float = config_dict['objects']['gc_content']['stroke_width']
+            
         self.fill_opacity: float = config_dict['objects']['gc_content']['fill_opacity']
         self.show_gc: bool = config_dict['canvas']['show_gc']
 
@@ -50,7 +62,7 @@ class GcSkewConfigurator:
         dinucleotide (str): Specific dinucleotide sequence to consider for GC content calculation.
     """
 
-    def __init__(self, window: int, step: int, dinucleotide: str, config_dict: Dict, default_colors_df: DataFrame) -> None:
+    def __init__(self, window: int, step: int, dinucleotide: str, config_dict: Dict, default_colors_df: DataFrame, track_params: Optional[Dict] = None) -> None:
         """
         Initializes the GcSkewConfigurator with specified settings.
 
@@ -62,10 +74,19 @@ class GcSkewConfigurator:
         self.window: int = window
         self.step: int = step
         self.dinucleotide: str = dinucleotide
-        self.high_fill_color: str = default_colors_df[default_colors_df['feature_type'] == 'skew_high']['color'].values[0]
-        self.low_fill_color: str = default_colors_df[default_colors_df['feature_type'] == 'skew_low']['color'].values[0]
-        self.stroke_color: str = config_dict['objects']['gc_skew']['stroke_color']
-        self.stroke_width: float = config_dict['objects']['gc_skew']['stroke_width']
+        if track_params:
+            # カスタムトラックのパラメータがあれば使用
+            self.high_fill_color: str = track_params.get('color_high', default_colors_df[default_colors_df['feature_type'] == 'skew_high']['color'].values[0])
+            self.low_fill_color: str = track_params.get('color_low', default_colors_df[default_colors_df['feature_type'] == 'skew_low']['color'].values[0])
+            self.stroke_color: str = track_params.get('stroke_color', config_dict['objects']['gc_skew']['stroke_color'])
+            self.stroke_width: float = track_params.get('stroke_width', config_dict['objects']['gc_skew']['stroke_width'])
+        else:
+            # デフォルト
+            self.high_fill_color: str = default_colors_df[default_colors_df['feature_type'] == 'skew_high']['color'].values[0]
+            self.low_fill_color: str = default_colors_df[default_colors_df['feature_type'] == 'skew_low']['color'].values[0]
+            self.stroke_color: str = config_dict['objects']['gc_skew']['stroke_color']
+            self.stroke_width: float = config_dict['objects']['gc_skew']['stroke_width']
+
         self.fill_opacity: float = config_dict['objects']['gc_skew']['fill_opacity']
         self.show_skew: bool = config_dict['canvas']['show_skew']
         
