@@ -16,6 +16,7 @@ resolve_overlaps = false
 height = 1000 # pixel
 radius = 390
 track_ratio = 0.19
+track_width = 75
 track_dict.short = {"spreadout" = {1 = 1.0, 2 = 0.85, 3 = 0.65}, "middle" = {1 = 1.0, 2 = 0.75, 3 = 0.55}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.50}}
 track_dict.long = {"spreadout" = {1 = 1.0, 2 = 0.80, 3 = 0.60}, "middle" = {1 = 1.0, 2 = 0.75, 3 = 0.55}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.50}}
 track_type = 'tuckin'
@@ -26,6 +27,9 @@ allow_inner_labels = false
 [canvas.circular.track_ratio_factors]
   long = [0.25, 1.0, 1.0]
   short = [0.50, 1.0, 1.0]
+[canvas.circular.cds_ratio] # track_ratio * track_ratio_factor, offset
+  long = [0.0475, 0.005] # 0.19 * 0.25, offset=0.005
+  short = [0.095, 0.01] # 0.19 * 0.50, offset=0.01
 
 [canvas.linear]
 # Note that only the width is defined here, as the height of the figure is dependent on the number of sequences displayed.
@@ -70,8 +74,7 @@ default = [1000, 100]
 stroke_color = 'none'
 stroke_width = 0
 fill_opacity = 1
-[objects.gc_content.circular]
-norm_factor = 0.65
+
 [objects.gc_content.linear]
 height = 20
 
@@ -79,8 +82,6 @@ height = 20
 stroke_color = 'none'
 stroke_width = 0
 fill_opacity = 1
-[objects.gc_skew.circular]
-norm_factor = 0.80
 
 [objects.ticks]
 tick_width = 2.0
