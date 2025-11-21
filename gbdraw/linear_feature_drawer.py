@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from ast import Str
 import logging
-import sys
 from pandas import DataFrame
 from svgwrite.path import Path
 from svgwrite.container import Group
@@ -12,10 +10,9 @@ from typing import Optional, Literal
 from .linear_path_drawer import calculate_gc_content_path_desc, calculate_gc_skew_path_desc, create_intron_path_linear, create_arrowhead_path_linear, create_rectangle_path_linear
 from .circular_path_drawer import generate_text_path
 from .object_configurators import GcSkewConfigurator, FeatureDrawingConfigurator
-# Logging setup
-logger = logging.getLogger()
-handler = logging.StreamHandler(sys.stdout)
 
+# Logging setup
+logger = logging.getLogger(__name__)
 
 class FeatureDrawer:
     """

@@ -6,7 +6,6 @@ import logging
 import tomllib
 import cairosvg
 
-
 from pathlib import Path
 from typing import Optional, Generator, List, Dict, Set
 from importlib import resources
@@ -19,11 +18,10 @@ from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 from BCBio import GFF
 
-
 from .object_configurators import BlastMatchConfigurator
-logger = logging.getLogger()
-handler = logging.StreamHandler(sys.stdout)
 
+# Logging setup
+logger = logging.getLogger(__name__)
 
 _COLOR_NAME_MAP = {
     "aliceblue": "#F0F8FF",

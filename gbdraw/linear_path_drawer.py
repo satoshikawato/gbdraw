@@ -2,16 +2,13 @@
 # coding: utf-8
 
 import logging
-import sys
-
 from pandas import DataFrame
 from .circular_path_drawer import generate_text_path
 from .create_feature_objects import set_arrow_shoulder
 from .utility_functions import  normalize_position_to_linear_track, calculate_bbox_dimensions, get_label_text
 
 # Logging setup
-logger = logging.getLogger()
-handler = logging.StreamHandler(sys.stdout)
+logger = logging.getLogger(__name__)
 
 def calculate_feature_position_factors_linear(strand: str, track_id: int, separate_strands: bool) -> list[float]:
     """

@@ -2,7 +2,6 @@
 # coding: utf-8
 
 import logging
-import sys
 import math
 from typing import Optional, Union, List, Dict, Literal, Tuple
 from pandas import DataFrame
@@ -14,10 +13,9 @@ from svgwrite.masking import ClipPath
 from .feature_objects import FeatureObject
 from .circular_path_drawer import get_exon_and_intron_coordinates, calculate_feature_position_factors_circular,  generate_circle_path_desc, generate_circular_gc_skew_path_desc, generate_circular_gc_content_path_desc, generate_circular_rectangle_path, generate_circular_arrowhead_path, generate_circular_intron_path, generate_name_path, generate_text_path
 from .utility_functions import determine_length_parameter, calculate_bbox_dimensions, calculate_cds_ratio
-# Logging setup
-logger = logging.getLogger()
-handler = logging.StreamHandler(sys.stdout)
 
+# Logging setup
+logger = logging.getLogger(__name__)
 
 class SkewDrawer:
     """

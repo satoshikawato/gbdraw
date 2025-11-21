@@ -2,7 +2,6 @@
 # coding: utf-8
 
 import logging
-import sys
 from typing import List, Union, Tuple, Dict, Optional
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
@@ -19,10 +18,9 @@ from .create_feature_objects import create_feature_dict, preprocess_color_tables
 from .utility_functions import create_text_element, normalize_position_linear, preprocess_label_filtering, calculate_bbox_dimensions, interpolate_color
 from .object_configurators import GcContentConfigurator, FeatureDrawingConfigurator, GcSkewConfigurator
 from .circular_path_drawer import generate_text_path
-import math
+
 # Logging setup
-logger = logging.getLogger()
-handler = logging.StreamHandler(sys.stdout)
+logger = logging.getLogger(__name__)
 
 
 class DefinitionGroup:

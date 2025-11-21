@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 import re
-import sys
 import logging
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
@@ -9,10 +8,9 @@ from Bio.SeqFeature import SeqFeature, SimpleLocation
 from typing import List, Dict, Tuple
 from .feature_objects import GeneObject, RepeatObject, FeatureObject
 from .utility_functions import get_label_text
-# Logging setup
-logger = logging.getLogger()
-handler = logging.StreamHandler(sys.stdout)
 
+# Logging setup
+logger = logging.getLogger(__name__)
 
 def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -> tuple[dict, dict]:
     """

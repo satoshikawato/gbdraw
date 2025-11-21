@@ -2,7 +2,6 @@
 # coding: utf-8
 
 import logging
-import sys
 from pandas import DataFrame
 from typing import Tuple, Optional
 from svgwrite import Drawing
@@ -19,9 +18,7 @@ from .data_processing import prepare_label_list_linear
 from .utility_functions import preprocess_label_filtering
 
 # Logging setup
-logger = logging.getLogger()
-handler = logging.StreamHandler(sys.stdout)
-
+logger = logging.getLogger(__name__)
 
 def _precalculate_definition_widths(records: list[SeqRecord], config_dict: dict, canvas_config) -> float:
     """
