@@ -117,6 +117,7 @@ if 'manual_whitelist' not in st.session_state:
     st.session_state.manual_whitelist = []
 
 
+
 st.markdown(
     """
     <p>
@@ -284,6 +285,7 @@ if selected_mode == "🔵 Circular":
             new_palette = st.session_state.c_palette_selector
             st.session_state.custom_circular_colors = get_palette_colors(new_palette).copy()
             st.session_state.color_picker_seed += 1
+
 
         if 'custom_circular_colors' not in st.session_state:
             default_palette = PALETTES[0] if PALETTES and PALETTES[0] != "" else "default"

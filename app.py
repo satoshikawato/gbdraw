@@ -152,6 +152,8 @@ if 'linear_result' not in st.session_state:
     st.session_state.linear_result = None
 if 'linear_seq_count' not in st.session_state:
     st.session_state.linear_seq_count = 1
+if 'color_picker_seed' not in st.session_state:
+    st.session_state.color_picker_seed = 0
 
 # --- Helper Functions ---
 @st.cache_data
@@ -289,6 +291,7 @@ if selected_mode == "🔵 Circular":
         def circular_palette_changed():
             new_palette = st.session_state.c_palette_selector
             st.session_state.custom_circular_colors = get_palette_colors(new_palette).copy()
+            st.session_state.color_picker_seed += 1
 
         if 'custom_circular_colors' not in st.session_state:
             default_palette = PALETTES[0] if PALETTES and PALETTES[0] != "" else "default"
@@ -311,7 +314,7 @@ if selected_mode == "🔵 Circular":
                 st.session_state.custom_circular_colors[feature] = st.color_picker(
                     label=feature,
                     value=st.session_state.custom_circular_colors[feature],
-                    key=f"c_color_picker_{feature}"
+                    key=f"c_color_picker_{feature}_{st.session_state.color_picker_seed}"
                 )
     with col2:
     # --- Qualifier Priority & Label Filtering Section (OUTSIDE the form) ---
@@ -733,6 +736,7 @@ if selected_mode == "📏 Linear":
         def linear_palette_changed():
             new_palette = st.session_state.l_palette_selector
             st.session_state.custom_linear_colors = get_palette_colors(new_palette).copy()
+            st.session_state.color_picker_seed += 1
 
         if 'custom_linear_colors' not in st.session_state:
             default_palette = PALETTES[0] if PALETTES and PALETTES[0] != "" else "default"
@@ -756,7 +760,7 @@ if selected_mode == "📏 Linear":
                 st.session_state.custom_linear_colors[feature] = st.color_picker(
                     label=feature,
                     value=st.session_state.custom_linear_colors[feature],
-                    key=f"l_color_picker_{feature}"
+                    key=f"l_color_picker_{feature}_{st.session_state.color_picker_seed}"
                 )
     
     # --- Qualifier Priority & Label Filtering Section (OUTSIDE the form) ---
