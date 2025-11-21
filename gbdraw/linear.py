@@ -14,14 +14,9 @@ from .utility_functions import create_dict_for_sequence_lengths, modify_config_d
 from .canvas_generator import LinearCanvasConfigurator
 from .object_configurators import GcSkewConfigurator, LegendDrawingConfigurator, GcContentConfigurator, FeatureDrawingConfigurator, BlastMatchConfigurator
 
-# Setup for the logging system. Configures a stream handler to direct log messages to stdout
-# and sets the logging level to INFO for both the handler and the logger.
+# Setup for the logging system and sets the logging level to INFO
 logger = logging.getLogger()
-handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.INFO)
-logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
 
 def _get_args(args) -> argparse.Namespace:
     """
@@ -434,6 +429,7 @@ def linear_main(cmd_args) -> None:
 
 if __name__ == "__main__":
     # This gets all arguments passed to the script, excluding the script name
+    handler = logging.StreamHandler(sys.stdout)
     main_args = sys.argv[1:]
     if not main_args:
         main_args.append('--help')

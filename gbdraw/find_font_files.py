@@ -5,8 +5,8 @@ import logging
 import subprocess
 from fontTools.ttLib import TTFont
 
-logger = logging.getLogger()
-
+# Logging setup
+logger = logging.getLogger(__name__)
 
 def find_font_paths(font_families):
     font_paths = []

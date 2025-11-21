@@ -2,14 +2,12 @@
 # coding: utf-8
 
 import logging
-import sys
 from svgwrite import Drawing
 from typing import Literal
 from .utility_functions import determine_length_parameter
-# Logging setup
-Logger = logging.getLogger()
-handler = logging.StreamHandler(sys.stdout)
 
+# Logging setup
+logger = logging.getLogger(__name__)
 
 class CircularCanvasConfigurator:
     """

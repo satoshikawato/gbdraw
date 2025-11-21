@@ -2,7 +2,6 @@
 # coding: utf-8
 
 import logging
-import sys
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from .canvas_generator import CircularCanvasConfigurator
@@ -14,11 +13,9 @@ from .utility_functions import check_feature_presence, calculate_coordinates
 from svgwrite import Drawing
 from svgwrite.container import Group
 from svgwrite.path import Path
+
 # Logging setup
-logger = logging.getLogger()
-handler = logging.StreamHandler(sys.stdout)
-
-
+logger = logging.getLogger(__name__)
 
 def center_group_on_canvas(group: Group, canvas_config: CircularCanvasConfigurator) -> Group:
     """

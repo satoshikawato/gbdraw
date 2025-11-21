@@ -14,10 +14,9 @@ from .canvas_generator import CircularCanvasConfigurator
 from .object_configurators import LegendDrawingConfigurator, GcSkewConfigurator,GcContentConfigurator, FeatureDrawingConfigurator
 from .utility_functions import suppress_gc_content_and_skew, modify_config_dict, determine_output_file_prefix, read_qualifier_priority_file
 
-# Setup the logging system. Configures a stream handler to output log messages to stdout.
-# Default logging level is set to INFO.
+# Setup for the logging system and sets the logging level to INFO
 logger = logging.getLogger()
-handler = logging.StreamHandler(sys.stdout)
+logger.setLevel(logging.INFO)
 
 
 def _get_args(args) -> argparse.Namespace:
@@ -421,6 +420,7 @@ if __name__ == "__main__":
     # Calls the main function `circular_main` with command-line arguments.
     # args are parsed command-line arguments
     # This gets all arguments passed to the script, excluding the script name
+    handler = logging.StreamHandler(sys.stdout)
     main_args = sys.argv[1:]
     if not main_args:
         main_args.append('--help')

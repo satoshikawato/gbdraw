@@ -2,7 +2,6 @@
 # coding: utf-8
 
 import logging
-import sys
 import math
 import numpy as np
 from typing import Literal, Tuple, Dict, Union
@@ -15,9 +14,7 @@ from .create_feature_objects import set_arrow_shoulder, get_exon_and_intron_coor
 from .utility_functions import edit_available_tracks, normalize_position_to_linear_track, calculate_bbox_dimensions
 
 # Logging setup
-logger = logging.getLogger()
-handler = logging.StreamHandler(sys.stdout)
-
+logger = logging.getLogger(__name__)
 
 def generate_circle_path_desc(radius: float, norm_factor: float) -> str:
     """
