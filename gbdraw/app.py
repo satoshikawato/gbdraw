@@ -280,7 +280,10 @@ if selected_mode == "🔵 Circular":
         # Color Palette Selection and Customization
         def circular_palette_changed():
             new_palette = st.session_state.c_palette_selector
-            st.session_state.custom_circular_colors = get_palette_colors(new_palette).copy()
+            new_colors = get_palette_colors(new_palette).copy()
+            st.session_state.custom_circular_colors = new_colors
+            for feature, color in new_colors.items():
+                st.session_state[f"c_color_picker_{feature}"] = color
 
         if 'custom_circular_colors' not in st.session_state:
             default_palette = PALETTES[0] if PALETTES and PALETTES[0] != "" else "default"
@@ -724,8 +727,11 @@ if selected_mode == "📏 Linear":
 
         def linear_palette_changed():
             new_palette = st.session_state.l_palette_selector
-            st.session_state.custom_linear_colors = get_palette_colors(new_palette).copy()
-
+            new_colors = get_palette_colors(new_palette).copy()
+            st.session_state.custom_linear_colors = new_colors
+            for feature, color in new_colors.items():
+                st.session_state[f"l_color_picker_{feature}"] = color
+                
         if 'custom_linear_colors' not in st.session_state:
             default_palette = PALETTES[0] if PALETTES and PALETTES[0] != "" else "default"
             st.session_state.custom_linear_colors = get_palette_colors(default_palette).copy()
