@@ -854,7 +854,14 @@ if selected_mode == "📏 Linear":
             l_align_center = st.checkbox("Align center", value=False, key="l_align", help="Align the linear map to the center of the page. This can help with aesthetics, especially for long sequences.")
             l_resolve_overlaps = st.checkbox("Resolve overlaps (experimental)", value=False, key="l_overlaps", help="Attempt to resolve label overlaps. This is experimental and may not work well for all genomes.")
             st.markdown("##### Label layout")
-            l_show_labels = st.checkbox("Show labels", value=False, key="l_labels", help="Display feature labels on the linear map.")
+            l_show_labels_mode = st.radio(
+                "Show labels", 
+                options=["None", "All", "First"], 
+                index=0, 
+                key="l_labels_mode", 
+                horizontal=True,
+                help="Display feature labels on the linear map. 'First' shows labels only for the top track."
+            )
             st.markdown("##### Dinucleotide Tracks")     
             l_show_gc = st.checkbox("Show GC content", value=False, key="l_gc", help="Display the GC content track on the linear map.")
             l_show_skew = st.checkbox("Show GC skew", value=False, key="l_skew", help="Display the GC skew track on the linear map.")
@@ -951,7 +958,10 @@ if selected_mode == "📏 Linear":
         if selected_blast:
             blast_paths = [st.session_state.uploaded_files[f] for f in selected_blast]
             linear_args += ["-b", *blast_paths]
-        if l_show_labels: linear_args.append("--show_labels")
+        if l_show_labels_mode == "All":
+            linear_args.extend(["--show_labels", "all"])
+        elif l_show_labels_mode == "First":
+            linear_args.extend(["--show_labels", "first"])
         if l_separate_strands: linear_args.append("--separate_strands")
         if l_align_center: linear_args.append("--align_center")
         if l_show_gc: linear_args.append("--show_gc")

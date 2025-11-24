@@ -185,7 +185,15 @@ def _get_args(args) -> argparse.Namespace:
         help='Legend position (default: "right"; "right", "left", "top", "bottom", "none")',
         type=str,
         default="right")
-    parser.add_argument("--show_labels", help="Show labels", action="store_true")
+    parser.add_argument(
+            "--show_labels",
+            help="Show labels: no argument or 'all' (all records), 'first' (first record only), 'none' (no labels). Default: 'none'",
+            nargs='?',
+            const="all",
+            default="none",
+            choices=["all", "first", "none"],
+            type=str
+        )
     parser.add_argument(
         '--resolve_overlaps',
         help='Resolve overlaps (experimental; default: False). ',
@@ -309,7 +317,7 @@ def linear_main(cmd_args) -> None:
     show_skew: bool = args.show_skew
     bitscore: float = args.bitscore
     identity: float = args.identity
-    show_labels: bool = args.show_labels
+    show_labels: str = args.show_labels
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority

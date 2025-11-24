@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import logging
+import copy
 from pandas import DataFrame
 from typing import Tuple, Optional
 from svgwrite import Drawing
@@ -36,14 +37,24 @@ def _precalculate_definition_widths(records: list[SeqRecord], config_dict: dict,
 
 def _precalculate_label_dimensions(records: list[SeqRecord], feature_config: FeatureDrawingConfigurator, canvas_config: LinearCanvasConfigurator, config_dict: dict) -> tuple[float, dict, dict]:
     """Pre-calculates label placements for all records to determine the required canvas height."""
-    if not canvas_config.show_labels:
-        return 0, {}, {}
 
+    show_labels_mode = config_dict['canvas']['show_labels'] # "all", "first", "none"
+
+    if show_labels_mode == 'none':
+        return 0, {}, {}
+    
     max_required_height = 0
     all_labels_by_record = {}
     record_label_heights = {} # Store height required for labels per record
     normalize_length = config_dict['canvas']['linear']['normalize_length']
-    for record in records:
+
+    for i, record in enumerate(records):
+        
+        if show_labels_mode == 'first' and i > 0:
+            all_labels_by_record[record.id] = []
+            record_label_heights[record.id] = 0
+            continue
+
         color_table, default_colors = preprocess_color_tables(
             feature_config.color_table, feature_config.default_colors
         )
@@ -424,7 +435,8 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
             comparison_offsets, actual_comparison_heights
         )
 
-    
+    show_labels_mode = config_dict['canvas']['show_labels']
+
     for count, record in enumerate(records, start=1):
         offset_y = record_offsets[count-1]
 
@@ -435,11 +447,19 @@ def plot_linear_diagram(records: list[SeqRecord], blast_files, canvas_config: Li
                         ((canvas_config.longest_genome - len(record.seq)) / canvas_config.longest_genome) / 2) if canvas_config.align_center else 0
         
         labels_for_record = all_labels.get(record.id)
-        add_record_group(canvas, record, offset_y, offset_x, canvas_config, feature_config, config_dict, precalculated_labels=labels_for_record)
-        add_record_definition_group(canvas, record, offset_y, offset_x, canvas_config, config_dict, max_def_width)
+        should_show_labels = False
+        if show_labels_mode == 'all':
+            should_show_labels = True
+        elif show_labels_mode == 'first' and count == 1:
+            should_show_labels = True
+        current_config_dict = copy.deepcopy(config_dict)
+        current_config_dict['canvas']['show_labels'] = should_show_labels
+        
+        add_record_group(canvas, record, offset_y, offset_x, canvas_config, feature_config, current_config_dict, precalculated_labels=labels_for_record)
+        add_record_definition_group(canvas, record, offset_y, offset_x, canvas_config, current_config_dict, max_def_width)
         if canvas_config.show_gc:
-            add_gc_content_group(canvas, record, offset_y, offset_x, canvas_config, gc_config, config_dict)
+            add_gc_content_group(canvas, record, offset_y, offset_x, canvas_config, gc_config, current_config_dict)
         if canvas_config.show_skew:
-            add_gc_skew_group(canvas, record, offset_y, offset_x, canvas_config, skew_config, config_dict)
+            add_gc_skew_group(canvas, record, offset_y, offset_x, canvas_config, skew_config, current_config_dict)
 
     save_figure(canvas, out_formats)
