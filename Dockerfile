@@ -1,14 +1,10 @@
-# 1. Use Python 3.13
+# 1. Use Python 3.13 as the base image
 FROM python:3.13-slim
 
-# 2. Set unbuffered output for logs
 ENV PYTHONUNBUFFERED=1
-
-# 3. Set working directory
 WORKDIR /app
 
-# 4. Install necessary OS libraries
-# These are necessary OS libraries for cairosvg, etc.
+# 2. Install required libraries 
 RUN apt-get update && apt-get install -y \
     git \
     libcairo2 \
@@ -18,19 +14,26 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     shared-mime-info \
     curl \
+    fonts-liberation \
+    fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
-# 5. Copy project files
+# 3. Copy application files
 COPY . .
 
-# 6. Install Python libraries
+# 4. Important: Register gbdraw bundled fonts to the system
+RUN mkdir -p /usr/share/fonts/truetype/gbdraw \
+    && cp gbdraw/data/*.ttf /usr/share/fonts/truetype/gbdraw/ 2>/dev/null || true \
+    && fc-cache -f -v
+
+# 5. Install Python libraries
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# 7. Expose port
+# 6. Expose port
 EXPOSE 8080
 
-# 8. Health check
+# 7. Healthcheck
 HEALTHCHECK CMD curl --fail http://localhost:8080/_stcore/health || exit 1
 
-# 9. Set entrypoint command
+# 8. Entry point command
 ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"]
