@@ -10,6 +10,7 @@ WORKDIR /app
 # 4. Install necessary OS libraries
 # These are necessary OS libraries for cairosvg, etc.
 RUN apt-get update && apt-get install -y \
+    git \
     libcairo2 \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \

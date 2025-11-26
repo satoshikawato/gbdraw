@@ -10,6 +10,7 @@ import shutil
 import uuid
 import tomllib
 import time
+import tempfile
 import gbdraw.version
 import streamlit as st
 from pathlib import Path
@@ -139,6 +140,7 @@ st.markdown(
 )
 
 # --- Temporary Directory and Session State Initialization ---
+# Upload destination for input files
 TEMP_DIR = Path("gbdraw_temp")
 UPLOAD_DIR = TEMP_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True, parents=True)
@@ -255,8 +257,6 @@ selected_mode = st.radio(
     horizontal=True,
     label_visibility="collapsed"
 )
-
-
 
 # --- CIRCULAR MODE ---
 if selected_mode == "🔵 Circular":
@@ -458,220 +458,210 @@ if selected_mode == "🔵 Circular":
         c_submitted = st.form_submit_button("🚀 Run gbdraw Circular", type="primary")
 
     if c_submitted:
-        circular_args = []
-        selected_file_for_prefix = None
-
-        if st.session_state.c_input_type == "GenBank":
-            selected_gb_file = st.session_state.get("c_gb_manual", "")
-            if not selected_gb_file:
-                st.error("Please select a GenBank file.")
-                st.stop()
-            gb_path = st.session_state.uploaded_files[selected_gb_file]
-            circular_args.extend(["--gbk", gb_path])
-            selected_file_for_prefix = selected_gb_file
-        else:  # GFF3 + FASTA
-            selected_gff_file = st.session_state.get("c_gff_manual", "")
-            selected_fasta_file = st.session_state.get("c_fasta_manual", "")
-            if not selected_gff_file or not selected_fasta_file:
-                st.error("Please select both a GFF3 file and a FASTA file.")
-                st.stop()
-            gff_path = st.session_state.uploaded_files[selected_gff_file]
-            fasta_path = st.session_state.uploaded_files[selected_fasta_file]
-            circular_args.extend(["--gff", gff_path, "--fasta", fasta_path])
-            selected_file_for_prefix = selected_gff_file
-
-        if not selected_file_for_prefix:
-            st.error("Please select an input file.")
-            st.stop()
-
-        sanitized_prefix = sanitize_filename(c_prefix) # Use the new function
-        prefix = sanitized_prefix or Path(selected_file_for_prefix).stem
-        
-        circular_args.extend(["-o", prefix, "-f", c_fmt, "--track_type", c_track_type])
-        
-        if c_species:
-            circular_args.extend(["--species", c_species])
-        if c_strain:
-            circular_args.extend(["--strain", c_strain])
-        if c_show_labels: circular_args.append("--show_labels")
-        if c_separate_strands: circular_args.append("--separate_strands")
-        if c_allow_inner_labels:
-            circular_args.extend(["--allow_inner_labels", "--suppress_gc", "--suppress_skew"])
-        else:
-            if c_suppress_gc: circular_args.append("--suppress_gc")
-            if c_suppress_skew: circular_args.append("--suppress_skew")
-
-        if c_adv_def_font_size:
-            circular_args += ["--definition_font_size", str(c_adv_def_font_size)]
-        if c_adv_label_font_size:
-            circular_args += ["--label_font_size", str(c_adv_label_font_size)]
-
-        if c_legend != "right": circular_args += ["-l", c_legend]
-        
-        selected_palette = st.session_state.get("c_palette_selector")
-        if selected_palette: circular_args += ["--palette", selected_palette]
-
-        if 'custom_circular_colors' in st.session_state:
-            custom_color_filename = f"custom_colors_c_{uuid.uuid4().hex[:8]}.tsv"
-            save_path = UPLOAD_DIR / custom_color_filename
-            with open(save_path, "w") as f:
-                for feature, color in st.session_state.custom_circular_colors.items():
-                    f.write(f"{feature}\t{color}\n")
-            circular_args += ["-d", str(save_path)]
-        circular_args += ["-k", ",".join(c_adv_feat), "-n", c_adv_nt]
-        if c_adv_win: circular_args += ["--window", str(c_adv_win)]
-        if c_adv_step: circular_args += ["--step", str(c_adv_step)]
-        if c_adv_scale_interval: circular_args += ["--scale_interval", str(c_adv_scale_interval)]
-        circular_args += ["--block_stroke_color", c_adv_blk_color]
-        if c_adv_blk_width: circular_args += ["--block_stroke_width", str(c_adv_blk_width)]
-        circular_args += ["--line_stroke_color", c_adv_line_color]
-        if c_adv_line_width: circular_args += ["--line_stroke_width", str(c_adv_line_width)]
-        circular_args += ["--axis_stroke_color", c_adv_axis_color]
-        if c_adv_axis_width: circular_args += ["--axis_stroke_width", str(c_adv_axis_width)]
-        circular_args += ["--outer_label_x_radius_offset", str(c_adv_outer_x_offset)]
-        circular_args += ["--outer_label_y_radius_offset", str(c_adv_outer_y_offset)]
-        circular_args += ["--inner_label_x_radius_offset", str(c_adv_inner_x_offset)]
-        circular_args += ["--inner_label_y_radius_offset", str(c_adv_inner_y_offset)]
-
-        # --- QUALIFIER PRIORITY & BLACKLIST LOGIC ---
-        selected_prio_file = st.session_state.get("c_qualifier_priority_file_manual", "")
-        if selected_prio_file:
-            prio_path = st.session_state.uploaded_files[selected_prio_file]
-            circular_args += ["--qualifier_priority", prio_path]
-        else:
-            prio_lines = []
-            for row_state in st.session_state.manual_priorities:
-                feature_key = f"feature_{row_state['id']}"
-                qualifiers_key = f"qualifiers_{row_state['id']}"
-                feature_value = st.session_state.get(feature_key, "")
-                qualifiers_value = st.session_state.get(qualifiers_key, "")
-                if feature_value and qualifiers_value:
-                    prio_lines.append(f"{feature_value}\t{qualifiers_value}")
+        # Start execution in a secure temporary directory
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tmp_dir = Path(tmpdirname)
             
-            if prio_lines:
-                prio_content = "\n".join(prio_lines)
-                save_path = UPLOAD_DIR / f"qual_prio_c_{uuid.uuid4().hex}"
-                with open(save_path, "w", encoding="utf-8") as f:
-                    f.write(prio_content)
-                circular_args += ["--qualifier_priority", str(save_path)]
+            circular_args = []
+            selected_file_for_prefix = None
 
-        if c_filter_mode == "Blacklist (exclude keywords)":
-            selected_blacklist_file = st.session_state.get("c_blacklist_file_manual", "")
-            if selected_blacklist_file:
-                blacklist_path = st.session_state.uploaded_files[selected_blacklist_file]
-                circular_args += ["--label_blacklist", blacklist_path]
+            if st.session_state.c_input_type == "GenBank":
+                selected_gb_file = st.session_state.get("c_gb_manual", "")
+                if not selected_gb_file:
+                    st.error("Please select a GenBank file.")
+                    st.stop()
+                gb_path = st.session_state.uploaded_files[selected_gb_file]
+                circular_args.extend(["--gbk", gb_path])
+                selected_file_for_prefix = selected_gb_file
+            else:  # GFF3 + FASTA
+                selected_gff_file = st.session_state.get("c_gff_manual", "")
+                selected_fasta_file = st.session_state.get("c_fasta_manual", "")
+                if not selected_gff_file or not selected_fasta_file:
+                    st.error("Please select both a GFF3 file and a FASTA file.")
+                    st.stop()
+                gff_path = st.session_state.uploaded_files[selected_gff_file]
+                fasta_path = st.session_state.uploaded_files[selected_fasta_file]
+                circular_args.extend(["--gff", gff_path, "--fasta", fasta_path])
+                selected_file_for_prefix = selected_gff_file
+
+            if not selected_file_for_prefix:
+                st.error("Please select an input file.")
+                st.stop()
+
+            sanitized_prefix = sanitize_filename(c_prefix)
+            prefix = sanitized_prefix or Path(selected_file_for_prefix).stem
+            
+            # Specify the output destination within the temporary directory
+            full_output_prefix = tmp_dir / prefix
+            circular_args.extend(["-o", str(full_output_prefix), "-f", c_fmt, "--track_type", c_track_type])
+            
+            if c_species:
+                circular_args.extend(["--species", c_species])
+            if c_strain:
+                circular_args.extend(["--strain", c_strain])
+            if c_show_labels: circular_args.append("--show_labels")
+            if c_separate_strands: circular_args.append("--separate_strands")
+            if c_allow_inner_labels:
+                circular_args.extend(["--allow_inner_labels", "--suppress_gc", "--suppress_skew"])
             else:
-                blacklist_keywords = st.session_state.get("c_blacklist_manual", "")
-                if blacklist_keywords:
-                    circular_args += ["--label_blacklist", blacklist_keywords]
-        elif c_filter_mode == "Whitelist (include keywords)":
-            selected_whitelist_file = st.session_state.get("c_whitelist_file_manual", "")
-            if selected_whitelist_file:
-                whitelist_path = st.session_state.uploaded_files[selected_whitelist_file]
-                circular_args += ["--label_whitelist", whitelist_path]
-            whitelist_lines = []
-            for row in st.session_state.manual_whitelist:
-                if row['feature'] and row['qualifier'] and row['keyword']:
-                    whitelist_lines.append(f"{row['feature']}\t{row['qualifier']}\t{row['keyword']}")
+                if c_suppress_gc: circular_args.append("--suppress_gc")
+                if c_suppress_skew: circular_args.append("--suppress_skew")
+
+            if c_adv_def_font_size:
+                circular_args += ["--definition_font_size", str(c_adv_def_font_size)]
+            if c_adv_label_font_size:
+                circular_args += ["--label_font_size", str(c_adv_label_font_size)]
+
+            if c_legend != "right": circular_args += ["-l", c_legend]
             
-            if whitelist_lines:
-                whitelist_content = "\n".join(whitelist_lines)
-                save_path = UPLOAD_DIR / f"label_whitelist_c_{uuid.uuid4().hex}.tsv"
-                with open(save_path, "w", encoding="utf-8") as f:
-                    f.write(whitelist_content)
-                circular_args += ["--label_whitelist", str(save_path)]
-        selected_d_color_file = st.session_state.get("c_d_color_manual", "")
-        if selected_d_color_file: circular_args += ["-d", st.session_state.uploaded_files[selected_d_color_file]]
-        selected_t_color_file = st.session_state.get("c_t_color_manual", "")
-        if selected_t_color_file: circular_args += ["-t", st.session_state.uploaded_files[selected_t_color_file]]
+            selected_palette = st.session_state.get("c_palette_selector")
+            if selected_palette: circular_args += ["--palette", selected_palette]
 
-        # --- Run gbdraw and handle output ---
-        logger = logging.getLogger() 
-        log_capture = io.StringIO()  
-        command_str = f"gbdraw circular {' '.join(circular_args)}"
-        log_capture.write(f"--- Executed Command ---\n{command_str}\n------------------------\n\n")
-        stream_handler = logging.StreamHandler(log_capture)
-        stream_handler.setLevel(logging.INFO) 
-        logger.addHandler(stream_handler)
-        
-        start_time = time.time()
-        had_exception = False
-        exit_code = 0
+            if 'custom_circular_colors' in st.session_state:
+                custom_color_filename = f"custom_colors_c_{uuid.uuid4().hex[:8]}.tsv"
+                save_path = UPLOAD_DIR / custom_color_filename
+                with open(save_path, "w") as f:
+                    for feature, color in st.session_state.custom_circular_colors.items():
+                        f.write(f"{feature}\t{color}\n")
+                circular_args += ["-d", str(save_path)]
+            circular_args += ["-k", ",".join(c_adv_feat), "-n", c_adv_nt]
+            if c_adv_win: circular_args += ["--window", str(c_adv_win)]
+            if c_adv_step: circular_args += ["--step", str(c_adv_step)]
+            if c_adv_scale_interval: circular_args += ["--scale_interval", str(c_adv_scale_interval)]
+            circular_args += ["--block_stroke_color", c_adv_blk_color]
+            if c_adv_blk_width: circular_args += ["--block_stroke_width", str(c_adv_blk_width)]
+            circular_args += ["--line_stroke_color", c_adv_line_color]
+            if c_adv_line_width: circular_args += ["--line_stroke_width", str(c_adv_line_width)]
+            circular_args += ["--axis_stroke_color", c_adv_axis_color]
+            if c_adv_axis_width: circular_args += ["--axis_stroke_width", str(c_adv_axis_width)]
+            circular_args += ["--outer_label_x_radius_offset", str(c_adv_outer_x_offset)]
+            circular_args += ["--outer_label_y_radius_offset", str(c_adv_outer_y_offset)]
+            circular_args += ["--inner_label_x_radius_offset", str(c_adv_inner_x_offset)]
+            circular_args += ["--inner_label_y_radius_offset", str(c_adv_inner_y_offset)]
 
-        with st.spinner(f"Running: `{command_str}`"):
-            try:
-                with redirect_stdout(log_capture), redirect_stderr(log_capture):
-                    circular_main(circular_args)
-            except SystemExit as e:
-                exit_code = e.code if e.code is not None else 1
-            except Exception as e:
-                had_exception = True
-                log_capture.write(f"\n--- Streamlit App Exception ---\n{e}\n----------------------\n")
-        
-        end_time = time.time()
-        duration = end_time - start_time
-        log_capture.write(f"\n--- Execution Time ---\nTotal time: {duration:.2f} seconds\n----------------------")
-        log_content = log_capture.getvalue()
-        logger.removeHandler(stream_handler)
-        
-        output_files = sorted(list(Path(".").glob(f"{prefix}*.{c_fmt}")))
-        
-        is_successful = (
-            not had_exception and
-            exit_code == 0 and
-            "ERROR:" not in log_content.upper() and
-            bool(output_files)
-        )
+            # --- QUALIFIER PRIORITY & BLACKLIST LOGIC ---
+            selected_prio_file = st.session_state.get("c_qualifier_priority_file_manual", "")
+            if selected_prio_file:
+                prio_path = st.session_state.uploaded_files[selected_prio_file]
+                circular_args += ["--qualifier_priority", prio_path]
+            else:
+                prio_lines = []
+                for row_state in st.session_state.manual_priorities:
+                    feature_key = f"feature_{row_state['id']}"
+                    qualifiers_key = f"qualifiers_{row_state['id']}"
+                    feature_value = st.session_state.get(feature_key, "")
+                    qualifiers_value = st.session_state.get(qualifiers_key, "")
+                    if feature_value and qualifiers_value:
+                        prio_lines.append(f"{feature_value}\t{qualifiers_value}")
+                
+                if prio_lines:
+                    prio_content = "\n".join(prio_lines)
+                    save_path = UPLOAD_DIR / f"qual_prio_c_{uuid.uuid4().hex}"
+                    with open(save_path, "w", encoding="utf-8") as f:
+                        f.write(prio_content)
+                    circular_args += ["--qualifier_priority", str(save_path)]
 
-        if is_successful:
-            st.success("✅ gbdraw finished successfully.")
-            st.session_state.circular_result = {
-                "prefix": prefix, 
-                "fmt": c_fmt, 
-                "log": log_content,
-                "failed": False
-            }
-        else:
-            st.error("gbdraw execution failed. Please check the log for details.")
-            st.session_state.circular_result = {
-                "log": log_content,
-                "failed": True
-            }
+            if c_filter_mode == "Blacklist (exclude keywords)":
+                selected_blacklist_file = st.session_state.get("c_blacklist_file_manual", "")
+                if selected_blacklist_file:
+                    blacklist_path = st.session_state.uploaded_files[selected_blacklist_file]
+                    circular_args += ["--label_blacklist", blacklist_path]
+                else:
+                    blacklist_keywords = st.session_state.get("c_blacklist_manual", "")
+                    if blacklist_keywords:
+                        circular_args += ["--label_blacklist", blacklist_keywords]
+            elif c_filter_mode == "Whitelist (include keywords)":
+                selected_whitelist_file = st.session_state.get("c_whitelist_file_manual", "")
+                if selected_whitelist_file:
+                    whitelist_path = st.session_state.uploaded_files[selected_whitelist_file]
+                    circular_args += ["--label_whitelist", whitelist_path]
+                whitelist_lines = []
+                for row in st.session_state.manual_whitelist:
+                    if row['feature'] and row['qualifier'] and row['keyword']:
+                        whitelist_lines.append(f"{row['feature']}\t{row['qualifier']}\t{row['keyword']}")
+                
+                if whitelist_lines:
+                    whitelist_content = "\n".join(whitelist_lines)
+                    save_path = UPLOAD_DIR / f"label_whitelist_c_{uuid.uuid4().hex}.tsv"
+                    with open(save_path, "w", encoding="utf-8") as f:
+                        f.write(whitelist_content)
+                    circular_args += ["--label_whitelist", str(save_path)]
+            selected_d_color_file = st.session_state.get("c_d_color_manual", "")
+            if selected_d_color_file: circular_args += ["-d", st.session_state.uploaded_files[selected_d_color_file]]
+            selected_t_color_file = st.session_state.get("c_t_color_manual", "")
+            if selected_t_color_file: circular_args += ["-t", st.session_state.uploaded_files[selected_t_color_file]]
 
-    if st.session_state.circular_result:
-        res = st.session_state.circular_result
-        if res.get("failed"):
-            st.subheader("❌ Execution Failed")
-            with st.expander("Show Log", expanded=True):
-                st.text(res["log"])
-        else:
-            st.subheader("🌀 Circular Drawing Output")
-            prefix = res["prefix"] 
-            fmt = res["fmt"]
-            output_files = sorted(list(Path(".").glob(f"{prefix}*.{fmt}")))
-            if output_files:
+            # --- Run gbdraw and handle output ---
+            logger = logging.getLogger() 
+            log_capture = io.StringIO()  
+            command_str = f"gbdraw circular {' '.join(circular_args)}"
+            log_capture.write(f"--- Executed Command ---\n{command_str}\n------------------------\n\n")
+            stream_handler = logging.StreamHandler(log_capture)
+            stream_handler.setLevel(logging.INFO) 
+            logger.addHandler(stream_handler)
+            
+            start_time = time.time()
+            had_exception = False
+            exit_code = 0
+
+            with st.spinner(f"Running: `{command_str}`"):
+                try:
+                    with redirect_stdout(log_capture), redirect_stderr(log_capture):
+                        circular_main(circular_args)
+                except SystemExit as e:
+                    exit_code = e.code if e.code is not None else 1
+                except Exception as e:
+                    had_exception = True
+                    log_capture.write(f"\n--- Streamlit App Exception ---\n{e}\n----------------------\n")
+            
+            end_time = time.time()
+            duration = end_time - start_time
+            log_capture.write(f"\n--- Execution Time ---\nTotal time: {duration:.2f} seconds\n----------------------")
+            log_content = log_capture.getvalue()
+            logger.removeHandler(stream_handler)
+            
+            # Find output files in the temporary directory
+            output_files = sorted(list(tmp_dir.glob(f"{prefix}*.{c_fmt}")))
+            
+            is_successful = (
+                not had_exception and
+                exit_code == 0 and
+                "ERROR:" not in log_content.upper() and
+                bool(output_files)
+            )
+
+            # Display results (load files into memory for download)
+            if is_successful:
+                st.success("✅ gbdraw finished successfully.")
+                st.subheader("🌀 Circular Drawing Output")
+                
                 for out_path in output_files:
+                    # Load file data into memory
+                    file_data = out_path.read_bytes()
+                    file_name = out_path.name
+                    
                     file_extension = out_path.suffix.lower()
                     if file_extension == ".svg":
-                        st.image(out_path.read_text(), caption=str(out_path.name))
+                        st.image(file_data.decode("utf-8"), caption=file_name)
                     elif file_extension == ".png":
-                        st.image(str(out_path), caption=str(out_path.name))
+                        st.image(file_data, caption=file_name)
                     else:
-                        st.info(f"📄 Preview is not available for {out_path.suffix.upper()} format. Please use the download button below.")
-                    with open(out_path, "rb") as f:
-                        st.download_button(
-                            f"⬇️ Download {out_path.name}",
-                            data=f,
-                            file_name=out_path.name,
-                            key=f"download_{out_path.name}"
-                        )
+                        st.info(f"📄 Preview is not available for {file_extension.upper()} format. Please use the download button below.")
+                    
+                    st.download_button(
+                        f"⬇️ Download {file_name}",
+                        data=file_data,
+                        file_name=file_name,
+                        key=f"download_{file_name}",
+                        mime=f"image/{c_fmt}" if c_fmt in ["png", "svg"] else "application/octet-stream"
+                    )
                     st.markdown("---")
                 with st.expander("Show Log"):
-                    st.text(res["log"])
+                    st.text(log_content)
             else:
-                st.warning("gbdraw reported success, but no output files were found.")
+                st.error("gbdraw execution failed. Please check the log for details.")
                 with st.expander("Show Log", expanded=True):
-                    st.text(res["log"])
+                    st.text(log_content)
 
 # --- LINEAR MODE ---
 if selected_mode == "📏 Linear":
@@ -910,249 +900,239 @@ if selected_mode == "📏 Linear":
         l_submitted = st.form_submit_button("🚀 Run gbdraw Linear", type="primary")
 
     if l_submitted:
-        linear_args = []
-        num_sequences = 0
+        # Use a secure temporary directory for execution
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tmp_dir = Path(tmpdirname)
+            
+            linear_args = []
+            num_sequences = 0
 
-        if st.session_state.l_input_type == "GenBank":
-            selected_gb = [st.session_state.get(f"l_gb_{i}_manual", "") for i in range(st.session_state.linear_seq_count)]
-            selected_gb = [f for f in selected_gb if f]
-            if not selected_gb:
-                st.error("Please select at least one GenBank file.")
-                st.stop()
-            gb_paths = [st.session_state.uploaded_files[f] for f in selected_gb]
-            linear_args.extend(["--gbk", *gb_paths])
-            num_sequences = len(gb_paths)
-        else: # GFF3 + FASTA
-            gff_paths = []
-            fasta_paths = []
-            for i in range(st.session_state.linear_seq_count):
-                gff_file = st.session_state.get(f"l_gff_{i}_manual", "")
-                fasta_file = st.session_state.get(f"l_fasta_{i}_manual", "")
-                if gff_file and fasta_file:
-                    gff_paths.append(st.session_state.uploaded_files[gff_file])
-                    fasta_paths.append(st.session_state.uploaded_files[fasta_file])
-                elif gff_file or fasta_file:
-                    st.error(f"For Sequence {i+1}, both GFF3 and FASTA files must be provided as a pair.")
+            if st.session_state.l_input_type == "GenBank":
+                selected_gb = [st.session_state.get(f"l_gb_{i}_manual", "") for i in range(st.session_state.linear_seq_count)]
+                selected_gb = [f for f in selected_gb if f]
+                if not selected_gb:
+                    st.error("Please select at least one GenBank file.")
                     st.stop()
+                gb_paths = [st.session_state.uploaded_files[f] for f in selected_gb]
+                linear_args.extend(["--gbk", *gb_paths])
+                num_sequences = len(gb_paths)
+            else: # GFF3 + FASTA
+                gff_paths = []
+                fasta_paths = []
+                for i in range(st.session_state.linear_seq_count):
+                    gff_file = st.session_state.get(f"l_gff_{i}_manual", "")
+                    fasta_file = st.session_state.get(f"l_fasta_{i}_manual", "")
+                    if gff_file and fasta_file:
+                        gff_paths.append(st.session_state.uploaded_files[gff_file])
+                        fasta_paths.append(st.session_state.uploaded_files[fasta_file])
+                    elif gff_file or fasta_file:
+                        st.error(f"For Sequence {i+1}, both GFF3 and FASTA files must be provided as a pair.")
+                        st.stop()
+                
+                if not gff_paths:
+                    st.error("Please select at least one pair of GFF3 and FASTA files.")
+                    st.stop()
+                
+                linear_args.extend(["--gff", *gff_paths, "--fasta", *fasta_paths])
+                num_sequences = len(gff_paths)
             
-            if not gff_paths:
-                st.error("Please select at least one pair of GFF3 and FASTA files.")
+            selected_blast = [st.session_state.get(f"l_blast_{i}_manual", "") for i in range(st.session_state.linear_seq_count - 1)]
+            selected_blast = [f for f in selected_blast if f]
+            
+            if selected_blast and len(selected_blast) != num_sequences - 1:
+                st.error(f"Please provide {num_sequences - 1} comparison file(s) for {num_sequences} sequence files.")
                 st.stop()
+
+            sanitized_prefix = sanitize_filename(l_prefix) 
+            prefix = sanitized_prefix or "linear"
             
-            linear_args.extend(["--gff", *gff_paths, "--fasta", *fasta_paths])
-            num_sequences = len(gff_paths)
-        
-        selected_blast = [st.session_state.get(f"l_blast_{i}_manual", "") for i in range(st.session_state.linear_seq_count - 1)]
-        selected_blast = [f for f in selected_blast if f]
-        
-        if selected_blast and len(selected_blast) != num_sequences - 1:
-            st.error(f"Please provide {num_sequences - 1} comparison file(s) for {num_sequences} sequence files.")
-            st.stop()
-
-        sanitized_prefix = sanitize_filename(l_prefix) # Use the new function
-        prefix = sanitized_prefix or "linear"
-        output_path = Path(f"{prefix}.{l_fmt}")
-        
-        linear_args.extend(["-o", prefix, "-f", l_fmt])
-
-        if selected_blast:
-            blast_paths = [st.session_state.uploaded_files[f] for f in selected_blast]
-            linear_args += ["-b", *blast_paths]
-        if l_show_labels_mode == "All":
-            linear_args.extend(["--show_labels", "all"])
-        elif l_show_labels_mode == "First":
-            linear_args.extend(["--show_labels", "first"])
-        if l_separate_strands: linear_args.append("--separate_strands")
-        if l_align_center: linear_args.append("--align_center")
-        if l_show_gc: linear_args.append("--show_gc")
-        if l_show_skew: linear_args.append("--show_skew")
-        if l_resolve_overlaps: linear_args.append("--resolve_overlaps")
-        if l_legend != "right": linear_args += ["-l", l_legend]
-        if l_normalize_length: linear_args.append("--normalize_length")
-        if l_adv_gc_height:
-            linear_args += ["--gc_height", str(l_adv_gc_height)]
-        if l_adv_def_font_size:
-            linear_args += ["--definition_font_size", str(l_adv_def_font_size)]
-        if l_adv_label_font_size:
-            linear_args += ["--label_font_size", str(l_adv_label_font_size)]
-        if l_adv_feat_height:
-            linear_args += ["--feature_height", str(l_adv_feat_height)]
-        if l_adv_comp_height:
-            linear_args += ["--comparison_height", str(l_adv_comp_height)]
-        if l_scale_style != "bar":
-            linear_args += ["--scale_style", l_scale_style]
-        if l_adv_scale_font_size:
-            linear_args += ["--scale_font_size", str(l_adv_scale_font_size)]
-        if l_adv_scale_interval:
-            linear_args += ["--scale_interval", str(l_adv_scale_interval)]
-        if l_adv_scale_stroke_width:
-            linear_args += ["--scale_stroke_width", str(l_adv_scale_stroke_width)]
-        if l_adv_scale_stroke_color:
-            linear_args += ["--scale_stroke_color", str(l_adv_scale_stroke_color)]
-        if l_adv_legend_box_size:
-            linear_args += ["--legend_box_size", str(l_adv_legend_box_size)]
-        if l_adv_legend_font_size:
-            linear_args += ["--legend_font_size", str(l_adv_legend_font_size)]
-        if l_adv_axis_color:
-            linear_args += ["--axis_stroke_color", l_adv_axis_color]
-        if l_adv_axis_width:
-            linear_args += ["--axis_stroke_width", str(l_adv_axis_width)]
-        if l_adv_blk_width:
-            linear_args += ["--block_stroke_width", str(l_adv_blk_width)]
-        selected_palette = st.session_state.get("l_palette_selector")
-        if selected_palette: linear_args += ["--palette", selected_palette]
-
-        if 'custom_linear_colors' in st.session_state:
-            custom_color_filename = f"custom_colors_l_{uuid.uuid4().hex[:8]}.tsv"
-            save_path = UPLOAD_DIR / custom_color_filename
-            with open(save_path, "w") as f:
-                for feature, color in st.session_state.custom_linear_colors.items():
-                    f.write(f"{feature}\t{color}\n")
-            linear_args += ["-d", str(save_path)]
-        
-        linear_args += ["-k", ",".join(l_adv_feat), "-n", l_adv_nt]
-        if l_adv_win: linear_args += ["--window", str(l_adv_win)]
-        if l_adv_step: linear_args += ["--step", str(l_adv_step)]
-        
-        linear_args += ["--bitscore", str(l_adv_bitscore), "--evalue", l_adv_evalue, "--identity", str(l_adv_identity)]
-        linear_args += ["--block_stroke_color", l_adv_blk_color]
-        
-        linear_args += ["--line_stroke_color", l_adv_line_color]
-        if l_adv_line_width:
-            linear_args += ["--line_stroke_width", str(l_adv_line_width)]
-
-        
-
-        
-        # --- QUALIFIER PRIORITY & BLACKLIST LOGIC ---
-        selected_prio_file = st.session_state.get("l_qualifier_priority_file_manual", "")
-        if selected_prio_file:
-            prio_path = st.session_state.uploaded_files[selected_prio_file]
-            linear_args += ["--qualifier_priority", prio_path]
-        else:
-            prio_lines = []
-            for row_state in st.session_state.manual_priorities:
-                feature_key = f"feature_{row_state['id']}"
-                qualifiers_key = f"qualifiers_{row_state['id']}"
-                feature_value = st.session_state.get(feature_key, "")
-                qualifiers_value = st.session_state.get(qualifiers_key, "")
-                if feature_value and qualifiers_value:
-                    prio_lines.append(f"{feature_value}\t{qualifiers_value}")
+            # Specify output path inside the temporary directory
+            full_output_prefix = tmp_dir / prefix
+            output_path = full_output_prefix.with_suffix(f".{l_fmt}")
             
-            if prio_lines:
-                prio_content = "\n".join(prio_lines)
-                save_path = UPLOAD_DIR / f"qual_prio_l_{uuid.uuid4().hex}"
-                with open(save_path, "w", encoding="utf-8") as f:
-                    f.write(prio_content)
-                linear_args += ["--qualifier_priority", str(save_path)]
-        
-        if l_filter_mode == "Blacklist (exclude keywords)":
-            selected_blacklist_file = st.session_state.get("l_blacklist_file_manual", "")
-            if selected_blacklist_file:
-                blacklist_path = st.session_state.uploaded_files[selected_blacklist_file]
-                linear_args += ["--label_blacklist", blacklist_path]
+            linear_args.extend(["-o", str(full_output_prefix), "-f", l_fmt])
+
+            if selected_blast:
+                blast_paths = [st.session_state.uploaded_files[f] for f in selected_blast]
+                linear_args += ["-b", *blast_paths]
+            if l_show_labels_mode == "All":
+                linear_args.extend(["--show_labels", "all"])
+            elif l_show_labels_mode == "First":
+                linear_args.extend(["--show_labels", "first"])
+            if l_separate_strands: linear_args.append("--separate_strands")
+            if l_align_center: linear_args.append("--align_center")
+            if l_show_gc: linear_args.append("--show_gc")
+            if l_show_skew: linear_args.append("--show_skew")
+            if l_resolve_overlaps: linear_args.append("--resolve_overlaps")
+            if l_legend != "right": linear_args += ["-l", l_legend]
+            if l_normalize_length: linear_args.append("--normalize_length")
+            if l_adv_gc_height:
+                linear_args += ["--gc_height", str(l_adv_gc_height)]
+            if l_adv_def_font_size:
+                linear_args += ["--definition_font_size", str(l_adv_def_font_size)]
+            if l_adv_label_font_size:
+                linear_args += ["--label_font_size", str(l_adv_label_font_size)]
+            if l_adv_feat_height:
+                linear_args += ["--feature_height", str(l_adv_feat_height)]
+            if l_adv_comp_height:
+                linear_args += ["--comparison_height", str(l_adv_comp_height)]
+            if l_scale_style != "bar":
+                linear_args += ["--scale_style", l_scale_style]
+            if l_adv_scale_font_size:
+                linear_args += ["--scale_font_size", str(l_adv_scale_font_size)]
+            if l_adv_scale_interval:
+                linear_args += ["--scale_interval", str(l_adv_scale_interval)]
+            if l_adv_scale_stroke_width:
+                linear_args += ["--scale_stroke_width", str(l_adv_scale_stroke_width)]
+            if l_adv_scale_stroke_color:
+                linear_args += ["--scale_stroke_color", str(l_adv_scale_stroke_color)]
+            if l_adv_legend_box_size:
+                linear_args += ["--legend_box_size", str(l_adv_legend_box_size)]
+            if l_adv_legend_font_size:
+                linear_args += ["--legend_font_size", str(l_adv_legend_font_size)]
+            if l_adv_axis_color:
+                linear_args += ["--axis_stroke_color", l_adv_axis_color]
+            if l_adv_axis_width:
+                linear_args += ["--axis_stroke_width", str(l_adv_axis_width)]
+            if l_adv_blk_width:
+                linear_args += ["--block_stroke_width", str(l_adv_blk_width)]
+            selected_palette = st.session_state.get("l_palette_selector")
+            if selected_palette: linear_args += ["--palette", selected_palette]
+
+            if 'custom_linear_colors' in st.session_state:
+                custom_color_filename = f"custom_colors_l_{uuid.uuid4().hex[:8]}.tsv"
+                save_path = UPLOAD_DIR / custom_color_filename
+                with open(save_path, "w") as f:
+                    for feature, color in st.session_state.custom_linear_colors.items():
+                        f.write(f"{feature}\t{color}\n")
+                linear_args += ["-d", str(save_path)]
+            
+            linear_args += ["-k", ",".join(l_adv_feat), "-n", l_adv_nt]
+            if l_adv_win: linear_args += ["--window", str(l_adv_win)]
+            if l_adv_step: linear_args += ["--step", str(l_adv_step)]
+            
+            linear_args += ["--bitscore", str(l_adv_bitscore), "--evalue", l_adv_evalue, "--identity", str(l_adv_identity)]
+            linear_args += ["--block_stroke_color", l_adv_blk_color]
+            
+            linear_args += ["--line_stroke_color", l_adv_line_color]
+            if l_adv_line_width:
+                linear_args += ["--line_stroke_width", str(l_adv_line_width)]
+
+            
+            # --- QUALIFIER PRIORITY & BLACKLIST LOGIC ---
+            selected_prio_file = st.session_state.get("l_qualifier_priority_file_manual", "")
+            if selected_prio_file:
+                prio_path = st.session_state.uploaded_files[selected_prio_file]
+                linear_args += ["--qualifier_priority", prio_path]
             else:
-                blacklist_keywords = st.session_state.get("l_blacklist_manual", "")
-                if blacklist_keywords:
-                    linear_args += ["--label_blacklist", blacklist_keywords]
-        elif l_filter_mode == "Whitelist (include keywords)":
-            selected_whitelist_file = st.session_state.get("l_whitelist_file_manual", "")
-            if selected_whitelist_file:
-                whitelist_path = st.session_state.uploaded_files[selected_whitelist_file]
-                linear_args += ["--label_whitelist", whitelist_path]
-            whitelist_lines = []
-            for row in st.session_state.manual_whitelist:
-                if row['feature'] and row['qualifier'] and row['keyword']:
-                    whitelist_lines.append(f"{row['feature']}\t{row['qualifier']}\t{row['keyword']}")
-            if whitelist_lines:
-                whitelist_content = "\n".join(whitelist_lines)
-                save_path = UPLOAD_DIR / f"label_whitelist_l_{uuid.uuid4().hex}.tsv"
-                with open(save_path, "w", encoding="utf-8") as f:
-                    f.write(whitelist_content)
-                linear_args += ["--label_whitelist", str(save_path)]
-        selected_d_color_file = st.session_state.get("l_d_color_manual", "")
-        if selected_d_color_file: linear_args += ["-d", st.session_state.uploaded_files[selected_d_color_file]]
-        selected_t_color_file = st.session_state.get("l_t_color_manual", "")
-        if selected_t_color_file: linear_args += ["-t", st.session_state.uploaded_files[selected_t_color_file]]
-        
-        logger = logging.getLogger()
-        log_capture = io.StringIO()
-        command_str = f"gbdraw linear {' '.join(map(str, linear_args))}"
-        stream_handler = logging.StreamHandler(log_capture)
-        stream_handler.setLevel(logging.INFO)
-        logger.addHandler(stream_handler)
-        log_capture.write(f"--- Executed Command ---\n{command_str}\n------------------------\n\n")
-        
-        start_time = time.time()
-        had_exception = False
-        exit_code = 0
-        
-        with st.spinner(f"Running: `{command_str}`"):
-            try:
-                with redirect_stdout(log_capture), redirect_stderr(log_capture):
-                    linear_main(linear_args)
-            except SystemExit as e:
-                exit_code = e.code if e.code is not None else 1
-            except Exception as e:
-                had_exception = True
-                log_capture.write(f"\n--- Streamlit App Exception ---\n{e}\n----------------------\n")
-
-        end_time = time.time()
-        duration = end_time - start_time
-        log_capture.write(f"\n--- Execution Time ---\nTotal time: {duration:.2f} seconds\n----------------------")
-        log_content = log_capture.getvalue()
-        logger.removeHandler(stream_handler)
-
-        is_successful = (
-            not had_exception and
-            exit_code == 0 and
-            "ERROR:" not in log_content.upper() and
-            output_path.exists()
-        )
-
-        if is_successful:
-            st.success("✅ gbdraw finished successfully.")
-            st.session_state.linear_result = {
-                "path": output_path, 
-                "log": log_content,
-                "failed": False
-            }
-        else:
-            st.error("gbdraw execution failed. Please check the log for details.")
-            st.session_state.linear_result = {
-                "log": log_content,
-                "failed": True
-            }
-
-    if st.session_state.linear_result:
-        res = st.session_state.linear_result
-        if res.get("failed"):
-            st.subheader("❌ Execution Failed")
-            with st.expander("Show Log", expanded=True):
-                st.text(res["log"])
-        else:
-            st.subheader("📏 Linear Drawing Output")
-            out_path = res["path"]
-            if out_path.exists():
-                file_extension = out_path.suffix.lower()
-                if file_extension == ".svg":
-                    st.image(out_path.read_text(), caption=str(out_path.name))
-                elif file_extension == ".png":
-                    st.image(str(out_path), caption=str(out_path.name))
+                prio_lines = []
+                for row_state in st.session_state.manual_priorities:
+                    feature_key = f"feature_{row_state['id']}"
+                    qualifiers_key = f"qualifiers_{row_state['id']}"
+                    feature_value = st.session_state.get(feature_key, "")
+                    qualifiers_value = st.session_state.get(qualifiers_key, "")
+                    if feature_value and qualifiers_value:
+                        prio_lines.append(f"{feature_value}\t{qualifiers_value}")
+                
+                if prio_lines:
+                    prio_content = "\n".join(prio_lines)
+                    save_path = UPLOAD_DIR / f"qual_prio_l_{uuid.uuid4().hex}"
+                    with open(save_path, "w", encoding="utf-8") as f:
+                        f.write(prio_content)
+                    linear_args += ["--qualifier_priority", str(save_path)]
+            
+            if l_filter_mode == "Blacklist (exclude keywords)":
+                selected_blacklist_file = st.session_state.get("l_blacklist_file_manual", "")
+                if selected_blacklist_file:
+                    blacklist_path = st.session_state.uploaded_files[selected_blacklist_file]
+                    linear_args += ["--label_blacklist", blacklist_path]
                 else:
-                    st.info(f"📄 Preview is not available for {out_path.suffix.upper()} format. Please use the download button below.")
-                with open(out_path, "rb") as f:
-                    st.download_button(
-                        f"⬇️ Download {out_path.name}",
-                        data=f,
-                        file_name=out_path.name
-                    )
+                    blacklist_keywords = st.session_state.get("l_blacklist_manual", "")
+                    if blacklist_keywords:
+                        linear_args += ["--label_blacklist", blacklist_keywords]
+            elif l_filter_mode == "Whitelist (include keywords)":
+                selected_whitelist_file = st.session_state.get("l_whitelist_file_manual", "")
+                if selected_whitelist_file:
+                    whitelist_path = st.session_state.uploaded_files[selected_whitelist_file]
+                    linear_args += ["--label_whitelist", whitelist_path]
+                whitelist_lines = []
+                for row in st.session_state.manual_whitelist:
+                    if row['feature'] and row['qualifier'] and row['keyword']:
+                        whitelist_lines.append(f"{row['feature']}\t{row['qualifier']}\t{row['keyword']}")
+                if whitelist_lines:
+                    whitelist_content = "\n".join(whitelist_lines)
+                    save_path = UPLOAD_DIR / f"label_whitelist_l_{uuid.uuid4().hex}.tsv"
+                    with open(save_path, "w", encoding="utf-8") as f:
+                        f.write(whitelist_content)
+                    linear_args += ["--label_whitelist", str(save_path)]
+            selected_d_color_file = st.session_state.get("l_d_color_manual", "")
+            if selected_d_color_file: linear_args += ["-d", st.session_state.uploaded_files[selected_d_color_file]]
+            selected_t_color_file = st.session_state.get("l_t_color_manual", "")
+            if selected_t_color_file: linear_args += ["-t", st.session_state.uploaded_files[selected_t_color_file]]
+            
+            logger = logging.getLogger()
+            log_capture = io.StringIO()
+            command_str = f"gbdraw linear {' '.join(map(str, linear_args))}"
+            stream_handler = logging.StreamHandler(log_capture)
+            stream_handler.setLevel(logging.INFO)
+            logger.addHandler(stream_handler)
+            log_capture.write(f"--- Executed Command ---\n{command_str}\n------------------------\n\n")
+            
+            start_time = time.time()
+            had_exception = False
+            exit_code = 0
+            
+            with st.spinner(f"Running: `{command_str}`"):
+                try:
+                    with redirect_stdout(log_capture), redirect_stderr(log_capture):
+                        linear_main(linear_args)
+                except SystemExit as e:
+                    exit_code = e.code if e.code is not None else 1
+                except Exception as e:
+                    had_exception = True
+                    log_capture.write(f"\n--- Streamlit App Exception ---\n{e}\n----------------------\n")
+
+            end_time = time.time()
+            duration = end_time - start_time
+            log_capture.write(f"\n--- Execution Time ---\nTotal time: {duration:.2f} seconds\n----------------------")
+            log_content = log_capture.getvalue()
+            logger.removeHandler(stream_handler)
+
+            is_successful = (
+                not had_exception and
+                exit_code == 0 and
+                "ERROR:" not in log_content.upper() and
+                output_path.exists()
+            )
+
+            # Display results (load file into memory for download)
+            if is_successful:
+                st.success("✅ gbdraw finished successfully.")
+                st.subheader("📏 Linear Drawing Output")
+
+                file_data = output_path.read_bytes()
+                file_name = output_path.name
+                
+                file_extension = output_path.suffix.lower()
+                if file_extension == ".svg":
+                    st.image(file_data.decode("utf-8"), caption=file_name)
+                elif file_extension == ".png":
+                    st.image(file_data, caption=file_name)
+                else:
+                    st.info(f"📄 Preview is not available for {file_extension.upper()} format. Please use the download button below.")
+                
+                st.download_button(
+                    f"⬇️ Download {file_name}",
+                    data=file_data,
+                    file_name=file_name,
+                    mime=f"image/{l_fmt}" if l_fmt in ["png", "svg"] else "application/octet-stream"
+                )
                 with st.expander("Show Log"):
-                    st.text(res["log"])
+                    st.text(log_content)
             else:
-                st.warning("gbdraw reported success, but no output file was found.")
+                st.error("gbdraw execution failed. Please check the log for details.")
                 with st.expander("Show Log", expanded=True):
-                    st.text(res["log"])
+                    st.text(log_content)
 
 # --- Footer ---
 st.markdown("---")
