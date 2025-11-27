@@ -457,6 +457,9 @@ if selected_mode == "🔵 Circular":
 
         c_submitted = st.form_submit_button("🚀 Run gbdraw Circular", type="primary")
 
+    if "c_results" not in st.session_state:
+        st.session_state.c_results = None
+        
     if c_submitted:
         # Start execution in a secure temporary directory
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -630,38 +633,68 @@ if selected_mode == "🔵 Circular":
                 bool(output_files)
             )
 
-            # Display results (load files into memory for download)
             if is_successful:
-                st.success("✅ gbdraw finished successfully.")
-                st.subheader("🌀 Circular Drawing Output")
-                
+                # 【重要】結果を session_state に保存する
+                # ファイルの中身をメモリ（バイナリデータ）として読み込んでおく
+                results_data = []
                 for out_path in output_files:
-                    # Load file data into memory
                     file_data = out_path.read_bytes()
-                    file_name = out_path.name
-                    
-                    file_extension = out_path.suffix.lower()
-                    if file_extension == ".svg":
-                        st.image(file_data.decode("utf-8"), caption=file_name)
-                    elif file_extension == ".png":
-                        st.image(file_data, caption=file_name)
-                    else:
-                        st.info(f"📄 Preview is not available for {file_extension.upper()} format. Please use the download button below.")
-                    
-                    st.download_button(
-                        f"⬇️ Download {file_name}",
-                        data=file_data,
-                        file_name=file_name,
-                        key=f"download_{file_name}",
-                        mime=f"image/{c_fmt}" if c_fmt in ["png", "svg"] else "application/octet-stream"
-                    )
-                    st.markdown("---")
-                with st.expander("Show Log"):
-                    st.text(log_content)
+                    results_data.append({
+                        "name": out_path.name,
+                        "data": file_data,
+                        "suffix": out_path.suffix.lower()
+                    })
+                
+                st.session_state.c_results = {
+                    "success": True,
+                    "files": results_data,
+                    "log": log_content,
+                    "fmt": c_fmt
+                }
             else:
-                st.error("gbdraw execution failed. Please check the log for details.")
-                with st.expander("Show Log", expanded=True):
-                    st.text(log_content)
+                st.session_state.c_results = {
+                    "success": False,
+                    "log": log_content
+                }
+    # --- 結果の表示処理 (フォームの外、かつ if c_submitted の外に置く) ---
+    if st.session_state.c_results:
+        res = st.session_state.c_results
+        
+        if res["success"]:
+            st.success("✅ gbdraw finished successfully.")
+            st.subheader("🌀 Circular Drawing Output")
+            
+            for f_info in res["files"]:
+                file_name = f_info["name"]
+                file_data = f_info["data"]
+                file_extension = f_info["suffix"]
+                fmt = res["fmt"]
+
+                # 画像のプレビュー
+                if file_extension == ".svg":
+                    st.image(file_data.decode("utf-8"), caption=file_name)
+                elif file_extension == ".png":
+                    st.image(file_data, caption=file_name)
+                else:
+                    st.info(f"📄 Preview is not available for {file_extension.upper()} format.")
+                
+                # ダウンロードボタン
+                st.download_button(
+                    f"⬇️ Download {file_name}",
+                    data=file_data,
+                    file_name=file_name,
+                    # キーを一意にするためにファイル名を含める
+                    key=f"download_{file_name}",
+                    mime=f"image/{fmt}" if fmt in ["png", "svg"] else "application/octet-stream"
+                )
+                st.markdown("---")
+            
+            with st.expander("Show Log"):
+                st.text(res["log"])
+        else:
+            st.error("gbdraw execution failed. Please check the log for details.")
+            with st.expander("Show Log", expanded=True):
+                st.text(res["log"])
 
 # --- LINEAR MODE ---
 if selected_mode == "📏 Linear":
@@ -899,6 +932,9 @@ if selected_mode == "📏 Linear":
             
         l_submitted = st.form_submit_button("🚀 Run gbdraw Linear", type="primary")
 
+    if "l_results" not in st.session_state:
+        st.session_state.l_results = None
+        
     if l_submitted:
         # Use a secure temporary directory for execution
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -1107,32 +1143,58 @@ if selected_mode == "📏 Linear":
 
             # Display results (load file into memory for download)
             if is_successful:
-                st.success("✅ gbdraw finished successfully.")
-                st.subheader("📏 Linear Drawing Output")
-
+                # 【重要】結果を session_state に保存する
+                # ファイルの中身をメモリ（バイナリデータ）として読み込んでおく
                 file_data = output_path.read_bytes()
-                file_name = output_path.name
                 
-                file_extension = output_path.suffix.lower()
-                if file_extension == ".svg":
-                    st.image(file_data.decode("utf-8"), caption=file_name)
-                elif file_extension == ".png":
-                    st.image(file_data, caption=file_name)
-                else:
-                    st.info(f"📄 Preview is not available for {file_extension.upper()} format. Please use the download button below.")
-                
-                st.download_button(
-                    f"⬇️ Download {file_name}",
-                    data=file_data,
-                    file_name=file_name,
-                    mime=f"image/{l_fmt}" if l_fmt in ["png", "svg"] else "application/octet-stream"
-                )
-                with st.expander("Show Log"):
-                    st.text(log_content)
+                st.session_state.l_results = {
+                    "success": True,
+                    "file_name": output_path.name,
+                    "data": file_data,
+                    "suffix": output_path.suffix.lower(),
+                    "fmt": l_fmt,
+                    "log": log_content
+                }
             else:
-                st.error("gbdraw execution failed. Please check the log for details.")
-                with st.expander("Show Log", expanded=True):
-                    st.text(log_content)
+                st.session_state.l_results = {
+                    "success": False,
+                    "log": log_content
+                }
+    # --- 結果の表示処理 (フォームの外、かつ if l_submitted の外に置く) ---
+    if st.session_state.l_results:
+        res = st.session_state.l_results
+
+        if res["success"]:
+            st.success("✅ gbdraw finished successfully.")
+            st.subheader("📏 Linear Drawing Output")
+
+            file_name = res["file_name"]
+            file_data = res["data"]
+            file_extension = res["suffix"]
+            fmt = res["fmt"]
+            
+            # 画像のプレビュー
+            if file_extension == ".svg":
+                st.image(file_data.decode("utf-8"), caption=file_name)
+            elif file_extension == ".png":
+                st.image(file_data, caption=file_name)
+            else:
+                st.info(f"📄 Preview is not available for {file_extension.upper()} format. Please use the download button below.")
+            
+            # ダウンロードボタン
+            st.download_button(
+                f"⬇️ Download {file_name}",
+                data=file_data,
+                file_name=file_name,
+                mime=f"image/{fmt}" if fmt in ["png", "svg"] else "application/octet-stream"
+            )
+            
+            with st.expander("Show Log"):
+                st.text(res["log"])
+        else:
+            st.error("gbdraw execution failed. Please check the log for details.")
+            with st.expander("Show Log", expanded=True):
+                st.text(res["log"])
 
 # --- Footer ---
 st.markdown("---")
