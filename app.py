@@ -634,8 +634,6 @@ if selected_mode == "🔵 Circular":
             )
 
             if is_successful:
-                # 【重要】結果を session_state に保存する
-                # ファイルの中身をメモリ（バイナリデータ）として読み込んでおく
                 results_data = []
                 for out_path in output_files:
                     file_data = out_path.read_bytes()
@@ -656,7 +654,7 @@ if selected_mode == "🔵 Circular":
                     "success": False,
                     "log": log_content
                 }
-    # --- 結果の表示処理 (フォームの外、かつ if c_submitted の外に置く) ---
+
     if st.session_state.c_results:
         res = st.session_state.c_results
         
@@ -670,7 +668,6 @@ if selected_mode == "🔵 Circular":
                 file_extension = f_info["suffix"]
                 fmt = res["fmt"]
 
-                # 画像のプレビュー
                 if file_extension == ".svg":
                     st.image(file_data.decode("utf-8"), caption=file_name)
                 elif file_extension == ".png":
@@ -678,12 +675,10 @@ if selected_mode == "🔵 Circular":
                 else:
                     st.info(f"📄 Preview is not available for {file_extension.upper()} format.")
                 
-                # ダウンロードボタン
                 st.download_button(
                     f"⬇️ Download {file_name}",
                     data=file_data,
                     file_name=file_name,
-                    # キーを一意にするためにファイル名を含める
                     key=f"download_{file_name}",
                     mime=f"image/{fmt}" if fmt in ["png", "svg"] else "application/octet-stream"
                 )
@@ -1143,8 +1138,6 @@ if selected_mode == "📏 Linear":
 
             # Display results (load file into memory for download)
             if is_successful:
-                # 【重要】結果を session_state に保存する
-                # ファイルの中身をメモリ（バイナリデータ）として読み込んでおく
                 file_data = output_path.read_bytes()
                 
                 st.session_state.l_results = {
@@ -1160,7 +1153,7 @@ if selected_mode == "📏 Linear":
                     "success": False,
                     "log": log_content
                 }
-    # --- 結果の表示処理 (フォームの外、かつ if l_submitted の外に置く) ---
+
     if st.session_state.l_results:
         res = st.session_state.l_results
 
@@ -1173,7 +1166,6 @@ if selected_mode == "📏 Linear":
             file_extension = res["suffix"]
             fmt = res["fmt"]
             
-            # 画像のプレビュー
             if file_extension == ".svg":
                 st.image(file_data.decode("utf-8"), caption=file_name)
             elif file_extension == ".png":
@@ -1181,7 +1173,6 @@ if selected_mode == "📏 Linear":
             else:
                 st.info(f"📄 Preview is not available for {file_extension.upper()} format. Please use the download button below.")
             
-            # ダウンロードボタン
             st.download_button(
                 f"⬇️ Download {file_name}",
                 data=file_data,
