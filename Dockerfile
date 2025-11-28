@@ -30,7 +30,7 @@ RUN mkdir -p /usr/share/fonts/truetype/gbdraw \
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # 6. Add Google Analytics to Streamlit
-RUN sed -i 's|<head>|<head><script async src="https://www.googletagmanager.com/gtag/js?id=G-GG6JMKM02Y"></script><script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag("js", new Date());gtag("config", "G-GG6JMKM02Y");</script>|' /usr/local/lib/python3.13/site-packages/streamlit/static/index.html
+RUN sed -i 's~<head>~<head><script async src="https://www.googletagmanager.com/gtag/js?id=G-GG6JMKM02Y"></script><script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag("js", new Date());gtag("config", "G-GG6JMKM02Y");</script>~' /usr/local/lib/python3.13/site-packages/streamlit/static/index.html
 
 # 7. Expose port
 EXPOSE 8080
