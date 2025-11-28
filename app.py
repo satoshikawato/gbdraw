@@ -269,6 +269,11 @@ with st.sidebar:
             Satoshi Kawato (Tokyo Univ. of Marine Science and Tech.)
             Email: `kawato [at] kaiyodai.ac.jp`
             """)
+    with st.expander("📚Citation"):
+            st.markdown("""
+            If you use gbdraw in your research, I would appreciate it if you could cite the official GitHub repository:
+            [https://github.com/satoshikawato/gbdraw/](https://github.com/satoshikawato/gbdraw/)
+            """)
 # --- Main Content (Mode Selection) ---
 file_options = [""] + sorted(st.session_state.uploaded_files.keys())
 
