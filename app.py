@@ -132,6 +132,7 @@ st.markdown(
     <a href="https://anaconda.org/bioconda/gbdraw"><img src="https://anaconda.org/bioconda/gbdraw/badges/version.svg" alt="version"></a>
     <a href="https://anaconda.org/bioconda/gbdraw"><img src="https://anaconda.org/bioconda/gbdraw/badges/platforms.svg" alt="platforms"></a>
     <a href="http://bioconda.github.io/recipes/gbdraw/README.html"><img src="https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat" alt="install with bioconda"></a>
+    <a href="https://anaconda.org/bioconda/gbdraw"> <img src="https://anaconda.org/bioconda/gbdraw/badges/downloads.svg" /> </a>
     <a href="https://anaconda.org/bioconda/gbdraw"><img src="https://anaconda.org/bioconda/gbdraw/badges/license.svg" alt="license"></a>
     <a href="https://deepwiki.com/satoshikawato/gbdraw"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
     </p>
@@ -247,7 +248,27 @@ with st.sidebar:
             UPLOAD_DIR.mkdir(exist_ok=True, parents=True)
         st.success("All uploaded files and states have been cleared.")
         st.rerun()
-
+    st.markdown("---")
+    with st.expander("📜 Privacy & Terms"):
+        st.markdown("""
+        **Privacy Policy**
+        Uploaded data is processed temporarily for visualization and is automatically deleted immediately after processing. We do not store or view your data.
+        
+        **Disclaimer**
+        This tool is provided "as is" without warranty of any kind. The author is not liable for any damages arising from its use.
+        
+        **License**
+        Source code is available under the [MIT License](https://github.com/satoshikawato/gbdraw).
+        """)
+    with st.expander("📬 Contact"):
+            st.markdown("""
+            **Bug Reports & Feature Requests:**
+            Please open an issue on [GitHub Issues](https://github.com/satoshikawato/gbdraw/issues).
+            
+            **Other Inquiries:**
+            Satoshi Kawato (Tokyo Univ. of Marine Science and Tech.)
+            Email: `kawato [at] kaiyodai.ac.jp`
+            """)
 # --- Main Content (Mode Selection) ---
 file_options = [""] + sorted(st.session_state.uploaded_files.keys())
 
