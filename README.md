@@ -40,9 +40,9 @@ For detailed instructions on how to use `gbdraw`, please visit our main document
 
 ## Use without local installation
 ### Streamlit Web App
-A GUI web app of `gbdraw` (latest commit on `main` branch) is available on Streamlit without any local installation:
+A GUI web app of `gbdraw` (latest commit on `main` branch) is available （powered by Streamlit) without any local installation:
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://gbdraw.streamlit.app/)
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://gbdraw.app/)
 
 ### Colab Notebook (Google account required)
 You can try `gbdraw` (latest release) on Google Colaboratory without any local installation:
@@ -52,6 +52,7 @@ You can try `gbdraw` (latest release) on Google Colaboratory without any local i
 ## Bug reports and suggestions
 Please feel free to submit a new issue if you find a bug or have a suggestion:
 https://github.com/satoshikawato/gbdraw/issues
+
 
 
 
