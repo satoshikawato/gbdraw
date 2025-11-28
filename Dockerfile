@@ -29,11 +29,14 @@ RUN mkdir -p /usr/share/fonts/truetype/gbdraw \
 # 5. Install Python libraries
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# 6. Expose port
+# 6. Add Google Analytics to Streamlit
+RUN sed -i 's|<head>|<head><script async src="https://www.googletagmanager.com/gtag/js?id=G-GG6JMKM02Y"></script><script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag("js", new Date());gtag("config", "G-GG6JMKM02Y");</script>|' /usr/local/lib/python3.13/site-packages/streamlit/static/index.html
+
+# 7. Expose port
 EXPOSE 8080
 
-# 7. Healthcheck
+# 8. Healthcheck
 HEALTHCHECK CMD curl --fail http://localhost:8080/_stcore/health || exit 1
 
-# 8. Entry point command
+# 9. Entry point command
 ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"]
