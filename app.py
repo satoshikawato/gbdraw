@@ -17,39 +17,9 @@ from pathlib import Path
 from importlib import resources
 from contextlib import redirect_stdout, redirect_stderr
 from streamlit.runtime.uploaded_file_manager import UploadedFile
-import streamlit.components.v1 as components
 from gbdraw.circular import circular_main
 from gbdraw.linear import linear_main
 
-
-# --- Google Analytics settings (Injects into parent window) ---
-GA_ID = "G-GG6JMKM02Y"
-GA_JS = f"""
-<script>
-    var parent_head = window.parent.document.head;
-
-    if (!parent_head.querySelector('script[src*="googletagmanager"]')) {{
-        
-        var script = document.createElement('script');
-        script.async = true;
-        script.src = 'https://www.googletagmanager.com/gtag/js?id={GA_ID}';
-        parent_head.appendChild(script);
-
-        var inline_script = document.createElement('script');
-        inline_script.innerHTML = `
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){{dataLayer.push(arguments);}}
-            gtag('js', new Date());
-            gtag('config', '{GA_ID}');
-        `;
-        parent_head.appendChild(inline_script);
-        
-        console.log("GA4 tag injected into parent window");
-    }}
-</script>
-"""
-
-components.html(GA_JS, height=0, width=0)
 
 # --- Basic Application Settings ---
 st.set_page_config(
