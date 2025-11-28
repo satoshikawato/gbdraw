@@ -17,9 +17,24 @@ from pathlib import Path
 from importlib import resources
 from contextlib import redirect_stdout, redirect_stderr
 from streamlit.runtime.uploaded_file_manager import UploadedFile
+import streamlit.components.v1 as components
 from gbdraw.circular import circular_main
 from gbdraw.linear import linear_main
 
+
+# --- Google Analytics settings ---
+GA_ID = "G-GG6JMKM02Y"
+GA_JS = f"""
+<script async src="https://www.googletagmanager.com/gtag/js?id={GA_ID}"></script>
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){{dataLayer.push(arguments);}}
+    gtag('js', new Date());
+    gtag('config', '{GA_ID}');
+</script>
+"""
+
+components.html(GA_JS, height=0, width=0)
 
 # --- Basic Application Settings ---
 st.set_page_config(
@@ -30,6 +45,40 @@ st.set_page_config(
         'Report a bug': "https://github.com/satoshikawato/gbdraw/issues",
         'About': "# 🧬 gbdraw Web App\nA genome diagram generator for microbes and organelles.\nhttps://github.com/satoshikawato/gbdraw/"
     })
+
+# --- Cookie Consent Banner ---
+if 'cookie_consent' not in st.session_state:
+    cookie_container = st.container()
+    
+    st.markdown("""
+        <style>
+        .cookie-banner {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: #f0f2f6;
+            padding: 1rem;
+            z-index: 100000;
+            border-top: 1px solid #ccc;
+            text-align: center;
+            box-shadow: 0px -2px 10px rgba(0,0,0,0.1);
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    with cookie_container:
+        st.markdown('<div class="cookie-banner">', unsafe_allow_html=True)
+        
+        cols = st.columns([0.8, 0.2])
+        with cols[0]:
+            st.write("🍪 **Privacy Notice:** This website uses Google Analytics to collect anonymous usage data (e.g., visitor country) to improve the tool. No personal genomic data is stored.")
+        with cols[1]:
+            if st.button("Got it!", type="primary", key="cookie_btn"):
+                st.session_state['cookie_consent'] = True
+                st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
 def get_version_info():
     """Retrieves the gbdraw version and commit ID."""
@@ -253,6 +302,9 @@ with st.sidebar:
         st.markdown("""
         **Privacy Policy**
         Uploaded data is processed temporarily for visualization and is automatically deleted immediately after processing. We do not store or view your data.
+
+        **Analytics**
+        This tool uses **Google Analytics** to collect anonymous usage statistics (e.g., visitor country) to improve the service. No personal data is linked to these statistics.
         
         **Disclaimer**
         This tool is provided "as is" without warranty of any kind. The author is not liable for any damages arising from its use.
