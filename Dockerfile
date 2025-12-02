@@ -39,4 +39,4 @@ EXPOSE 8080
 HEALTHCHECK CMD curl --fail http://localhost:8080/_stcore/health || exit 1
 
 # 9. Entry point command
-ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"]
+ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0", "--server.maxUploadSize=500"]
