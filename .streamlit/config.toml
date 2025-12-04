@@ -1,4 +1,0 @@
-# .streamlit/config.toml
-[server]
-enableWebsocketCompression = false
-enableXsrfProtection = false
