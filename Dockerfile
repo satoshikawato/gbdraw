@@ -1,10 +1,9 @@
-# 1. Use Python 3.13 as the base image
 FROM python:3.13-slim
 
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
-# 2. Install required libraries 
+# 1. Nginx を追加インストール
 RUN apt-get update && apt-get install -y \
     git \
     libcairo2 \
@@ -19,26 +18,32 @@ RUN apt-get update && apt-get install -y \
     nginx \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Copy application files
 COPY . .
 
-# 4. Important: Register gbdraw bundled fonts to the system
+# 2. フォント登録 (元のまま)
 RUN mkdir -p /usr/share/fonts/truetype/gbdraw \
     && cp gbdraw/data/*.ttf /usr/share/fonts/truetype/gbdraw/ 2>/dev/null || true \
     && fc-cache -f -v
 
-# 5. Install Python libraries
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# 6. Add Google Analytics to Streamlit
+# Google Analytics (元のまま)
 RUN sed -i 's~<head>~<head><script async src="https://www.googletagmanager.com/gtag/js?id=G-GG6JMKM02Y"></script><script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag("js", new Date());gtag("config", "G-GG6JMKM02Y");</script>~' /usr/local/lib/python3.13/site-packages/streamlit/static/index.html
 
-# 7. Expose port
+# 3. Nginxの設定ファイルを配置
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# 4. 起動スクリプトに実行権限を付与
+COPY run.sh /app/run.sh
+RUN chmod +x /app/run.sh
+
+# Cloud Run は 8080 を見に来る
 EXPOSE 8080
 
-# 8. Healthcheck
+# ヘルスチェック: Nginx経由で確認するように変更
 HEALTHCHECK CMD curl --fail http://localhost:8080/_stcore/health || exit 1
 
-# 9. Entry point command
-ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"]
+# 5. エントリーポイントをシェルスクリプトに変更
+ENTRYPOINT ["/app/run.sh"]
+
 
