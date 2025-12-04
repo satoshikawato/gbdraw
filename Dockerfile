@@ -37,7 +37,13 @@ RUN sed -i 's~<head>~<head><script async src="https://www.googletagmanager.com/g
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
+# --- ADD THIS LINE ---
+# Copy Streamlit config to disable CORS/XSRF
+COPY config.toml /root/.streamlit/config.toml
+# ---------------------
+
 ENV PORT=8080
 EXPOSE 8080
 
 CMD ["/usr/bin/supervisord", "-n"]
+
