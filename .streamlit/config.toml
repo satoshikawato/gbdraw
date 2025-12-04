@@ -1,6 +1,0 @@
-[server]
-maxUploadSize = 500
-maxMessageSize = 1000
-
-port = 8080
-address = "0.0.0.0"
