@@ -1,13 +1,7 @@
 #!/bin/bash
+# Streamlit をバックグラウンド(ポート8501)で起動
+streamlit run app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true &
 
-# Nginxをバックグラウンドで起動
-nginx -c /app/nginx.conf &
+# Nginx をフォアグラウンド(ポート8080)で起動
+nginx -g 'daemon off;'
 
-# Streamlitを起動（ポートは8501に固定）
-# maxUploadSizeはここで指定
-streamlit run app.py \
-    --server.port=8501 \
-    --server.address=127.0.0.1 \
-    --server.maxUploadSize=500 \
-    --server.enableCORS=false \
-    --server.enableXsrfProtection=false

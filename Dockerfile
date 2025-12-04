@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     fonts-liberation \
     fontconfig \
+    nginx \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. Copy application files
