@@ -3,7 +3,7 @@ set -e
 
 # Start Nginx in the background
 nginx
-
+sleep 2  # Give Nginx a moment to settle
 # Start Streamlit on the internal port Nginx proxies to
 streamlit run app.py \
     --server.port=8501 \
