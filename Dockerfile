@@ -4,7 +4,21 @@ FROM python:3.13-slim
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
-# 1. Install required libraries + Nginx
+# -----------------------------------------------------------
+# 1. Install latest Nginx (Official Repo) & dependencies
+# デフォルトの古いNginxではなく、公式の最新版を入れるための手順
+# -----------------------------------------------------------
+RUN apt-get update && apt-get install -y \
+    curl gnupg2 ca-certificates lsb-release debian-archive-keyring \
+    && curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor \
+    | tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null \
+    && echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] \
+    http://nginx.org/packages/debian bookworm nginx" \
+    | tee /etc/apt/sources.list.d/nginx.list \
+    && apt-get update && apt-get install -y nginx \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Install library dependencies (gbdraw用)
 RUN apt-get update && apt-get install -y \
     git \
     libcairo2 \
@@ -13,41 +27,37 @@ RUN apt-get update && apt-get install -y \
     gdk-pixbuf2.0-0 \
     libffi-dev \
     shared-mime-info \
-    curl \
     fonts-liberation \
     fontconfig \
-    nginx \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Copy application files
+# 3. Copy application files
 COPY . .
 
-# 3. Copy Nginx config
-# 作成した nginx.conf を所定の位置にコピー
+# 4. Copy Nginx config (前回作成した「偽造キー付き」の設定ファイルをそのまま使います)
 COPY nginx.conf /etc/nginx/nginx.conf
 
-# 4. Register gbdraw bundled fonts
+# 5. Register gbdraw bundled fonts
 RUN mkdir -p /usr/share/fonts/truetype/gbdraw \
     && cp gbdraw/data/*.ttf /usr/share/fonts/truetype/gbdraw/ 2>/dev/null || true \
     && fc-cache -f -v
 
-# 5. Install Python libraries
+# 6. Install Python libraries
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# 6. Streamlit Config (GA tag insertion)
+# 7. Streamlit Config (GA tag insertion)
 RUN sed -i 's~<head>~<head><script async src="https://www.googletagmanager.com/gtag/js?id=G-GG6JMKM02Y"></script><script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag("js", new Date());gtag("config", "G-GG6JMKM02Y");</script>~' /usr/local/lib/python3.13/site-packages/streamlit/static/index.html
 
-# 7. Expose Cloud Run port
+# 8. Expose Cloud Run port
 EXPOSE 8080
 
-# 8. Start Script
-# Nginxをバックグラウンドで起動し、Streamlitをフォアグラウンドで起動
-# Streamlitは 8501 で待ち受ける（Nginxがそこへ転送する）
+# 9. Start Script
+# Nginxを起動しつつ、Streamlitも起動
 CMD service nginx start && \
     streamlit run app.py \
     --server.port=8501 \
     --server.address=0.0.0.0 \
     --server.enableCORS=false \
     --server.enableXsrfProtection=false \
-    --server.maxUploadSize=500
+    --server.maxUploadSize=1024
     
