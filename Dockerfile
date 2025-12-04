@@ -33,6 +33,10 @@ RUN sed -i 's~<head>~<head><script async src="https://www.googletagmanager.com/g
 # 3. Nginxの設定ファイルを配置
 COPY nginx.conf /etc/nginx/nginx.conf
 
+
+RUN mkdir -p /root/.streamlit
+COPY .streamlit/config.toml /root/.streamlit/config.toml
+
 # 4. 起動スクリプトに実行権限を付与
 COPY run.sh /app/run.sh
 RUN chmod +x /app/run.sh
