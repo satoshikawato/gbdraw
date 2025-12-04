@@ -1,5 +1,12 @@
 #!/bin/bash
+set -e
 
+# Start Nginx in the background
 nginx
-streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+
+# Start Streamlit on the internal port Nginx proxies to
+streamlit run app.py \
+    --server.port=8501 \
+    --server.address=0.0.0.0 \
+    --server.enableWebsocketCompression=false
 
