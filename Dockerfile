@@ -4,7 +4,7 @@ FROM python:3.13-slim
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
-# 2. Install required libraries + Nginx (Nginxを追加)
+# 2. Install required libraries
 RUN apt-get update && apt-get install -y \
     git \
     libcairo2 \
@@ -16,16 +16,11 @@ RUN apt-get update && apt-get install -y \
     curl \
     fonts-liberation \
     fontconfig \
-    nginx \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. Copy application files
 COPY . .
 
-# 3.5 Copy Nginx config and entrypoint (追加)
-COPY nginx.conf /app/nginx.conf
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
 
 # 4. Register gbdraw bundled fonts
 RUN mkdir -p /usr/share/fonts/truetype/gbdraw \
@@ -41,9 +36,13 @@ RUN sed -i 's~<head>~<head><script async src="https://www.googletagmanager.com/g
 # 7. Expose port
 EXPOSE 8080
 
-# 8. Healthcheck (ポートをローカルのStreamlit用 8501 に変更)
-HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
+# 8. Healthcheck 
+HEALTHCHECK CMD curl --fail http://localhost:8080/_stcore/health || exit 1
 
-# 9. Entry point command (スクリプト経由に変更)
-ENTRYPOINT ["/app/entrypoint.sh"]
-
+# 9. Entry point command
+CMD streamlit run app.py \
+    --server.port=8080 \
+    --server.address=0.0.0.0 \
+    --server.enableCORS=false \
+    --server.enableXsrfProtection=false
+    
