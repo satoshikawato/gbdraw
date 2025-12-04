@@ -1,49 +1,43 @@
+# 1. Use Python 3.13 as the base image
 FROM python:3.13-slim
 
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
-# Install Nginx (official) & dependencies
+# 2. Install required libraries 
 RUN apt-get update && apt-get install -y \
-    curl gnupg2 ca-certificates lsb-release debian-archive-keyring \
-    supervisor \
     git \
-    libcairo2 libpango-1.0-0 libpangocairo-1.0-0 \
-    gdk-pixbuf2.0-0 libffi-dev shared-mime-info \
-    fonts-liberation fontconfig \
-    && curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor \
-       | tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null \
-    && echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] \
-       http://nginx.org/packages/debian bookworm nginx" \
-       | tee /etc/apt/sources.list.d/nginx.list \
-    && apt-get update && apt-get install -y nginx \
+    libcairo2 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    gdk-pixbuf2.0-0 \
+    libffi-dev \
+    shared-mime-info \
+    curl \
+    fonts-liberation \
+    fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
+# 3. Copy application files
 COPY . .
 
-# Register fonts
+# 4. Important: Register gbdraw bundled fonts to the system
 RUN mkdir -p /usr/share/fonts/truetype/gbdraw \
     && cp gbdraw/data/*.ttf /usr/share/fonts/truetype/gbdraw/ 2>/dev/null || true \
     && fc-cache -f -v
 
-# Install Python libs
-RUN pip install --no-cache-dir -r requirements.txt
+# 5. Install Python libraries
+RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Google Analytics inject
-RUN sed -i 's~<head>~<head><script async src="https://www.googletagmanager.com/gtag/js?id=G-GG6JMKM02Y"></script><script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag("js", new Date());gtag("config", "G-GG6JMKM02Y");</script>~' \
-    /usr/local/lib/python3.13/site-packages/streamlit/static/index.html
+# 6. Add Google Analytics to Streamlit
+RUN sed -i 's~<head>~<head><script async src="https://www.googletagmanager.com/gtag/js?id=G-GG6JMKM02Y"></script><script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag("js", new Date());gtag("config", "G-GG6JMKM02Y");</script>~' /usr/local/lib/python3.13/site-packages/streamlit/static/index.html
 
-# Copy nginx and supervisor configs
-COPY nginx.conf /etc/nginx/nginx.conf
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-# --- ADD THIS LINE ---
-# Copy Streamlit config to disable CORS/XSRF
-COPY config.toml /root/.streamlit/config.toml
-# ---------------------
-
-ENV PORT=8080
+# 7. Expose port
 EXPOSE 8080
 
-CMD ["/usr/bin/supervisord", "-n"]
+# 8. Healthcheck
+HEALTHCHECK CMD curl --fail http://localhost:8080/_stcore/health || exit 1
+
+# 9. Entry point command
+ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"]
 
