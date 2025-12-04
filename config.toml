@@ -2,10 +2,5 @@
 maxUploadSize = 500
 maxMessageSize = 1000
 
-enableCORS = true
-corsAllowedOrigins = ["https://gbdraw.app", "http://localhost:8501"]
-
-enableXsrfProtection = false
-
 port = 8080
 address = "0.0.0.0"
