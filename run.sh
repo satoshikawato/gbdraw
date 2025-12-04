@@ -1,12 +1,16 @@
 #!/bin/bash
-set -e
 
-# Start Nginx in the background
-nginx
-sleep 2  # Give Nginx a moment to settle
-# Start Streamlit on the internal port Nginx proxies to
+# --server.enableCORS=false と --server.enableXsrfProtection=false を追加
 streamlit run app.py \
     --server.port=8501 \
-    --server.address=0.0.0.0 \
-    --server.enableWebsocketCompression=false
+    --server.address=127.0.0.1 \
+    --server.headless=true \
+    --server.enableCORS=false \
+    --server.enableXsrfProtection=false \
+    --server.fileWatcherType=none \
+    --browser.gatherUsageStats=false &
+
+sleep 2
+
+nginx -g 'daemon off;'
 
