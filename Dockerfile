@@ -36,7 +36,7 @@ RUN sed -i 's~<head>~<head><script async src="https://www.googletagmanager.com/g
 EXPOSE 8080
 
 # 8. Healthcheck
-HEALTHCHECK CMD curl --fail http://localhost:8080/_stcore/health || exit 1
+HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
 
 # 9. Entry point command
 ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"]
