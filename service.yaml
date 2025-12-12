@@ -1,0 +1,27 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: gbdraw-http2
+spec:
+  template:
+    metadata:
+      annotations:
+        # HTTP/2をエンドツーエンドで有効化
+        run.googleapis.com/container-dependencies: '{"nginx": ["app"]}'
+    spec:
+      containers:
+      # メインのIngressコンテナ (Nginx)
+      - name: nginx
+        image: [NGINX_IMAGE_URL] # ここにNginxのイメージURL
+        ports:
+        - containerPort: 8080
+          name: h2c # HTTP/2を使用するために必須
+      
+      # サイドカーコンテナ (Streamlit App)
+      - name: app
+        image: [STREAMLIT_IMAGE_URL] # ここにアプリのイメージURL
+        # ポート公開は不要 (localhost経由で通信)
+        env:
+        - name: PORT
+          value: "8501"
+          
