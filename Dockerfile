@@ -32,12 +32,12 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # 6. Add Google Analytics to Streamlit
 RUN sed -i 's~<head>~<head><script async src="https://www.googletagmanager.com/gtag/js?id=G-GG6JMKM02Y"></script><script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag("js", new Date());gtag("config", "G-GG6JMKM02Y");</script>~' /usr/local/lib/python3.13/site-packages/streamlit/static/index.html
 
-# 7. Expose port (削除または8888に変更)
-EXPOSE 8888
+# 7. Expose port (削除または8501に変更)
+EXPOSE 8501
 
-# 8. Healthcheck (ポートを8888に変更)
-HEALTHCHECK CMD curl --fail http://localhost:8888/_stcore/health || exit 1
+# 8. Healthcheck (ポートを8501に変更)
+HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
 
 # 9. Entry point command
-# ポートを8888に変更し、アドレスをlocalhost (127.0.0.1) に限定
-ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8888", "--server.address=127.0.0.1"]
+# ポートを8501に変更し、アドレスをlocalhost (127.0.0.1) に限定
+ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=127.0.0.1"]
