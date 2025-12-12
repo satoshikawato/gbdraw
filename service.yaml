@@ -28,4 +28,4 @@ spec:
             path: /_stcore/health
           initialDelaySeconds: 10
           periodSeconds: 10
-          failureThreshold: 5
+          failureThreshold: 20
