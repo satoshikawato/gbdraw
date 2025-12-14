@@ -50,7 +50,7 @@ spec:
       volumes:
         - name: nginx-conf-secret
           secret:
-            secretName: nginx_config5
+            secretName: nginx_config7
             items:
               - key: latest
                 path: default.conf
