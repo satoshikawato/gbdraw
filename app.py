@@ -1275,3 +1275,32 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+# --- Session Timeout Script ---
+components.html(
+    """
+    <script>
+    (function () {
+        const ctx = window.top || window;             // Prefer the top window so the alert blocks the main tab
+        if (ctx.__sessionTimeoutStarted) return;      // Guard against multiple initializations
+        ctx.__sessionTimeoutStarted = true;
+
+        const PERIOD = 10 * 60 * 1000; // 10 minutes
+
+        function scheduleNext() {
+            ctx.__sessionTimeoutTimer = ctx.setTimeout(() => {
+                try { ctx.alert("Are you still using this app?"); }
+                finally {
+                    // Schedule the next run only after the alert is dismissed (ensures at most one pending timer)
+                    scheduleNext();
+                }
+            }, PERIOD);
+        }
+
+        // Kick off the first run
+        scheduleNext();
+    })();
+    </script>
+    """,
+    height=0,
+)

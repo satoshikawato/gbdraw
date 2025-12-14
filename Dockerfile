@@ -36,7 +36,7 @@ RUN sed -i 's~<head>~<head><script async src="https://www.googletagmanager.com/g
 EXPOSE 8501
 
 # 8. Healthcheck (ポートを8501に変更)
-HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
+HEALTHCHECK CMD curl --fail http://localhost:8051/_stcore/health || exit 1
 
 # 9. Entry point command
 ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.enableCORS=false", "--server.enableXsrfProtection=false", "--server.enableWebsocketCompression=false"]

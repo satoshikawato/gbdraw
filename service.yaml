@@ -11,21 +11,46 @@ spec:
         run.googleapis.com/container-dependencies: '{"nginx":["gbdraw"]}'
     spec:
       containers:
-      - name: nginx
-        image: asia-northeast1-docker.pkg.dev/gbdraw/cloud-run-source-deploy/gbdraw-nginx:v1
-        ports:
-        - containerPort: 8080
-          name: h2c
-      - name: gbdraw
-        # 最新のアプリイメージを指定
-        image: asia-northeast1-docker.pkg.dev/gbdraw/cloud-run-source-deploy/gbdraw/gbdraw:latest
-        env:
-        - name: PORT
-          value: "8501"
-        startupProbe:
-          httpGet:
-            port: 8501
-            path: /_stcore/health
-          initialDelaySeconds: 10
-          periodSeconds: 10
-          failureThreshold: 20
+        - image: nginx
+          name: nginx
+          ports:
+            - name: h2c
+              containerPort: 8080
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            
+          # Referencing declared volume below,
+          # Declaring volume to mount in current ingress container's filesystem
+          # https://cloud.google.com/run/docs/reference/rest/v2/Container#volumemount
+          volumeMounts:
+            - name: nginx-conf-secret
+              readOnly: true
+              mountPath: /etc/nginx/conf.d/
+          startupProbe:
+            timeoutSeconds: 240
+            periodSeconds: 240
+            failureThreshold: 1
+            tcpSocket:
+              port: 8080     
+        - name: gbdraw
+          # 最新のアプリイメージを指定
+          image: asia-northeast1-docker.pkg.dev/gbdraw/cloud-run-source-deploy/gbdraw/gbdraw:latest
+          env:
+          - name: PORT
+            value: "8501"
+          startupProbe:
+            httpGet:
+              port: 8501
+              path: /_stcore/health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 20
+      volumes:
+        - name: nginx-conf-secret
+          secret:
+            secretName: nginx_config5
+            items:
+              - key: latest
+                path: default.conf
