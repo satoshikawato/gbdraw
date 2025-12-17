@@ -1,0 +1,9 @@
+.git
+.gitignore
+venv/
+__pycache__/
+*.pyc
+Dockerfile
+service.yaml
+README.md
+./nginx/*
