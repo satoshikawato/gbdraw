@@ -4,8 +4,6 @@ import os
 import sys
 import logging
 import tomllib
-import cairosvg
-
 from pathlib import Path
 from typing import Optional, Generator, List, Dict, Set
 from importlib import resources
@@ -17,6 +15,13 @@ from Bio import SeqIO
 from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 from BCBio import GFF
+
+try:
+    import cairosvg
+    CAIROSVG_AVAILABLE = True
+except (ImportError, OSError):
+    CAIROSVG_AVAILABLE = False
+
 
 from .object_configurators import BlastMatchConfigurator
 
@@ -174,19 +179,9 @@ _COLOR_NAME_MAP = {
     }
 
 def resolve_color_to_hex(color_str: str) -> str:
-    """
-    SVGカラーネームをHexコードに変換する。
-    既にHexコードの場合はそのまま返す。
-
-    Args:
-        color_str (str): 色文字列 (例: "red", "#FF0000")
-
-    Returns:
-        str: Hexコード (例: "#FF0000")
-    """
     if not isinstance(color_str, str):
         logger.error(f"Invalid color value (not a string): {color_str}.")
-        exit(1)
+        sys.exit(1)
 
     if color_str.startswith('#'):
         return color_str
@@ -197,46 +192,9 @@ def resolve_color_to_hex(color_str: str) -> str:
         return hex_code
     else:
         logger.error(f"Unknown color name: {color_str}. Please use a valid SVG color name or hex code.")
-        exit(1)
+        sys.exit(1)
 
 def load_gbks(gbk_list: List[str], mode: str, load_comparison=False) -> list[SeqRecord]:
-    """
-    Loads GenBank records from the given list of file paths based on the specified mode.
-
-    Args:
-        gbk_list (List[str]): List of paths to GenBank files.
-        mode (str): Mode of operation, either 'linear' or 'circular'.
-        load_comparison (bool, optional): Flag to load only the first entry for comparison. Defaults to False.
-
-    Returns:
-        list[SeqRecord]: List of SeqRecord objects parsed from the GenBank files.
-
-    The function processes each GenBank file in the provided list. In 'linear' mode, it loads all entries
-    from a single file or the first entry from multiple files. In 'circular' mode, it loads all entries,
-    issuing warnings for sequences with linear topology.
-    """
-    """
-    Loads GenBank records from provided file paths based on the specified mode (linear or circular).
-
-    This function processes a list of GenBank file paths, loading and appending the corresponding 
-    SeqRecord objects to a list. It adapts its behavior based on the specified mode:
-    - In 'linear' mode, it imports all entries from a single file or the first entry from multiple files.
-    - In 'circular' mode, it imports all entries and logs warnings if the topology of any sequence is 
-      linear or unspecified, as circular diagrams may not be suitable.
-
-    Args:
-        gbk_list (list): A list of file paths to GenBank files.
-        mode (str): The mode of operation, either 'linear' or 'circular', determining how the files
-                    are processed and how many entries are loaded.
-
-    Returns:
-        list: A list of BioPython SeqRecord objects loaded from the specified GenBank files.
-
-    The function iterates through each file in the provided list, logging the file being processed.
-    It utilizes BioPython's SeqIO.parse to load records and conditionally appends them to the output list
-    based on the specified mode and the content of each file. Warnings are logged to inform the user of 
-    potential issues with sequence topology in relation to the desired diagram type.
-    """
     record_list: list[SeqRecord] = []
     id_list: list[str] = []
     logger.info("INFO: Loading GenBank file(s)...")
@@ -303,21 +261,6 @@ def load_gbks(gbk_list: List[str], mode: str, load_comparison=False) -> list[Seq
     return record_list
 
 def merge_gff_fasta_records(gff_records: List[SeqRecord], fasta_records: List[SeqRecord]) -> List[SeqRecord]:
-    """
-    Merges GFF and FASTA records based on matching IDs.
-
-    Args:
-        gff_records (List[SeqRecord]): List of SeqRecord objects from GFF files.
-        fasta_records (List[SeqRecord]): List of SeqRecord objects from FASTA files.
-
-    Returns:
-        List[SeqRecord]: Merged list of SeqRecord objects with annotations from GFF files.
-
-    This function iterates through the GFF records and searches for matching FASTA records by ID.
-    If a match is found, it merges the features from the GFF record into the corresponding FASTA record.
-    If no match is found, the GFF record is added to the merged list as is. Warnings are logged for
-    any GFF records without matching FASTA entries.
-    """
     merged_records: List[SeqRecord] = []
     fasta_dict: Dict[str, SeqRecord] = {record.id: record for record in fasta_records}
     for gff_record in gff_records:
@@ -337,10 +280,6 @@ def merge_gff_fasta_records(gff_records: List[SeqRecord], fasta_records: List[Se
     return merged_records
 
 def scan_features_recursive(features: List[SeqFeature], feature_types_to_keep: Set[str]) -> List[SeqFeature]:
-    """
-    Recursively scans a list of features and their sub-features,
-    extracting only those of the specified types.
-    """
     filtered_list = []
     for feature in features:
         if feature.type in feature_types_to_keep:
@@ -359,10 +298,6 @@ def scan_features_recursive(features: List[SeqFeature], feature_types_to_keep: S
     return filtered_list
 
 def filter_features_by_type(record: SeqRecord, feature_types_to_keep: Set[str]) -> SeqRecord:
-    """
-    Creates a new SeqRecord containing only features of specified types.
-    Sub-features of the desired types are extracted and promoted to top-level features.
-    """
     new_record = SeqRecord(
         seq=record.seq,
         id=record.id,
@@ -380,8 +315,6 @@ def filter_features_by_type(record: SeqRecord, feature_types_to_keep: Set[str]) 
 
 
 def load_gff_fasta(gff_list: List[str], fasta_list: List[str], mode: str, selected_features_set=None, load_comparison=False) -> list[SeqRecord]:
-    """
-    """
     gff_record_list_tmp : list[SeqRecord] = []
     gff_id_list_tmp: list[str] = []
     fasta_record_list_tmp : list[SeqRecord] = []
@@ -518,19 +451,6 @@ def load_gff_fasta(gff_list: List[str], fasta_list: List[str], mode: str, select
 def load_comparisons(
         comparison_files: List[str],
         blast_config: BlastMatchConfigurator) -> List[DataFrame]:
-    """
-    Loads and filters comparison data from tab-separated BLAST output files.
-
-    Args:
-        comparison_files (list[str]): A list of file paths to tab-separated BLAST output files.
-        blast_config (BlastMatchConfigurator): Configuration object containing evalue, bitscore, and identity thresholds.
-
-    Returns:
-        list[DataFrame]: List of DataFrames containing the filtered comparison data.
-
-    This function reads comparison data from each specified file and applies filters based on the thresholds
-    in the blast_config. It retains records that meet the specified criteria for evalue, bitscore, and identity.
-    """
     evalue_threshold: float = blast_config.evalue
     bitscore_threshold: float = blast_config.bitscore
     identity_threshold: float = blast_config.identity
@@ -572,25 +492,6 @@ def load_comparisons(
 
 
 def load_default_colors(user_defined_default_colors: str, palette: str = "default", load_comparison: bool = False) -> DataFrame:
-    """
-    Load the built-in colour palette from *color_palettes.toml* (section
-    `[default]` by default) and merge any user-supplied TSV overrides.
-
-    ```
-    Parameters
-    ----------
-    user_defined_default_colors : str
-        Path to a TSV file whose rows are ``feature_type<TAB>HEX``.
-        If empty, the built-in palette is used as-is.
-    palette : str, optional
-        Name of the palette inside *color_palettes.toml*.
-        Falls back to ``[default]`` if the name is not found.
-
-    Returns
-    -------
-    pandas.DataFrame
-        Two columns: ``feature_type`` and ``color``.
-    """
     column_names = ["feature_type", "color"]
 
     # ── 1) Load TOML
@@ -654,15 +555,6 @@ def load_default_colors(user_defined_default_colors: str, palette: str = "defaul
 
 
 def read_color_table(color_table_file: str) -> Optional[DataFrame]:
-    """
-    Reads a color table from a TSV file and errors out immediately if any row has
-    the wrong number of fields or missing values.
-
-    Expected columns: feature_type, qualifier_key, value, color, caption
-
-    Returns:
-        DataFrame with the user-defined color mappings, or None if no file was provided.
-    """
     required_cols = ['feature_type', 'qualifier_key', 'value', 'color', 'caption']
 
     # If user did not supply -t, just skip and return None
@@ -704,18 +596,6 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
 
 
 def parse_formats(out_formats: str) -> list[str]:
-    """
-    Parses and validates the output file formats from a comma-separated string.
-
-    Args:
-        out_formats (str): Comma-separated string of output file formats.
-
-    Returns:
-        list[str]: List of valid output file formats. Defaults to ['png'] if no valid formats are provided.
-
-    The function splits the input string, trims whitespace, and converts each format to lowercase.
-    It validates each format against a list of accepted formats and logs warnings for unrecognized formats.
-    """
     list_of_formats: list[str] = [format.strip().lower()
                                   for format in out_formats.split(',')]
     accepted_formats: list[str] = ["svg", "png", "eps", "ps", "pdf"]
@@ -740,68 +620,61 @@ def parse_formats(out_formats: str) -> list[str]:
 
 def save_figure(canvas: Drawing, list_of_formats: List[str]) -> None:
     """
-    Saves the rendered figure to files in the specified formats.
-
-    Args:
-        canvas: Canvas object containing the rendered figure.
-        list_of_formats (List[str]): List of file formats to save the figure in.
-
-    This function saves the figure in each of the specified formats. It supports 'svg', 'png', 'eps', 'ps', and 'pdf'.
-    It logs information about each generated file. If no valid format is specified, it defaults to 'png'.
+    Saves the rendered figure.
+    Logic:
+      1. Always save SVG (base format).
+      2. If Pyodide (Web), skip conversion (JS handles it).
+      3. If CLI, try CairoSVG. If not available, warn and skip.
     """
-    # Extract the base filename
-    list_of_formats_copy = list_of_formats.copy()
-    outfile_base: str = os.path.splitext(canvas.filename)[0]
-    svg_data: str = canvas.tostring()
-    outfile_count: int = 0
-    # Define accepted formats and the conversion function for each
-    accepted_formats = {
-        "png": cairosvg.svg2png,
-        "eps": cairosvg.svg2eps,
-        "ps": cairosvg.svg2ps,
-        "pdf": cairosvg.svg2pdf
-    }
-    # Handling svg format separately
-    if "svg" in list_of_formats_copy:
-        canvas.save()
-        logger.info(f"Generated {canvas.filename}!")
-        outfile_count += 1
-        # Remove 'svg' to avoid processing it again
-        list_of_formats_copy.remove('svg')
+    base_filename = os.path.splitext(canvas.filename)[0]
+    svg_filename = f"{base_filename}.svg"
 
-    for out_format in list_of_formats_copy:
-        if out_format in accepted_formats:
-            # Call the appropriate Cairo conversion function
-            conversion_func = accepted_formats[out_format]
-            if conversion_func:  # Ensure conversion function is not None
-                out_filename: str = f'{outfile_base}.{out_format}'
-                conversion_func(bytestring=svg_data, write_to=out_filename, dpi=96, scale=3)
-                logger.info(f"Generated {out_filename}!")
-                outfile_count += 1
-            else:
-                logger.warning(f"WARNING: Conversion function for {out_format} is not defined.")
-        else:
-            logger.warning(f"WARNING: Unaccepted/unrecognized output file format: {out_format}")
+    # 1. Always save SVG
+    canvas.saveas(svg_filename)
+    logger.info(f"Generated SVG: {svg_filename}")
 
-    # Default to PNG if no valid format is specified
-    if outfile_count < 1:
-        logger.warning("WARNING: No valid output file format was specified. By default, generating a PNG file.")
-        out_filename = f'{outfile_base}.png'
-        conversion_func = accepted_formats["png"]
-        conversion_func(bytestring=svg_data, write_to=out_filename, dpi=96, scale=3)
-        logger.info(f"Generated {out_filename}!")
+    # 2. Prepare other formats (excluding SVG)
+    formats_to_process = [f for f in list_of_formats if f != 'svg']
+
+    if not formats_to_process:
+        return
+
+    # --- WebAssembly (Pyodide) Check ---
+    if "pyodide" in sys.modules:
+        if formats_to_process:
+            logger.info("Running in WebAssembly: Image conversion will be handled by the browser.")
+        return
+
+    # --- CLI Conversion Logic (CairoSVG Only) ---
+    if CAIROSVG_AVAILABLE:
+        try:
+            svg_string = canvas.tostring() 
+            for fmt in formats_to_process:
+                out_file = f"{base_filename}.{fmt}"
+                
+                if fmt == 'png':
+                    cairosvg.svg2png(bytestring=svg_string.encode('utf-8'), write_to=out_file)
+                elif fmt == 'pdf':
+                    cairosvg.svg2pdf(bytestring=svg_string.encode('utf-8'), write_to=out_file)
+                elif fmt == 'ps':
+                    cairosvg.svg2ps(bytestring=svg_string.encode('utf-8'), write_to=out_file)
+                elif fmt == 'eps':
+                    cairosvg.svg2ps(bytestring=svg_string.encode('utf-8'), write_to=out_file)
+                
+                logger.info(f"Generated {fmt.upper()}: {out_file}")
+        except Exception as e:
+            logger.error(f"Failed to generate images using CairoSVG: {e}")
+    else:
+        # CairoSVG not available; warn user about skipped formats
+        missing_formats = ", ".join([f.upper() for f in formats_to_process])
+        logger.warning(
+            f"⚠️  Skipping generation of: {missing_formats}\n"
+            f"   CairoSVG is not installed.\n"
+            f"   To enable PNG/PDF support, run: pip install gbdraw[export]\n"
+        )
 
 
 def load_config_toml(config_directory: str, config_file: str) -> dict:
-    """
-    Loads configuration settings from a TOML file.
-
-    Returns:
-        dict: Dictionary containing the loaded configuration settings.
-
-    This function attempts to load configuration settings from a TOML file located within the package.
-    If the file is not found or an error occurs during loading, it logs the error and returns an empty dictionary.
-    """
     config_dict = {}  # Initialize to empty dict to handle cases where loading fails.
     absolute_config_path = None  # Initialize outside of try for scope in exception block
     try:
@@ -817,54 +690,3 @@ def load_config_toml(config_directory: str, config_file: str) -> dict:
     except FileNotFoundError as e:
         logger.error(f"Failed to load configs from {absolute_config_path}: {e}")
     return config_dict
-
-
-
-def read_color_table(color_table_file: str) -> Optional[DataFrame]:
-    """
-    Reads a color table from a TSV file and errors out immediately if any row has
-    the wrong number of fields or missing values.
-
-    Expected columns: feature_type, qualifier_key, value, color, caption
-
-    Returns:
-        DataFrame with the user-defined color mappings, or None if no file was provided.
-    """
-    required_cols = ['feature_type', 'qualifier_key', 'value', 'color', 'caption']
-
-    # If user did not supply -t, just skip and return None
-    if not color_table_file:
-        return None
-
-    try:
-        df = pd.read_csv(
-            color_table_file,
-            sep='\t',
-            header=None,
-            names=required_cols,
-            dtype=str,
-            on_bad_lines='error',  # raise on any row with wrong number of fields
-            engine='python'        # required for on_bad_lines
-        )
-    except pd.errors.ParserError as e:
-        logger.error(f"ERROR: Malformed line in '{color_table_file}': {e}")
-        sys.exit(1)
-    except FileNotFoundError as e:
-        logger.error(f"ERROR: Color table file not found: {e}")
-        sys.exit(1)
-    except Exception as e:
-        logger.error(f"ERROR: Failed to read '{color_table_file}': {e}")
-        sys.exit(1)
-
-    # Check for any rows with missing values and error out if found
-    null_rows = df[df.isnull().any(axis=1)]
-    if not null_rows.empty:
-        for idx, row in null_rows.iterrows():
-            missing = [c for c in required_cols if pd.isna(row[c])]
-            logger.error(
-                f"ERROR: Missing values in '{color_table_file}' at line {idx+1}. "
-                f"Missing columns: {missing}. Row data: {row.to_dict()}"
-            )
-        sys.exit(1)
-
-    return df

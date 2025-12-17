@@ -17,16 +17,65 @@ Functions:
 
 
 import sys
-import subprocess
+import webbrowser
+import http.server
+import socketserver
+import threading
+import socket
 from typing import NoReturn
+from importlib import resources
+from functools import partial
+
 from .circular import circular_main
 from .linear import linear_main
-from importlib import resources
 from .version import __version__
 
 def print_version() -> None:
     print(f"gbdraw version {__version__}")
 
+
+def print_version() -> None:
+    print(f"gbdraw version {__version__}")
+
+def find_free_port():
+    """Find a free port on localhost"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('', 0))
+        return s.getsockname()[1]
+
+def start_local_server(directory: str):
+    """
+    Starts a local HTTP server to serve the gbdraw web UI.
+    """
+
+    port = find_free_port()
+    
+    handler = partial(http.server.SimpleHTTPRequestHandler, directory=directory)
+    
+    try:
+        httpd = socketserver.TCPServer(("", port), handler)
+    except OSError as e:
+        print(f"Error starting server: {e}", file=sys.stderr)
+        return
+
+    thread = threading.Thread(target=httpd.serve_forever)
+    thread.daemon = True
+    thread.start()
+
+    url = f"http://localhost:{port}"
+    print(f"✅ Local server started at: {url}")
+    print(f"📂 Serving UI from: {directory}")
+    print("Press Ctrl+C to stop the server.")
+    
+    webbrowser.open(url)
+
+    try:
+        while True:
+            pass
+    except KeyboardInterrupt:
+        print("\nStopping server...")
+        httpd.shutdown()
+        sys.exit(0)
 
 def print_help_message() -> NoReturn:
     print(f"gbdraw v. {__version__}: A diagram generator for small genomes")
@@ -95,26 +144,18 @@ def main() -> None:
     elif command == "linear":
         linear_main(args)
     elif command == "gui":
-        # Check if streamlit is installed
-        try:
-            import streamlit
-        except ImportError:
-            print("Error: Streamlit is not installed.", file=sys.stderr)
-            print("Please install it to use the GUI:", file=sys.stderr)
-            print("Examples:", file=sys.stderr)
-            print("mamba install -c conda-forge streamlit", file=sys.stderr)
-            print("micromamba install -c conda-forge streamlit", file=sys.stderr)
-            sys.exit(1)
+            try:
+                # Python 3.9+
+                web_dir = resources.files('gbdraw').joinpath('web')
+            except AttributeError:
+                import os
+                web_dir = os.path.join(os.path.dirname(__file__), 'web')
 
-        # Get the path to the app.py file within the package
-        app_path = resources.files('gbdraw').joinpath('app.py')
-        
-        # Launch the Streamlit app
-        print("Launching gbdraw GUI...")
-        print("If the GUI does not open automatically, please open your web browser and navigate to one of the URLs provided below.")
-        print("When you are finished using the GUI, return to this terminal and press Ctrl+C to stop the server.")
-        subprocess.run([sys.executable, "-m", "streamlit", "run", str(app_path)])
-        
+            if not str(web_dir).endswith("index.html") and not str(web_dir).endswith("web"):
+                pass
+            
+            print("Launching gbdraw GUI (Local Mode)...")
+            start_local_server(str(web_dir))
     else:
         print("Oops! It seems like you entered an invalid command.")
         print("Please use 'circular' or 'linear' followed by the respective options.")

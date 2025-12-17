@@ -14,6 +14,12 @@ from .canvas_generator import CircularCanvasConfigurator
 from .object_configurators import LegendDrawingConfigurator, GcSkewConfigurator,GcContentConfigurator, FeatureDrawingConfigurator
 from .utility_functions import suppress_gc_content_and_skew, modify_config_dict, determine_output_file_prefix, read_qualifier_priority_file
 
+try:
+    import cairosvg
+    CAIROSVG_AVAILABLE = True
+except (ImportError, OSError):
+    CAIROSVG_AVAILABLE = False
+
 # Setup for the logging system and sets the logging level to INFO
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -40,12 +46,6 @@ def _get_args(args) -> argparse.Namespace:
         "--gbk",
         metavar="GBK_FILE",
         help='Genbank/DDBJ flatfile',
-        type=str,
-        nargs='*')
-    parser.add_argument(
-        '-i', '--input',
-        dest='gbk',  
-        help=argparse.SUPPRESS,
         type=str,
         nargs='*')
     parser.add_argument(
@@ -146,12 +146,20 @@ def _get_args(args) -> argparse.Namespace:
         '--label_font_size',
         help='Label font size (optional; default: 14 (pt) for genomes <= 50 kb, 8 for genomes >= 50 kb)',
         type=float)
-    parser.add_argument(
-        '-f',
-        '--format',
-        help='Comma-separated list of output file formats (svg, png, pdf, eps, ps; default: svg).',
-        type=str,
-        default="svg")
+    if CAIROSVG_AVAILABLE:
+        parser.add_argument(
+            '-f',
+            '--format',
+            help='Comma-separated list of output file formats (svg, png, pdf, eps, ps; default: svg).',
+            type=str,
+            default="svg")
+    else:
+        parser.add_argument(
+            '-f',
+            '--format',
+            help='Comma-separated list of output file formats (svg; install CairoSVG to enable png, pdf, eps, ps output).',
+            type=str,
+            default="svg")
     parser.add_argument(
         '--suppress_gc',
         help='Suppress GC content track (default: False).',
@@ -268,10 +276,7 @@ def circular_main(cmd_args) -> None:
     - Plotting the circular diagrams with genomic features and GC-related tracks.
     - Generating output files in specified formats.
     """
-    args: argparse.Namespace = _get_args(cmd_args)
-    if '-i' in cmd_args or '--input' in cmd_args:
-        logger.warning(
-            "WARNING: The -i/--input option is deprecated and will be removed in a future version. Please use --gbk instead.")    
+    args: argparse.Namespace = _get_args(cmd_args)   
     output_prefix = args.output
     dinucleotide: str = args.nt.upper()
     manual_window: int = args.window
@@ -370,6 +375,21 @@ def circular_main(cmd_args) -> None:
     )    
 
     out_formats: list[str] = parse_formats(args.format)
+    # Handle WebAssembly environment and CairoSVG availability
+    if "pyodide" in sys.modules:
+        if any(f != 'svg' for f in out_formats):
+            logger.info("Running in WebAssembly mode: Output format constrained to SVG. (Image conversion is handled by the browser)")
+            out_formats = ['svg']
+    # Handle absence of CairoSVG
+    elif not CAIROSVG_AVAILABLE:
+        non_svg_formats = [f for f in out_formats if f != 'svg']
+        if non_svg_formats:
+            logger.warning(
+                f"⚠️  CairoSVG is not installed. Cannot generate: {', '.join(non_svg_formats).upper()}\n"
+                f"   Output restricted to SVG only.\n"
+                f"   (To enable PNG/PDF, run: pip install gbdraw[export])"
+            )
+            out_formats = ['svg']
     record_count: int = 0
 
 

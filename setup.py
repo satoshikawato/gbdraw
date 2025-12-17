@@ -2,18 +2,25 @@ from setuptools import setup, find_packages
 
 setup(
     name='gbdraw',
-    version='0.7.0',
+    version='0.8.0',
     packages=find_packages(),
     install_requires=[
         'pandas',
         'svgwrite',
         'biopython',
-        'cairosvg',
         'fonttools',
         'bcbio-gff'
     ],
+    extras_require={
+        'export': ['cairosvg'],
+    },
     package_data={
-        'gbdraw': ['data/color_palettes.toml', 'data/config.toml', 'data/*.ttf']
+        'gbdraw': [
+            'data/color_palettes.toml', 
+            'data/config.toml', 
+            'data/*.ttf',
+            'web/index.html',
+        ]
     },
     include_package_data=True,
     python_requires='>=3.10',
@@ -23,8 +30,9 @@ setup(
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/satoshikawato/gbdraw/',
+    project_urls={
+        "Web App": "https://gbdraw.app/",
+        "Source": "https://github.com/satoshikawato/gbdraw/",
+    },
     entry_points={'console_scripts': ['gbdraw = gbdraw.cli:main',] },
-    # Add other relevant information
 )
-
-

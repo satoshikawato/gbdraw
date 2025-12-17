@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gbdraw Serverless Ultimate</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.2.3/dist/svg2pdf.umd.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+        body { font-family: 'Inter', 'Noto Sans JP', sans-serif; background-color: #f8fafc; color: #334155; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .card { @apply bg-white p-5 rounded-xl shadow-sm border border-slate-200 mb-4 transition-all; }
+        .card-header { @apply text-base font-bold mb-3 text-slate-700 flex items-center gap-2 border-b pb-2; }
+        .input-group { @apply mb-3; }
+        .input-label { @apply block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1; }
+        .form-input { @apply w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 transition-all; }
+        .form-checkbox { @apply w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2; }
+        
+        .btn { @apply font-bold rounded-lg text-sm px-4 py-2 shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2; }
+        .btn-primary { @apply text-white bg-blue-600 hover:bg-blue-700; }
+        .btn-secondary { @apply text-slate-700 bg-white border border-slate-300 hover:bg-slate-50; }
+        .btn-danger { @apply text-red-600 bg-white border border-red-200 hover:bg-red-50; }
+        .btn-sm { @apply px-2 py-1 text-xs; }
+
+        /* Highlighted Generate Button Style */
+        .btn-generate {
+            @apply text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 border-b-4 border-indigo-800 shadow-lg shadow-indigo-200;
+        }
+        .btn-generate:active { @apply border-b-0 translate-y-1; }
+
+        .upload-zone {
+            background-color: #fefce8;
+            @apply border-2 border-dashed border-slate-300 rounded-lg p-3 text-center cursor-pointer select-none hover:border-blue-500 hover:bg-blue-50 relative transition-colors flex flex-col items-center justify-center min-h-[60px]; 
+        }
+        .upload-zone.ready { @apply bg-green-50 border-green-500; }
+        
+        details > summary { @apply list-none cursor-pointer font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2 select-none; }
+        details > summary::-webkit-details-marker { display: none; }
+        details[open] > summary { @apply mb-4 text-blue-600; }
+        details > summary::before { content: ''; @apply w-4 h-4 bg-contain bg-no-repeat transition-transform duration-200; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 18 15 12 9 6'%3E%3C/polyline%3E%3C/svg%3E"); }
+        details[open] > summary::before { transform: rotate(90deg); }
+    </style>
+</head>
+<body class="antialiased pb-0 overflow-hidden">
+
+<div id="app" class="h-screen flex flex-col relative">
+    
+    <div v-if="!pyodideReady" class="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center p-4 text-center">
+        <div class="animate-spin text-5xl mb-6">🧬</div>
+        <h3 class="text-2xl font-bold text-slate-800">Initializing gbdraw Serverless...</h3>
+        <p class="text-slate-500 mt-2">Loading Python engine (Pyodide) and dependencies.</p>
+        <p class="text-xs text-slate-400 mt-4 font-mono">{{ loadingStatus }}</p>
+    </div>
+
+    <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
+        <div class="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mb-6"></div>
+        <h3 class="text-xl font-bold text-slate-800 animate-pulse">Generating Diagram...</h3>
+    </div>
+
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-16 shrink-0">
+        <div class="max-w-[1600px] mx-auto px-4 h-full flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 text-white w-9 h-9 rounded-lg flex items-center justify-center font-bold text-xl shadow-md">🧬</div>
+                <h1 class="text-xl font-bold text-slate-800 tracking-tight">gbdraw <span class="text-blue-600 text-xs uppercase tracking-wider ml-1 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">A genome diagram generator for micobes and organelles</span></h1>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <div class="flex gap-1 mr-4">
+                    <button @click="exportConfig" class="text-xs font-bold text-slate-500 hover:text-blue-600 px-2 py-1 rounded border border-slate-200 bg-white flex items-center gap-1">
+                        <i class="ph ph-export"></i> Save Config
+                    </button>
+                    <button @click="$refs.configInput.click()" class="text-xs font-bold text-slate-500 hover:text-blue-600 px-2 py-1 rounded border border-slate-200 bg-white flex items-center gap-1">
+                        <i class="ph ph-arrow-square-in"></i> Load Config
+                    </button>
+                    <input type="file" ref="configInput" accept=".json" class="hidden" @change="importConfig">
+                </div>
+
+                <div class="flex bg-slate-100 p-1 rounded-lg">
+                    <button @click="mode = 'circular'" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="px-4 py-1.5 rounded-md text-sm font-bold transition-all flex items-center gap-2"><i class="ph ph-circle"></i> Circular</button>
+                    <button @click="mode = 'linear'" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="px-4 py-1.5 rounded-md text-sm font-bold transition-all flex items-center gap-2"><i class="ph ph-ruler"></i> Linear</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow container max-w-[1600px] mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-8 overflow-hidden h-[calc(100vh-64px)]">
+        
+        <div class="lg:col-span-4 flex flex-col h-full overflow-hidden relative border-r border-slate-100 pr-4">
+            
+            <div class="flex-grow overflow-y-auto custom-scrollbar pr-2 pb-4 space-y-4">
+                
+                <div class="card border-l-4 border-l-blue-500">
+                    <div class="card-header"><i class="ph ph-folder-open text-xl"></i> Input Genomes</div>
+                    
+                    <div v-if="mode === 'circular'" class="space-y-4">
+                        <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex">
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="cInputType" value="gb" class="text-blue-600 focus:ring-blue-500"> GenBank</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="cInputType" value="gff" class="text-blue-600 focus:ring-blue-500"> GFF3 + FASTA</label>
+                        </div>
+                        <div v-if="cInputType === 'gb'">
+                            <file-uploader label="GenBank File (.gb)" accept=".gb,.gbk,.txt" v-model="files.c_gb"></file-uploader>
+                        </div>
+                        <div v-else class="grid grid-cols-1 gap-3">
+                            <file-uploader label="GFF3 File" accept=".gff,.gff3" v-model="files.c_gff"></file-uploader>
+                            <file-uploader label="FASTA File" accept=".fasta,.fa,.fna" v-model="files.c_fasta"></file-uploader>
+                        </div>
+                    </div>
+
+                    <div v-if="mode === 'linear'" class="space-y-4">
+                        <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="lInputType" value="gb" class="text-blue-600"> GenBank</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="lInputType" value="gff" class="text-blue-600"> GFF3 + FASTA</label>
+                        </div>
+                        <div v-for="(seq, idx) in linearSeqs" :key="idx" class="p-3 bg-slate-50 rounded-lg border border-slate-200 relative group text-sm transition-all hover:border-blue-300">
+                            <div class="absolute top-2 right-2 text-[10px] font-bold text-white bg-slate-400 px-1.5 py-0.5 rounded-full">#{{ idx + 1 }}</div>
+                            <div v-if="lInputType === 'gb'" class="space-y-2">
+                                <file-uploader label="GenBank File" accept=".gb,.gbk" v-model="seq.gb"></file-uploader>
+                            </div>
+                            <div v-else class="space-y-2 mb-2">
+                                <file-uploader label="GFF3" accept=".gff" v-model="seq.gff"></file-uploader>
+                                <file-uploader label="FASTA" accept=".fasta" v-model="seq.fasta"></file-uploader>
+                            </div>
+                            <div v-if="idx < linearSeqs.length - 1" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
+                                <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1"><i class="ph ph-arrows-down-up"></i> Compare to next (BLAST)</div>
+                                <file-uploader label="BLAST TSV" accept=".txt,.tsv,.csv" v-model="seq.blast"></file-uploader>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button @click="linearSeqs.push({gb:null, gff:null, fasta:null, blast:null})" class="btn btn-secondary text-xs w-full"><i class="ph ph-plus"></i> Add Seq</button>
+                            <button v-if="linearSeqs.length > 1" @click="linearSeqs.pop()" class="btn btn-danger text-xs w-full"><i class="ph ph-minus"></i> Remove</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header"><i class="ph ph-sliders"></i> Basic Settings</div>
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                             <div>
+                                <label class="input-label">Output Prefix <help-tip text="Prefix for output files. Leave empty to use the record name (e.g., NC_000xxx)."></help-tip></label>
+                                <input type="text" v-model="form.prefix" class="form-input" placeholder="Optional (Default: Record ID)">
+                            </div>
+                             <div>
+                                <label class="input-label">Legend <help-tip text="Position of the legend. 'None' hides the legend."></help-tip></label>
+                                <select v-model="form.legend" class="form-input">
+                                    <option value="right">Right</option><option value="left">Left</option>
+                                    <option value="top" v-if="mode==='linear'">Top</option><option value="bottom" v-if="mode==='linear'">Bottom</option>
+                                    <option value="upper_left" v-if="mode==='circular'">Upper Left</option><option value="upper_right" v-if="mode==='circular'">Upper Right</option>
+                                    <option value="none">None</option>
+                                </select>
+                            </div>
+                        </div>
+                       
+                        <div v-if="mode === 'circular'">
+                            <label class="input-label">Track Layout <help-tip text="Choose how features are displayed. 'Tuckin' is default and compact. 'Middle' aligns to center, 'Spreadout' separates them."></help-tip></label>
+                            <select v-model="form.track_type" class="form-input"><option value="tuckin">Tuckin (Compact)</option><option value="middle">Middle</option><option value="spreadout">Spreadout</option></select>
+                        </div>
+
+                        <div v-if="mode === 'linear'">
+                             <label class="input-label">Scale Style <help-tip text="'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels."></help-tip></label>
+                             <select v-model="form.scale_style" class="form-input"><option value="bar">Bar (Simple)</option><option value="ruler">Ruler (Ticks)</option></select>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-y-2 gap-x-1 p-2 bg-slate-50 rounded-lg">
+                            <div v-if="mode === 'linear'" class="col-span-2 mb-1">
+                                <label class="input-label text-[10px] mb-1">Show Labels <help-tip text="Display feature labels on the map. 'First' shows labels only for the top track."></help-tip></label>
+                                <select v-model="form.show_labels_linear" class="form-input text-xs py-1">
+                                    <option value="none">None</option>
+                                    <option value="all">All Records</option>
+                                    <option value="first">First Record Only</option>
+                                </select>
+                            </div>
+                            <label v-else class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                <input type="checkbox" v-model="form.show_labels" class="form-checkbox"> Show Labels <help-tip text="Display feature labels on the map."></help-tip>
+                            </label>
+
+                            <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                <input type="checkbox" v-model="form.separate_strands" class="form-checkbox"> Separate Strands <help-tip text="Display features on separate strands for better distinction."></help-tip>
+                            </label>
+                            
+                            <template v-if="mode === 'circular'">
+                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.allow_inner_labels" class="form-checkbox"> Inner Labels <help-tip text="Enable labels inside the circle. Automatically suppresses GC content/skew to avoid overlap."></help-tip>
+                                </label>
+                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.suppress_gc" class="form-checkbox"> Hide GC <help-tip text="Suppress the GC content track."></help-tip>
+                                </label>
+                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.suppress_skew" class="form-checkbox"> Hide Skew <help-tip text="Suppress the GC skew track."></help-tip>
+                                </label>
+                            </template>
+                            
+                            <template v-if="mode === 'linear'">
+                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox"> Resolve Overlaps <help-tip text="Shift features vertically to avoid overlap. (Experimental)"></help-tip>
+                                </label>
+                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.align_center" class="form-checkbox"> Align Center <help-tip text="Align the linear map to the center of the page."></help-tip>
+                                </label>
+                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.normalize_length" class="form-checkbox"> Normalize Len <help-tip text="Normalize sequence lengths to be equal. Suppresses length bar."></help-tip>
+                                </label>
+                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.show_gc" class="form-checkbox"> Show GC <help-tip text="Display GC content track."></help-tip>
+                                </label>
+                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.show_skew" class="form-checkbox"> Show Skew <help-tip text="Display GC skew track."></help-tip>
+                                </label>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card bg-slate-50/50">
+                    <details>
+                        <summary><i class="ph ph-palette"></i> Colors & Filters <help-tip text="Customize colors and filter labels by keyword."></help-tip></summary>
+                        <div class="mt-4 space-y-6 pt-4 border-t border-slate-200">
+                            
+                            <div>
+                                <div class="flex justify-between items-center mb-2">
+                                    <h4 class="text-xs font-bold text-slate-500">DEFAULT COLORS (-d) <help-tip text="Base colors for features. Acts as the -d override table."></help-tip></h4>
+                                    <button @click="resetColors" class="text-[10px] text-blue-600 hover:underline">Reset</button>
+                                </div>
+                                <select v-model="selectedPalette" @change="updatePalette" class="form-input mb-3">
+                                    <option v-for="p in paletteNames" :value="p">{{ p }}</option>
+                                </select>
+                                <div class="grid grid-cols-5 gap-1.5 bg-white p-2 rounded border border-slate-200">
+                                    <div v-for="(color, feat) in currentColors" :key="feat" class="flex flex-col items-center group relative cursor-pointer">
+                                        <input type="color" v-model="currentColors[feat]" class="w-8 h-8 p-0 border-0 rounded cursor-pointer transition-transform hover:scale-110">
+                                        <span class="text-[9px] text-slate-500 mt-0.5 truncate w-full text-center" :title="feat">{{ feat }}</span>
+                                    </div>
+                                </div>
+
+                                <div class="mt-2 p-2 bg-slate-50 rounded border border-slate-200 flex gap-2 items-end">
+                                    <div class="flex-grow">
+                                        <label class="text-[9px] font-bold text-slate-500 block mb-1">ADD FEATURE</label>
+                                        <select v-model="newColorFeat" class="form-input text-xs py-1 px-2 h-8">
+                                            <option v-for="k in featureKeys" :value="k">{{ k }}</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-[9px] font-bold text-slate-500 block mb-1">COLOR</label>
+                                        <input type="color" v-model="newColorVal" class="h-8 w-10 p-0 border border-slate-300 rounded cursor-pointer">
+                                    </div>
+                                    <button @click.prevent="addCustomColor" class="btn btn-secondary text-xs h-8">
+                                        <i class="ph ph-plus"></i> Add
+                                    </button>
+                                </div>
+                                <div class="mt-2">
+                                    <div class="text-[10px] text-center text-slate-400 mb-1">- OR UPLOAD FILE -</div>
+                                    <file-uploader label="Override File (-d)" v-model="files.d_color" :small="true"></file-uploader>
+                                    <div class="text-[9px] text-slate-400 mt-1">
+                                        <help-tip text="Tab-separated value (TSV) file that overrides the color palette. Feature types not specified will use the selected palette colors."></help-tip> 
+                                        Override default feature colors.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 class="text-xs font-bold text-slate-500 mb-2">SPECIFIC RULES (-t) <help-tip text="Color features matching specific qualifier values (Regex supported)."></help-tip></h4>
+                                
+                                <div class="space-y-1 mb-3">
+                                    <div v-for="(rule, i) in manualSpecificRules" :key="i" class="flex items-center gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
+                                        <span class="w-12 font-bold truncate" :title="rule.feat">{{rule.feat}}</span>
+                                        <span class="w-12 text-slate-500 truncate" :title="rule.qual">{{rule.qual}}</span>
+                                        <span class="flex-grow text-blue-600 truncate font-mono" :title="rule.val">/{{rule.val}}/</span>
+                                        <div class="w-4 h-4 rounded border" :style="{backgroundColor: rule.color}"></div>
+                                        <button @click="manualSpecificRules.splice(i,1)" class="text-red-500 hover:text-red-700 px-1"><i class="ph ph-trash"></i></button>
+                                    </div>
+                                    <div v-if="manualSpecificRules.length === 0" class="text-[10px] text-slate-400 italic text-center py-2">No rules added</div>
+                                </div>
+
+                                <div class="bg-slate-50 p-2 rounded border border-slate-200">
+                                    <div class="grid grid-cols-2 gap-1 mb-1">
+                                        <select v-model="newSpecRule.feat" class="form-input text-xs p-1 h-7">
+                                            <option v-for="k in featureKeys" :value="k">{{ k }}</option>
+                                        </select>
+                                        <input v-model="newSpecRule.qual" placeholder="Qualifier" class="form-input text-xs p-1 h-7">
+                                    </div>
+                                    <div class="flex gap-1 mb-1">
+                                        <input v-model="newSpecRule.val" placeholder="Regex (e.g. hypothetical)" class="form-input text-xs p-1 h-7 flex-grow">
+                                        <input type="color" v-model="newSpecRule.color" class="h-7 w-8 p-0 border rounded cursor-pointer shrink-0">
+                                    </div>
+                                    <div class="flex gap-1">
+                                        <input v-model="newSpecRule.cap" placeholder="Legend Caption (Optional)" class="form-input text-xs p-1 h-7 flex-grow">
+                                        <button @click="addSpecificRule" class="btn btn-secondary text-xs h-7 px-3"><i class="ph ph-plus"></i></button>
+                                    </div>
+                                </div>
+
+                                <div class="mt-2">
+                                    <div class="text-[10px] text-center text-slate-400 mb-1">- OR UPLOAD FILE -</div>
+                                    <file-uploader label="Specific Table (-t)" v-model="files.t_color" :small="true"></file-uploader>
+                                    <div class="text-[9px] text-slate-400 mt-1">
+                                        <help-tip text="TSV file that overrides the color palette for specific features based on qualifiers."></help-tip>
+                                        Override colors for specific features.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 class="text-xs font-bold text-slate-500 mb-2">LABEL FILTERING <help-tip text="Control which feature labels are displayed using Blacklist or Whitelist."></help-tip></h4>
+                                <div class="flex gap-2 mb-2">
+                                    <button v-for="m in ['None', 'Blacklist', 'Whitelist']" @click="filterMode = m" :class="filterMode===m ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border'" class="flex-1 py-1 rounded text-xs font-bold transition-colors">{{m}}</button>
+                                </div>
+                                
+                                <div v-if="filterMode === 'Blacklist'" class="space-y-2 bg-white p-2 rounded border">
+                                    <p class="text-[10px] text-slate-500">Exclude labels containing these keywords.</p>
+                                    <textarea v-model="manualBlacklist" class="form-input h-20" placeholder="hypothetical, unknown"></textarea>
+                                    <div class="text-[10px] text-center text-slate-400">- OR -</div>
+                                    <file-uploader label="Blacklist File" v-model="files.blacklist" :small="true"></file-uploader>
+                                </div>
+
+                                <div v-if="filterMode === 'Whitelist'" class="space-y-2 bg-white p-2 rounded border">
+                                    <p class="text-[10px] text-slate-500">Only show labels matching rules.</p>
+                                    <div v-for="(row, i) in manualWhitelist" :key="i" class="flex gap-1 mb-1">
+                                        <input v-model="row.feat" placeholder="Feat" class="form-input px-1 py-1 text-xs w-1/4">
+                                        <input v-model="row.qual" placeholder="Qual" class="form-input px-1 py-1 text-xs w-1/4">
+                                        <input v-model="row.key" placeholder="Keyword" class="form-input px-1 py-1 text-xs w-1/3">
+                                        <button @click="manualWhitelist.splice(i,1)" class="text-red-500 hover:text-red-700 px-1">×</button>
+                                    </div>
+                                    <button @click="manualWhitelist.push({feat:'CDS', qual:'product', key:''})" class="text-xs text-blue-600 font-bold">+ Add Rule</button>
+                                    <div class="text-[10px] text-center text-slate-400 mt-2">- OR -</div>
+                                    <file-uploader label="Whitelist File" v-model="files.whitelist" :small="true"></file-uploader>
+                                </div>
+                                
+                                <div class="mt-4 pt-4 border-t border-slate-100">
+                                    <h5 class="text-[10px] font-bold text-slate-500 mb-1">QUALIFIER PRIORITY <help-tip text="Tab-separated value (TSV) file defining qualifier priorities for feature labels (e.g. CDS  product,gene,locus_tag)."></help-tip></h5>
+                                    <file-uploader label="Priority File (TSV)" v-model="files.qualifier_priority" :small="true"></file-uploader>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                    
+                    <div class="border-t border-slate-200 my-2"></div>
+                    
+                    <details>
+                        <summary><i class="ph ph-faders"></i> Advanced Options</summary>
+                        <div class="mt-4 space-y-4 pt-4 border-t border-slate-200">
+                            
+                            <div class="grid grid-cols-3 gap-2">
+                                <div><label class="input-label text-[10px]">Window <help-tip text="Window size for GC content/skew. Default: 1kb (<1Mb), 10kb (<10Mb), 100kb (>=10Mb)."></help-tip></label><input type="number" v-model.number="adv.window_size" class="form-input" placeholder="Auto"></div>
+                                <div><label class="input-label text-[10px]">Step <help-tip text="Step size for GC content/skew. Default: 100bp (<1Mb), 1kb (<10Mb), 10kb (>=10Mb)."></help-tip></label><input type="number" v-model.number="adv.step_size" class="form-input" placeholder="Auto"></div>
+                                <div><label class="input-label text-[10px]">Dinucleotide <help-tip text="Dinucleotide to use (e.g., 'GC'). Default is 'GC'."></help-tip></label><input type="text" v-model="adv.nt" class="form-input" placeholder="GC"></div>
+                            </div>
+
+                            <div>
+                                <label class="input-label">Definition & Text</label>
+                                <div class="grid grid-cols-2 gap-2 mb-2">
+                                    <input type="text" v-model="form.species" class="form-input" placeholder="Species (e.g. E. coli)">
+                                    <input type="text" v-model="form.strain" class="form-input" placeholder="Strain (e.g. K-12)">
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div><label class="text-[9px] text-slate-400">Def Font Size <help-tip text="Font size for the species/strain definition text."></help-tip></label><input type="number" v-model.number="adv.def_font_size" class="form-input" placeholder="18"></div>
+                                    <div><label class="text-[9px] text-slate-400">Label Font Size <help-tip text="Font size for feature labels."></help-tip></label><input type="number" v-model.number="adv.label_font_size" class="form-input" placeholder="Auto"></div>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2">
+                                <div><label class="input-label text-[10px]">Legend Box Size <help-tip text="Size of the color boxes in the legend."></help-tip></label><input type="number" v-model.number="adv.legend_box_size" class="form-input" placeholder="Auto"></div>
+                                <div><label class="input-label text-[10px]">Legend Font Size <help-tip text="Font size for the legend text."></help-tip></label><input type="number" v-model.number="adv.legend_font_size" class="form-input" placeholder="Auto"></div>
+                            </div>
+
+                            <div>
+                                <label class="input-label">Styles (Colors & Widths)</label>
+                                <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div><label class="text-[9px] block">Block Stroke Color <help-tip text="Color of the outline for feature blocks."></help-tip></label><input type="color" v-model="adv.block_stroke_color" class="h-6 w-full p-0 border rounded"></div>
+                                        <div><label class="text-[9px] block">Block Stroke Width <help-tip text="Width of the outline for feature blocks."></help-tip></label><input type="number" v-model.number="adv.block_stroke_width" class="form-input py-0.5" placeholder="Auto"></div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div><label class="text-[9px] block">Line Stroke Color <help-tip text="Color of the lines representing introns."></help-tip></label><input type="color" v-model="adv.line_stroke_color" class="h-6 w-full p-0 border rounded"></div>
+                                        <div><label class="text-[9px] block">Line Stroke Width <help-tip text="Width of the lines representing introns."></help-tip></label><input type="number" v-model.number="adv.line_stroke_width" class="form-input py-0.5" placeholder="Auto"></div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div><label class="text-[9px] block">Axis Stroke Color <help-tip text="Color of the main axis line."></help-tip></label><input type="color" v-model="adv.axis_stroke_color" class="h-6 w-full p-0 border rounded"></div>
+                                        <div><label class="text-[9px] block">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label><input type="number" v-model.number="adv.axis_stroke_width" class="form-input py-0.5" placeholder="Auto"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div v-if="mode === 'linear'">
+                                <label class="input-label">Linear Specific Settings</label>
+                                <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
+                                    <div class="grid grid-cols-3 gap-1 text-xs">
+                                        <div><label class="text-[9px] block">Feature H <help-tip text="Height of the feature blocks."></help-tip></label><input type="number" v-model.number="adv.feature_height" class="form-input px-1 py-0.5"></div>
+                                        <div><label class="text-[9px] block">GC H <help-tip text="Height of the GC content track."></help-tip></label><input type="number" v-model.number="adv.gc_height" class="form-input px-1 py-0.5"></div>
+                                        <div><label class="text-[9px] block">Comp H <help-tip text="Height of the comparison blocks."></help-tip></label><input type="number" v-model.number="adv.comparison_height" class="form-input px-1 py-0.5"></div>
+                                    </div>
+                                    
+                                    <div class="pt-1 border-t border-slate-200">
+                                        <label class="text-[9px] font-bold block mb-1">SCALE BAR</label>
+                                        <div class="grid grid-cols-3 gap-1">
+                                            <input type="number" v-model.number="adv.scale_interval" placeholder="Interval" class="form-input px-1 py-0.5 text-xs" title="Manual tick interval">
+                                            <input type="number" v-model.number="adv.scale_font_size" placeholder="Font" class="form-input px-1 py-0.5 text-xs" title="Scale font size">
+                                            <input type="number" v-model.number="adv.scale_stroke_width" placeholder="Width" class="form-input px-1 py-0.5 text-xs" title="Scale bar width">
+                                        </div>
+                                        <div class="mt-1 flex items-center gap-2">
+                                            <label class="text-[9px]">Color:</label>
+                                            <input type="color" v-model="adv.scale_stroke_color" class="h-5 w-8 p-0 border rounded" title="Scale bar color">
+                                        </div>
+                                    </div>
+
+                                    <div class="pt-1 border-t border-slate-200">
+                                        <label class="text-[9px] font-bold block mb-1">BLAST FILTERS</label>
+                                        <div class="grid grid-cols-3 gap-1">
+                                            <input type="number" v-model.number="adv.min_bitscore" placeholder="Bitscore" class="form-input px-1 text-xs" title="Min bitscore">
+                                            <input type="text" v-model="adv.evalue" placeholder="E-value" class="form-input px-1 text-xs" title="Max E-value">
+                                            <input type="number" v-model.number="adv.identity" placeholder="Ident%" class="form-input px-1 text-xs" title="Min identity %">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div v-if="mode === 'circular'">
+                                <label class="input-label">Circular Label Offsets <help-tip text="Adjust radius offset factors for labels."></help-tip></label>
+                                <div class="bg-slate-50 p-2 rounded border border-slate-200 grid grid-cols-2 gap-2 text-xs">
+                                    <div><label class="text-[9px] block">Outer X Offset</label><input type="number" step="0.1" v-model.number="adv.outer_label_x_offset" class="form-input py-0.5"></div>
+                                    <div><label class="text-[9px] block">Outer Y Offset</label><input type="number" step="0.1" v-model.number="adv.outer_label_y_offset" class="form-input py-0.5"></div>
+                                    <div><label class="text-[9px] block">Inner X Offset</label><input type="number" step="0.1" v-model.number="adv.inner_label_x_offset" class="form-input py-0.5"></div>
+                                    <div><label class="text-[9px] block">Inner Y Offset</label><input type="number" step="0.1" v-model.number="adv.inner_label_y_offset" class="form-input py-0.5"></div>
+                                    <div><label class="text-[9px] block">Scale Interval</label><input type="number" v-model.number="adv.scale_interval" class="form-input py-0.5"></div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="input-label">Include Features <help-tip text="Select which feature types to draw."></help-tip></label>
+                                <div class="flex flex-wrap gap-2 mb-2 p-2 bg-slate-50 rounded border border-slate-200 min-h-[38px]">
+                                    <span v-for="(f, i) in adv.features" :key="f" class="inline-flex items-center gap-1 text-[10px] bg-white text-blue-700 px-2 py-1 rounded border border-blue-200 shadow-sm">
+                                        {{ f }}
+                                        <button @click="adv.features.splice(i, 1)" class="text-slate-400 hover:text-red-500 flex items-center justify-center w-4 h-4 rounded-full hover:bg-red-50 transition-colors">
+                                            <i class="ph ph-x"></i>
+                                        </button>
+                                    </span>
+                                    <span v-if="adv.features.length === 0" class="text-[10px] text-slate-400 italic py-1">No features selected</span>
+                                </div>
+                                <div class="flex gap-2">
+                                    <select v-model="newFeatureToAdd" class="form-input text-xs py-1 px-2 h-8">
+                                        <option v-for="k in featureKeys" :value="k">{{ k }}</option>
+                                    </select>
+                                    <button @click.prevent="addFeature" class="btn btn-secondary text-xs h-8 shrink-0">
+                                        <i class="ph ph-plus"></i> Add
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                <div class="card bg-slate-50/50">
+                    <details>
+                        <summary><i class="ph ph-info"></i> About & Citation</summary>
+                        <div class="mt-4 space-y-4 pt-4 border-t border-slate-200 text-xs text-slate-600">
+                            
+                            <div class="bg-blue-50 text-blue-800 p-2.5 rounded-lg border border-blue-100 leading-relaxed">
+                                <strong class="flex items-center gap-1 mb-1"><i class="ph ph-lock-key"></i> Privacy & Security</strong>
+                                This tool runs <strong>entirely in your browser</strong> using WebAssembly (Pyodide). Your genomic data is processed locally and never leaves your device.
+                            </div>
+
+                            <div>
+                                <strong class="block mb-1 text-slate-700 flex items-center gap-1"><i class="ph ph-quotes"></i> Citation</strong>
+                                <p class="mb-1.5 text-[11px]">If you use gbdraw in your research, please cite the GitHub repository:</p>
+                                <div class="bg-white p-2 rounded border border-slate-200 font-mono text-[10px] select-all text-slate-500 break-all">
+                                    https://github.com/satoshikawato/gbdraw
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2">
+                                <a href="https://github.com/satoshikawato/gbdraw" target="_blank" class="btn btn-secondary btn-sm justify-center">
+                                    <i class="ph ph-github-logo text-lg"></i> GitHub
+                                </a>
+                                <a href="https://github.com/satoshikawato/gbdraw/issues" target="_blank" class="btn btn-secondary btn-sm justify-center">
+                                    <i class="ph ph-bug text-lg"></i> Issues
+                                </a>
+                            </div>
+
+                            <div class="pt-2 border-t border-slate-200 text-[10px] text-slate-400 leading-relaxed">
+                                <strong>Disclaimer:</strong> This tool is provided "as is" without warranty of any kind. The author is not liable for any damages arising from its use.<br>
+                                <span class="mt-1 block">License: MIT | Author: Satoshi Kawato</span>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+            </div>
+            
+            <div class="shrink-0 py-4 bg-white/50 backdrop-blur-sm border-t border-slate-100 z-10 relative mt-auto">
+            <button @click="runAnalysis" :disabled="processing || !pyodideReady" 
+                class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
+                <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
+                <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> Processing...</span>
+            </button>
+            </div>
+
+        </div>
+
+        <div class="lg:col-span-8 space-y-6 flex flex-col h-full overflow-hidden">
+            
+            <div v-if="errorLog" class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
+                <div class="text-red-700 font-bold mb-2 flex items-center gap-2"><i class="ph ph-warning-circle"></i> Error Occurred</div>
+                <pre class="text-xs font-mono text-red-800 whitespace-pre-wrap overflow-auto max-h-40 bg-white/50 p-3 rounded custom-scrollbar">{{ errorLog }}</pre>
+            </div>
+
+            <div v-if="results.length > 0" class="card border-2 border-green-100 ring-4 ring-green-50/50 flex flex-col flex-grow overflow-hidden">
+                <div class="card-header bg-green-50/50 -m-5 mb-0 p-4 border-green-100 flex justify-between items-center shrink-0">
+                    <span class="text-green-600 flex items-center gap-2">
+                        <i class="ph ph-check-circle text-xl"></i> 
+                        <span v-if="results.length === 1">Result Preview</span>
+                        <span v-else>
+                            <select v-model="selectedResultIndex" class="bg-white border border-green-300 text-green-700 text-xs font-bold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-green-500">
+                                <option v-for="(res, idx) in results" :key="idx" :value="idx">Preview: {{ res.name }}</option>
+                            </select>
+                        </span>
+                    </span>
+                    <div class="flex gap-2 items-center">
+                        <div class="flex items-center gap-1 bg-white px-2 py-1 rounded border border-green-200">
+                            <span class="text-[10px] font-bold text-green-700">DPI</span>
+                            <select v-model="downloadDpi" class="text-xs bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
+                                <option value="72">72 (Web)</option>
+                                <option value="96">96 (Screen)</option>
+                                <option value="150">150 (Draft)</option>
+                                <option value="300">300 (Print)</option>
+                                <option value="600">600 (High)</option>
+                            </select>
+                        </div>
+                        <button @click="downloadSVG" class="btn btn-secondary text-xs"><i class="ph ph-download-simple"></i> SVG</button>
+                        <button @click="downloadPNG" class="btn btn-primary text-xs"><i class="ph ph-download-simple"></i> PNG</button>
+                        <button @click="downloadPDF" class="btn btn-secondary text-xs"><i class="ph ph-file-pdf"></i> PDF</button>
+                    </div>
+                </div>
+
+                <div class="relative flex-grow overflow-hidden bg-slate-50/30">
+                    
+                    <div class="absolute bottom-4 right-4 flex gap-1 bg-white shadow rounded-lg p-1 z-20 border border-slate-200">
+                        <button @click="zoom+=0.1" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded"><i class="ph ph-plus"></i></button>
+                        <button @click="zoom = 1.0" class="w-12 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-xs font-mono rounded">{{Math.round(zoom*100)}}%</button>
+                        <button @click="zoom = Math.max(0.1, zoom-0.1)" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded"><i class="ph ph-minus"></i></button>
+                    </div>
+
+                    <div class="absolute inset-0 overflow-auto flex p-8 custom-scrollbar">
+                        <div v-if="svgContent" v-html="svgContent" 
+                            :style="{transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.2s'}" 
+                            class="shadow-xl bg-white m-auto origin-top">
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+            
+            <div v-else class="h-full flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50/30">
+                <i class="ph ph-dna text-6xl mb-4 text-slate-200"></i>
+                <p class="font-medium text-slate-400">Configure settings and click Generate</p>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script type="text/x-template" id="help-tip-template">
+    <div class="inline-block ml-1 align-text-bottom">
+        <i class="ph ph-question text-slate-400 hover:text-blue-500 cursor-help"
+           @mouseenter="show" @mouseleave="hide" ref="trigger"></i>
+        <Teleport to="body">
+            <div v-if="visible" :style="style" class="fixed z-[9999] px-3 py-2 bg-slate-800 text-white text-xs rounded-md shadow-lg max-w-[250px] pointer-events-none transition-opacity text-left leading-relaxed">
+                 {{ text }}
+            </div>
+        </Teleport>
+    </div>
+</script>
+
+<script type="text/x-template" id="file-uploader-template">
+    <div class="w-full">
+        <div class="flex justify-between items-end mb-1">
+            <label class="input-label mb-0">{{ label }}</label>
+            <button v-if="modelValue" @click.stop="clearFile" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash"></i> Remove</button>
+        </div>
+        <div class="upload-zone cursor-pointer" :class="{'ready': modelValue, 'py-1 min-h-[36px]': small}" @click="$refs.input.click()">
+            <input type="file" ref="input" @change="handleFile" :accept="accept" class="hidden">
+            <div v-if="!modelValue" class="flex items-center justify-center gap-2 text-slate-400 group-hover:text-blue-600 transition-colors">
+                <i class="ph ph-upload-simple" :class="small ? 'text-base' : 'text-xl'"></i>
+                <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">Click to Browse</span>
+            </div>
+            <div v-else class="text-green-700 font-bold truncate w-full px-2 flex items-center justify-center gap-2" :class="small ? 'text-[10px]' : 'text-xs'">
+                <i class="ph ph-check-circle text-lg"></i>
+                <span>{{ modelValue.name }}</span>
+            </div>
+        </div>
+    </div>
+</script>
+
+<script>
+    const { createApp, ref, reactive, onMounted, computed, watch } = Vue;
+    const GBDRAW_WHEEL_NAME = "gbdraw-0.7.0-py3-none-any.whl"; 
+
+    // HelpTip & FileUploader Components
+    const HelpTip = {
+        template: '#help-tip-template',
+        props: ['text'],
+        setup(props) {
+            const visible = ref(false);
+            const style = reactive({ top: '0px', left: '0px' });
+            const trigger = ref(null);
+            const show = () => {
+                if (!trigger.value) return;
+                const rect = trigger.value.getBoundingClientRect();
+                style.top = (rect.top - 10) + 'px';
+                style.left = (rect.left + rect.width / 2) + 'px';
+                style.transform = 'translate(-50%, -100%)'; 
+                visible.value = true;
+            };
+            const hide = () => visible.value = false;
+            return { visible, style, trigger, show, hide };
+        }
+    };
+
+    const FileUploader = {
+        template: '#file-uploader-template',
+        props: ['label', 'accept', 'modelValue', 'small'],
+        emits: ['update:modelValue'],
+        setup(props, { emit }) {
+            const input = ref(null);
+            const handleFile = (e) => {
+                if(e.target.files[0]) emit('update:modelValue', e.target.files[0]);
+                e.target.value = ''; 
+            };
+            const clearFile = () => emit('update:modelValue', null);
+            return { input, handleFile, clearFile };
+        }
+    };
+
+    // DPI Helper
+    const setDpiInPng = async (blob, dpi) => {
+        const pixelsPerMeter = Math.round(dpi / 0.0254);
+        const buffer = await blob.arrayBuffer();
+        const view = new DataView(buffer);
+        const uint8 = new Uint8Array(buffer);
+        let offset = 8; let physChunk = null; let idatOffset = null;
+        while (offset < view.byteLength) {
+            const length = view.getUint32(offset);
+            const type = String.fromCharCode(uint8[offset+4], uint8[offset+5], uint8[offset+6], uint8[offset+7]);
+            if (type === 'pHYs') { physChunk = offset; break; }
+            if (type === 'IDAT') { idatOffset = offset; break; }
+            offset += 12 + length;
+        }
+        const ppm = pixelsPerMeter;
+        const physData = new Uint8Array(9);
+        const dv = new DataView(physData.buffer);
+        dv.setUint32(0, ppm); dv.setUint32(4, ppm); physData[8] = 1;
+        const crcTable = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crcTable[n] = c; }
+        const crc32 = (buf) => { let crc = 0 ^ (-1); for (let i = 0; i < buf.length; i++) crc = (crc >>> 8) ^ crcTable[(crc ^ buf[i]) & 0xff]; return (crc ^ (-1)) >>> 0; };
+        const newChunk = new Uint8Array(21);
+        const newDv = new DataView(newChunk.buffer);
+        newDv.setUint32(0, 9); newChunk.set([112, 72, 89, 115], 4); newChunk.set(physData, 8);
+        const crcInput = new Uint8Array(13); crcInput.set([112, 72, 89, 115], 0); crcInput.set(physData, 4);
+        newDv.setUint32(17, crc32(crcInput));
+        if (physChunk !== null) {
+             const newBuffer = new Uint8Array(buffer.byteLength); newBuffer.set(uint8.slice(0, physChunk), 0); newBuffer.set(newChunk, physChunk); const oldLen = view.getUint32(physChunk); newBuffer.set(uint8.slice(physChunk + 12 + oldLen), physChunk + 21); return new Blob([newBuffer], { type: 'image/png' });
+        } else {
+            const newBuffer = new Uint8Array(buffer.byteLength + 21); newBuffer.set(uint8.slice(0, idatOffset), 0); newBuffer.set(newChunk, idatOffset); newBuffer.set(uint8.slice(idatOffset), idatOffset + 21); return new Blob([newBuffer], { type: 'image/png' });
+        }
+    };
+
+    createApp({
+        components: { FileUploader, HelpTip },
+        setup() {
+            // System State
+            const pyodideReady = ref(false);
+            const processing = ref(false);
+            const loadingStatus = ref("Initializing...");
+            const errorLog = ref(null);
+            
+            const results = ref([]);
+            const selectedResultIndex = ref(0);
+            const svgContent = computed(() => {
+                if (results.value.length > 0 && results.value[selectedResultIndex.value]) {
+                    return results.value[selectedResultIndex.value].content;
+                }
+                return null;
+            });
+
+            const zoom = ref(1.0);
+            let pyodide = null;
+
+            // App State
+            const mode = ref('circular');
+            const cInputType = ref('gb');
+            const lInputType = ref('gb');
+            const files = reactive({ 
+                c_gb: null, c_gff: null, c_fasta: null, 
+                d_color: null, t_color: null, 
+                blacklist: null, whitelist: null, qualifier_priority: null 
+            });
+            const linearSeqs = reactive([{ gb: null, gff: null, fasta: null, blast: null }]);
+            
+            // Configuration Forms
+            const form = reactive({ 
+                prefix: '', species: '', strain: '', 
+                track_type: 'tuckin', legend: 'right', scale_style: 'bar', 
+                show_labels: false, show_labels_linear: "none",
+                separate_strands: true, 
+                allow_inner_labels: false, suppress_gc: false, suppress_skew: false, 
+                align_center: false, show_gc: false, show_skew: false, normalize_length: false 
+            });
+
+            // Extended Advanced Config
+            const adv = reactive({
+                features: ["CDS","rRNA","tRNA","tmRNA","ncRNA","repeat_region"],
+                window_size: null, step_size: null, nt: "GC",
+                def_font_size: 18, label_font_size: null,
+                
+                // Styles
+                block_stroke_width: null, block_stroke_color: null,
+                line_stroke_width: null, line_stroke_color: null,
+                axis_stroke_width: null, axis_stroke_color: null,
+                
+                // Legend
+                legend_box_size: null, legend_font_size: null,
+
+                // Linear Specific
+                resolve_overlaps: false,
+                feature_height: null, gc_height: null, comparison_height: null,
+                min_bitscore: 50, evalue: "1e-2", identity: 0,
+                scale_interval: null, scale_font_size: null, scale_stroke_width: null, scale_stroke_color: null,
+
+                // Circular Specific
+                outer_label_x_offset: null, outer_label_y_offset: null,
+                inner_label_x_offset: null, inner_label_y_offset: null
+            });
+
+            // Color & Filter State
+            const paletteNames = ref(["default"]);
+            const selectedPalette = ref("default");
+            const currentColors = ref({});
+            const filterMode = ref("None");
+            const manualBlacklist = ref("hypothetical, uncharacterized, putative, unknown");
+            const manualWhitelist = reactive([]); 
+            const manualSpecificRules = reactive([]);
+            const newSpecRule = reactive({ feat: "CDS", qual: "product", val: "", color: "#ff0000", cap: "" });
+            const downloadDpi = ref(300);
+
+            const featureKeys = [
+                "assembly_gap", "C_region", "CDS", "centromere", "D-loop", "D_segment",
+                "exon", "gap", "intron", "J_segment", "mat_peptide", "misc_binding",
+                "misc_difference", "misc_feature", "misc_RNA", "misc_structure",
+                "mobile_element", "modified_base", "mRNA", "ncRNA", "operon", "oriT",
+                "precursor_RNA", "primer_bind", "propeptide", "protein_bind", "regulatory",
+                "repeat_region", "rep_origin", "rRNA", "sig_peptide", "stem_loop",
+                "telomere", "tmRNA", "transit_peptide", "tRNA", "unsure", "V_region",
+                "V_segment", "variation", "3'UTR", "5'UTR"
+            ];
+            
+            const newColorFeat = ref("CDS");
+            const newColorVal = ref("#000000");
+            const addCustomColor = () => { if(!newColorFeat.value) return; currentColors.value[newColorFeat.value] = newColorVal.value; };
+            const addSpecificRule = () => { if(!newSpecRule.val) return; manualSpecificRules.push({ ...newSpecRule }); newSpecRule.val = ""; };
+            const newFeatureToAdd = ref("mobile_element");
+            const addFeature = () => { if(newFeatureToAdd.value && !adv.features.includes(newFeatureToAdd.value)){ adv.features.push(newFeatureToAdd.value); } };
+
+            onMounted(async () => {
+                try {
+                    pyodide = await loadPyodide();
+                    loadingStatus.value = "Installing dependencies...";
+                    await pyodide.loadPackage("micropip");
+                    const micropip = pyodide.pyimport("micropip");
+                    await micropip.install(["biopython","svgwrite", "pandas", "fonttools", "bcbio-gff"]);
+                    loadingStatus.value = "Installing gbdraw...";
+                    await micropip.install(GBDRAW_WHEEL_NAME);
+                    await pyodide.runPythonAsync(`
+                        import tomllib
+                        from importlib import resources
+                        import json
+                        import traceback
+                        import glob
+                        import os
+                        from gbdraw.circular import circular_main
+                        from gbdraw.linear import linear_main
+
+                        def get_palettes_json():
+                            try:
+                                with resources.files("gbdraw.data").joinpath("color_palettes.toml").open("rb") as fh:
+                                    return json.dumps(tomllib.load(fh))
+                            except: return "{}"
+
+                        def run_gbdraw_wrapper(mode, args):
+                            for f in glob.glob("*.svg"):
+                                try: os.remove(f)
+                                except: pass
+                            
+                            full_args = args + ["-f", "svg"]
+                            try:
+                                if mode == 'circular': circular_main(full_args)
+                                else: linear_main(full_args)
+                            except SystemExit as e:
+                                if e.code != 0: return json.dumps({"error": f"SystemExit: {e}"})
+                            except Exception: 
+                                return json.dumps({"error": traceback.format_exc()})
+                            
+                            files = glob.glob("*.svg")
+                            if not files: return json.dumps({"error": "No output files generated."})
+                            results = []
+                            for fname in sorted(files):
+                                with open(fname, "r") as f:
+                                    results.append({"name": fname, "content": f.read()})
+                            return json.dumps(results)
+                    `);
+                    const paletteJson = pyodide.runPython("get_palettes_json()");
+                    const allPalettes = JSON.parse(paletteJson);
+                    paletteNames.value = Object.keys(allPalettes).filter(k => k !== 'title').sort();
+                    currentColors.value = allPalettes['default'] || {};
+                    pyodideReady.value = true;
+                } catch (e) {
+                    loadingStatus.value = "Startup Error: " + e.message;
+                    console.error(e);
+                }
+            });
+
+            const updatePalette = () => {
+                if(!pyodide) return;
+                const paletteJson = pyodide.runPython("get_palettes_json()");
+                const all = JSON.parse(paletteJson);
+                currentColors.value =  { ...(all[selectedPalette.value] || {}) };
+            };
+            const resetColors = () => updatePalette();
+            const writeToFS = async (fileObj, path) => {
+                if(!fileObj) return false;
+                const buffer = await fileObj.arrayBuffer();
+                pyodide.FS.writeFile(path, new Uint8Array(buffer));
+                return true;
+            };
+
+            const runAnalysis = async () => {
+                if (!pyodideReady.value) return;
+                processing.value = true;
+                results.value = [];
+                selectedResultIndex.value = 0;
+                errorLog.value = null;
+                zoom.value = 1.0;
+
+                try {
+                    let args = [];
+                    
+                    if(form.prefix && form.prefix.trim() !== "") args.push("-o", form.prefix.trim());
+                    if(form.species) args.push("--species", form.species);
+                    if(form.strain) args.push("--strain", form.strain);
+                    if(form.separate_strands) args.push("--separate_strands");
+                    
+                    if(adv.features.length) args.push("-k", adv.features.join(","));
+                    if(adv.window_size) args.push("--window", adv.window_size);
+                    if(adv.step_size) args.push("--step", adv.step_size);
+                    if(adv.nt && adv.nt !== "GC") args.push("--nt", adv.nt);
+
+                    if(adv.def_font_size) args.push("--definition_font_size", adv.def_font_size);
+                    if(adv.label_font_size) args.push("--label_font_size", adv.label_font_size);
+                    
+                    // Styles
+                    if(adv.block_stroke_width !== null) args.push("--block_stroke_width", adv.block_stroke_width);
+                    if(adv.block_stroke_color) args.push("--block_stroke_color", adv.block_stroke_color);
+                    if(adv.line_stroke_width !== null) args.push("--line_stroke_width", adv.line_stroke_width);
+                    if(adv.line_stroke_color) args.push("--line_stroke_color", adv.line_stroke_color);
+                    if(adv.axis_stroke_width !== null) args.push("--axis_stroke_width", adv.axis_stroke_width);
+                    if(adv.axis_stroke_color) args.push("--axis_stroke_color", adv.axis_stroke_color);
+                    
+                    // Legend Params
+                    if(adv.legend_box_size) args.push("--legend_box_size", adv.legend_box_size);
+                    if(adv.legend_font_size) args.push("--legend_font_size", adv.legend_font_size);
+
+                    // Colors
+                    let dContent = "";
+                    for(const [k,v] of Object.entries(currentColors.value)) dContent += `${k}\t${v}\n`;
+                    if (files.d_color) { let fText = await files.d_color.text(); if(!dContent.endsWith('\n')) dContent += '\n'; dContent += fText; }
+                    pyodide.FS.writeFile("/combined_d.tsv", dContent);
+                    args.push("-d", "/combined_d.tsv");
+
+                    let tContent = "";
+                    if (files.t_color) { tContent = await files.t_color.text(); if(!tContent.endsWith('\n')) tContent += '\n'; }
+                    manualSpecificRules.forEach(r => { tContent += `${r.feat}\t${r.qual}\t${r.val}\t${r.color}\t${r.cap}\n`; });
+                    if(tContent.trim() !== "") { pyodide.FS.writeFile("/combined_t.tsv", tContent); args.push("-t", "/combined_t.tsv"); }
+
+                    // Filtering
+                    if (filterMode.value === 'Blacklist') {
+                        if (files.blacklist) { await writeToFS(files.blacklist, "/blacklist.txt"); args.push("--label_blacklist", "/blacklist.txt"); }
+                        else if (manualBlacklist.value) { args.push("--label_blacklist", manualBlacklist.value.replace(/\n/g, ",")); }
+                    } else if (filterMode.value === 'Whitelist') {
+                        if (files.whitelist) { await writeToFS(files.whitelist, "/whitelist.txt"); args.push("--label_whitelist", "/whitelist.txt"); }
+                        else if (manualWhitelist.length > 0) {
+                            let wlContent = "";
+                            manualWhitelist.forEach(r => { if(r.feat && r.qual) wlContent += `${r.feat}\t${r.qual}\t${r.key}\n` });
+                            pyodide.FS.writeFile("/manual_wl.tsv", wlContent);
+                            args.push("--label_whitelist", "/manual_wl.tsv");
+                        }
+                    }
+                    // Priority File
+                    if(files.qualifier_priority) {
+                        await writeToFS(files.qualifier_priority, "/priority.tsv");
+                        args.push("--qualifier_priority", "/priority.tsv");
+                    }
+
+                    if (mode.value === 'circular') {
+                        args.push("--track_type", form.track_type, "-l", form.legend);
+                        if(form.show_labels) args.push("--show_labels");
+                        if(form.allow_inner_labels) args.push("--allow_inner_labels");
+                        if(form.suppress_gc) args.push("--suppress_gc");
+                        if(form.suppress_skew) args.push("--suppress_skew");
+                        
+                        // Circular Offsets
+                        if(adv.outer_label_x_offset) args.push("--outer_label_x_radius_offset", adv.outer_label_x_offset);
+                        if(adv.outer_label_y_offset) args.push("--outer_label_y_radius_offset", adv.outer_label_y_offset);
+                        if(adv.inner_label_x_offset) args.push("--inner_label_x_radius_offset", adv.inner_label_x_offset);
+                        if(adv.inner_label_y_offset) args.push("--inner_label_y_radius_offset", adv.inner_label_y_offset);
+                        if(adv.scale_interval) args.push("--scale_interval", adv.scale_interval);
+
+                        if (cInputType.value === 'gb') {
+                            if(!files.c_gb) throw new Error("Please upload a GenBank file.");
+                            await writeToFS(files.c_gb, "/input.gb"); args.push("--gbk", "/input.gb");
+                        } else {
+                            if(!files.c_gff || !files.c_fasta) throw new Error("GFF3 and FASTA are required.");
+                            await writeToFS(files.c_gff, "/input.gff"); await writeToFS(files.c_fasta, "/input.fasta");
+                            args.push("--gff", "/input.gff", "--fasta", "/input.fasta");
+                        }
+
+                    } else { 
+                        args.push("--scale_style", form.scale_style);
+                        if(form.align_center) args.push("--align_center");
+                        if(form.show_gc) args.push("--show_gc");
+                        if(form.show_skew) args.push("--show_skew");
+                        if(form.normalize_length) args.push("--normalize_length");
+                        if(form.legend !== 'right') args.push("-l", form.legend);
+                        args.push("--bitscore", adv.min_bitscore, "--evalue", adv.evalue, "--identity", adv.identity);
+                        
+                        // Linear Labels
+                        if(form.show_labels_linear !== 'none') {
+                            args.push("--show_labels");
+                            if(form.show_labels_linear === 'first') args.push("first");
+                        }
+                        // Linear Specifics
+                        if(adv.resolve_overlaps) args.push("--resolve_overlaps");
+                        if(adv.feature_height) args.push("--feature_height", adv.feature_height);
+                        if(adv.gc_height) args.push("--gc_height", adv.gc_height);
+                        if(adv.comparison_height) args.push("--comparison_height", adv.comparison_height);
+                        
+                        // Linear Scale Settings
+                        if(adv.scale_interval) args.push("--scale_interval", adv.scale_interval);
+                        if(adv.scale_font_size) args.push("--scale_font_size", adv.scale_font_size);
+                        if(adv.scale_stroke_width) args.push("--scale_stroke_width", adv.scale_stroke_width);
+                        if(adv.scale_stroke_color) args.push("--scale_stroke_color", adv.scale_stroke_color);
+
+                        let inputArgs = [], blastArgs = [];
+                        for(let i=0; i<linearSeqs.length; i++) {
+                            const seq = linearSeqs[i];
+                            if (lInputType.value === 'gb') {
+                                if(!seq.gb) throw new Error(`Sequence #${i+1}: Missing GenBank file.`);
+                                await writeToFS(seq.gb, `/seq_${i}.gb`); inputArgs.push(`/seq_${i}.gb`);
+                            } else {
+                                if(!seq.gff || !seq.fasta) throw new Error(`Sequence #${i+1}: GFF3 and FASTA are required.`);
+                                await writeToFS(seq.gff, `/seq_${i}.gff`); await writeToFS(seq.fasta, `/seq_${i}.fasta`);
+                            }
+                            if(i < linearSeqs.length - 1 && seq.blast) {
+                                await writeToFS(seq.blast, `/blast_${i}.txt`); blastArgs.push(`/blast_${i}.txt`);
+                            }
+                        }
+                        if(lInputType.value === 'gb') args.push("--gbk", ...inputArgs);
+                        else {
+                             let gffs = [], fastas = [];
+                             for(let i=0; i<linearSeqs.length; i++) { gffs.push(`/seq_${i}.gff`); fastas.push(`/seq_${i}.fasta`); }
+                             args.push("--gff", ...gffs, "--fasta", ...fastas);
+                        }
+                        if(blastArgs.length) args.push("-b", ...blastArgs);
+                    }
+
+                    console.log("CMD:", args.join(" "));
+                    const jsonResult = pyodide.globals.get("run_gbdraw_wrapper")(mode.value, pyodide.toPy(args.map(String)));
+                    const res = JSON.parse(jsonResult);
+                    if(res.error) throw new Error(res.error);
+                    results.value = res;
+
+                } catch (e) {
+                    errorLog.value = e.message;
+                } finally {
+                    processing.value = false;
+                }
+            };
+
+            const downloadSVG = () => {
+                if(!svgContent.value) return;
+                const blob = new Blob([svgContent.value], {type: "image/svg+xml"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; 
+                a.download = results.value[selectedResultIndex.value].name; a.click();
+            };
+
+            const downloadPNG = () => {
+                if(!svgContent.value) return;
+                const svgEl = document.createElement('div');
+                svgEl.innerHTML = svgContent.value;
+                const svg = svgEl.querySelector('svg');
+                if(!svg) return;
+                let w = parseFloat(svg.getAttribute('width')); let h = parseFloat(svg.getAttribute('height'));
+                if (!w || !h) { const parts = svg.getAttribute('viewBox').split(' '); w = parseFloat(parts[2]); h = parseFloat(parts[3]); }
+                const canvas = document.createElement("canvas");
+                const dpi = parseInt(downloadDpi.value); const scale = dpi / 96; 
+                canvas.width = w * scale; canvas.height = h * scale;
+                const ctx = canvas.getContext("2d");
+                const img = new Image();
+                const svgData = new XMLSerializer().serializeToString(svg);
+                const blob = new Blob([svgData], {type: "image/svg+xml;charset=utf-8"});
+                const url = URL.createObjectURL(blob);
+                img.onload = () => {
+                    ctx.fillStyle = "white"; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    canvas.toBlob(async (blob) => {
+                         const fixedBlob = await setDpiInPng(blob, dpi);
+                         const downloadUrl = URL.createObjectURL(fixedBlob);
+                         const link = document.createElement('a');
+                         let fname = results.value[selectedResultIndex.value].name;
+                         fname = fname.replace(/\.svg$/i, ".png");
+                         link.download = fname; link.href = downloadUrl; link.click();
+                         URL.revokeObjectURL(downloadUrl); URL.revokeObjectURL(url);
+                    }, "image/png");
+                };
+                img.src = url;
+            };
+
+            // ---- New PDF Download Function ----
+            const downloadPDF = async () => {
+                if(!svgContent.value) return;
+
+                // 1. Create temporary SVG element to read dimensions
+                const svgEl = document.createElement('div');
+                svgEl.innerHTML = svgContent.value;
+                const svg = svgEl.querySelector('svg');
+                if(!svg) return;
+
+                // 2. Determine Width/Height (Use attributes or viewBox)
+                let w = parseFloat(svg.getAttribute('width'));
+                let h = parseFloat(svg.getAttribute('height'));
+                if (!w || !h) { 
+                    const parts = svg.getAttribute('viewBox').split(' '); 
+                    w = parseFloat(parts[2]); 
+                    h = parseFloat(parts[3]); 
+                }
+
+                // 3. Initialize jsPDF (Use 'pt' as unit for vector fidelity)
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({
+                    orientation: w > h ? 'l' : 'p',
+                    unit: 'pt',
+                    format: [w, h]
+                });
+
+                // 4. Convert SVG to PDF
+                await doc.svg(svg, {
+                    x: 0,
+                    y: 0,
+                    width: w,
+                    height: h
+                });
+
+                // 5. Save File
+                let fname = results.value[selectedResultIndex.value].name;
+                fname = fname.replace(/\.svg$/i, ".pdf");
+                doc.save(fname);
+            };
+
+            // ---- Config I/O Functions ----
+            const exportConfig = () => {
+                const configData = {
+                    form: form,
+                    adv: adv,
+                    colors: currentColors.value,
+                    palette: selectedPalette.value,
+                    rules: manualSpecificRules,
+                    filterMode: filterMode.value,
+                    whitelist: manualWhitelist,
+                    blacklistText: manualBlacklist.value
+                };
+                const blob = new Blob([JSON.stringify(configData, null, 2)], {type: "application/json"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = "gbdraw_config.json";
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            const importConfig = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        if (data.form) Object.assign(form, data.form);
+                        if (data.adv) Object.assign(adv, data.adv);
+                        if (data.colors) currentColors.value = data.colors;
+                        if (data.palette) selectedPalette.value = data.palette;
+                        if (data.rules) {
+                            manualSpecificRules.length = 0;
+                            manualSpecificRules.push(...data.rules);
+                        }
+                        if (data.filterMode) filterMode.value = data.filterMode;
+                        if (data.whitelist) {
+                            manualWhitelist.length = 0;
+                            manualWhitelist.push(...data.whitelist);
+                        }
+                        if (data.blacklistText) manualBlacklist.value = data.blacklistText;
+                        alert("Configuration loaded successfully!");
+                    } catch (err) {
+                        alert("Failed to load config: " + err.message);
+                    }
+                };
+                reader.readAsText(file);
+                e.target.value = ''; // Reset input
+            };
+
+            return {
+                pyodideReady, processing, loadingStatus, errorLog, results, selectedResultIndex, svgContent, zoom,
+                mode, cInputType, lInputType, files, linearSeqs, form, adv, 
+                paletteNames, selectedPalette, currentColors, updatePalette, resetColors,
+                filterMode, manualBlacklist, manualWhitelist, featureKeys, newColorFeat, newColorVal, addCustomColor, 
+                newFeatureToAdd, addFeature, manualSpecificRules, newSpecRule, addSpecificRule,
+                downloadDpi, runAnalysis, downloadSVG, downloadPNG, downloadPDF,
+                exportConfig, importConfig 
+            };
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>

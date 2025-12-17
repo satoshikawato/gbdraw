@@ -1,3 +1,5 @@
 include gbdraw/data/color_palettes.toml
 include gbdraw/data/config.toml
 include gbdraw/data/*.ttf
+include gbdraw/web/index.html
+

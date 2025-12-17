@@ -14,6 +14,12 @@ from .utility_functions import create_dict_for_sequence_lengths, modify_config_d
 from .canvas_generator import LinearCanvasConfigurator
 from .object_configurators import GcSkewConfigurator, LegendDrawingConfigurator, GcContentConfigurator, FeatureDrawingConfigurator, BlastMatchConfigurator
 
+try:
+    import cairosvg
+    CAIROSVG_AVAILABLE = True
+except (ImportError, OSError):
+    CAIROSVG_AVAILABLE = False
+
 # Setup for the logging system and sets the logging level to INFO
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -173,12 +179,20 @@ def _get_args(args) -> argparse.Namespace:
         '--label_font_size',
         help='Label font size (optional; default: 24 pt for genomes <= 50 kb, 5 pt for genomes >= 50 kb)',
         type=float)
-    parser.add_argument(
-        '-f',
-        '--format',
-        help='Comma-separated list of output file formats (svg, png, pdf, eps, ps; default: svg).',
-        type=str,
-        default="svg")
+    if CAIROSVG_AVAILABLE:
+        parser.add_argument(
+            '-f',
+            '--format',
+            help='Comma-separated list of output file formats (svg, png, pdf, eps, ps; default: svg).',
+            type=str,
+            default="svg")
+    else:
+        parser.add_argument(
+            '-f',
+            '--format',
+            help='Comma-separated list of output file formats (svg; install CairoSVG to enable png, pdf, eps, ps output).',
+            type=str,
+            default="svg")
     parser.add_argument(
         '-l',
         '--legend',
@@ -326,6 +340,21 @@ def linear_main(cmd_args) -> None:
     comparison_height: Optional[float] = args.comparison_height
 
     out_formats: list[str] = parse_formats(args.format)
+    # Handle WebAssembly environment and CairoSVG availability
+    if "pyodide" in sys.modules:
+        if any(f != 'svg' for f in out_formats):
+            logger.info("Running in WebAssembly mode: Output format constrained to SVG. (Image conversion is handled by the browser)")
+            out_formats = ['svg']
+    # Handle absence of CairoSVG
+    elif not CAIROSVG_AVAILABLE:
+        non_svg_formats = [f for f in out_formats if f != 'svg']
+        if non_svg_formats:
+            logger.warning(
+                f"⚠️  CairoSVG is not installed. Cannot generate: {', '.join(non_svg_formats).upper()}\n"
+                f"   Output restricted to SVG only.\n"
+                f"   (To enable PNG/PDF, run: pip install gbdraw[export])"
+            )
+            out_formats = ['svg']
     user_defined_default_colors: str = args.default_colors
     scale_style: str = args.scale_style
     scale_stroke_color: Optional[str] = args.scale_stroke_color
