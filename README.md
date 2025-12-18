@@ -1,4 +1,4 @@
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://gbdraw.app/)
+[![Static Badge](https://img.shields.io/badge/gbdraw%20webapp-8A2BE2)](https://gbdraw.app/)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/gbdraw/badges/version.svg)](https://anaconda.org/bioconda/gbdraw)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/gbdraw/badges/platforms.svg)](https://anaconda.org/bioconda/gbdraw)
 [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/gbdraw/README.html)
@@ -12,9 +12,7 @@
 `gbdraw` is a command-line/GUI tool designed for creating detailed diagrams of microbial genomes. 
 `gbdraw` accepts GenBank/DDBJ-format annotated genomes or GFF3+FASTA file pairs as input and outputs a visual representation of the genomes in SVG/PNG/PDF/EPS/PS formats.
 
-**Try gbdraw Web App!** [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://gbdraw.app/)
-
-**Try gbdraw on Colab Notebook!** [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
+**Try gbdraw Web App!** [![Static Badge](https://img.shields.io/badge/gbdraw%20webapp-8A2BE2)](https://gbdraw.app/)
 
 ## Features
 - **Circular and linear diagrams:** Generates both circular and linear representations of genome structures.
@@ -39,19 +37,16 @@ For detailed instructions on how to use `gbdraw`, please visit our main document
 | **[FAQ](./docs/FAQ.md)** | Find answers to common questions. |
 
 ## Use without local installation
-### Streamlit Web App
-A GUI web app of `gbdraw` (latest commit on `main` branch) is available （powered by Streamlit) without any local installation:
+### Web App
+A GUI web app of `gbdraw` (latest commit on `main` branch) is available without any local installation:
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://gbdraw.app/)
-
-### Colab Notebook (Google account required)
-You can try `gbdraw` (latest release) on Google Colaboratory without any local installation:
-
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
+[![Static Badge](https://img.shields.io/badge/gbdraw%20webapp-8A2BE2)](https://gbdraw.app/)
 
 ## Bug reports and suggestions
 Please feel free to submit a new issue if you find a bug or have a suggestion:
 https://github.com/satoshikawato/gbdraw/issues
+
+
 
 
 
