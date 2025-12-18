@@ -40,7 +40,7 @@ def print_version() -> None:
 def find_free_port():
     """Find a free port on localhost"""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('', 0))
+        s.bind(('127.0.0.1', 0)) 
         return s.getsockname()[1]
 
 def start_local_server(directory: str):
@@ -53,7 +53,7 @@ def start_local_server(directory: str):
     handler = partial(http.server.SimpleHTTPRequestHandler, directory=directory)
     
     try:
-        httpd = socketserver.TCPServer(("", port), handler)
+        httpd = socketserver.TCPServer(("127.0.0.1", port), handler)
     except OSError as e:
         print(f"Error starting server: {e}", file=sys.stderr)
         return

@@ -2,14 +2,28 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net;
+    font-src 'self' https://fonts.gstatic.com https://unpkg.com https://cdn.jsdelivr.net data:;
+    img-src 'self' data: blob:;
+    connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://cdn.tailwindcss.com https://pypi.org https://files.pythonhosted.org https://cdnjs.cloudflare.com;
+    worker-src 'self' blob:;
+    object-src 'none';
+    base-uri 'self';
+    form-action 'self';
+    frame-ancestors 'none';
+    ">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>gbdraw Serverless Ultimate</title>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/vue@3.5.25/dist/vue.global.js" integrity="sha384-E8hqvY4j8uyv6njj1udAOIuT4tsPt3lJET321mQPDQ29OMiTOYMuG/UDD6o52yW4" crossorigin="anonymous"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.2.3/dist/svg2pdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js" integrity="sha384-l95tshxQlbjf4kdyWZf10uUL5Dw8/iN9q16SQ+ttOEWA8SN0cLG6BGDGY17GxToh" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web@2.1.2/src/index.js" integrity="sha384-J7cw2fbG1T4C5MirTVUxsZGaMfw2m0XsCgOQEqUvB1OF9VIsHWuZF1GmyVRzs7eu" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/3.0.3/jspdf.umd.min.js" integrity="sha384-GwHhSt8QjC7J+v0zZ0Flfho/T76YHEcCL9w4rvjTIUHauh6gWJeBSIi3vWXxNhtA" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.6.0/dist/svg2pdf.umd.min.js" integrity="sha384-UMdplNeJF/mRqnsNO/vfK5po5eKyTMGCymHkdARQ9NFscA4DX3buGxfhUJcPLbWj" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.7/purify.min.js" integrity="sha384-qJNkHwhlYywDHfyoEe1np+1lYvX/8x+3gHCKFhSSBMQyCFlvFnn+zXmaebXl21rV" crossorigin="anonymous"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
         body { font-family: 'Inter', 'Noto Sans JP', sans-serif; background-color: #f8fafc; color: #334155; }
@@ -72,7 +86,10 @@
         <div class="max-w-[1600px] mx-auto px-4 h-full flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <div class="bg-blue-600 text-white w-9 h-9 rounded-lg flex items-center justify-center font-bold text-xl shadow-md">🧬</div>
-                <h1 class="text-xl font-bold text-slate-800 tracking-tight">gbdraw <span class="text-blue-600 text-xs uppercase tracking-wider ml-1 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">A genome diagram generator for micobes and organelles</span></h1>
+                <h1 class="text-xl font-bold text-slate-800 tracking-tight flex items-baseline">
+                    gbdraw 
+                    <span class="text-slate-400 text-xs font-normal ml-3">A genome diagram generator for microbes and organelles</span>
+                </h1>
             </div>
             
             <div class="flex items-center gap-3">
@@ -335,7 +352,28 @@
                                 </div>
                                 
                                 <div class="mt-4 pt-4 border-t border-slate-100">
-                                    <h5 class="text-[10px] font-bold text-slate-500 mb-1">QUALIFIER PRIORITY <help-tip text="Tab-separated value (TSV) file defining qualifier priorities for feature labels (e.g. CDS  product,gene,locus_tag)."></help-tip></h5>
+                                    <h5 class="text-[10px] font-bold text-slate-500 mb-2">QUALIFIER PRIORITY <help-tip text="Define label priority order (e.g. CDS -> product,gene,locus_tag)."></help-tip></h5>
+                                    
+                                    <div class="space-y-1 mb-3">
+                                        <div v-for="(rule, i) in manualPriorityRules" :key="i" class="flex items-center gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
+                                            <span class="w-16 font-bold truncate shrink-0" :title="rule.feat">{{rule.feat}}</span>
+                                            <span class="flex-grow text-slate-600 truncate font-mono" :title="rule.order">{{rule.order}}</span>
+                                            <button @click="manualPriorityRules.splice(i,1)" class="text-red-500 hover:text-red-700 px-1"><i class="ph ph-trash"></i></button>
+                                        </div>
+                                        <div v-if="manualPriorityRules.length === 0" class="text-[10px] text-slate-400 italic text-center py-2">No priority rules defined</div>
+                                    </div>
+
+                                    <div class="bg-slate-50 p-2 rounded border border-slate-200 mb-2">
+                                        <div class="flex gap-1 mb-1">
+                                            <select v-model="newPriorityRule.feat" class="form-input text-xs p-1 h-7 w-24 shrink-0">
+                                                <option v-for="k in featureKeys" :value="k">{{ k }}</option>
+                                            </select>
+                                            <input v-model="newPriorityRule.order" placeholder="product,gene,locus_tag" class="form-input text-xs p-1 h-7 flex-grow">
+                                            <button @click="addPriorityRule" class="btn btn-secondary text-xs h-7 px-3"><i class="ph ph-plus"></i></button>
+                                        </div>
+                                    </div>
+
+                                    <div class="text-[10px] text-center text-slate-400 mb-1">- OR UPLOAD FILE -</div>
                                     <file-uploader label="Priority File (TSV)" v-model="files.qualifier_priority" :small="true"></file-uploader>
                                 </div>
                             </div>
@@ -475,14 +513,12 @@
                                 </div>
                             </div>
 
-                            <div class="grid grid-cols-2 gap-2">
-                                <a href="https://github.com/satoshikawato/gbdraw" target="_blank" class="btn btn-secondary btn-sm justify-center">
-                                    <i class="ph ph-github-logo text-lg"></i> GitHub
-                                </a>
-                                <a href="https://github.com/satoshikawato/gbdraw/issues" target="_blank" class="btn btn-secondary btn-sm justify-center">
-                                    <i class="ph ph-bug text-lg"></i> Issues
-                                </a>
-                            </div>
+                            <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center">
+                                <i class="ph ph-github-logo text-lg"></i> GitHub
+                            </a>
+                            <a href="https://github.com/satoshikawato/gbdraw/issues" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center">
+                                <i class="ph ph-bug text-lg"></i> Issues
+                            </a>
 
                             <div class="pt-2 border-t border-slate-200 text-[10px] text-slate-400 leading-relaxed">
                                 <strong>Disclaimer:</strong> This tool is provided "as is" without warranty of any kind. The author is not liable for any damages arising from its use.<br>
@@ -599,7 +635,7 @@
 
 <script>
     const { createApp, ref, reactive, onMounted, computed, watch } = Vue;
-    const GBDRAW_WHEEL_NAME = "gbdraw-0.7.0-py3-none-any.whl"; 
+    const GBDRAW_WHEEL_NAME = "gbdraw-0.8.0-py3-none-any.whl"; 
 
     // HelpTip & FileUploader Components
     const HelpTip = {
@@ -612,9 +648,36 @@
             const show = () => {
                 if (!trigger.value) return;
                 const rect = trigger.value.getBoundingClientRect();
-                style.top = (rect.top - 10) + 'px';
-                style.left = (rect.left + rect.width / 2) + 'px';
-                style.transform = 'translate(-50%, -100%)'; 
+                
+                // Get viewport width and tooltip max width
+                const viewportWidth = window.innerWidth;
+                const tooltipMaxWidth = 260; // max-w-250px + extra margin
+                const halfWidth = tooltipMaxWidth / 2;
+                const gap = 12; // gap between icon and tooltip
+
+                // Centered on the icon
+                let left = rect.left + rect.width / 2;
+                let top = rect.top - gap;
+                let transform = 'translate(-50%, -100%)'; // above the icon
+
+                // Prevent overflow on left/right (keep at least 10px from viewport edges)
+                if (left < halfWidth + 10) {
+                    left = halfWidth + 10;
+                } else if (left > viewportWidth - halfWidth - 10) {
+                    left = viewportWidth - halfWidth - 10;
+                }
+
+                // Prevent overflow at the top (if too close to top edge, show below)
+                // Considering header and browser frame, if y < 60px, show below
+                if (rect.top < 60) {
+                    top = rect.bottom + gap;
+                    transform = 'translate(-50%, 0)'; // transform for below display
+                }
+
+                style.top = top + 'px';
+                style.left = left + 'px';
+                style.transform = transform;
+                
                 visible.value = true;
             };
             const hide = () => visible.value = false;
@@ -681,8 +744,26 @@
             const results = ref([]);
             const selectedResultIndex = ref(0);
             const svgContent = computed(() => {
-                if (results.value.length > 0 && results.value[selectedResultIndex.value]) {
-                    return results.value[selectedResultIndex.value].content;
+                if (results.value.length > 0) {
+                    const rawSvg = results.value[selectedResultIndex.value].content;
+                    
+                    // Sanitize the SVG output from svgwrite to ensure safety and prevent DOMXSS
+                    return DOMPurify.sanitize(rawSvg, {
+                        USE_PROFILES: { svg: true },
+                        // Only allow main tags used by svgwrite
+                        ADD_TAGS: ['use', 'g', 'defs', 'linearGradient', 'radialGradient', 'stop', 'path', 'rect', 'circle', 'line', 'polyline', 'polygon', 'text', 'tspan'],
+                        // Allowed attributes list (event handlers are automatically excluded, but can be explicitly forbidden as well)
+                        ADD_ATTR: [
+                            'xlink:href', 'href', 'id', 'class',
+                            'fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin', 
+                            'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 
+                            'width', 'height', 'transform', 'viewBox', 'preserveAspectRatio',
+                            'font-family', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline', 'writing-mode', 'letter-spacing'
+                        ],
+                        // Forbid <style> tags (to prevent breaking parent page CSS). Also forbid script-related tags.
+                        FORBID_TAGS: ['style', 'script', 'foreignObject', 'iframe', 'embed', 'object', 'animate', 'set', 'animateTransform', 'image'],
+                        FORBID_ATTR: ['name', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onerror']
+                    });
                 }
                 return null;
             });
@@ -761,10 +842,192 @@
             const newColorFeat = ref("CDS");
             const newColorVal = ref("#000000");
             const addCustomColor = () => { if(!newColorFeat.value) return; currentColors.value[newColorFeat.value] = newColorVal.value; };
-            const addSpecificRule = () => { if(!newSpecRule.val) return; manualSpecificRules.push({ ...newSpecRule }); newSpecRule.val = ""; };
+            const manualPriorityRules = reactive([]);
+            const newPriorityRule = reactive({ feat: "CDS", order: "product,gene,locus_tag" });
+            
+            const addPriorityRule = () => {
+                if (!newPriorityRule.order) return;
+                // If the same feature exists, overwrite it; otherwise, add it.
+                const idx = manualPriorityRules.findIndex(r => r.feat === newPriorityRule.feat);
+                if (idx >= 0) {
+                    manualPriorityRules[idx].order = newPriorityRule.order;
+                } else {
+                    manualPriorityRules.push({ feat: newPriorityRule.feat, order: newPriorityRule.order });
+                }
+            };
+        
+            const addSpecificRule = () => {
+                if(!newSpecRule.val) return;
+
+                // If the regex is too long (>50 chars), warn the user about potential performance impact.
+                if (newSpecRule.val.length > 50) {
+                    if (!confirm("Regular expression is quite long (>50 chars). This might impact performance. Continue?")) {
+                        return;
+                    }
+                }
+
+                // Simple check for potentially dangerous patterns (warning)
+                if (/\(.+[\+\*]\)[\+\*]/.test(newSpecRule.val) || /\(.*\)\+/.test(newSpecRule.val)) {
+                    if (!confirm("This regular expression contains patterns that may freeze the browser (ReDoS risk). Are you sure you want to add it?")) {
+                        return;
+                    }
+                }
+
+                try {
+                    new RegExp(newSpecRule.val);
+                } catch (e) {
+                    alert("Invalid Regular Expression: " + e.message);
+                    return;
+                }
+
+                manualSpecificRules.push({
+                    feat: String(newSpecRule.feat || ''),
+                    qual: String(newSpecRule.qual || ''),
+                    val: String(newSpecRule.val),
+                    color: String(newSpecRule.color || '#000000'),
+                    cap: String(newSpecRule.cap || '')
+                });
+                newSpecRule.val = "";
+            };
             const newFeatureToAdd = ref("mobile_element");
             const addFeature = () => { if(newFeatureToAdd.value && !adv.features.includes(newFeatureToAdd.value)){ adv.features.push(newFeatureToAdd.value); } };
 
+            watch(() => files.d_color, async (newFile) => {
+                if (!newFile) return;
+                try {
+                    const text = await newFile.text();
+                    const lines = text.split(/\r?\n/);
+                    let count = 0;
+                    
+                    for (const line of lines) {
+                        // Skip comments, empty lines, and section headers
+                        if (!line.trim() || line.trim().startsWith('#') || line.trim().startsWith('[')) continue;
+                        
+                        const parts = line.split('\t');
+                        if (parts.length >= 2) {
+                            const key = parts[0].trim();
+                            const color = parts[1].trim();
+                            
+                            // Apply if it's a color code (#...) or color name (red, blue, etc.)
+                            if (key && (color.startsWith('#') || /^[a-z]+$/i.test(color))) {
+                                currentColors.value[key] = color;
+                                count++;
+                            }
+                        }
+                    }
+                    console.log(`Loaded ${count} colors from file.`);
+                } catch (e) {
+                    console.error("Failed to load color file:", e);
+                    alert("Failed to load color file. Please check the TSV format.");
+                }
+            });
+            watch(() => files.t_color, async (newFile) => {
+                if (!newFile) return;
+                try {
+                    const text = await newFile.text();
+                    const lines = text.split(/\r?\n/);
+                    let count = 0;
+                    
+                    for (const line of lines) {
+                        // Skip comments and empty lines
+                        if (!line.trim() || line.trim().startsWith('#')) continue;
+                        
+                        const parts = line.split('\t');
+                        // TSV format: Feature, Qualifier, Regex, Color, [Caption]
+                        if (parts.length >= 4) {
+                            manualSpecificRules.push({
+                                feat: parts[0].trim(),
+                                qual: parts[1].trim(),
+                                val: parts[2].trim(),
+                                color: parts[3].trim(),
+                                cap: parts[4] ? parts[4].trim() : "" 
+                            });
+                            count++;
+                        }
+                    }
+                    console.log(`Loaded ${count} rules from file.`);
+                } catch (e) {
+                    console.error("Failed to load rules file:", e);
+                    alert("Failed to load rules file. Please check the TSV format.");
+                }
+            });
+            watch(() => files.qualifier_priority, async (newFile) => {
+                if (!newFile) return;
+                try {
+                    const text = await newFile.text();
+                    const lines = text.split(/\r?\n/);
+                    let count = 0;
+                    
+                    for (const line of lines) {
+                        if (!line.trim() || line.trim().startsWith('#')) continue;
+                        const parts = line.split('\t');
+                        // TSV format: Feature<TAB>Qualifier1,Qualifier2,Qualifier3
+                        if (parts.length >= 2) {
+                            const feat = parts[0].trim();
+                            const order = parts[1].trim();
+                            
+                            // If the same feature exists, overwrite it; otherwise, add it.
+                            const idx = manualPriorityRules.findIndex(r => r.feat === feat);
+                            if (idx >= 0) {
+                                manualPriorityRules[idx].order = order;
+                            } else {
+                                manualPriorityRules.push({ feat, order });
+                            }
+                            count++;
+                        }
+                    }
+                    console.log(`Loaded ${count} priority rules.`);
+                } catch (e) {
+                    console.error("Failed to load priority file:", e);
+                    alert("Failed to load priority file.");
+                }
+            });
+            watch(() => files.whitelist, async (newFile) => {
+                if (!newFile) return;
+                try {
+                    const text = await newFile.text();
+                    const lines = text.split(/\r?\n/);
+                    let count = 0;
+                    
+                    for (const line of lines) {
+                        if (!line.trim() || line.trim().startsWith('#')) continue;
+                        const parts = line.split('\t');
+                        if (parts.length >= 3) {
+                            manualWhitelist.push({
+                                feat: parts[0].trim(),
+                                qual: parts[1].trim(),
+                                key: parts[2].trim()
+                            });
+                            count++;
+                        }
+                    }
+                    console.log(`Loaded ${count} whitelist rules.`);
+                } catch (e) {
+                    console.error("Failed to load whitelist file:", e);
+                    alert("Failed to load whitelist file.");
+                }
+            });
+
+            watch(() => files.blacklist, async (newFile) => {
+                if (!newFile) return;
+                try {
+                    const text = await newFile.text();
+                    // Load newline or comma-separated text and append to the textarea
+                    const words = text.split(/[\r\n,]+/).map(w => w.trim()).filter(w => w);
+                    
+                    if (words.length > 0) {
+                        const existing = manualBlacklist.value ? manualBlacklist.value.trim() : "";
+                        // If there is existing text, add a comma before appending
+                        const separator = existing && !existing.endsWith(',') ? ", " : "";
+                        manualBlacklist.value = existing + separator + words.join(", ");
+                        
+                        console.log(`Loaded ${words.length} blacklist words.`);
+                    }
+                } catch (e) {
+                    console.error("Failed to load blacklist file:", e);
+                    alert("Failed to load blacklist file.");
+                }
+            });
             onMounted(async () => {
                 try {
                     pyodide = await loadPyodide();
@@ -775,6 +1038,8 @@
                     loadingStatus.value = "Installing gbdraw...";
                     await micropip.install(GBDRAW_WHEEL_NAME);
                     await pyodide.runPythonAsync(`
+                        import warnings
+                        warnings.simplefilter('ignore', SyntaxWarning)
                         import tomllib
                         from importlib import resources
                         import json
@@ -783,7 +1048,6 @@
                         import os
                         from gbdraw.circular import circular_main
                         from gbdraw.linear import linear_main
-
                         def get_palettes_json():
                             try:
                                 with resources.files("gbdraw.data").joinpath("color_palettes.toml").open("rb") as fh:
@@ -876,22 +1140,23 @@
                     // Colors
                     let dContent = "";
                     for(const [k,v] of Object.entries(currentColors.value)) dContent += `${k}\t${v}\n`;
-                    if (files.d_color) { let fText = await files.d_color.text(); if(!dContent.endsWith('\n')) dContent += '\n'; dContent += fText; }
                     pyodide.FS.writeFile("/combined_d.tsv", dContent);
                     args.push("-d", "/combined_d.tsv");
 
                     let tContent = "";
-                    if (files.t_color) { tContent = await files.t_color.text(); if(!tContent.endsWith('\n')) tContent += '\n'; }
+                    // if (files.t_color) { tContent = await files.t_color.text(); if(!tContent.endsWith('\n')) tContent += '\n'; }
                     manualSpecificRules.forEach(r => { tContent += `${r.feat}\t${r.qual}\t${r.val}\t${r.color}\t${r.cap}\n`; });
                     if(tContent.trim() !== "") { pyodide.FS.writeFile("/combined_t.tsv", tContent); args.push("-t", "/combined_t.tsv"); }
 
                     // Filtering
                     if (filterMode.value === 'Blacklist') {
-                        if (files.blacklist) { await writeToFS(files.blacklist, "/blacklist.txt"); args.push("--label_blacklist", "/blacklist.txt"); }
-                        else if (manualBlacklist.value) { args.push("--label_blacklist", manualBlacklist.value.replace(/\n/g, ",")); }
+                        // Even if there is a file (files.blacklist), ignore it and use the manualBlacklist taken in by Watch as correct
+                        if (manualBlacklist.value) { 
+                            args.push("--label_blacklist", manualBlacklist.value.replace(/\n/g, ",")); 
+                        }
                     } else if (filterMode.value === 'Whitelist') {
-                        if (files.whitelist) { await writeToFS(files.whitelist, "/whitelist.txt"); args.push("--label_whitelist", "/whitelist.txt"); }
-                        else if (manualWhitelist.length > 0) {
+                        // Even if there is a file (files.whitelist), ignore it and use the manualWhitelist taken in by Watch as correct
+                        if (manualWhitelist.length > 0) {
                             let wlContent = "";
                             manualWhitelist.forEach(r => { if(r.feat && r.qual) wlContent += `${r.feat}\t${r.qual}\t${r.key}\n` });
                             pyodide.FS.writeFile("/manual_wl.tsv", wlContent);
@@ -899,8 +1164,13 @@
                         }
                     }
                     // Priority File
-                    if(files.qualifier_priority) {
-                        await writeToFS(files.qualifier_priority, "/priority.tsv");
+                    let pContent = "";
+                    manualPriorityRules.forEach(r => {
+                        pContent += `${r.feat}\t${r.order}\n`;
+                    });
+                    
+                    if (pContent.trim() !== "") {
+                        pyodide.FS.writeFile("/priority.tsv", pContent);
                         args.push("--qualifier_priority", "/priority.tsv");
                     }
 
@@ -990,11 +1260,14 @@
             };
 
             const downloadSVG = () => {
-                if(!svgContent.value) return;
-                const blob = new Blob([svgContent.value], {type: "image/svg+xml"});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; 
-                a.download = results.value[selectedResultIndex.value].name; a.click();
+            if(!svgContent.value) return;
+            const blob = new Blob([svgContent.value], {type: "image/svg+xml"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = results.value[selectedResultIndex.value].name;
+            a.click();
+            URL.revokeObjectURL(url);
             };
 
             const downloadPNG = () => {
@@ -1088,35 +1361,91 @@
                 a.click();
                 URL.revokeObjectURL(url);
             };
+            const safeDeepMerge = (target, source) => {
+                if (!source || typeof source !== 'object') return;
 
+                Object.keys(source).forEach(key => {
+                    // 1. Prevent prototype pollution
+                    if (['__proto__', 'constructor', 'prototype'].includes(key)) return;
+                    
+                    // 2. Ignore keys not present in target (whitelisting effect)
+                    if (!Object.prototype.hasOwnProperty.call(target, key)) return;
+
+                    const targetValue = target[key];
+                    const sourceValue = source[key];
+
+                    // 3. Recursive merge for objects
+                    if (targetValue && typeof targetValue === 'object' && !Array.isArray(targetValue) &&
+                        sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue)) {
+                        safeDeepMerge(targetValue, sourceValue);
+                    }
+                    // 4. For arrays, intentionally overwrite (replacing lists of settings is natural)
+                    else if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
+                        target[key].splice(0, target[key].length, ...sourceValue);
+                    }
+                    // 5. Update value only if types match or initial value is null
+                    else if (typeof targetValue === typeof sourceValue || targetValue === null) {
+                        target[key] = sourceValue;
+                    }
+                });
+            };
             const importConfig = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
+                
+                if (file.size > 10 * 1024 * 1024) {
+                    alert("Config file is too large.");
+                    return;
+                }
+
                 const reader = new FileReader();
                 reader.onload = (event) => {
                     try {
-                        const data = JSON.parse(event.target.result);
-                        if (data.form) Object.assign(form, data.form);
-                        if (data.adv) Object.assign(adv, data.adv);
-                        if (data.colors) currentColors.value = data.colors;
+                        const data = JSON.parse(event.target.result, (key, value) => {
+                            if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+                                return undefined;
+                            }
+                            return value;
+                        });
+                        
+                        if (data.form) safeDeepMerge(form, data.form);
+                        if (data.adv) safeDeepMerge(adv, data.adv);
+                        if (data.colors) currentColors.value = data.colors; 
                         if (data.palette) selectedPalette.value = data.palette;
-                        if (data.rules) {
+                        
+                        if (data.rules && Array.isArray(data.rules)) {
                             manualSpecificRules.length = 0;
-                            manualSpecificRules.push(...data.rules);
+                            data.rules.forEach(r => {
+                                manualSpecificRules.push({
+                                    feat: String(r.feat || ''),
+                                    qual: String(r.qual || ''),
+                                    val: String(r.val || ''),
+                                    color: String(r.color || '#000000'),
+                                    cap: String(r.cap || '')
+                                });
+                            });
                         }
                         if (data.filterMode) filterMode.value = data.filterMode;
-                        if (data.whitelist) {
+                        if (data.whitelist && Array.isArray(data.whitelist)) {
                             manualWhitelist.length = 0;
-                            manualWhitelist.push(...data.whitelist);
-                        }
-                        if (data.blacklistText) manualBlacklist.value = data.blacklistText;
+                            data.whitelist.forEach(w => {
+                            manualWhitelist.push({
+                                feat: String(w.feat || ''),
+                                qual: String(w.qual || ''),
+                                key: String(w.key || '')
+                            });
+                        });
+                    }
+                        if (data.blacklistText) manualBlacklist.value = String(data.blacklistText);
+                        
                         alert("Configuration loaded successfully!");
                     } catch (err) {
-                        alert("Failed to load config: " + err.message);
+                        console.error(err);
+                        alert("Failed to load config: Invalid JSON structure.");
                     }
                 };
                 reader.readAsText(file);
-                e.target.value = ''; // Reset input
+                e.target.value = ''; 
             };
 
             return {
@@ -1126,7 +1455,7 @@
                 filterMode, manualBlacklist, manualWhitelist, featureKeys, newColorFeat, newColorVal, addCustomColor, 
                 newFeatureToAdd, addFeature, manualSpecificRules, newSpecRule, addSpecificRule,
                 downloadDpi, runAnalysis, downloadSVG, downloadPNG, downloadPDF,
-                exportConfig, importConfig 
+                exportConfig, importConfig, manualPriorityRules, newPriorityRule, addPriorityRule
             };
         }
     }).mount('#app');

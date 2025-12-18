@@ -23,7 +23,9 @@ MANIFEST
 
 # --- Pyodide / Web Artifacts ---
 gbdraw/web/*.whl
-
+*.whl
+*.html
+*.tar.gz
 # --- Virtual Environments ---
 .env
 .venv
