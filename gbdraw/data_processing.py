@@ -85,7 +85,12 @@ def calculate_dinucleotide_skew(seq: str, base1: str, base2: str) -> float:
     """
     base1_count: int = seq.count(base1)
     base2_count: int = seq.count(base2)
-    skew: float = (base1_count - base2_count) / (base1_count + base2_count)
+    total_count = base1_count + base2_count
+    
+    if total_count == 0:
+        return 0.0
+        
+    skew: float = (base1_count - base2_count) / total_count
     return skew
 
 
