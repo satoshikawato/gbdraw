@@ -393,14 +393,26 @@
                             </div>
 
                             <div>
-                                <label class="input-label">Definition & Text</label>
-                                <div class="grid grid-cols-2 gap-2 mb-2">
-                                    <input type="text" v-model="form.species" class="form-input" placeholder="Species (e.g. E. coli)">
-                                    <input type="text" v-model="form.strain" class="form-input" placeholder="Strain (e.g. K-12)">
-                                </div>
+                                <template v-if="mode === 'circular'">
+                                    <label class="input-label">Definition & Text</label>
+                                    <div class="grid grid-cols-2 gap-2 mb-2">
+                                        <input type="text" v-model="form.species" class="form-input" placeholder="Species (e.g. <i>Escherichia coli</i>)">
+                                        <input type="text" v-model="form.strain" class="form-input" placeholder="Strain (e.g. K-12)">
+                                    </div>
+                                </template>
+
+                                <label v-if="mode === 'linear'" class="input-label">Label Settings</label>
+
                                 <div class="grid grid-cols-2 gap-2">
-                                    <div><label class="text-[9px] text-slate-400">Def Font Size <help-tip text="Font size for the species/strain definition text."></help-tip></label><input type="number" v-model.number="adv.def_font_size" class="form-input" placeholder="18"></div>
-                                    <div><label class="text-[9px] text-slate-400">Label Font Size <help-tip text="Font size for feature labels."></help-tip></label><input type="number" v-model.number="adv.label_font_size" class="form-input" placeholder="Auto"></div>
+                                    <div v-if="mode === 'circular'">
+                                        <label class="text-[9px] text-slate-400">Def Font Size <help-tip text="Font size for the species/strain definition text."></help-tip></label>
+                                        <input type="number" v-model.number="adv.def_font_size" class="form-input" placeholder="18">
+                                    </div>
+                                    
+                                    <div :class="mode === 'linear' ? 'col-span-2' : ''">
+                                        <label class="text-[9px] text-slate-400">Label Font Size <help-tip text="Font size for feature labels."></help-tip></label>
+                                        <input type="number" v-model.number="adv.label_font_size" class="form-input" placeholder="Auto">
+                                    </div>
                                 </div>
                             </div>
 
