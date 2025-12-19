@@ -365,8 +365,6 @@ def create_feature_dict(gb_record: SeqRecord, color_table: DataFrame, selected_f
                     feature_id, feature, color_table, default_colors, genome_length, label_filtering)
                 feature_dict[feature_id] = feature_object
     feature_dict = arrange_feature_tracks(feature_dict, separate_strands, resolve_overlaps)
-    if locus_count == 0:
-        logger.warning(f"WARNING: No genes were found in {gb_record.id}. Are you sure the GenBank file is in the correct format?")
     return feature_dict
 
 

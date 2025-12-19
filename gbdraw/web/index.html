@@ -851,9 +851,15 @@
                 "V_segment", "variation", "3'UTR", "5'UTR"
             ];
             
-            const newColorFeat = ref("CDS");
-            const newColorVal = ref("#000000");
-            const addCustomColor = () => { if(!newColorFeat.value) return; currentColors.value[newColorFeat.value] = newColorVal.value; };
+            const newColorFeat = ref("gene");
+            const newColorVal = ref("#d3d3d3");
+            const addCustomColor = () => { 
+                if(!newColorFeat.value) return; 
+                currentColors.value = { 
+                    ...currentColors.value, 
+                    [newColorFeat.value]: newColorVal.value 
+                }; 
+            };
             const manualPriorityRules = reactive([]);
             const newPriorityRule = reactive({ feat: "CDS", order: "product,gene,locus_tag" });
             
@@ -1067,6 +1073,7 @@
                             except: return "{}"
 
                         def run_gbdraw_wrapper(mode, args):
+                        
                             for f in glob.glob("*.svg"):
                                 try: os.remove(f)
                                 except: pass

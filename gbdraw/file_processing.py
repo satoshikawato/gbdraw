@@ -540,15 +540,17 @@ def load_default_colors(user_defined_default_colors: str, palette: str = "defaul
                     resolved_color = resolve_color_to_hex(row['color'])
                     user_df.at[idx, 'color'] = resolved_color
                 
-            default_colors.update(user_df)
+            default_colors = user_df.combine_first(default_colors)
             logger.info(f"User overrides applied: {user_defined_default_colors}")
 
         except FileNotFoundError:
             logger.error(
                 f"ERROR: override file '{user_defined_default_colors}' not found")
+            sys.exit(1)
         except Exception as exc:
             logger.error(
                 f"ERROR: failed to read '{user_defined_default_colors}' – {exc}")
+            sys.exit(1)
 
     # ── 3) Return tidy DataFrame (index reset for downstream code)
     return default_colors.reset_index()

@@ -343,6 +343,7 @@ def circular_main(cmd_args) -> None:
     palette: str = args.palette
     default_colors: Optional[DataFrame] = load_default_colors(
         user_defined_default_colors, palette)
+    
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     show_gc, show_skew = suppress_gc_content_and_skew(
         suppress_gc, suppress_skew)
