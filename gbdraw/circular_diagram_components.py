@@ -2,20 +2,91 @@
 # coding: utf-8
 
 import logging
-from Bio.SeqRecord import SeqRecord
-from pandas import DataFrame
-from .canvas_generator import CircularCanvasConfigurator
-from .circular_object_groups import LegendGroup, GcContentGroup, GcSkewGroup, SeqRecordGroup, DefinitionGroup, TickGroup, AxisGroup
-from .object_configurators import GcSkewConfigurator, GcContentConfigurator, FeatureDrawingConfigurator
-from .file_processing import save_figure
-from .data_processing import prepare_legend_table
-from .utility_functions import check_feature_presence, calculate_coordinates
-from svgwrite import Drawing
-from svgwrite.container import Group
-from svgwrite.path import Path
+from dataclasses import replace
+from typing import Optional
+
+from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from pandas import DataFrame  # type: ignore[reportMissingImports]
+from .canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
+from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from .tracks import TrackSpec  # type: ignore[reportMissingImports]
+from .groups.circular import (  # type: ignore[reportMissingImports]
+    LegendGroup,
+    GcContentGroup,
+    GcSkewGroup,
+    SeqRecordGroup,
+    LabelsGroup,
+    DefinitionGroup,
+    TickGroup,
+    AxisGroup,
+)
+from .configurators import (  # type: ignore[reportMissingImports]
+    FeatureDrawingConfigurator,
+    GcContentConfigurator,
+    GcSkewConfigurator,
+    LegendDrawingConfigurator,
+)
+from .render.export import save_figure  # type: ignore[reportMissingImports]
+from .legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
+from .core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
+from svgwrite import Drawing  # type: ignore[reportMissingImports]
+from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
 # Logging setup
 logger = logging.getLogger(__name__)
+
+
+def _track_specs_by_kind(track_specs: list[TrackSpec] | None) -> dict[str, TrackSpec]:
+    """Index TrackSpec list by kind (first occurrence wins)."""
+    if not track_specs:
+        return {}
+    out: dict[str, TrackSpec] = {}
+    for ts in track_specs:
+        out.setdefault(str(ts.kind), ts)
+    return out
+
+
+def _resolve_circular_track_center_and_width_px(
+    ts: TrackSpec | None, *, base_radius_px: float
+) -> tuple[float | None, float | None]:
+    """Resolve a circular placement into (center_radius_px, width_px).
+
+    Supports:
+    - radius + width
+    - inner_radius + outer_radius
+    """
+    if ts is None or ts.placement is None:
+        return None, None
+
+    placement = ts.placement
+    # Only handle circular placements (best-effort; keep permissive).
+    if not hasattr(placement, "radius"):
+        return None, None
+
+    # ScalarSpec has .resolve(reference) method.
+    inner_spec = getattr(placement, "inner_radius", None)
+    outer_spec = getattr(placement, "outer_radius", None)
+    radius_spec = getattr(placement, "radius", None)
+    width_spec = getattr(placement, "width", None)
+
+    inner_px = inner_spec.resolve(base_radius_px) if inner_spec is not None else None
+    outer_px = outer_spec.resolve(base_radius_px) if outer_spec is not None else None
+    radius_px = radius_spec.resolve(base_radius_px) if radius_spec is not None else None
+    width_px = width_spec.resolve(base_radius_px) if width_spec is not None else None
+
+    if inner_px is not None and outer_px is not None:
+        if outer_px < inner_px:
+            inner_px, outer_px = outer_px, inner_px
+        return (inner_px + outer_px) / 2.0, (outer_px - inner_px)
+
+    if radius_px is not None and width_px is not None:
+        return radius_px, width_px
+
+    # Partial specs: treat "radius" alone as center; width unknown.
+    if radius_px is not None:
+        return radius_px, None
+
+    return None, None
 
 def center_group_on_canvas(group: Group, canvas_config: CircularCanvasConfigurator) -> Group:
     """
@@ -30,12 +101,24 @@ def center_group_on_canvas(group: Group, canvas_config: CircularCanvasConfigurat
     """
     group.translate(canvas_config.offset_x, canvas_config.offset_y)
     return group
-def place_legend_on_canvas(group: Group, canvas_config: CircularCanvasConfigurator):
-    
+
+
+def place_legend_on_canvas(group: Group, canvas_config: CircularCanvasConfigurator) -> Group:
     group.translate(canvas_config.legend_offset_x, canvas_config.legend_offset_y)
     return group
 
-def add_gc_skew_group_on_canvas(canvas: Drawing, gb_record: SeqRecord, gc_df: DataFrame, canvas_config: CircularCanvasConfigurator, skew_config: GcSkewConfigurator, config_dict: dict) -> Drawing:
+def add_gc_skew_group_on_canvas(
+    canvas: Drawing,
+    gb_record: SeqRecord,
+    gc_df: DataFrame,
+    canvas_config: CircularCanvasConfigurator,
+    skew_config: GcSkewConfigurator,
+    config_dict: dict,
+    *,
+    track_width_override: float | None = None,
+    norm_factor_override: float | None = None,
+    cfg: GbdrawConfig | None = None,
+) -> Drawing:
     """
     Adds the GC skew group to the canvas.
 
@@ -49,14 +132,40 @@ def add_gc_skew_group_on_canvas(canvas: Drawing, gb_record: SeqRecord, gc_df: Da
     Returns:
     Drawing: The updated SVG drawing with the GC skew group added.
     """
-    skew_track_width = canvas_config.radius * canvas_config.track_ratio * canvas_config.track_ratio_factors[2]
-    gc_skew_group: Group = GcSkewGroup(gb_record, gc_df, canvas_config.radius, skew_track_width, skew_config, config_dict, canvas_config.track_ids['skew_track']).get_group()
+    cfg = cfg or canvas_config._cfg
+    skew_track_width = (
+        float(track_width_override)
+        if track_width_override is not None
+        else canvas_config.radius * canvas_config.track_ratio * canvas_config.track_ratio_factors[2]
+    )
+    gc_skew_group: Group = GcSkewGroup(
+        gb_record,
+        gc_df,
+        canvas_config.radius,
+        skew_track_width,
+        skew_config,
+        config_dict,
+        canvas_config.track_ids["skew_track"],
+        norm_factor_override=norm_factor_override,
+        cfg=cfg,
+    ).get_group()
     gc_skew_group = center_group_on_canvas(gc_skew_group, canvas_config)
     canvas.add(gc_skew_group)
     return canvas
 
 
-def add_gc_content_group_on_canvas(canvas: Drawing, gb_record: SeqRecord, gc_df: DataFrame, canvas_config: CircularCanvasConfigurator, gc_config: GcContentConfigurator, config_dict: dict) -> Drawing:
+def add_gc_content_group_on_canvas(
+    canvas: Drawing,
+    gb_record: SeqRecord,
+    gc_df: DataFrame,
+    canvas_config: CircularCanvasConfigurator,
+    gc_config: GcContentConfigurator,
+    config_dict: dict,
+    *,
+    track_width_override: float | None = None,
+    norm_factor_override: float | None = None,
+    cfg: GbdrawConfig | None = None,
+) -> Drawing:
     """
     Adds the GC content group to the canvas.
 
@@ -71,15 +180,38 @@ def add_gc_content_group_on_canvas(canvas: Drawing, gb_record: SeqRecord, gc_df:
     Returns:
     Drawing: The updated SVG drawing with the GC content group added.
     """
-    gc_content_track_width = canvas_config.radius * canvas_config.track_ratio * canvas_config.track_ratio_factors[1]
-    gc_content_group: Group = GcContentGroup(gb_record, gc_df, canvas_config.radius, gc_content_track_width,
-                                             gc_config, config_dict, canvas_config.track_ids['gc_track']).get_group()
+    cfg = cfg or canvas_config._cfg
+    gc_content_track_width = (
+        float(track_width_override)
+        if track_width_override is not None
+        else canvas_config.radius * canvas_config.track_ratio * canvas_config.track_ratio_factors[1]
+    )
+    gc_content_group: Group = GcContentGroup(
+        gb_record,
+        gc_df,
+        canvas_config.radius,
+        gc_content_track_width,
+        gc_config,
+        config_dict,
+        canvas_config.track_ids["gc_track"],
+        norm_factor_override=norm_factor_override,
+        cfg=cfg,
+    ).get_group()
     gc_content_group = center_group_on_canvas(gc_content_group, canvas_config)
     canvas.add(gc_content_group)
     return canvas
 
 
-def add_record_definition_group_on_canvas(canvas: Drawing, gb_record: SeqRecord, canvas_config: CircularCanvasConfigurator, species: str, strain: str, config_dict: dict) -> Drawing:
+def add_record_definition_group_on_canvas(
+    canvas: Drawing,
+    gb_record: SeqRecord,
+    canvas_config: CircularCanvasConfigurator,
+    species: str,
+    strain: str,
+    config_dict: dict,
+    *,
+    cfg: GbdrawConfig | None = None,
+) -> Drawing:
     """
     Adds the record definition group to the canvas.
 
@@ -95,13 +227,21 @@ def add_record_definition_group_on_canvas(canvas: Drawing, gb_record: SeqRecord,
     Drawing: The updated SVG drawing with the record definition group added.
     """
     definition_group: Group = DefinitionGroup(
-        gb_record, canvas_config, species=species, strain=strain, config_dict=config_dict).get_group()
+        gb_record, canvas_config, species=species, strain=strain, config_dict=config_dict, cfg=cfg or canvas_config._cfg).get_group()
     definition_group = center_group_on_canvas(definition_group, canvas_config)
     canvas.add(definition_group)
     return canvas
 
 
-def add_record_group_on_canvas(canvas: Drawing, record: SeqRecord, canvas_config: CircularCanvasConfigurator, feature_config: FeatureDrawingConfigurator, config_dict: dict) -> Drawing:
+def add_record_group_on_canvas(
+    canvas: Drawing,
+    record: SeqRecord,
+    canvas_config: CircularCanvasConfigurator,
+    feature_config: FeatureDrawingConfigurator,
+    config_dict: dict,
+    *,
+    cfg: GbdrawConfig | None = None,
+) -> Drawing:
     """
     Adds the record group to the canvas.
 
@@ -117,7 +257,12 @@ def add_record_group_on_canvas(canvas: Drawing, record: SeqRecord, canvas_config
     """
     # Unpack parameters
     record_group: Group = SeqRecordGroup(
-        gb_record=record, canvas_config=canvas_config, feature_config=feature_config, config_dict=config_dict).get_group()
+        gb_record=record,
+        canvas_config=canvas_config,
+        feature_config=feature_config,
+        config_dict=config_dict,
+        cfg=cfg or canvas_config._cfg,
+    ).get_group()
     # Calculate start and end points for the 60-degree arc
     
     record_group = center_group_on_canvas(record_group, canvas_config)
@@ -126,7 +271,14 @@ def add_record_group_on_canvas(canvas: Drawing, record: SeqRecord, canvas_config
     return canvas
 
 
-def add_axis_group_on_canvas(canvas: Drawing, canvas_config: CircularCanvasConfigurator, config_dict: dict) -> Drawing:
+def add_axis_group_on_canvas(
+    canvas: Drawing,
+    canvas_config: CircularCanvasConfigurator,
+    config_dict: dict,
+    *,
+    radius_override: float | None = None,
+    cfg: GbdrawConfig | None = None,
+) -> Drawing:
     """
     Adds the axis group to the canvas.
 
@@ -139,13 +291,25 @@ def add_axis_group_on_canvas(canvas: Drawing, canvas_config: CircularCanvasConfi
     Drawing: The updated SVG drawing with the axis group added.
     """
     axis_group: Group = AxisGroup(
-        canvas_config.radius, config_dict, canvas_config).get_group()
+        float(radius_override) if radius_override is not None else canvas_config.radius,
+        config_dict,
+        canvas_config,
+        cfg=cfg or canvas_config._cfg,
+    ).get_group()
     axis_group = center_group_on_canvas(axis_group, canvas_config)
     canvas.add(axis_group)
     return canvas
 
 
-def add_tick_group_on_canvas(canvas: Drawing, gb_record: SeqRecord, canvas_config: CircularCanvasConfigurator, config_dict: dict) -> Drawing:
+def add_tick_group_on_canvas(
+    canvas: Drawing,
+    gb_record: SeqRecord,
+    canvas_config: CircularCanvasConfigurator,
+    config_dict: dict,
+    *,
+    radius_override: float | None = None,
+    cfg: GbdrawConfig | None = None,
+) -> Drawing:
     """
     Adds the tick group to the canvas.
 
@@ -159,9 +323,37 @@ def add_tick_group_on_canvas(canvas: Drawing, gb_record: SeqRecord, canvas_confi
     Drawing: The updated SVG drawing with the tick group added.
     """
     tick_group: Group = TickGroup(
-        gb_record, canvas_config, config_dict).get_group()
+        gb_record,
+        canvas_config,
+        config_dict,
+        radius=radius_override,
+        cfg=cfg or canvas_config._cfg,
+    ).get_group()
     tick_group = center_group_on_canvas(tick_group, canvas_config)
     canvas.add(tick_group)
+    return canvas
+
+
+def add_labels_group_on_canvas(
+    canvas: Drawing,
+    gb_record: SeqRecord,
+    canvas_config: CircularCanvasConfigurator,
+    feature_config: FeatureDrawingConfigurator,
+    config_dict: dict,
+    *,
+    outer_arena: tuple[float, float] | None = None,
+    cfg: GbdrawConfig | None = None,
+) -> Drawing:
+    labels_group: Group = LabelsGroup(
+        gb_record=gb_record,
+        canvas_config=canvas_config,
+        feature_config=feature_config,
+        config_dict=config_dict,
+        outer_arena=outer_arena,
+        cfg=cfg or canvas_config._cfg,
+    ).get_group()
+    labels_group = center_group_on_canvas(labels_group, canvas_config)
+    canvas.add(labels_group)
     return canvas
 
 def add_legend_group_on_canvas(canvas: Drawing, canvas_config: CircularCanvasConfigurator, legend_config, legend_table):
@@ -171,7 +363,23 @@ def add_legend_group_on_canvas(canvas: Drawing, canvas_config: CircularCanvasCon
 
     return canvas
 
-def add_record_on_circular_canvas(canvas: Drawing, gb_record: SeqRecord, canvas_config: CircularCanvasConfigurator, feature_config: FeatureDrawingConfigurator, gc_config: GcContentConfigurator, skew_config: GcSkewConfigurator, gc_df: DataFrame, species: str, strain: str, config_dict: dict, legend_config, legend_table) -> Drawing:
+def add_record_on_circular_canvas(
+    canvas: Drawing,
+    gb_record: SeqRecord,
+    canvas_config: CircularCanvasConfigurator,
+    feature_config: FeatureDrawingConfigurator,
+    gc_config: GcContentConfigurator,
+    skew_config: GcSkewConfigurator,
+    gc_df: DataFrame,
+    species: str,
+    strain: str,
+    config_dict: dict,
+    legend_config,
+    legend_table,
+    *,
+    cfg: GbdrawConfig | None = None,
+    track_specs: list[TrackSpec] | None = None,
+) -> Drawing:
     """
     Adds various record-related groups to a circular canvas.
 
@@ -189,33 +397,113 @@ def add_record_on_circular_canvas(canvas: Drawing, gb_record: SeqRecord, canvas_
     Returns:
     Drawing: The updated SVG drawing with all record-related groups added.
     """
-    
-    canvas = add_axis_group_on_canvas(canvas, canvas_config, config_dict)
-    # Add record group
-    canvas = add_record_group_on_canvas(
-        canvas, gb_record, canvas_config, feature_config, config_dict)
-    # Add record definition group
-    canvas = add_record_definition_group_on_canvas(
-        canvas, gb_record, canvas_config, species, strain, config_dict)
-    # Add record tick group
-    canvas = add_tick_group_on_canvas(
-        canvas, gb_record, canvas_config, config_dict)
-    if canvas_config.legend_position != 'none':
-        canvas = add_legend_group_on_canvas(
-            canvas, canvas_config, legend_config, legend_table)
+    cfg = cfg or canvas_config._cfg
+    ts_by_kind = _track_specs_by_kind(track_specs)
+
+    axis_ts = ts_by_kind.get("axis")
+    if axis_ts is None or axis_ts.show:
+        axis_radius_px, _ = _resolve_circular_track_center_and_width_px(axis_ts, base_radius_px=canvas_config.radius)
+        canvas = add_axis_group_on_canvas(canvas, canvas_config, config_dict, radius_override=axis_radius_px, cfg=cfg)
+
+    features_ts = ts_by_kind.get("features")
+    if features_ts is None or features_ts.show:
+        canvas = add_record_group_on_canvas(
+            canvas, gb_record, canvas_config, feature_config, config_dict, cfg=cfg
+        )
+
+    definition_ts = ts_by_kind.get("definition")
+    if definition_ts is None or definition_ts.show:
+        canvas = add_record_definition_group_on_canvas(
+            canvas, gb_record, canvas_config, species, strain, config_dict, cfg=cfg
+        )
+
+    ticks_ts = ts_by_kind.get("ticks")
+    if ticks_ts is None or ticks_ts.show:
+        ticks_radius_px, _ = _resolve_circular_track_center_and_width_px(ticks_ts, base_radius_px=canvas_config.radius)
+        canvas = add_tick_group_on_canvas(
+            canvas, gb_record, canvas_config, config_dict, radius_override=ticks_radius_px, cfg=cfg
+        )
+
+    legend_ts = ts_by_kind.get("legend")
+    if canvas_config.legend_position != "none" and (legend_ts is None or legend_ts.show):
+        canvas = add_legend_group_on_canvas(canvas, canvas_config, legend_config, legend_table)
+
     # Add GC content group if configured to show
-    if canvas_config.show_gc:
+    gc_ts = ts_by_kind.get("gc_content")
+    if canvas_config.show_gc and (gc_ts is None or gc_ts.show):
+        gc_center_px, gc_width_px = _resolve_circular_track_center_and_width_px(gc_ts, base_radius_px=canvas_config.radius)
+        norm_factor_override = (gc_center_px / canvas_config.radius) if gc_center_px is not None else None
         canvas = add_gc_content_group_on_canvas(
-            canvas, gb_record, gc_df, canvas_config, gc_config, config_dict)
-    if canvas_config.show_skew:
+            canvas,
+            gb_record,
+            gc_df,
+            canvas_config,
+            gc_config,
+            config_dict,
+            track_width_override=gc_width_px,
+            norm_factor_override=norm_factor_override,
+            cfg=cfg,
+        )
+
+    skew_ts = ts_by_kind.get("gc_skew")
+    if canvas_config.show_skew and (skew_ts is None or skew_ts.show):
+        skew_center_px, skew_width_px = _resolve_circular_track_center_and_width_px(skew_ts, base_radius_px=canvas_config.radius)
+        norm_factor_override = (skew_center_px / canvas_config.radius) if skew_center_px is not None else None
         canvas = add_gc_skew_group_on_canvas(
-            canvas, gb_record, gc_df, canvas_config, skew_config, config_dict)
+            canvas,
+            gb_record,
+            gc_df,
+            canvas_config,
+            skew_config,
+            config_dict,
+            track_width_override=skew_width_px,
+            norm_factor_override=norm_factor_override,
+            cfg=cfg,
+        )
+
+    # External labels: separate group (label arena). Embedded labels remain in the record group.
+    labels_ts = ts_by_kind.get("labels")
+    raw_show_labels = cfg.canvas.show_labels
+    show_labels_base = (raw_show_labels != "none") if isinstance(raw_show_labels, str) else bool(raw_show_labels)
+    show_external_labels = show_labels_base and (labels_ts is None or labels_ts.show) and (features_ts is None or features_ts.show)
+    if show_external_labels:
+        outer_arena = None
+        if labels_ts is not None:
+            center_px, width_px = _resolve_circular_track_center_and_width_px(labels_ts, base_radius_px=canvas_config.radius)
+            if center_px is not None and width_px is not None:
+                inner_px = center_px - (width_px / 2.0)
+                outer_px = center_px + (width_px / 2.0)
+                if outer_px < inner_px:
+                    inner_px, outer_px = outer_px, inner_px
+                outer_arena = (inner_px, outer_px)
+        canvas = add_labels_group_on_canvas(
+            canvas,
+            gb_record,
+            canvas_config,
+            feature_config,
+            config_dict,
+            outer_arena=outer_arena,
+            cfg=cfg,
+        )
     return canvas
 
 
-def plot_circular_diagram(gb_record: SeqRecord, canvas_config: CircularCanvasConfigurator, gc_df: DataFrame, gc_config: GcContentConfigurator, skew_config: GcSkewConfigurator, feature_config: FeatureDrawingConfigurator, species: str, strain: str, config_dict: dict, out_formats: list, legend_config) -> None:
+def assemble_circular_diagram(
+    gb_record: SeqRecord,
+    canvas_config: CircularCanvasConfigurator,
+    gc_df: DataFrame,
+    gc_config: GcContentConfigurator,
+    skew_config: GcSkewConfigurator,
+    feature_config: FeatureDrawingConfigurator,
+    species: Optional[str],
+    strain: Optional[str],
+    config_dict: dict,
+    legend_config: LegendDrawingConfigurator,
+    cfg: GbdrawConfig | None = None,
+    track_specs: list[TrackSpec] | None = None,
+) -> Drawing:
     """
-    Plots a circular diagram for a GenBank record.
+    Assembles a circular diagram for a GenBank record and returns the SVG canvas.
 
     Parameters:
     gb_record (SeqRecord): The GenBank record to plot.
@@ -229,15 +517,68 @@ def plot_circular_diagram(gb_record: SeqRecord, canvas_config: CircularCanvasCon
     out_formats (list): List of formats to save the output (e.g., ['png', 'svg']).
 
     Returns:
-    None: The function saves the plotted diagram to specified output formats.
+    Drawing: The assembled SVG canvas (not saved).
     """
     # Configure and create canvas
     
+    # Prefer a pre-parsed config model when available to avoid repeated from_dict() calls.
+    cfg = cfg or GbdrawConfig.from_dict(config_dict)
+
     features_present = check_feature_presence(gb_record, feature_config.selected_features_set)
     legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present)
     legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
     canvas_config.recalculate_canvas_dimensions(legend_config)
     canvas: Drawing = canvas_config.create_svg_canvas()
     canvas = add_record_on_circular_canvas(
-        canvas, gb_record, canvas_config, feature_config, gc_config, skew_config, gc_df, species, strain, config_dict, legend_config, legend_table)
+        canvas,
+        gb_record,
+        canvas_config,
+        feature_config,
+        gc_config,
+        skew_config,
+        gc_df,
+        species,
+        strain,
+        config_dict,
+        legend_config,
+        legend_table,
+        cfg=cfg,
+        track_specs=track_specs,
+    )
+    return canvas
+
+
+def plot_circular_diagram(
+    gb_record: SeqRecord,
+    canvas_config: CircularCanvasConfigurator,
+    gc_df: DataFrame,
+    gc_config: GcContentConfigurator,
+    skew_config: GcSkewConfigurator,
+    feature_config: FeatureDrawingConfigurator,
+    species: Optional[str],
+    strain: Optional[str],
+    config_dict: dict,
+    out_formats: list,
+    legend_config: LegendDrawingConfigurator,
+    cfg: GbdrawConfig | None = None,
+    track_specs: list[TrackSpec] | None = None,
+) -> Drawing:
+    """
+    Backwards-compatible wrapper that assembles and saves a circular diagram.
+    """
+    canvas = assemble_circular_diagram(
+        gb_record=gb_record,
+        canvas_config=canvas_config,
+        gc_df=gc_df,
+        gc_config=gc_config,
+        skew_config=skew_config,
+        feature_config=feature_config,
+        species=species,
+        strain=strain,
+        config_dict=config_dict,
+        legend_config=legend_config,
+        cfg=cfg,
+        track_specs=track_specs,
+    )
     save_figure(canvas, out_formats)
+    return canvas

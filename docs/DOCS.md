@@ -32,3 +32,12 @@ Look here for detailed information, examples, and answers to specific questions.
 * **[Gallery](./GALLERY.md)**: A gallery of examples created with `gbdraw`.
 * **[FAQ](./FAQ.md)**: Frequently Asked Questions and solutions to known issues.
 * **[About](./ABOUT.md)**: Information on how to cite `gbdraw`.
+
+---
+
+### **🧱 Design / Refactoring Proposal**
+
+Planning documents for future major improvements.
+
+* **[Refactoring Proposal](./REFACTORING_PROPOSAL.md)**: Library-ization, multi-track (circular/linear), custom tracks, and interactivity.
+* **[Refactoring Daily Log (2026-01-02)](./REFACTORING_LOG_2026-01-02.md)**: Today's progress + plan for tomorrow.

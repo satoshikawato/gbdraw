@@ -5,17 +5,20 @@ import sys
 import argparse
 import logging
 from typing import Optional
-from pandas import DataFrame
-from Bio.SeqRecord import SeqRecord
-from .file_processing import load_gbks, load_gff_fasta, load_default_colors, read_color_table, load_config_toml, parse_formats
-from .circular_diagram_components import plot_circular_diagram
-from .data_processing import skew_df
-from .canvas_generator import CircularCanvasConfigurator
-from .object_configurators import LegendDrawingConfigurator, GcSkewConfigurator,GcContentConfigurator, FeatureDrawingConfigurator
-from .utility_functions import suppress_gc_content_and_skew, modify_config_dict, determine_output_file_prefix, read_qualifier_priority_file
+from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from .io.genome import load_gbks, load_gff_fasta
+from .io.colors import load_default_colors, read_color_table
+from .config.toml import load_config_toml
+from .render.export import parse_formats, save_figure
+from .api.diagram import assemble_circular_diagram_from_record  # type: ignore[reportMissingImports]
+from .config.modify import suppress_gc_content_and_skew, modify_config_dict  # type: ignore[reportMissingImports]
+from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from .core.sequence import determine_output_file_prefix  # type: ignore[reportMissingImports]
+from .labels.filtering import read_qualifier_priority_file  # type: ignore[reportMissingImports]
 
 try:
-    import cairosvg
+    import cairosvg  # type: ignore[reportMissingImports]
     CAIROSVG_AVAILABLE = True
 except (ImportError, OSError):
     CAIROSVG_AVAILABLE = False
@@ -334,11 +337,11 @@ def circular_main(cmd_args) -> None:
     scale_interval: Optional[int] = args.scale_interval
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
+    filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
     if qualifier_priority_path:
-        qualifier_priority_df = read_qualifier_priority_file(qualifier_priority_path)
-        config_dict['labels']['filtering']['qualifier_priority_df'] = qualifier_priority_df
+        filtering_cfg["qualifier_priority_df"] = read_qualifier_priority_file(qualifier_priority_path)
     else:
-        config_dict['labels']['filtering']['qualifier_priority_df'] = None
+        filtering_cfg["qualifier_priority_df"] = None
 
     palette: str = args.palette
     default_colors: Optional[DataFrame] = load_default_colors(
@@ -395,46 +398,48 @@ def circular_main(cmd_args) -> None:
 
 
 
+    cfg = GbdrawConfig.from_dict(config_dict)
+
     for gb_record in gb_records:
         record_count += 1 
         accession = gb_record.id
         seq_length = len(gb_record.seq)
         if not manual_window:
-            if seq_length < 1000000:
-                window = config_dict['objects']['sliding_window']['default'][0]
-            elif seq_length < 10000000:
-                window = config_dict['objects']['sliding_window']['up1m'][0]
+            if seq_length < 1_000_000:
+                window = cfg.objects.sliding_window.default[0]
+            elif seq_length < 10_000_000:
+                window = cfg.objects.sliding_window.up1m[0]
             else:
-                window = config_dict['objects']['sliding_window']['up10m'][0]
+                window = cfg.objects.sliding_window.up10m[0]
         else:
             window = manual_window
         if not manual_step:
-            if seq_length < 1000000:
-                step = config_dict['objects']['sliding_window']['default'][1]
-            elif seq_length < 10000000:
-                step = config_dict['objects']['sliding_window']['up1m'][1]
+            if seq_length < 1_000_000:
+                step = cfg.objects.sliding_window.default[1]
+            elif seq_length < 10_000_000:
+                step = cfg.objects.sliding_window.up1m[1]
             else:
-                step = config_dict['objects']['sliding_window']['up10m'][1]
+                step = cfg.objects.sliding_window.up10m[1]
         else:
             step = manual_step
 
-        gc_config = GcContentConfigurator(
-            window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
-        skew_config = GcSkewConfigurator(
-            window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
-
-        
-
         outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
-        gc_df: DataFrame = skew_df(gb_record, window, step, dinucleotide)
-        canvas_config = CircularCanvasConfigurator(
-            output_prefix=outfile_prefix, config_dict=config_dict, legend=legend, gb_record=gb_record
-            )
-        feature_config = FeatureDrawingConfigurator(
-            color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, canvas_config=canvas_config)
-        legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config, canvas_config=canvas_config)
-        plot_circular_diagram(gb_record, canvas_config, gc_df, gc_config, skew_config,
-                              feature_config, species, strain, config_dict, out_formats, legend_config)
+        canvas = assemble_circular_diagram_from_record(
+            gb_record,
+            config_dict=config_dict,
+            color_table=color_table,
+            default_colors=default_colors,
+            selected_features_set=selected_features_set,
+            output_prefix=outfile_prefix,
+            legend=legend,
+            dinucleotide=dinucleotide,
+            window=window,
+            step=step,
+            species=species,
+            strain=strain,
+            cfg=cfg,
+        )
+        save_figure(canvas, out_formats)
 
 if __name__ == "__main__":
     # Entry point for the script when run as a standalone program.
