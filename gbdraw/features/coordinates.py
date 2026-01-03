@@ -43,6 +43,8 @@ def get_intron_coordinate(
 ) -> tuple[int, list[FeatureLocationPart]]:
     """
     Generates coordinates for introns based on adjacent exons.
+    Returns an empty list if exons overlap or if coordinates would be invalid
+    (e.g., RNA editing frameshift features with coordinate fallback).
     """
     intron_count: int = previous_intron_count + 1
     intron_id: str = str(intron_count).zfill(3)
@@ -52,6 +54,17 @@ def get_intron_coordinate(
     current_exon_start: int = current_exon.start
     current_exon_end: int = current_exon.end
     intron_parts: List[FeatureLocationPart] = []
+
+    # Check for overlapping exons or invalid intron coordinates
+    # This handles cases like RNA editing frameshift (e.g., join(1850..2340,2339..3026))
+    # where the second exon starts before or at the first exon's end
+    if intron_strand == "positive" and previous_exon_end >= current_exon_start:
+        # Exons overlap or are adjacent with no gap - no intron to draw
+        return intron_count, intron_parts
+    elif intron_strand == "negative" and current_exon_end >= previous_exon_start:
+        # Exons overlap or are adjacent with no gap - no intron to draw
+        return intron_count, intron_parts
+
     if (intron_strand == "positive" and previous_exon_end > current_exon_start + 1) or (
         intron_strand == "negative" and previous_exon_end + 1 < current_exon_start
     ):
