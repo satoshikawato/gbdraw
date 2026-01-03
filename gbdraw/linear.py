@@ -28,6 +28,11 @@ except (ImportError, OSError):
 # Setup for the logging system and sets the logging level to INFO
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+# Ensure handler is added if not already present
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter('%(message)s'))
+    logger.addHandler(handler)
 
 def _get_args(args) -> argparse.Namespace:
     """
@@ -389,14 +394,14 @@ def linear_main(cmd_args) -> None:
     else:
         filtering_cfg["whitelist_df"] = None
 
-    block_stroke_color: str = args.block_stroke_color
-    block_stroke_width: str = args.block_stroke_width
+    block_stroke_color: Optional[str] = args.block_stroke_color
+    block_stroke_width: Optional[float] = args.block_stroke_width
     definition_font_size: Optional[float] = args.definition_font_size
     label_font_size: Optional[float] = args.label_font_size
-    axis_stroke_color: str = args.axis_stroke_color
-    axis_stroke_width: str = args.axis_stroke_width
-    line_stroke_color: str = args.line_stroke_color
-    line_stroke_width: str = args.line_stroke_width       
+    axis_stroke_color: Optional[str] = args.axis_stroke_color
+    axis_stroke_width: Optional[float] = args.axis_stroke_width
+    line_stroke_color: Optional[str] = args.line_stroke_color
+    line_stroke_width: Optional[float] = args.line_stroke_width       
     config_dict = modify_config_dict(
         config_dict, 
         block_stroke_color=block_stroke_color, 
@@ -409,6 +414,8 @@ def linear_main(cmd_args) -> None:
         line_stroke_width=line_stroke_width, 
         show_gc=show_gc, 
         show_skew=show_skew, 
+        show_labels=show_labels,
+        resolve_overlaps=resolve_overlaps,
         align_center=align_center, 
         strandedness=strandedness,
         label_blacklist=label_blacklist,
@@ -456,10 +463,6 @@ def linear_main(cmd_args) -> None:
     else:
         step = manual_step
     num_of_entries: int = len(sequence_length_dict)
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness, show_labels=show_labels, resolve_overlaps=resolve_overlaps, label_blacklist=label_blacklist, label_whitelist=label_whitelist, default_cds_height=feature_height, legend_box_size=legend_box_size, legend_font_size=legend_font_size)
-
-    # Rebuild typed config after the final config_dict mutations (show_labels, resolve_overlaps, etc.).
-    cfg = GbdrawConfig.from_dict(config_dict)
 
     canvas = assemble_linear_diagram_from_records(
         records=records,
@@ -484,6 +487,8 @@ def linear_main(cmd_args) -> None:
 if __name__ == "__main__":
     # This gets all arguments passed to the script, excluding the script name
     handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter('%(message)s'))
+    logger.addHandler(handler)
     main_args = sys.argv[1:]
     if not main_args:
         main_args.append('--help')

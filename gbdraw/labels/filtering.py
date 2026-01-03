@@ -94,25 +94,11 @@ def read_filter_list_file(filepath: str) -> Optional[DataFrame]:
 
 
 def preprocess_label_filtering(label_filtering: dict):
-    # #region agent log
-    import json
-    log_path = "/mnt/c/Users/kawato/Documents/GitHub/gbdraw/.cursor/debug.log"
-    try:
-        with open(log_path, "a") as f:
-            f.write(json.dumps({"id": "log_preprocess_entry", "timestamp": __import__("time").time(), "location": "filtering.py:96", "message": "preprocess_label_filtering entry", "data": {"label_filtering_keys": list(label_filtering.keys()), "whitelist_df_type": str(type(label_filtering.get("whitelist_df"))), "whitelist_df_value": str(label_filtering.get("whitelist_df"))[:100] if isinstance(label_filtering.get("whitelist_df"), str) else "not_string", "qualifier_priority_df_type": str(type(label_filtering.get("qualifier_priority_df"))), "qualifier_priority_df_value": str(label_filtering.get("qualifier_priority_df"))[:100] if isinstance(label_filtering.get("qualifier_priority_df"), str) else "not_string"}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
-    except: pass
-    # #endregion
     # If already processed, return as-is
     if "whitelist_map" in label_filtering and "priority_map" in label_filtering:
         return label_filtering
     
     whitelist_df = label_filtering.get("whitelist_df")
-    # #region agent log
-    try:
-        with open(log_path, "a") as f:
-            f.write(json.dumps({"id": "log_whitelist_check", "timestamp": __import__("time").time(), "location": "filtering.py:98", "message": "whitelist_df check", "data": {"whitelist_df_is_none": whitelist_df is None, "whitelist_df_type": str(type(whitelist_df)), "has_empty_attr": hasattr(whitelist_df, "empty") if whitelist_df is not None else False}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
-    except: pass
-    # #endregion
     # Handle case where whitelist_df is a string (should be DataFrame or None)
     # This can happen if modify_config_dict overwrote a DataFrame with a string
     if isinstance(whitelist_df, str):

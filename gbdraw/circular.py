@@ -26,6 +26,11 @@ except (ImportError, OSError):
 # Setup for the logging system and sets the logging level to INFO
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+# Ensure handler is added if not already present
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter('%(message)s'))
+    logger.addHandler(handler)
 
 
 def _get_args(args) -> argparse.Namespace:
@@ -326,26 +331,18 @@ def circular_main(cmd_args) -> None:
             "WARNING: Inner labels are allowed, but GC and skew tracks are not suppressed. Suppressing GC and skew tracks.")  # 
 
     user_defined_default_colors: str = args.default_colors
-    block_stroke_color: str = args.block_stroke_color
-    block_stroke_width: str = args.block_stroke_width
-    axis_stroke_color: str = args.axis_stroke_color
-    axis_stroke_width: str = args.axis_stroke_width
-    line_stroke_color: str = args.line_stroke_color
-    line_stroke_width: str = args.line_stroke_width   
+    block_stroke_color: Optional[str] = args.block_stroke_color
+    block_stroke_width: Optional[float] = args.block_stroke_width
+    axis_stroke_color: Optional[str] = args.axis_stroke_color
+    axis_stroke_width: Optional[float] = args.axis_stroke_width
+    line_stroke_color: Optional[str] = args.line_stroke_color
+    line_stroke_width: Optional[float] = args.line_stroke_width   
     track_type: str = args.track_type
     strandedness = args.separate_strands
     scale_interval: Optional[int] = args.scale_interval
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
     filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
-    # #region agent log
-    import json
-    log_path = "/mnt/c/Users/kawato/Documents/GitHub/gbdraw/.cursor/debug.log"
-    try:
-        with open(log_path, "a") as f:
-            f.write(json.dumps({"id": "log_circular_before_qualifier", "timestamp": __import__("time").time(), "location": "circular.py:340", "message": "before qualifier_priority processing", "data": {"qualifier_priority_path": qualifier_priority_path, "qualifier_priority_path_type": str(type(qualifier_priority_path)), "label_whitelist": label_whitelist, "label_whitelist_type": str(type(label_whitelist))}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "D"}) + "\n")
-    except: pass
-    # #endregion
     if qualifier_priority_path:
         filtering_cfg["qualifier_priority_df"] = read_qualifier_priority_file(qualifier_priority_path)
     else:
@@ -354,12 +351,6 @@ def circular_main(cmd_args) -> None:
         filtering_cfg["whitelist_df"] = read_filter_list_file(label_whitelist)
     else:
         filtering_cfg["whitelist_df"] = None
-    # #region agent log
-    try:
-        with open(log_path, "a") as f:
-            f.write(json.dumps({"id": "log_circular_after_qualifier", "timestamp": __import__("time").time(), "location": "circular.py:344", "message": "after qualifier_priority processing, before modify_config_dict", "data": {"qualifier_priority_df_type": str(type(filtering_cfg.get("qualifier_priority_df"))), "whitelist_df_type": str(type(filtering_cfg.get("whitelist_df"))), "label_whitelist": label_whitelist, "label_whitelist_type": str(type(label_whitelist))}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "D"}) + "\n")
-    except: pass
-    # #endregion
 
     palette: str = args.palette
     default_colors: Optional[DataFrame] = load_default_colors(
@@ -465,6 +456,8 @@ if __name__ == "__main__":
     # args are parsed command-line arguments
     # This gets all arguments passed to the script, excluding the script name
     handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter('%(message)s'))
+    logger.addHandler(handler)
     main_args = sys.argv[1:]
     if not main_args:
         main_args.append('--help')

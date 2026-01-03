@@ -208,24 +208,9 @@ def modify_config_dict(
         "normalize_length": "canvas.linear.normalize_length",
     }
 
-    # #region agent log
-    import json
-    log_path = "/mnt/c/Users/kawato/Documents/GitHub/gbdraw/.cursor/debug.log"
-    try:
-        with open(log_path, "a") as f:
-            f.write(json.dumps({"id": "log_modify_config_before_update", "timestamp": __import__("time").time(), "location": "modify.py:211", "message": "before update_config_value loop", "data": {"label_whitelist": str(label_whitelist)[:100] if label_whitelist else None, "label_whitelist_type": str(type(label_whitelist)), "qualifier_priority": str(qualifier_priority)[:100] if qualifier_priority else None, "qualifier_priority_type": str(type(qualifier_priority))}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
-    except: pass
-    # #endregion
     for param, path in mapping.items():
         value = locals()[param]
         if value is not None:
-            # #region agent log
-            if param in ["label_whitelist", "qualifier_priority"]:
-                try:
-                    with open(log_path, "a") as f:
-                        f.write(json.dumps({"id": "log_modify_config_update", "timestamp": __import__("time").time(), "location": "modify.py:214", "message": "updating config value", "data": {"param": param, "path": path, "value_type": str(type(value)), "value_preview": str(value)[:100] if isinstance(value, str) else "not_string"}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
-                except: pass
-            # #endregion
             # Convert label_blacklist string to list if needed
             if param == "label_blacklist" and isinstance(value, str):
                 value = [kw.strip() for kw in value.split(",") if kw.strip()]
