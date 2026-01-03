@@ -535,9 +535,13 @@ def prepare_label_list(
                         longest_segment_length = interval_length
 
             cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
+            # Get track_id for overlap resolution
+            track_id = getattr(feature_object, 'feature_track_id', 0)
             factors: list[float] = calculate_feature_position_factors_circular(
-                total_length, coordinate_strand, track_ratio, cds_ratio, offset, track_type, strandedness
+                total_length, coordinate_strand, track_ratio, cds_ratio, offset, track_type, strandedness, track_id
             )
+            # Store track_id in label entry for embedded label drawing
+            label_entry["track_id"] = track_id
             bbox_width_px, bbox_height_px = calculate_bbox_dimensions(feature_label_text, font_family, font_size, interval)
             label_middle = longeset_segment_middle
             label_as_feature_length = total_length * (1.1 * bbox_width_px) / (2 * math.pi * radius)

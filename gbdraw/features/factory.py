@@ -170,7 +170,9 @@ def create_feature_dict(
             )
             feature_dict[feature_id] = feature_object
 
-    feature_dict = arrange_feature_tracks(feature_dict, separate_strands, resolve_overlaps)
+    feature_dict = arrange_feature_tracks(
+        feature_dict, separate_strands, resolve_overlaps, genome_length
+    )
     return feature_dict
 
 

@@ -192,6 +192,10 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         default="tuckin")
     parser.add_argument(
+        '--resolve_overlaps',
+        help='Resolve overlapping features by placing them on separate tracks (default: False). Useful for plasmid visualization.',
+        action='store_true')
+    parser.add_argument(
         '--show_labels',
         help='Show feature labels (default: False).',
         action='store_true')
@@ -299,6 +303,7 @@ def circular_main(cmd_args) -> None:
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
     show_labels: bool = args.show_labels
+    resolve_overlaps: bool = args.resolve_overlaps
     allow_inner_labels: bool = args.allow_inner_labels
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
@@ -340,6 +345,13 @@ def circular_main(cmd_args) -> None:
     track_type: str = args.track_type
     strandedness = args.separate_strands
     scale_interval: Optional[int] = args.scale_interval
+    
+    # Warn if resolve_overlaps is used with separate_strands
+    if strandedness and resolve_overlaps:
+        logger.warning(
+            "WARNING: --resolve_overlaps is ignored when --separate_strands is enabled.")
+        resolve_overlaps = False
+    
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
     filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
@@ -371,6 +383,7 @@ def circular_main(cmd_args) -> None:
         show_labels=show_labels, 
         track_type=track_type, 
         strandedness=strandedness, 
+        resolve_overlaps=resolve_overlaps,
         show_gc=show_gc, 
         show_skew=show_skew, 
         allow_inner_labels=allow_inner_labels,

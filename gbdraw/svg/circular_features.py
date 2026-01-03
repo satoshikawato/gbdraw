@@ -17,9 +17,24 @@ def generate_circular_intron_path(
     offset: float,
     track_type: str,
     strandedness: bool,
+    track_id: int = 0,
 ) -> list[str]:
     """
     Generates the SVG path description for an intron feature on a circular canvas.
+    
+    Args:
+        radius: Base radius of the circular canvas
+        coord_dict: Dictionary with coord_strand, coord_start, coord_end
+        total_length: Total genome length
+        track_ratio: Track ratio from config
+        cds_ratio: Calculated CDS ratio
+        offset: Base offset
+        track_type: "tuckin", "middle", or "spreadout"
+        strandedness: Whether strands are separated
+        track_id: Track number for overlap resolution (0 = default track)
+    
+    Returns:
+        List with ["line", path_data]
     """
     coord_strand: str = str(coord_dict["coord_strand"])
 
@@ -36,7 +51,7 @@ def generate_circular_intron_path(
         param = params[0]
 
     factors: list[float] = calculate_feature_position_factors_circular(
-        total_length, coord_strand, track_ratio, cds_ratio, offset, track_type, strandedness
+        total_length, coord_strand, track_ratio, cds_ratio, offset, track_type, strandedness, track_id
     )
     start_x_1: float = (radius * factors[1]) * math.cos(
         math.radians(360.0 * ((coord_start) / total_length) - 90)
@@ -77,13 +92,29 @@ def generate_circular_arrowhead_path(
     offset: float,
     track_type: str,
     strandedness: bool,
+    track_id: int = 0,
 ) -> list[str]:
     """
     Generates the SVG path description for an arrowhead feature on a circular canvas.
+    
+    Args:
+        radius: Base radius of the circular canvas
+        coord_dict: Dictionary with coord_strand, coord_start, coord_end
+        total_length: Total genome length
+        cds_arrow_length: Arrow head length in bp
+        track_ratio: Track ratio from config
+        cds_ratio: Calculated CDS ratio
+        offset: Base offset
+        track_type: "tuckin", "middle", or "spreadout"
+        strandedness: Whether strands are separated
+        track_id: Track number for overlap resolution (0 = default track)
+    
+    Returns:
+        List with ["block", path_data]
     """
     coord_strand: str = str(coord_dict["coord_strand"])
     factors: list[float] = calculate_feature_position_factors_circular(
-        total_length, coord_strand, track_ratio, cds_ratio, offset, track_type, strandedness
+        total_length, coord_strand, track_ratio, cds_ratio, offset, track_type, strandedness, track_id
     )
     coord_start = int(coord_dict["coord_start"])
     coord_end = int(coord_dict["coord_end"])
@@ -249,13 +280,28 @@ def generate_circular_rectangle_path(
     offset,
     track_type: str,
     strandedness: bool,
+    track_id: int = 0,
 ) -> list[str]:
     """
     Generates the SVG path description for a rectangular feature on a circular canvas.
+    
+    Args:
+        radius: Base radius of the circular canvas
+        coord_dict: Dictionary with coord_strand, coord_start, coord_end
+        total_length: Total genome length
+        track_ratio: Track ratio from config
+        cds_ratio: Calculated CDS ratio
+        offset: Base offset
+        track_type: "tuckin", "middle", or "spreadout"
+        strandedness: Whether strands are separated
+        track_id: Track number for overlap resolution (0 = default track)
+    
+    Returns:
+        List with ["block", path_data]
     """
     coord_strand: str = str(coord_dict["coord_strand"])
     factors: list[float] = calculate_feature_position_factors_circular(
-        total_length, coord_strand, track_ratio, cds_ratio, offset, track_type, strandedness
+        total_length, coord_strand, track_ratio, cds_ratio, offset, track_type, strandedness, track_id
     )
     coord_start: int = int(coord_dict["coord_start"])
     coord_end: int = int(coord_dict["coord_end"])
@@ -366,5 +412,3 @@ __all__ = [
     "generate_circular_intron_path",
     "generate_circular_rectangle_path",
 ]
-
-

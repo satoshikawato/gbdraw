@@ -1,67 +1,157 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from ..feature_objects import FeatureObject
 
 
-def get_feature_ends(feature):
+def get_feature_ends(feature, genome_length: Optional[int] = None) -> Tuple[int, int, str]:
+    """
+    Get feature start/end positions and strand.
+    
+    For origin-spanning features on circular genomes, returns start > end
+    to indicate the feature crosses the origin.
+    
+    Args:
+        feature: FeatureObject with location/coordinates
+        genome_length: Total genome length (required for origin-spanning detection)
+    
+    Returns:
+        (start, end, strand) tuple. If start > end, feature spans the origin.
+    """
     strand = feature.location[0].strand if feature.location else "undefined"
+    
     if hasattr(feature, "coordinates") and feature.coordinates:
-        start = min(part.start for part in feature.coordinates)
-        if start < 1:
-            start = 1
-        end = max(part.end for part in feature.coordinates)
-        if end < 1:
-            end = 1
+        parts = list(feature.coordinates)
     else:
-        start = min(part.start for part in feature.location)
-        end = max(part.end for part in feature.location)
-        if start < 1:
-            start = 1
-        if end < 1:
-            end = 1
+        parts = list(feature.location)
+    
+    if not parts:
+        return 1, 1, strand
+    
+    # Check for origin-spanning feature
+    # Origin-spanning features have parts that wrap around (e.g., join(9000..10000,1..500))
+    if len(parts) > 1 and genome_length:
+        # Get the first and last part positions
+        first_part = parts[0]
+        last_part = parts[-1]
+        
+        # For positive strand: if last part ends before first part starts, it spans origin
+        # For negative strand: if first part starts after last part ends, it spans origin
+        if strand == "positive":
+            if last_part.end < first_part.start:
+                # Origin-spanning: return (first_start, last_end) where start > end
+                start = max(1, first_part.start)
+                end = max(1, last_part.end)
+                return start, end, strand
+        elif strand == "negative":
+            if first_part.start > last_part.end:
+                # Origin-spanning for negative strand
+                start = max(1, first_part.start)
+                end = max(1, last_part.end)
+                return start, end, strand
+    
+    # Normal case: use min/max
+    starts = [part.start for part in parts]
+    ends = [part.end for part in parts]
+    start = max(1, min(starts))
+    end = max(1, max(ends))
+    
     return start, end, strand
 
 
-def calculate_feature_metrics(feature) -> Tuple[int, int]:
+def calculate_feature_metrics(feature, genome_length: Optional[int] = None) -> Tuple[int, int]:
     """
     Calculate total span and occupied length with corrected calculations.
+    
+    Handles origin-spanning features correctly when genome_length is provided.
 
     Returns:
         (total_span, occupied_length)
     """
-    if hasattr(feature, "coordinates") and feature.coordinates:
-        start = min(part.start for part in feature.coordinates)
-        if start < 1:
-            start = 1
-        end = max(part.end for part in feature.coordinates)
-        if end < 1:
-            end = 1
+    start, end, _ = get_feature_ends(feature, genome_length)
+    
+    # Calculate total span, accounting for origin-spanning
+    if start > end and genome_length:
+        # Origin-spanning: spans from start to genome_length, then from 1 to end
+        total_span = (genome_length - start) + end
     else:
-        start = min(part.start for part in feature.location)
-        end = max(part.end for part in feature.location)
-        if start < 1:
-            start = 1
-        if end < 1:
-            end = 1
-
-    total_span = abs(end - start)
+        total_span = abs(end - start)
 
     occupied_length = 0
     for part in feature.location:
         if part.kind == "block":
             occupied_length += abs(part.end - part.start)
 
-    occupied_length = min(occupied_length, total_span)
+    occupied_length = min(occupied_length, total_span) if total_span > 0 else occupied_length
     return total_span, occupied_length
 
 
-def check_feature_overlap(a: dict, b: dict, separate_strands: bool) -> bool:
+def check_feature_overlap(
+    a: dict, b: dict, separate_strands: bool, genome_length: Optional[int] = None
+) -> bool:
+    """
+    Check if two features overlap on a circular genome.
+    
+    Handles origin-spanning features when genome_length is provided.
+    Origin-spanning features have start > end.
+    
+    Args:
+        a: Feature dict with 'start', 'end', 'strand' keys
+        b: Feature dict with 'start', 'end', 'strand' keys
+        separate_strands: If True, features on different strands don't overlap
+        genome_length: Total genome length (required for origin-spanning detection)
+    
+    Returns:
+        True if features overlap, False otherwise
+    """
     if separate_strands and a["strand"] != b["strand"]:
         return False
-    return not (a["end"] < b["start"] or a["start"] > b["end"])
+    
+    a_start, a_end = a["start"], a["end"]
+    b_start, b_end = b["start"], b["end"]
+    
+    # Check if either feature spans the origin
+    a_spans_origin = a_start > a_end
+    b_spans_origin = b_start > b_end
+    
+    if not a_spans_origin and not b_spans_origin:
+        # Simple linear overlap check
+        return not (a_end < b_start or a_start > b_end)
+    
+    if genome_length is None:
+        # Can't determine accurately without genome_length, assume overlap
+        return True
+    
+    # Handle origin-spanning cases
+    def overlaps_circular(s1: int, e1: int, s2: int, e2: int, length: int) -> bool:
+        """Check overlap for circular genome coordinates."""
+        span1_origin = s1 > e1
+        span2_origin = s2 > e2
+        
+        if not span1_origin and not span2_origin:
+            # Neither spans origin
+            return not (e1 < s2 or s1 > e2)
+        
+        if span1_origin and span2_origin:
+            # Both span origin - they definitely overlap (both cover position 1 and length)
+            return True
+        
+        if span1_origin:
+            # Feature 1 spans origin: covers [s1, length] and [1, e1]
+            # Feature 2 is normal: covers [s2, e2]
+            # Overlap if: s2 <= length and s2 >= s1 (overlaps right part)
+            #         or: e2 >= 1 and e2 <= e1 (overlaps left part)
+            #         or: s2 <= e1 (feature 2 is within left part)
+            #         or: e2 >= s1 (feature 2 is within right part)
+            return (s2 >= s1) or (e2 <= e1) or (s2 <= e1 and e2 >= 1) or (e2 >= s1 and s2 <= length)
+        
+        # span2_origin is True
+        # Feature 2 spans origin, feature 1 is normal
+        return (s1 >= s2) or (e1 <= e2) or (s1 <= e2 and e1 >= 1) or (e1 >= s2 and s1 <= length)
+    
+    return overlaps_circular(a_start, a_end, b_start, b_end, genome_length)
 
 
 def find_best_track(
@@ -69,8 +159,23 @@ def find_best_track(
     track_dict: Dict[str, List[dict]],
     separate_strands: bool,
     resolve_overlaps: bool,
+    genome_length: Optional[int] = None,
     max_track: int = 100,
 ) -> int:
+    """
+    Find the best track for a feature, avoiding overlaps if resolve_overlaps is True.
+    
+    Args:
+        feature: Feature metrics dict
+        track_dict: Dict of existing features per track
+        separate_strands: Whether to separate positive/negative strands
+        resolve_overlaps: Whether to resolve overlapping features
+        genome_length: Total genome length (for origin-spanning detection)
+        max_track: Maximum number of tracks to consider
+    
+    Returns:
+        Track number (positive for positive strand, negative for negative strand)
+    """
     if not separate_strands:
         track_nums = [0] if not resolve_overlaps else list(range(0, max_track))
     else:
@@ -87,25 +192,39 @@ def find_best_track(
             key = f"track_{abs(tn)}"
             if key not in track_dict or not track_dict[key]:
                 return tn
+            has_overlap = False
             for existing in track_dict[key]:
-                if check_feature_overlap(feature, existing, separate_strands):
+                if check_feature_overlap(feature, existing, separate_strands, genome_length):
+                    has_overlap = True
                     break
-            else:
+            if not has_overlap:
                 return tn
 
     return track_nums[0]
 
 
 def arrange_feature_tracks(
-    feature_dict: Dict[str, FeatureObject], separate_strands: bool, resolve_overlaps: bool
+    feature_dict: Dict[str, FeatureObject],
+    separate_strands: bool,
+    resolve_overlaps: bool,
+    genome_length: Optional[int] = None,
 ) -> Dict[str, FeatureObject]:
     """
     Arrange features in tracks with improved strand handling and track assignment.
+    
+    Args:
+        feature_dict: Dict of feature_id -> FeatureObject
+        separate_strands: Whether to separate positive/negative strands
+        resolve_overlaps: Whether to resolve overlapping features by assigning to different tracks
+        genome_length: Total genome length (for origin-spanning feature detection)
+    
+    Returns:
+        Updated feature_dict with feature_track_id set on each feature
     """
     feature_metrics = {}
     for feat_id, feature in feature_dict.items():
-        total_span, occupied_length = calculate_feature_metrics(feature)
-        start, end, strand = get_feature_ends(feature)
+        total_span, occupied_length = calculate_feature_metrics(feature, genome_length)
+        start, end, strand = get_feature_ends(feature, genome_length)
 
         occupation_ratio = occupied_length / total_span if total_span > 0 else 0
 
@@ -144,7 +263,9 @@ def arrange_feature_tracks(
         else:
             track_dict = pos_tracks
 
-        track_num = find_best_track(feat_metrics, track_dict, separate_strands, resolve_overlaps)
+        track_num = find_best_track(
+            feat_metrics, track_dict, separate_strands, resolve_overlaps, genome_length
+        )
         track_id = f"track_{abs(track_num)}"
 
         if track_id not in track_dict:
@@ -163,5 +284,3 @@ __all__ = [
     "find_best_track",
     "get_feature_ends",
 ]
-
-

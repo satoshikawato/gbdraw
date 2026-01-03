@@ -54,11 +54,44 @@ class FeatureDrawer:
         )
         group.add(path)
 
-    def draw(self, feature_object: FeatureObject, group: Group, total_length: int, radius: float, track_ratio: float, track_ratio_factor, track_type: str, strandedness: bool, length_param) -> Group:
+    def draw(
+        self,
+        feature_object: FeatureObject,
+        group: Group,
+        total_length: int,
+        radius: float,
+        track_ratio: float,
+        track_ratio_factor,
+        track_type: str,
+        strandedness: bool,
+        length_param,
+    ) -> Group:
+        """
+        Draw a feature on the circular canvas.
+        
+        Args:
+            feature_object: The feature to draw
+            group: SVG group to add the feature to
+            total_length: Total genome length
+            radius: Base radius of the canvas
+            track_ratio: Track ratio from config
+            track_ratio_factor: Track ratio factor for length parameter
+            track_type: "tuckin", "middle", or "spreadout"
+            strandedness: Whether strands are separated
+            length_param: Length parameter ("short" or "long")
+        
+        Returns:
+            Updated SVG group with the feature added
+        """
         cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
+        
+        # Get the track_id from the feature for overlap resolution
+        track_id = getattr(feature_object, 'feature_track_id', 0)
+        
         gene_paths = FeaturePathGenerator(
-            radius, total_length, track_ratio, cds_ratio, offset, track_type, strandedness
+            radius, total_length, track_ratio, cds_ratio, offset, track_type, strandedness, track_id
         ).generate_circular_gene_path(feature_object)
+        
         for gene_path in gene_paths:
             if not gene_path or not gene_path[0]:
                 continue
@@ -85,7 +118,30 @@ class FeaturePathGenerator:
     Generates SVG path data for genomic features on a circular canvas.
     """
 
-    def __init__(self, radius: float, total_length: int, track_ratio: float, cds_ratio: float, offset: float, track_type, strandedness) -> None:
+    def __init__(
+        self,
+        radius: float,
+        total_length: int,
+        track_ratio: float,
+        cds_ratio: float,
+        offset: float,
+        track_type: str,
+        strandedness: bool,
+        track_id: int = 0,
+    ) -> None:
+        """
+        Initialize the path generator.
+        
+        Args:
+            radius: Base radius of the circular canvas
+            total_length: Total genome length
+            track_ratio: Track ratio from config
+            cds_ratio: Calculated CDS ratio
+            offset: Base offset
+            track_type: "tuckin", "middle", or "spreadout"
+            strandedness: Whether strands are separated
+            track_id: Track number for overlap resolution (0 = default track)
+        """
         self.radius: float = radius
         self.total_length: int = total_length
         self.track_ratio: float = track_ratio
@@ -93,6 +149,7 @@ class FeaturePathGenerator:
         self.offset: float = offset
         self.track_type = track_type
         self.strandedness = strandedness
+        self.track_id = track_id
         self.set_arrow_length()
 
     def set_arrow_length(self) -> None:
@@ -108,6 +165,15 @@ class FeaturePathGenerator:
         )
 
     def generate_circular_gene_path(self, feature_object: FeatureObject):
+        """
+        Generate SVG path data for a feature.
+        
+        Args:
+            feature_object: The feature to generate paths for
+        
+        Returns:
+            List of [path_type, path_data] pairs
+        """
         coords = feature_object.location
         coordinates_paths: List[List[str]] = []
         for coord in coords:
@@ -128,6 +194,7 @@ class FeaturePathGenerator:
                     self.offset,
                     self.track_type,
                     self.strandedness,
+                    self.track_id,
                 )
             elif coord_type == "block":
                 if coord.is_last and feature_object.is_directional is True:
@@ -141,6 +208,7 @@ class FeaturePathGenerator:
                         self.offset,
                         self.track_type,
                         self.strandedness,
+                        self.track_id,
                     )
                 else:
                     coord_path = generate_circular_rectangle_path(
@@ -152,6 +220,7 @@ class FeaturePathGenerator:
                         self.offset,
                         self.track_type,
                         self.strandedness,
+                        self.track_id,
                     )
             else:
                 coord_path = []
@@ -160,5 +229,3 @@ class FeaturePathGenerator:
 
 
 __all__ = ["FeatureDrawer", "FeaturePathGenerator"]
-
-

@@ -66,8 +66,10 @@ class LabelDrawer:
         length_param = determine_length_parameter(record_length, self._cfg.labels.length_threshold.circular)
         track_ratio_factor = self._cfg.canvas.circular.track_ratio_factors[length_param][0]
         cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
+        # Get track_id from label for overlap resolution
+        track_id = label.get("track_id", 0)
         factors: list[float] = calculate_feature_position_factors_circular(
-            record_length, label["strand"], track_ratio, cds_ratio, offset, self.track_type, self.strandedness
+            record_length, label["strand"], track_ratio, cds_ratio, offset, self.track_type, self.strandedness, track_id
         )
         angle = 360.0 * (label["middle"] / record_length)
         font_px = float(str(self.font_size).rstrip("ptpx"))
