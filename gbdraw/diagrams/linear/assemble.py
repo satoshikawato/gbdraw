@@ -38,8 +38,79 @@ from .builders import (
     add_record_group,
 )
 from .precalc import _precalculate_definition_widths, _precalculate_label_dimensions
+from ...features.colors import preprocess_color_tables  # type: ignore[reportMissingImports]
+from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
+from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
 
 logger = logging.getLogger(__name__)
+
+
+def _precalculate_feature_track_heights(
+    records: list[SeqRecord],
+    feature_config: FeatureDrawingConfigurator,
+    canvas_config: LinearCanvasConfigurator,
+    cfg: GbdrawConfig,
+) -> tuple[dict[str, float], dict[str, float]]:
+    """
+    Pre-calculates the height required for feature tracks for each record.
+    This is needed when resolve_overlaps is enabled as features may span multiple tracks.
+    
+    Returns:
+        - dict mapping record_id -> height below the axis line (for lower tracks)
+        - dict mapping record_id -> height above the axis line (for upper tracks)
+    """
+    record_heights_below: dict[str, float] = {}
+    record_heights_above: dict[str, float] = {}
+    
+    color_table, default_colors = preprocess_color_tables(
+        feature_config.color_table, feature_config.default_colors
+    )
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    
+    for record in records:
+        feature_dict = create_feature_dict(
+            record,
+            color_table,
+            feature_config.selected_features_set,
+            default_colors,
+            canvas_config.strandedness,
+            canvas_config.resolve_overlaps,
+            label_filtering,
+        )
+        
+        # Find the maximum and minimum track IDs
+        max_positive_track = 0
+        min_negative_track = 0
+        
+        for feature_obj in feature_dict.values():
+            track_id = feature_obj.feature_track_id
+            if track_id > max_positive_track:
+                max_positive_track = track_id
+            if track_id < min_negative_track:
+                min_negative_track = track_id
+        
+        # Calculate heights based on number of tracks
+        # Use cds_height as the base unit for track spacing
+        # Add generous padding to prevent any overlap
+        
+        if canvas_config.strandedness:
+            # Stranded mode: positive tracks above axis, negative tracks below
+            num_tracks_above = max_positive_track + 1
+            num_tracks_below = abs(min_negative_track) + 1 if min_negative_track < 0 else 1
+            height_above = num_tracks_above * canvas_config.cds_height * 1.1
+            height_below = num_tracks_below * canvas_config.cds_height * 1.1
+        else:
+            # Non-stranded mode: track 0 is at axis, higher track IDs go below
+            # Each track needs full cds_height of space plus some padding
+            # Track 0 extends both above and below the axis (0.6 each direction)
+            # Additional tracks (1, 2, ...) add cds_height * 1.1 below for breathing room
+            height_above = canvas_config.cds_height * 0.6
+            height_below = canvas_config.cds_height * (0.6 + max_positive_track * 1.1)
+        
+        record_heights_above[record.id] = height_above
+        record_heights_below[record.id] = height_below
+    
+    return record_heights_below, record_heights_above
 
 
 def assemble_linear_diagram(
@@ -63,6 +134,12 @@ def assemble_linear_diagram(
     required_label_height, all_labels, record_label_heights = _precalculate_label_dimensions(
         records, feature_config, canvas_config, config_dict, cfg=cfg
     )
+    
+    # Pre-calculate feature track heights for each record (needed for resolve_overlaps)
+    record_heights_below, record_heights_above = _precalculate_feature_track_heights(
+        records, feature_config, canvas_config, cfg
+    )
+    
     if required_label_height > 0:
         if canvas_config.vertical_offset < required_label_height:
             canvas_config.vertical_offset = (
@@ -114,13 +191,28 @@ def assemble_linear_diagram(
         record_offsets.append(current_y)
 
         if i < len(record_ids) - 1:
-            height_below_axis = canvas_config.cds_padding + canvas_config.gc_padding + canvas_config.skew_padding
+            current_record_id = record_ids[i]
             next_record_id = record_ids[i + 1]
+            
+            # Get the height below axis for the current record (feature tracks + GC/skew)
+            current_feature_height_below = record_heights_below.get(current_record_id, canvas_config.cds_padding)
+            height_below_axis = current_feature_height_below + canvas_config.gc_padding + canvas_config.skew_padding
+            
+            # Get the height above axis for the next record (labels or feature tracks)
             next_label_height = record_label_heights.get(next_record_id, 0)
-            if next_label_height > canvas_config.comparison_height:
-                inter_record_space = height_below_axis + next_label_height + canvas_config.cds_padding
+            next_feature_height_above = record_heights_above.get(next_record_id, canvas_config.cds_padding)
+            # For above-axis height, we need to consider both labels and the upper part of features
+            height_above_next_axis = max(next_label_height, next_feature_height_above)
+            
+            # For BLAST comparisons, use comparison_height as minimum space between records
+            if has_blast:
+                min_gap = canvas_config.comparison_height
             else:
-                inter_record_space = height_below_axis + canvas_config.comparison_height + canvas_config.cds_padding
+                # Use cds_padding * 1.5 as minimum gap to ensure clean separation with some breathing room
+                min_gap = canvas_config.cds_padding * 1.5
+            
+            # Total inter-record space: below current + gap + above next
+            inter_record_space = height_below_axis + min_gap + height_above_next_axis
             current_y += inter_record_space
 
     length_bar_group: Group = LengthBarGroup(

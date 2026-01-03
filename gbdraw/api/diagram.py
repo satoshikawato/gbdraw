@@ -100,6 +100,7 @@ def assemble_linear_diagram_from_records(
         legend=legend,
         output_prefix=output_prefix,
         cfg=cfg,
+        has_comparisons=bool(blast_files),
     )
     feature_config = FeatureDrawingConfigurator(
         color_table=color_table,

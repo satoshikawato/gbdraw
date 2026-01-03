@@ -49,6 +49,7 @@ class LinearCanvasConfigurator:
         legend: str,
         output_prefix="out",
         cfg: GbdrawConfig | None = None,
+        has_comparisons: bool = False,
     ):
         """
         Initializes the linear canvas configurator with given settings.
@@ -61,6 +62,7 @@ class LinearCanvasConfigurator:
         show_gc (bool, optional): Flag to display GC content. Defaults to False.
         strandedness (bool, optional): Flag to display strandedness. Defaults to False.
         align_center (bool, optional): Flag to align content to the center. Defaults to False.
+        has_comparisons (bool, optional): Flag indicating if BLAST comparisons are present. Defaults to False.
         """
 
         self.output_prefix: str = output_prefix
@@ -74,7 +76,13 @@ class LinearCanvasConfigurator:
         self.horizontal_offset: float = cfg.canvas.linear.horizontal_offset
         self.original_horizontal_offset = self.horizontal_offset
         self.vertical_padding: float = cfg.canvas.linear.vertical_padding
-        self.comparison_height: float = cfg.canvas.linear.comparison_height
+        self.has_comparisons: bool = has_comparisons
+        # Store the configured comparison_height for BLAST ribbons
+        self.configured_comparison_height: float = cfg.canvas.linear.comparison_height
+        # For initial dimension calculation, use comparison_height only when BLAST is present
+        # The actual inter-record spacing will be recalculated in assemble_linear_diagram
+        # based on feature track heights
+        self.comparison_height: float = cfg.canvas.linear.comparison_height if has_comparisons else 0
         self.canvas_padding: float = cfg.canvas.linear.canvas_padding
         self.length_threshold = cfg.labels.length_threshold.linear
         self.length_param = determine_length_parameter(self.longest_genome, self.length_threshold)
