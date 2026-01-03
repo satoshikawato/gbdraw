@@ -208,9 +208,42 @@ def modify_config_dict(
         "normalize_length": "canvas.linear.normalize_length",
     }
 
+    # #region agent log
+    import json
+    log_path = "/mnt/c/Users/kawato/Documents/GitHub/gbdraw/.cursor/debug.log"
+    try:
+        with open(log_path, "a") as f:
+            f.write(json.dumps({"id": "log_modify_config_before_update", "timestamp": __import__("time").time(), "location": "modify.py:211", "message": "before update_config_value loop", "data": {"label_whitelist": str(label_whitelist)[:100] if label_whitelist else None, "label_whitelist_type": str(type(label_whitelist)), "qualifier_priority": str(qualifier_priority)[:100] if qualifier_priority else None, "qualifier_priority_type": str(type(qualifier_priority))}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
+    except: pass
+    # #endregion
     for param, path in mapping.items():
         value = locals()[param]
         if value is not None:
+            # #region agent log
+            if param in ["label_whitelist", "qualifier_priority"]:
+                try:
+                    with open(log_path, "a") as f:
+                        f.write(json.dumps({"id": "log_modify_config_update", "timestamp": __import__("time").time(), "location": "modify.py:214", "message": "updating config value", "data": {"param": param, "path": path, "value_type": str(type(value)), "value_preview": str(value)[:100] if isinstance(value, str) else "not_string"}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
+                except: pass
+            # #endregion
+            # Convert label_blacklist string to list if needed
+            if param == "label_blacklist" and isinstance(value, str):
+                value = [kw.strip() for kw in value.split(",") if kw.strip()]
+            # Skip updating whitelist_df and qualifier_priority_df if they're already DataFrames
+            # (they were processed from file paths before this function was called)
+            # Also skip if the value is an empty string and existing value is None or DataFrame
+            if param in ["label_whitelist", "qualifier_priority"]:
+                keys = path.split(".")
+                target_dict = config_dict
+                for key in keys[:-1]:
+                    target_dict = target_dict.setdefault(key, {})
+                existing_value = target_dict.get(keys[-1])
+                # If existing value is a DataFrame, don't overwrite it with a string
+                if existing_value is not None and hasattr(existing_value, 'empty'):
+                    continue
+                # If value is empty string and existing is None, skip (empty string means "no file")
+                if value == "" and existing_value is None:
+                    continue
             update_config_value(config_dict, path, value)
 
     return config_dict

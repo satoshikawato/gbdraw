@@ -18,7 +18,7 @@ def generate_name_path(
     """
     t = Text(
         "",
-        insert=(title_x, title_y),
+        insert=(title_x, title_y + interval),
         font_size=font_size,
         font_weight=font_weight,
         font_family=font_family,
@@ -27,7 +27,7 @@ def generate_name_path(
     )
     for part in name_parts:
         part_text = part.get("text")
-        if part_text is None:
+        if part_text is None or not part_text.strip():
             continue
         if part.get("italic"):
             t.add(TSpan(part_text, font_style="italic"))
@@ -54,7 +54,7 @@ def generate_text_path(
     """
     return Text(
         text,
-        insert=(title_x, title_y),
+        insert=(title_x, title_y + interval),
         font_size=font_size,
         font_weight=font_weight,
         font_family=font,

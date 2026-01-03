@@ -74,7 +74,16 @@ def _precalculate_label_dimensions(
             continue
 
         color_table, default_colors = preprocess_color_tables(feature_config.color_table, feature_config.default_colors)
-        label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+        # #region agent log
+        import json
+        log_path = "/mnt/c/Users/kawato/Documents/GitHub/gbdraw/.cursor/debug.log"
+        as_dict_result = cfg.labels.filtering.as_dict()
+        try:
+            with open(log_path, "a") as f:
+                f.write(json.dumps({"id": "log_as_dict_result", "timestamp": __import__("time").time(), "location": "precalc.py:77", "message": "as_dict() result", "data": {"as_dict_keys": list(as_dict_result.keys()), "whitelist_df_type": str(type(as_dict_result.get("whitelist_df"))), "whitelist_df_value": str(as_dict_result.get("whitelist_df"))[:100] if isinstance(as_dict_result.get("whitelist_df"), str) else "not_string", "qualifier_priority_df_type": str(type(as_dict_result.get("qualifier_priority_df")))}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
+        except: pass
+        # #endregion
+        label_filtering = preprocess_label_filtering(as_dict_result)
         feature_dict = create_feature_dict(
             record,
             color_table,

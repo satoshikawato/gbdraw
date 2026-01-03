@@ -89,9 +89,7 @@ class LabelsGroup:
         for label in label_list:
             if label.get("is_embedded"):
                 continue
-            group = drawer.draw(label, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)
-
-            # Leader lines (same as legacy behavior).
+            # Leader lines first (so they appear behind features)
             line_path = Line(
                 start=(label["middle_x"], label["middle_y"]),
                 end=(label["start_x"], label["start_y"]),
@@ -106,6 +104,8 @@ class LabelsGroup:
                 stroke_width=self.label_stroke_width,
             )
             group.add(line_path2)
+            # Label text after lines (so it appears on top)
+            group = drawer.draw(label, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)
 
         return group
 

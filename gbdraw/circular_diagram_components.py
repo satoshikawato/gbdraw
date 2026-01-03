@@ -405,6 +405,33 @@ def add_record_on_circular_canvas(
         axis_radius_px, _ = _resolve_circular_track_center_and_width_px(axis_ts, base_radius_px=canvas_config.radius)
         canvas = add_axis_group_on_canvas(canvas, canvas_config, config_dict, radius_override=axis_radius_px, cfg=cfg)
 
+    # External labels: separate group (label arena). Embedded labels remain in the record group.
+    # Add labels BEFORE features so leader lines appear behind features
+    labels_ts = ts_by_kind.get("labels")
+    raw_show_labels = cfg.canvas.show_labels
+    show_labels_base = (raw_show_labels != "none") if isinstance(raw_show_labels, str) else bool(raw_show_labels)
+    features_ts = ts_by_kind.get("features")
+    show_external_labels = show_labels_base and (labels_ts is None or labels_ts.show) and (features_ts is None or features_ts.show)
+    if show_external_labels:
+        outer_arena = None
+        if labels_ts is not None:
+            center_px, width_px = _resolve_circular_track_center_and_width_px(labels_ts, base_radius_px=canvas_config.radius)
+            if center_px is not None and width_px is not None:
+                inner_px = center_px - (width_px / 2.0)
+                outer_px = center_px + (width_px / 2.0)
+                if outer_px < inner_px:
+                    inner_px, outer_px = outer_px, inner_px
+                outer_arena = (inner_px, outer_px)
+        canvas = add_labels_group_on_canvas(
+            canvas,
+            gb_record,
+            canvas_config,
+            feature_config,
+            config_dict,
+            outer_arena=outer_arena,
+            cfg=cfg,
+        )
+
     features_ts = ts_by_kind.get("features")
     if features_ts is None or features_ts.show:
         canvas = add_record_group_on_canvas(
@@ -458,31 +485,6 @@ def add_record_on_circular_canvas(
             config_dict,
             track_width_override=skew_width_px,
             norm_factor_override=norm_factor_override,
-            cfg=cfg,
-        )
-
-    # External labels: separate group (label arena). Embedded labels remain in the record group.
-    labels_ts = ts_by_kind.get("labels")
-    raw_show_labels = cfg.canvas.show_labels
-    show_labels_base = (raw_show_labels != "none") if isinstance(raw_show_labels, str) else bool(raw_show_labels)
-    show_external_labels = show_labels_base and (labels_ts is None or labels_ts.show) and (features_ts is None or features_ts.show)
-    if show_external_labels:
-        outer_arena = None
-        if labels_ts is not None:
-            center_px, width_px = _resolve_circular_track_center_and_width_px(labels_ts, base_radius_px=canvas_config.radius)
-            if center_px is not None and width_px is not None:
-                inner_px = center_px - (width_px / 2.0)
-                outer_px = center_px + (width_px / 2.0)
-                if outer_px < inner_px:
-                    inner_px, outer_px = outer_px, inner_px
-                outer_arena = (inner_px, outer_px)
-        canvas = add_labels_group_on_canvas(
-            canvas,
-            gb_record,
-            canvas_config,
-            feature_config,
-            config_dict,
-            outer_arena=outer_arena,
             cfg=cfg,
         )
     return canvas

@@ -16,7 +16,7 @@ from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[re
 from .core.sequence import create_dict_for_sequence_lengths  # type: ignore[reportMissingImports]
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from .labels.filtering import read_qualifier_priority_file  # type: ignore[reportMissingImports]
+from .labels.filtering import read_qualifier_priority_file, read_filter_list_file  # type: ignore[reportMissingImports]
 
 
 try:
@@ -384,6 +384,10 @@ def linear_main(cmd_args) -> None:
         filtering_cfg["qualifier_priority_df"] = read_qualifier_priority_file(qualifier_priority_path)
     else:
         filtering_cfg["qualifier_priority_df"] = None
+    if label_whitelist:
+        filtering_cfg["whitelist_df"] = read_filter_list_file(label_whitelist)
+    else:
+        filtering_cfg["whitelist_df"] = None
 
     block_stroke_color: str = args.block_stroke_color
     block_stroke_width: str = args.block_stroke_width

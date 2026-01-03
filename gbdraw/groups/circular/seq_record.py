@@ -49,7 +49,16 @@ class SeqRecordGroup:
 
         self.label_stroke_width = cfg.labels.stroke_width.for_length_param(self.length_param)
         self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
-        self.label_filtering = cfg.labels.filtering.as_dict()
+        # #region agent log
+        import json
+        log_path = "/mnt/c/Users/kawato/Documents/GitHub/gbdraw/.cursor/debug.log"
+        as_dict_result = cfg.labels.filtering.as_dict()
+        try:
+            with open(log_path, "a") as f:
+                f.write(json.dumps({"id": "log_as_dict_result_circular", "timestamp": __import__("time").time(), "location": "seq_record.py:52", "message": "as_dict() result in circular", "data": {"as_dict_keys": list(as_dict_result.keys()), "whitelist_df_type": str(type(as_dict_result.get("whitelist_df"))), "whitelist_df_value": str(as_dict_result.get("whitelist_df"))[:100] if isinstance(as_dict_result.get("whitelist_df"), str) else "not_string", "qualifier_priority_df_type": str(type(as_dict_result.get("qualifier_priority_df")))}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "C"}) + "\n")
+        except: pass
+        # #endregion
+        self.label_filtering = as_dict_result
         self.font_size = cfg.labels.font_size.for_length_param(self.length_param)
         self.dpi = cfg.canvas.dpi
         self.track_type = cfg.canvas.circular.track_type

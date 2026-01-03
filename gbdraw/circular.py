@@ -15,7 +15,7 @@ from .api.diagram import assemble_circular_diagram_from_record  # type: ignore[r
 from .config.modify import suppress_gc_content_and_skew, modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .core.sequence import determine_output_file_prefix  # type: ignore[reportMissingImports]
-from .labels.filtering import read_qualifier_priority_file  # type: ignore[reportMissingImports]
+from .labels.filtering import read_qualifier_priority_file, read_filter_list_file  # type: ignore[reportMissingImports]
 
 try:
     import cairosvg  # type: ignore[reportMissingImports]
@@ -338,10 +338,28 @@ def circular_main(cmd_args) -> None:
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
     filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
+    # #region agent log
+    import json
+    log_path = "/mnt/c/Users/kawato/Documents/GitHub/gbdraw/.cursor/debug.log"
+    try:
+        with open(log_path, "a") as f:
+            f.write(json.dumps({"id": "log_circular_before_qualifier", "timestamp": __import__("time").time(), "location": "circular.py:340", "message": "before qualifier_priority processing", "data": {"qualifier_priority_path": qualifier_priority_path, "qualifier_priority_path_type": str(type(qualifier_priority_path)), "label_whitelist": label_whitelist, "label_whitelist_type": str(type(label_whitelist))}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "D"}) + "\n")
+    except: pass
+    # #endregion
     if qualifier_priority_path:
         filtering_cfg["qualifier_priority_df"] = read_qualifier_priority_file(qualifier_priority_path)
     else:
         filtering_cfg["qualifier_priority_df"] = None
+    if label_whitelist:
+        filtering_cfg["whitelist_df"] = read_filter_list_file(label_whitelist)
+    else:
+        filtering_cfg["whitelist_df"] = None
+    # #region agent log
+    try:
+        with open(log_path, "a") as f:
+            f.write(json.dumps({"id": "log_circular_after_qualifier", "timestamp": __import__("time").time(), "location": "circular.py:344", "message": "after qualifier_priority processing, before modify_config_dict", "data": {"qualifier_priority_df_type": str(type(filtering_cfg.get("qualifier_priority_df"))), "whitelist_df_type": str(type(filtering_cfg.get("whitelist_df"))), "label_whitelist": label_whitelist, "label_whitelist_type": str(type(label_whitelist))}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "D"}) + "\n")
+    except: pass
+    # #endregion
 
     palette: str = args.palette
     default_colors: Optional[DataFrame] = load_default_colors(
