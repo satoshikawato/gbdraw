@@ -857,6 +857,8 @@
             
             const results = ref([]);
             const selectedResultIndex = ref(0);
+            // Store original pairwise match factors for re-interpolation
+            const pairwiseMatchFactors = ref({});  // { pathId: factor }
             const svgContent = computed(() => {
                 if (results.value.length > 0) {
                     const rawSvg = results.value[selectedResultIndex.value].content;
@@ -1058,6 +1060,53 @@
                 return features;
             });
 
+            // Helper: parse hex color to RGB
+            const hexToRgb = (hex) => {
+                const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+                return result ? {
+                    r: parseInt(result[1], 16),
+                    g: parseInt(result[2], 16),
+                    b: parseInt(result[3], 16)
+                } : { r: 128, g: 128, b: 128 };
+            };
+
+            // Helper: RGB to hex
+            const rgbToHex = (r, g, b) => {
+                return '#' + [r, g, b].map(x => {
+                    const hex = Math.round(Math.max(0, Math.min(255, x))).toString(16);
+                    return hex.length === 1 ? '0' + hex : hex;
+                }).join('');
+            };
+
+            // Interpolate between two colors
+            const interpolateColor = (color1, color2, factor) => {
+                const c1 = hexToRgb(color1);
+                const c2 = hexToRgb(color2);
+                return rgbToHex(
+                    c1.r + (c2.r - c1.r) * factor,
+                    c1.g + (c2.g - c1.g) * factor,
+                    c1.b + (c2.b - c1.b) * factor
+                );
+            };
+
+            // Estimate the interpolation factor from a current color given min/max colors
+            const estimateColorFactor = (currentColor, minColor, maxColor) => {
+                const current = hexToRgb(currentColor);
+                const min = hexToRgb(minColor);
+                const max = hexToRgb(maxColor);
+
+                // Calculate factor based on color distance
+                const totalDist = Math.sqrt(
+                    Math.pow(max.r - min.r, 2) + Math.pow(max.g - min.g, 2) + Math.pow(max.b - min.b, 2)
+                );
+                if (totalDist < 1) return 0.5;
+
+                const currentDist = Math.sqrt(
+                    Math.pow(current.r - min.r, 2) + Math.pow(current.g - min.g, 2) + Math.pow(current.b - min.b, 2)
+                );
+                return Math.max(0, Math.min(1, currentDist / totalDist));
+            };
+
             const getFeatureColor = (feat) => {
                 // Use internal ID for tracking (unique per feature)
                 if (featureColorOverrides[feat.id]) {
@@ -1083,7 +1132,7 @@
             };
 
             // Instant preview: update SVG path colors directly without regeneration
-            const applyInstantPreview = (feat, color) => {
+            const applyInstantPreview = (feat, color, legendCaption = null) => {
                 // Use pre-computed svg_id that matches Python's hash
                 const svgId = feat.svg_id;
                 if (!svgId) {
@@ -1100,9 +1149,16 @@
 
                         // Find ALL elements with this ID (for multi-exon features)
                         const elements = doc.querySelectorAll(`#${CSS.escape(svgId)}`);
+                        let updated = elements.length > 0;
 
-                        if (elements.length > 0) {
+                        if (updated) {
                             elements.forEach(el => el.setAttribute('fill', color));
+                        }
+
+                        // Note: Legend entries cannot be added dynamically because Python uses text-to-path conversion
+                        // New legend entries require regenerating the diagram with updated color rules
+
+                        if (updated) {
                             const serializer = new XMLSerializer();
                             const newContent = serializer.serializeToString(doc.documentElement);
                             // Replace the entire object to ensure Vue reactivity
@@ -1175,6 +1231,7 @@
                         }
                     });
                 });
+
                 console.log(`Attached handlers to ${featurePaths.length} feature paths (${Object.keys(pathsByIdMap).length} unique features)`);
             };
 
@@ -1195,10 +1252,381 @@
                 });
             });
 
+            // Function to apply palette colors to SVG immediately
+            const applyPaletteToSvg = () => {
+                if (!svgContent.value || !extractedFeatures.value.length) return;
+                if (!svgContainer.value) return;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const colors = currentColors.value;
+                const featurePaths = svg.querySelectorAll('path[id^="f"]');
+                let updatedCount = 0;
+
+                featurePaths.forEach(path => {
+                    const svgId = path.getAttribute('id');
+                    const feat = extractedFeatures.value.find(f => f.svg_id === svgId);
+                    if (!feat) return;
+
+                    const paletteColor = colors[feat.type];
+                    if (!paletteColor) return;
+
+                    // Don't update if feature has a specific color rule
+                    const hasSpecificRule = manualSpecificRules.some(r => {
+                        const qualInfo = getFeatureQualifier(feat);
+                        return qualInfo && r.feat === feat.type && r.qual === qualInfo.qual && r.val === qualInfo.val;
+                    });
+
+                    if (!hasSpecificRule && !featureColorOverrides[feat.id]) {
+                        const currentFill = path.getAttribute('fill');
+                        if (currentFill !== paletteColor) {
+                            path.setAttribute('fill', paletteColor);
+                            updatedCount++;
+                        }
+                    }
+                });
+
+                // Update GC content track
+                const gcContentGroup = svg.getElementById('gc_content');
+                if (gcContentGroup && colors.gc_content) {
+                    const gcPaths = gcContentGroup.querySelectorAll('path');
+                    gcPaths.forEach(path => {
+                        path.setAttribute('fill', colors.gc_content);
+                        updatedCount++;
+                    });
+                }
+
+                // Update GC skew track (circular: #skew, linear: #gc_skew)
+                const skewGroup = svg.getElementById('skew') || svg.getElementById('gc_skew');
+                if (skewGroup) {
+                    const skewPaths = skewGroup.querySelectorAll('path');
+                    // In circular: first visible path is high (after clipPath), second is low
+                    // In linear: similar structure
+                    let pathIndex = 0;
+                    skewPaths.forEach(path => {
+                        const fill = path.getAttribute('fill');
+                        // Skip clipPath paths (fill="white") and non-filled paths
+                        if (fill && fill !== 'white' && fill !== 'none') {
+                            if (pathIndex === 0 && colors.skew_high) {
+                                path.setAttribute('fill', colors.skew_high);
+                                updatedCount++;
+                            } else if (pathIndex === 1 && colors.skew_low) {
+                                path.setAttribute('fill', colors.skew_low);
+                                updatedCount++;
+                            }
+                            pathIndex++;
+                        }
+                    });
+                }
+
+                // Update pairwise match tracks (comparison1, comparison2, etc.)
+                // These use color interpolation based on identity
+                if (colors.pairwise_match_min && colors.pairwise_match_max) {
+                    let compIdx = 1;
+                    let compGroup = svg.getElementById(`comparison${compIdx}`);
+                    while (compGroup) {
+                        const matchPaths = compGroup.querySelectorAll('path');
+                        matchPaths.forEach((path, pathIdx) => {
+                            const pathKey = `comp${compIdx}_path${pathIdx}`;
+                            const currentFill = path.getAttribute('fill');
+                            if (currentFill) {
+                                let factor;
+                                // Check if we have a stored factor for this path
+                                if (pairwiseMatchFactors.value[pathKey] !== undefined) {
+                                    factor = pairwiseMatchFactors.value[pathKey];
+                                } else {
+                                    // First time - estimate factor from original colors used when diagram was generated
+                                    const origMin = window._origPairwiseMin || '#FFE7E7';
+                                    const origMax = window._origPairwiseMax || '#FF7272';
+                                    factor = estimateColorFactor(currentFill, origMin, origMax);
+                                    pairwiseMatchFactors.value[pathKey] = factor;
+                                }
+                                const newColor = interpolateColor(colors.pairwise_match_min, colors.pairwise_match_max, factor);
+                                path.setAttribute('fill', newColor);
+                                updatedCount++;
+                            }
+                        });
+                        compIdx++;
+                        compGroup = svg.getElementById(`comparison${compIdx}`);
+                    }
+                }
+
+                // Also update legend colors - try to match by group position since text is converted to paths
+                const legendGroup = svg.getElementById('legend');
+                if (legendGroup) {
+                    // Group paths by transform Y position
+                    const pathsByY = {};
+                    const allPaths = legendGroup.querySelectorAll('path');
+                    allPaths.forEach(p => {
+                        const transform = p.getAttribute('transform');
+                        if (transform) {
+                            const match = transform.match(/translate\(([^,]+),\s*([\d.]+)\)/);
+                            if (match) {
+                                const x = parseFloat(match[1]);
+                                const y = match[2];
+                                if (!pathsByY[y]) pathsByY[y] = [];
+                                pathsByY[y].push({ path: p, x });
+                            }
+                        }
+                    });
+
+                    // Legend order typically: CDS, GC content, GC skew (+), GC skew (-), etc.
+                    // The first path at x=0 for each Y is the color rectangle
+                    const legendOrder = ['CDS', 'gc_content', 'skew_high', 'skew_low'];
+                    const legendColors = {
+                        'CDS': colors.CDS,
+                        'gc_content': colors.gc_content,
+                        'skew_high': colors.skew_high,
+                        'skew_low': colors.skew_low
+                    };
+
+                    // Sort Y positions and update color rectangles
+                    const yPositions = Object.keys(pathsByY).sort((a, b) => parseFloat(a) - parseFloat(b));
+                    yPositions.forEach((y, idx) => {
+                        const paths = pathsByY[y];
+                        // Find the color rectangle (usually at x=0, has simple d attribute)
+                        const colorRect = paths.find(p => p.x === 0 || Math.abs(p.x) < 1);
+                        if (colorRect && idx < legendOrder.length) {
+                            const colorKey = legendOrder[idx];
+                            const newColor = legendColors[colorKey];
+                            if (newColor) {
+                                colorRect.path.setAttribute('fill', newColor);
+                                updatedCount++;
+                            }
+                        }
+                    });
+
+                    // Update pairwise legend gradient
+                    const pairwiseLegend = legendGroup.querySelector('#pairwise_legend') || svg.getElementById('pairwise_legend');
+                    if (pairwiseLegend && colors.pairwise_match_min && colors.pairwise_match_max) {
+                        // Find the linearGradient element
+                        const gradient = pairwiseLegend.querySelector('linearGradient');
+                        if (gradient) {
+                            const stops = gradient.querySelectorAll('stop');
+                            if (stops.length >= 2) {
+                                // First stop is min color (0%), second is max color (100%)
+                                stops[0].setAttribute('stop-color', colors.pairwise_match_min);
+                                stops[1].setAttribute('stop-color', colors.pairwise_match_max);
+                                updatedCount++;
+                            }
+                        }
+                    }
+                }
+
+                if (updatedCount > 0) {
+                    const idx = selectedResultIndex.value;
+                    if (idx >= 0 && results.value.length > idx) {
+                        const serializer = new XMLSerializer();
+                        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                    }
+                }
+            };
+
+            // Watch for palette color changes
+            watch(currentColors, () => {
+                applyPaletteToSvg();
+            }, { deep: true });
+
+            // Function to apply specific rules to SVG immediately
+            const applySpecificRulesToSvg = () => {
+                if (!svgContent.value || !extractedFeatures.value.length) return;
+                if (!svgContainer.value) return;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                let updatedCount = 0;
+
+                // For each extracted feature, check if it matches any specific rule
+                extractedFeatures.value.forEach(feat => {
+                    if (!feat.svg_id) return;
+
+                    // Check if there's a matching specific rule
+                    let matchingRule = null;
+                    for (const rule of manualSpecificRules) {
+                        if (rule.feat !== feat.type) continue;
+
+                        let matches = false;
+                        if (rule.qual === 'product' && feat.product) {
+                            // Support regex matching
+                            try {
+                                const regex = new RegExp(rule.val, 'i');
+                                matches = regex.test(feat.product);
+                            } catch {
+                                matches = feat.product === rule.val;
+                            }
+                        } else if (rule.qual === 'gene' && feat.gene) {
+                            try {
+                                const regex = new RegExp(rule.val, 'i');
+                                matches = regex.test(feat.gene);
+                            } catch {
+                                matches = feat.gene === rule.val;
+                            }
+                        } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
+                            try {
+                                const regex = new RegExp(rule.val, 'i');
+                                matches = regex.test(feat.locus_tag);
+                            } catch {
+                                matches = feat.locus_tag === rule.val;
+                            }
+                        } else if (rule.qual === 'hash' && feat.svg_id === rule.val) {
+                            matches = true;
+                        }
+
+                        if (matches) {
+                            matchingRule = rule;
+                            break;
+                        }
+                    }
+
+                    // Apply color based on matching rule or default palette
+                    const elements = svg.querySelectorAll(`#${CSS.escape(feat.svg_id)}`);
+                    if (elements.length > 0) {
+                        const newColor = matchingRule ? matchingRule.color : (currentColors.value[feat.type] || '#cccccc');
+                        elements.forEach(el => {
+                            if (el.getAttribute('fill') !== newColor) {
+                                el.setAttribute('fill', newColor);
+                                updatedCount++;
+                            }
+                        });
+                    }
+                });
+
+                if (updatedCount > 0) {
+                    const idx = selectedResultIndex.value;
+                    if (idx >= 0 && results.value.length > idx) {
+                        const serializer = new XMLSerializer();
+                        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                    }
+                    console.log(`Applied specific rules: updated ${updatedCount} elements`);
+                }
+            };
+
+            // Watch for specific rules changes
+            watch(() => [...manualSpecificRules], () => {
+                applySpecificRulesToSvg();
+            }, { deep: true });
+
+            // Function to apply style changes (stroke colors/widths) to SVG immediately
+            const applyStylesToSvg = () => {
+                if (!svgContent.value) return;
+                if (!svgContainer.value) return;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                let updatedCount = 0;
+
+                // Update block stroke (feature paths)
+                if (adv.block_stroke_color || adv.block_stroke_width !== null) {
+                    const featurePaths = svg.querySelectorAll('path[id^="f"]');
+                    featurePaths.forEach(path => {
+                        if (adv.block_stroke_color) {
+                            path.setAttribute('stroke', adv.block_stroke_color);
+                            updatedCount++;
+                        }
+                        if (adv.block_stroke_width !== null) {
+                            path.setAttribute('stroke-width', adv.block_stroke_width);
+                            updatedCount++;
+                        }
+                    });
+                }
+
+                // Update axis stroke
+                const axisGroup = svg.getElementById('Axis');
+                if (axisGroup) {
+                    const axisElements = axisGroup.querySelectorAll('path, line, circle');
+                    axisElements.forEach(el => {
+                        if (adv.axis_stroke_color) {
+                            el.setAttribute('stroke', adv.axis_stroke_color);
+                            updatedCount++;
+                        }
+                        if (adv.axis_stroke_width !== null) {
+                            el.setAttribute('stroke-width', adv.axis_stroke_width);
+                            updatedCount++;
+                        }
+                    });
+                }
+
+                // Update tick stroke (same as axis typically)
+                const tickGroup = svg.getElementById('tick');
+                if (tickGroup) {
+                    const tickElements = tickGroup.querySelectorAll('path, line');
+                    tickElements.forEach(el => {
+                        if (adv.axis_stroke_color) {
+                            el.setAttribute('stroke', adv.axis_stroke_color);
+                            updatedCount++;
+                        }
+                        if (adv.axis_stroke_width !== null) {
+                            el.setAttribute('stroke-width', adv.axis_stroke_width);
+                            updatedCount++;
+                        }
+                    });
+                }
+
+                // Update intron/line strokes (paths without fill or with fill="none")
+                if (adv.line_stroke_color || adv.line_stroke_width !== null) {
+                    // Find paths that are likely intron lines (no fill or fill=none, have stroke)
+                    const allPaths = svg.querySelectorAll('path');
+                    allPaths.forEach(path => {
+                        const fill = path.getAttribute('fill');
+                        const stroke = path.getAttribute('stroke');
+                        const id = path.getAttribute('id') || '';
+                        // Intron lines typically have no fill and are not feature blocks
+                        if ((fill === 'none' || !fill) && stroke && !id.startsWith('f')) {
+                            if (adv.line_stroke_color) {
+                                path.setAttribute('stroke', adv.line_stroke_color);
+                                updatedCount++;
+                            }
+                            if (adv.line_stroke_width !== null) {
+                                path.setAttribute('stroke-width', adv.line_stroke_width);
+                                updatedCount++;
+                            }
+                        }
+                    });
+                }
+
+                // Update scale bar (linear mode)
+                const lengthBarGroup = svg.getElementById('length_bar');
+                if (lengthBarGroup) {
+                    const scaleElements = lengthBarGroup.querySelectorAll('line, path');
+                    scaleElements.forEach(el => {
+                        if (adv.scale_stroke_color) {
+                            el.setAttribute('stroke', adv.scale_stroke_color);
+                            updatedCount++;
+                        }
+                        if (adv.scale_stroke_width !== null) {
+                            el.setAttribute('stroke-width', adv.scale_stroke_width);
+                            updatedCount++;
+                        }
+                    });
+                }
+
+                if (updatedCount > 0) {
+                    const idx = selectedResultIndex.value;
+                    if (idx >= 0 && results.value.length > idx) {
+                        const serializer = new XMLSerializer();
+                        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                    }
+                    console.log(`Applied styles: updated ${updatedCount} elements`);
+                }
+            };
+
+            // Watch for style changes
+            watch(() => [
+                adv.block_stroke_color, adv.block_stroke_width,
+                adv.line_stroke_color, adv.line_stroke_width,
+                adv.axis_stroke_color, adv.axis_stroke_width,
+                adv.scale_stroke_color, adv.scale_stroke_width
+            ], () => {
+                applyStylesToSvg();
+            });
+
             // Close popup when clicking outside
             const closeFeaturePopup = (e) => {
-                if (clickedFeature.value && !e.target.closest('.fixed.z-50')) {
-                    clickedFeature.value = null;
+                if (!e.target.closest('.fixed.z-50')) {
+                    if (clickedFeature.value) clickedFeature.value = null;
                 }
             };
 
@@ -1244,8 +1672,8 @@
                 // Track override for UI display
                 featureColorOverrides[featureKey] = color;
 
-                // Apply instant preview (update SVG directly)
-                applyInstantPreview(feat, color);
+                // Apply instant preview (update SVG and legend directly)
+                applyInstantPreview(feat, color, caption);
             };
 
             // Clear feature list when switching modes
@@ -1528,6 +1956,11 @@
                 selectedResultIndex.value = 0;
                 errorLog.value = null;
                 zoom.value = 1.0;
+                // Clear stored pairwise match factors for re-calculation
+                pairwiseMatchFactors.value = {};
+                // Store current palette's pairwise colors as reference for interpolation
+                window._origPairwiseMin = currentColors.value.pairwise_match_min || '#FFE7E7';
+                window._origPairwiseMax = currentColors.value.pairwise_match_max || '#FF7272';
 
                 try {
                     let args = [];
