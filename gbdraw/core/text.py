@@ -3,6 +3,7 @@
 
 import functools
 import logging
+import sys
 import xml.etree.ElementTree as ET
 from importlib import resources
 from typing import Dict, List, Optional, Union
@@ -23,15 +24,20 @@ _font_path_cache: Dict[str, Optional[str]] = {}
 def _get_kerning_value(font, left_glyph_index, right_glyph_index):
     """
     Get kerning adjustment value for a glyph pair from kern or GPOS tables.
-    
+
     Args:
         font: TTFont object
         left_glyph_index: Glyph index of the left glyph
         right_glyph_index: Glyph index of the right glyph
-    
+
     Returns:
         int: Kerning adjustment value in font design units, or 0 if not found
     """
+    # Skip expensive kerning calculation in Pyodide/WebAssembly environment
+    # The GPOS table processing can freeze the browser due to nested loops
+    if "pyodide" in sys.modules:
+        return 0
+
     if left_glyph_index is None or right_glyph_index is None:
         return 0
     
@@ -277,16 +283,80 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi):
 
 
 # ------------------------------------------------------------------
+#  Browser Canvas Text Measurement (for Pyodide)
+# ------------------------------------------------------------------
+def _measure_text_canvas(text: str, font_family: str, font_size: float) -> tuple:
+    """
+    Measure text dimensions using browser's Canvas API.
+    This is much faster than fontTools in Pyodide because it uses
+    the browser's native text rendering engine.
+
+    Args:
+        text: The text to measure
+        font_family: Font family name (e.g., "Liberation Sans")
+        font_size: Font size in pixels
+
+    Returns:
+        tuple: (width, height) in pixels
+    """
+    try:
+        from js import document  # type: ignore[import-not-found]
+
+        canvas = document.createElement("canvas")
+        ctx = canvas.getContext("2d")
+
+        # Map bundled font names to web-safe equivalents
+        # Liberation Sans -> Arial (metrics are nearly identical)
+        # Liberation Serif -> Times New Roman
+        # Liberation Mono -> Courier New
+        web_font = font_family
+        font_lower = font_family.lower()
+        if "liberation" in font_lower:
+            if "sans" in font_lower:
+                web_font = "Arial, sans-serif"
+            elif "serif" in font_lower:
+                web_font = "Times New Roman, serif"
+            elif "mono" in font_lower:
+                web_font = "Courier New, monospace"
+
+        ctx.font = f"{font_size}px {web_font}"
+        metrics = ctx.measureText(str(text))
+
+        # Width from measureText
+        width = metrics.width
+
+        # Height estimation: actualBoundingBoxAscent + actualBoundingBoxDescent
+        # These are available in modern browsers
+        if hasattr(metrics, "actualBoundingBoxAscent") and hasattr(
+            metrics, "actualBoundingBoxDescent"
+        ):
+            height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent
+        else:
+            # Fallback: approximate height as font_size * 1.2
+            height = font_size * 1.2
+
+        return float(width), float(height)
+    except Exception as e:
+        logger.debug(f"Canvas text measurement failed: {e}")
+        # Fallback approximation
+        return len(str(text)) * float(font_size) * 0.6, float(font_size)
+
+
+# ------------------------------------------------------------------
 #  Main BBox Calculation Function
 # ------------------------------------------------------------------
 @functools.lru_cache(maxsize=4096)
 def calculate_bbox_dimensions(text, font_family, font_size, dpi):
     """
     Calculates bounding box dimensions using bundled font files in gbdraw package.
-    Locates the font in gbdraw.data.fonts using importlib.resources.
-    Uses caching for font path resolution and font object loading.
+    In Pyodide/browser environments, uses the native Canvas API for fast measurement.
+    In native Python, uses fontTools for accurate measurement with kerning.
     """
-    # Use cached font path resolution
+    # Use browser's Canvas API in Pyodide (much faster, uses native text engine)
+    if "pyodide" in sys.modules:
+        return _measure_text_canvas(text, font_family, float(font_size))
+
+    # Native Python: Use fontTools with kerning support
     target_font_path = _resolve_font_path(font_family)
 
     if target_font_path:
