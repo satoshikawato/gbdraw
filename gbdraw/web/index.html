@@ -559,7 +559,7 @@
                 <pre class="text-xs font-mono text-red-800 whitespace-pre-wrap overflow-auto max-h-40 bg-white/50 p-3 rounded custom-scrollbar">{{ errorLog }}</pre>
             </div>
 
-            <div v-if="results.length > 0" class="card border-2 border-green-100 ring-4 ring-green-50/50 flex flex-col flex-grow overflow-hidden">
+            <div v-if="results.length > 0" class="card border-2 border-green-100 ring-4 ring-green-50/50 flex flex-col flex-grow overflow-hidden relative">
                 <div class="card-header bg-green-50/50 -m-5 mb-0 p-4 border-green-100 flex justify-between items-center shrink-0">
                     <span class="text-green-600 flex items-center gap-2">
                         <i class="ph ph-check-circle text-xl"></i> 
@@ -596,15 +596,183 @@
                     </div>
 
                     <div class="absolute inset-0 overflow-auto flex p-8 custom-scrollbar">
-                        <div v-if="svgContent" v-html="svgContent" 
-                            :style="{transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.2s'}" 
+                        <div v-if="svgContent" v-html="svgContent" ref="svgContainer"
+                            :key="`svg-${mode}-${selectedResultIndex}-${results.length}`"
+                            :style="{transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.2s'}"
                             class="shadow-xl bg-white m-auto origin-top">
                         </div>
                     </div>
-                    
+
+                    <!-- Feature Color Picker Popup -->
+                    <div v-if="clickedFeature"
+                         class="fixed z-50 bg-white rounded-lg shadow-2xl border border-slate-200 p-3 min-w-[240px]"
+                         :style="{ top: clickedFeaturePos.y + 'px', left: clickedFeaturePos.x + 'px' }">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-xs font-medium text-slate-600 truncate max-w-[200px]">{{ clickedFeature.label }}</span>
+                            <button @click="clickedFeature = null" class="text-slate-400 hover:text-slate-600 ml-auto">
+                                <i class="ph ph-x"></i>
+                            </button>
+                        </div>
+                        <div class="border-t border-slate-100 pt-2 mb-2">
+                            <label class="text-[10px] text-slate-400 block mb-1">Legend name (optional)</label>
+                            <input type="text"
+                                   v-model="clickedFeature.legendName"
+                                   :placeholder="clickedFeature.label"
+                                   class="w-full text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="color"
+                                   :value="clickedFeature.color"
+                                   @input="clickedFeature.color = $event.target.value"
+                                   @change="updateClickedFeatureColor($event.target.value)"
+                                   class="w-10 h-8 cursor-pointer border rounded">
+                            <span class="text-xs font-mono text-slate-500">{{ clickedFeature.color }}</span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Legend Editor Toggle Button -->
+                <button v-if="svgContent"
+                        @click="showLegendPanel = !showLegendPanel"
+                        class="absolute right-0 top-1/3 -translate-y-1/2 bg-purple-600 hover:bg-purple-700 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
+                        :class="{ 'translate-x-0': !showLegendPanel, '-translate-x-72': showLegendPanel }"
+                        :title="showLegendPanel ? 'Close legend editor' : 'Edit legend'">
+                    <i class="ph ph-list-bullets text-lg"></i>
+                </button>
+
+                <!-- Legend Editor Panel -->
+                <div v-if="svgContent"
+                     class="absolute right-0 top-0 bottom-0 w-72 bg-white border-l border-slate-200 shadow-xl z-10 transition-transform duration-300 flex flex-col"
+                     :class="showLegendPanel ? 'translate-x-0' : 'translate-x-full'">
+                    <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-purple-50">
+                        <div class="flex items-center gap-2">
+                            <i class="ph ph-list-bullets text-purple-600"></i>
+                            <span class="font-bold text-slate-700">Legend Editor</span>
+                        </div>
+                        <button @click="showLegendPanel = false" class="text-slate-400 hover:text-slate-600">
+                            <i class="ph ph-x text-lg"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto p-3 space-y-2">
+                        <div v-for="(entry, idx) in legendEntries" :key="idx"
+                             class="flex items-center gap-1 p-2 bg-slate-50 rounded border border-slate-100">
+                            <!-- Up/Down buttons -->
+                            <div class="flex flex-col shrink-0">
+                                <button @click="moveLegendEntryUp(idx)"
+                                        :disabled="idx === 0"
+                                        class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none"
+                                        title="Move up">
+                                    <i class="ph ph-caret-up text-xs"></i>
+                                </button>
+                                <button @click="moveLegendEntryDown(idx)"
+                                        :disabled="idx === legendEntries.length - 1"
+                                        class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none"
+                                        title="Move down">
+                                    <i class="ph ph-caret-down text-xs"></i>
+                                </button>
+                            </div>
+                            <!-- Color display (read-only) -->
+                            <div class="w-6 h-6 rounded border border-slate-300 shrink-0"
+                                 :style="{ backgroundColor: entry.color }"
+                                 :title="entry.color"></div>
+                            <input type="text"
+                                   :value="entry.caption"
+                                   @change="updateLegendEntryCaption(idx, $event.target.value)"
+                                   class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0">
+                            <button @click="deleteLegendEntry(idx)"
+                                    class="text-red-400 hover:text-red-600 shrink-0"
+                                    title="Remove entry">
+                                <i class="ph ph-trash text-sm"></i>
+                            </button>
+                        </div>
+                        <div v-if="legendEntries.length === 0" class="text-center text-slate-400 text-sm py-4">
+                            No legend entries found
+                        </div>
+                    </div>
+
+                    <!-- Info message -->
+                    <div class="p-3 border-t border-slate-200 bg-slate-50 text-xs text-slate-500">
+                        <i class="ph ph-info"></i> Colors are managed via Feature Colors panel
+                    </div>
+                </div>
+
+                <!-- Feature Color Editor Toggle Button (floating) -->
+                <button v-if="extractedFeatures.length > 0"
+                        @click="showFeaturePanel = !showFeaturePanel"
+                        class="absolute right-0 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-700 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
+                        :class="{ 'translate-x-0': !showFeaturePanel, '-translate-x-80': showFeaturePanel }"
+                        :title="showFeaturePanel ? 'Close color panel' : 'Open color panel'">
+                    <i class="ph ph-paint-brush text-lg"></i>
+                </button>
+
+                <!-- Feature Color Editor Drawer (slides from right) -->
+                <div v-if="extractedFeatures.length > 0"
+                     class="absolute right-0 top-0 bottom-0 w-80 bg-white border-l border-slate-200 shadow-xl z-10 transition-transform duration-300 flex flex-col"
+                     :class="showFeaturePanel ? 'translate-x-0' : 'translate-x-full'">
+                    <!-- Header -->
+                    <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50">
+                        <div class="flex items-center gap-2">
+                            <i class="ph ph-paint-brush text-blue-600"></i>
+                            <span class="font-bold text-slate-700">Feature Colors</span>
+                            <span class="text-xs text-slate-400">({{ filteredFeatures.length }})</span>
+                        </div>
+                        <button @click="showFeaturePanel = false" class="text-slate-400 hover:text-slate-600">
+                            <i class="ph ph-x text-lg"></i>
+                        </button>
+                    </div>
+
+                    <!-- Record Selector (for multi-record files) -->
+                    <div v-if="featureRecordIds.length > 1" class="px-4 py-2 border-b border-slate-100 shrink-0">
+                        <select v-model="selectedFeatureRecordIdx" class="form-select text-xs w-full">
+                            <option v-for="(rid, idx) in featureRecordIds" :key="idx" :value="idx">
+                                {{ rid }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <!-- Search -->
+                    <div class="px-4 py-2 border-b border-slate-100 shrink-0">
+                        <input v-model="featureSearch" placeholder="Search by product, gene, locus_tag..."
+                               class="form-input text-xs w-full">
+                    </div>
+
+                    <!-- Feature List -->
+                    <div class="flex-grow overflow-y-auto">
+                        <div v-for="feat in filteredFeatures" :key="feat.id"
+                             @click="$event.currentTarget.querySelector('input[type=color]')?.click()"
+                             class="flex items-center gap-2 px-3 py-2 border-b border-slate-100 text-xs hover:bg-blue-50 cursor-pointer transition-colors">
+                            <span class="w-10 font-mono text-slate-400 shrink-0 text-[10px]">{{ feat.type }}</span>
+                            <span class="w-16 font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="`${feat.start}..${feat.end}`">
+                                {{ feat.start }}..{{ feat.end }}
+                            </span>
+                            <span class="flex-grow truncate text-slate-700"
+                                  :title="feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)'">
+                                {{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}
+                            </span>
+                            <input type="color"
+                                   :value="getFeatureColor(feat)"
+                                   @click.stop
+                                   @change="setFeatureColor(feat, $event.target.value)"
+                                   :disabled="!canEditFeatureColor(feat)"
+                                   :title="canEditFeatureColor(feat) ? 'Click to change color' : 'No identifier available (no locus_tag, gene, or product)'"
+                                   :class="['w-7 h-5 border rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
+                        </div>
+                        <div v-if="filteredFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">
+                            No features found
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="px-4 py-2 border-t border-slate-200 shrink-0 bg-slate-50">
+                        <p class="text-[10px] text-slate-400">
+                            <i class="ph ph-info"></i> Click a feature or the diagram to change colors.
+                        </p>
+                    </div>
                 </div>
             </div>
-            
+
             <div v-else class="h-full flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50/30">
                 <i class="ph ph-dna text-6xl mb-4 text-slate-200"></i>
                 <p class="font-medium text-slate-400">Configure settings and click Generate</p>
@@ -755,6 +923,8 @@
             
             const results = ref([]);
             const selectedResultIndex = ref(0);
+            // Store original pairwise match factors for re-interpolation
+            const pairwiseMatchFactors = ref({});  // { pathId: factor }
             const svgContent = computed(() => {
                 if (results.value.length > 0) {
                     const rawSvg = results.value[selectedResultIndex.value].content;
@@ -840,6 +1010,24 @@
             const newSpecRule = reactive({ feat: "CDS", qual: "product", val: "", color: "#ff0000", cap: "" });
             const downloadDpi = ref(300);
 
+            // Feature Color Editor state
+            const extractedFeatures = ref([]);  // Features from last generation
+            const featureRecordIds = ref([]);  // Record IDs for multi-record files
+            const selectedFeatureRecordIdx = ref(0);  // Currently selected record index
+            const showFeaturePanel = ref(false);
+            const featureSearch = ref('');
+            const featureColorOverrides = reactive({});  // {featureKey: color}
+            // SVG Feature Click state
+            const svgContainer = ref(null);
+            const clickedFeature = ref(null);  // {id, svg_id, label, color, feat}
+            const clickedFeaturePos = reactive({ x: 0, y: 0 });
+
+            // Legend Editor state
+            const showLegendPanel = ref(false);
+            const legendEntries = ref([]);  // [{caption, color, yPos}]
+            const newLegendCaption = ref('');
+            const newLegendColor = ref('#808080');
+
             const featureKeys = [
                 "assembly_gap", "C_region", "CDS", "centromere", "D-loop", "D_segment",
                 "exon", "gap", "gene", "intron", "J_segment", "mat_peptide", "misc_binding",
@@ -909,6 +1097,1339 @@
             };
             const newFeatureToAdd = ref("mobile_element");
             const addFeature = () => { if(newFeatureToAdd.value && !adv.features.includes(newFeatureToAdd.value)){ adv.features.push(newFeatureToAdd.value); } };
+
+            // Feature Color Editor functions
+            const filteredFeatures = computed(() => {
+                // First filter by feature type (only show features that are actually drawn)
+                let features = extractedFeatures.value.filter(f =>
+                    adv.features.includes(f.type)
+                );
+
+                // Filter by selected record (if multiple records exist)
+                if (featureRecordIds.value.length > 1) {
+                    const selectedIdx = selectedFeatureRecordIdx.value;
+                    if (mode.value === 'circular') {
+                        // For circular: filter by record_idx within the file
+                        features = features.filter(f => f.record_idx === selectedIdx);
+                    } else {
+                        // For linear: filter by the combined file+record label
+                        const selectedLabel = featureRecordIds.value[selectedIdx];
+                        features = features.filter(f => f.displayRecordId === selectedLabel);
+                    }
+                }
+
+                // Then apply search filter
+                if (featureSearch.value) {
+                    const q = featureSearch.value.toLowerCase();
+                    features = features.filter(f =>
+                        (f.product || '').toLowerCase().includes(q) ||
+                        (f.gene || '').toLowerCase().includes(q) ||
+                        (f.locus_tag || '').toLowerCase().includes(q) ||
+                        (f.note || '').toLowerCase().includes(q) ||
+                        f.type.toLowerCase().includes(q)
+                    );
+                }
+                return features;
+            });
+
+            // Helper: parse hex color to RGB
+            const hexToRgb = (hex) => {
+                const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+                return result ? {
+                    r: parseInt(result[1], 16),
+                    g: parseInt(result[2], 16),
+                    b: parseInt(result[3], 16)
+                } : { r: 128, g: 128, b: 128 };
+            };
+
+            // Helper: RGB to hex
+            const rgbToHex = (r, g, b) => {
+                return '#' + [r, g, b].map(x => {
+                    const hex = Math.round(Math.max(0, Math.min(255, x))).toString(16);
+                    return hex.length === 1 ? '0' + hex : hex;
+                }).join('');
+            };
+
+            // Interpolate between two colors
+            const interpolateColor = (color1, color2, factor) => {
+                const c1 = hexToRgb(color1);
+                const c2 = hexToRgb(color2);
+                return rgbToHex(
+                    c1.r + (c2.r - c1.r) * factor,
+                    c1.g + (c2.g - c1.g) * factor,
+                    c1.b + (c2.b - c1.b) * factor
+                );
+            };
+
+            // Estimate the interpolation factor from a current color given min/max colors
+            const estimateColorFactor = (currentColor, minColor, maxColor) => {
+                const current = hexToRgb(currentColor);
+                const min = hexToRgb(minColor);
+                const max = hexToRgb(maxColor);
+
+                // Calculate factor based on color distance
+                const totalDist = Math.sqrt(
+                    Math.pow(max.r - min.r, 2) + Math.pow(max.g - min.g, 2) + Math.pow(max.b - min.b, 2)
+                );
+                if (totalDist < 1) return 0.5;
+
+                const currentDist = Math.sqrt(
+                    Math.pow(current.r - min.r, 2) + Math.pow(current.g - min.g, 2) + Math.pow(current.b - min.b, 2)
+                );
+                return Math.max(0, Math.min(1, currentDist / totalDist));
+            };
+
+            const getFeatureColor = (feat) => {
+                // Use internal ID for tracking (unique per feature)
+                const override = featureColorOverrides[feat.id];
+                if (override) {
+                    return override.color || override;  // Support both {color, caption} and legacy string format
+                }
+                // Otherwise use the default color for this feature type from the palette
+                return currentColors.value[feat.type] || '#cccccc';
+            };
+
+            // Helper to check if a feature can be identified for color editing
+            // Always true - we can always use location as a unique identifier
+            const canEditFeatureColor = (feat) => {
+                return true;  // Location is always available
+            };
+
+            // Helper to get the best qualifier for a feature
+            // Uses hash pseudo-qualifier which is always unique (based on type+position+strand)
+            // The svg_id is computed the same way in both Python and JavaScript
+            const getFeatureQualifier = (feat) => {
+                // Always use hash - it's the most reliable unique identifier
+                // svg_id is pre-computed for each feature (e.g., "f1a2b3c4")
+                return { qual: 'hash', val: feat.svg_id };
+            };
+
+            // Instant preview: update SVG path colors directly without regeneration
+            const applyInstantPreview = (feat, color, legendCaption = null) => {
+                // Use pre-computed svg_id that matches Python's hash
+                const svgId = feat.svg_id;
+                if (!svgId) {
+                    console.log('No svg_id for feature', feat);
+                    return;
+                }
+
+                // Update results array (svgContent is computed from results)
+                const idx = selectedResultIndex.value;
+                if (results.value.length > idx && results.value[idx].content) {
+                    try {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(results.value[idx].content, 'image/svg+xml');
+
+                        // Find ALL elements with this ID (for multi-exon features)
+                        const elements = doc.querySelectorAll(`#${CSS.escape(svgId)}`);
+                        let updated = elements.length > 0;
+
+                        if (updated) {
+                            elements.forEach(el => el.setAttribute('fill', color));
+                        }
+
+                        // Note: Legend entries are added separately via addLegendEntry() in setFeatureColor()
+
+                        if (updated) {
+                            const serializer = new XMLSerializer();
+                            const newContent = serializer.serializeToString(doc.documentElement);
+                            // Replace the entire object to ensure Vue reactivity
+                            results.value[idx] = { ...results.value[idx], content: newContent };
+                            console.log(`Instant preview: updated ${elements.length} element(s) for ${svgId} to ${color}`);
+                        } else {
+                            console.log(`Instant preview: element ${svgId} not found in SVG`);
+                        }
+                    } catch (e) {
+                        console.error('Instant preview error:', e);
+                    }
+                }
+            };
+
+            // Attach click handlers to SVG feature paths
+            const attachSvgFeatureHandlers = () => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                // Find all paths with id starting with 'f' (feature hash IDs)
+                const featurePaths = svg.querySelectorAll('path[id^="f"], polygon[id^="f"]');
+
+                // Group paths by ID (for multi-exon features)
+                const pathsByIdMap = {};
+                featurePaths.forEach(path => {
+                    const id = path.getAttribute('id');
+                    if (!pathsByIdMap[id]) pathsByIdMap[id] = [];
+                    pathsByIdMap[id].push(path);
+                });
+
+                // Helper to highlight all segments of a feature
+                const highlightFeature = (svgId, highlight) => {
+                    const paths = pathsByIdMap[svgId] || [];
+                    paths.forEach(p => {
+                        p.style.opacity = highlight ? '0.7' : '1';
+                        p.style.filter = highlight ? 'brightness(1.2)' : 'none';
+                    });
+                };
+
+                featurePaths.forEach(path => {
+                    const svgId = path.getAttribute('id');
+                    path.style.cursor = 'pointer';
+
+                    // Hover: highlight ALL segments with same ID
+                    path.addEventListener('mouseenter', () => highlightFeature(svgId, true));
+                    path.addEventListener('mouseleave', () => highlightFeature(svgId, false));
+
+                    // Click handler
+                    path.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        // Find matching feature from extractedFeatures
+                        const feat = extractedFeatures.value.find(f => f.svg_id === svgId);
+                        if (feat) {
+                            const currentColor = path.getAttribute('fill') || getFeatureColor(feat);
+                            const defaultLabel = feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`;
+
+                            // Check if there's an existing override with a caption
+                            const existingOverride = featureColorOverrides[feat.id];
+                            const existingCaption = existingOverride?.caption || '';
+
+                            clickedFeature.value = {
+                                id: feat.id,
+                                svg_id: svgId,
+                                label: defaultLabel,
+                                color: currentColor,
+                                feat: feat,
+                                // Pre-fill with existing caption if available, otherwise empty
+                                legendName: existingCaption
+                            };
+                            // Position popup near click
+                            clickedFeaturePos.x = Math.min(e.clientX + 10, window.innerWidth - 280);
+                            clickedFeaturePos.y = Math.min(e.clientY + 10, window.innerHeight - 100);
+                        } else {
+                            console.log(`No feature found for svg_id: ${svgId}`);
+                        }
+                    });
+                });
+
+                console.log(`Attached handlers to ${featurePaths.length} feature paths (${Object.keys(pathsByIdMap).length} unique features)`);
+            };
+
+            // Update color from the popup picker
+            const updateClickedFeatureColor = (color) => {
+                if (!clickedFeature.value) return;
+                const feat = clickedFeature.value.feat;
+                // Use custom legendName if provided (check for non-empty trimmed string)
+                const customName = clickedFeature.value.legendName?.trim();
+                const legendName = customName ? customName : clickedFeature.value.label;
+                clickedFeature.value.color = color;
+                setFeatureColor(feat, color, legendName);
+            };
+
+            // Watch for SVG content changes to reattach handlers
+            watch(() => svgContent.value, () => {
+                // Use nextTick to ensure DOM is updated
+                Vue.nextTick(() => {
+                    attachSvgFeatureHandlers();
+                });
+            });
+
+            // Function to apply palette colors to SVG immediately
+            const applyPaletteToSvg = () => {
+                if (!svgContent.value || !extractedFeatures.value.length) return;
+                if (!svgContainer.value) return;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const colors = currentColors.value;
+                const featurePaths = svg.querySelectorAll('path[id^="f"]');
+                let updatedCount = 0;
+
+                featurePaths.forEach(path => {
+                    const svgId = path.getAttribute('id');
+                    const feat = extractedFeatures.value.find(f => f.svg_id === svgId);
+                    if (!feat) return;
+
+                    const paletteColor = colors[feat.type];
+                    if (!paletteColor) return;
+
+                    // Don't update if feature has a specific color rule
+                    const hasSpecificRule = manualSpecificRules.some(r => {
+                        const qualInfo = getFeatureQualifier(feat);
+                        return qualInfo && r.feat === feat.type && r.qual === qualInfo.qual && r.val === qualInfo.val;
+                    });
+
+                    if (!hasSpecificRule && !featureColorOverrides[feat.id]) {
+                        const currentFill = path.getAttribute('fill');
+                        if (currentFill !== paletteColor) {
+                            path.setAttribute('fill', paletteColor);
+                            updatedCount++;
+                        }
+                    }
+                });
+
+                // Update GC content track
+                const gcContentGroup = svg.getElementById('gc_content');
+                if (gcContentGroup && colors.gc_content) {
+                    const gcPaths = gcContentGroup.querySelectorAll('path');
+                    gcPaths.forEach(path => {
+                        path.setAttribute('fill', colors.gc_content);
+                        updatedCount++;
+                    });
+                }
+
+                // Update GC skew track (circular: #skew, linear: #gc_skew)
+                const skewGroup = svg.getElementById('skew') || svg.getElementById('gc_skew');
+                if (skewGroup) {
+                    const skewPaths = skewGroup.querySelectorAll('path');
+                    // In circular: first visible path is high (after clipPath), second is low
+                    // In linear: similar structure
+                    let pathIndex = 0;
+                    skewPaths.forEach(path => {
+                        const fill = path.getAttribute('fill');
+                        // Skip clipPath paths (fill="white") and non-filled paths
+                        if (fill && fill !== 'white' && fill !== 'none') {
+                            if (pathIndex === 0 && colors.skew_high) {
+                                path.setAttribute('fill', colors.skew_high);
+                                updatedCount++;
+                            } else if (pathIndex === 1 && colors.skew_low) {
+                                path.setAttribute('fill', colors.skew_low);
+                                updatedCount++;
+                            }
+                            pathIndex++;
+                        }
+                    });
+                }
+
+                // Update pairwise match tracks (comparison1, comparison2, etc.)
+                // These use color interpolation based on identity
+                if (colors.pairwise_match_min && colors.pairwise_match_max) {
+                    let compIdx = 1;
+                    let compGroup = svg.getElementById(`comparison${compIdx}`);
+                    while (compGroup) {
+                        const matchPaths = compGroup.querySelectorAll('path');
+                        matchPaths.forEach((path, pathIdx) => {
+                            const pathKey = `comp${compIdx}_path${pathIdx}`;
+                            const currentFill = path.getAttribute('fill');
+                            if (currentFill) {
+                                let factor;
+                                // Check if we have a stored factor for this path
+                                if (pairwiseMatchFactors.value[pathKey] !== undefined) {
+                                    factor = pairwiseMatchFactors.value[pathKey];
+                                } else {
+                                    // First time - estimate factor from original colors used when diagram was generated
+                                    const origMin = window._origPairwiseMin || '#FFE7E7';
+                                    const origMax = window._origPairwiseMax || '#FF7272';
+                                    factor = estimateColorFactor(currentFill, origMin, origMax);
+                                    pairwiseMatchFactors.value[pathKey] = factor;
+                                }
+                                const newColor = interpolateColor(colors.pairwise_match_min, colors.pairwise_match_max, factor);
+                                path.setAttribute('fill', newColor);
+                                updatedCount++;
+                            }
+                        });
+                        compIdx++;
+                        compGroup = svg.getElementById(`comparison${compIdx}`);
+                    }
+                }
+
+                // Also update legend colors - try to match by group position since text is converted to paths
+                const legendGroup = svg.getElementById('legend');
+                if (legendGroup) {
+                    // Group paths by transform Y position
+                    const pathsByY = {};
+                    const allPaths = legendGroup.querySelectorAll('path');
+                    allPaths.forEach(p => {
+                        const transform = p.getAttribute('transform');
+                        if (transform) {
+                            const match = transform.match(/translate\(([^,]+),\s*([\d.]+)\)/);
+                            if (match) {
+                                const x = parseFloat(match[1]);
+                                const y = match[2];
+                                if (!pathsByY[y]) pathsByY[y] = [];
+                                pathsByY[y].push({ path: p, x });
+                            }
+                        }
+                    });
+
+                    // Legend order typically: CDS, GC content, GC skew (+), GC skew (-), etc.
+                    // The first path at x=0 for each Y is the color rectangle
+                    const legendOrder = ['CDS', 'gc_content', 'skew_high', 'skew_low'];
+                    const legendColors = {
+                        'CDS': colors.CDS,
+                        'gc_content': colors.gc_content,
+                        'skew_high': colors.skew_high,
+                        'skew_low': colors.skew_low
+                    };
+
+                    // Sort Y positions and update color rectangles
+                    const yPositions = Object.keys(pathsByY).sort((a, b) => parseFloat(a) - parseFloat(b));
+                    yPositions.forEach((y, idx) => {
+                        const paths = pathsByY[y];
+                        // Find the color rectangle (usually at x=0, has simple d attribute)
+                        const colorRect = paths.find(p => p.x === 0 || Math.abs(p.x) < 1);
+                        if (colorRect && idx < legendOrder.length) {
+                            const colorKey = legendOrder[idx];
+                            const newColor = legendColors[colorKey];
+                            if (newColor) {
+                                colorRect.path.setAttribute('fill', newColor);
+                                updatedCount++;
+                            }
+                        }
+                    });
+
+                    // Update pairwise legend gradient
+                    const pairwiseLegend = legendGroup.querySelector('#pairwise_legend') || svg.getElementById('pairwise_legend');
+                    if (pairwiseLegend && colors.pairwise_match_min && colors.pairwise_match_max) {
+                        // Find the linearGradient element
+                        const gradient = pairwiseLegend.querySelector('linearGradient');
+                        if (gradient) {
+                            const stops = gradient.querySelectorAll('stop');
+                            if (stops.length >= 2) {
+                                // First stop is min color (0%), second is max color (100%)
+                                stops[0].setAttribute('stop-color', colors.pairwise_match_min);
+                                stops[1].setAttribute('stop-color', colors.pairwise_match_max);
+                                updatedCount++;
+                            }
+                        }
+                    }
+                }
+
+                if (updatedCount > 0) {
+                    const idx = selectedResultIndex.value;
+                    if (idx >= 0 && results.value.length > idx) {
+                        const serializer = new XMLSerializer();
+                        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                    }
+                }
+            };
+
+            // Watch for palette color changes
+            watch(currentColors, () => {
+                applyPaletteToSvg();
+            }, { deep: true });
+
+            // Function to apply specific rules to SVG immediately
+            const applySpecificRulesToSvg = () => {
+                if (!svgContent.value || !extractedFeatures.value.length) return;
+                if (!svgContainer.value) return;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                let updatedCount = 0;
+
+                // For each extracted feature, check if it matches any specific rule
+                extractedFeatures.value.forEach(feat => {
+                    if (!feat.svg_id) return;
+
+                    // Check if there's a matching specific rule
+                    let matchingRule = null;
+                    for (const rule of manualSpecificRules) {
+                        if (rule.feat !== feat.type) continue;
+
+                        let matches = false;
+                        if (rule.qual === 'product' && feat.product) {
+                            // Support regex matching
+                            try {
+                                const regex = new RegExp(rule.val, 'i');
+                                matches = regex.test(feat.product);
+                            } catch {
+                                matches = feat.product === rule.val;
+                            }
+                        } else if (rule.qual === 'gene' && feat.gene) {
+                            try {
+                                const regex = new RegExp(rule.val, 'i');
+                                matches = regex.test(feat.gene);
+                            } catch {
+                                matches = feat.gene === rule.val;
+                            }
+                        } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
+                            try {
+                                const regex = new RegExp(rule.val, 'i');
+                                matches = regex.test(feat.locus_tag);
+                            } catch {
+                                matches = feat.locus_tag === rule.val;
+                            }
+                        } else if (rule.qual === 'hash' && feat.svg_id === rule.val) {
+                            matches = true;
+                        }
+
+                        if (matches) {
+                            matchingRule = rule;
+                            break;
+                        }
+                    }
+
+                    // Apply color based on matching rule or default palette
+                    const elements = svg.querySelectorAll(`#${CSS.escape(feat.svg_id)}`);
+                    if (elements.length > 0) {
+                        const newColor = matchingRule ? matchingRule.color : (currentColors.value[feat.type] || '#cccccc');
+                        elements.forEach(el => {
+                            if (el.getAttribute('fill') !== newColor) {
+                                el.setAttribute('fill', newColor);
+                                updatedCount++;
+                            }
+                        });
+                    }
+                });
+
+                if (updatedCount > 0) {
+                    const idx = selectedResultIndex.value;
+                    if (idx >= 0 && results.value.length > idx) {
+                        const serializer = new XMLSerializer();
+                        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                    }
+                    console.log(`Applied specific rules: updated ${updatedCount} elements`);
+                }
+            };
+
+            // Track legend entries added by specific rules
+            const addedLegendCaptions = ref(new Set());
+
+            // Watch for specific rules changes - only apply styles and handle removals
+            // Legend ADDITIONS are handled by setFeatureColor to avoid race conditions
+            watch(() => [...manualSpecificRules], async (newRules, oldRules) => {
+                applySpecificRulesToSvg();
+
+                // Get captions from current rules
+                const currentCaptions = new Set(newRules.filter(r => r.cap).map(r => r.cap));
+
+                // Find removed captions (were in addedLegendCaptions but not in current rules)
+                const removedCaptions = [...addedLegendCaptions.value].filter(cap => !currentCaptions.has(cap));
+
+                // Remove legend entries for removed captions only
+                for (const cap of removedCaptions) {
+                    removeLegendEntry(cap);
+                    addedLegendCaptions.value.delete(cap);
+                }
+
+                // DO NOT add legend entries here - that's handled by setFeatureColor
+                // to avoid race conditions and duplicate entries
+            }, { deep: true });
+
+            // Function to apply style changes (stroke colors/widths) to SVG immediately
+            const applyStylesToSvg = () => {
+                if (!svgContent.value) return;
+                if (!svgContainer.value) return;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                let updatedCount = 0;
+
+                // Update block stroke (feature paths)
+                if (adv.block_stroke_color || adv.block_stroke_width !== null) {
+                    const featurePaths = svg.querySelectorAll('path[id^="f"]');
+                    featurePaths.forEach(path => {
+                        if (adv.block_stroke_color) {
+                            path.setAttribute('stroke', adv.block_stroke_color);
+                            updatedCount++;
+                        }
+                        if (adv.block_stroke_width !== null) {
+                            path.setAttribute('stroke-width', adv.block_stroke_width);
+                            updatedCount++;
+                        }
+                    });
+                }
+
+                // Update axis stroke
+                const axisGroup = svg.getElementById('Axis');
+                if (axisGroup) {
+                    const axisElements = axisGroup.querySelectorAll('path, line, circle');
+                    axisElements.forEach(el => {
+                        if (adv.axis_stroke_color) {
+                            el.setAttribute('stroke', adv.axis_stroke_color);
+                            updatedCount++;
+                        }
+                        if (adv.axis_stroke_width !== null) {
+                            el.setAttribute('stroke-width', adv.axis_stroke_width);
+                            updatedCount++;
+                        }
+                    });
+                }
+
+                // Update tick stroke (same as axis typically)
+                const tickGroup = svg.getElementById('tick');
+                if (tickGroup) {
+                    const tickElements = tickGroup.querySelectorAll('path, line');
+                    tickElements.forEach(el => {
+                        if (adv.axis_stroke_color) {
+                            el.setAttribute('stroke', adv.axis_stroke_color);
+                            updatedCount++;
+                        }
+                        if (adv.axis_stroke_width !== null) {
+                            el.setAttribute('stroke-width', adv.axis_stroke_width);
+                            updatedCount++;
+                        }
+                    });
+                }
+
+                // Update intron/line strokes (paths without fill or with fill="none")
+                if (adv.line_stroke_color || adv.line_stroke_width !== null) {
+                    // Find paths that are likely intron lines (no fill or fill=none, have stroke)
+                    const allPaths = svg.querySelectorAll('path');
+                    allPaths.forEach(path => {
+                        const fill = path.getAttribute('fill');
+                        const stroke = path.getAttribute('stroke');
+                        const id = path.getAttribute('id') || '';
+                        // Intron lines typically have no fill and are not feature blocks
+                        if ((fill === 'none' || !fill) && stroke && !id.startsWith('f')) {
+                            if (adv.line_stroke_color) {
+                                path.setAttribute('stroke', adv.line_stroke_color);
+                                updatedCount++;
+                            }
+                            if (adv.line_stroke_width !== null) {
+                                path.setAttribute('stroke-width', adv.line_stroke_width);
+                                updatedCount++;
+                            }
+                        }
+                    });
+                }
+
+                // Update scale bar (linear mode)
+                const lengthBarGroup = svg.getElementById('length_bar');
+                if (lengthBarGroup) {
+                    const scaleElements = lengthBarGroup.querySelectorAll('line, path');
+                    scaleElements.forEach(el => {
+                        if (adv.scale_stroke_color) {
+                            el.setAttribute('stroke', adv.scale_stroke_color);
+                            updatedCount++;
+                        }
+                        if (adv.scale_stroke_width !== null) {
+                            el.setAttribute('stroke-width', adv.scale_stroke_width);
+                            updatedCount++;
+                        }
+                    });
+                }
+
+                if (updatedCount > 0) {
+                    const idx = selectedResultIndex.value;
+                    if (idx >= 0 && results.value.length > idx) {
+                        const serializer = new XMLSerializer();
+                        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                    }
+                    console.log(`Applied styles: updated ${updatedCount} elements`);
+                }
+            };
+
+            // Watch for style changes
+            watch(() => [
+                adv.block_stroke_color, adv.block_stroke_width,
+                adv.line_stroke_color, adv.line_stroke_width,
+                adv.axis_stroke_color, adv.axis_stroke_width,
+                adv.scale_stroke_color, adv.scale_stroke_width
+            ], () => {
+                applyStylesToSvg();
+            });
+
+            // Function to toggle track visibility
+            const applyTrackVisibility = () => {
+                if (!svgContent.value) return;
+                if (!svgContainer.value) return;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                let updated = false;
+
+                // GC content track
+                const gcContentGroup = svg.getElementById('gc_content');
+                if (gcContentGroup) {
+                    const shouldHide = mode.value === 'circular' ? form.suppress_gc : !form.show_gc;
+                    const currentDisplay = gcContentGroup.getAttribute('display');
+                    if (shouldHide && currentDisplay !== 'none') {
+                        gcContentGroup.setAttribute('display', 'none');
+                        updated = true;
+                    } else if (!shouldHide && currentDisplay === 'none') {
+                        gcContentGroup.removeAttribute('display');
+                        updated = true;
+                    }
+                }
+
+                // GC skew track (circular: #skew, linear: #gc_skew)
+                const skewGroup = svg.getElementById('skew') || svg.getElementById('gc_skew');
+                if (skewGroup) {
+                    const shouldHide = mode.value === 'circular' ? form.suppress_skew : !form.show_skew;
+                    const currentDisplay = skewGroup.getAttribute('display');
+                    if (shouldHide && currentDisplay !== 'none') {
+                        skewGroup.setAttribute('display', 'none');
+                        updated = true;
+                    } else if (!shouldHide && currentDisplay === 'none') {
+                        skewGroup.removeAttribute('display');
+                        updated = true;
+                    }
+                }
+
+                if (updated) {
+                    const idx = selectedResultIndex.value;
+                    if (idx >= 0 && results.value.length > idx) {
+                        const serializer = new XMLSerializer();
+                        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                    }
+                    console.log('Track visibility updated');
+                }
+            };
+
+            // Watch for track visibility changes
+            watch(() => [form.suppress_gc, form.suppress_skew, form.show_gc, form.show_skew], () => {
+                applyTrackVisibility();
+            });
+
+            // Function to add a legend entry dynamically using Pyodide
+            const addLegendEntry = async (caption, color) => {
+                if (!svgContainer.value || !pyodideReady.value) return false;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return false;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) {
+                    console.log('No legend group found');
+                    return false;
+                }
+
+                // Determine target group: feature_legend (linear) or legend (circular)
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                // Check existing legend entries
+                const existingTexts = targetGroup.querySelectorAll('text');
+                let finalCaption = caption.trim();
+
+                // Check if exact caption exists
+                for (const t of existingTexts) {
+                    const existingCaption = t.textContent?.trim();
+                    if (existingCaption === finalCaption) {
+                        // Found exact match - check if color is the same
+                        const transform = t.getAttribute('transform');
+                        if (transform) {
+                            const match = transform.match(/translate\([^,]+,\s*([\d.]+)\)/);
+                            if (match) {
+                                const y = match[1];
+                                // Find the color rect at the same Y
+                                const rects = targetGroup.querySelectorAll('path');
+                                for (const r of rects) {
+                                    const rt = r.getAttribute('transform');
+                                    if (rt && rt.includes(`, ${y})`)) {
+                                        const existingColor = r.getAttribute('fill');
+                                        if (existingColor === color) {
+                                            // Same caption, same color - no change needed
+                                            return finalCaption;
+                                        }
+                                        // Same caption, different color - need unique name
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Generate unique caption if needed (e.g., "hypothetical protein (1)")
+                const baseCaption = finalCaption.replace(/\s*\(\d+\)$/, '');  // Remove existing (N) suffix
+                let counter = 1;
+                const existingCaptions = new Set();
+                existingTexts.forEach(t => existingCaptions.add(t.textContent?.trim()));
+
+                while (existingCaptions.has(finalCaption)) {
+                    finalCaption = `${baseCaption} (${counter})`;
+                    counter++;
+                }
+
+                // Update the caption parameter for the caller
+                caption = finalCaption;
+
+                // Detect rect_size from existing legend entries
+                let rectSize = 14;  // Default
+                const firstColorRect = targetGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
+                if (firstColorRect) {
+                    const d = firstColorRect.getAttribute('d');
+                    if (d) {
+                        // Parse path to extract rect size: M 0,-7 L 14,-7 L 14,7 L 0,7 z
+                        const lMatch = d.match(/L\s+([\d.]+),/);
+                        if (lMatch) {
+                            rectSize = parseFloat(lMatch[1]);
+                        }
+                    }
+                }
+
+                // Detect font settings from existing text elements
+                let fontSize = 14;
+                let fontFamily = 'Arial';
+                const firstText = targetGroup.querySelector('text');
+                if (firstText) {
+                    const fs = firstText.getAttribute('font-size');
+                    if (fs) fontSize = parseFloat(fs);
+                    const ff = firstText.getAttribute('font-family');
+                    if (ff) fontFamily = ff;
+                }
+
+                const lineMargin = (24 / 14) * rectSize;
+                const xMargin = (22 / 14) * rectSize;
+
+                // Find max Y position in feature legend entries only (not background rect)
+                let maxY = -lineMargin;  // Start at -lineMargin so first entry is at y=0
+                const textElements = targetGroup.querySelectorAll('text');
+                textElements.forEach(el => {
+                    const transform = el.getAttribute('transform');
+                    if (transform) {
+                        const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                        if (match) {
+                            const y = parseFloat(match[1]);
+                            if (y > maxY) maxY = y;
+                        }
+                    }
+                });
+
+                // If no text elements found, check for paths with solid fills (entry rects)
+                if (textElements.length === 0) {
+                    const colorRects = targetGroup.querySelectorAll('path');
+                    colorRects.forEach(el => {
+                        const fill = el.getAttribute('fill');
+                        if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                            const transform = el.getAttribute('transform');
+                            if (transform) {
+                                const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                                if (match) {
+                                    const y = parseFloat(match[1]);
+                                    if (y > maxY) maxY = y;
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Calculate new Y position
+                const newY = maxY + lineMargin;
+
+                try {
+                    // Call Python to generate legend entry SVG with correct sizing and font settings
+                    const escapedCaption = caption.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                    const escapedFontFamily = fontFamily.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                    const resultJson = pyodide.runPython(`generate_legend_entry_svg("${escapedCaption}", "${color}", ${newY}, ${rectSize}, ${fontSize}, "${escapedFontFamily}")`);
+                    const result = JSON.parse(resultJson);
+
+                    // Parse and insert the SVG elements
+                    const parser = new DOMParser();
+
+                    // Insert rect
+                    const rectDoc = parser.parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${result.rect}</svg>`, 'image/svg+xml');
+                    const rectEl = rectDoc.querySelector('path');
+                    if (rectEl) {
+                        targetGroup.appendChild(document.importNode(rectEl, true));
+                    }
+
+                    // Insert text
+                    const textDoc = parser.parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${result.text}</svg>`, 'image/svg+xml');
+                    const textEl = textDoc.querySelector('text');
+                    if (textEl) {
+                        targetGroup.appendChild(document.importNode(textEl, true));
+                    }
+
+                    // Update results for reactivity
+                    const idx = selectedResultIndex.value;
+                    if (idx >= 0 && results.value.length > idx) {
+                        const serializer = new XMLSerializer();
+                        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                    }
+
+                    console.log(`Added legend entry: "${finalCaption}" at y=${newY} in ${featureLegendGroup ? 'feature_legend' : 'legend'}`);
+                    return finalCaption;  // Return the actual caption used (may have (N) suffix)
+                } catch (e) {
+                    console.error('Failed to add legend entry:', e);
+                    return false;
+                }
+            };
+
+            // Function to update legend entry color by caption (without removing)
+            const updateLegendEntryColorByCaption = (caption, color) => {
+                if (!svgContainer.value) return false;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return false;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return false;
+
+                // Determine target group: feature_legend (linear) or legend (circular)
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                // Helper to parse Y from transform (handles both "translate(x, y)" and "translate(x,y)")
+                const getTransformY = (transform) => {
+                    if (!transform) return null;
+                    const match = transform.match(/translate\(\s*[\d.-]+\s*,\s*([\d.-]+)\s*\)/);
+                    return match ? parseFloat(match[1]) : null;
+                };
+
+                // Find text element with this caption
+                const texts = targetGroup.querySelectorAll('text');
+                let updated = false;
+
+                for (const t of texts) {
+                    if (t.textContent?.trim() === caption.trim()) {
+                        const textY = getTransformY(t.getAttribute('transform'));
+                        if (textY !== null) {
+                            // Find and update the color rect at the same Y
+                            const rects = targetGroup.querySelectorAll('path');
+                            for (const r of rects) {
+                                const rectY = getTransformY(r.getAttribute('transform'));
+                                if (rectY !== null && Math.abs(rectY - textY) < 0.1) {
+                                    const fill = r.getAttribute('fill');
+                                    if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                        r.setAttribute('fill', color);
+                                        updated = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+
+                if (updated) {
+                    // Save to results
+                    const idx = selectedResultIndex.value;
+                    if (idx >= 0 && results.value.length > idx) {
+                        const serializer = new XMLSerializer();
+                        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                    }
+                    console.log(`Updated legend entry color: "${caption}" to ${color}`);
+                }
+
+                return updated;
+            };
+
+            // Function to check if a legend entry exists with given caption
+            const legendEntryExists = (caption) => {
+                if (!svgContainer.value) return false;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return false;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return false;
+
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                const texts = targetGroup.querySelectorAll('text');
+                for (const t of texts) {
+                    if (t.textContent?.trim() === caption.trim()) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            // Helper to parse Y coordinate from transform attribute
+            const parseTransformY = (transform) => {
+                if (!transform) return null;
+                // Match both "translate(x, y)" and "translate(x,y)" formats
+                const match = transform.match(/translate\(\s*[\d.-]+\s*,\s*([\d.-]+)\s*\)/);
+                return match ? parseFloat(match[1]) : null;
+            };
+
+            // Function to remove a legend entry by caption
+            const removeLegendEntry = (caption) => {
+                if (!svgContainer.value) return false;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return false;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return false;
+
+                // Determine target group: feature_legend (linear) or legend (circular)
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                // Find text element with this caption
+                const texts = targetGroup.querySelectorAll('text');
+                let removed = false;
+
+                texts.forEach(t => {
+                    if (t.textContent?.trim() === caption.trim()) {
+                        const textY = parseTransformY(t.getAttribute('transform'));
+                        if (textY !== null) {
+                            // Find and remove the color rect at the same Y (within tolerance)
+                            const rects = targetGroup.querySelectorAll('path');
+                            rects.forEach(r => {
+                                const rectY = parseTransformY(r.getAttribute('transform'));
+                                // Check if Y coordinates match (within 0.1 tolerance for floating point)
+                                if (rectY !== null && Math.abs(rectY - textY) < 0.1) {
+                                    // Make sure it's a color rect (has solid fill, not gradient)
+                                    const fill = r.getAttribute('fill');
+                                    if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                        r.remove();
+                                    }
+                                }
+                            });
+                        }
+                        t.remove();
+                        removed = true;
+                    }
+                });
+
+                if (removed) {
+                    const idx = selectedResultIndex.value;
+                    if (idx >= 0 && results.value.length > idx) {
+                        const serializer = new XMLSerializer();
+                        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                    }
+                    console.log(`Removed legend entry: "${caption}"`);
+                }
+
+                return removed;
+            };
+
+            // Extract legend entries from current SVG for the Legend Editor panel
+            const extractLegendEntries = () => {
+                if (!svgContainer.value) {
+                    legendEntries.value = [];
+                    return;
+                }
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) {
+                    legendEntries.value = [];
+                    return;
+                }
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) {
+                    legendEntries.value = [];
+                    return;
+                }
+
+                // Determine target group: feature_legend (linear) or legend (circular)
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                const entries = [];
+
+                // Find all text elements in legend (these are the captions)
+                const textElements = targetGroup.querySelectorAll('text');
+                textElements.forEach(textEl => {
+                    const caption = textEl.textContent?.trim();
+                    if (!caption) return;
+
+                    const transform = textEl.getAttribute('transform');
+                    let yPos = 0;
+                    if (transform) {
+                        const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                        if (match) yPos = parseFloat(match[1]);
+                    }
+
+                    // Find the color rect at the same Y position
+                    let color = '#cccccc';
+                    const paths = targetGroup.querySelectorAll('path');
+                    paths.forEach(p => {
+                        const pt = p.getAttribute('transform');
+                        if (pt) {
+                            const pMatch = pt.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                            if (pMatch && Math.abs(parseFloat(pMatch[1]) - yPos) < 1) {
+                                const fill = p.getAttribute('fill');
+                                if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                    color = fill;
+                                }
+                            }
+                        }
+                    });
+
+                    entries.push({ caption, color, yPos });
+                });
+
+                // Sort by Y position
+                entries.sort((a, b) => a.yPos - b.yPos);
+                legendEntries.value = entries;
+            };
+
+            // Update legend entry color
+            const updateLegendEntryColor = (idx, newColor) => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const entry = legendEntries.value[idx];
+                if (!entry) return;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return;
+
+                // Determine target group: feature_legend (linear) or legend (circular)
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                // Find and update the color rect at this Y position
+                const paths = targetGroup.querySelectorAll('path');
+                paths.forEach(p => {
+                    const pt = p.getAttribute('transform');
+                    if (pt) {
+                        const pMatch = pt.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                        if (pMatch && Math.abs(parseFloat(pMatch[1]) - entry.yPos) < 1) {
+                            const fill = p.getAttribute('fill');
+                            if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                p.setAttribute('fill', newColor);
+                            }
+                        }
+                    }
+                });
+
+                // Update local state
+                legendEntries.value[idx].color = newColor;
+
+                // Save to results
+                const resultIdx = selectedResultIndex.value;
+                if (resultIdx >= 0 && results.value.length > resultIdx) {
+                    const serializer = new XMLSerializer();
+                    results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                }
+            };
+
+            // Update legend entry caption
+            const updateLegendEntryCaption = (idx, newCaption) => {
+                if (!svgContainer.value || !newCaption.trim()) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const entry = legendEntries.value[idx];
+                if (!entry) return;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return;
+
+                // Determine target group: feature_legend (linear) or legend (circular)
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                // Find and update the text element at this Y position
+                const texts = targetGroup.querySelectorAll('text');
+                texts.forEach(t => {
+                    const tt = t.getAttribute('transform');
+                    if (tt) {
+                        const tMatch = tt.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                        if (tMatch && Math.abs(parseFloat(tMatch[1]) - entry.yPos) < 1) {
+                            t.textContent = newCaption;
+                        }
+                    }
+                });
+
+                // Update local state
+                legendEntries.value[idx].caption = newCaption;
+
+                // Save to results
+                const resultIdx = selectedResultIndex.value;
+                if (resultIdx >= 0 && results.value.length > resultIdx) {
+                    const serializer = new XMLSerializer();
+                    results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                }
+            };
+
+            // Delete legend entry by index
+            const deleteLegendEntry = (idx) => {
+                const entry = legendEntries.value[idx];
+                if (!entry) return;
+
+                removeLegendEntry(entry.caption);
+                extractLegendEntries();  // Refresh the list
+            };
+
+            // Move legend entry up (swap with previous)
+            const moveLegendEntryUp = (idx) => {
+                if (idx <= 0) return;
+                swapLegendEntries(idx, idx - 1);
+            };
+
+            // Move legend entry down (swap with next)
+            const moveLegendEntryDown = (idx) => {
+                if (idx >= legendEntries.value.length - 1) return;
+                swapLegendEntries(idx, idx + 1);
+            };
+
+            // Swap two legend entries by exchanging their Y positions in the SVG
+            const swapLegendEntries = (idx1, idx2) => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return;
+
+                // Determine target group: feature_legend (linear) or legend (circular)
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                const entry1 = legendEntries.value[idx1];
+                const entry2 = legendEntries.value[idx2];
+                if (!entry1 || !entry2) return;
+
+                const y1 = entry1.yPos;
+                const y2 = entry2.yPos;
+
+                // Find and update elements at y1 position
+                const allElements = targetGroup.querySelectorAll('path, text');
+                allElements.forEach(el => {
+                    const transform = el.getAttribute('transform');
+                    if (!transform) return;
+
+                    const match = transform.match(/translate\(([^,]+),\s*([\d.-]+)\)/);
+                    if (!match) return;
+
+                    const x = match[1];
+                    const y = parseFloat(match[2]);
+
+                    // Check if this element belongs to entry1 or entry2
+                    if (Math.abs(y - y1) < 1) {
+                        // This element belongs to entry1, move to y2
+                        el.setAttribute('transform', `translate(${x}, ${y2})`);
+                    } else if (Math.abs(y - y2) < 1) {
+                        // This element belongs to entry2, move to y1
+                        el.setAttribute('transform', `translate(${x}, ${y1})`);
+                    }
+                });
+
+                // Update local state (swap yPos values)
+                legendEntries.value[idx1].yPos = y2;
+                legendEntries.value[idx2].yPos = y1;
+
+                // Swap entries in array to reflect visual order
+                const temp = { ...legendEntries.value[idx1] };
+                legendEntries.value[idx1] = { ...legendEntries.value[idx2], yPos: y1 };
+                legendEntries.value[idx2] = { ...temp, yPos: y2 };
+
+                // Save to results
+                const resultIdx = selectedResultIndex.value;
+                if (resultIdx >= 0 && results.value.length > resultIdx) {
+                    const serializer = new XMLSerializer();
+                    results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                }
+
+                // Re-extract to ensure correct ordering
+                extractLegendEntries();
+            };
+
+            // Add new legend entry from the UI
+            const addNewLegendEntry = async () => {
+                if (!newLegendCaption.value.trim()) return;
+
+                const added = await addLegendEntry(newLegendCaption.value.trim(), newLegendColor.value);
+                if (added) {
+                    newLegendCaption.value = '';
+                    newLegendColor.value = '#808080';
+                    // Refresh after a short delay to allow DOM update
+                    setTimeout(() => extractLegendEntries(), 100);
+                }
+            };
+
+            // Watch for SVG changes to refresh legend entries
+            watch(svgContent, () => {
+                Vue.nextTick(() => {
+                    extractLegendEntries();
+                });
+            });
+
+            // Close popup when clicking outside
+            const closeFeaturePopup = (e) => {
+                if (!e.target.closest('.fixed.z-50')) {
+                    if (clickedFeature.value) clickedFeature.value = null;
+                }
+            };
+
+            onMounted(() => {
+                document.addEventListener('click', closeFeaturePopup);
+            });
+
+            const setFeatureColor = async (feat, color, customCaption = null) => {
+                // Use the best available qualifier for TSV generation
+                const qualInfo = getFeatureQualifier(feat);
+                if (!qualInfo) {
+                    console.warn(`Cannot identify feature: ${feat.type} at ${feat.start}..${feat.end} (no locus_tag, gene, or product)`);
+                    return;
+                }
+                const { qual, val } = qualInfo;
+
+                // Use internal ID for UI tracking (unique across all features)
+                const featureKey = feat.id;
+
+                // Default caption if not provided
+                const caption = customCaption || feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`;
+
+                // Track override for UI display (store both color and caption)
+                const oldOverride = featureColorOverrides[featureKey];
+                const oldCaption = oldOverride?.caption;
+                featureColorOverrides[featureKey] = { color, caption };
+
+                // Apply instant preview (update SVG feature color directly)
+                applyInstantPreview(feat, color, caption);
+
+                // Handle legend entry FIRST, before adding rule to prevent watch race condition
+                await Vue.nextTick();
+                let actualCaption = caption;
+                if (pyodideReady.value && caption) {
+                    // Logic based on THIS FEATURE's existing legend entry (tracked by oldCaption):
+                    // - oldCaption exists → this feature already has a legend entry
+                    // - oldCaption is undefined → this feature doesn't have a legend entry yet
+
+                    if (oldCaption) {
+                        // This feature already has a legend entry
+                        if (oldCaption === caption) {
+                            // Same caption - just update the color of THIS feature's entry
+                            updateLegendEntryColorByCaption(oldCaption, color);
+                        } else {
+                            // Caption changed - remove old entry, add new one
+                            removeLegendEntry(oldCaption);
+                            actualCaption = await addLegendEntry(caption, color);
+                            if (actualCaption && typeof actualCaption === 'string') {
+                                addedLegendCaptions.value.add(actualCaption);
+                            }
+                        }
+                    } else {
+                        // This feature doesn't have a legend entry yet - add new one
+                        actualCaption = await addLegendEntry(caption, color);
+                        if (actualCaption && typeof actualCaption === 'string') {
+                            addedLegendCaptions.value.add(actualCaption);
+                        }
+                    }
+
+                    // Update tracked caption if it changed (may have (N) suffix)
+                    if (actualCaption && typeof actualCaption === 'string' && actualCaption !== caption) {
+                        featureColorOverrides[featureKey] = { color, caption: actualCaption };
+                    }
+                    extractLegendEntries();  // Refresh legend editor
+                }
+
+                // NOW add/update the rule with the correct caption (possibly numbered)
+                const finalCaption = (actualCaption && typeof actualCaption === 'string') ? actualCaption : caption;
+                const existingIdx = manualSpecificRules.findIndex(r =>
+                    r.feat === feat.type && r.qual === qual && r.val === val
+                );
+
+                if (existingIdx >= 0) {
+                    // Update existing rule with final caption
+                    manualSpecificRules[existingIdx].color = color;
+                    manualSpecificRules[existingIdx].cap = finalCaption;
+                } else {
+                    // Add new rule with final caption
+                    manualSpecificRules.push({
+                        feat: feat.type,
+                        qual: qual,
+                        val: val,
+                        color: color,
+                        cap: finalCaption
+                    });
+                }
+            };
+
+            // Clear feature list when switching modes
+            watch(() => mode.value, () => {
+                extractedFeatures.value = [];
+                featureRecordIds.value = [];
+                selectedFeatureRecordIdx.value = 0;
+                Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
+                showFeaturePanel.value = false;
+            });
 
             watch(() => files.d_color, async (newFile) => {
                 if (!newFile) return;
@@ -1073,20 +2594,20 @@
                             except: return "{}"
 
                         def run_gbdraw_wrapper(mode, args):
-                        
+
                             for f in glob.glob("*.svg"):
                                 try: os.remove(f)
                                 except: pass
-                            
+
                             full_args = args + ["-f", "svg"]
                             try:
                                 if mode == 'circular': circular_main(full_args)
                                 else: linear_main(full_args)
                             except SystemExit as e:
                                 if e.code != 0: return json.dumps({"error": f"SystemExit: {e}"})
-                            except Exception: 
+                            except Exception:
                                 return json.dumps({"error": traceback.format_exc()})
-                            
+
                             files = glob.glob("*.svg")
                             if not files: return json.dumps({"error": "No output files generated."})
                             results = []
@@ -1094,6 +2615,77 @@
                                 with open(fname, "r") as f:
                                     results.append({"name": fname, "content": f.read()})
                             return json.dumps(results)
+
+                        def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=14, font_family="Arial"):
+                            """Generate SVG elements for a single legend entry"""
+                            from svgwrite.path import Path
+                            from svgwrite.text import Text
+                            import io
+
+                            # Create color rectangle path
+                            half = rect_size / 2
+                            rect_d = f"M 0,{-half} L {rect_size},{-half} L {rect_size},{half} L 0,{half} z"
+                            rect_svg = f'<path d="{rect_d}" fill="{color}" stroke="none" transform="translate(0, {y_offset})"/>'
+
+                            # Create text element
+                            x_margin = (22 / 14) * rect_size
+                            text_svg = f'<text font-size="{font_size}" font-family="{font_family}" dominant-baseline="central" text-anchor="start" transform="translate({x_margin}, {y_offset})">{caption}</text>'
+
+                            return json.dumps({"rect": rect_svg, "text": text_svg})
+
+                        def extract_features_from_genbank(gb_path):
+                            """Extract feature info from GenBank file for UI display"""
+                            import hashlib
+                            from Bio import SeqIO
+                            features = []
+                            record_ids = []
+                            idx = 0
+                            try:
+                                for rec_idx, record in enumerate(SeqIO.parse(gb_path, "genbank")):
+                                    record_id = record.id or f"Record_{rec_idx}"
+                                    record_ids.append(record_id)
+                                    for feat in record.features:
+                                        if feat.type in ['CDS', 'tRNA', 'rRNA', 'ncRNA', 'misc_RNA', 'tmRNA',
+                                                         'repeat_region', 'misc_feature', 'mobile_element',
+                                                         'regulatory', 'gene', 'mRNA', 'exon', 'intron']:
+                                            # Overall coordinates for display
+                                            start = int(feat.location.start)
+                                            end = int(feat.location.end)
+                                            strand_raw = feat.location.strand
+
+                                            # For svg_id hash, use FIRST part's coordinates (matches Python drawer)
+                                            # CompoundLocation has .parts, SimpleLocation doesn't
+                                            if hasattr(feat.location, 'parts') and feat.location.parts:
+                                                first_part = feat.location.parts[0]
+                                                hash_start = int(first_part.start)
+                                                hash_end = int(first_part.end)
+                                                hash_strand = first_part.strand
+                                            else:
+                                                hash_start = start
+                                                hash_end = end
+                                                hash_strand = strand_raw
+
+                                            # Compute same hash as SVG rendering uses (must match Python drawer)
+                                            key = f"{feat.type}:{hash_start}:{hash_end}:{hash_strand}"
+                                            svg_id = "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+                                            features.append({
+                                                "id": f"f{idx}",  # Unique internal ID for UI tracking
+                                                "svg_id": svg_id,  # Matches SVG path id attribute
+                                                "record_id": record_id,  # For multi-record filtering
+                                                "record_idx": rec_idx,
+                                                "type": feat.type,
+                                                "start": start,
+                                                "end": end,
+                                                "strand": "+" if strand_raw == 1 else "-",
+                                                "locus_tag": feat.qualifiers.get("locus_tag", [""])[0],
+                                                "gene": feat.qualifiers.get("gene", [""])[0],
+                                                "product": feat.qualifiers.get("product", [""])[0],
+                                                "note": feat.qualifiers.get("note", [""])[0][:50] if feat.qualifiers.get("note") else "",
+                                            })
+                                            idx += 1
+                            except Exception as e:
+                                return json.dumps({"error": str(e)})
+                            return json.dumps({"features": features, "record_ids": record_ids})
                     `);
                     const paletteJson = pyodide.runPython("get_palettes_json()");
                     const allPalettes = JSON.parse(paletteJson);
@@ -1127,6 +2719,16 @@
                 selectedResultIndex.value = 0;
                 errorLog.value = null;
                 zoom.value = 1.0;
+                // Clear stored pairwise match factors for re-calculation
+                pairwiseMatchFactors.value = {};
+                // Clear tracked legend entries (will be regenerated)
+                addedLegendCaptions.value = new Set();
+                // Clear feature color overrides (custom legend entries from previous records)
+                Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
+                legendEntries.value = [];
+                // Store current palette's pairwise colors as reference for interpolation
+                window._origPairwiseMin = currentColors.value.pairwise_match_min || '#FFE7E7';
+                window._origPairwiseMax = currentColors.value.pairwise_match_max || '#FF7272';
 
                 try {
                     let args = [];
@@ -1270,6 +2872,108 @@
                     const res = JSON.parse(jsonResult);
                     if(res.error) throw new Error(res.error);
                     results.value = res;
+
+                    // Extract features for color editor (only for GenBank input)
+                    extractedFeatures.value = [];
+
+                    // Helper to rebuild featureColorOverrides from manualSpecificRules
+                    const rebuildColorOverrides = (features) => {
+                        // Clear existing overrides
+                        Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
+
+                        // For each feature, check if there's a matching rule
+                        for (const feat of features) {
+                            // Look for a matching rule in manualSpecificRules
+                            for (const rule of manualSpecificRules) {
+                                if (rule.feat !== feat.type) continue;
+
+                                let matches = false;
+                                // Hash qualifier - highest priority, most reliable
+                                if (rule.qual === 'hash' && feat.svg_id) {
+                                    try {
+                                        const regex = new RegExp(rule.val, 'i');
+                                        matches = regex.test(feat.svg_id);
+                                    } catch (e) {
+                                        matches = feat.svg_id === rule.val;
+                                    }
+                                } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
+                                    try {
+                                        const regex = new RegExp(rule.val, 'i');
+                                        matches = regex.test(feat.locus_tag);
+                                    } catch (e) {
+                                        matches = feat.locus_tag === rule.val;
+                                    }
+                                } else if (rule.qual === 'gene' && feat.gene) {
+                                    try {
+                                        const regex = new RegExp(rule.val, 'i');
+                                        matches = regex.test(feat.gene);
+                                    } catch (e) {
+                                        matches = feat.gene.toLowerCase().includes(rule.val.toLowerCase());
+                                    }
+                                } else if (rule.qual === 'product' && feat.product) {
+                                    try {
+                                        const regex = new RegExp(rule.val, 'i');
+                                        matches = regex.test(feat.product);
+                                    } catch (e) {
+                                        matches = feat.product.toLowerCase().includes(rule.val.toLowerCase());
+                                    }
+                                }
+
+                                if (matches) {
+                                    // Use internal ID as key, store {color, caption} object
+                                    featureColorOverrides[feat.id] = { color: rule.color, caption: rule.cap };
+                                    break; // First match wins
+                                }
+                            }
+                        }
+                    };
+
+                    if (mode.value === 'circular' && cInputType.value === 'gb') {
+                        try {
+                            const featJson = pyodide.globals.get("extract_features_from_genbank")("/input.gb");
+                            const featData = JSON.parse(featJson);
+                            if (!featData.error && featData.features) {
+                                extractedFeatures.value = featData.features;
+                                featureRecordIds.value = featData.record_ids || [];
+                                selectedFeatureRecordIdx.value = 0;
+                                rebuildColorOverrides(featData.features);
+                                console.log(`Extracted ${featData.features.length} features from ${featData.record_ids.length} record(s) for color editor.`);
+                            }
+                        } catch (e) {
+                            console.log("Could not extract features:", e);
+                        }
+                    } else if (mode.value === 'linear' && lInputType.value === 'gb' && linearSeqs.length > 0) {
+                        // Extract features from ALL GenBank files in linear mode
+                        try {
+                            let allFeatures = [];
+                            let allRecordLabels = [];
+                            for (let i = 0; i < linearSeqs.length; i++) {
+                                const featJson = pyodide.globals.get("extract_features_from_genbank")(`/seq_${i}.gb`);
+                                const featData = JSON.parse(featJson);
+                                if (!featData.error && featData.features) {
+                                    // Add file index to each feature and create unique record labels
+                                    featData.features.forEach(f => {
+                                        f.fileIdx = i;  // File index
+                                        f.displayRecordId = `File ${i + 1}: ${f.record_id}`;
+                                        // Make id unique across files by prefixing with file index
+                                        f.id = `file${i}_${f.id}`;
+                                    });
+                                    allFeatures = allFeatures.concat(featData.features);
+                                    // Add record labels with file prefix
+                                    featData.record_ids.forEach((rid, ridx) => {
+                                        allRecordLabels.push({ label: `File ${i + 1}: ${rid}`, fileIdx: i, recordIdx: ridx });
+                                    });
+                                }
+                            }
+                            extractedFeatures.value = allFeatures;
+                            featureRecordIds.value = allRecordLabels.map(r => r.label);
+                            selectedFeatureRecordIdx.value = 0;
+                            rebuildColorOverrides(allFeatures);
+                            console.log(`Extracted ${allFeatures.length} features from ${linearSeqs.length} file(s) for color editor.`);
+                        } catch (e) {
+                            console.log("Could not extract features:", e);
+                        }
+                    }
 
                 } catch (e) {
                     errorLog.value = e.message;
@@ -1469,10 +3173,20 @@
 
             return {
                 pyodideReady, processing, loadingStatus, errorLog, results, selectedResultIndex, svgContent, zoom,
-                mode, cInputType, lInputType, files, linearSeqs, form, adv, 
+                mode, cInputType, lInputType, files, linearSeqs, form, adv,
                 paletteNames, selectedPalette, currentColors, updatePalette, resetColors,
-                filterMode, manualBlacklist, manualWhitelist, featureKeys, newColorFeat, newColorVal, addCustomColor, 
+                filterMode, manualBlacklist, manualWhitelist, featureKeys, newColorFeat, newColorVal, addCustomColor,
                 newFeatureToAdd, addFeature, manualSpecificRules, newSpecRule, addSpecificRule,
+                // Feature Color Editor
+                extractedFeatures, featureRecordIds, selectedFeatureRecordIdx,
+                showFeaturePanel, featureSearch, filteredFeatures,
+                featureColorOverrides, getFeatureColor, setFeatureColor, canEditFeatureColor,
+                // SVG Feature Click
+                svgContainer, clickedFeature, clickedFeaturePos, updateClickedFeatureColor,
+                // Legend Editor
+                showLegendPanel, legendEntries, newLegendCaption, newLegendColor,
+                updateLegendEntryColor, updateLegendEntryCaption, deleteLegendEntry, addNewLegendEntry,
+                moveLegendEntryUp, moveLegendEntryDown,
                 downloadDpi, runAnalysis, downloadSVG, downloadPNG, downloadPDF,
                 exportConfig, importConfig, manualPriorityRules, newPriorityRule, addPriorityRule
             };

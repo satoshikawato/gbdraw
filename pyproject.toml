@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gbdraw"
-version = "0.8.0"
+version = "0.8.3"
 description = "A genome diagram generator for microbes and organelles"
 readme = "README.md"
 license = {text = "MIT"}

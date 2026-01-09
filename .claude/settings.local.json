@@ -16,7 +16,12 @@
       "Bash(python -m pytest:*)",
       "Bash(python3 -m py_compile:*)",
       "Bash(python3:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(python -m gbdraw:*)",
+      "Bash(timeout 3 gbdraw:*)",
+      "Bash(pip wheel:*)",
+      "Bash(python -m build:*)",
+      "Bash(unzip:*)"
     ]
   }
 }

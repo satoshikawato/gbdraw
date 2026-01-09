@@ -71,7 +71,7 @@ def _precalculate_label_dimensions(
 
         color_table, default_colors = preprocess_color_tables(feature_config.color_table, feature_config.default_colors)
         label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
-        feature_dict = create_feature_dict(
+        feature_dict, _ = create_feature_dict(
             record,
             color_table,
             feature_config.selected_features_set,

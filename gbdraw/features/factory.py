@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set, Tuple
 
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
@@ -9,7 +9,7 @@ from Bio.SeqFeature import SeqFeature, SimpleLocation
 
 from .objects import GeneObject, RepeatObject, FeatureObject
 from ..labels.filtering import get_label_text
-from .colors import get_color
+from .colors import get_color, get_color_with_info
 from .coordinates import get_exon_and_intron_coordinates
 from .tracks import arrange_feature_tracks
 
@@ -131,14 +131,19 @@ def create_feature_dict(
     separate_strands: bool,
     resolve_overlaps: bool,
     label_filtering,
-) -> Dict[str, FeatureObject]:
+) -> Tuple[Dict[str, FeatureObject], Set[Tuple[str, str]]]:
     """
     Creates a dictionary mapping feature IDs to FeatureObjects from a GenBank record.
 
     NOTE: `color_table` / `default_colors` are expected to be preprocessed maps
     produced by `gbdraw.features.colors.preprocess_color_tables`.
+
+    Returns:
+        Tuple of (feature_dict, used_color_rules) where used_color_rules is a set
+        of (caption, color) tuples for rules that actually matched features.
     """
     feature_dict: Dict[str, FeatureObject] = {}
+    used_color_rules: Set[Tuple[str, str]] = set()
     locus_count: int = 0
     repeat_count: int = 0
     feature_count: int = 0
@@ -147,6 +152,11 @@ def create_feature_dict(
     for feature in gb_record.features:
         if feature.type not in selected_features_set:
             continue
+
+        # Track which color rules are actually used
+        color, caption = get_color_with_info(feature, color_table, default_colors)
+        if caption:
+            used_color_rules.add((caption, color))
 
         if feature.type in {"CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA"}:
             locus_count += 1
@@ -173,7 +183,7 @@ def create_feature_dict(
     feature_dict = arrange_feature_tracks(
         feature_dict, separate_strands, resolve_overlaps, genome_length
     )
-    return feature_dict
+    return feature_dict, used_color_rules
 
 
 __all__ = [

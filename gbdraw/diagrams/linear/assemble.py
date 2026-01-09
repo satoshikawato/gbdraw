@@ -37,7 +37,7 @@ from .builders import (
     add_record_group,
 )
 from .precalc import _precalculate_definition_widths, _precalculate_label_dimensions
-from ...features.colors import preprocess_color_tables  # type: ignore[reportMissingImports]
+from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
 
@@ -65,7 +65,7 @@ def _precalculate_feature_track_heights(
     label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
     
     for record in records:
-        feature_dict = create_feature_dict(
+        feature_dict, _ = create_feature_dict(
             record,
             color_table,
             feature_config.selected_features_set,
@@ -151,8 +151,18 @@ def assemble_linear_diagram(
     has_blast = bool(blast_files)
     # Determine which features should be displayed in the legend
     features_present = check_feature_presence(records, feature_config.selected_features_set)
+    # Pre-compute which color rules are actually used for accurate legend
+    color_map, default_color_map = preprocess_color_tables(
+        feature_config.color_table, feature_config.default_colors
+    )
+    used_color_rules = precompute_used_color_rules(
+        records, color_map, default_color_map, set(feature_config.selected_features_set)
+    )
     # Prepare legend table
-    legend_table = prepare_legend_table(gc_config, skew_config, feature_config, features_present, blast_config, has_blast)
+    legend_table = prepare_legend_table(
+        gc_config, skew_config, feature_config, features_present, blast_config, has_blast,
+        used_color_rules=used_color_rules
+    )
     # Predetermine legend dimensions (number of columns etc.)
     legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
     # Draw legend group to determine the actual dimensions

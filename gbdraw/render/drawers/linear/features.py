@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import hashlib
 from typing import Optional
 
 from svgwrite.container import Group
@@ -26,6 +27,23 @@ class FeatureDrawer:
         self.intron_stroke_color: str = feature_config.line_stroke_color
         self.intron_stroke_width: float = feature_config.line_stroke_width
 
+    @staticmethod
+    def get_feature_data_id(feature_object) -> Optional[str]:
+        """
+        Generate a stable identifier for SVG id attribute.
+        Hashes feature properties (type, start, end, strand) to create a unique ID.
+        Must use original coordinates (not processed location) to match colors.py compute_feature_hash().
+        """
+        # Use original coordinates (SimpleLocation from BioPython) for consistent hashing
+        coords = getattr(feature_object, 'coordinates', None)
+        if not coords:
+            return None
+        coord = coords[0]  # First SimpleLocation
+        feat_type = getattr(feature_object, 'feature_type', '') or ''
+        # Use integer strand directly from SimpleLocation
+        key = f"{feat_type}:{int(coord.start)}:{int(coord.end)}:{coord.strand}"
+        return "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+
     def draw_path(
         self,
         path_data: str,
@@ -33,6 +51,7 @@ class FeatureDrawer:
         fill_color: str,
         stroke_color_specified: Optional[str] = None,
         stroke_width_specified: Optional[float] = None,
+        feature_data_id: Optional[str] = None,
     ) -> None:
         stroke_color: str = (
             stroke_color_specified if stroke_color_specified is not None else self.default_stroke_color
@@ -48,6 +67,9 @@ class FeatureDrawer:
             stroke_linejoin="round",
             stroke_linecap="round",
         )
+        if feature_data_id:
+            # Use feature's internal ID directly (e.g., "gene_000000001")
+            path.attribs['id'] = feature_data_id
         group.add(path)
 
     def draw(self, feature_object, group: Group, genome_length: int, cds_height: float, alignment_width: float, normalization_factor: float, feature_strand: str, separate_strands: bool, arrow_length: float) -> Group:
@@ -63,10 +85,13 @@ class FeatureDrawer:
 
         gene_paths = path_generator.generate_linear_gene_path(feature_object)
 
+        # Get feature identifier for instant preview support
+        feature_data_id = self.get_feature_data_id(feature_object)
+
         for gene_path in gene_paths:
             path_type, path_data = gene_path[0], gene_path[1]
             if path_type == "block":
-                self.draw_path(path_data, group, fill_color=feature_object.color)
+                self.draw_path(path_data, group, fill_color=feature_object.color, feature_data_id=feature_data_id)
             elif path_type == "line":
                 self.draw_path(
                     path_data,
