@@ -19,7 +19,8 @@
       "Bash(done)",
       "Bash(python -m gbdraw:*)",
       "Bash(timeout 3 gbdraw:*)",
-      "Bash(pip wheel:*)"
+      "Bash(pip wheel:*)",
+      "Bash(python -m build:*)"
     ]
   }
 }

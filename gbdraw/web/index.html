@@ -559,7 +559,7 @@
                 <pre class="text-xs font-mono text-red-800 whitespace-pre-wrap overflow-auto max-h-40 bg-white/50 p-3 rounded custom-scrollbar">{{ errorLog }}</pre>
             </div>
 
-            <div v-if="results.length > 0" class="card border-2 border-green-100 ring-4 ring-green-50/50 flex flex-col flex-grow overflow-hidden">
+            <div v-if="results.length > 0" class="card border-2 border-green-100 ring-4 ring-green-50/50 flex flex-col flex-grow overflow-hidden relative">
                 <div class="card-header bg-green-50/50 -m-5 mb-0 p-4 border-green-100 flex justify-between items-center shrink-0">
                     <span class="text-green-600 flex items-center gap-2">
                         <i class="ph ph-check-circle text-xl"></i> 
@@ -604,47 +604,71 @@
 
                 </div>
 
-                <!-- Feature Color Editor Panel -->
-                <div v-if="extractedFeatures.length > 0" class="border-t border-slate-200 bg-slate-50/50 shrink-0">
-                    <div class="px-4 py-2 cursor-pointer hover:bg-slate-100 flex items-center gap-2 text-sm font-bold text-slate-600"
-                         @click="showFeaturePanel = !showFeaturePanel">
-                        <i class="ph ph-paint-brush"></i>
-                        <span>Feature Colors</span>
-                        <span class="text-xs font-normal text-slate-400">({{ extractedFeatures.length }} features)</span>
-                        <i :class="showFeaturePanel ? 'ph-caret-up' : 'ph-caret-down'" class="ph ml-auto"></i>
+                <!-- Feature Color Editor Toggle Button (floating) -->
+                <button v-if="extractedFeatures.length > 0"
+                        @click="showFeaturePanel = !showFeaturePanel"
+                        class="absolute right-0 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-700 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
+                        :class="{ 'translate-x-0': !showFeaturePanel, '-translate-x-80': showFeaturePanel }"
+                        :title="showFeaturePanel ? 'Close color panel' : 'Open color panel'">
+                    <i class="ph ph-paint-brush text-lg"></i>
+                    <span v-if="pendingColorChanges > 0" class="absolute -top-1 -left-1 bg-amber-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                        {{ pendingColorChanges > 9 ? '9+' : pendingColorChanges }}
+                    </span>
+                </button>
+
+                <!-- Feature Color Editor Drawer (slides from right) -->
+                <div v-if="extractedFeatures.length > 0"
+                     class="absolute right-0 top-0 bottom-0 w-80 bg-white border-l border-slate-200 shadow-xl z-10 transition-transform duration-300 flex flex-col"
+                     :class="showFeaturePanel ? 'translate-x-0' : 'translate-x-full'">
+                    <!-- Header -->
+                    <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50">
+                        <div class="flex items-center gap-2">
+                            <i class="ph ph-paint-brush text-blue-600"></i>
+                            <span class="font-bold text-slate-700">Feature Colors</span>
+                            <span class="text-xs text-slate-400">({{ filteredFeatures.length }})</span>
+                        </div>
+                        <button @click="showFeaturePanel = false" class="text-slate-400 hover:text-slate-600">
+                            <i class="ph ph-x text-lg"></i>
+                        </button>
                     </div>
 
-                    <div v-if="showFeaturePanel" class="px-4 pb-4">
-                        <!-- Search -->
+                    <!-- Search -->
+                    <div class="px-4 py-2 border-b border-slate-100 shrink-0">
                         <input v-model="featureSearch" placeholder="Search by product, gene, locus_tag..."
-                               class="form-input mb-2 text-xs">
+                               class="form-input text-xs w-full">
+                    </div>
 
-                        <!-- Feature List -->
-                        <div class="max-h-64 overflow-y-auto border rounded bg-white">
-                            <div v-for="(feat, idx) in filteredFeatures" :key="idx"
-                                 class="flex items-center gap-2 px-2 py-1.5 border-b border-slate-100 text-xs hover:bg-slate-50 last:border-b-0">
-                                <span class="w-10 font-mono text-slate-400 shrink-0 text-[10px]">{{ feat.type }}</span>
-                                <span class="w-20 font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="`${feat.start}..${feat.end}`">
-                                    {{ feat.start }}..{{ feat.end }}
-                                </span>
-                                <span class="flex-grow truncate text-slate-700"
-                                      :title="feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)'">
-                                    {{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}
-                                </span>
-                                <input type="color"
-                                       :value="getFeatureColor(feat)"
-                                       @change="setFeatureColor(feat, $event.target.value)"
-                                       class="w-7 h-5 cursor-pointer border rounded shrink-0">
-                            </div>
-                            <div v-if="filteredFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">
-                                No features found
-                            </div>
+                    <!-- Feature List -->
+                    <div class="flex-grow overflow-y-auto">
+                        <div v-for="(feat, idx) in filteredFeatures" :key="idx"
+                             class="flex items-center gap-2 px-3 py-2 border-b border-slate-100 text-xs hover:bg-slate-50">
+                            <span class="w-10 font-mono text-slate-400 shrink-0 text-[10px]">{{ feat.type }}</span>
+                            <span class="w-16 font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="`${feat.start}..${feat.end}`">
+                                {{ feat.start }}..{{ feat.end }}
+                            </span>
+                            <span class="flex-grow truncate text-slate-700"
+                                  :title="feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)'">
+                                {{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}
+                            </span>
+                            <input type="color"
+                                   :value="getFeatureColor(feat)"
+                                   @change="setFeatureColor(feat, $event.target.value)"
+                                   :disabled="!canEditFeatureColor(feat)"
+                                   :title="canEditFeatureColor(feat) ? 'Click to change color' : 'No identifier available (no locus_tag, gene, or product)'"
+                                   :class="['w-7 h-5 border rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
                         </div>
-                        <p v-if="Object.keys(featureColorOverrides).length === 0" class="text-[10px] text-slate-400 mt-2">
+                        <div v-if="filteredFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">
+                            No features found
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="px-4 py-2 border-t border-slate-200 shrink-0 bg-slate-50">
+                        <p v-if="pendingColorChanges === 0" class="text-[10px] text-slate-400">
                             <i class="ph ph-info"></i> Change colors and click "Generate" to update.
                         </p>
-                        <p v-else class="text-[10px] text-amber-600 mt-2 font-medium">
-                            <i class="ph ph-warning"></i> {{ Object.keys(featureColorOverrides).length }} color change(s) pending. Click "Generate" to apply.
+                        <p v-else class="text-[10px] text-amber-600 font-medium">
+                            <i class="ph ph-warning"></i> {{ pendingColorChanges }} color change(s) pending. Click "Generate" to apply.
                         </p>
                     </div>
                 </div>
@@ -890,6 +914,7 @@
             const showFeaturePanel = ref(false);
             const featureSearch = ref('');
             const featureColorOverrides = reactive({});  // {featureKey: color}
+            const pendingColorChanges = ref(0);  // Count of changes since last generation
 
             const featureKeys = [
                 "assembly_gap", "C_region", "CDS", "centromere", "D-loop", "D_segment",
@@ -983,34 +1008,38 @@
             });
 
             const getFeatureColor = (feat) => {
-                // Use same key format as setFeatureColor
-                const key = feat.locus_tag || `${feat.type}:${feat.start}..${feat.end}`;
-                // If user has set a color override, use that
-                if (featureColorOverrides[key]) {
-                    return featureColorOverrides[key];
+                // Use internal ID for tracking (unique per feature)
+                if (featureColorOverrides[feat.id]) {
+                    return featureColorOverrides[feat.id];
                 }
                 // Otherwise use the default color for this feature type from the palette
                 return currentColors.value[feat.type] || '#cccccc';
             };
 
+            // Helper to check if a feature can be identified for color editing
+            const canEditFeatureColor = (feat) => {
+                return !!(feat.locus_tag || feat.gene || feat.product);
+            };
+
+            // Helper to get the best qualifier for a feature
+            const getFeatureQualifier = (feat) => {
+                if (feat.locus_tag) return { qual: 'locus_tag', val: feat.locus_tag };
+                if (feat.gene) return { qual: 'gene', val: feat.gene };
+                if (feat.product) return { qual: 'product', val: feat.product.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') };
+                return null;
+            };
+
             const setFeatureColor = (feat, color) => {
-                // Priority for identifying features:
-                // 1. locus_tag (unique per feature)
-                // 2. location (always unique - "start..end" format)
-                let qual, val;
-
-                if (feat.locus_tag) {
-                    qual = 'locus_tag';
-                    val = feat.locus_tag;
-                } else {
-                    // Use location for features without locus_tag
-                    qual = 'location';
-                    // Escape dots for regex: 1000..2000 -> 1000\.\.2000
-                    val = `${feat.start}\\.\\.\\.${feat.end}`;
+                // Use the best available qualifier for TSV generation
+                const qualInfo = getFeatureQualifier(feat);
+                if (!qualInfo) {
+                    console.warn(`Cannot identify feature: ${feat.type} at ${feat.start}..${feat.end} (no locus_tag, gene, or product)`);
+                    return;
                 }
+                const { qual, val } = qualInfo;
 
-                // Unique key for tracking in UI
-                const featureKey = feat.locus_tag || `${feat.type}:${feat.start}..${feat.end}`;
+                // Use internal ID for UI tracking (unique across all features)
+                const featureKey = feat.id;
 
                 // Check if rule already exists for this exact feature
                 const existingIdx = manualSpecificRules.findIndex(r =>
@@ -1033,6 +1062,7 @@
 
                 // Track override for UI display
                 featureColorOverrides[featureKey] = color;
+                pendingColorChanges.value++;
             };
 
             watch(() => files.d_color, async (newFile) => {
@@ -1224,6 +1254,7 @@
                             """Extract feature info from GenBank file for UI display"""
                             from Bio import SeqIO
                             features = []
+                            idx = 0
                             try:
                                 for record in SeqIO.parse(gb_path, "genbank"):
                                     for feat in record.features:
@@ -1231,6 +1262,7 @@
                                                          'repeat_region', 'misc_feature', 'mobile_element',
                                                          'regulatory', 'gene', 'mRNA', 'exon', 'intron']:
                                             features.append({
+                                                "id": f"f{idx}",  # Unique internal ID for UI tracking
                                                 "type": feat.type,
                                                 "start": int(feat.location.start),
                                                 "end": int(feat.location.end),
@@ -1240,6 +1272,7 @@
                                                 "product": feat.qualifiers.get("product", [""])[0],
                                                 "note": feat.qualifiers.get("note", [""])[0][:50] if feat.qualifiers.get("note") else "",
                                             })
+                                            idx += 1
                             except Exception as e:
                                 return json.dumps({"error": str(e)})
                             return json.dumps(features)
@@ -1422,8 +1455,50 @@
 
                     // Extract features for color editor (only for GenBank input)
                     extractedFeatures.value = [];
-                    featureColorOverrides.length = 0;  // Clear previous overrides
-                    Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
+
+                    // Helper to rebuild featureColorOverrides from manualSpecificRules
+                    const rebuildColorOverrides = (features) => {
+                        // Clear existing overrides
+                        Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
+
+                        // For each feature, check if there's a matching rule
+                        for (const feat of features) {
+                            // Look for a matching rule in manualSpecificRules
+                            for (const rule of manualSpecificRules) {
+                                if (rule.feat !== feat.type) continue;
+
+                                let matches = false;
+                                if (rule.qual === 'locus_tag' && feat.locus_tag) {
+                                    try {
+                                        const regex = new RegExp(rule.val, 'i');
+                                        matches = regex.test(feat.locus_tag);
+                                    } catch (e) {
+                                        matches = feat.locus_tag === rule.val;
+                                    }
+                                } else if (rule.qual === 'gene' && feat.gene) {
+                                    try {
+                                        const regex = new RegExp(rule.val, 'i');
+                                        matches = regex.test(feat.gene);
+                                    } catch (e) {
+                                        matches = feat.gene.toLowerCase().includes(rule.val.toLowerCase());
+                                    }
+                                } else if (rule.qual === 'product' && feat.product) {
+                                    try {
+                                        const regex = new RegExp(rule.val, 'i');
+                                        matches = regex.test(feat.product);
+                                    } catch (e) {
+                                        matches = feat.product.toLowerCase().includes(rule.val.toLowerCase());
+                                    }
+                                }
+
+                                if (matches) {
+                                    // Use internal ID as key
+                                    featureColorOverrides[feat.id] = rule.color;
+                                    break; // First match wins
+                                }
+                            }
+                        }
+                    };
 
                     if (mode.value === 'circular' && cInputType.value === 'gb') {
                         try {
@@ -1431,6 +1506,8 @@
                             const featData = JSON.parse(featJson);
                             if (!featData.error) {
                                 extractedFeatures.value = featData;
+                                rebuildColorOverrides(featData);
+                                pendingColorChanges.value = 0;  // Reset after generation
                                 console.log(`Extracted ${featData.length} features for color editor.`);
                             }
                         } catch (e) {
@@ -1442,6 +1519,8 @@
                             const featData = JSON.parse(featJson);
                             if (!featData.error) {
                                 extractedFeatures.value = featData;
+                                rebuildColorOverrides(featData);
+                                pendingColorChanges.value = 0;  // Reset after generation
                                 console.log(`Extracted ${featData.length} features for color editor.`);
                             }
                         } catch (e) {
@@ -1653,7 +1732,7 @@
                 newFeatureToAdd, addFeature, manualSpecificRules, newSpecRule, addSpecificRule,
                 // Feature Color Editor
                 extractedFeatures, showFeaturePanel, featureSearch, filteredFeatures,
-                featureColorOverrides, getFeatureColor, setFeatureColor,
+                featureColorOverrides, getFeatureColor, setFeatureColor, canEditFeatureColor, pendingColorChanges,
                 downloadDpi, runAnalysis, downloadSVG, downloadPNG, downloadPDF,
                 exportConfig, importConfig, manualPriorityRules, newPriorityRule, addPriorityRule
             };
