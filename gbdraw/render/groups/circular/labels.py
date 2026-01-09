@@ -64,7 +64,7 @@ class LabelsGroup:
         default_colors: Optional[DataFrame] = self.feature_config.default_colors
         label_filtering = preprocess_label_filtering(self.label_filtering)
         color_table, default_colors = preprocess_color_tables(color_table, default_colors)
-        feature_dict: Dict[str, FeatureObject] = create_feature_dict(
+        feature_dict, _ = create_feature_dict(
             self.gb_record,
             color_table,
             selected_features_set,

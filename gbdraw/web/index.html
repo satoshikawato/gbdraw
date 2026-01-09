@@ -597,6 +597,7 @@
 
                     <div class="absolute inset-0 overflow-auto flex p-8 custom-scrollbar">
                         <div v-if="svgContent" v-html="svgContent"
+                            :key="`svg-${mode}-${selectedResultIndex}-${results.length}`"
                             :style="{transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.2s'}"
                             class="shadow-xl bg-white m-auto origin-top">
                         </div>
@@ -630,6 +631,15 @@
                         <button @click="showFeaturePanel = false" class="text-slate-400 hover:text-slate-600">
                             <i class="ph ph-x text-lg"></i>
                         </button>
+                    </div>
+
+                    <!-- Record Selector (for multi-record files) -->
+                    <div v-if="featureRecordIds.length > 1" class="px-4 py-2 border-b border-slate-100 shrink-0">
+                        <select v-model="selectedFeatureRecordIdx" class="form-select text-xs w-full">
+                            <option v-for="(rid, idx) in featureRecordIds" :key="idx" :value="idx">
+                                {{ rid }}
+                            </option>
+                        </select>
                     </div>
 
                     <!-- Search -->
@@ -716,7 +726,7 @@
 
 <script>
     const { createApp, ref, reactive, onMounted, computed, watch } = Vue;
-    const GBDRAW_WHEEL_NAME = "gbdraw-0.8.0-py3-none-any.whl"; 
+    const GBDRAW_WHEEL_NAME = "gbdraw-0.8.3-py3-none-any.whl"; 
 
     // HelpTip & FileUploader Components
     const HelpTip = {
@@ -911,6 +921,8 @@
 
             // Feature Color Editor state
             const extractedFeatures = ref([]);  // Features from last generation
+            const featureRecordIds = ref([]);  // Record IDs for multi-record files
+            const selectedFeatureRecordIdx = ref(0);  // Currently selected record index
             const showFeaturePanel = ref(false);
             const featureSearch = ref('');
             const featureColorOverrides = reactive({});  // {featureKey: color}
@@ -993,6 +1005,19 @@
                     adv.features.includes(f.type)
                 );
 
+                // Filter by selected record (if multiple records exist)
+                if (featureRecordIds.value.length > 1) {
+                    const selectedIdx = selectedFeatureRecordIdx.value;
+                    if (mode.value === 'circular') {
+                        // For circular: filter by record_idx within the file
+                        features = features.filter(f => f.record_idx === selectedIdx);
+                    } else {
+                        // For linear: filter by the combined file+record label
+                        const selectedLabel = featureRecordIds.value[selectedIdx];
+                        features = features.filter(f => f.displayRecordId === selectedLabel);
+                    }
+                }
+
                 // Then apply search filter
                 if (featureSearch.value) {
                     const q = featureSearch.value.toLowerCase();
@@ -1017,16 +1042,38 @@
             };
 
             // Helper to check if a feature can be identified for color editing
+            // Always true - we can always use location as a unique identifier
             const canEditFeatureColor = (feat) => {
-                return !!(feat.locus_tag || feat.gene || feat.product);
+                return true;  // Location is always available
             };
 
             // Helper to get the best qualifier for a feature
+            // Uses hash pseudo-qualifier which is always unique (based on type+position+strand)
+            // The svg_id is computed the same way in both Python and JavaScript
             const getFeatureQualifier = (feat) => {
-                if (feat.locus_tag) return { qual: 'locus_tag', val: feat.locus_tag };
-                if (feat.gene) return { qual: 'gene', val: feat.gene };
-                if (feat.product) return { qual: 'product', val: feat.product.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') };
-                return null;
+                // Always use hash - it's the most reliable unique identifier
+                // svg_id is pre-computed for each feature (e.g., "f1a2b3c4")
+                return { qual: 'hash', val: feat.svg_id };
+            };
+
+            // Instant preview: update SVG path colors directly without regeneration
+            const applyInstantPreview = (feat, color) => {
+                // Use pre-computed svg_id that matches Python's hash
+                const svgId = feat.svg_id;
+                if (!svgId) return;
+
+                // Find all SVG paths with this id
+                const svgContainer = document.querySelector('.shadow-xl.bg-white');
+                if (!svgContainer) return;
+
+                const paths = svgContainer.querySelectorAll(`#${CSS.escape(svgId)}`);
+                paths.forEach(path => {
+                    path.setAttribute('fill', color);
+                });
+
+                if (paths.length > 0) {
+                    console.log(`Instant preview: updated ${paths.length} path(s) for ${svgId}`);
+                }
             };
 
             const setFeatureColor = (feat, color) => {
@@ -1063,7 +1110,20 @@
                 // Track override for UI display
                 featureColorOverrides[featureKey] = color;
                 pendingColorChanges.value++;
+
+                // Apply instant preview (update SVG directly)
+                applyInstantPreview(feat, color);
             };
+
+            // Clear feature list when switching modes
+            watch(() => mode.value, () => {
+                extractedFeatures.value = [];
+                featureRecordIds.value = [];
+                selectedFeatureRecordIdx.value = 0;
+                Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
+                pendingColorChanges.value = 0;
+                showFeaturePanel.value = false;
+            });
 
             watch(() => files.d_color, async (newFile) => {
                 if (!newFile) return;
@@ -1252,20 +1312,33 @@
 
                         def extract_features_from_genbank(gb_path):
                             """Extract feature info from GenBank file for UI display"""
+                            import hashlib
                             from Bio import SeqIO
                             features = []
+                            record_ids = []
                             idx = 0
                             try:
-                                for record in SeqIO.parse(gb_path, "genbank"):
+                                for rec_idx, record in enumerate(SeqIO.parse(gb_path, "genbank")):
+                                    record_id = record.id or f"Record_{rec_idx}"
+                                    record_ids.append(record_id)
                                     for feat in record.features:
                                         if feat.type in ['CDS', 'tRNA', 'rRNA', 'ncRNA', 'misc_RNA', 'tmRNA',
                                                          'repeat_region', 'misc_feature', 'mobile_element',
                                                          'regulatory', 'gene', 'mRNA', 'exon', 'intron']:
+                                            start = int(feat.location.start)
+                                            end = int(feat.location.end)
+                                            strand_raw = feat.location.strand  # Use raw strand value (1 or -1) for hash
+                                            # Compute same hash as SVG rendering uses (must match Python drawer)
+                                            key = f"{feat.type}:{start}:{end}:{strand_raw}"
+                                            svg_id = "f" + hashlib.md5(key.encode()).hexdigest()[:8]
                                             features.append({
                                                 "id": f"f{idx}",  # Unique internal ID for UI tracking
+                                                "svg_id": svg_id,  # Matches SVG path id attribute
+                                                "record_id": record_id,  # For multi-record filtering
+                                                "record_idx": rec_idx,
                                                 "type": feat.type,
-                                                "start": int(feat.location.start),
-                                                "end": int(feat.location.end),
+                                                "start": start,
+                                                "end": end,
                                                 "strand": "+" if feat.location.strand == 1 else "-",
                                                 "locus_tag": feat.qualifiers.get("locus_tag", [""])[0],
                                                 "gene": feat.qualifiers.get("gene", [""])[0],
@@ -1275,7 +1348,7 @@
                                             idx += 1
                             except Exception as e:
                                 return json.dumps({"error": str(e)})
-                            return json.dumps(features)
+                            return json.dumps({"features": features, "record_ids": record_ids})
                     `);
                     const paletteJson = pyodide.runPython("get_palettes_json()");
                     const allPalettes = JSON.parse(paletteJson);
@@ -1468,7 +1541,15 @@
                                 if (rule.feat !== feat.type) continue;
 
                                 let matches = false;
-                                if (rule.qual === 'locus_tag' && feat.locus_tag) {
+                                // Hash qualifier - highest priority, most reliable
+                                if (rule.qual === 'hash' && feat.svg_id) {
+                                    try {
+                                        const regex = new RegExp(rule.val, 'i');
+                                        matches = regex.test(feat.svg_id);
+                                    } catch (e) {
+                                        matches = feat.svg_id === rule.val;
+                                    }
+                                } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
                                     try {
                                         const regex = new RegExp(rule.val, 'i');
                                         matches = regex.test(feat.locus_tag);
@@ -1504,25 +1585,44 @@
                         try {
                             const featJson = pyodide.globals.get("extract_features_from_genbank")("/input.gb");
                             const featData = JSON.parse(featJson);
-                            if (!featData.error) {
-                                extractedFeatures.value = featData;
-                                rebuildColorOverrides(featData);
-                                pendingColorChanges.value = 0;  // Reset after generation
-                                console.log(`Extracted ${featData.length} features for color editor.`);
+                            if (!featData.error && featData.features) {
+                                extractedFeatures.value = featData.features;
+                                featureRecordIds.value = featData.record_ids || [];
+                                selectedFeatureRecordIdx.value = 0;
+                                rebuildColorOverrides(featData.features);
+                                pendingColorChanges.value = 0;
+                                console.log(`Extracted ${featData.features.length} features from ${featData.record_ids.length} record(s) for color editor.`);
                             }
                         } catch (e) {
                             console.log("Could not extract features:", e);
                         }
                     } else if (mode.value === 'linear' && lInputType.value === 'gb' && linearSeqs.length > 0) {
+                        // Extract features from ALL GenBank files in linear mode
                         try {
-                            const featJson = pyodide.globals.get("extract_features_from_genbank")("/seq_0.gb");
-                            const featData = JSON.parse(featJson);
-                            if (!featData.error) {
-                                extractedFeatures.value = featData;
-                                rebuildColorOverrides(featData);
-                                pendingColorChanges.value = 0;  // Reset after generation
-                                console.log(`Extracted ${featData.length} features for color editor.`);
+                            let allFeatures = [];
+                            let allRecordLabels = [];
+                            for (let i = 0; i < linearSeqs.length; i++) {
+                                const featJson = pyodide.globals.get("extract_features_from_genbank")(`/seq_${i}.gb`);
+                                const featData = JSON.parse(featJson);
+                                if (!featData.error && featData.features) {
+                                    // Add file index to each feature and create unique record labels
+                                    featData.features.forEach(f => {
+                                        f.fileIdx = i;  // File index
+                                        f.displayRecordId = `File ${i + 1}: ${f.record_id}`;
+                                    });
+                                    allFeatures = allFeatures.concat(featData.features);
+                                    // Add record labels with file prefix
+                                    featData.record_ids.forEach((rid, ridx) => {
+                                        allRecordLabels.push({ label: `File ${i + 1}: ${rid}`, fileIdx: i, recordIdx: ridx });
+                                    });
+                                }
                             }
+                            extractedFeatures.value = allFeatures;
+                            featureRecordIds.value = allRecordLabels.map(r => r.label);
+                            selectedFeatureRecordIdx.value = 0;
+                            rebuildColorOverrides(allFeatures);
+                            pendingColorChanges.value = 0;
+                            console.log(`Extracted ${allFeatures.length} features from ${linearSeqs.length} file(s) for color editor.`);
                         } catch (e) {
                             console.log("Could not extract features:", e);
                         }
@@ -1731,7 +1831,8 @@
                 filterMode, manualBlacklist, manualWhitelist, featureKeys, newColorFeat, newColorVal, addCustomColor,
                 newFeatureToAdd, addFeature, manualSpecificRules, newSpecRule, addSpecificRule,
                 // Feature Color Editor
-                extractedFeatures, showFeaturePanel, featureSearch, filteredFeatures,
+                extractedFeatures, featureRecordIds, selectedFeatureRecordIdx,
+                showFeaturePanel, featureSearch, filteredFeatures,
                 featureColorOverrides, getFeatureColor, setFeatureColor, canEditFeatureColor, pendingColorChanges,
                 downloadDpi, runAnalysis, downloadSVG, downloadPNG, downloadPDF,
                 exportConfig, importConfig, manualPriorityRules, newPriorityRule, addPriorityRule
