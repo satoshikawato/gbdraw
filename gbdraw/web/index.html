@@ -613,20 +613,20 @@
                                 <i class="ph ph-x"></i>
                             </button>
                         </div>
-                        <div class="flex items-center gap-2 mb-2">
+                        <div class="border-t border-slate-100 pt-2 mb-2">
+                            <label class="text-[10px] text-slate-400 block mb-1">Legend name (optional)</label>
+                            <input type="text"
+                                   v-model="clickedFeature.legendName"
+                                   :placeholder="clickedFeature.label"
+                                   class="w-full text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400">
+                        </div>
+                        <div class="flex items-center gap-2">
                             <input type="color"
                                    :value="clickedFeature.color"
                                    @input="clickedFeature.color = $event.target.value"
                                    @change="updateClickedFeatureColor($event.target.value)"
                                    class="w-10 h-8 cursor-pointer border rounded">
                             <span class="text-xs font-mono text-slate-500">{{ clickedFeature.color }}</span>
-                        </div>
-                        <div class="border-t border-slate-100 pt-2">
-                            <label class="text-[10px] text-slate-400 block mb-1">Legend name (optional)</label>
-                            <input type="text"
-                                   v-model="clickedFeature.legendName"
-                                   :placeholder="clickedFeature.label"
-                                   class="w-full text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400">
                         </div>
                     </div>
 
@@ -1181,8 +1181,9 @@
 
             const getFeatureColor = (feat) => {
                 // Use internal ID for tracking (unique per feature)
-                if (featureColorOverrides[feat.id]) {
-                    return featureColorOverrides[feat.id];
+                const override = featureColorOverrides[feat.id];
+                if (override) {
+                    return override.color || override;  // Support both {color, caption} and legacy string format
                 }
                 // Otherwise use the default color for this feature type from the palette
                 return currentColors.value[feat.type] || '#cccccc';
@@ -1227,8 +1228,7 @@
                             elements.forEach(el => el.setAttribute('fill', color));
                         }
 
-                        // Note: Legend entries cannot be added dynamically because Python uses text-to-path conversion
-                        // New legend entries require regenerating the diagram with updated color rules
+                        // Note: Legend entries are added separately via addLegendEntry() in setFeatureColor()
 
                         if (updated) {
                             const serializer = new XMLSerializer();
@@ -1287,13 +1287,19 @@
                         if (feat) {
                             const currentColor = path.getAttribute('fill') || getFeatureColor(feat);
                             const defaultLabel = feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`;
+
+                            // Check if there's an existing override with a caption
+                            const existingOverride = featureColorOverrides[feat.id];
+                            const existingCaption = existingOverride?.caption || '';
+
                             clickedFeature.value = {
                                 id: feat.id,
                                 svg_id: svgId,
                                 label: defaultLabel,
                                 color: currentColor,
                                 feat: feat,
-                                legendName: ''  // User can optionally set a custom legend name
+                                // Pre-fill with existing caption if available, otherwise empty
+                                legendName: existingCaption
                             };
                             // Position popup near click
                             clickedFeaturePos.x = Math.min(e.clientX + 10, window.innerWidth - 280);
@@ -1311,7 +1317,9 @@
             const updateClickedFeatureColor = (color) => {
                 if (!clickedFeature.value) return;
                 const feat = clickedFeature.value.feat;
-                const legendName = clickedFeature.value.legendName || clickedFeature.value.label;
+                // Use custom legendName if provided (check for non-empty trimmed string)
+                const customName = clickedFeature.value.legendName?.trim();
+                const legendName = customName ? customName : clickedFeature.value.label;
                 clickedFeature.value.color = color;
                 setFeatureColor(feat, color, legendName);
             };
@@ -1578,7 +1586,8 @@
             // Track legend entries added by specific rules
             const addedLegendCaptions = ref(new Set());
 
-            // Watch for specific rules changes and manage legend entries
+            // Watch for specific rules changes - only apply styles and handle removals
+            // Legend ADDITIONS are handled by setFeatureColor to avoid race conditions
             watch(() => [...manualSpecificRules], async (newRules, oldRules) => {
                 applySpecificRulesToSvg();
 
@@ -1588,21 +1597,14 @@
                 // Find removed captions (were in addedLegendCaptions but not in current rules)
                 const removedCaptions = [...addedLegendCaptions.value].filter(cap => !currentCaptions.has(cap));
 
-                // Remove legend entries for removed captions
+                // Remove legend entries for removed captions only
                 for (const cap of removedCaptions) {
                     removeLegendEntry(cap);
                     addedLegendCaptions.value.delete(cap);
                 }
 
-                // Find new captions that need legend entries
-                for (const rule of newRules) {
-                    if (rule.cap && !addedLegendCaptions.value.has(rule.cap)) {
-                        const added = await addLegendEntry(rule.cap, rule.color);
-                        if (added) {
-                            addedLegendCaptions.value.add(rule.cap);
-                        }
-                    }
-                }
+                // DO NOT add legend entries here - that's handled by setFeatureColor
+                // to avoid race conditions and duplicate entries
             }, { deep: true });
 
             // Function to apply style changes (stroke colors/widths) to SVG immediately
@@ -1790,11 +1792,15 @@
                 const featureLegendGroup = legendGroup.querySelector('#feature_legend');
                 const targetGroup = featureLegendGroup || legendGroup;
 
-                // Check if this caption already exists in the legend
+                // Check existing legend entries
                 const existingTexts = targetGroup.querySelectorAll('text');
+                let finalCaption = caption.trim();
+
+                // Check if exact caption exists
                 for (const t of existingTexts) {
-                    if (t.textContent?.trim() === caption.trim()) {
-                        // Update existing entry color instead
+                    const existingCaption = t.textContent?.trim();
+                    if (existingCaption === finalCaption) {
+                        // Found exact match - check if color is the same
                         const transform = t.getAttribute('transform');
                         if (transform) {
                             const match = transform.match(/translate\([^,]+,\s*([\d.]+)\)/);
@@ -1802,17 +1808,36 @@
                                 const y = match[1];
                                 // Find the color rect at the same Y
                                 const rects = targetGroup.querySelectorAll('path');
-                                rects.forEach(r => {
+                                for (const r of rects) {
                                     const rt = r.getAttribute('transform');
                                     if (rt && rt.includes(`, ${y})`)) {
-                                        r.setAttribute('fill', color);
+                                        const existingColor = r.getAttribute('fill');
+                                        if (existingColor === color) {
+                                            // Same caption, same color - no change needed
+                                            return finalCaption;
+                                        }
+                                        // Same caption, different color - need unique name
+                                        break;
                                     }
-                                });
+                                }
                             }
                         }
-                        return true;
                     }
                 }
+
+                // Generate unique caption if needed (e.g., "hypothetical protein (1)")
+                const baseCaption = finalCaption.replace(/\s*\(\d+\)$/, '');  // Remove existing (N) suffix
+                let counter = 1;
+                const existingCaptions = new Set();
+                existingTexts.forEach(t => existingCaptions.add(t.textContent?.trim()));
+
+                while (existingCaptions.has(finalCaption)) {
+                    finalCaption = `${baseCaption} (${counter})`;
+                    counter++;
+                }
+
+                // Update the caption parameter for the caller
+                caption = finalCaption;
 
                 // Detect rect_size from existing legend entries
                 let rectSize = 14;  // Default
@@ -1908,12 +1933,102 @@
                         results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
                     }
 
-                    console.log(`Added legend entry: "${caption}" at y=${newY} in ${featureLegendGroup ? 'feature_legend' : 'legend'}`);
-                    return true;
+                    console.log(`Added legend entry: "${finalCaption}" at y=${newY} in ${featureLegendGroup ? 'feature_legend' : 'legend'}`);
+                    return finalCaption;  // Return the actual caption used (may have (N) suffix)
                 } catch (e) {
                     console.error('Failed to add legend entry:', e);
                     return false;
                 }
+            };
+
+            // Function to update legend entry color by caption (without removing)
+            const updateLegendEntryColorByCaption = (caption, color) => {
+                if (!svgContainer.value) return false;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return false;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return false;
+
+                // Determine target group: feature_legend (linear) or legend (circular)
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                // Helper to parse Y from transform (handles both "translate(x, y)" and "translate(x,y)")
+                const getTransformY = (transform) => {
+                    if (!transform) return null;
+                    const match = transform.match(/translate\(\s*[\d.-]+\s*,\s*([\d.-]+)\s*\)/);
+                    return match ? parseFloat(match[1]) : null;
+                };
+
+                // Find text element with this caption
+                const texts = targetGroup.querySelectorAll('text');
+                let updated = false;
+
+                for (const t of texts) {
+                    if (t.textContent?.trim() === caption.trim()) {
+                        const textY = getTransformY(t.getAttribute('transform'));
+                        if (textY !== null) {
+                            // Find and update the color rect at the same Y
+                            const rects = targetGroup.querySelectorAll('path');
+                            for (const r of rects) {
+                                const rectY = getTransformY(r.getAttribute('transform'));
+                                if (rectY !== null && Math.abs(rectY - textY) < 0.1) {
+                                    const fill = r.getAttribute('fill');
+                                    if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                        r.setAttribute('fill', color);
+                                        updated = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+
+                if (updated) {
+                    // Save to results
+                    const idx = selectedResultIndex.value;
+                    if (idx >= 0 && results.value.length > idx) {
+                        const serializer = new XMLSerializer();
+                        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                    }
+                    console.log(`Updated legend entry color: "${caption}" to ${color}`);
+                }
+
+                return updated;
+            };
+
+            // Function to check if a legend entry exists with given caption
+            const legendEntryExists = (caption) => {
+                if (!svgContainer.value) return false;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return false;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return false;
+
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                const texts = targetGroup.querySelectorAll('text');
+                for (const t of texts) {
+                    if (t.textContent?.trim() === caption.trim()) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            // Helper to parse Y coordinate from transform attribute
+            const parseTransformY = (transform) => {
+                if (!transform) return null;
+                // Match both "translate(x, y)" and "translate(x,y)" formats
+                const match = transform.match(/translate\(\s*[\d.-]+\s*,\s*([\d.-]+)\s*\)/);
+                return match ? parseFloat(match[1]) : null;
             };
 
             // Function to remove a legend entry by caption
@@ -1936,20 +2051,21 @@
 
                 texts.forEach(t => {
                     if (t.textContent?.trim() === caption.trim()) {
-                        const transform = t.getAttribute('transform');
-                        if (transform) {
-                            const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
-                            if (match) {
-                                const y = match[1];
-                                // Find and remove the color rect at the same Y
-                                const rects = targetGroup.querySelectorAll('path');
-                                rects.forEach(r => {
-                                    const rt = r.getAttribute('transform');
-                                    if (rt && rt.includes(`, ${y})`)) {
+                        const textY = parseTransformY(t.getAttribute('transform'));
+                        if (textY !== null) {
+                            // Find and remove the color rect at the same Y (within tolerance)
+                            const rects = targetGroup.querySelectorAll('path');
+                            rects.forEach(r => {
+                                const rectY = parseTransformY(r.getAttribute('transform'));
+                                // Check if Y coordinates match (within 0.1 tolerance for floating point)
+                                if (rectY !== null && Math.abs(rectY - textY) < 0.1) {
+                                    // Make sure it's a color rect (has solid fill, not gradient)
+                                    const fill = r.getAttribute('fill');
+                                    if (fill && fill !== 'none' && !fill.startsWith('url(')) {
                                         r.remove();
                                     }
-                                });
-                            }
+                                }
+                            });
                         }
                         t.remove();
                         removed = true;
@@ -2225,7 +2341,7 @@
                 document.addEventListener('click', closeFeaturePopup);
             });
 
-            const setFeatureColor = (feat, color, customCaption = null) => {
+            const setFeatureColor = async (feat, color, customCaption = null) => {
                 // Use the best available qualifier for TSV generation
                 const qualInfo = getFeatureQualifier(feat);
                 if (!qualInfo) {
@@ -2240,31 +2356,70 @@
                 // Default caption if not provided
                 const caption = customCaption || feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`;
 
-                // Check if rule already exists for this exact feature
+                // Track override for UI display (store both color and caption)
+                const oldOverride = featureColorOverrides[featureKey];
+                const oldCaption = oldOverride?.caption;
+                featureColorOverrides[featureKey] = { color, caption };
+
+                // Apply instant preview (update SVG feature color directly)
+                applyInstantPreview(feat, color, caption);
+
+                // Handle legend entry FIRST, before adding rule to prevent watch race condition
+                await Vue.nextTick();
+                let actualCaption = caption;
+                if (pyodideReady.value && caption) {
+                    // Logic based on THIS FEATURE's existing legend entry (tracked by oldCaption):
+                    // - oldCaption exists → this feature already has a legend entry
+                    // - oldCaption is undefined → this feature doesn't have a legend entry yet
+
+                    if (oldCaption) {
+                        // This feature already has a legend entry
+                        if (oldCaption === caption) {
+                            // Same caption - just update the color of THIS feature's entry
+                            updateLegendEntryColorByCaption(oldCaption, color);
+                        } else {
+                            // Caption changed - remove old entry, add new one
+                            removeLegendEntry(oldCaption);
+                            actualCaption = await addLegendEntry(caption, color);
+                            if (actualCaption && typeof actualCaption === 'string') {
+                                addedLegendCaptions.value.add(actualCaption);
+                            }
+                        }
+                    } else {
+                        // This feature doesn't have a legend entry yet - add new one
+                        actualCaption = await addLegendEntry(caption, color);
+                        if (actualCaption && typeof actualCaption === 'string') {
+                            addedLegendCaptions.value.add(actualCaption);
+                        }
+                    }
+
+                    // Update tracked caption if it changed (may have (N) suffix)
+                    if (actualCaption && typeof actualCaption === 'string' && actualCaption !== caption) {
+                        featureColorOverrides[featureKey] = { color, caption: actualCaption };
+                    }
+                    extractLegendEntries();  // Refresh legend editor
+                }
+
+                // NOW add/update the rule with the correct caption (possibly numbered)
+                const finalCaption = (actualCaption && typeof actualCaption === 'string') ? actualCaption : caption;
                 const existingIdx = manualSpecificRules.findIndex(r =>
                     r.feat === feat.type && r.qual === qual && r.val === val
                 );
 
                 if (existingIdx >= 0) {
-                    // Update existing rule (also update caption)
+                    // Update existing rule with final caption
                     manualSpecificRules[existingIdx].color = color;
-                    manualSpecificRules[existingIdx].cap = caption;
+                    manualSpecificRules[existingIdx].cap = finalCaption;
                 } else {
-                    // Add new rule
+                    // Add new rule with final caption
                     manualSpecificRules.push({
                         feat: feat.type,
                         qual: qual,
                         val: val,
                         color: color,
-                        cap: caption
+                        cap: finalCaption
                     });
                 }
-
-                // Track override for UI display
-                featureColorOverrides[featureKey] = color;
-
-                // Apply instant preview (update SVG and legend directly)
-                applyInstantPreview(feat, color, caption);
             };
 
             // Clear feature list when switching modes
@@ -2568,6 +2723,9 @@
                 pairwiseMatchFactors.value = {};
                 // Clear tracked legend entries (will be regenerated)
                 addedLegendCaptions.value = new Set();
+                // Clear feature color overrides (custom legend entries from previous records)
+                Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
+                legendEntries.value = [];
                 // Store current palette's pairwise colors as reference for interpolation
                 window._origPairwiseMin = currentColors.value.pairwise_match_min || '#FFE7E7';
                 window._origPairwiseMax = currentColors.value.pairwise_match_max || '#FF7272';
@@ -2762,8 +2920,8 @@
                                 }
 
                                 if (matches) {
-                                    // Use internal ID as key
-                                    featureColorOverrides[feat.id] = rule.color;
+                                    // Use internal ID as key, store {color, caption} object
+                                    featureColorOverrides[feat.id] = { color: rule.color, caption: rule.cap };
                                     break; // First match wins
                                 }
                             }
