@@ -18,97 +18,6 @@ _font_cache: Dict[str, TTFont] = {}
 _font_path_cache: Dict[str, Optional[str]] = {}
 
 
-# ------------------------------------------------------------------
-#  Kerning Support
-# ------------------------------------------------------------------
-def _get_kerning_value(font, left_glyph_index, right_glyph_index):
-    """
-    Get kerning adjustment value for a glyph pair from kern or GPOS tables.
-
-    Args:
-        font: TTFont object
-        left_glyph_index: Glyph index of the left glyph
-        right_glyph_index: Glyph index of the right glyph
-
-    Returns:
-        int: Kerning adjustment value in font design units, or 0 if not found
-    """
-    # Skip expensive kerning calculation in Pyodide/WebAssembly environment
-    # The GPOS table processing can freeze the browser due to nested loops
-    if "pyodide" in sys.modules:
-        return 0
-
-    if left_glyph_index is None or right_glyph_index is None:
-        return 0
-    
-    try:
-        # Try kern table first (simpler, faster, used in older fonts)
-        if "kern" in font:
-            kern_table = font["kern"]
-            # kern table can have multiple subtables
-            if hasattr(kern_table, "kernTables"):
-                for subtable in kern_table.kernTables:
-                    # Check if this subtable has horizontal kerning (bit 0 of coverage)
-                    if subtable.coverage & 1:
-                        # Look up the glyph pair
-                        pair = (left_glyph_index, right_glyph_index)
-                        if hasattr(subtable, "kernTable") and pair in subtable.kernTable:
-                            return subtable.kernTable[pair]
-    except Exception as e:
-        logger.debug(f"Error reading kern table: {e}")
-    
-    try:
-        # Try GPOS table (modern OpenType fonts)
-        if "GPOS" in font:
-            gpos_table = font["GPOS"]
-            if hasattr(gpos_table, "table") and gpos_table.table:
-                lookup_list = gpos_table.table.LookupList
-                if lookup_list:
-                    # Iterate through lookups to find pair adjustment
-                    for lookup in lookup_list.Lookup:
-                        if lookup.LookupType == 2:  # Pair adjustment lookup
-                            for subtable in lookup.SubTable:
-                                # Format 1: Pair adjustment positioning
-                                if hasattr(subtable, "PairSets") and hasattr(subtable, "Coverage"):
-                                    # Check if left glyph is in coverage
-                                    coverage = subtable.Coverage
-                                    if hasattr(coverage, "glyphs") and left_glyph_index in coverage.glyphs:
-                                        # Find the index of left glyph in coverage
-                                        try:
-                                            left_idx = coverage.glyphs.index(left_glyph_index)
-                                            if left_idx < len(subtable.PairSets):
-                                                pair_set = subtable.PairSets[left_idx]
-                                                if pair_set:
-                                                    for pair_value_record in pair_set:
-                                                        if hasattr(pair_value_record, "SecondGlyph"):
-                                                            if pair_value_record.SecondGlyph == right_glyph_index:
-                                                                if hasattr(pair_value_record, "Value1"):
-                                                                    value_record = pair_value_record.Value1
-                                                                    if hasattr(value_record, "XAdvance"):
-                                                                        return value_record.XAdvance
-                                        except (ValueError, IndexError, AttributeError):
-                                            pass
-                                    # Format 2: Class-based pair adjustment
-                                    elif hasattr(subtable, "ClassDef1") and hasattr(subtable, "ClassDef2"):
-                                        # Get class for left and right glyphs
-                                        class_def1 = subtable.ClassDef1
-                                        class_def2 = subtable.ClassDef2
-                                        class1 = class_def1.get(left_glyph_index, 0) if hasattr(class_def1, "get") else 0
-                                        class2 = class_def2.get(right_glyph_index, 0) if hasattr(class_def2, "get") else 0
-                                        if hasattr(subtable, "Class1Record"):
-                                            if class1 < len(subtable.Class1Record):
-                                                class1_record = subtable.Class1Record[class1]
-                                                if hasattr(class1_record, "Class2Record"):
-                                                    if class2 < len(class1_record.Class2Record):
-                                                        class2_record = class1_record.Class2Record[class2]
-                                                        if hasattr(class2_record, "Value1"):
-                                                            value_record = class2_record.Value1
-                                                            if hasattr(value_record, "XAdvance"):
-                                                                return value_record.XAdvance
-    except Exception as e:
-        logger.debug(f"Error reading GPOS table: {e}")
-    
-    return 0
 
 
 # ------------------------------------------------------------------
@@ -207,7 +116,6 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi):
         return 0.0, 0.0
 
     rsb_previous = 0
-    previous_glyph_index = None
 
     for i, char in enumerate(text_str):
         char_code = ord(char)
@@ -233,11 +141,6 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi):
 
         ymaxes.append(ymax)
         ymins.append(ymin)
-
-        # Apply kerning adjustment between consecutive glyphs
-        if previous_glyph_index is not None:
-            kerning_value = _get_kerning_value(font, previous_glyph_index, glyph_index)
-            total_width += kerning_value
 
         # Calculate horizontal advance
         try:
@@ -265,7 +168,6 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi):
             total_width += lsb
 
         rsb_previous = rsb
-        previous_glyph_index = glyph_index
 
     # Formula: pixels = (design_units * font_size * dpi) / (72 * units_per_em)
     scale_factor = (float(font_size) * dpi) / (72 * units_per_em)
@@ -350,13 +252,13 @@ def calculate_bbox_dimensions(text, font_family, font_size, dpi):
     """
     Calculates bounding box dimensions using bundled font files in gbdraw package.
     In Pyodide/browser environments, uses the native Canvas API for fast measurement.
-    In native Python, uses fontTools for accurate measurement with kerning.
+    In native Python, uses fontTools for measurement.
     """
     # Use browser's Canvas API in Pyodide (much faster, uses native text engine)
     if "pyodide" in sys.modules:
         return _measure_text_canvas(text, font_family, float(font_size))
 
-    # Native Python: Use fontTools with kerning support
+    # Native Python: Use fontTools
     target_font_path = _resolve_font_path(font_family)
 
     if target_font_path:
