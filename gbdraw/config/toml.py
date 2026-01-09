@@ -2,7 +2,14 @@
 # coding: utf-8
 
 import logging
-import tomllib
+import sys
+
+# tomllib is available in Python 3.11+; use tomli as fallback for 3.10
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
+
 from importlib import resources
 from importlib.abc import Traversable
 
