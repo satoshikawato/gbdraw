@@ -5,24 +5,32 @@
 import argparse
 import logging
 import sys
-from Bio.SeqRecord import SeqRecord
-from typing import Any, Optional
-from pandas import DataFrame
-from .file_processing import load_default_colors, load_gbks, load_gff_fasta, read_color_table, load_config_toml, parse_formats
-from .linear_diagram_components import plot_linear_diagram
-from .utility_functions import create_dict_for_sequence_lengths, modify_config_dict, read_qualifier_priority_file
-from .canvas_generator import LinearCanvasConfigurator
-from .object_configurators import GcSkewConfigurator, LegendDrawingConfigurator, GcContentConfigurator, FeatureDrawingConfigurator, BlastMatchConfigurator
+from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from typing import Optional
+from pandas import DataFrame  # type: ignore[reportMissingImports]
+from .io.colors import load_default_colors, read_color_table
+from .io.genome import load_gbks, load_gff_fasta
+from .config.toml import load_config_toml
+from .render.export import parse_formats, save_figure
+from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[reportMissingImports]
+from .core.sequence import create_dict_for_sequence_lengths  # type: ignore[reportMissingImports]
+from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
+from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from .labels.filtering import read_qualifier_priority_file, read_filter_list_file  # type: ignore[reportMissingImports]
 
-try:
-    import cairosvg
-    CAIROSVG_AVAILABLE = True
-except (ImportError, OSError):
-    CAIROSVG_AVAILABLE = False
 
-# Setup for the logging system and sets the logging level to INFO
+from .cli_utils.common import (
+    CAIROSVG_AVAILABLE,
+    setup_logging,
+    validate_input_args,
+    validate_label_args,
+    handle_output_formats,
+    calculate_window_step,
+)
+
+# Setup for the logging system
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+setup_logging()
 
 def _get_args(args) -> argparse.Namespace:
     """
@@ -275,16 +283,8 @@ def _get_args(args) -> argparse.Namespace:
         help='Normalize record length (experimental; default: False). ',
         action='store_true')
     args = parser.parse_args(args)
-    if args.gbk and (args.gff or args.fasta):
-        parser.error("Error: --gbk cannot be used with --gff or --fasta.")
-    if args.gff and not args.fasta:
-        parser.error("Error: --gff requires --fasta.")
-    if args.fasta and not args.gff:
-        parser.error("Error: --fasta requires --gff.")
-    if not args.gbk and not (args.gff and args.fasta):
-        parser.error("Error: Either --gbk or both --gff and --fasta must be provided.")
-    if args.label_whitelist and args.label_blacklist:
-        parser.error("Error: --label_whitelist and --label_blacklist are mutually exclusive.")
+    validate_input_args(parser, args)
+    validate_label_args(parser, args)
     return args
 
 
@@ -340,21 +340,7 @@ def linear_main(cmd_args) -> None:
     comparison_height: Optional[float] = args.comparison_height
 
     out_formats: list[str] = parse_formats(args.format)
-    # Handle WebAssembly environment and CairoSVG availability
-    if "pyodide" in sys.modules:
-        if any(f != 'svg' for f in out_formats):
-            logger.info("Running in WebAssembly mode: Output format constrained to SVG. (Image conversion is handled by the browser)")
-            out_formats = ['svg']
-    # Handle absence of CairoSVG
-    elif not CAIROSVG_AVAILABLE:
-        non_svg_formats = [f for f in out_formats if f != 'svg']
-        if non_svg_formats:
-            logger.warning(
-                f"⚠️  CairoSVG is not installed. Cannot generate: {', '.join(non_svg_formats).upper()}\n"
-                f"   Output restricted to SVG only.\n"
-                f"   (To enable PNG/PDF, run: pip install gbdraw[export])"
-            )
-            out_formats = ['svg']
+    out_formats = handle_output_formats(out_formats)
     user_defined_default_colors: str = args.default_colors
     scale_style: str = args.scale_style
     scale_stroke_color: Optional[str] = args.scale_stroke_color
@@ -374,20 +360,24 @@ def linear_main(cmd_args) -> None:
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
+    filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
     if qualifier_priority_path:
-        qualifier_priority_df = read_qualifier_priority_file(qualifier_priority_path)
-        config_dict['labels']['filtering']['qualifier_priority_df'] = qualifier_priority_df
+        filtering_cfg["qualifier_priority_df"] = read_qualifier_priority_file(qualifier_priority_path)
     else:
-        config_dict['labels']['filtering']['qualifier_priority_df'] = None
+        filtering_cfg["qualifier_priority_df"] = None
+    if label_whitelist:
+        filtering_cfg["whitelist_df"] = read_filter_list_file(label_whitelist)
+    else:
+        filtering_cfg["whitelist_df"] = None
 
-    block_stroke_color: str = args.block_stroke_color
-    block_stroke_width: str = args.block_stroke_width
+    block_stroke_color: Optional[str] = args.block_stroke_color
+    block_stroke_width: Optional[float] = args.block_stroke_width
     definition_font_size: Optional[float] = args.definition_font_size
     label_font_size: Optional[float] = args.label_font_size
-    axis_stroke_color: str = args.axis_stroke_color
-    axis_stroke_width: str = args.axis_stroke_width
-    line_stroke_color: str = args.line_stroke_color
-    line_stroke_width: str = args.line_stroke_width       
+    axis_stroke_color: Optional[str] = args.axis_stroke_color
+    axis_stroke_width: Optional[float] = args.axis_stroke_width
+    line_stroke_color: Optional[str] = args.line_stroke_color
+    line_stroke_width: Optional[float] = args.line_stroke_width       
     config_dict = modify_config_dict(
         config_dict, 
         block_stroke_color=block_stroke_color, 
@@ -400,6 +390,8 @@ def linear_main(cmd_args) -> None:
         line_stroke_width=line_stroke_width, 
         show_gc=show_gc, 
         show_skew=show_skew, 
+        show_labels=show_labels,
+        resolve_overlaps=resolve_overlaps,
         align_center=align_center, 
         strandedness=strandedness,
         label_blacklist=label_blacklist,
@@ -427,46 +419,35 @@ def linear_main(cmd_args) -> None:
     sequence_length_dict: dict[str,
                                int] = create_dict_for_sequence_lengths(records)
     longest_genome: int = max(sequence_length_dict.values())
-    if not manual_window:
-        if longest_genome < 1000000:
-            window = config_dict['objects']['sliding_window']['default'][0]
-        elif longest_genome < 10000000:
-            window = config_dict['objects']['sliding_window']['up1m'][0]
-        else:
-            window = config_dict['objects']['sliding_window']['up10m'][0]
-    else:
-        window = manual_window
-    if not manual_step:
-        if longest_genome < 1000000:
-            step = config_dict['objects']['sliding_window']['default'][1]
-        elif longest_genome < 10000000:
-            step = config_dict['objects']['sliding_window']['up1m'][1]
-        else:
-            step = config_dict['objects']['sliding_window']['up10m'][1]
-    else:
-        step = manual_step
+    cfg = GbdrawConfig.from_dict(config_dict)
+    window, step = calculate_window_step(longest_genome, cfg, manual_window, manual_step)
     num_of_entries: int = len(sequence_length_dict)
-    config_dict = modify_config_dict(config_dict, block_stroke_color=block_stroke_color, block_stroke_width=block_stroke_width, line_stroke_color=line_stroke_color, line_stroke_width=line_stroke_width, show_gc=show_gc, show_skew=show_skew, align_center=align_center, strandedness=strandedness, show_labels=show_labels, resolve_overlaps=resolve_overlaps, label_blacklist=label_blacklist, label_whitelist=label_whitelist, default_cds_height=feature_height, legend_box_size=legend_box_size, legend_font_size=legend_font_size)
 
-
-    blast_config = BlastMatchConfigurator(
-        evalue=evalue, bitscore=bitscore, identity=identity, sequence_length_dict=sequence_length_dict, config_dict=config_dict, default_colors_df=default_colors)
-    canvas_config = LinearCanvasConfigurator(output_prefix=out_file_prefix,
-                                            num_of_entries=num_of_entries, longest_genome=longest_genome, config_dict=config_dict, legend=legend)
-    feature_config = FeatureDrawingConfigurator(
-        color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, canvas_config=canvas_config)
-    gc_config = GcContentConfigurator(
-        window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
-    skew_config = GcSkewConfigurator(
-        window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
-    legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config, blast_config=blast_config, canvas_config=canvas_config)    
-    plot_linear_diagram(records, blast_files, canvas_config, blast_config,
-                        feature_config, gc_config, config_dict, out_formats, legend_config, skew_config)
+    canvas = assemble_linear_diagram_from_records(
+        records=records,
+        blast_files=blast_files,
+        config_dict=config_dict,
+        color_table=color_table,
+        default_colors=default_colors,
+        selected_features_set=selected_features_set,
+        output_prefix=out_file_prefix,
+        legend=legend,
+        dinucleotide=dinucleotide,
+        window=window,
+        step=step,
+        evalue=evalue,
+        bitscore=bitscore,
+        identity=identity,
+        cfg=cfg,
+    )
+    save_figure(canvas, out_formats)
 
 
 if __name__ == "__main__":
     # This gets all arguments passed to the script, excluding the script name
     handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter('%(message)s'))
+    logger.addHandler(handler)
     main_args = sys.argv[1:]
     if not main_args:
         main_args.append('--help')

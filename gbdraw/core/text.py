@@ -173,7 +173,6 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi):
         text (str): The text string for which to calculate the size.
         font_size (int or float): The font size (in points).
         dpi (int): Dots Per Inch (DPI). Used to convert font units into pixels.
-
     Returns:
         tuple[float, float]:
             text_width_pixels (float): The calculated width of the text in pixels,

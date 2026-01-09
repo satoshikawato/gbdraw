@@ -5,24 +5,30 @@ import sys
 import argparse
 import logging
 from typing import Optional
-from pandas import DataFrame
-from Bio.SeqRecord import SeqRecord
-from .file_processing import load_gbks, load_gff_fasta, load_default_colors, read_color_table, load_config_toml, parse_formats
-from .circular_diagram_components import plot_circular_diagram
-from .data_processing import skew_df
-from .canvas_generator import CircularCanvasConfigurator
-from .object_configurators import LegendDrawingConfigurator, GcSkewConfigurator,GcContentConfigurator, FeatureDrawingConfigurator
-from .utility_functions import suppress_gc_content_and_skew, modify_config_dict, determine_output_file_prefix, read_qualifier_priority_file
+from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from .io.genome import load_gbks, load_gff_fasta
+from .io.colors import load_default_colors, read_color_table
+from .config.toml import load_config_toml
+from .render.export import parse_formats, save_figure
+from .api.diagram import assemble_circular_diagram_from_record  # type: ignore[reportMissingImports]
+from .config.modify import suppress_gc_content_and_skew, modify_config_dict  # type: ignore[reportMissingImports]
+from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from .core.sequence import determine_output_file_prefix  # type: ignore[reportMissingImports]
+from .labels.filtering import read_qualifier_priority_file, read_filter_list_file  # type: ignore[reportMissingImports]
 
-try:
-    import cairosvg
-    CAIROSVG_AVAILABLE = True
-except (ImportError, OSError):
-    CAIROSVG_AVAILABLE = False
+from .cli_utils.common import (
+    CAIROSVG_AVAILABLE,
+    setup_logging,
+    validate_input_args,
+    validate_label_args,
+    handle_output_formats,
+    calculate_window_step,
+)
 
-# Setup for the logging system and sets the logging level to INFO
+# Setup for the logging system
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+setup_logging()
 
 
 def _get_args(args) -> argparse.Namespace:
@@ -184,6 +190,10 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         default="tuckin")
     parser.add_argument(
+        '--resolve_overlaps',
+        help='Resolve overlapping features by placing them on separate tracks (default: False). Useful for plasmid visualization.',
+        action='store_true')
+    parser.add_argument(
         '--show_labels',
         help='Show feature labels (default: False).',
         action='store_true')
@@ -239,21 +249,8 @@ def _get_args(args) -> argparse.Namespace:
         type=float)
     
     args = parser.parse_args(args)
-    if args.gbk and (args.gff or args.fasta):
-        parser.error("Error: --gbk cannot be used with --gff or --fasta.")
-    
-    # Check if both --gff and --fasta are provided together
-    if args.gff and not args.fasta:
-        parser.error("Error: --gff requires --fasta.")
-    
-    if args.fasta and not args.gff:
-        parser.error("Error: --fasta requires --gff.")
-        
-    # Ensure that either --gbk or both --gff and --fasta are provided
-    if not args.gbk and not (args.gff and args.fasta):
-        parser.error("Error: Either --gbk or both --gff and --fasta must be provided.")
-    if args.label_whitelist and args.label_blacklist:
-        parser.error("Error: --label_whitelist and --label_blacklist are mutually exclusive.")
+    validate_input_args(parser, args)
+    validate_label_args(parser, args)
     return args
 
 
@@ -291,6 +288,7 @@ def circular_main(cmd_args) -> None:
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
     show_labels: bool = args.show_labels
+    resolve_overlaps: bool = args.resolve_overlaps
     allow_inner_labels: bool = args.allow_inner_labels
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
@@ -323,22 +321,33 @@ def circular_main(cmd_args) -> None:
             "WARNING: Inner labels are allowed, but GC and skew tracks are not suppressed. Suppressing GC and skew tracks.")  # 
 
     user_defined_default_colors: str = args.default_colors
-    block_stroke_color: str = args.block_stroke_color
-    block_stroke_width: str = args.block_stroke_width
-    axis_stroke_color: str = args.axis_stroke_color
-    axis_stroke_width: str = args.axis_stroke_width
-    line_stroke_color: str = args.line_stroke_color
-    line_stroke_width: str = args.line_stroke_width   
+    block_stroke_color: Optional[str] = args.block_stroke_color
+    block_stroke_width: Optional[float] = args.block_stroke_width
+    axis_stroke_color: Optional[str] = args.axis_stroke_color
+    axis_stroke_width: Optional[float] = args.axis_stroke_width
+    line_stroke_color: Optional[str] = args.line_stroke_color
+    line_stroke_width: Optional[float] = args.line_stroke_width   
     track_type: str = args.track_type
     strandedness = args.separate_strands
     scale_interval: Optional[int] = args.scale_interval
+    
+    # Warn if resolve_overlaps is used with separate_strands
+    if strandedness and resolve_overlaps:
+        logger.warning(
+            "WARNING: --resolve_overlaps is ignored when --separate_strands is enabled.")
+        resolve_overlaps = False
+    
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
+    filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
     if qualifier_priority_path:
-        qualifier_priority_df = read_qualifier_priority_file(qualifier_priority_path)
-        config_dict['labels']['filtering']['qualifier_priority_df'] = qualifier_priority_df
+        filtering_cfg["qualifier_priority_df"] = read_qualifier_priority_file(qualifier_priority_path)
     else:
-        config_dict['labels']['filtering']['qualifier_priority_df'] = None
+        filtering_cfg["qualifier_priority_df"] = None
+    if label_whitelist:
+        filtering_cfg["whitelist_df"] = read_filter_list_file(label_whitelist)
+    else:
+        filtering_cfg["whitelist_df"] = None
 
     palette: str = args.palette
     default_colors: Optional[DataFrame] = load_default_colors(
@@ -359,6 +368,7 @@ def circular_main(cmd_args) -> None:
         show_labels=show_labels, 
         track_type=track_type, 
         strandedness=strandedness, 
+        resolve_overlaps=resolve_overlaps,
         show_gc=show_gc, 
         show_skew=show_skew, 
         allow_inner_labels=allow_inner_labels,
@@ -376,65 +386,36 @@ def circular_main(cmd_args) -> None:
     )    
 
     out_formats: list[str] = parse_formats(args.format)
-    # Handle WebAssembly environment and CairoSVG availability
-    if "pyodide" in sys.modules:
-        if any(f != 'svg' for f in out_formats):
-            logger.info("Running in WebAssembly mode: Output format constrained to SVG. (Image conversion is handled by the browser)")
-            out_formats = ['svg']
-    # Handle absence of CairoSVG
-    elif not CAIROSVG_AVAILABLE:
-        non_svg_formats = [f for f in out_formats if f != 'svg']
-        if non_svg_formats:
-            logger.warning(
-                f"⚠️  CairoSVG is not installed. Cannot generate: {', '.join(non_svg_formats).upper()}\n"
-                f"   Output restricted to SVG only.\n"
-                f"   (To enable PNG/PDF, run: pip install gbdraw[export])"
-            )
-            out_formats = ['svg']
+    out_formats = handle_output_formats(out_formats)
     record_count: int = 0
 
 
 
+    cfg = GbdrawConfig.from_dict(config_dict)
+
     for gb_record in gb_records:
-        record_count += 1 
+        record_count += 1
         accession = gb_record.id
         seq_length = len(gb_record.seq)
-        if not manual_window:
-            if seq_length < 1000000:
-                window = config_dict['objects']['sliding_window']['default'][0]
-            elif seq_length < 10000000:
-                window = config_dict['objects']['sliding_window']['up1m'][0]
-            else:
-                window = config_dict['objects']['sliding_window']['up10m'][0]
-        else:
-            window = manual_window
-        if not manual_step:
-            if seq_length < 1000000:
-                step = config_dict['objects']['sliding_window']['default'][1]
-            elif seq_length < 10000000:
-                step = config_dict['objects']['sliding_window']['up1m'][1]
-            else:
-                step = config_dict['objects']['sliding_window']['up10m'][1]
-        else:
-            step = manual_step
-
-        gc_config = GcContentConfigurator(
-            window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
-        skew_config = GcSkewConfigurator(
-            window=window, step=step, dinucleotide=dinucleotide, config_dict=config_dict, default_colors_df=default_colors)
-
-        
+        window, step = calculate_window_step(seq_length, cfg, manual_window, manual_step)
 
         outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
-        gc_df: DataFrame = skew_df(gb_record, window, step, dinucleotide)
-        canvas_config = CircularCanvasConfigurator(
-            output_prefix=outfile_prefix, config_dict=config_dict, legend=legend, gb_record=gb_record
-            )
-        feature_config = FeatureDrawingConfigurator(
-            color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, canvas_config=canvas_config)
-        legend_config = LegendDrawingConfigurator(color_table=color_table, default_colors=default_colors, selected_features_set=selected_features_set, config_dict=config_dict, gc_config=gc_config, skew_config=skew_config, feature_config=feature_config, canvas_config=canvas_config)
-        plot_circular_diagram(gb_record, canvas_config, gc_df, gc_config, skew_config,
-                              feature_config, species, strain, config_dict, out_formats, legend_config)
+        canvas = assemble_circular_diagram_from_record(
+            gb_record,
+            config_dict=config_dict,
+            color_table=color_table,
+            default_colors=default_colors,
+            selected_features_set=selected_features_set,
+            output_prefix=outfile_prefix,
+            legend=legend,
+            dinucleotide=dinucleotide,
+            window=window,
+            step=step,
+            species=species,
+            strain=strain,
+            cfg=cfg,
+        )
+        save_figure(canvas, out_formats)
 
 if __name__ == "__main__":
     # Entry point for the script when run as a standalone program.
@@ -442,6 +423,8 @@ if __name__ == "__main__":
     # args are parsed command-line arguments
     # This gets all arguments passed to the script, excluding the script name
     handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter('%(message)s'))
+    logger.addHandler(handler)
     main_args = sys.argv[1:]
     if not main_args:
         main_args.append('--help')

@@ -1,0 +1,89 @@
+name: Tests
+
+# Limit GITHUB_TOKEN permissions to minimum required
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["main", "refactoring", "develop"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run fast tests
+        run: |
+          pytest tests/ -v --tb=short -m "not slow" --timeout=120
+
+      - name: Run slow tests
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          pytest tests/ -v --tb=short -m "slow" --timeout=600
+
+  test-with-cairosvg:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies for CairoSVG
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev
+
+      - name: Install dependencies with export extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,export]"
+
+      - name: Run tests with CairoSVG
+        run: |
+          pytest tests/ -v --tb=short -m "not slow" --timeout=120
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+
+      - name: Check code formatting
+        run: |
+          ruff check gbdraw/ --select=E,F,W --ignore=E501,W503 || true
+        continue-on-error: true

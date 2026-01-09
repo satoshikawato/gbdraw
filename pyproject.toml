@@ -1,0 +1,97 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gbdraw"
+version = "0.8.0"
+description = "A genome diagram generator for microbes and organelles"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Satoshi Kawato", email = "kawato@kaiyodai.ac.jp"}
+]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = [
+    "pandas",
+    "svgwrite",
+    "biopython",
+    "fonttools",
+    "bcbio-gff",
+    "tomli; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+export = ["cairosvg"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-timeout>=2.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/satoshikawato/gbdraw/"
+Documentation = "https://github.com/satoshikawato/gbdraw/"
+Repository = "https://github.com/satoshikawato/gbdraw/"
+"Web App" = "https://gbdraw.app/"
+
+[project.scripts]
+gbdraw = "gbdraw.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["gbdraw*"]
+
+[tool.setuptools.package-data]
+gbdraw = [
+    "data/color_palettes.toml",
+    "data/config.toml",
+    "data/*.ttf",
+    "web/index.html",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "regression: marks tests as regression tests",
+    "circular: marks tests for circular diagrams",
+    "linear: marks tests for linear diagrams",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+timeout = 300
+
+[tool.coverage.run]
+source = ["gbdraw"]
+omit = [
+    "tests/*",
+    "gbdraw/web/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
