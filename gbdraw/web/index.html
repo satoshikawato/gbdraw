@@ -605,7 +605,7 @@
 
                     <!-- Feature Color Picker Popup -->
                     <div v-if="clickedFeature"
-                         class="fixed z-50 bg-white rounded-lg shadow-2xl border border-slate-200 p-3"
+                         class="fixed z-50 bg-white rounded-lg shadow-2xl border border-slate-200 p-3 min-w-[240px]"
                          :style="{ top: clickedFeaturePos.y + 'px', left: clickedFeaturePos.x + 'px' }">
                         <div class="flex items-center gap-2 mb-2">
                             <span class="text-xs font-medium text-slate-600 truncate max-w-[200px]">{{ clickedFeature.label }}</span>
@@ -613,13 +613,20 @@
                                 <i class="ph ph-x"></i>
                             </button>
                         </div>
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2 mb-2">
                             <input type="color"
                                    :value="clickedFeature.color"
                                    @input="clickedFeature.color = $event.target.value"
                                    @change="updateClickedFeatureColor($event.target.value)"
                                    class="w-10 h-8 cursor-pointer border rounded">
                             <span class="text-xs font-mono text-slate-500">{{ clickedFeature.color }}</span>
+                        </div>
+                        <div class="border-t border-slate-100 pt-2">
+                            <label class="text-[10px] text-slate-400 block mb-1">Legend name (optional)</label>
+                            <input type="text"
+                                   v-model="clickedFeature.legendName"
+                                   :placeholder="clickedFeature.label"
+                                   class="w-full text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400">
                         </div>
                     </div>
 
@@ -1151,12 +1158,14 @@
                         const feat = extractedFeatures.value.find(f => f.svg_id === svgId);
                         if (feat) {
                             const currentColor = path.getAttribute('fill') || getFeatureColor(feat);
+                            const defaultLabel = feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`;
                             clickedFeature.value = {
                                 id: feat.id,
                                 svg_id: svgId,
-                                label: feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`,
+                                label: defaultLabel,
                                 color: currentColor,
-                                feat: feat
+                                feat: feat,
+                                legendName: ''  // User can optionally set a custom legend name
                             };
                             // Position popup near click
                             clickedFeaturePos.x = Math.min(e.clientX + 10, window.innerWidth - 280);
@@ -1173,8 +1182,9 @@
             const updateClickedFeatureColor = (color) => {
                 if (!clickedFeature.value) return;
                 const feat = clickedFeature.value.feat;
+                const legendName = clickedFeature.value.legendName || clickedFeature.value.label;
                 clickedFeature.value.color = color;
-                setFeatureColor(feat, color);
+                setFeatureColor(feat, color, legendName);
             };
 
             // Watch for SVG content changes to reattach handlers
@@ -1196,7 +1206,7 @@
                 document.addEventListener('click', closeFeaturePopup);
             });
 
-            const setFeatureColor = (feat, color) => {
+            const setFeatureColor = (feat, color, customCaption = null) => {
                 // Use the best available qualifier for TSV generation
                 const qualInfo = getFeatureQualifier(feat);
                 if (!qualInfo) {
@@ -1208,14 +1218,18 @@
                 // Use internal ID for UI tracking (unique across all features)
                 const featureKey = feat.id;
 
+                // Default caption if not provided
+                const caption = customCaption || feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`;
+
                 // Check if rule already exists for this exact feature
                 const existingIdx = manualSpecificRules.findIndex(r =>
                     r.feat === feat.type && r.qual === qual && r.val === val
                 );
 
                 if (existingIdx >= 0) {
-                    // Update existing rule
+                    // Update existing rule (also update caption)
                     manualSpecificRules[existingIdx].color = color;
+                    manualSpecificRules[existingIdx].cap = caption;
                 } else {
                     // Add new rule
                     manualSpecificRules.push({
@@ -1223,7 +1237,7 @@
                         qual: qual,
                         val: val,
                         color: color,
-                        cap: feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`
+                        cap: caption
                     });
                 }
 
