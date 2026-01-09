@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(wc:*)",
+      "Bash(git -C /mnt/c/Users/genom/GitHub/gbdraw log --oneline -20)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(git -C /mnt/c/Users/genom/GitHub/gbdraw log --oneline --all)",
+      "Bash(git -C /mnt/c/Users/genom/GitHub/gbdraw log --all --oneline --grep=\"test\")",
+      "Bash(git -C /mnt/c/Users/genom/GitHub/gbdraw log --all --oneline --grep=\"smoke\\\\|validation\\\\|snapshot\")",
+      "Bash(git -C /mnt/c/Users/genom/GitHub/gbdraw show 4f4caba --stat)",
+      "Bash(pip install:*)",
+      "Bash(pytest:*)",
+      "Bash(python -c:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(python3 -m py_compile:*)",
+      "Bash(python3:*)",
+      "Bash(done)"
+    ]
+  }
+}

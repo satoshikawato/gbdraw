@@ -34,9 +34,6 @@ def print_version() -> None:
     print(f"gbdraw version {__version__}")
 
 
-def print_version() -> None:
-    print(f"gbdraw version {__version__}")
-
 def find_free_port():
     """Find a free port on localhost"""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
