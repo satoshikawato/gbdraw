@@ -650,7 +650,7 @@
 
                     <!-- Feature List -->
                     <div class="flex-grow overflow-y-auto">
-                        <div v-for="(feat, idx) in filteredFeatures" :key="idx"
+                        <div v-for="feat in filteredFeatures" :key="feat.id"
                              class="flex items-center gap-2 px-3 py-2 border-b border-slate-100 text-xs hover:bg-slate-50">
                             <span class="w-10 font-mono text-slate-400 shrink-0 text-[10px]">{{ feat.type }}</span>
                             <span class="w-16 font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="`${feat.start}..${feat.end}`">
@@ -1060,19 +1060,31 @@
             const applyInstantPreview = (feat, color) => {
                 // Use pre-computed svg_id that matches Python's hash
                 const svgId = feat.svg_id;
-                if (!svgId) return;
+                if (!svgId) {
+                    console.log('No svg_id for feature', feat);
+                    return;
+                }
 
-                // Find all SVG paths with this id
-                const svgContainer = document.querySelector('.shadow-xl.bg-white');
-                if (!svgContainer) return;
+                // Update results array (svgContent is computed from results)
+                const idx = selectedResultIndex.value;
+                if (results.value.length > idx && results.value[idx].content) {
+                    try {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(results.value[idx].content, 'image/svg+xml');
+                        const element = doc.getElementById(svgId);
 
-                const paths = svgContainer.querySelectorAll(`#${CSS.escape(svgId)}`);
-                paths.forEach(path => {
-                    path.setAttribute('fill', color);
-                });
-
-                if (paths.length > 0) {
-                    console.log(`Instant preview: updated ${paths.length} path(s) for ${svgId}`);
+                        if (element) {
+                            element.setAttribute('fill', color);
+                            const serializer = new XMLSerializer();
+                            // Update the results array - this triggers svgContent recomputation
+                            results.value[idx].content = serializer.serializeToString(doc.documentElement);
+                            console.log(`Instant preview: updated ${svgId} to ${color}`);
+                        } else {
+                            console.log(`Instant preview: element ${svgId} not found in SVG`);
+                        }
+                    } catch (e) {
+                        console.error('Instant preview error:', e);
+                    }
                 }
             };
 
@@ -1609,6 +1621,8 @@
                                     featData.features.forEach(f => {
                                         f.fileIdx = i;  // File index
                                         f.displayRecordId = `File ${i + 1}: ${f.record_id}`;
+                                        // Make id unique across files by prefixing with file index
+                                        f.id = `file${i}_${f.id}`;
                                     });
                                     allFeatures = allFeatures.concat(featData.features);
                                     // Add record labels with file prefix
