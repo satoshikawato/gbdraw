@@ -9,8 +9,6 @@ final canvas sizing.
 
 from __future__ import annotations
 
-import logging
-
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
@@ -18,11 +16,9 @@ from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...configurators import FeatureDrawingConfigurator  # type: ignore[reportMissingImports]
 from ...features.colors import preprocess_color_tables  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
-from ...groups.linear import DefinitionGroup  # type: ignore[reportMissingImports]
+from ...render.groups.linear import DefinitionGroup  # type: ignore[reportMissingImports]
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
 from ...labels.placement import prepare_label_list_linear  # type: ignore[reportMissingImports]
-
-logger = logging.getLogger(__name__)
 
 
 def _precalculate_definition_widths(

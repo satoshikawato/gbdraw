@@ -7,7 +7,7 @@ from typing import Literal
 from svgwrite.path import Path
 from svgwrite.text import Text, TextPath
 
-from ..text import calculate_bbox_dimensions
+from ..core.text import calculate_bbox_dimensions
 
 
 def generate_circular_tick_paths(

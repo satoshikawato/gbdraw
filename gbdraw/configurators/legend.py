@@ -2,7 +2,7 @@
 # coding: utf-8
 
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from gbdraw.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
+from gbdraw.core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
 
 
 class LegendDrawingConfigurator:

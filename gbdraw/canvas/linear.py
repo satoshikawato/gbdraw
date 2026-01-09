@@ -1,16 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import logging
 from typing import Literal
 
 from svgwrite import Drawing
 
 from ..config.models import GbdrawConfig
 from ..core.sequence import determine_length_parameter
-
-# Logging setup
-logger = logging.getLogger(__name__)
 
 
 class LinearCanvasConfigurator:

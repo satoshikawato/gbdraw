@@ -18,7 +18,7 @@ from ...configurators import (  # type: ignore[reportMissingImports]
     GcContentConfigurator,
     GcSkewConfigurator,
 )
-from ...groups.linear import (  # type: ignore[reportMissingImports]
+from ...render.groups.linear import (  # type: ignore[reportMissingImports]
     DefinitionGroup,
     GcContentGroup,
     GcSkewGroup,

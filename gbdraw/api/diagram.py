@@ -27,8 +27,8 @@ from gbdraw.configurators import (  # type: ignore[reportMissingImports]
     LegendDrawingConfigurator,
 )
 from gbdraw.core.sequence import create_dict_for_sequence_lengths  # type: ignore[reportMissingImports]
-from gbdraw.circular_diagram_components import assemble_circular_diagram  # type: ignore[reportMissingImports]
-from gbdraw.linear_diagram_components import assemble_linear_diagram  # type: ignore[reportMissingImports]
+from gbdraw.diagrams.circular import assemble_circular_diagram  # type: ignore[reportMissingImports]
+from gbdraw.diagrams.linear import assemble_linear_diagram  # type: ignore[reportMissingImports]
 from gbdraw.tracks import TrackSpec, parse_track_specs  # type: ignore[reportMissingImports]
 
 

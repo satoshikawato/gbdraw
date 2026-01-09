@@ -8,7 +8,6 @@ This module was extracted from `gbdraw.linear_diagram_components` to improve coh
 
 from __future__ import annotations
 
-import logging
 from dataclasses import replace
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
@@ -23,7 +22,7 @@ from ...configurators import (  # type: ignore[reportMissingImports]
     LegendDrawingConfigurator,
 )
 from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
-from ...groups.linear import LengthBarGroup, LegendGroup  # type: ignore[reportMissingImports]
+from ...render.groups.linear import LengthBarGroup, LegendGroup  # type: ignore[reportMissingImports]
 from ...io.comparisons import load_comparisons
 from ...legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
@@ -41,8 +40,6 @@ from .precalc import _precalculate_definition_widths, _precalculate_label_dimens
 from ...features.colors import preprocess_color_tables  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
-
-logger = logging.getLogger(__name__)
 
 
 def _precalculate_feature_track_heights(

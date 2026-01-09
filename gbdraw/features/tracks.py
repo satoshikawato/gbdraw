@@ -3,7 +3,7 @@
 
 from typing import Dict, List, Optional, Tuple
 
-from ..feature_objects import FeatureObject
+from .objects import FeatureObject
 
 
 def get_feature_ends(feature, genome_length: Optional[int] = None) -> Tuple[int, int, str]:

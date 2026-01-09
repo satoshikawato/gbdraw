@@ -35,9 +35,11 @@ Look here for detailed information, examples, and answers to specific questions.
 
 ---
 
-### **🧱 Design / Refactoring Proposal**
+### **🧱 Design / Refactoring**
 
-Planning documents for future major improvements.
+Planning documents and migration guides for the codebase restructuring.
 
+* **[Migration Guide](./REFACTORING_MIGRATION_GUIDE.md)**: Comprehensive guide for developers - what moved where, new import paths, backwards compatibility.
 * **[Refactoring Proposal](./REFACTORING_PROPOSAL.md)**: Library-ization, multi-track (circular/linear), custom tracks, and interactivity.
-* **[Refactoring Daily Log (2026-01-02)](./REFACTORING_LOG_2026-01-02.md)**: Today's progress + plan for tomorrow.
+* **[Refactoring Daily Log (2026-01-09)](./REFACTORING_LOG_2026-01-09.md)**: Package restructuring, render consolidation, diagrams/circular.
+* **[Refactoring Daily Log (2026-01-02)](./REFACTORING_LOG_2026-01-02.md)**: API layer, diagrams/linear, track specs.

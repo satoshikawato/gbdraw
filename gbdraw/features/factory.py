@@ -7,7 +7,7 @@ from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 
-from ..feature_objects import GeneObject, RepeatObject, FeatureObject
+from .objects import GeneObject, RepeatObject, FeatureObject
 from ..labels.filtering import get_label_text
 from .colors import get_color
 from .coordinates import get_exon_and_intron_coordinates

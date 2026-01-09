@@ -1,16 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import logging
 from typing import Literal
 
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 
 from ..config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ..core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
-
-# Logging setup
-logger = logging.getLogger(__name__)
 
 
 class CircularCanvasConfigurator:

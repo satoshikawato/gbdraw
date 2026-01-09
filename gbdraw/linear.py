@@ -6,7 +6,7 @@ import argparse
 import logging
 import sys
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from typing import Any, Optional
+from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .io.colors import load_default_colors, read_color_table
 from .io.genome import load_gbks, load_gff_fasta
@@ -19,20 +19,18 @@ from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .labels.filtering import read_qualifier_priority_file, read_filter_list_file  # type: ignore[reportMissingImports]
 
 
-try:
-    import cairosvg  # type: ignore[reportMissingImports]
-    CAIROSVG_AVAILABLE = True
-except (ImportError, OSError):
-    CAIROSVG_AVAILABLE = False
+from .cli_utils.common import (
+    CAIROSVG_AVAILABLE,
+    setup_logging,
+    validate_input_args,
+    validate_label_args,
+    handle_output_formats,
+    calculate_window_step,
+)
 
-# Setup for the logging system and sets the logging level to INFO
+# Setup for the logging system
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-# Ensure handler is added if not already present
-if not logger.handlers:
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter('%(message)s'))
-    logger.addHandler(handler)
+setup_logging()
 
 def _get_args(args) -> argparse.Namespace:
     """
@@ -285,16 +283,8 @@ def _get_args(args) -> argparse.Namespace:
         help='Normalize record length (experimental; default: False). ',
         action='store_true')
     args = parser.parse_args(args)
-    if args.gbk and (args.gff or args.fasta):
-        parser.error("Error: --gbk cannot be used with --gff or --fasta.")
-    if args.gff and not args.fasta:
-        parser.error("Error: --gff requires --fasta.")
-    if args.fasta and not args.gff:
-        parser.error("Error: --fasta requires --gff.")
-    if not args.gbk and not (args.gff and args.fasta):
-        parser.error("Error: Either --gbk or both --gff and --fasta must be provided.")
-    if args.label_whitelist and args.label_blacklist:
-        parser.error("Error: --label_whitelist and --label_blacklist are mutually exclusive.")
+    validate_input_args(parser, args)
+    validate_label_args(parser, args)
     return args
 
 
@@ -350,21 +340,7 @@ def linear_main(cmd_args) -> None:
     comparison_height: Optional[float] = args.comparison_height
 
     out_formats: list[str] = parse_formats(args.format)
-    # Handle WebAssembly environment and CairoSVG availability
-    if "pyodide" in sys.modules:
-        if any(f != 'svg' for f in out_formats):
-            logger.info("Running in WebAssembly mode: Output format constrained to SVG. (Image conversion is handled by the browser)")
-            out_formats = ['svg']
-    # Handle absence of CairoSVG
-    elif not CAIROSVG_AVAILABLE:
-        non_svg_formats = [f for f in out_formats if f != 'svg']
-        if non_svg_formats:
-            logger.warning(
-                f"⚠️  CairoSVG is not installed. Cannot generate: {', '.join(non_svg_formats).upper()}\n"
-                f"   Output restricted to SVG only.\n"
-                f"   (To enable PNG/PDF, run: pip install gbdraw[export])"
-            )
-            out_formats = ['svg']
+    out_formats = handle_output_formats(out_formats)
     user_defined_default_colors: str = args.default_colors
     scale_style: str = args.scale_style
     scale_stroke_color: Optional[str] = args.scale_stroke_color
@@ -444,24 +420,7 @@ def linear_main(cmd_args) -> None:
                                int] = create_dict_for_sequence_lengths(records)
     longest_genome: int = max(sequence_length_dict.values())
     cfg = GbdrawConfig.from_dict(config_dict)
-    if not manual_window:
-        if longest_genome < 1_000_000:
-            window = cfg.objects.sliding_window.default[0]
-        elif longest_genome < 10_000_000:
-            window = cfg.objects.sliding_window.up1m[0]
-        else:
-            window = cfg.objects.sliding_window.up10m[0]
-    else:
-        window = manual_window
-    if not manual_step:
-        if longest_genome < 1_000_000:
-            step = cfg.objects.sliding_window.default[1]
-        elif longest_genome < 10_000_000:
-            step = cfg.objects.sliding_window.up1m[1]
-        else:
-            step = cfg.objects.sliding_window.up10m[1]
-    else:
-        step = manual_step
+    window, step = calculate_window_step(longest_genome, cfg, manual_window, manual_step)
     num_of_entries: int = len(sequence_length_dict)
 
     canvas = assemble_linear_diagram_from_records(

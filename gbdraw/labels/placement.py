@@ -7,13 +7,13 @@ Primary label placement utilities (compatibility façade).
 Historically this module contained both circular and linear label placement logic.
 To improve cohesion, implementations were moved into:
 
-- `gbdraw.labels.placement_circular`
-- `gbdraw.labels.placement_linear`
+- `gbdraw.labels.circular`
+- `gbdraw.labels.linear`
 
 The public API remains available from this module via re-exports.
 """
 
-from .placement_circular import (  # type: ignore[reportMissingImports]
+from .circular import (  # type: ignore[reportMissingImports]
     calculate_angle_degrees,
     calculate_angle_for_y,
     calculate_coordinates,
@@ -26,7 +26,7 @@ from .placement_circular import (  # type: ignore[reportMissingImports]
     x_overlap,
     y_overlap,
 )
-from .placement_linear import (  # type: ignore[reportMissingImports]
+from .linear import (  # type: ignore[reportMissingImports]
     check_label_overlap,
     find_lowest_available_track,
     prepare_label_list_linear,

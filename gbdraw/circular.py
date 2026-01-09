@@ -17,20 +17,18 @@ from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .core.sequence import determine_output_file_prefix  # type: ignore[reportMissingImports]
 from .labels.filtering import read_qualifier_priority_file, read_filter_list_file  # type: ignore[reportMissingImports]
 
-try:
-    import cairosvg  # type: ignore[reportMissingImports]
-    CAIROSVG_AVAILABLE = True
-except (ImportError, OSError):
-    CAIROSVG_AVAILABLE = False
+from .cli_utils.common import (
+    CAIROSVG_AVAILABLE,
+    setup_logging,
+    validate_input_args,
+    validate_label_args,
+    handle_output_formats,
+    calculate_window_step,
+)
 
-# Setup for the logging system and sets the logging level to INFO
+# Setup for the logging system
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-# Ensure handler is added if not already present
-if not logger.handlers:
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter('%(message)s'))
-    logger.addHandler(handler)
+setup_logging()
 
 
 def _get_args(args) -> argparse.Namespace:
@@ -251,21 +249,8 @@ def _get_args(args) -> argparse.Namespace:
         type=float)
     
     args = parser.parse_args(args)
-    if args.gbk and (args.gff or args.fasta):
-        parser.error("Error: --gbk cannot be used with --gff or --fasta.")
-    
-    # Check if both --gff and --fasta are provided together
-    if args.gff and not args.fasta:
-        parser.error("Error: --gff requires --fasta.")
-    
-    if args.fasta and not args.gff:
-        parser.error("Error: --fasta requires --gff.")
-        
-    # Ensure that either --gbk or both --gff and --fasta are provided
-    if not args.gbk and not (args.gff and args.fasta):
-        parser.error("Error: Either --gbk or both --gff and --fasta must be provided.")
-    if args.label_whitelist and args.label_blacklist:
-        parser.error("Error: --label_whitelist and --label_blacklist are mutually exclusive.")
+    validate_input_args(parser, args)
+    validate_label_args(parser, args)
     return args
 
 
@@ -401,21 +386,7 @@ def circular_main(cmd_args) -> None:
     )    
 
     out_formats: list[str] = parse_formats(args.format)
-    # Handle WebAssembly environment and CairoSVG availability
-    if "pyodide" in sys.modules:
-        if any(f != 'svg' for f in out_formats):
-            logger.info("Running in WebAssembly mode: Output format constrained to SVG. (Image conversion is handled by the browser)")
-            out_formats = ['svg']
-    # Handle absence of CairoSVG
-    elif not CAIROSVG_AVAILABLE:
-        non_svg_formats = [f for f in out_formats if f != 'svg']
-        if non_svg_formats:
-            logger.warning(
-                f"⚠️  CairoSVG is not installed. Cannot generate: {', '.join(non_svg_formats).upper()}\n"
-                f"   Output restricted to SVG only.\n"
-                f"   (To enable PNG/PDF, run: pip install gbdraw[export])"
-            )
-            out_formats = ['svg']
+    out_formats = handle_output_formats(out_formats)
     record_count: int = 0
 
 
@@ -423,27 +394,10 @@ def circular_main(cmd_args) -> None:
     cfg = GbdrawConfig.from_dict(config_dict)
 
     for gb_record in gb_records:
-        record_count += 1 
+        record_count += 1
         accession = gb_record.id
         seq_length = len(gb_record.seq)
-        if not manual_window:
-            if seq_length < 1_000_000:
-                window = cfg.objects.sliding_window.default[0]
-            elif seq_length < 10_000_000:
-                window = cfg.objects.sliding_window.up1m[0]
-            else:
-                window = cfg.objects.sliding_window.up10m[0]
-        else:
-            window = manual_window
-        if not manual_step:
-            if seq_length < 1_000_000:
-                step = cfg.objects.sliding_window.default[1]
-            elif seq_length < 10_000_000:
-                step = cfg.objects.sliding_window.up1m[1]
-            else:
-                step = cfg.objects.sliding_window.up10m[1]
-        else:
-            step = manual_step
+        window, step = calculate_window_step(seq_length, cfg, manual_window, manual_step)
 
         outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
         canvas = assemble_circular_diagram_from_record(

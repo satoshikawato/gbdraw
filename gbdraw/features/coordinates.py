@@ -6,7 +6,7 @@ from typing import List, Tuple
 
 from Bio.SeqFeature import SimpleLocation
 
-from ..feature_objects import FeatureLocation, FeatureLocationPart, Strand
+from .objects import FeatureLocation, FeatureLocationPart, Strand
 
 
 logger = logging.getLogger(__name__)
