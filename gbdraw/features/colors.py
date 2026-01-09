@@ -36,10 +36,15 @@ def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -
 def get_color(feature: SeqFeature, color_map: dict, default_color_map: dict) -> str:
     """
     Determines the color for a given feature based on its type and qualifiers.
+
+    Supports special 'location' pseudo-qualifier for position-based matching.
+    This allows targeting individual features without locus_tag by their
+    genomic position (e.g., "1000..2000" format).
     """
     # Check for specific rules first
     rules_for_feature_type = color_map.get(feature.type)
     if rules_for_feature_type:
+        # First, check regular qualifiers
         for qualifier_key, qualifier_values in feature.qualifiers.items():
             if qualifier_key in rules_for_feature_type:
                 # Check each pattern for this qualifier
@@ -47,6 +52,15 @@ def get_color(feature: SeqFeature, color_map: dict, default_color_map: dict) -> 
                     for value in qualifier_values:
                         if pattern.search(value):
                             return color
+
+        # Check 'location' pseudo-qualifier for position-based matching
+        # This allows targeting features without locus_tag (misc_feature, repeat_region, etc.)
+        if 'location' in rules_for_feature_type:
+            # Create location string in GenBank format: "start..end"
+            location_str = f"{int(feature.location.start)}..{int(feature.location.end)}"
+            for pattern, color in rules_for_feature_type['location']:
+                if pattern.search(location_str):
+                    return color
 
     # Fallback to default color if no specific rule matched
     return default_color_map.get(feature.type, "#d3d3d3")  # Fallback color

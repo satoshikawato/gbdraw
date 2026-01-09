@@ -596,15 +596,60 @@
                     </div>
 
                     <div class="absolute inset-0 overflow-auto flex p-8 custom-scrollbar">
-                        <div v-if="svgContent" v-html="svgContent" 
-                            :style="{transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.2s'}" 
+                        <div v-if="svgContent" v-html="svgContent"
+                            :style="{transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.2s'}"
                             class="shadow-xl bg-white m-auto origin-top">
                         </div>
                     </div>
-                    
+
+                </div>
+
+                <!-- Feature Color Editor Panel -->
+                <div v-if="extractedFeatures.length > 0" class="border-t border-slate-200 bg-slate-50/50 shrink-0">
+                    <div class="px-4 py-2 cursor-pointer hover:bg-slate-100 flex items-center gap-2 text-sm font-bold text-slate-600"
+                         @click="showFeaturePanel = !showFeaturePanel">
+                        <i class="ph ph-paint-brush"></i>
+                        <span>Feature Colors</span>
+                        <span class="text-xs font-normal text-slate-400">({{ extractedFeatures.length }} features)</span>
+                        <i :class="showFeaturePanel ? 'ph-caret-up' : 'ph-caret-down'" class="ph ml-auto"></i>
+                    </div>
+
+                    <div v-if="showFeaturePanel" class="px-4 pb-4">
+                        <!-- Search -->
+                        <input v-model="featureSearch" placeholder="Search by product, gene, locus_tag..."
+                               class="form-input mb-2 text-xs">
+
+                        <!-- Feature List -->
+                        <div class="max-h-64 overflow-y-auto border rounded bg-white">
+                            <div v-for="(feat, idx) in filteredFeatures" :key="idx"
+                                 class="flex items-center gap-2 px-2 py-1.5 border-b border-slate-100 text-xs hover:bg-slate-50 last:border-b-0">
+                                <span class="w-10 font-mono text-slate-400 shrink-0 text-[10px]">{{ feat.type }}</span>
+                                <span class="w-20 font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="`${feat.start}..${feat.end}`">
+                                    {{ feat.start }}..{{ feat.end }}
+                                </span>
+                                <span class="flex-grow truncate text-slate-700"
+                                      :title="feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)'">
+                                    {{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}
+                                </span>
+                                <input type="color"
+                                       :value="getFeatureColor(feat)"
+                                       @change="setFeatureColor(feat, $event.target.value)"
+                                       class="w-7 h-5 cursor-pointer border rounded shrink-0">
+                            </div>
+                            <div v-if="filteredFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">
+                                No features found
+                            </div>
+                        </div>
+                        <p v-if="Object.keys(featureColorOverrides).length === 0" class="text-[10px] text-slate-400 mt-2">
+                            <i class="ph ph-info"></i> Change colors and click "Generate" to update.
+                        </p>
+                        <p v-else class="text-[10px] text-amber-600 mt-2 font-medium">
+                            <i class="ph ph-warning"></i> {{ Object.keys(featureColorOverrides).length }} color change(s) pending. Click "Generate" to apply.
+                        </p>
+                    </div>
                 </div>
             </div>
-            
+
             <div v-else class="h-full flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50/30">
                 <i class="ph ph-dna text-6xl mb-4 text-slate-200"></i>
                 <p class="font-medium text-slate-400">Configure settings and click Generate</p>
@@ -647,7 +692,7 @@
 
 <script>
     const { createApp, ref, reactive, onMounted, computed, watch } = Vue;
-    const GBDRAW_WHEEL_NAME = "gbdraw.whl"; 
+    const GBDRAW_WHEEL_NAME = "gbdraw-0.8.0-py3-none-any.whl"; 
 
     // HelpTip & FileUploader Components
     const HelpTip = {
@@ -840,6 +885,12 @@
             const newSpecRule = reactive({ feat: "CDS", qual: "product", val: "", color: "#ff0000", cap: "" });
             const downloadDpi = ref(300);
 
+            // Feature Color Editor state
+            const extractedFeatures = ref([]);  // Features from last generation
+            const showFeaturePanel = ref(false);
+            const featureSearch = ref('');
+            const featureColorOverrides = reactive({});  // {featureKey: color}
+
             const featureKeys = [
                 "assembly_gap", "C_region", "CDS", "centromere", "D-loop", "D_segment",
                 "exon", "gap", "gene", "intron", "J_segment", "mat_peptide", "misc_binding",
@@ -909,6 +960,80 @@
             };
             const newFeatureToAdd = ref("mobile_element");
             const addFeature = () => { if(newFeatureToAdd.value && !adv.features.includes(newFeatureToAdd.value)){ adv.features.push(newFeatureToAdd.value); } };
+
+            // Feature Color Editor functions
+            const filteredFeatures = computed(() => {
+                // First filter by feature type (only show features that are actually drawn)
+                let features = extractedFeatures.value.filter(f =>
+                    adv.features.includes(f.type)
+                );
+
+                // Then apply search filter
+                if (featureSearch.value) {
+                    const q = featureSearch.value.toLowerCase();
+                    features = features.filter(f =>
+                        (f.product || '').toLowerCase().includes(q) ||
+                        (f.gene || '').toLowerCase().includes(q) ||
+                        (f.locus_tag || '').toLowerCase().includes(q) ||
+                        (f.note || '').toLowerCase().includes(q) ||
+                        f.type.toLowerCase().includes(q)
+                    );
+                }
+                return features;
+            });
+
+            const getFeatureColor = (feat) => {
+                // Use same key format as setFeatureColor
+                const key = feat.locus_tag || `${feat.type}:${feat.start}..${feat.end}`;
+                // If user has set a color override, use that
+                if (featureColorOverrides[key]) {
+                    return featureColorOverrides[key];
+                }
+                // Otherwise use the default color for this feature type from the palette
+                return currentColors.value[feat.type] || '#cccccc';
+            };
+
+            const setFeatureColor = (feat, color) => {
+                // Priority for identifying features:
+                // 1. locus_tag (unique per feature)
+                // 2. location (always unique - "start..end" format)
+                let qual, val;
+
+                if (feat.locus_tag) {
+                    qual = 'locus_tag';
+                    val = feat.locus_tag;
+                } else {
+                    // Use location for features without locus_tag
+                    qual = 'location';
+                    // Escape dots for regex: 1000..2000 -> 1000\.\.2000
+                    val = `${feat.start}\\.\\.\\.${feat.end}`;
+                }
+
+                // Unique key for tracking in UI
+                const featureKey = feat.locus_tag || `${feat.type}:${feat.start}..${feat.end}`;
+
+                // Check if rule already exists for this exact feature
+                const existingIdx = manualSpecificRules.findIndex(r =>
+                    r.feat === feat.type && r.qual === qual && r.val === val
+                );
+
+                if (existingIdx >= 0) {
+                    // Update existing rule
+                    manualSpecificRules[existingIdx].color = color;
+                } else {
+                    // Add new rule
+                    manualSpecificRules.push({
+                        feat: feat.type,
+                        qual: qual,
+                        val: val,
+                        color: color,
+                        cap: feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`
+                    });
+                }
+
+                // Track override for UI display
+                featureColorOverrides[featureKey] = color;
+            };
 
             watch(() => files.d_color, async (newFile) => {
                 if (!newFile) return;
@@ -1073,20 +1198,20 @@
                             except: return "{}"
 
                         def run_gbdraw_wrapper(mode, args):
-                        
+
                             for f in glob.glob("*.svg"):
                                 try: os.remove(f)
                                 except: pass
-                            
+
                             full_args = args + ["-f", "svg"]
                             try:
                                 if mode == 'circular': circular_main(full_args)
                                 else: linear_main(full_args)
                             except SystemExit as e:
                                 if e.code != 0: return json.dumps({"error": f"SystemExit: {e}"})
-                            except Exception: 
+                            except Exception:
                                 return json.dumps({"error": traceback.format_exc()})
-                            
+
                             files = glob.glob("*.svg")
                             if not files: return json.dumps({"error": "No output files generated."})
                             results = []
@@ -1094,6 +1219,30 @@
                                 with open(fname, "r") as f:
                                     results.append({"name": fname, "content": f.read()})
                             return json.dumps(results)
+
+                        def extract_features_from_genbank(gb_path):
+                            """Extract feature info from GenBank file for UI display"""
+                            from Bio import SeqIO
+                            features = []
+                            try:
+                                for record in SeqIO.parse(gb_path, "genbank"):
+                                    for feat in record.features:
+                                        if feat.type in ['CDS', 'tRNA', 'rRNA', 'ncRNA', 'misc_RNA', 'tmRNA',
+                                                         'repeat_region', 'misc_feature', 'mobile_element',
+                                                         'regulatory', 'gene', 'mRNA', 'exon', 'intron']:
+                                            features.append({
+                                                "type": feat.type,
+                                                "start": int(feat.location.start),
+                                                "end": int(feat.location.end),
+                                                "strand": "+" if feat.location.strand == 1 else "-",
+                                                "locus_tag": feat.qualifiers.get("locus_tag", [""])[0],
+                                                "gene": feat.qualifiers.get("gene", [""])[0],
+                                                "product": feat.qualifiers.get("product", [""])[0],
+                                                "note": feat.qualifiers.get("note", [""])[0][:50] if feat.qualifiers.get("note") else "",
+                                            })
+                            except Exception as e:
+                                return json.dumps({"error": str(e)})
+                            return json.dumps(features)
                     `);
                     const paletteJson = pyodide.runPython("get_palettes_json()");
                     const allPalettes = JSON.parse(paletteJson);
@@ -1270,6 +1419,35 @@
                     const res = JSON.parse(jsonResult);
                     if(res.error) throw new Error(res.error);
                     results.value = res;
+
+                    // Extract features for color editor (only for GenBank input)
+                    extractedFeatures.value = [];
+                    featureColorOverrides.length = 0;  // Clear previous overrides
+                    Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
+
+                    if (mode.value === 'circular' && cInputType.value === 'gb') {
+                        try {
+                            const featJson = pyodide.globals.get("extract_features_from_genbank")("/input.gb");
+                            const featData = JSON.parse(featJson);
+                            if (!featData.error) {
+                                extractedFeatures.value = featData;
+                                console.log(`Extracted ${featData.length} features for color editor.`);
+                            }
+                        } catch (e) {
+                            console.log("Could not extract features:", e);
+                        }
+                    } else if (mode.value === 'linear' && lInputType.value === 'gb' && linearSeqs.length > 0) {
+                        try {
+                            const featJson = pyodide.globals.get("extract_features_from_genbank")("/seq_0.gb");
+                            const featData = JSON.parse(featJson);
+                            if (!featData.error) {
+                                extractedFeatures.value = featData;
+                                console.log(`Extracted ${featData.length} features for color editor.`);
+                            }
+                        } catch (e) {
+                            console.log("Could not extract features:", e);
+                        }
+                    }
 
                 } catch (e) {
                     errorLog.value = e.message;
@@ -1469,10 +1647,13 @@
 
             return {
                 pyodideReady, processing, loadingStatus, errorLog, results, selectedResultIndex, svgContent, zoom,
-                mode, cInputType, lInputType, files, linearSeqs, form, adv, 
+                mode, cInputType, lInputType, files, linearSeqs, form, adv,
                 paletteNames, selectedPalette, currentColors, updatePalette, resetColors,
-                filterMode, manualBlacklist, manualWhitelist, featureKeys, newColorFeat, newColorVal, addCustomColor, 
+                filterMode, manualBlacklist, manualWhitelist, featureKeys, newColorFeat, newColorVal, addCustomColor,
                 newFeatureToAdd, addFeature, manualSpecificRules, newSpecRule, addSpecificRule,
+                // Feature Color Editor
+                extractedFeatures, showFeaturePanel, featureSearch, filteredFeatures,
+                featureColorOverrides, getFeatureColor, setFeatureColor,
                 downloadDpi, runAnalysis, downloadSVG, downloadPNG, downloadPDF,
                 exportConfig, importConfig, manualPriorityRules, newPriorityRule, addPriorityRule
             };
