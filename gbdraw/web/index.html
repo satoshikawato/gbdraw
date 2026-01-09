@@ -632,6 +632,72 @@
 
                 </div>
 
+                <!-- Legend Editor Toggle Button -->
+                <button v-if="svgContent"
+                        @click="showLegendPanel = !showLegendPanel"
+                        class="absolute right-0 top-1/3 -translate-y-1/2 bg-purple-600 hover:bg-purple-700 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
+                        :class="{ 'translate-x-0': !showLegendPanel, '-translate-x-72': showLegendPanel }"
+                        :title="showLegendPanel ? 'Close legend editor' : 'Edit legend'">
+                    <i class="ph ph-list-bullets text-lg"></i>
+                </button>
+
+                <!-- Legend Editor Panel -->
+                <div v-if="svgContent"
+                     class="absolute right-0 top-0 bottom-0 w-72 bg-white border-l border-slate-200 shadow-xl z-10 transition-transform duration-300 flex flex-col"
+                     :class="showLegendPanel ? 'translate-x-0' : 'translate-x-full'">
+                    <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-purple-50">
+                        <div class="flex items-center gap-2">
+                            <i class="ph ph-list-bullets text-purple-600"></i>
+                            <span class="font-bold text-slate-700">Legend Editor</span>
+                        </div>
+                        <button @click="showLegendPanel = false" class="text-slate-400 hover:text-slate-600">
+                            <i class="ph ph-x text-lg"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto p-3 space-y-2">
+                        <div v-for="(entry, idx) in legendEntries" :key="idx"
+                             class="flex items-center gap-1 p-2 bg-slate-50 rounded border border-slate-100">
+                            <!-- Up/Down buttons -->
+                            <div class="flex flex-col shrink-0">
+                                <button @click="moveLegendEntryUp(idx)"
+                                        :disabled="idx === 0"
+                                        class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none"
+                                        title="Move up">
+                                    <i class="ph ph-caret-up text-xs"></i>
+                                </button>
+                                <button @click="moveLegendEntryDown(idx)"
+                                        :disabled="idx === legendEntries.length - 1"
+                                        class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none"
+                                        title="Move down">
+                                    <i class="ph ph-caret-down text-xs"></i>
+                                </button>
+                            </div>
+                            <!-- Color display (read-only) -->
+                            <div class="w-6 h-6 rounded border border-slate-300 shrink-0"
+                                 :style="{ backgroundColor: entry.color }"
+                                 :title="entry.color"></div>
+                            <input type="text"
+                                   :value="entry.caption"
+                                   @change="updateLegendEntryCaption(idx, $event.target.value)"
+                                   class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0">
+                            <button @click="deleteLegendEntry(idx)"
+                                    class="text-red-400 hover:text-red-600 shrink-0"
+                                    title="Remove entry">
+                                <i class="ph ph-trash text-sm"></i>
+                            </button>
+                        </div>
+                        <div v-if="legendEntries.length === 0" class="text-center text-slate-400 text-sm py-4">
+                            No legend entries found
+                        </div>
+                    </div>
+
+                    <!-- Info message -->
+                    <div class="p-3 border-t border-slate-200 bg-slate-50 text-xs text-slate-500">
+                        <i class="ph ph-info"></i> Colors are managed via Feature Colors panel
+                    </div>
+                </div>
+
                 <!-- Feature Color Editor Toggle Button (floating) -->
                 <button v-if="extractedFeatures.length > 0"
                         @click="showFeaturePanel = !showFeaturePanel"
@@ -955,6 +1021,12 @@
             const svgContainer = ref(null);
             const clickedFeature = ref(null);  // {id, svg_id, label, color, feat}
             const clickedFeaturePos = reactive({ x: 0, y: 0 });
+
+            // Legend Editor state
+            const showLegendPanel = ref(false);
+            const legendEntries = ref([]);  // [{caption, color, yPos}]
+            const newLegendCaption = ref('');
+            const newLegendColor = ref('#808080');
 
             const featureKeys = [
                 "assembly_gap", "C_region", "CDS", "centromere", "D-loop", "D_segment",
@@ -1503,9 +1575,34 @@
                 }
             };
 
-            // Watch for specific rules changes
-            watch(() => [...manualSpecificRules], () => {
+            // Track legend entries added by specific rules
+            const addedLegendCaptions = ref(new Set());
+
+            // Watch for specific rules changes and manage legend entries
+            watch(() => [...manualSpecificRules], async (newRules, oldRules) => {
                 applySpecificRulesToSvg();
+
+                // Get captions from current rules
+                const currentCaptions = new Set(newRules.filter(r => r.cap).map(r => r.cap));
+
+                // Find removed captions (were in addedLegendCaptions but not in current rules)
+                const removedCaptions = [...addedLegendCaptions.value].filter(cap => !currentCaptions.has(cap));
+
+                // Remove legend entries for removed captions
+                for (const cap of removedCaptions) {
+                    removeLegendEntry(cap);
+                    addedLegendCaptions.value.delete(cap);
+                }
+
+                // Find new captions that need legend entries
+                for (const rule of newRules) {
+                    if (rule.cap && !addedLegendCaptions.value.has(rule.cap)) {
+                        const added = await addLegendEntry(rule.cap, rule.color);
+                        if (added) {
+                            addedLegendCaptions.value.add(rule.cap);
+                        }
+                    }
+                }
             }, { deep: true });
 
             // Function to apply style changes (stroke colors/widths) to SVG immediately
@@ -1621,6 +1718,500 @@
                 adv.scale_stroke_color, adv.scale_stroke_width
             ], () => {
                 applyStylesToSvg();
+            });
+
+            // Function to toggle track visibility
+            const applyTrackVisibility = () => {
+                if (!svgContent.value) return;
+                if (!svgContainer.value) return;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                let updated = false;
+
+                // GC content track
+                const gcContentGroup = svg.getElementById('gc_content');
+                if (gcContentGroup) {
+                    const shouldHide = mode.value === 'circular' ? form.suppress_gc : !form.show_gc;
+                    const currentDisplay = gcContentGroup.getAttribute('display');
+                    if (shouldHide && currentDisplay !== 'none') {
+                        gcContentGroup.setAttribute('display', 'none');
+                        updated = true;
+                    } else if (!shouldHide && currentDisplay === 'none') {
+                        gcContentGroup.removeAttribute('display');
+                        updated = true;
+                    }
+                }
+
+                // GC skew track (circular: #skew, linear: #gc_skew)
+                const skewGroup = svg.getElementById('skew') || svg.getElementById('gc_skew');
+                if (skewGroup) {
+                    const shouldHide = mode.value === 'circular' ? form.suppress_skew : !form.show_skew;
+                    const currentDisplay = skewGroup.getAttribute('display');
+                    if (shouldHide && currentDisplay !== 'none') {
+                        skewGroup.setAttribute('display', 'none');
+                        updated = true;
+                    } else if (!shouldHide && currentDisplay === 'none') {
+                        skewGroup.removeAttribute('display');
+                        updated = true;
+                    }
+                }
+
+                if (updated) {
+                    const idx = selectedResultIndex.value;
+                    if (idx >= 0 && results.value.length > idx) {
+                        const serializer = new XMLSerializer();
+                        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                    }
+                    console.log('Track visibility updated');
+                }
+            };
+
+            // Watch for track visibility changes
+            watch(() => [form.suppress_gc, form.suppress_skew, form.show_gc, form.show_skew], () => {
+                applyTrackVisibility();
+            });
+
+            // Function to add a legend entry dynamically using Pyodide
+            const addLegendEntry = async (caption, color) => {
+                if (!svgContainer.value || !pyodideReady.value) return false;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return false;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) {
+                    console.log('No legend group found');
+                    return false;
+                }
+
+                // Determine target group: feature_legend (linear) or legend (circular)
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                // Check if this caption already exists in the legend
+                const existingTexts = targetGroup.querySelectorAll('text');
+                for (const t of existingTexts) {
+                    if (t.textContent?.trim() === caption.trim()) {
+                        // Update existing entry color instead
+                        const transform = t.getAttribute('transform');
+                        if (transform) {
+                            const match = transform.match(/translate\([^,]+,\s*([\d.]+)\)/);
+                            if (match) {
+                                const y = match[1];
+                                // Find the color rect at the same Y
+                                const rects = targetGroup.querySelectorAll('path');
+                                rects.forEach(r => {
+                                    const rt = r.getAttribute('transform');
+                                    if (rt && rt.includes(`, ${y})`)) {
+                                        r.setAttribute('fill', color);
+                                    }
+                                });
+                            }
+                        }
+                        return true;
+                    }
+                }
+
+                // Detect rect_size from existing legend entries
+                let rectSize = 14;  // Default
+                const firstColorRect = targetGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
+                if (firstColorRect) {
+                    const d = firstColorRect.getAttribute('d');
+                    if (d) {
+                        // Parse path to extract rect size: M 0,-7 L 14,-7 L 14,7 L 0,7 z
+                        const lMatch = d.match(/L\s+([\d.]+),/);
+                        if (lMatch) {
+                            rectSize = parseFloat(lMatch[1]);
+                        }
+                    }
+                }
+
+                // Detect font settings from existing text elements
+                let fontSize = 14;
+                let fontFamily = 'Arial';
+                const firstText = targetGroup.querySelector('text');
+                if (firstText) {
+                    const fs = firstText.getAttribute('font-size');
+                    if (fs) fontSize = parseFloat(fs);
+                    const ff = firstText.getAttribute('font-family');
+                    if (ff) fontFamily = ff;
+                }
+
+                const lineMargin = (24 / 14) * rectSize;
+                const xMargin = (22 / 14) * rectSize;
+
+                // Find max Y position in feature legend entries only (not background rect)
+                let maxY = -lineMargin;  // Start at -lineMargin so first entry is at y=0
+                const textElements = targetGroup.querySelectorAll('text');
+                textElements.forEach(el => {
+                    const transform = el.getAttribute('transform');
+                    if (transform) {
+                        const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                        if (match) {
+                            const y = parseFloat(match[1]);
+                            if (y > maxY) maxY = y;
+                        }
+                    }
+                });
+
+                // If no text elements found, check for paths with solid fills (entry rects)
+                if (textElements.length === 0) {
+                    const colorRects = targetGroup.querySelectorAll('path');
+                    colorRects.forEach(el => {
+                        const fill = el.getAttribute('fill');
+                        if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                            const transform = el.getAttribute('transform');
+                            if (transform) {
+                                const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                                if (match) {
+                                    const y = parseFloat(match[1]);
+                                    if (y > maxY) maxY = y;
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Calculate new Y position
+                const newY = maxY + lineMargin;
+
+                try {
+                    // Call Python to generate legend entry SVG with correct sizing and font settings
+                    const escapedCaption = caption.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                    const escapedFontFamily = fontFamily.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                    const resultJson = pyodide.runPython(`generate_legend_entry_svg("${escapedCaption}", "${color}", ${newY}, ${rectSize}, ${fontSize}, "${escapedFontFamily}")`);
+                    const result = JSON.parse(resultJson);
+
+                    // Parse and insert the SVG elements
+                    const parser = new DOMParser();
+
+                    // Insert rect
+                    const rectDoc = parser.parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${result.rect}</svg>`, 'image/svg+xml');
+                    const rectEl = rectDoc.querySelector('path');
+                    if (rectEl) {
+                        targetGroup.appendChild(document.importNode(rectEl, true));
+                    }
+
+                    // Insert text
+                    const textDoc = parser.parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${result.text}</svg>`, 'image/svg+xml');
+                    const textEl = textDoc.querySelector('text');
+                    if (textEl) {
+                        targetGroup.appendChild(document.importNode(textEl, true));
+                    }
+
+                    // Update results for reactivity
+                    const idx = selectedResultIndex.value;
+                    if (idx >= 0 && results.value.length > idx) {
+                        const serializer = new XMLSerializer();
+                        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                    }
+
+                    console.log(`Added legend entry: "${caption}" at y=${newY} in ${featureLegendGroup ? 'feature_legend' : 'legend'}`);
+                    return true;
+                } catch (e) {
+                    console.error('Failed to add legend entry:', e);
+                    return false;
+                }
+            };
+
+            // Function to remove a legend entry by caption
+            const removeLegendEntry = (caption) => {
+                if (!svgContainer.value) return false;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return false;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return false;
+
+                // Determine target group: feature_legend (linear) or legend (circular)
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                // Find text element with this caption
+                const texts = targetGroup.querySelectorAll('text');
+                let removed = false;
+
+                texts.forEach(t => {
+                    if (t.textContent?.trim() === caption.trim()) {
+                        const transform = t.getAttribute('transform');
+                        if (transform) {
+                            const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                            if (match) {
+                                const y = match[1];
+                                // Find and remove the color rect at the same Y
+                                const rects = targetGroup.querySelectorAll('path');
+                                rects.forEach(r => {
+                                    const rt = r.getAttribute('transform');
+                                    if (rt && rt.includes(`, ${y})`)) {
+                                        r.remove();
+                                    }
+                                });
+                            }
+                        }
+                        t.remove();
+                        removed = true;
+                    }
+                });
+
+                if (removed) {
+                    const idx = selectedResultIndex.value;
+                    if (idx >= 0 && results.value.length > idx) {
+                        const serializer = new XMLSerializer();
+                        results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                    }
+                    console.log(`Removed legend entry: "${caption}"`);
+                }
+
+                return removed;
+            };
+
+            // Extract legend entries from current SVG for the Legend Editor panel
+            const extractLegendEntries = () => {
+                if (!svgContainer.value) {
+                    legendEntries.value = [];
+                    return;
+                }
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) {
+                    legendEntries.value = [];
+                    return;
+                }
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) {
+                    legendEntries.value = [];
+                    return;
+                }
+
+                // Determine target group: feature_legend (linear) or legend (circular)
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                const entries = [];
+
+                // Find all text elements in legend (these are the captions)
+                const textElements = targetGroup.querySelectorAll('text');
+                textElements.forEach(textEl => {
+                    const caption = textEl.textContent?.trim();
+                    if (!caption) return;
+
+                    const transform = textEl.getAttribute('transform');
+                    let yPos = 0;
+                    if (transform) {
+                        const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                        if (match) yPos = parseFloat(match[1]);
+                    }
+
+                    // Find the color rect at the same Y position
+                    let color = '#cccccc';
+                    const paths = targetGroup.querySelectorAll('path');
+                    paths.forEach(p => {
+                        const pt = p.getAttribute('transform');
+                        if (pt) {
+                            const pMatch = pt.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                            if (pMatch && Math.abs(parseFloat(pMatch[1]) - yPos) < 1) {
+                                const fill = p.getAttribute('fill');
+                                if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                    color = fill;
+                                }
+                            }
+                        }
+                    });
+
+                    entries.push({ caption, color, yPos });
+                });
+
+                // Sort by Y position
+                entries.sort((a, b) => a.yPos - b.yPos);
+                legendEntries.value = entries;
+            };
+
+            // Update legend entry color
+            const updateLegendEntryColor = (idx, newColor) => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const entry = legendEntries.value[idx];
+                if (!entry) return;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return;
+
+                // Determine target group: feature_legend (linear) or legend (circular)
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                // Find and update the color rect at this Y position
+                const paths = targetGroup.querySelectorAll('path');
+                paths.forEach(p => {
+                    const pt = p.getAttribute('transform');
+                    if (pt) {
+                        const pMatch = pt.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                        if (pMatch && Math.abs(parseFloat(pMatch[1]) - entry.yPos) < 1) {
+                            const fill = p.getAttribute('fill');
+                            if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                p.setAttribute('fill', newColor);
+                            }
+                        }
+                    }
+                });
+
+                // Update local state
+                legendEntries.value[idx].color = newColor;
+
+                // Save to results
+                const resultIdx = selectedResultIndex.value;
+                if (resultIdx >= 0 && results.value.length > resultIdx) {
+                    const serializer = new XMLSerializer();
+                    results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                }
+            };
+
+            // Update legend entry caption
+            const updateLegendEntryCaption = (idx, newCaption) => {
+                if (!svgContainer.value || !newCaption.trim()) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const entry = legendEntries.value[idx];
+                if (!entry) return;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return;
+
+                // Determine target group: feature_legend (linear) or legend (circular)
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                // Find and update the text element at this Y position
+                const texts = targetGroup.querySelectorAll('text');
+                texts.forEach(t => {
+                    const tt = t.getAttribute('transform');
+                    if (tt) {
+                        const tMatch = tt.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                        if (tMatch && Math.abs(parseFloat(tMatch[1]) - entry.yPos) < 1) {
+                            t.textContent = newCaption;
+                        }
+                    }
+                });
+
+                // Update local state
+                legendEntries.value[idx].caption = newCaption;
+
+                // Save to results
+                const resultIdx = selectedResultIndex.value;
+                if (resultIdx >= 0 && results.value.length > resultIdx) {
+                    const serializer = new XMLSerializer();
+                    results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                }
+            };
+
+            // Delete legend entry by index
+            const deleteLegendEntry = (idx) => {
+                const entry = legendEntries.value[idx];
+                if (!entry) return;
+
+                removeLegendEntry(entry.caption);
+                extractLegendEntries();  // Refresh the list
+            };
+
+            // Move legend entry up (swap with previous)
+            const moveLegendEntryUp = (idx) => {
+                if (idx <= 0) return;
+                swapLegendEntries(idx, idx - 1);
+            };
+
+            // Move legend entry down (swap with next)
+            const moveLegendEntryDown = (idx) => {
+                if (idx >= legendEntries.value.length - 1) return;
+                swapLegendEntries(idx, idx + 1);
+            };
+
+            // Swap two legend entries by exchanging their Y positions in the SVG
+            const swapLegendEntries = (idx1, idx2) => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return;
+
+                // Determine target group: feature_legend (linear) or legend (circular)
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                const targetGroup = featureLegendGroup || legendGroup;
+
+                const entry1 = legendEntries.value[idx1];
+                const entry2 = legendEntries.value[idx2];
+                if (!entry1 || !entry2) return;
+
+                const y1 = entry1.yPos;
+                const y2 = entry2.yPos;
+
+                // Find and update elements at y1 position
+                const allElements = targetGroup.querySelectorAll('path, text');
+                allElements.forEach(el => {
+                    const transform = el.getAttribute('transform');
+                    if (!transform) return;
+
+                    const match = transform.match(/translate\(([^,]+),\s*([\d.-]+)\)/);
+                    if (!match) return;
+
+                    const x = match[1];
+                    const y = parseFloat(match[2]);
+
+                    // Check if this element belongs to entry1 or entry2
+                    if (Math.abs(y - y1) < 1) {
+                        // This element belongs to entry1, move to y2
+                        el.setAttribute('transform', `translate(${x}, ${y2})`);
+                    } else if (Math.abs(y - y2) < 1) {
+                        // This element belongs to entry2, move to y1
+                        el.setAttribute('transform', `translate(${x}, ${y1})`);
+                    }
+                });
+
+                // Update local state (swap yPos values)
+                legendEntries.value[idx1].yPos = y2;
+                legendEntries.value[idx2].yPos = y1;
+
+                // Swap entries in array to reflect visual order
+                const temp = { ...legendEntries.value[idx1] };
+                legendEntries.value[idx1] = { ...legendEntries.value[idx2], yPos: y1 };
+                legendEntries.value[idx2] = { ...temp, yPos: y2 };
+
+                // Save to results
+                const resultIdx = selectedResultIndex.value;
+                if (resultIdx >= 0 && results.value.length > resultIdx) {
+                    const serializer = new XMLSerializer();
+                    results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                }
+
+                // Re-extract to ensure correct ordering
+                extractLegendEntries();
+            };
+
+            // Add new legend entry from the UI
+            const addNewLegendEntry = async () => {
+                if (!newLegendCaption.value.trim()) return;
+
+                const added = await addLegendEntry(newLegendCaption.value.trim(), newLegendColor.value);
+                if (added) {
+                    newLegendCaption.value = '';
+                    newLegendColor.value = '#808080';
+                    // Refresh after a short delay to allow DOM update
+                    setTimeout(() => extractLegendEntries(), 100);
+                }
+            };
+
+            // Watch for SVG changes to refresh legend entries
+            watch(svgContent, () => {
+                Vue.nextTick(() => {
+                    extractLegendEntries();
+                });
             });
 
             // Close popup when clicking outside
@@ -1870,6 +2461,23 @@
                                     results.append({"name": fname, "content": f.read()})
                             return json.dumps(results)
 
+                        def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=14, font_family="Arial"):
+                            """Generate SVG elements for a single legend entry"""
+                            from svgwrite.path import Path
+                            from svgwrite.text import Text
+                            import io
+
+                            # Create color rectangle path
+                            half = rect_size / 2
+                            rect_d = f"M 0,{-half} L {rect_size},{-half} L {rect_size},{half} L 0,{half} z"
+                            rect_svg = f'<path d="{rect_d}" fill="{color}" stroke="none" transform="translate(0, {y_offset})"/>'
+
+                            # Create text element
+                            x_margin = (22 / 14) * rect_size
+                            text_svg = f'<text font-size="{font_size}" font-family="{font_family}" dominant-baseline="central" text-anchor="start" transform="translate({x_margin}, {y_offset})">{caption}</text>'
+
+                            return json.dumps({"rect": rect_svg, "text": text_svg})
+
                         def extract_features_from_genbank(gb_path):
                             """Extract feature info from GenBank file for UI display"""
                             import hashlib
@@ -1958,6 +2566,8 @@
                 zoom.value = 1.0;
                 // Clear stored pairwise match factors for re-calculation
                 pairwiseMatchFactors.value = {};
+                // Clear tracked legend entries (will be regenerated)
+                addedLegendCaptions.value = new Set();
                 // Store current palette's pairwise colors as reference for interpolation
                 window._origPairwiseMin = currentColors.value.pairwise_match_min || '#FFE7E7';
                 window._origPairwiseMax = currentColors.value.pairwise_match_max || '#FF7272';
@@ -2415,6 +3025,10 @@
                 featureColorOverrides, getFeatureColor, setFeatureColor, canEditFeatureColor,
                 // SVG Feature Click
                 svgContainer, clickedFeature, clickedFeaturePos, updateClickedFeatureColor,
+                // Legend Editor
+                showLegendPanel, legendEntries, newLegendCaption, newLegendColor,
+                updateLegendEntryColor, updateLegendEntryCaption, deleteLegendEntry, addNewLegendEntry,
+                moveLegendEntryUp, moveLegendEntryDown,
                 downloadDpi, runAnalysis, downloadSVG, downloadPNG, downloadPDF,
                 exportConfig, importConfig, manualPriorityRules, newPriorityRule, addPriorityRule
             };
