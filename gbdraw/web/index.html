@@ -596,10 +596,30 @@
                     </div>
 
                     <div class="absolute inset-0 overflow-auto flex p-8 custom-scrollbar">
-                        <div v-if="svgContent" v-html="svgContent"
+                        <div v-if="svgContent" v-html="svgContent" ref="svgContainer"
                             :key="`svg-${mode}-${selectedResultIndex}-${results.length}`"
                             :style="{transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.2s'}"
                             class="shadow-xl bg-white m-auto origin-top">
+                        </div>
+                    </div>
+
+                    <!-- Feature Color Picker Popup -->
+                    <div v-if="clickedFeature"
+                         class="fixed z-50 bg-white rounded-lg shadow-2xl border border-slate-200 p-3"
+                         :style="{ top: clickedFeaturePos.y + 'px', left: clickedFeaturePos.x + 'px' }">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-xs font-medium text-slate-600 truncate max-w-[200px]">{{ clickedFeature.label }}</span>
+                            <button @click="clickedFeature = null" class="text-slate-400 hover:text-slate-600 ml-auto">
+                                <i class="ph ph-x"></i>
+                            </button>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="color"
+                                   :value="clickedFeature.color"
+                                   @input="clickedFeature.color = $event.target.value"
+                                   @change="updateClickedFeatureColor($event.target.value)"
+                                   class="w-10 h-8 cursor-pointer border rounded">
+                            <span class="text-xs font-mono text-slate-500">{{ clickedFeature.color }}</span>
                         </div>
                     </div>
 
@@ -612,9 +632,6 @@
                         :class="{ 'translate-x-0': !showFeaturePanel, '-translate-x-80': showFeaturePanel }"
                         :title="showFeaturePanel ? 'Close color panel' : 'Open color panel'">
                     <i class="ph ph-paint-brush text-lg"></i>
-                    <span v-if="pendingColorChanges > 0" class="absolute -top-1 -left-1 bg-amber-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold">
-                        {{ pendingColorChanges > 9 ? '9+' : pendingColorChanges }}
-                    </span>
                 </button>
 
                 <!-- Feature Color Editor Drawer (slides from right) -->
@@ -651,7 +668,8 @@
                     <!-- Feature List -->
                     <div class="flex-grow overflow-y-auto">
                         <div v-for="feat in filteredFeatures" :key="feat.id"
-                             class="flex items-center gap-2 px-3 py-2 border-b border-slate-100 text-xs hover:bg-slate-50">
+                             @click="$event.currentTarget.querySelector('input[type=color]')?.click()"
+                             class="flex items-center gap-2 px-3 py-2 border-b border-slate-100 text-xs hover:bg-blue-50 cursor-pointer transition-colors">
                             <span class="w-10 font-mono text-slate-400 shrink-0 text-[10px]">{{ feat.type }}</span>
                             <span class="w-16 font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="`${feat.start}..${feat.end}`">
                                 {{ feat.start }}..{{ feat.end }}
@@ -662,6 +680,7 @@
                             </span>
                             <input type="color"
                                    :value="getFeatureColor(feat)"
+                                   @click.stop
                                    @change="setFeatureColor(feat, $event.target.value)"
                                    :disabled="!canEditFeatureColor(feat)"
                                    :title="canEditFeatureColor(feat) ? 'Click to change color' : 'No identifier available (no locus_tag, gene, or product)'"
@@ -674,11 +693,8 @@
 
                     <!-- Footer -->
                     <div class="px-4 py-2 border-t border-slate-200 shrink-0 bg-slate-50">
-                        <p v-if="pendingColorChanges === 0" class="text-[10px] text-slate-400">
-                            <i class="ph ph-info"></i> Change colors and click "Generate" to update.
-                        </p>
-                        <p v-else class="text-[10px] text-amber-600 font-medium">
-                            <i class="ph ph-warning"></i> {{ pendingColorChanges }} color change(s) pending. Click "Generate" to apply.
+                        <p class="text-[10px] text-slate-400">
+                            <i class="ph ph-info"></i> Click a feature or the diagram to change colors.
                         </p>
                     </div>
                 </div>
@@ -926,7 +942,10 @@
             const showFeaturePanel = ref(false);
             const featureSearch = ref('');
             const featureColorOverrides = reactive({});  // {featureKey: color}
-            const pendingColorChanges = ref(0);  // Count of changes since last generation
+            // SVG Feature Click state
+            const svgContainer = ref(null);
+            const clickedFeature = ref(null);  // {id, svg_id, label, color, feat}
+            const clickedFeaturePos = reactive({ x: 0, y: 0 });
 
             const featureKeys = [
                 "assembly_gap", "C_region", "CDS", "centromere", "D-loop", "D_segment",
@@ -1071,14 +1090,17 @@
                     try {
                         const parser = new DOMParser();
                         const doc = parser.parseFromString(results.value[idx].content, 'image/svg+xml');
-                        const element = doc.getElementById(svgId);
 
-                        if (element) {
-                            element.setAttribute('fill', color);
+                        // Find ALL elements with this ID (for multi-exon features)
+                        const elements = doc.querySelectorAll(`#${CSS.escape(svgId)}`);
+
+                        if (elements.length > 0) {
+                            elements.forEach(el => el.setAttribute('fill', color));
                             const serializer = new XMLSerializer();
-                            // Update the results array - this triggers svgContent recomputation
-                            results.value[idx].content = serializer.serializeToString(doc.documentElement);
-                            console.log(`Instant preview: updated ${svgId} to ${color}`);
+                            const newContent = serializer.serializeToString(doc.documentElement);
+                            // Replace the entire object to ensure Vue reactivity
+                            results.value[idx] = { ...results.value[idx], content: newContent };
+                            console.log(`Instant preview: updated ${elements.length} element(s) for ${svgId} to ${color}`);
                         } else {
                             console.log(`Instant preview: element ${svgId} not found in SVG`);
                         }
@@ -1087,6 +1109,92 @@
                     }
                 }
             };
+
+            // Attach click handlers to SVG feature paths
+            const attachSvgFeatureHandlers = () => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                // Find all paths with id starting with 'f' (feature hash IDs)
+                const featurePaths = svg.querySelectorAll('path[id^="f"], polygon[id^="f"]');
+
+                // Group paths by ID (for multi-exon features)
+                const pathsByIdMap = {};
+                featurePaths.forEach(path => {
+                    const id = path.getAttribute('id');
+                    if (!pathsByIdMap[id]) pathsByIdMap[id] = [];
+                    pathsByIdMap[id].push(path);
+                });
+
+                // Helper to highlight all segments of a feature
+                const highlightFeature = (svgId, highlight) => {
+                    const paths = pathsByIdMap[svgId] || [];
+                    paths.forEach(p => {
+                        p.style.opacity = highlight ? '0.7' : '1';
+                        p.style.filter = highlight ? 'brightness(1.2)' : 'none';
+                    });
+                };
+
+                featurePaths.forEach(path => {
+                    const svgId = path.getAttribute('id');
+                    path.style.cursor = 'pointer';
+
+                    // Hover: highlight ALL segments with same ID
+                    path.addEventListener('mouseenter', () => highlightFeature(svgId, true));
+                    path.addEventListener('mouseleave', () => highlightFeature(svgId, false));
+
+                    // Click handler
+                    path.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        // Find matching feature from extractedFeatures
+                        const feat = extractedFeatures.value.find(f => f.svg_id === svgId);
+                        if (feat) {
+                            const currentColor = path.getAttribute('fill') || getFeatureColor(feat);
+                            clickedFeature.value = {
+                                id: feat.id,
+                                svg_id: svgId,
+                                label: feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`,
+                                color: currentColor,
+                                feat: feat
+                            };
+                            // Position popup near click
+                            clickedFeaturePos.x = Math.min(e.clientX + 10, window.innerWidth - 280);
+                            clickedFeaturePos.y = Math.min(e.clientY + 10, window.innerHeight - 100);
+                        } else {
+                            console.log(`No feature found for svg_id: ${svgId}`);
+                        }
+                    });
+                });
+                console.log(`Attached handlers to ${featurePaths.length} feature paths (${Object.keys(pathsByIdMap).length} unique features)`);
+            };
+
+            // Update color from the popup picker
+            const updateClickedFeatureColor = (color) => {
+                if (!clickedFeature.value) return;
+                const feat = clickedFeature.value.feat;
+                clickedFeature.value.color = color;
+                setFeatureColor(feat, color);
+            };
+
+            // Watch for SVG content changes to reattach handlers
+            watch(() => svgContent.value, () => {
+                // Use nextTick to ensure DOM is updated
+                Vue.nextTick(() => {
+                    attachSvgFeatureHandlers();
+                });
+            });
+
+            // Close popup when clicking outside
+            const closeFeaturePopup = (e) => {
+                if (clickedFeature.value && !e.target.closest('.fixed.z-50')) {
+                    clickedFeature.value = null;
+                }
+            };
+
+            onMounted(() => {
+                document.addEventListener('click', closeFeaturePopup);
+            });
 
             const setFeatureColor = (feat, color) => {
                 // Use the best available qualifier for TSV generation
@@ -1121,7 +1229,6 @@
 
                 // Track override for UI display
                 featureColorOverrides[featureKey] = color;
-                pendingColorChanges.value++;
 
                 // Apply instant preview (update SVG directly)
                 applyInstantPreview(feat, color);
@@ -1133,7 +1240,6 @@
                 featureRecordIds.value = [];
                 selectedFeatureRecordIdx.value = 0;
                 Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
-                pendingColorChanges.value = 0;
                 showFeaturePanel.value = false;
             });
 
@@ -1337,11 +1443,25 @@
                                         if feat.type in ['CDS', 'tRNA', 'rRNA', 'ncRNA', 'misc_RNA', 'tmRNA',
                                                          'repeat_region', 'misc_feature', 'mobile_element',
                                                          'regulatory', 'gene', 'mRNA', 'exon', 'intron']:
+                                            # Overall coordinates for display
                                             start = int(feat.location.start)
                                             end = int(feat.location.end)
-                                            strand_raw = feat.location.strand  # Use raw strand value (1 or -1) for hash
+                                            strand_raw = feat.location.strand
+
+                                            # For svg_id hash, use FIRST part's coordinates (matches Python drawer)
+                                            # CompoundLocation has .parts, SimpleLocation doesn't
+                                            if hasattr(feat.location, 'parts') and feat.location.parts:
+                                                first_part = feat.location.parts[0]
+                                                hash_start = int(first_part.start)
+                                                hash_end = int(first_part.end)
+                                                hash_strand = first_part.strand
+                                            else:
+                                                hash_start = start
+                                                hash_end = end
+                                                hash_strand = strand_raw
+
                                             # Compute same hash as SVG rendering uses (must match Python drawer)
-                                            key = f"{feat.type}:{start}:{end}:{strand_raw}"
+                                            key = f"{feat.type}:{hash_start}:{hash_end}:{hash_strand}"
                                             svg_id = "f" + hashlib.md5(key.encode()).hexdigest()[:8]
                                             features.append({
                                                 "id": f"f{idx}",  # Unique internal ID for UI tracking
@@ -1351,7 +1471,7 @@
                                                 "type": feat.type,
                                                 "start": start,
                                                 "end": end,
-                                                "strand": "+" if feat.location.strand == 1 else "-",
+                                                "strand": "+" if strand_raw == 1 else "-",
                                                 "locus_tag": feat.qualifiers.get("locus_tag", [""])[0],
                                                 "gene": feat.qualifiers.get("gene", [""])[0],
                                                 "product": feat.qualifiers.get("product", [""])[0],
@@ -1602,7 +1722,6 @@
                                 featureRecordIds.value = featData.record_ids || [];
                                 selectedFeatureRecordIdx.value = 0;
                                 rebuildColorOverrides(featData.features);
-                                pendingColorChanges.value = 0;
                                 console.log(`Extracted ${featData.features.length} features from ${featData.record_ids.length} record(s) for color editor.`);
                             }
                         } catch (e) {
@@ -1635,7 +1754,6 @@
                             featureRecordIds.value = allRecordLabels.map(r => r.label);
                             selectedFeatureRecordIdx.value = 0;
                             rebuildColorOverrides(allFeatures);
-                            pendingColorChanges.value = 0;
                             console.log(`Extracted ${allFeatures.length} features from ${linearSeqs.length} file(s) for color editor.`);
                         } catch (e) {
                             console.log("Could not extract features:", e);
@@ -1847,7 +1965,9 @@
                 // Feature Color Editor
                 extractedFeatures, featureRecordIds, selectedFeatureRecordIdx,
                 showFeaturePanel, featureSearch, filteredFeatures,
-                featureColorOverrides, getFeatureColor, setFeatureColor, canEditFeatureColor, pendingColorChanges,
+                featureColorOverrides, getFeatureColor, setFeatureColor, canEditFeatureColor,
+                // SVG Feature Click
+                svgContainer, clickedFeature, clickedFeaturePos, updateClickedFeatureColor,
                 downloadDpi, runAnalysis, downloadSVG, downloadPNG, downloadPDF,
                 exportConfig, importConfig, manualPriorityRules, newPriorityRule, addPriorityRule
             };

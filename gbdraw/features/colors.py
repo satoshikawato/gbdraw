@@ -13,8 +13,20 @@ def compute_feature_hash(feature: SeqFeature) -> str:
     """
     Compute a stable hash for a feature based on type, start, end, strand.
     This matches the hash computed in render/drawers for SVG IDs.
+    For multi-exon features (CompoundLocation), uses first part's coordinates.
     """
-    key = f"{feature.type}:{int(feature.location.start)}:{int(feature.location.end)}:{feature.location.strand}"
+    # Use first part's coordinates for CompoundLocation (matches drawer code)
+    loc = feature.location
+    if hasattr(loc, 'parts') and loc.parts:
+        first_part = loc.parts[0]
+        start = int(first_part.start)
+        end = int(first_part.end)
+        strand = first_part.strand
+    else:
+        start = int(loc.start)
+        end = int(loc.end)
+        strand = loc.strand
+    key = f"{feature.type}:{start}:{end}:{strand}"
     return "f" + hashlib.md5(key.encode()).hexdigest()[:8]
 
 
