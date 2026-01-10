@@ -3425,42 +3425,48 @@
 
             // Watch for SVG changes to refresh legend entries and setup drag
             watch(svgContent, () => {
-                Vue.nextTick(() => {
-                    // When skipping captureBaseConfig (incremental edits), we need to preserve
-                    // the base transforms but they're keyed by old element references.
-                    // Save the base transforms by ID before setupDiagramDrag creates new element refs.
-                    let savedBaseTransformsById = null;
-                    if (skipCaptureBaseConfig.value && diagramElementBaseTransforms.value.size > 0) {
-                        // Build ID -> transforms lookup (handle duplicate IDs by storing as arrays)
-                        savedBaseTransformsById = new Map();
-                        for (const [el, transform] of diagramElementBaseTransforms.value) {
-                            const id = el.id || '';
+                // IMPORTANT: Capture state BEFORE nextTick, while old DOM elements are still valid
+                // After nextTick, Vue will have updated the DOM and old element refs become invalid
+                const isIncrementalEdit = skipCaptureBaseConfig.value;
+
+                // Build ID -> transforms lookup from current base transforms BEFORE DOM update
+                // This must happen synchronously (before nextTick) to access old element IDs
+                let savedBaseTransformsById = null;
+                if (isIncrementalEdit && diagramElementBaseTransforms.value.size > 0) {
+                    savedBaseTransformsById = new Map();
+                    for (const [el, transform] of diagramElementBaseTransforms.value) {
+                        const id = el.id || '';
+                        if (id) {  // Only save if element has valid ID
                             if (!savedBaseTransformsById.has(id)) {
                                 savedBaseTransformsById.set(id, []);
                             }
                             savedBaseTransformsById.get(id).push(transform);
                         }
                     }
+                    console.log('[DEBUG] Saved', savedBaseTransformsById.size, 'base transform IDs before DOM update');
+                }
 
+                Vue.nextTick(() => {
                     extractLegendEntries();
                     setupLegendDrag();
                     setupDiagramDrag();
 
-                    // Only capture base config and reset padding if this is NOT an incremental edit
-                    // When repositioning legend or adding entries, we want to keep the original base config intact
-                    if (!skipCaptureBaseConfig.value) {
-                        // Capture base config after diagram drag setup (which populates originalTransforms)
+                    if (!isIncrementalEdit) {
+                        // Full capture for fresh generation
                         captureBaseConfig();
+                        console.log('[DEBUG] Full base config capture (fresh generation)');
+
                         // Reset canvas padding for new SVG
                         canvasPadding.top = 0;
                         canvasPadding.right = 0;
                         canvasPadding.bottom = 0;
                         canvasPadding.left = 0;
-                    } else if (savedBaseTransformsById) {
-                        // Remap base transforms to new element references using saved ID lookup
-                        // This preserves the original base transforms even after DOM elements are recreated
+                    } else if (savedBaseTransformsById && savedBaseTransformsById.size > 0) {
+                        // Incremental edit - remap saved base transforms to new elements
+                        console.log('[DEBUG] Incremental edit - remapping base transforms');
+
                         const newBaseTransforms = new Map();
-                        const idCounters = new Map(); // Track index for duplicate IDs
+                        const idCounters = new Map();
 
                         diagramElements.value.forEach(newEl => {
                             const id = newEl.id || '';
@@ -3475,8 +3481,11 @@
                         });
 
                         diagramElementBaseTransforms.value = newBaseTransforms;
-                        console.log('[DEBUG] Remapped base transforms to new elements:', newBaseTransforms.size);
+                        console.log('[DEBUG] Remapped', newBaseTransforms.size, 'base transforms to new elements');
+                    } else {
+                        console.log('[DEBUG] Incremental edit but no base transforms to remap');
                     }
+
                     // Reset the flag
                     skipCaptureBaseConfig.value = false;
                 });
