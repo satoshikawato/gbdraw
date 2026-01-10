@@ -2640,6 +2640,7 @@
                 if (!svg) return;
 
                 const legendGroup = svg.getElementById('legend');
+                const isLinear = mode.value === 'linear';
 
                 // Get SVG dimensions
                 let viewBox = svg.getAttribute('viewBox');
@@ -2657,40 +2658,56 @@
                     legendHeight = bbox.height || legendHeight;
                 }
 
-                // Calculate legend position based on position setting
+                // Calculate legend position based on position setting (different for linear vs circular)
                 const calcLegendPos = (pos) => {
-                    switch (pos) {
-                        case 'right':
-                            return { x: vbW - legendWidth - 10, y: (vbH - legendHeight) / 2 };
-                        case 'left':
-                            return { x: 10, y: (vbH - legendHeight) / 2 };
-                        case 'upper_left':
-                            return { x: 0.025 * vbW, y: 0.05 * vbH };
-                        case 'upper_right':
-                            return { x: 0.85 * vbW, y: 0.05 * vbH };
-                        case 'lower_left':
-                            return { x: 0.025 * vbW, y: 0.78 * vbH };
-                        case 'lower_right':
-                            return { x: 0.875 * vbW, y: 0.75 * vbH };
-                        case 'none':
-                            return null; // Hidden
-                        default:
-                            return { x: vbW - legendWidth - 10, y: (vbH - legendHeight) / 2 };
+                    if (isLinear) {
+                        // Linear diagram positions
+                        const padding = 20;
+                        switch (pos) {
+                            case 'right':
+                                return { x: vbW - legendWidth - padding, y: (vbH - legendHeight) / 2 };
+                            case 'left':
+                                return { x: padding, y: (vbH - legendHeight) / 2 };
+                            case 'top':
+                                return { x: (vbW - legendWidth) / 2, y: padding };
+                            case 'bottom':
+                                return { x: (vbW - legendWidth) / 2, y: vbH - legendHeight - padding };
+                            case 'none':
+                                return null;
+                            default:
+                                return { x: vbW - legendWidth - padding, y: (vbH - legendHeight) / 2 };
+                        }
+                    } else {
+                        // Circular diagram positions
+                        switch (pos) {
+                            case 'right':
+                                return { x: vbW - legendWidth - 10, y: (vbH - legendHeight) / 2 };
+                            case 'left':
+                                return { x: 10, y: (vbH - legendHeight) / 2 };
+                            case 'upper_left':
+                                return { x: 0.025 * vbW, y: 0.05 * vbH };
+                            case 'upper_right':
+                                return { x: 0.85 * vbW, y: 0.05 * vbH };
+                            case 'lower_left':
+                                return { x: 0.025 * vbW, y: 0.78 * vbH };
+                            case 'lower_right':
+                                return { x: 0.875 * vbW, y: 0.75 * vbH };
+                            case 'none':
+                                return null;
+                            default:
+                                return { x: vbW - legendWidth - 10, y: (vbH - legendHeight) / 2 };
+                        }
                     }
                 };
 
                 // Calculate diagram offset based on legend position (for left/right scenarios)
                 const calcDiagramOffset = (pos) => {
-                    const baseX = vbW / 2;
                     switch (pos) {
                         case 'left':
-                            // When legend is left, diagram shifts right by legend space
                             return { x: legendWidth * 0.5, y: 0 };
                         case 'right':
-                            // When legend is right, diagram is at original position
                             return { x: -legendWidth * 0.5, y: 0 };
                         default:
-                            // For corner positions or none, no offset
                             return { x: 0, y: 0 };
                     }
                 };
@@ -2707,13 +2724,9 @@
                     } else {
                         legendGroup.style.display = '';
                         if (newLegendPos) {
-                            // Calculate delta from current initial position
-                            const currentInitial = legendInitialTransform.value;
-                            const deltaX = newLegendPos.x - (oldLegendPos?.x || currentInitial.x);
-                            const deltaY = newLegendPos.y - (oldLegendPos?.y || currentInitial.y);
-
-                            const newX = currentInitial.x + deltaX;
-                            const newY = currentInitial.y + deltaY;
+                            // Use direct positioning based on new position
+                            const newX = newLegendPos.x;
+                            const newY = newLegendPos.y;
 
                             legendGroup.setAttribute('transform', `translate(${newX}, ${newY})`);
 
@@ -2756,7 +2769,7 @@
                 // Update tracked generated position
                 generatedLegendPosition.value = newPosition;
 
-                console.log(`Legend repositioned: ${oldPosition} -> ${newPosition}`);
+                console.log(`Legend repositioned (${isLinear ? 'linear' : 'circular'}): ${oldPosition} -> ${newPosition}`);
             };
 
             // Discover and setup draggable diagram elements
