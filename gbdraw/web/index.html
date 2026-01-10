@@ -588,11 +588,70 @@
                 </div>
 
                 <div class="relative flex-grow overflow-hidden bg-slate-50/30">
-                    
-                    <div class="absolute bottom-4 right-4 flex gap-1 bg-white shadow rounded-lg p-1 z-20 border border-slate-200">
-                        <button @click="zoom+=0.1" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded"><i class="ph ph-plus"></i></button>
-                        <button @click="zoom = 1.0" class="w-12 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-xs font-mono rounded">{{Math.round(zoom*100)}}%</button>
-                        <button @click="zoom = Math.max(0.1, zoom-0.1)" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded"><i class="ph ph-minus"></i></button>
+
+                    <!-- Zoom and Canvas controls -->
+                    <div class="absolute bottom-4 right-4 flex flex-col gap-2 z-20">
+                        <!-- Reset all positions button -->
+                        <button v-if="svgContent" @click="resetAllPositions"
+                                class="w-8 h-8 flex items-center justify-center bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600"
+                                title="Reset all element positions">
+                            <i class="ph ph-arrow-counter-clockwise"></i>
+                        </button>
+                        <!-- Canvas size toggle -->
+                        <button v-if="svgContent" @click="showCanvasControls = !showCanvasControls"
+                                class="w-8 h-8 flex items-center justify-center bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600"
+                                :class="{ 'bg-blue-50 text-blue-600 border-blue-300': showCanvasControls }"
+                                title="Canvas padding controls">
+                            <i class="ph ph-frame-corners"></i>
+                        </button>
+                        <!-- Zoom controls -->
+                        <div class="flex gap-1 bg-white shadow rounded-lg p-1 border border-slate-200">
+                            <button @click="zoom+=0.1" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded"><i class="ph ph-plus"></i></button>
+                            <button @click="zoom = 1.0" class="w-12 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-xs font-mono rounded">{{Math.round(zoom*100)}}%</button>
+                            <button @click="zoom = Math.max(0.1, zoom-0.1)" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded"><i class="ph ph-minus"></i></button>
+                        </div>
+                    </div>
+
+                    <!-- Drag hint -->
+                    <div v-if="svgContent" class="absolute top-4 left-4 bg-white/90 shadow rounded-lg px-3 py-2 z-20 border border-slate-200">
+                        <p class="text-[10px] text-slate-500 flex items-center gap-1">
+                            <i class="ph ph-hand-grabbing"></i> Drag diagram or legend to reposition
+                        </p>
+                    </div>
+
+                    <!-- Canvas padding controls panel -->
+                    <div v-if="showCanvasControls && svgContent"
+                         class="absolute bottom-4 right-36 bg-white shadow-lg rounded-lg p-3 z-20 border border-slate-200 w-48">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-bold text-slate-700">Canvas Padding</span>
+                            <button @click="resetCanvasPadding" class="text-[10px] text-blue-600 hover:text-blue-800">Reset</button>
+                        </div>
+                        <div class="grid grid-cols-3 gap-1 text-center">
+                            <div></div>
+                            <div>
+                                <label class="text-[9px] text-slate-400 block">Top</label>
+                                <input type="number" v-model.number="canvasPadding.top" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
+                            </div>
+                            <div></div>
+                            <div>
+                                <label class="text-[9px] text-slate-400 block">Left</label>
+                                <input type="number" v-model.number="canvasPadding.left" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
+                            </div>
+                            <div class="flex items-center justify-center">
+                                <i class="ph ph-selection-background text-slate-300 text-lg"></i>
+                            </div>
+                            <div>
+                                <label class="text-[9px] text-slate-400 block">Right</label>
+                                <input type="number" v-model.number="canvasPadding.right" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
+                            </div>
+                            <div></div>
+                            <div>
+                                <label class="text-[9px] text-slate-400 block">Bottom</label>
+                                <input type="number" v-model.number="canvasPadding.bottom" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
+                            </div>
+                            <div></div>
+                        </div>
+                        <p class="text-[9px] text-slate-400 mt-2 text-center">Add space around the diagram</p>
                     </div>
 
                     <div class="absolute inset-0 overflow-auto flex p-8 custom-scrollbar">
@@ -653,6 +712,20 @@
                         <button @click="showLegendPanel = false" class="text-slate-400 hover:text-slate-600">
                             <i class="ph ph-x text-lg"></i>
                         </button>
+                    </div>
+
+                    <!-- Legend position controls -->
+                    <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] text-slate-500 flex items-center gap-1">
+                                <i class="ph ph-hand-grabbing"></i> Drag legend to reposition
+                            </span>
+                            <button @click="resetLegendPosition"
+                                    class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                                    title="Reset legend to original position">
+                                <i class="ph ph-arrow-counter-clockwise"></i> Reset
+                            </button>
+                        </div>
                     </div>
 
                     <div class="flex-1 overflow-y-auto p-3 space-y-2">
@@ -815,7 +888,7 @@
 
 <script>
     const { createApp, ref, reactive, onMounted, computed, watch } = Vue;
-    const GBDRAW_WHEEL_NAME = "gbdraw.whl"; 
+    const GBDRAW_WHEEL_NAME = "gbdraw-0.8.3-py3-none-any.whl"; 
 
     // HelpTip & FileUploader Components
     const HelpTip = {
@@ -1027,6 +1100,24 @@
             const legendEntries = ref([]);  // [{caption, color, yPos}]
             const newLegendCaption = ref('');
             const newLegendColor = ref('#808080');
+
+            // Legend Drag state
+            const legendDragging = ref(false);
+            const legendDragStart = reactive({ x: 0, y: 0 });
+            const legendOriginalTransform = ref({ x: 0, y: 0 });
+            const legendInitialTransform = ref({ x: 0, y: 0 });  // Store SVG's original legend position
+            const legendCurrentOffset = reactive({ x: 0, y: 0 });
+
+            // Main Diagram Drag state (tick, labels, axis, definition, records as one group)
+            const diagramDragging = ref(false);
+            const diagramDragStart = reactive({ x: 0, y: 0 });
+            const diagramOffset = reactive({ x: 0, y: 0 });  // Cumulative drag offset
+            const diagramElementIds = ref([]);  // IDs of elements that move together
+            const diagramElementOriginalTransforms = ref(new Map());  // Store original transforms for each element
+
+            // Canvas size state
+            const canvasPadding = reactive({ top: 0, right: 0, bottom: 0, left: 0 });
+            const showCanvasControls = ref(false);
 
             const featureKeys = [
                 "assembly_gap", "C_region", "CDS", "centromere", "D-loop", "D_segment",
@@ -2323,10 +2414,383 @@
                 }
             };
 
-            // Watch for SVG changes to refresh legend entries
+            // Legend drag functions
+            const parseTransform = (transformStr) => {
+                if (!transformStr) return { x: 0, y: 0 };
+                const match = transformStr.match(/translate\(\s*([-\d.]+)\s*,?\s*([-\d.]+)?\s*\)/);
+                if (match) {
+                    return { x: parseFloat(match[1]) || 0, y: parseFloat(match[2]) || 0 };
+                }
+                return { x: 0, y: 0 };
+            };
+
+            const startLegendDrag = (e) => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return;
+
+                // Prevent default to avoid text selection
+                e.preventDefault();
+
+                legendDragging.value = true;
+                legendDragStart.x = e.clientX;
+                legendDragStart.y = e.clientY;
+
+                // Parse current transform
+                const currentTransform = parseTransform(legendGroup.getAttribute('transform'));
+                legendOriginalTransform.value = { ...currentTransform };
+
+                // Add visual feedback
+                legendGroup.style.cursor = 'grabbing';
+                legendGroup.style.opacity = '0.8';
+
+                // Add document-level event listeners
+                document.addEventListener('mousemove', onLegendDrag);
+                document.addEventListener('mouseup', endLegendDrag);
+            };
+
+            const onLegendDrag = (e) => {
+                if (!legendDragging.value) return;
+                if (!svgContainer.value) return;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return;
+
+                // Calculate delta, accounting for zoom level
+                const deltaX = (e.clientX - legendDragStart.x) / zoom.value;
+                const deltaY = (e.clientY - legendDragStart.y) / zoom.value;
+
+                // Apply new transform
+                const newX = legendOriginalTransform.value.x + deltaX;
+                const newY = legendOriginalTransform.value.y + deltaY;
+                legendGroup.setAttribute('transform', `translate(${newX}, ${newY})`);
+
+                // Store current offset
+                legendCurrentOffset.x = newX;
+                legendCurrentOffset.y = newY;
+            };
+
+            const endLegendDrag = () => {
+                if (!legendDragging.value) return;
+
+                legendDragging.value = false;
+
+                // Remove document-level event listeners
+                document.removeEventListener('mousemove', onLegendDrag);
+                document.removeEventListener('mouseup', endLegendDrag);
+
+                // Reset visual feedback
+                if (svgContainer.value) {
+                    const svg = svgContainer.value.querySelector('svg');
+                    if (svg) {
+                        const legendGroup = svg.getElementById('legend');
+                        if (legendGroup) {
+                            legendGroup.style.cursor = 'grab';
+                            legendGroup.style.opacity = '1';
+                        }
+                    }
+                }
+            };
+
+            const resetLegendPosition = () => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return;
+
+                // Reset to original position (restore initial transform)
+                const initial = legendInitialTransform.value;
+                if (initial.x !== 0 || initial.y !== 0) {
+                    legendGroup.setAttribute('transform', `translate(${initial.x}, ${initial.y})`);
+                } else {
+                    legendGroup.removeAttribute('transform');
+                }
+                legendCurrentOffset.x = 0;
+                legendCurrentOffset.y = 0;
+            };
+
+            const setupLegendDrag = () => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return;
+
+                // Store the legend's initial transform from the SVG
+                const initialTransform = parseTransform(legendGroup.getAttribute('transform'));
+                legendInitialTransform.value = { ...initialTransform };
+
+                // Reset offset tracking
+                legendCurrentOffset.x = 0;
+                legendCurrentOffset.y = 0;
+
+                // Set cursor style
+                legendGroup.style.cursor = 'grab';
+
+                // Remove existing listener to avoid duplicates
+                legendGroup.removeEventListener('mousedown', startLegendDrag);
+                // Add mousedown listener
+                legendGroup.addEventListener('mousedown', startLegendDrag);
+            };
+
+            // Main diagram drag functions (moves tick, labels, axis, definition, records as one group)
+            const startDiagramDrag = (e) => {
+                // Don't start if clicking on legend or feature elements
+                if (e.target.closest('#legend') ||
+                    e.target.closest('path[data-feature-id]') ||
+                    e.target.closest('rect[data-feature-id]')) {
+                    return;
+                }
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                // Check if clicking inside a diagram element
+                const clickedGroup = e.target.closest('g[id]');
+                if (!clickedGroup) return;
+
+                const clickedId = clickedGroup.id;
+                // Only start drag if clicking on a main diagram element (not legend)
+                if (clickedId === 'legend' || clickedId === 'feature_legend' || clickedId === 'pairwise_legend') {
+                    return;
+                }
+
+                e.preventDefault();
+                diagramDragging.value = true;
+                diagramDragStart.x = e.clientX;
+                diagramDragStart.y = e.clientY;
+
+                // Visual feedback on all diagram elements
+                diagramElements.value.forEach(el => {
+                    el.style.opacity = '0.8';
+                });
+
+                document.addEventListener('mousemove', onDiagramDrag);
+                document.addEventListener('mouseup', endDiagramDrag);
+            };
+
+            const onDiagramDrag = (e) => {
+                if (!diagramDragging.value) return;
+
+                // Calculate delta, accounting for zoom level
+                const deltaX = (e.clientX - diagramDragStart.x) / zoom.value;
+                const deltaY = (e.clientY - diagramDragStart.y) / zoom.value;
+
+                // Apply transform to all diagram elements, preserving their original positions
+                diagramElements.value.forEach(el => {
+                    const original = diagramElementOriginalTransforms.value.get(el) || { x: 0, y: 0 };
+                    const newX = original.x + diagramOffset.x + deltaX;
+                    const newY = original.y + diagramOffset.y + deltaY;
+                    el.setAttribute('transform', `translate(${newX}, ${newY})`);
+                });
+            };
+
+            const endDiagramDrag = () => {
+                if (!diagramDragging.value) return;
+
+                // Update stored offset
+                const deltaX = (event.clientX - diagramDragStart.x) / zoom.value;
+                const deltaY = (event.clientY - diagramDragStart.y) / zoom.value;
+                diagramOffset.x += deltaX;
+                diagramOffset.y += deltaY;
+
+                diagramDragging.value = false;
+                document.removeEventListener('mousemove', onDiagramDrag);
+                document.removeEventListener('mouseup', endDiagramDrag);
+
+                // Reset visual feedback
+                diagramElements.value.forEach(el => {
+                    el.style.opacity = '1';
+                });
+            };
+
+            const resetDiagramPosition = () => {
+                // Reset offset
+                diagramOffset.x = 0;
+                diagramOffset.y = 0;
+
+                // Restore original transforms for all diagram elements
+                diagramElements.value.forEach(el => {
+                    const original = diagramElementOriginalTransforms.value.get(el);
+                    if (original && (original.x !== 0 || original.y !== 0)) {
+                        el.setAttribute('transform', `translate(${original.x}, ${original.y})`);
+                    } else {
+                        el.removeAttribute('transform');
+                    }
+                });
+            };
+
+            const resetAllPositions = () => {
+                resetDiagramPosition();
+                resetLegendPosition();
+            };
+
+            // Discover and setup draggable diagram elements
+            // Store actual DOM elements since IDs can be duplicated (record and definition share same ID)
+            const diagramElements = ref([]);
+
+            const setupDiagramDrag = () => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                // Reset offset
+                diagramOffset.x = 0;
+                diagramOffset.y = 0;
+
+                // Known main diagram element IDs
+                const knownIds = ['tick', 'labels', 'Axis', 'gc_content', 'skew', 'gc_skew', 'length_bar'];
+                const foundElements = [];
+                const foundIds = [];
+
+                // Add known IDs that exist
+                knownIds.forEach(id => {
+                    const el = svg.getElementById(id);
+                    if (el) {
+                        foundElements.push(el);
+                        foundIds.push(id);
+                    }
+                });
+
+                // Find ALL groups (including those with duplicate IDs like record and definition)
+                const allGroups = svg.querySelectorAll('g[id]');
+                allGroups.forEach(group => {
+                    const id = group.id;
+                    if (!id) return;
+
+                    // Skip legend groups
+                    if (id === 'legend' || id === 'feature_legend' || id === 'pairwise_legend') return;
+
+                    // Skip if this exact element is already added
+                    if (foundElements.includes(group)) return;
+
+                    // Check for record/definition-like IDs (accession numbers, etc.)
+                    const isAccession = id.match(/^[A-Z]{2}_?\d+/) ||  // NC_012920, AP027078
+                                       id.match(/^[A-Z]+\d+\.\d+$/);   // AP027078.1
+                    const isKnown = knownIds.includes(id);
+                    const isDynamic = id.startsWith('record_') ||
+                                     id.startsWith('definition_') ||
+                                     id.startsWith('seq_') ||
+                                     id.startsWith('track_') ||
+                                     id.startsWith('match_') ||
+                                     id.startsWith('comparison');  // pairwise match groups
+
+                    if (isAccession || isKnown || isDynamic) {
+                        foundElements.push(group);
+                        if (!foundIds.includes(id)) {
+                            foundIds.push(id);
+                        }
+                    }
+                });
+
+                diagramElements.value = foundElements;
+                diagramElementIds.value = foundIds;
+
+                // Store original transforms for each element
+                const originalTransforms = new Map();
+                foundElements.forEach(el => {
+                    const transform = parseTransform(el.getAttribute('transform'));
+                    originalTransforms.set(el, transform);
+                });
+                diagramElementOriginalTransforms.value = originalTransforms;
+
+                // Set cursor on all diagram elements
+                foundElements.forEach(el => {
+                    el.style.cursor = 'grab';
+                });
+
+                // Add mousedown listener to SVG for diagram dragging
+                svg.removeEventListener('mousedown', startDiagramDrag);
+                svg.addEventListener('mousedown', startDiagramDrag);
+            };
+
+            // Canvas size functions
+            const applyCanvasPadding = () => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                // Get original viewBox or create one from width/height
+                let viewBox = svg.getAttribute('viewBox');
+                if (!viewBox) {
+                    const width = parseFloat(svg.getAttribute('width')) || 800;
+                    const height = parseFloat(svg.getAttribute('height')) || 600;
+                    viewBox = `0 0 ${width} ${height}`;
+                }
+
+                const parts = viewBox.split(/\s+/).map(parseFloat);
+                if (parts.length !== 4) return;
+
+                // Store original viewBox if not already stored
+                if (!svg.dataset.originalViewBox) {
+                    svg.dataset.originalViewBox = viewBox;
+                }
+
+                const [origX, origY, origW, origH] = svg.dataset.originalViewBox.split(/\s+/).map(parseFloat);
+
+                // Calculate new viewBox with padding
+                const newX = origX - canvasPadding.left;
+                const newY = origY - canvasPadding.top;
+                const newW = origW + canvasPadding.left + canvasPadding.right;
+                const newH = origH + canvasPadding.top + canvasPadding.bottom;
+
+                svg.setAttribute('viewBox', `${newX} ${newY} ${newW} ${newH}`);
+
+                // Update width/height to maintain aspect ratio
+                const origWidth = parseFloat(svg.dataset.originalWidth || svg.getAttribute('width')) || origW;
+                const origHeight = parseFloat(svg.dataset.originalHeight || svg.getAttribute('height')) || origH;
+                if (!svg.dataset.originalWidth) {
+                    svg.dataset.originalWidth = origWidth;
+                    svg.dataset.originalHeight = origHeight;
+                }
+
+                const scaleX = newW / origW;
+                const scaleY = newH / origH;
+                svg.setAttribute('width', origWidth * scaleX);
+                svg.setAttribute('height', origHeight * scaleY);
+            };
+
+            const resetCanvasPadding = () => {
+                canvasPadding.top = 0;
+                canvasPadding.right = 0;
+                canvasPadding.bottom = 0;
+                canvasPadding.left = 0;
+
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                // Restore original viewBox
+                if (svg.dataset.originalViewBox) {
+                    svg.setAttribute('viewBox', svg.dataset.originalViewBox);
+                }
+                if (svg.dataset.originalWidth) {
+                    svg.setAttribute('width', svg.dataset.originalWidth);
+                    svg.setAttribute('height', svg.dataset.originalHeight);
+                }
+            };
+
+            // Watch canvas padding changes
+            watch(canvasPadding, () => {
+                applyCanvasPadding();
+            }, { deep: true });
+
+            // Watch for SVG changes to refresh legend entries and setup drag
             watch(svgContent, () => {
                 Vue.nextTick(() => {
                     extractLegendEntries();
+                    setupLegendDrag();
+                    setupDiagramDrag();
+                    // Reset canvas padding for new SVG
+                    canvasPadding.top = 0;
+                    canvasPadding.right = 0;
+                    canvasPadding.bottom = 0;
+                    canvasPadding.left = 0;
                 });
             });
 
@@ -3186,7 +3650,9 @@
                 // Legend Editor
                 showLegendPanel, legendEntries, newLegendCaption, newLegendColor,
                 updateLegendEntryColor, updateLegendEntryCaption, deleteLegendEntry, addNewLegendEntry,
-                moveLegendEntryUp, moveLegendEntryDown,
+                moveLegendEntryUp, moveLegendEntryDown, resetLegendPosition,
+                // Diagram Drag & Canvas
+                resetAllPositions, canvasPadding, showCanvasControls, resetCanvasPadding,
                 downloadDpi, runAnalysis, downloadSVG, downloadPNG, downloadPDF,
                 exportConfig, importConfig, manualPriorityRules, newPriorityRule, addPriorityRule
             };
