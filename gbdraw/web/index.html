@@ -1119,6 +1119,9 @@
             const canvasPadding = reactive({ top: 0, right: 0, bottom: 0, left: 0 });
             const showCanvasControls = ref(false);
 
+            // Track legend position at generation time (for repositioning without regeneration)
+            const generatedLegendPosition = ref('right');
+
             const featureKeys = [
                 "assembly_gap", "C_region", "CDS", "centromere", "D-loop", "D_segment",
                 "exon", "gap", "gene", "intron", "J_segment", "mat_peptide", "misc_binding",
@@ -2630,6 +2633,132 @@
                 resetLegendPosition();
             };
 
+            // Reposition elements when legend position dropdown changes
+            const repositionForLegendChange = (newPosition, oldPosition) => {
+                if (!svgContainer.value || !svgContent.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const legendGroup = svg.getElementById('legend');
+
+                // Get SVG dimensions
+                let viewBox = svg.getAttribute('viewBox');
+                if (!viewBox) return;
+                const parts = viewBox.split(/\s+/).map(parseFloat);
+                if (parts.length !== 4) return;
+                const [vbX, vbY, vbW, vbH] = parts;
+
+                // Get legend dimensions (approximate from legend group bounds)
+                let legendWidth = 120;  // Default estimate
+                let legendHeight = 150; // Default estimate
+                if (legendGroup) {
+                    const bbox = legendGroup.getBBox();
+                    legendWidth = bbox.width || legendWidth;
+                    legendHeight = bbox.height || legendHeight;
+                }
+
+                // Calculate legend position based on position setting
+                const calcLegendPos = (pos) => {
+                    switch (pos) {
+                        case 'right':
+                            return { x: vbW - legendWidth - 10, y: (vbH - legendHeight) / 2 };
+                        case 'left':
+                            return { x: 10, y: (vbH - legendHeight) / 2 };
+                        case 'upper_left':
+                            return { x: 0.025 * vbW, y: 0.05 * vbH };
+                        case 'upper_right':
+                            return { x: 0.85 * vbW, y: 0.05 * vbH };
+                        case 'lower_left':
+                            return { x: 0.025 * vbW, y: 0.78 * vbH };
+                        case 'lower_right':
+                            return { x: 0.875 * vbW, y: 0.75 * vbH };
+                        case 'none':
+                            return null; // Hidden
+                        default:
+                            return { x: vbW - legendWidth - 10, y: (vbH - legendHeight) / 2 };
+                    }
+                };
+
+                // Calculate diagram offset based on legend position (for left/right scenarios)
+                const calcDiagramOffset = (pos) => {
+                    const baseX = vbW / 2;
+                    switch (pos) {
+                        case 'left':
+                            // When legend is left, diagram shifts right by legend space
+                            return { x: legendWidth * 0.5, y: 0 };
+                        case 'right':
+                            // When legend is right, diagram is at original position
+                            return { x: -legendWidth * 0.5, y: 0 };
+                        default:
+                            // For corner positions or none, no offset
+                            return { x: 0, y: 0 };
+                    }
+                };
+
+                const oldLegendPos = calcLegendPos(oldPosition);
+                const newLegendPos = calcLegendPos(newPosition);
+                const oldDiagramOffset = calcDiagramOffset(oldPosition);
+                const newDiagramOffset = calcDiagramOffset(newPosition);
+
+                // Handle legend visibility and position
+                if (legendGroup) {
+                    if (newPosition === 'none') {
+                        legendGroup.style.display = 'none';
+                    } else {
+                        legendGroup.style.display = '';
+                        if (newLegendPos) {
+                            // Calculate delta from current initial position
+                            const currentInitial = legendInitialTransform.value;
+                            const deltaX = newLegendPos.x - (oldLegendPos?.x || currentInitial.x);
+                            const deltaY = newLegendPos.y - (oldLegendPos?.y || currentInitial.y);
+
+                            const newX = currentInitial.x + deltaX;
+                            const newY = currentInitial.y + deltaY;
+
+                            legendGroup.setAttribute('transform', `translate(${newX}, ${newY})`);
+
+                            // Update initial transform for reset
+                            legendInitialTransform.value = { x: newX, y: newY };
+                            legendCurrentOffset.x = 0;
+                            legendCurrentOffset.y = 0;
+                        }
+                    }
+                }
+
+                // Move diagram elements only for left/right transitions
+                const isLeftRightTransition =
+                    (oldPosition === 'left' || oldPosition === 'right') &&
+                    (newPosition === 'left' || newPosition === 'right');
+
+                if (isLeftRightTransition && diagramElements.value.length > 0) {
+                    const diagramDeltaX = newDiagramOffset.x - oldDiagramOffset.x;
+                    const diagramDeltaY = newDiagramOffset.y - oldDiagramOffset.y;
+
+                    if (diagramDeltaX !== 0 || diagramDeltaY !== 0) {
+                        const newOriginalTransforms = new Map();
+
+                        diagramElements.value.forEach(el => {
+                            const original = diagramElementOriginalTransforms.value.get(el) || { x: 0, y: 0 };
+                            const newX = original.x + diagramDeltaX;
+                            const newY = original.y + diagramDeltaY;
+
+                            el.setAttribute('transform', `translate(${newX}, ${newY})`);
+                            newOriginalTransforms.set(el, { x: newX, y: newY });
+                        });
+
+                        // Update original transforms for reset
+                        diagramElementOriginalTransforms.value = newOriginalTransforms;
+                        diagramOffset.x = 0;
+                        diagramOffset.y = 0;
+                    }
+                }
+
+                // Update tracked generated position
+                generatedLegendPosition.value = newPosition;
+
+                console.log(`Legend repositioned: ${oldPosition} -> ${newPosition}`);
+            };
+
             // Discover and setup draggable diagram elements
             // Store actual DOM elements since IDs can be duplicated (record and definition share same ID)
             const diagramElements = ref([]);
@@ -2779,6 +2908,16 @@
             watch(canvasPadding, () => {
                 applyCanvasPadding();
             }, { deep: true });
+
+            // Watch for legend position changes to reposition elements without regeneration
+            watch(() => form.legend, (newPos, oldPos) => {
+                // Only reposition if SVG exists and position actually changed
+                if (svgContent.value && newPos !== oldPos) {
+                    Vue.nextTick(() => {
+                        repositionForLegendChange(newPos, generatedLegendPosition.value);
+                    });
+                }
+            });
 
             // Watch for SVG changes to refresh legend entries and setup drag
             watch(svgContent, () => {
@@ -3336,6 +3475,9 @@
                     const res = JSON.parse(jsonResult);
                     if(res.error) throw new Error(res.error);
                     results.value = res;
+
+                    // Store legend position used at generation time
+                    generatedLegendPosition.value = form.legend;
 
                     // Extract features for color editor (only for GenBank input)
                     extractedFeatures.value = [];
