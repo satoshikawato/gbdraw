@@ -1,17 +1,28 @@
-[Home](../README.md) | [Installation](./INSTALL.md) | [Usage](./USAGE.md) | [Gallery](./GALLERY.md) | [RECIPES](./RECIPES.md) | [Advanced](./ADVANCED.md) | [FAQ](./FAQ.md)
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | [Recipes](./RECIPES.md) | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)
+
 # Roadmap
 
-## Planned features
-### Short-term plans
-- Automatic adjustment of GC content/skew windows and steps (10kb window-1kb step for genomes larger than 1Mb; window size makes a huge difference in PNG/PDF processing time!)
-- Tick label configuration (e.g. per Mb)
+## Recently Implemented
+
+- Automatic adjustment of GC content/skew windows and steps based on genome size
+- Legend placement adjustment (multiple positions available)
+- Overlap resolution for features (`--resolve_overlaps`)
+- Scale interval customization (`--scale_interval`)
+- Legend size customization (`--legend_box_size`, `--legend_font_size`)
+- GC skew track for linear mode (`--show_skew`)
+- Scale style options for linear mode (`--scale_style bar/ruler`)
+- Feature/GC/comparison height customization for linear mode
+
+## Planned Features
+
+### Short-term
+- Tick label configuration (e.g., per Mb)
 - `--separate_strands` by default (change in args)
-- Legend placement adjustment
-- Feature-wise SVG element grouping (for the ease of manual editing)
-### Long-term plans
-- PAF/MAF support (pairwise matches) 
-- Feature overlap resolution (overlapping genes, transcript isoforms etc.;unsure how to impelment mutiple tracks with label overlap resolution)
+- Feature-wise SVG element grouping (for ease of manual editing)
+
+### Long-term
+- PAF/MAF support (pairwise matches)
+- Feature overlap resolution with label overlap handling (overlapping genes, transcript isoforms, etc.)
 - Custom tracks (read depth, motifs, etc.)
 
-
-[Home](../README.md) | [Installation](./INSTALL.md) | [Usage](./USAGE.md) | [Gallery](./GALLERY.md) | [RECIPES](./RECIPES.md) | [Advanced](./ADVANCED.md) | [FAQ](./FAQ.md)
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | [Recipes](./RECIPES.md) | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)

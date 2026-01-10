@@ -21,7 +21,11 @@
       "Bash(timeout 3 gbdraw:*)",
       "Bash(pip wheel:*)",
       "Bash(python -m build:*)",
-      "Bash(unzip:*)"
+      "Bash(unzip:*)",
+      "Bash(git checkout:*)",
+      "Bash(grep:*)",
+      "Bash(gbdraw:*)",
+      "Bash(python -m gbdraw.cli:*)"
     ]
   }
 }

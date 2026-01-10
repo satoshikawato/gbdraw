@@ -1,6 +1,6 @@
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)
 
-[< Back to Installation](./INSTALLATION.md)　　　　　　[Go to Tutorials >](./TUTORIALS/TUTORIALS.md)
+[< Back to Installation](./INSTALL.md)　　　　　　[Go to Tutorials >](./TUTORIALS/TUTORIALS.md)
 # Quickstart: Your First Plot in 5 Minutes
 
 This tutorial will guide you from a fresh installation to generating your first circular genome plot.
@@ -53,6 +53,6 @@ To learn how to change colors, add titles, and show labels, continue to [Tutoria
 
 To see more examples of what `gbdraw` can do, check out the [Gallery](./GALLERY.md).
 
-[< Back to Installation](./INSTALLATION.md)　　　　　　[Go to Tutorials >](./TUTORIALS/TUTORIALS.md)
+[< Back to Installation](./INSTALL.md)　　　　　　[Go to Tutorials >](./TUTORIALS/TUTORIALS.md)
 
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/TUTORIALS.md)) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)
