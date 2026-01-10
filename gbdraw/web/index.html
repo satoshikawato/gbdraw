@@ -2969,25 +2969,38 @@
                             const padding = 20;
                             let finalX, finalY;
 
-                            // Position based on target position (not layout direction)
-                            switch (newPosition) {
-                                case 'top':
-                                    finalX = (vbW - legendWidth) / 2;
-                                    finalY = padding;
-                                    break;
-                                case 'bottom':
-                                    finalX = (vbW - legendWidth) / 2;
-                                    finalY = vbH - legendHeight - padding;
-                                    break;
-                                case 'left':
-                                    finalX = padding;
-                                    finalY = (vbH - legendHeight) / 2;
-                                    break;
-                                case 'right':
-                                default:
+                            if (isLinear) {
+                                // Linear: position based on top/bottom/left/right
+                                switch (newPosition) {
+                                    case 'top':
+                                        finalX = (vbW - legendWidth) / 2;
+                                        finalY = padding;
+                                        break;
+                                    case 'bottom':
+                                        finalX = (vbW - legendWidth) / 2;
+                                        finalY = vbH - legendHeight - padding;
+                                        break;
+                                    case 'left':
+                                        finalX = padding;
+                                        finalY = (vbH - legendHeight) / 2;
+                                        break;
+                                    case 'right':
+                                    default:
+                                        finalX = vbW - legendWidth - padding;
+                                        finalY = (vbH - legendHeight) / 2;
+                                        break;
+                                }
+                            } else {
+                                // Circular: use calcLegendPos which handles all circular positions
+                                // (right, left, upper_left, upper_right, lower_left, lower_right)
+                                if (newLegendPos) {
+                                    finalX = newLegendPos.x;
+                                    finalY = newLegendPos.y;
+                                } else {
+                                    // Fallback
                                     finalX = vbW - legendWidth - padding;
                                     finalY = (vbH - legendHeight) / 2;
-                                    break;
+                                }
                             }
 
                             legendGroup.setAttribute('transform', `translate(${finalX}, ${finalY})`);
