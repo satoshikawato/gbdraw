@@ -2791,8 +2791,12 @@
             // Uses base config to avoid accumulation errors
             const getCircularAbsoluteConfig = (position, baseConfig) => {
                 const { viewBoxWidth, viewBoxHeight, diagramCenterX, diagramCenterY, legendWidth, legendHeight } = baseConfig;
+                // Use generated viewBox dimensions for corner positions to maintain diagram position
+                const genVbW = baseConfig.generatedViewBoxWidth || viewBoxWidth;
+                const genVbH = baseConfig.generatedViewBoxHeight || viewBoxHeight;
                 console.log(`[DEBUG] getCircularAbsoluteConfig called with position="${position}" (type: ${typeof position}, length: ${position.length})`);
                 console.log(`[DEBUG] position === 'left': ${position === 'left'}, position === 'right': ${position === 'right'}`);
+                console.log(`[DEBUG] viewBoxWidth=${viewBoxWidth}, genVbW=${genVbW}`);
 
                 switch (position) {
                     case 'left':
@@ -2816,47 +2820,48 @@
                             legendY: (viewBoxHeight - legendHeight) / 2
                         };
                     case 'upper_left':
+                        // Use generated viewBox size to maintain diagram position
                         return {
-                            vbWidth: viewBoxWidth,
-                            vbHeight: viewBoxHeight,
+                            vbWidth: genVbW,
+                            vbHeight: genVbH,
                             diagramShiftX: 0,
                             diagramShiftY: 0,
-                            legendX: 0.025 * viewBoxWidth,
-                            legendY: 0.05 * viewBoxHeight
+                            legendX: 0.025 * genVbW,
+                            legendY: 0.05 * genVbH
                         };
                     case 'upper_right':
                         return {
-                            vbWidth: viewBoxWidth,
-                            vbHeight: viewBoxHeight,
+                            vbWidth: genVbW,
+                            vbHeight: genVbH,
                             diagramShiftX: 0,
                             diagramShiftY: 0,
-                            legendX: 0.85 * viewBoxWidth,
-                            legendY: 0.05 * viewBoxHeight
+                            legendX: 0.85 * genVbW,
+                            legendY: 0.05 * genVbH
                         };
                     case 'lower_left':
                         return {
-                            vbWidth: viewBoxWidth,
-                            vbHeight: viewBoxHeight,
+                            vbWidth: genVbW,
+                            vbHeight: genVbH,
                             diagramShiftX: 0,
                             diagramShiftY: 0,
-                            legendX: 0.025 * viewBoxWidth,
-                            legendY: 0.78 * viewBoxHeight
+                            legendX: 0.025 * genVbW,
+                            legendY: 0.78 * genVbH
                         };
                     case 'lower_right':
                         return {
-                            vbWidth: viewBoxWidth,
-                            vbHeight: viewBoxHeight,
+                            vbWidth: genVbW,
+                            vbHeight: genVbH,
                             diagramShiftX: 0,
                             diagramShiftY: 0,
-                            legendX: 0.875 * viewBoxWidth,
-                            legendY: 0.75 * viewBoxHeight
+                            legendX: 0.875 * genVbW,
+                            legendY: 0.75 * genVbH
                         };
                     case 'none':
                     default:
                         console.log(`[DEBUG] Matched case: default (position was "${position}")`);
                         return {
-                            vbWidth: viewBoxWidth,
-                            vbHeight: viewBoxHeight,
+                            vbWidth: genVbW,
+                            vbHeight: genVbH,
                             diagramShiftX: 0,
                             diagramShiftY: 0,
                             legendX: 0,
@@ -3437,6 +3442,8 @@
                     circularBaseConfig.value = {
                         viewBoxWidth: baseVbW,
                         viewBoxHeight: vbH,
+                        generatedViewBoxWidth: vbW,   // Actual viewBox width at generation time
+                        generatedViewBoxHeight: vbH,  // Actual viewBox height at generation time
                         diagramCenterX: diagramCenterX,
                         diagramCenterY: diagramCenterY,
                         legendWidth: legendWidth,
