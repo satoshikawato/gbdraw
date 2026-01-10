@@ -2647,7 +2647,7 @@
                 if (!viewBox) return;
                 const parts = viewBox.split(/\s+/).map(parseFloat);
                 if (parts.length !== 4) return;
-                const [vbX, vbY, vbW, vbH] = parts;
+                let [vbX, vbY, vbW, vbH] = parts;
 
                 // Get legend dimensions (approximate from legend group bounds)
                 let legendWidth = 120;  // Default estimate
@@ -2757,6 +2757,10 @@
                             const entrySpacing = 24; // line_height = (24/14) * rect_size, rect_size ~= 14
                             const textXOffset = 22;  // text_x_offset = (22/14) * rect_size
                             const rectSize = 14;
+
+                            // Store legend bounds before rearrangement for viewBox calculation
+                            const oldLegendBbox = legendGroup.getBBox();
+                            const oldLegendTransform = parseTransform(legendGroup.getAttribute('transform'));
 
                             // Process feature_legend_group
                             if (featureLegendGroup) {
@@ -2870,40 +2874,40 @@
 
                                 // Handle pairwise_legend_group positioning
                                 if (pairwiseLegendGroup) {
+                                    // Clear any existing transform first
+                                    pairwiseLegendGroup.removeAttribute('transform');
+
                                     // Get actual bounding boxes for proper alignment
                                     const featureBbox = featureLegendGroup.getBBox();
                                     const pairwiseBbox = pairwiseLegendGroup.getBBox();
 
                                     if (newIsHorizontal) {
                                         // Place pairwise legend to the right of feature legend
-                                        // Vertically center the shorter one
-                                        let pairwiseY = 0;
-                                        if (featureBbox.height > pairwiseBbox.height) {
-                                            pairwiseY = (featureBbox.height - pairwiseBbox.height) / 2;
-                                        } else {
-                                            // Shift feature legend down to center
-                                            const featureYOffset = (pairwiseBbox.height - featureBbox.height) / 2;
-                                            // Update all feature legend entries
-                                            entries.forEach(entry => {
-                                                if (entry.path) {
-                                                    const t = parseTransform(entry.path.el.getAttribute('transform'));
-                                                    entry.path.el.setAttribute('transform', `translate(${t.x}, ${t.y + featureYOffset})`);
-                                                }
-                                                if (entry.text) {
-                                                    const t = parseTransform(entry.text.el.getAttribute('transform'));
-                                                    entry.text.el.setAttribute('transform', `translate(${t.x}, ${t.y + featureYOffset})`);
-                                                }
-                                            });
-                                        }
-                                        pairwiseLegendGroup.setAttribute('transform', `translate(${featureBbox.width + textXOffset}, ${pairwiseY})`);
-                                        featureLegendHeight = Math.max(featureBbox.height, pairwiseBbox.height);
+                                        // Both should be centered on the same Y baseline
+                                        // Feature legend center Y = featureBbox.y + featureBbox.height/2
+                                        // Pairwise legend should be vertically centered with feature legend
+                                        const featureCenterY = featureBbox.y + featureBbox.height / 2;
+                                        const pairwiseCenterY = pairwiseBbox.y + pairwiseBbox.height / 2;
+                                        const pairwiseY = featureCenterY - pairwiseCenterY;
+
+                                        // X position: right of feature legend with spacing
+                                        const pairwiseX = featureBbox.x + featureBbox.width + textXOffset;
+
+                                        pairwiseLegendGroup.setAttribute('transform', `translate(${pairwiseX}, ${pairwiseY})`);
                                     } else {
                                         // Place pairwise legend below feature legend
-                                        // Center horizontally if pairwise is wider
-                                        let featureXOffset = 0;
+                                        // Center horizontally relative to each other
+                                        const featureBbox = featureLegendGroup.getBBox();
+                                        const pairwiseBbox = pairwiseLegendGroup.getBBox();
+
+                                        // Y position: below feature legend with spacing
+                                        const pairwiseY = featureBbox.y + featureBbox.height + entrySpacing / 2;
+
+                                        // X position: center if pairwise is wider, otherwise align left
+                                        let pairwiseX = 0;
                                         if (pairwiseBbox.width > featureBbox.width) {
-                                            featureXOffset = (pairwiseBbox.width - featureBbox.width) / 2;
-                                            // Update all feature legend entries
+                                            // Center feature legend relative to pairwise
+                                            const featureXOffset = (pairwiseBbox.width - featureBbox.width) / 2;
                                             entries.forEach(entry => {
                                                 if (entry.path) {
                                                     const t = parseTransform(entry.path.el.getAttribute('transform'));
@@ -2914,28 +2918,82 @@
                                                     entry.text.el.setAttribute('transform', `translate(${t.x + featureXOffset}, ${t.y})`);
                                                 }
                                             });
+                                        } else {
+                                            // Center pairwise legend relative to feature
+                                            pairwiseX = (featureBbox.width - pairwiseBbox.width) / 2;
                                         }
-                                        pairwiseLegendGroup.setAttribute('transform', `translate(0, ${featureLegendHeight})`);
+                                        pairwiseLegendGroup.setAttribute('transform', `translate(${pairwiseX}, ${pairwiseY})`);
                                     }
                                 }
                             }
 
                             // Update legend dimensions after rearrangement
-                            const newBbox = legendGroup.getBBox();
-                            legendWidth = newBbox.width || legendWidth;
-                            legendHeight = newBbox.height || legendHeight;
+                            const newLegendBbox = legendGroup.getBBox();
+                            legendWidth = newLegendBbox.width || legendWidth;
+                            legendHeight = newLegendBbox.height || legendHeight;
+
+                            // Calculate viewBox change based on layout direction change
+                            // Vertical layout (left/right): legend adds to WIDTH
+                            // Horizontal layout (top/bottom): legend adds to HEIGHT
+                            const layoutPadding = 40; // Space between legend and content
+
+                            if (newIsHorizontal) {
+                                // Converting from vertical to horizontal
+                                // - Remove legend width from canvas width
+                                // - Add legend height to canvas height
+                                const widthReduction = oldLegendBbox.width + layoutPadding;
+                                const heightAddition = newLegendBbox.height + layoutPadding;
+
+                                vbW = vbW - widthReduction;
+                                vbH = vbH + heightAddition;
+                            } else {
+                                // Converting from horizontal to vertical
+                                // - Add legend width to canvas width
+                                // - Remove legend height from canvas height
+                                const widthAddition = newLegendBbox.width + layoutPadding;
+                                const heightReduction = oldLegendBbox.height + layoutPadding;
+
+                                vbW = vbW + widthAddition;
+                                vbH = vbH - heightReduction;
+                            }
+
+                            // Ensure minimum dimensions
+                            vbW = Math.max(vbW, 400);
+                            vbH = Math.max(vbH, 200);
+
+                            svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
                         }
 
-                        if (newLegendPos) {
-                            // Recalculate position after potential layout change
-                            const finalLegendPos = layoutChanged ? calcLegendPos(newPosition) : newLegendPos;
-                            const newX = finalLegendPos.x;
-                            const newY = finalLegendPos.y;
+                        if (newLegendPos || layoutChanged) {
+                            // Calculate position with updated legend dimensions
+                            const padding = 20;
+                            let finalX, finalY;
 
-                            legendGroup.setAttribute('transform', `translate(${newX}, ${newY})`);
+                            // Position based on target position (not layout direction)
+                            switch (newPosition) {
+                                case 'top':
+                                    finalX = (vbW - legendWidth) / 2;
+                                    finalY = padding;
+                                    break;
+                                case 'bottom':
+                                    finalX = (vbW - legendWidth) / 2;
+                                    finalY = vbH - legendHeight - padding;
+                                    break;
+                                case 'left':
+                                    finalX = padding;
+                                    finalY = (vbH - legendHeight) / 2;
+                                    break;
+                                case 'right':
+                                default:
+                                    finalX = vbW - legendWidth - padding;
+                                    finalY = (vbH - legendHeight) / 2;
+                                    break;
+                            }
+
+                            legendGroup.setAttribute('transform', `translate(${finalX}, ${finalY})`);
 
                             // Update initial transform for reset
-                            legendInitialTransform.value = { x: newX, y: newY };
+                            legendInitialTransform.value = { x: finalX, y: finalY };
                             legendCurrentOffset.x = 0;
                             legendCurrentOffset.y = 0;
                         }
@@ -3129,8 +3187,17 @@
 
             // Watch for legend position changes to reposition elements without regeneration
             watch(() => form.legend, (newPos, oldPos) => {
-                // Only reposition if SVG exists and position actually changed
-                if (svgContent.value && newPos !== oldPos) {
+                // Only reposition if:
+                // 1. SVG exists
+                // 2. oldPos is defined (not initial setup)
+                // 3. Position actually changed
+                // 4. The generated position is already set (diagram was generated)
+                // 5. newPos is different from the generated position (actual user change)
+                if (svgContent.value &&
+                    oldPos !== undefined &&
+                    newPos !== oldPos &&
+                    generatedLegendPosition.value &&
+                    newPos !== generatedLegendPosition.value) {
                     Vue.nextTick(() => {
                         repositionForLegendChange(newPos, generatedLegendPosition.value);
                     });
