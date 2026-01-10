@@ -81,10 +81,12 @@ gbdraw/
 ### Entry Points
 
 1. **CLI:** `gbdraw.cli:main()` → dispatches to `circular` or `linear` subcommands
-2. **Public API:** `gbdraw.api` module exports high-level functions:
-   - `assemble_circular_diagram_from_record()`
-   - `assemble_linear_diagram_from_records()`
-   - Configurator classes for programmatic use
+2. **Public API:** `gbdraw.api` module exports:
+   - `assemble_circular_diagram_from_record()` - Build circular diagram from SeqRecord
+   - `assemble_linear_diagram_from_records()` - Build linear diagram from multiple SeqRecords
+   - Configurator classes (`FeatureDrawingConfigurator`, `GcContentConfigurator`, etc.)
+   - Canvas configurators (`CircularCanvasConfigurator`, `LinearCanvasConfigurator`)
+   - Track specs (`TrackSpec`, `parse_track_specs()`) - Control individual track visibility/styling
 
 ### Data Flow
 
@@ -103,6 +105,13 @@ Main configurator classes encapsulate drawing logic:
 - `GcSkewConfigurator` - GC skew track
 - `BlastMatchConfigurator` - BLAST comparison (linear only)
 - `LegendDrawingConfigurator` - Color legend
+
+### Render Module Structure
+
+The `gbdraw/render/` module has a two-tier architecture:
+- **drawers/**: Low-level SVG element builders (individual shapes, paths)
+- **groups/**: High-level SVG group assemblers that compose drawers
+- **export.py**: Format conversion (`save_figure()`, `parse_formats()`)
 
 ## Coding Conventions
 
@@ -175,10 +184,24 @@ Tests compare generated SVG against `tests/reference_outputs/` files.
 5. **Label filtering:** Supports priority files, blacklists, whitelists
 6. **BLAST comparison:** Linear diagrams only, requires outfmt 6/7
 
+## Updating Reference Outputs
+
+When intentional changes affect SVG output, reference files need updating:
+
+```bash
+# 1. Run tests to identify failures
+pytest tests/test_output_comparison.py -v
+
+# 2. Review differences - ensure changes are intentional
+# 3. Regenerate and copy updated outputs to tests/reference_outputs/
+# 4. Commit with explanation of visual changes
+```
+
 ## Documentation
 
 - Main docs: `docs/DOCS.md`
 - Tutorials: `docs/TUTORIALS/`
 - CLI Reference: `docs/CLI_Reference.md`
+- **Web app development:** See `gbdraw/web/CLAUDE.md` for web-specific guidance
 - Web app: https://gbdraw.app/
 - GitHub: https://github.com/satoshikawato/gbdraw
