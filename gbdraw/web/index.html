@@ -2735,16 +2735,102 @@
                 const oldDiagramOffset = calcDiagramOffset(oldPosition);
                 const newDiagramOffset = calcDiagramOffset(newPosition);
 
+                // Determine layout direction
+                const isHorizontalLayout = (pos) => pos === 'top' || pos === 'bottom';
+                const isVerticalLayout = (pos) => pos === 'left' || pos === 'right';
+                const oldIsHorizontal = isHorizontalLayout(oldPosition);
+                const newIsHorizontal = isHorizontalLayout(newPosition);
+                const layoutChanged = isLinear && (oldIsHorizontal !== newIsHorizontal) && newPosition !== 'none';
+
                 // Handle legend visibility and position
                 if (legendGroup) {
                     if (newPosition === 'none') {
                         legendGroup.style.display = 'none';
                     } else {
                         legendGroup.style.display = '';
+
+                        // Rearrange legend entries if layout direction changed (horizontal <-> vertical)
+                        if (layoutChanged) {
+                            const featureLegendGroup = legendGroup.querySelector('#feature_legend') || legendGroup;
+                            const entries = [];
+
+                            // Collect all legend entry elements (paths and texts)
+                            const allElements = featureLegendGroup.querySelectorAll('path, text');
+                            const elementsByY = new Map();
+
+                            allElements.forEach(el => {
+                                const transform = el.getAttribute('transform');
+                                if (transform) {
+                                    const match = transform.match(/translate\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/);
+                                    if (match) {
+                                        const x = parseFloat(match[1]);
+                                        const y = parseFloat(match[2]);
+                                        // Group by Y position (for horizontal layout) or X position (for vertical)
+                                        const key = oldIsHorizontal ? Math.round(y) : Math.round(x);
+                                        if (!elementsByY.has(key)) {
+                                            elementsByY.set(key, []);
+                                        }
+                                        elementsByY.set(key, [...elementsByY.get(key), { el, x, y }]);
+                                    }
+                                }
+                            });
+
+                            // Sort entries and rearrange
+                            const sortedKeys = [...elementsByY.keys()].sort((a, b) => a - b);
+                            const entrySpacing = 24; // Spacing between entries
+                            const textOffset = 22;   // X offset for text after color box
+
+                            if (oldIsHorizontal && !newIsHorizontal) {
+                                // Horizontal -> Vertical: stack entries vertically
+                                let currentY = 0;
+                                sortedKeys.forEach((key, rowIndex) => {
+                                    const rowElements = elementsByY.get(key);
+                                    // Sort by X to get order
+                                    rowElements.sort((a, b) => a.x - b.x);
+
+                                    // Group into pairs (color box + text)
+                                    for (let i = 0; i < rowElements.length; i += 2) {
+                                        const colorBox = rowElements[i];
+                                        const textEl = rowElements[i + 1];
+
+                                        if (colorBox) {
+                                            colorBox.el.setAttribute('transform', `translate(0, ${currentY})`);
+                                        }
+                                        if (textEl) {
+                                            textEl.el.setAttribute('transform', `translate(${textOffset}, ${currentY})`);
+                                        }
+                                        currentY += entrySpacing;
+                                    }
+                                });
+                            } else if (!oldIsHorizontal && newIsHorizontal) {
+                                // Vertical -> Horizontal: arrange entries horizontally
+                                let currentX = 0;
+                                const entryWidth = 100; // Approximate width per entry
+
+                                sortedKeys.forEach((key, index) => {
+                                    const colElements = elementsByY.get(key);
+                                    colElements.sort((a, b) => a.y - b.y);
+
+                                    colElements.forEach(item => {
+                                        const isText = item.el.tagName === 'text';
+                                        const newX = currentX + (isText ? textOffset : 0);
+                                        item.el.setAttribute('transform', `translate(${newX}, 0)`);
+                                    });
+                                    currentX += entryWidth;
+                                });
+                            }
+
+                            // Update legend dimensions after rearrangement
+                            const newBbox = legendGroup.getBBox();
+                            legendWidth = newBbox.width || legendWidth;
+                            legendHeight = newBbox.height || legendHeight;
+                        }
+
                         if (newLegendPos) {
-                            // Use direct positioning based on new position
-                            const newX = newLegendPos.x;
-                            const newY = newLegendPos.y;
+                            // Recalculate position after potential layout change
+                            const finalLegendPos = layoutChanged ? calcLegendPos(newPosition) : newLegendPos;
+                            const newX = finalLegendPos.x;
+                            const newY = finalLegendPos.y;
 
                             legendGroup.setAttribute('transform', `translate(${newX}, ${newY})`);
 
