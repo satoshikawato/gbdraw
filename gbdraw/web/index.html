@@ -1128,6 +1128,10 @@
             // This prevents base config from being overwritten during incremental edits
             const skipCaptureBaseConfig = ref(false);
 
+            // Flag to skip position reapply after repositionForLegendChange is called
+            // This prevents infinite loop when repositionForLegendChange triggers watch(svgContent)
+            const skipPositionReapply = ref(false);
+
             // Base configuration for circular mode (stored when SVG is generated)
             // Used to calculate absolute positions without accumulation
             const circularBaseConfig = ref({
@@ -2904,6 +2908,13 @@
                         legendWidth: legendWidth,
                         legendHeight: legendHeight
                     };
+                    // Debug: Check if legend dimensions changed from original
+                    const origLegendWidth = circularBaseConfig.value.legendWidth || 0;
+                    const origLegendHeight = circularBaseConfig.value.legendHeight || 0;
+                    if (Math.abs(legendWidth - origLegendWidth) > 1 || Math.abs(legendHeight - origLegendHeight) > 1) {
+                        console.log(`[DEBUG] ⚠️ Legend size CHANGED: ${origLegendWidth.toFixed(1)}x${origLegendHeight.toFixed(1)} -> ${legendWidth.toFixed(1)}x${legendHeight.toFixed(1)}`);
+                        console.log(`[DEBUG] ⚠️ Shift calculation affected: old=${(origLegendWidth * 0.55).toFixed(1)}, new=${(legendWidth * 0.55).toFixed(1)}`);
+                    }
                     console.log('[DEBUG] baseConfig:', baseConfig);
 
                     // Calculate absolute configuration for new position
@@ -2924,6 +2935,13 @@
                     // Set diagram elements to absolute positions based on base transforms + shift
                     console.log('[DEBUG] Circular: diagramElementBaseTransforms size:', diagramElementBaseTransforms.value.size);
                     console.log('[DEBUG] Circular: diagramElements count:', diagramElements.value.length);
+
+                    // Debug: Show all base transforms at start of repositioning
+                    console.log('[DEBUG] Base transforms at reposition start:');
+                    for (const [el, transform] of diagramElementBaseTransforms.value) {
+                        console.log(`  ${el.id}: {x:${transform.x}, y:${transform.y}}`);
+                    }
+
                     if (diagramElements.value.length > 0) {
                         diagramElements.value.forEach((el, idx) => {
                             const currentTransform = el.getAttribute('transform');
@@ -3134,18 +3152,26 @@
                 generatedLegendPosition.value = newPosition;
 
                 // Persist changes to results.value so they survive re-rendering
-                // Set flag to prevent captureBaseConfig from being called when svgContent watch triggers
+                // Set flags to prevent captureBaseConfig and position reapply when svgContent watch triggers
                 skipCaptureBaseConfig.value = true;
+                skipPositionReapply.value = true;  // Prevent watch from calling repositionForLegendChange again
                 const idx = selectedResultIndex.value;
                 if (idx >= 0 && results.value.length > idx) {
                     const serializer = new XMLSerializer();
                     const serialized = serializer.serializeToString(svg);
-                    results.value[idx] = { ...results.value[idx], content: serialized };
-                    // Debug: verify the serialized SVG contains the correct transforms
+
+                    // Debug: Check what transforms are in the serialized SVG
                     if (!isLinear && diagramElements.value.length > 0) {
                         const firstEl = diagramElements.value[0];
-                        console.log(`[DEBUG] Serialization check - first element (${firstEl.id}) current transform:`, firstEl.getAttribute('transform'));
+                        const domTransform = firstEl.getAttribute('transform');
+                        // Check if serialized content contains this transform
+                        const transformMatch = serialized.match(new RegExp(`id="${firstEl.id}"[^>]*transform="([^"]+)"`));
+                        const serializedTransform = transformMatch ? transformMatch[1] : 'NOT FOUND';
+                        console.log(`[DEBUG] Before save - DOM transform: ${domTransform}`);
+                        console.log(`[DEBUG] Before save - Serialized transform: ${serializedTransform}`);
                     }
+
+                    results.value[idx] = { ...results.value[idx], content: serialized };
                 }
 
                 console.log(`Legend repositioned (${isLinear ? 'linear' : 'circular'}): ${oldPosition} -> ${newPosition}`);
@@ -3428,6 +3454,9 @@
                 // IMPORTANT: Capture state BEFORE nextTick, while old DOM elements are still valid
                 // After nextTick, Vue will have updated the DOM and old element refs become invalid
                 const isIncrementalEdit = skipCaptureBaseConfig.value;
+                const shouldSkipPositionReapply = skipPositionReapply.value;
+                // Reset position reapply flag immediately (it's only for one cycle)
+                skipPositionReapply.value = false;
 
                 // Build ID -> transforms lookup from current base transforms BEFORE DOM update
                 // This must happen synchronously (before nextTick) to access old element IDs
@@ -3447,6 +3476,17 @@
                 }
 
                 Vue.nextTick(() => {
+                    // Debug: Check what the DOM looks like AFTER Vue updates it
+                    if (svgContainer.value) {
+                        const svg = svgContainer.value.querySelector('svg');
+                        if (svg) {
+                            const tickEl = svg.getElementById('tick');
+                            if (tickEl) {
+                                console.log(`[DEBUG] After DOM update - tick transform: ${tickEl.getAttribute('transform')}`);
+                            }
+                        }
+                    }
+
                     extractLegendEntries();
                     setupLegendDrag();
                     setupDiagramDrag();
@@ -3482,6 +3522,33 @@
 
                         diagramElementBaseTransforms.value = newBaseTransforms;
                         console.log('[DEBUG] Remapped', newBaseTransforms.size, 'base transforms to new elements');
+
+                        // After DOM update, reapply legend position if it differs from generated position
+                        // This is needed because Python regenerates SVG with the original position
+                        // BUT skip if this watch was triggered by repositionForLegendChange itself
+                        if (!shouldSkipPositionReapply) {
+                            const isLinear = mode.value === 'linear';
+                            const currentLegendPos = form.legend;
+                            const generatedPos = isLinear
+                                ? linearBaseConfig.value.generatedPosition
+                                : circularBaseConfig.value.generatedPosition;
+
+                            console.log('[DEBUG] Checking position after incremental edit:', { currentLegendPos, generatedPos, isLinear, shouldSkipPositionReapply });
+
+                            if (currentLegendPos && generatedPos && currentLegendPos !== generatedPos) {
+                                console.log('[DEBUG] Position differs from generated - reapplying position shift');
+                                // IMPORTANT: Set flag BEFORE calling repositionForLegendChange
+                                // to ensure the subsequent watch(svgContent) doesn't call captureBaseConfig()
+                                skipCaptureBaseConfig.value = true;
+                                // Call synchronously - repositionForLegendChange will set the flag again anyway
+                                repositionForLegendChange(currentLegendPos, generatedPos);
+                                // Don't reset the flag here - let it be reset after the watch triggered by
+                                // repositionForLegendChange's serialization completes
+                                return;
+                            }
+                        } else {
+                            console.log('[DEBUG] Skipping position reapply (triggered by repositionForLegendChange)');
+                        }
                     } else {
                         console.log('[DEBUG] Incremental edit but no base transforms to remap');
                     }
