@@ -2787,9 +2787,12 @@
             // Uses base config to avoid accumulation errors
             const getCircularAbsoluteConfig = (position, baseConfig) => {
                 const { viewBoxWidth, viewBoxHeight, diagramCenterX, diagramCenterY, legendWidth, legendHeight } = baseConfig;
+                console.log(`[DEBUG] getCircularAbsoluteConfig called with position="${position}" (type: ${typeof position}, length: ${position.length})`);
+                console.log(`[DEBUG] position === 'left': ${position === 'left'}, position === 'right': ${position === 'right'}`);
 
                 switch (position) {
                     case 'left':
+                        console.log('[DEBUG] Matched case: left');
                         return {
                             vbWidth: viewBoxWidth + legendWidth * 1.1,
                             vbHeight: viewBoxHeight,
@@ -2799,6 +2802,7 @@
                             legendY: (viewBoxHeight - legendHeight) / 2
                         };
                     case 'right':
+                        console.log('[DEBUG] Matched case: right');
                         return {
                             vbWidth: viewBoxWidth + legendWidth * 1.1,
                             vbHeight: viewBoxHeight,
@@ -2845,6 +2849,7 @@
                         };
                     case 'none':
                     default:
+                        console.log(`[DEBUG] Matched case: default (position was "${position}")`);
                         return {
                             vbWidth: viewBoxWidth,
                             vbHeight: viewBoxHeight,
@@ -2921,11 +2926,12 @@
                     console.log('[DEBUG] Circular: diagramElements count:', diagramElements.value.length);
                     if (diagramElements.value.length > 0) {
                         diagramElements.value.forEach((el, idx) => {
+                            const currentTransform = el.getAttribute('transform');
                             const baseTransform = diagramElementBaseTransforms.value.get(el) || { x: 0, y: 0 };
                             const foundInMap = diagramElementBaseTransforms.value.has(el);
-                            console.log(`[DEBUG] Element ${idx} (${el.id}): foundInMap=${foundInMap}, baseTransform=`, baseTransform);
                             const newX = baseTransform.x + config.diagramShiftX;
                             const newY = baseTransform.y + config.diagramShiftY;
+                            console.log(`[DEBUG] Element ${idx} (${el.id}): currentTransform="${currentTransform}", foundInMap=${foundInMap}, baseTransform={x:${baseTransform.x}, y:${baseTransform.y}}, newTransform={x:${newX}, y:${newY}}`);
                             el.setAttribute('transform', `translate(${newX}, ${newY})`);
 
                             // Update current transforms (for drag operations)
@@ -3133,7 +3139,13 @@
                 const idx = selectedResultIndex.value;
                 if (idx >= 0 && results.value.length > idx) {
                     const serializer = new XMLSerializer();
-                    results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                    const serialized = serializer.serializeToString(svg);
+                    results.value[idx] = { ...results.value[idx], content: serialized };
+                    // Debug: verify the serialized SVG contains the correct transforms
+                    if (!isLinear && diagramElements.value.length > 0) {
+                        const firstEl = diagramElements.value[0];
+                        console.log(`[DEBUG] Serialization check - first element (${firstEl.id}) current transform:`, firstEl.getAttribute('transform'));
+                    }
                 }
 
                 console.log(`Legend repositioned (${isLinear ? 'linear' : 'circular'}): ${oldPosition} -> ${newPosition}`);
