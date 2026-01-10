@@ -2767,100 +2767,91 @@
                                 // Remove group-level transform first
                                 featureLegendGroup.removeAttribute('transform');
 
-                                // Collect feature entries (path + text pairs)
-                                const paths = featureLegendGroup.querySelectorAll('path');
-                                const texts = featureLegendGroup.querySelectorAll('text');
+                                // NOTE: All legend elements are <path> - both color rectangles AND text
+                                // (generate_text_path creates path elements, not text elements)
+                                // Rectangle paths are at X offset ~0, text paths are at X offset ~22
+                                const allPaths = featureLegendGroup.querySelectorAll('path');
 
-                                // Build entry list: each entry is {path, text, originalOrder}
+                                // Collect all path data
+                                const pathData = [];
+                                allPaths.forEach(p => {
+                                    const t = parseTransform(p.getAttribute('transform'));
+                                    pathData.push({ el: p, x: t.x, y: t.y });
+                                });
+
+                                // Build entry list: each entry is {rect, text}
                                 const entries = [];
 
                                 if (oldIsHorizontal) {
-                                    // Horizontal layout: entries are sorted by X position
-                                    // Path and text with similar Y are paired, sorted by X
-                                    const allElements = [];
-                                    paths.forEach(p => {
-                                        const t = parseTransform(p.getAttribute('transform'));
-                                        allElements.push({ el: p, x: t.x, y: t.y, type: 'path' });
-                                    });
-                                    texts.forEach(t => {
-                                        const tr = parseTransform(t.getAttribute('transform'));
-                                        allElements.push({ el: t, x: tr.x, y: tr.y, type: 'text' });
-                                    });
+                                    // Horizontal layout: entries arranged by X
+                                    // Sort by X position
+                                    pathData.sort((a, b) => a.x - b.x);
 
-                                    // Sort by Y first, then X
-                                    allElements.sort((a, b) => {
-                                        const yDiff = Math.round(a.y) - Math.round(b.y);
-                                        if (yDiff !== 0) return yDiff;
-                                        return a.x - b.x;
-                                    });
-
-                                    // Group into path-text pairs (path comes before its text in X order)
-                                    for (let i = 0; i < allElements.length; i++) {
-                                        if (allElements[i].type === 'path') {
-                                            const pathEl = allElements[i];
-                                            // Find the next text element (should be right after in sorted order)
-                                            const textEl = allElements[i + 1]?.type === 'text' ? allElements[i + 1] : null;
-                                            entries.push({ path: pathEl, text: textEl });
-                                            if (textEl) i++; // Skip the text we just paired
-                                        }
+                                    // Pair consecutive elements (rect, text, rect, text, ...)
+                                    for (let i = 0; i < pathData.length; i += 2) {
+                                        const rect = pathData[i];
+                                        const text = pathData[i + 1] || null;
+                                        entries.push({ rect, text });
                                     }
                                 } else {
-                                    // Vertical layout: entries are sorted by Y position
-                                    // Path at X=0, text at X=textXOffset, same Y
-                                    const pathsByY = new Map();
-                                    const textsByY = new Map();
-
-                                    paths.forEach(p => {
-                                        const t = parseTransform(p.getAttribute('transform'));
-                                        pathsByY.set(Math.round(t.y), { el: p, x: t.x, y: t.y });
-                                    });
-                                    texts.forEach(t => {
-                                        const tr = parseTransform(t.getAttribute('transform'));
-                                        textsByY.set(Math.round(tr.y), { el: t, x: tr.x, y: tr.y });
+                                    // Vertical layout: entries arranged by Y
+                                    // Group by Y position, then separate rect (X~0) from text (X~22)
+                                    const byY = new Map();
+                                    pathData.forEach(p => {
+                                        const yKey = Math.round(p.y);
+                                        if (!byY.has(yKey)) byY.set(yKey, []);
+                                        byY.get(yKey).push(p);
                                     });
 
-                                    // Match by Y position
-                                    const yPositions = [...new Set([...pathsByY.keys(), ...textsByY.keys()])].sort((a, b) => a - b);
+                                    // Sort Y positions and build entries
+                                    const yPositions = [...byY.keys()].sort((a, b) => a - b);
                                     yPositions.forEach(y => {
-                                        const pathEl = pathsByY.get(y);
-                                        const textEl = textsByY.get(y);
-                                        if (pathEl || textEl) {
-                                            entries.push({ path: pathEl, text: textEl });
-                                        }
+                                        const elements = byY.get(y);
+                                        // Sort by X - first is rect (X~0), second is text (X~22)
+                                        elements.sort((a, b) => a.x - b.x);
+                                        const rect = elements[0] || null;
+                                        const text = elements[1] || null;
+                                        entries.push({ rect, text });
                                     });
                                 }
+
+                                // Calculate text widths BEFORE moving anything
+                                // (getBBox is unreliable after transform changes)
+                                const entryWidths = entries.map(entry => {
+                                    if (entry.text) {
+                                        const bbox = entry.text.el.getBBox();
+                                        return rectSize + textXOffset + bbox.width + textXOffset;
+                                    }
+                                    return rectSize + textXOffset * 2;
+                                });
 
                                 // Now rearrange entries to new layout
                                 let featureLegendWidth = 0;
                                 let featureLegendHeight = 0;
 
                                 if (newIsHorizontal) {
-                                    // Arrange horizontally
+                                    // Vertical → Horizontal: Stack entries side by side
                                     let currentX = 0;
                                     const baseY = rectSize / 2;
 
                                     entries.forEach((entry, idx) => {
-                                        if (entry.path) {
-                                            entry.path.el.setAttribute('transform', `translate(${currentX}, ${baseY})`);
+                                        if (entry.rect) {
+                                            entry.rect.el.setAttribute('transform', `translate(${currentX}, ${baseY})`);
                                         }
                                         if (entry.text) {
                                             entry.text.el.setAttribute('transform', `translate(${currentX + textXOffset}, ${baseY})`);
-                                            // Estimate text width (approximate)
-                                            const textLen = entry.text.el.textContent?.length || 5;
-                                            currentX += textXOffset + (textLen * 8) + textXOffset;
-                                        } else {
-                                            currentX += textXOffset * 2;
                                         }
+                                        currentX += entryWidths[idx];
                                     });
                                     featureLegendWidth = currentX;
                                     featureLegendHeight = entrySpacing;
                                 } else {
-                                    // Arrange vertically
+                                    // Horizontal → Vertical: Stack entries top to bottom
                                     let currentY = rectSize / 2;
 
                                     entries.forEach((entry, idx) => {
-                                        if (entry.path) {
-                                            entry.path.el.setAttribute('transform', `translate(0, ${currentY})`);
+                                        if (entry.rect) {
+                                            entry.rect.el.setAttribute('transform', `translate(0, ${currentY})`);
                                         }
                                         if (entry.text) {
                                             entry.text.el.setAttribute('transform', `translate(${textXOffset}, ${currentY})`);
@@ -2868,8 +2859,7 @@
                                         currentY += entrySpacing;
                                     });
                                     featureLegendHeight = currentY;
-                                    // Width is textXOffset + max text width (estimate)
-                                    featureLegendWidth = textXOffset + 100;
+                                    featureLegendWidth = Math.max(...entryWidths);
                                 }
 
                                 // Handle pairwise_legend_group positioning
@@ -2909,9 +2899,9 @@
                                             // Center feature legend relative to pairwise
                                             const featureXOffset = (pairwiseBbox.width - featureBbox.width) / 2;
                                             entries.forEach(entry => {
-                                                if (entry.path) {
-                                                    const t = parseTransform(entry.path.el.getAttribute('transform'));
-                                                    entry.path.el.setAttribute('transform', `translate(${t.x + featureXOffset}, ${t.y})`);
+                                                if (entry.rect) {
+                                                    const t = parseTransform(entry.rect.el.getAttribute('transform'));
+                                                    entry.rect.el.setAttribute('transform', `translate(${t.x + featureXOffset}, ${t.y})`);
                                                 }
                                                 if (entry.text) {
                                                     const t = parseTransform(entry.text.el.getAttribute('transform'));
