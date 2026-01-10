@@ -2700,15 +2700,33 @@
                     }
                 };
 
-                // Calculate diagram offset based on legend position (for left/right scenarios)
+                // Calculate diagram offset based on legend position
                 const calcDiagramOffset = (pos) => {
-                    switch (pos) {
-                        case 'left':
-                            return { x: legendWidth * 0.5, y: 0 };
-                        case 'right':
-                            return { x: -legendWidth * 0.5, y: 0 };
-                        default:
-                            return { x: 0, y: 0 };
+                    if (isLinear) {
+                        // Linear: legend position affects diagram offset
+                        const verticalPadding = legendHeight + 40; // legend height + spacing
+                        switch (pos) {
+                            case 'left':
+                                return { x: legendWidth + 20, y: 0 };
+                            case 'right':
+                                return { x: 0, y: 0 };
+                            case 'top':
+                                return { x: 0, y: verticalPadding };
+                            case 'bottom':
+                                return { x: 0, y: 0 };
+                            default:
+                                return { x: 0, y: 0 };
+                        }
+                    } else {
+                        // Circular: only left/right affects diagram
+                        switch (pos) {
+                            case 'left':
+                                return { x: legendWidth * 0.5, y: 0 };
+                            case 'right':
+                                return { x: -legendWidth * 0.5, y: 0 };
+                            default:
+                                return { x: 0, y: 0 };
+                        }
                     }
                 };
 
@@ -2738,12 +2756,13 @@
                     }
                 }
 
-                // Move diagram elements only for left/right transitions
-                const isLeftRightTransition =
-                    (oldPosition === 'left' || oldPosition === 'right') &&
-                    (newPosition === 'left' || newPosition === 'right');
+                // Determine if diagram elements should move
+                const shouldMoveDiagram = isLinear
+                    ? (oldPosition !== newPosition && newPosition !== 'none')  // Linear: move for any valid transition
+                    : ((oldPosition === 'left' || oldPosition === 'right') &&
+                       (newPosition === 'left' || newPosition === 'right'));   // Circular: only left/right
 
-                if (isLeftRightTransition && diagramElements.value.length > 0) {
+                if (shouldMoveDiagram && diagramElements.value.length > 0) {
                     const diagramDeltaX = newDiagramOffset.x - oldDiagramOffset.x;
                     const diagramDeltaY = newDiagramOffset.y - oldDiagramOffset.y;
 
