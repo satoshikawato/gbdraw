@@ -2113,6 +2113,7 @@ json.dumps({"width": width})
                             // Entries are arranged left-to-right, wrapping to new rows
                             let maxY = rectSize / 2;  // Default first row Y
                             let maxXOnMaxY = 0;
+                            let lastEntryRightEdge = 0;  // Track actual right edge of last entry
 
                             const groupTextElements = group.querySelectorAll('text');
                             groupTextElements.forEach(el => {
@@ -2120,9 +2121,16 @@ json.dumps({"width": width})
                                 if (pos.y > maxY) {
                                     maxY = pos.y;
                                     maxXOnMaxY = pos.x;
+                                    // Calculate right edge: text X + text width + padding
+                                    const textBBox = el.getBBox();
+                                    lastEntryRightEdge = pos.x + textBBox.width + xMargin;
                                 } else if (Math.abs(pos.y - maxY) < 1) {
-                                    // Same row, track max X
-                                    if (pos.x > maxXOnMaxY) maxXOnMaxY = pos.x;
+                                    // Same row, track max X and right edge
+                                    if (pos.x > maxXOnMaxY) {
+                                        maxXOnMaxY = pos.x;
+                                        const textBBox = el.getBBox();
+                                        lastEntryRightEdge = pos.x + textBBox.width + xMargin;
+                                    }
                                 }
                             });
 
@@ -2136,18 +2144,19 @@ json.dumps({"width": width})
                                         if (pos.y > maxY) {
                                             maxY = pos.y;
                                             maxXOnMaxY = pos.x;
+                                            lastEntryRightEdge = pos.x + rectSize + xMargin;
                                         } else if (Math.abs(pos.y - maxY) < 1) {
-                                            if (pos.x > maxXOnMaxY) maxXOnMaxY = pos.x + rectSize;
+                                            if (pos.x > maxXOnMaxY) {
+                                                maxXOnMaxY = pos.x + rectSize;
+                                                lastEntryRightEdge = pos.x + rectSize + xMargin;
+                                            }
                                         }
                                     }
                                 });
                             }
 
-                            // Calculate new position
-                            // maxXOnMaxY is text X, so rect X is maxXOnMaxY - xMargin
-                            // Next entry rect should start after previous entry ends
-                            let lastEntryRectX = maxXOnMaxY > 0 ? maxXOnMaxY - xMargin : 0;
-                            let nextX = groupTextElements.length > 0 ? lastEntryRectX + entryWidth : 0;
+                            // Calculate new position using actual right edge of last entry
+                            let nextX = groupTextElements.length > 0 ? lastEntryRightEdge : 0;
 
                             // Check if we need to wrap to next row
                             // Use featureLegendMaxWidth (respects pairwise legend position)
@@ -2461,6 +2470,13 @@ json.dumps({"width": width})
                 return match ? parseFloat(match[1]) : null;
             };
 
+            // Helper to parse both X and Y from transform attribute
+            const parseTransformXY = (transform) => {
+                if (!transform) return { x: 0, y: 0 };
+                const match = transform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
+                return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : { x: 0, y: 0 };
+            };
+
             // Function to remove a legend entry by caption
             // Removes from BOTH horizontal and vertical legends if they exist
             const removeLegendEntry = (caption) => {
@@ -2476,27 +2492,47 @@ json.dumps({"width": width})
 
                 // Remove from all legend groups
                 for (const targetGroup of targetGroups) {
+                    // Detect rect_size from existing entries to calculate text_x_offset
+                    let rectSize = 14;
+                    const firstColorRect = targetGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
+                    if (firstColorRect) {
+                        const d = firstColorRect.getAttribute('d');
+                        if (d) {
+                            const lMatch = d.match(/L\s+([\d.]+),/);
+                            if (lMatch) rectSize = parseFloat(lMatch[1]);
+                        }
+                    }
+                    const textXOffset = (22 / 14) * rectSize;
+
                     // Find text element with this caption
                     const texts = targetGroup.querySelectorAll('text');
 
                     texts.forEach(t => {
                         if (t.textContent?.trim() === caption.trim()) {
-                            const textY = parseTransformY(t.getAttribute('transform'));
-                            if (textY !== null) {
-                                // Find and remove the color rect at the same Y (within tolerance)
-                                const rects = targetGroup.querySelectorAll('path');
-                                rects.forEach(r => {
-                                    const rectY = parseTransformY(r.getAttribute('transform'));
-                                    // Check if Y coordinates match (within 0.1 tolerance for floating point)
-                                    if (rectY !== null && Math.abs(rectY - textY) < 0.1) {
-                                        // Make sure it's a color rect (has solid fill, not gradient)
-                                        const fill = r.getAttribute('fill');
-                                        if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                                            r.remove();
-                                        }
+                            // Use X+Y coordinate matching (same as extractLegendEntries)
+                            const textTransform = parseTransformXY(t.getAttribute('transform'));
+                            const textX = textTransform.x;
+                            const textY = textTransform.y;
+
+                            // Find and remove the color rect at the correct X+Y position
+                            const rects = targetGroup.querySelectorAll('path');
+                            const expectedRectX = textX - textXOffset;
+
+                            rects.forEach(r => {
+                                const rectTransform = parseTransformXY(r.getAttribute('transform'));
+                                const rectX = rectTransform.x;
+                                const rectY = rectTransform.y;
+
+                                // Check both Y matches AND X position is correct for this text
+                                if (Math.abs(rectY - textY) < 1 && Math.abs(rectX - expectedRectX) < textXOffset) {
+                                    // Make sure it's a color rect (has solid fill, not gradient)
+                                    const fill = r.getAttribute('fill');
+                                    if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                        r.remove();
                                     }
-                                });
-                            }
+                                }
+                            });
+
                             t.remove();
                             removed = true;
                         }
@@ -3278,6 +3314,35 @@ json.dumps({"width": width})
                                         svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
                                         console.log('[DEBUG] ViewBox set to:', { vbX, vbY, vbW, vbH });
                                     }
+                                }
+
+                                // Expand canvas height if vertical legend exceeds canvas height
+                                // (Same logic as Python: assemble.py lines 177-185)
+                                const legendPadding = 40;  // Top + bottom padding
+                                const requiredHeight = legendHeight + legendPadding;
+                                if (!nowHorizontal && requiredHeight > vbH) {
+                                    const heightDifference = requiredHeight - vbH;
+                                    const newVbH = requiredHeight;
+                                    console.log('[DEBUG] Expanding canvas height:', { oldHeight: vbH, newHeight: newVbH, heightDifference });
+
+                                    // Shift all diagram elements down by half the difference to center them
+                                    const verticalShift = heightDifference / 2;
+                                    diagramElements.value.forEach(el => {
+                                        const currentTransform = parseTransform(el.getAttribute('transform'));
+                                        const newY = currentTransform.y + verticalShift;
+                                        el.setAttribute('transform', `translate(${currentTransform.x}, ${newY})`);
+                                        diagramElementOriginalTransforms.value.set(el, { x: currentTransform.x, y: newY });
+                                        // Also update base transforms so subsequent shifts work correctly
+                                        const baseTransform = diagramElementBaseTransforms.value.get(el);
+                                        if (baseTransform) {
+                                            diagramElementBaseTransforms.value.set(el, { x: baseTransform.x, y: baseTransform.y + verticalShift });
+                                        }
+                                    });
+
+                                    // Update viewBox height
+                                    vbH = newVbH;
+                                    svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                                    console.log('[DEBUG] ViewBox after height expansion:', { vbX, vbY, vbW, vbH });
                                 }
                             }
 
