@@ -2050,44 +2050,141 @@
                     const escapedFontFamily = fontFamily.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
                     const parser = new DOMParser();
 
+                    // Helper to parse X and Y from transform
+                    const parseTransformXY = (transform) => {
+                        if (!transform) return { x: 0, y: 0 };
+                        const match = transform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
+                        return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : { x: 0, y: 0 };
+                    };
+
+                    // Estimate text width using Pyodide
+                    let entryWidth = rectSize + xMargin + 100;  // Default estimate
+                    try {
+                        const widthResult = pyodide.runPython(`
+import json
+from gbdraw.core.text import calculate_bbox_dimensions
+width, _ = calculate_bbox_dimensions("${escapedCaption}", "${escapedFontFamily}", ${fontSize}, 72)
+json.dumps({"width": width})
+`);
+                        const widthData = JSON.parse(widthResult);
+                        entryWidth = rectSize + xMargin + widthData.width + xMargin;
+                    } catch (e) {
+                        console.warn('Could not calculate text width, using estimate');
+                    }
+
+                    // Get canvas width for horizontal wrapping (fallback)
+                    const viewBox = svg.getAttribute('viewBox');
+                    let canvasWidth = 800;  // Default
+                    if (viewBox) {
+                        const parts = viewBox.split(/\s+/);
+                        if (parts.length >= 4) canvasWidth = parseFloat(parts[2]);
+                    }
+
                     // Add entry to ALL feature legend groups (handles dual legends)
                     for (const group of allTargetGroups) {
-                        // Calculate Y position for THIS group (may differ between layouts)
-                        let groupMaxY = -lineMargin;
-                        const groupTextElements = group.querySelectorAll('text');
-                        groupTextElements.forEach(el => {
-                            const transform = el.getAttribute('transform');
-                            if (transform) {
-                                const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
-                                if (match) {
-                                    const y = parseFloat(match[1]);
-                                    if (y > groupMaxY) groupMaxY = y;
-                                }
-                            }
-                        });
+                        // Determine if this group is horizontal or vertical
+                        const parentId = group.parentElement?.id || '';
+                        const isHorizontalGroup = parentId === 'legend_horizontal';
 
-                        // If no text elements, check color rects
-                        if (groupTextElements.length === 0) {
-                            const colorRects = group.querySelectorAll('path');
-                            colorRects.forEach(el => {
-                                const fill = el.getAttribute('fill');
-                                if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                                    const transform = el.getAttribute('transform');
-                                    if (transform) {
-                                        const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                        let newX = 0, newY = 0;
+
+                        if (isHorizontalGroup) {
+                            // For horizontal layout, calculate available width for feature legend
+                            // by checking if there's a pairwise legend beside it
+                            let featureLegendMaxWidth = canvasWidth;
+                            const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+                            if (horizontalLegend) {
+                                const hPairwiseLegend = horizontalLegend.querySelector('#pairwise_legend');
+                                if (hPairwiseLegend) {
+                                    // Get pairwise legend's X position - that's where feature legend should stop
+                                    const pairwiseTransform = hPairwiseLegend.getAttribute('transform');
+                                    if (pairwiseTransform) {
+                                        const match = pairwiseTransform.match(/translate\(\s*([\d.-]+)\s*,/);
                                         if (match) {
-                                            const y = parseFloat(match[1]);
-                                            if (y > groupMaxY) groupMaxY = y;
+                                            // Feature legend should wrap before reaching pairwise legend
+                                            // Subtract some padding (xMargin) to leave space
+                                            featureLegendMaxWidth = parseFloat(match[1]) - xMargin;
                                         }
                                     }
                                 }
+                            }
+
+                            // Horizontal layout: find rightmost entry on the last row
+                            // Entries are arranged left-to-right, wrapping to new rows
+                            let maxY = rectSize / 2;  // Default first row Y
+                            let maxXOnMaxY = 0;
+
+                            const groupTextElements = group.querySelectorAll('text');
+                            groupTextElements.forEach(el => {
+                                const pos = parseTransformXY(el.getAttribute('transform'));
+                                if (pos.y > maxY) {
+                                    maxY = pos.y;
+                                    maxXOnMaxY = pos.x;
+                                } else if (Math.abs(pos.y - maxY) < 1) {
+                                    // Same row, track max X
+                                    if (pos.x > maxXOnMaxY) maxXOnMaxY = pos.x;
+                                }
                             });
+
+                            // If no text elements, check color rects
+                            if (groupTextElements.length === 0) {
+                                const colorRects = group.querySelectorAll('path');
+                                colorRects.forEach(el => {
+                                    const fill = el.getAttribute('fill');
+                                    if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                        const pos = parseTransformXY(el.getAttribute('transform'));
+                                        if (pos.y > maxY) {
+                                            maxY = pos.y;
+                                            maxXOnMaxY = pos.x;
+                                        } else if (Math.abs(pos.y - maxY) < 1) {
+                                            if (pos.x > maxXOnMaxY) maxXOnMaxY = pos.x + rectSize;
+                                        }
+                                    }
+                                });
+                            }
+
+                            // Calculate new position
+                            // maxXOnMaxY is text X, so rect X is maxXOnMaxY - xMargin
+                            // Next entry rect should start after previous entry ends
+                            let lastEntryRectX = maxXOnMaxY > 0 ? maxXOnMaxY - xMargin : 0;
+                            let nextX = groupTextElements.length > 0 ? lastEntryRectX + entryWidth : 0;
+
+                            // Check if we need to wrap to next row
+                            // Use featureLegendMaxWidth (respects pairwise legend position)
+                            if (nextX + entryWidth > featureLegendMaxWidth && nextX > 0) {
+                                newX = 0;
+                                newY = maxY + lineMargin;
+                            } else {
+                                newX = nextX;
+                                newY = maxY;
+                            }
+                        } else {
+                            // Vertical layout: existing behavior (stack vertically)
+                            let groupMaxY = -lineMargin;
+                            const groupTextElements = group.querySelectorAll('text');
+                            groupTextElements.forEach(el => {
+                                const pos = parseTransformXY(el.getAttribute('transform'));
+                                if (pos.y > groupMaxY) groupMaxY = pos.y;
+                            });
+
+                            // If no text elements, check color rects
+                            if (groupTextElements.length === 0) {
+                                const colorRects = group.querySelectorAll('path');
+                                colorRects.forEach(el => {
+                                    const fill = el.getAttribute('fill');
+                                    if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                        const pos = parseTransformXY(el.getAttribute('transform'));
+                                        if (pos.y > groupMaxY) groupMaxY = pos.y;
+                                    }
+                                });
+                            }
+
+                            newX = 0;
+                            newY = groupMaxY + lineMargin;
                         }
 
-                        const groupNewY = groupMaxY + lineMargin;
-
                         // Generate SVG for this group's position
-                        const resultJson = pyodide.runPython(`generate_legend_entry_svg("${escapedCaption}", "${color}", ${groupNewY}, ${rectSize}, ${fontSize}, "${escapedFontFamily}")`);
+                        const resultJson = pyodide.runPython(`generate_legend_entry_svg("${escapedCaption}", "${color}", ${newY}, ${rectSize}, ${fontSize}, "${escapedFontFamily}", ${newX})`);
                         const result = JSON.parse(resultJson);
 
                         // Insert rect
@@ -2102,6 +2199,85 @@
                         const textEl = textDoc.querySelector('text');
                         if (textEl) {
                             group.appendChild(document.importNode(textEl, true));
+                        }
+                    }
+
+                    // Reposition pairwise legend in vertical layout if needed
+                    const verticalLegend = legendGroup.querySelector('#legend_vertical');
+                    if (verticalLegend) {
+                        const vFeatureLegend = verticalLegend.querySelector('#feature_legend');
+                        const vPairwiseLegend = verticalLegend.querySelector('#pairwise_legend');
+
+                        if (vFeatureLegend && vPairwiseLegend) {
+                            // Calculate new feature legend height
+                            let maxFeatureY = 0;
+                            const featureTexts = vFeatureLegend.querySelectorAll('text');
+                            featureTexts.forEach(el => {
+                                const pos = parseTransformXY(el.getAttribute('transform'));
+                                if (pos.y > maxFeatureY) maxFeatureY = pos.y;
+                            });
+
+                            // Calculate new pairwise legend position
+                            // Backend uses: v_feature_height + self.line_height / 2
+                            const newPairwiseY = maxFeatureY + lineMargin + lineMargin / 2;
+
+                            // Get current pairwise transform to preserve X
+                            const currentTransform = vPairwiseLegend.getAttribute('transform');
+                            let pairwiseX = 0;
+                            if (currentTransform) {
+                                const match = currentTransform.match(/translate\(\s*([\d.-]+)\s*,/);
+                                if (match) pairwiseX = parseFloat(match[1]);
+                            }
+
+                            vPairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${newPairwiseY})`);
+                            console.log(`Repositioned vertical pairwise legend to y=${newPairwiseY}`);
+                        }
+                    }
+
+                    // Reposition pairwise legend in horizontal layout if needed (vertical centering)
+                    const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+                    if (horizontalLegend) {
+                        const hFeatureLegend = horizontalLegend.querySelector('#feature_legend');
+                        const hPairwiseLegend = horizontalLegend.querySelector('#pairwise_legend');
+
+                        if (hFeatureLegend && hPairwiseLegend) {
+                            // Calculate feature legend height (from rows)
+                            let minFeatureY = Infinity, maxFeatureY = -Infinity;
+                            const featureTexts = hFeatureLegend.querySelectorAll('text');
+                            featureTexts.forEach(el => {
+                                const pos = parseTransformXY(el.getAttribute('transform'));
+                                if (pos.y < minFeatureY) minFeatureY = pos.y;
+                                if (pos.y > maxFeatureY) maxFeatureY = pos.y;
+                            });
+
+                            if (minFeatureY !== Infinity && maxFeatureY !== -Infinity) {
+                                const featureHeight = maxFeatureY - minFeatureY + lineMargin;
+
+                                // Get pairwise legend height
+                                const pairwiseBBox = hPairwiseLegend.getBBox();
+                                const pairwiseHeight = pairwiseBBox.height;
+
+                                // Get current pairwise transform to preserve X
+                                const currentTransform = hPairwiseLegend.getAttribute('transform');
+                                let pairwiseX = 0, currentPairwiseY = 0;
+                                if (currentTransform) {
+                                    const match = currentTransform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
+                                    if (match) {
+                                        pairwiseX = parseFloat(match[1]);
+                                        currentPairwiseY = parseFloat(match[2]);
+                                    }
+                                }
+
+                                // Vertically center pairwise legend with feature legend
+                                // Backend: if h_feature_height > pairwise_height, offset pairwise by (h_feature_height - pairwise_height) / 2
+                                let newPairwiseY = currentPairwiseY;
+                                if (featureHeight > pairwiseHeight) {
+                                    newPairwiseY = (featureHeight - pairwiseHeight) / 2;
+                                }
+
+                                hPairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${newPairwiseY})`);
+                                console.log(`Repositioned horizontal pairwise legend to y=${newPairwiseY}`);
+                            }
                         }
                     }
 
@@ -2173,6 +2349,23 @@
                 // Single legend mode
                 const featureLegendGroup = legendGroup.querySelector('#feature_legend');
                 return featureLegendGroup || legendGroup;
+            };
+
+            // Check if current legend layout is horizontal (top/bottom)
+            const isCurrentLegendHorizontal = (svg) => {
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return false;
+
+                const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+                const verticalLegend = legendGroup.querySelector('#legend_vertical');
+
+                if (horizontalLegend && verticalLegend) {
+                    const hVisible = horizontalLegend.style.display !== 'none' &&
+                                    horizontalLegend.getAttribute('display') !== 'none';
+                    return hVisible;
+                }
+
+                return false;  // Single legend mode (circular) is vertical
             };
 
             // Function to update legend entry color by caption (without removing)
@@ -2345,40 +2538,79 @@
 
                 const entries = [];
 
+                // Helper to parse X and Y from transform
+                const parseTransform = (transform) => {
+                    if (!transform) return { x: 0, y: 0 };
+                    const match = transform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
+                    return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : { x: 0, y: 0 };
+                };
+
+                // Detect rect_size from existing entries to calculate text_x_offset
+                let rectSize = 14;
+                const firstColorRect = targetGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
+                if (firstColorRect) {
+                    const d = firstColorRect.getAttribute('d');
+                    if (d) {
+                        const lMatch = d.match(/L\s+([\d.]+),/);
+                        if (lMatch) rectSize = parseFloat(lMatch[1]);
+                    }
+                }
+                const textXOffset = (22 / 14) * rectSize;
+
                 // Find all text elements in legend (these are the captions)
                 const textElements = targetGroup.querySelectorAll('text');
                 textElements.forEach(textEl => {
                     const caption = textEl.textContent?.trim();
                     if (!caption) return;
 
-                    const transform = textEl.getAttribute('transform');
-                    let yPos = 0;
-                    if (transform) {
-                        const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
-                        if (match) yPos = parseFloat(match[1]);
-                    }
+                    const textTransform = parseTransform(textEl.getAttribute('transform'));
+                    const xPos = textTransform.x;
+                    const yPos = textTransform.y;
 
-                    // Find the color rect at the same Y position
+                    // Find the color rect matching this text element
+                    // For vertical layout: same Y, rect X ≈ 0
+                    // For horizontal layout: same Y, rect X ≈ text X - textXOffset
                     let color = '#cccccc';
                     const paths = targetGroup.querySelectorAll('path');
+                    let bestMatch = null;
+                    let bestDistance = Infinity;
+
                     paths.forEach(p => {
-                        const pt = p.getAttribute('transform');
-                        if (pt) {
-                            const pMatch = pt.match(/translate\([^,]+,\s*([\d.-]+)\)/);
-                            if (pMatch && Math.abs(parseFloat(pMatch[1]) - yPos) < 1) {
-                                const fill = p.getAttribute('fill');
-                                if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                                    color = fill;
-                                }
+                        const fill = p.getAttribute('fill');
+                        if (!fill || fill === 'none' || fill.startsWith('url(')) return;
+
+                        const rectTransform = parseTransform(p.getAttribute('transform'));
+                        const rectX = rectTransform.x;
+                        const rectY = rectTransform.y;
+
+                        // Check if Y positions match (within tolerance)
+                        if (Math.abs(rectY - yPos) < 1) {
+                            // Calculate expected rect X position based on text X
+                            const expectedRectX = xPos - textXOffset;
+                            const distance = Math.abs(rectX - expectedRectX);
+
+                            // Find the closest matching rect
+                            if (distance < bestDistance) {
+                                bestDistance = distance;
+                                bestMatch = fill;
                             }
                         }
                     });
 
-                    entries.push({ caption, color, yPos });
+                    if (bestMatch) {
+                        color = bestMatch;
+                    }
+
+                    entries.push({ caption, color, xPos, yPos });
                 });
 
-                // Sort by Y position
-                entries.sort((a, b) => a.yPos - b.yPos);
+                // Sort by Y position first, then by X position (for horizontal layout)
+                entries.sort((a, b) => {
+                    if (Math.abs(a.yPos - b.yPos) < 1) {
+                        return a.xPos - b.xPos;  // Same row, sort by X
+                    }
+                    return a.yPos - b.yPos;
+                });
                 legendEntries.value = entries;
             };
 
@@ -3866,7 +4098,7 @@
                                     results.append({"name": fname, "content": f.read()})
                             return json.dumps(results)
 
-                        def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=14, font_family="Arial"):
+                        def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=14, font_family="Arial", x_offset=0):
                             """Generate SVG elements for a single legend entry"""
                             from svgwrite.path import Path
                             from svgwrite.text import Text
@@ -3875,11 +4107,11 @@
                             # Create color rectangle path
                             half = rect_size / 2
                             rect_d = f"M 0,{-half} L {rect_size},{-half} L {rect_size},{half} L 0,{half} z"
-                            rect_svg = f'<path d="{rect_d}" fill="{color}" stroke="none" transform="translate(0, {y_offset})"/>'
+                            rect_svg = f'<path d="{rect_d}" fill="{color}" stroke="none" transform="translate({x_offset}, {y_offset})"/>'
 
                             # Create text element
                             x_margin = (22 / 14) * rect_size
-                            text_svg = f'<text font-size="{font_size}" font-family="{font_family}" dominant-baseline="central" text-anchor="start" transform="translate({x_margin}, {y_offset})">{caption}</text>'
+                            text_svg = f'<text font-size="{font_size}" font-family="{font_family}" dominant-baseline="central" text-anchor="start" transform="translate({x_offset + x_margin}, {y_offset})">{caption}</text>'
 
                             return json.dumps({"rect": rect_svg, "text": text_svg})
 

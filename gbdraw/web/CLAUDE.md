@@ -6,7 +6,7 @@ This document provides guidance for working with the gbdraw serverless web appli
 
 `index.html` is a **self-contained single-page application (SPA)** that runs gbdraw entirely in the browser using WebAssembly. No server is required - all genome data processing happens client-side via Pyodide (Python compiled to WebAssembly).
 
-- **File size:** ~3500+ lines (HTML + embedded JavaScript + CSS)
+- **File size:** ~4500+ lines (HTML + embedded JavaScript + CSS)
 - **Location:** `gbdraw/web/index.html`
 - **Served by:** `gbdraw gui` command or hosted at https://gbdraw.app/
 
@@ -42,19 +42,40 @@ index.html
 │   │   ├── Header (mode toggle, config save/load)
 │   │   ├── Left Panel (4 columns)
 │   │   │   ├── Input Genomes card
+│   │   │   │   ├── Circular: GenBank or GFF3+FASTA
+│   │   │   │   └── Linear: Multi-sequence with BLAST tracks
 │   │   │   ├── Basic Settings card
+│   │   │   │   ├── Output prefix, Legend position
+│   │   │   │   ├── Track layout (circular only)
+│   │   │   │   ├── Scale style (linear only)
+│   │   │   │   └── Checkboxes (labels, strands, GC, etc.)
 │   │   │   ├── Colors & Filters (collapsible)
+│   │   │   │   ├── Default Colors (-d) with palette picker
+│   │   │   │   ├── Specific Rules (-t) with regex support
+│   │   │   │   ├── Label Filtering (Blacklist/Whitelist)
+│   │   │   │   └── Qualifier Priority
 │   │   │   ├── Advanced Options (collapsible)
+│   │   │   │   ├── GC window/step settings
+│   │   │   │   ├── Font sizes, stroke styles
+│   │   │   │   ├── Legend styling
+│   │   │   │   ├── Linear-specific settings (heights, BLAST filters, scale)
+│   │   │   │   ├── Circular-specific offsets
+│   │   │   │   └── Feature type selection
+│   │   │   ├── About & Citation (collapsible)
 │   │   │   └── Generate button
 │   │   └── Right Panel (8 columns)
 │   │       ├── Error display
-│   │       ├── Result preview (SVG container)
-│   │       ├── Zoom controls
-│   │       ├── Canvas padding controls
-│   │       ├── Feature Color Editor (drawer)
-│   │       └── Legend Editor (drawer)
+│   │       ├── Result preview (SVG container with zoom)
+│   │       ├── Floating controls
+│   │       │   ├── Reset positions button
+│   │       │   ├── Canvas padding toggle
+│   │       │   └── Zoom controls
+│   │       ├── Canvas padding controls panel
+│   │       ├── Feature Color Picker Popup (on click)
+│   │       ├── Legend Editor (slide-out drawer)
+│   │       └── Feature Color Editor (slide-out drawer)
 │   ├── Vue component templates
-│   │   ├── HelpTip (tooltip component)
+│   │   ├── HelpTip (tooltip component with smart positioning)
 │   │   └── FileUploader (drag-drop file input)
 │   └── Main Vue application script
 ```
@@ -68,28 +89,34 @@ index.html
 - **Privacy:** Genomic data never leaves the user's device
 
 ### 2. Dual Mode Support
-- **Circular mode:** Single genome visualization
-- **Linear mode:** Multi-genome comparison with BLAST tracks
+- **Circular mode:** Single genome visualization with track type options (tuckin/middle/spreadout)
+- **Linear mode:** Multi-genome comparison with BLAST tracks and scale style options (bar/ruler)
 
 ### 3. Interactive SVG Editing
 Post-generation interactive editing without regeneration:
 - **Drag & Drop:** Reposition legend and diagram elements
-- **Feature Click:** Change individual feature colors with popup picker
-- **Legend Editor:** Reorder, rename, delete legend entries
-- **Canvas Padding:** Adjust whitespace around diagram
+- **Feature Click:** Change individual feature colors with popup picker (includes legend name option)
+- **Legend Editor:** Reorder (up/down), rename, delete legend entries
+- **Canvas Padding:** Adjust whitespace around diagram (top/right/bottom/left)
 - **Real-time Color Sync:** Palette changes update SVG instantly
+- **Position Reset:** Reset all element positions to original
 
 ### 4. Color Management
-- **Default Colors (-d):** Base palette with 16+ presets
-- **Specific Rules (-t):** Regex-based conditional coloring
-- **Feature Overrides:** Per-feature color customization
-- Automatic legend entry creation for custom colors
+- **Default Colors (-d):** Base palette with 16+ presets, dynamically editable
+- **Specific Rules (-t):** Regex-based conditional coloring with optional legend captions
+- **Feature Overrides:** Per-feature color customization with automatic legend entry creation
+- **Dual Legend Support:** Both horizontal and vertical legends synchronized in linear mode
 
-### 5. Export Options
+### 5. Label Filtering
+- **Blacklist Mode:** Exclude labels containing specified keywords
+- **Whitelist Mode:** Only show labels matching feature/qualifier/keyword rules
+- **Qualifier Priority:** Define label priority order per feature type (e.g., CDS → product,gene,locus_tag)
+
+### 6. Export Options
 | Format | Method | DPI Options |
 |--------|--------|-------------|
 | SVG | Direct download | N/A |
-| PNG | Canvas rendering | 72-600 DPI |
+| PNG | Canvas rendering | 72, 96, 150, 300, 600 DPI |
 | PDF | jsPDF + svg2pdf.js | Selected DPI |
 
 ## State Management
@@ -97,46 +124,86 @@ Post-generation interactive editing without regeneration:
 ### Reactive State (Vue refs)
 ```javascript
 // System state
-pyodideReady        // Pyodide initialization status
-processing          // Diagram generation in progress
-loadingStatus       // Current loading step message
-errorLog            // Error messages
+pyodideReady            // Pyodide initialization status
+processing              // Diagram generation in progress
+loadingStatus           // Current loading step message
+errorLog                // Error messages
 
 // Results
-results             // Array of {name, content} SVG outputs
-selectedResultIndex // Currently viewed result
-svgContent          // Computed sanitized SVG
+results                 // Array of {name, content} SVG outputs
+selectedResultIndex     // Currently viewed result
+svgContent              // Computed sanitized SVG
+pairwiseMatchFactors    // {pathId: factor} for match re-interpolation
 
 // UI state
-mode                // 'circular' | 'linear'
-zoom                // Preview zoom level (0.1 - 2.0+)
-showFeaturePanel    // Feature color editor visibility
-showLegendPanel     // Legend editor visibility
-showCanvasControls  // Canvas padding panel visibility
+mode                    // 'circular' | 'linear'
+zoom                    // Preview zoom level (0.1 - 2.0+)
+showFeaturePanel        // Feature color editor visibility
+showLegendPanel         // Legend editor visibility
+showCanvasControls      // Canvas padding panel visibility
+clickedFeature          // {id, svg_id, label, color, legendName} for popup
+clickedFeaturePos       // {x, y} popup position
+
+// Legend state
+legendEntries           // Extracted legend entries [{caption, color, yPos}]
+circularLegendPosition  // Saved legend position for circular mode
+linearLegendPosition    // Saved legend position for linear mode
+addedLegendCaptions     // Set of manually added legend captions
+
+// Feature editor state
+extractedFeatures       // Features from last generation
+featureRecordIds        // Record IDs for multi-record files
+selectedFeatureRecordIdx // Currently selected record index
+featureSearch           // Search filter text
+featureColorOverrides   // {featureKey: {color, caption}}
+
+// Canvas state
+canvasPadding           // {top, right, bottom, left}
+diagramElements         // Draggable diagram elements
+diagramElementBaseTransforms // Base positions for drag offset
+skipCaptureBaseConfig   // Flag to prevent re-capture on internal updates
 ```
 
 ### Form Data
 ```javascript
 form = {
     prefix, species, strain,      // Metadata
-    track_type,                   // 'tuckin' | 'middle' | 'spreadout'
-    legend,                       // Position: 'right' | 'left' | 'top' | 'bottom' | 'none'
-    show_labels, separate_strands,
+    track_type,                   // 'tuckin' | 'middle' | 'spreadout' (circular)
+    legend,                       // Position: 'right' | 'left' | 'top' | 'bottom' | 'upper_left' | 'upper_right' | 'none'
+    scale_style,                  // 'bar' | 'ruler' (linear)
+    show_labels,                  // boolean (circular)
+    show_labels_linear,           // 'none' | 'all' | 'first' (linear)
+    separate_strands,
+    allow_inner_labels,           // Circular option for inner labels
     suppress_gc, suppress_skew,   // Circular options
     show_gc, show_skew,           // Linear options
-    align_center, normalize_length
+    align_center, normalize_length // Linear options
 }
 
 adv = {
-    features,                     // Feature types to draw
+    features,                     // Array of feature types to draw
     window_size, step_size, nt,   // GC calculation
     def_font_size, label_font_size,
-    block_stroke_*, line_stroke_*, axis_stroke_*,  // Styling
+    block_stroke_color, block_stroke_width,
+    line_stroke_color, line_stroke_width,
+    axis_stroke_color, axis_stroke_width,
     legend_box_size, legend_font_size,
     // Linear-specific
+    resolve_overlaps,             // Experimental overlap resolution
     feature_height, gc_height, comparison_height,
-    min_bitscore, evalue, identity
+    min_bitscore, evalue, identity,
+    scale_interval, scale_font_size, scale_stroke_width, scale_stroke_color,
+    // Circular-specific
+    outer_label_x_offset, outer_label_y_offset,
+    inner_label_x_offset, inner_label_y_offset
 }
+
+// Manual rules
+manualSpecificRules     // [{feat, qual, val, color, cap}]
+manualPriorityRules     // [{feat, order}]
+manualBlacklist         // Comma-separated string
+manualWhitelist         // [{feat, qual, key}]
+filterMode              // 'None' | 'Blacklist' | 'Whitelist'
 ```
 
 ## Security Considerations
@@ -154,7 +221,9 @@ All generated SVG passes through DOMPurify:
 ```javascript
 DOMPurify.sanitize(rawSvg, {
     USE_PROFILES: { svg: true },
-    FORBID_TAGS: ['style', 'script', 'foreignObject', 'iframe', ...],
+    ADD_TAGS: ['use', 'g', 'defs', 'linearGradient', 'radialGradient', 'stop', ...],
+    ADD_ATTR: ['xlink:href', 'href', 'transform', 'viewBox', ...],
+    FORBID_TAGS: ['style', 'script', 'foreignObject', 'iframe', 'animate', ...],
     FORBID_ATTR: ['onload', 'onclick', 'onerror', ...]
 });
 ```
@@ -172,26 +241,34 @@ User-provided regex patterns are validated:
 2. Install micropip
 3. Load gbdraw wheel from same origin
 4. Install Python dependencies (biopython, svgwrite, pandas, fonttools, bcbio-gff)
-5. Initialize gbdraw module
+5. Initialize gbdraw module with helper functions
 6. Mark `pyodideReady = true`
+
+### Python Helper Functions
+```python
+get_palettes_json()        # Load color palettes from TOML
+run_gbdraw_wrapper()       # Execute circular or linear mode
+generate_legend_entry_svg() # Generate SVG for dynamic legend entry
+extract_features_from_genbank() # Extract features for UI color editor
+```
 
 ### Python Execution Pattern
 ```javascript
 // Run Python code
 pyodide.runPython(`
-    from gbdraw.api.diagram import assemble_circular_diagram_from_record
-    result = assemble_circular_diagram_from_record(record, config)
-    svg_string = result.tostring()
+    from gbdraw.circular import circular_main
+    result = circular_main(args)
 `);
 
-// Access Python results
-const svgOutput = pyodide.globals.get('svg_string');
+// Access Python results via JSON
+const resultJson = pyodide.runPython("run_gbdraw_wrapper('circular', args)");
+const results = JSON.parse(resultJson);
 ```
 
 ## Custom Vue Components
 
 ### HelpTip
-Tooltip component with smart positioning:
+Tooltip component with smart positioning (avoids viewport overflow):
 ```html
 <help-tip text="Explanation text here"></help-tip>
 ```
@@ -200,12 +277,41 @@ Tooltip component with smart positioning:
 File input with drag-drop support:
 ```html
 <file-uploader
-    label="GenBank File"
-    accept=".gb,.gbk"
+    label="GenBank File (.gb)"
+    accept=".gb,.gbk,.txt"
     v-model="files.c_gb"
     :small="true">
 </file-uploader>
 ```
+
+## Key JavaScript Functions
+
+### Legend Management
+- `getAllFeatureLegendGroups(svg)` - Get all legend groups (handles dual legends)
+- `getVisibleFeatureLegendGroup(svg)` - Get visible legend for extraction
+- `addLegendEntry(caption, color)` - Add entry to all legend groups
+- `removeLegendEntry(caption)` - Remove entry from all legend groups
+- `updateLegendEntryColorByCaption(caption, color)` - Update color without removing
+- `extractLegendEntries()` - Extract entries for Legend Editor panel
+- `moveLegendEntryUp/Down(idx)` - Reorder entries
+- `swapLegendEntries(idx1, idx2)` - Swap Y positions in SVG
+
+### Drag & Drop
+- `startLegendDrag(e)` / `onLegendDrag(e)` / `endLegendDrag()`
+- `startDiagramDrag(e)` / `onDiagramDrag(e)` / `endDiagramDrag()`
+- `parseTransform(str)` - Extract x,y from transform attribute
+- `resetAllPositions()` / `resetLegendPosition()` - Reset to original
+
+### Feature Color Editing
+- `setFeatureColor(feat, color, customCaption)` - Set color and update rules
+- `applyInstantPreview(feat, color, caption)` - Update SVG instantly
+- `getFeatureColor(feat)` / `canEditFeatureColor(feat)` - Color lookup
+- `updateClickedFeatureColor(color)` - Handle popup color change
+
+### Canvas & Export
+- `updateCanvasPadding()` - Apply padding to SVG viewBox
+- `downloadSVG()` / `downloadPNG()` / `downloadPDF()` - Export functions
+- `setDpiInPng(blob, dpi)` - Inject pHYs chunk for DPI metadata
 
 ## Development Notes
 
@@ -213,24 +319,26 @@ File input with drag-drop support:
 - CSS: Uses Tailwind utility classes inline
 - Custom classes defined in `<style>` block: `.card`, `.btn-*`, `.form-input`, etc.
 - Colors follow Slate palette with Blue/Indigo accents
+- Collapsible sections use `<details>` element with custom styling
 
 ### Adding New Settings
 1. Add reactive state to `setup()` function
 2. Add form element in appropriate card
-3. Include in config object passed to Python
-4. Update Python-side handling
+3. Include in config object / args array passed to Python
+4. Update Python-side handling if needed
 
 ### Debugging
 - Browser console shows Pyodide output
 - `console.log` statements throughout for key operations
 - Vue DevTools compatible
+- `[DEBUG]` prefixed logs for incremental edit tracking
 
 ## File Dependencies
 
 When deploying:
 - `index.html` (this file)
-- `gbdraw-X.X.X-py3-none-any.whl` (Python wheel, served from same origin)
-- CDN dependencies (Vue, Pyodide, TailwindCSS, icons, jsPDF)
+- `gbdraw-0.8.3-py3-none-any.whl` (Python wheel, served from same origin)
+- CDN dependencies (Vue, Pyodide, TailwindCSS, icons, jsPDF, DOMPurify)
 
 ## Known Limitations
 
@@ -238,6 +346,7 @@ When deploying:
 2. **Performance:** Initial Pyodide load takes 5-15 seconds
 3. **Fonts:** Custom fonts require paths accessible to Pyodide
 4. **CairoSVG:** Not available in browser (PNG/PDF use canvas instead)
+5. **Incremental Updates:** Some edits require full regeneration
 
 ## Related Files
 

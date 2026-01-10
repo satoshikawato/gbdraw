@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance for Claude Code when working with the gbdraw codebase.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
@@ -19,8 +19,21 @@ pytest tests/ -v -m "not slow"
 # Run all tests including slow
 pytest tests/ -v
 
+# Run a single test file
+pytest tests/test_regression.py -v
+
+# Run a single test by name
+pytest tests/ -v -k "test_circular_basic"
+
+# Run tests by marker
+pytest tests/ -v -m "circular"
+pytest tests/ -v -m "linear"
+
 # Run with coverage
 pytest tests/ --cov=gbdraw --cov-report=html
+
+# Check code formatting (ruff)
+ruff check gbdraw/ --select=E,F,W --ignore=E501,W503
 
 # Install in development mode
 pip install -e ".[dev]"
@@ -127,6 +140,19 @@ Package configuration, test markers, coverage settings.
 
 ### Reference Output Tests
 Tests compare generated SVG against `tests/reference_outputs/` files.
+
+### Test Helpers (tests/conftest.py)
+- `GbdrawRunner` - Helper class for running gbdraw commands in tests
+- `get_test_input_path()` - Find test input files across directories
+- `get_reference_output_path()` - Find reference SVG files
+- `temp_output_dir` fixture - Creates temporary directory for test outputs
+
+## CI/CD
+
+- **Python versions tested:** 3.10, 3.11, 3.12
+- **Lint job:** Uses ruff for code formatting checks
+- **CairoSVG job:** Separate test with export dependencies on Python 3.11
+- **Slow tests:** Only run on push to main branch
 
 ## Dependencies
 
