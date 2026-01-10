@@ -1028,6 +1028,8 @@
 
             // App State
             const mode = ref('circular');
+            const circularLegendPosition = ref('right');  // Separate legend position for circular mode
+            const linearLegendPosition = ref('right');    // Separate legend position for linear mode
             const cInputType = ref('gb');
             const lInputType = ref('gb');
             const files = reactive({ 
@@ -1121,6 +1123,35 @@
 
             // Track legend position at generation time (for repositioning without regeneration)
             const generatedLegendPosition = ref('right');
+
+            // Flag to skip captureBaseConfig when editing SVG (repositioning legend, adding legend entries, etc.)
+            // This prevents base config from being overwritten during incremental edits
+            const skipCaptureBaseConfig = ref(false);
+
+            // Base configuration for circular mode (stored when SVG is generated)
+            // Used to calculate absolute positions without accumulation
+            const circularBaseConfig = ref({
+                viewBoxWidth: 0,      // Base viewBox width (without legend-based adjustments)
+                viewBoxHeight: 0,     // Base viewBox height
+                diagramCenterX: 0,    // Original diagram center X coordinate
+                diagramCenterY: 0,    // Original diagram center Y coordinate
+                legendWidth: 0,       // Legend width
+                legendHeight: 0,      // Legend height
+                generatedPosition: 'right'  // The position when SVG was generated
+            });
+
+            // Base configuration for linear mode (stored when SVG is generated)
+            const linearBaseConfig = ref({
+                verticalViewBox: { x: 0, y: 0, w: 0, h: 0 },   // ViewBox for vertical legend (left/right)
+                horizontalViewBox: { x: 0, y: 0, w: 0, h: 0 }, // ViewBox for horizontal legend (top/bottom)
+                diagramBaseTransforms: new Map(),              // Base transforms for diagram elements
+                horizontalLegendWidth: 0, horizontalLegendHeight: 0,
+                verticalLegendWidth: 0, verticalLegendHeight: 0,
+                generatedPosition: 'right'  // The position when SVG was generated
+            });
+
+            // Store base transforms for diagram elements (separate from current offsets)
+            const diagramElementBaseTransforms = ref(new Map());
 
             const featureKeys = [
                 "assembly_gap", "C_region", "CDS", "centromere", "D-loop", "D_segment",
@@ -1299,6 +1330,7 @@
             };
 
             // Instant preview: update SVG path colors directly without regeneration
+            // Uses current DOM to preserve legend position and other modifications
             const applyInstantPreview = (feat, color, legendCaption = null) => {
                 // Use pre-computed svg_id that matches Python's hash
                 const svgId = feat.svg_id;
@@ -1307,35 +1339,37 @@
                     return;
                 }
 
-                // Update results array (svgContent is computed from results)
-                const idx = selectedResultIndex.value;
-                if (results.value.length > idx && results.value[idx].content) {
-                    try {
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(results.value[idx].content, 'image/svg+xml');
+                // Update DOM directly (preserves legend position and other modifications)
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
 
-                        // Find ALL elements with this ID (for multi-exon features)
-                        const elements = doc.querySelectorAll(`#${CSS.escape(svgId)}`);
-                        let updated = elements.length > 0;
+                try {
+                    // Find ALL elements with this ID (for multi-exon features)
+                    const elements = svg.querySelectorAll(`#${CSS.escape(svgId)}`);
+                    let updated = elements.length > 0;
 
-                        if (updated) {
-                            elements.forEach(el => el.setAttribute('fill', color));
-                        }
-
-                        // Note: Legend entries are added separately via addLegendEntry() in setFeatureColor()
-
-                        if (updated) {
-                            const serializer = new XMLSerializer();
-                            const newContent = serializer.serializeToString(doc.documentElement);
-                            // Replace the entire object to ensure Vue reactivity
-                            results.value[idx] = { ...results.value[idx], content: newContent };
-                            console.log(`Instant preview: updated ${elements.length} element(s) for ${svgId} to ${color}`);
-                        } else {
-                            console.log(`Instant preview: element ${svgId} not found in SVG`);
-                        }
-                    } catch (e) {
-                        console.error('Instant preview error:', e);
+                    if (updated) {
+                        elements.forEach(el => el.setAttribute('fill', color));
                     }
+
+                    // Note: Legend entries are added separately via addLegendEntry() in setFeatureColor()
+
+                    if (updated) {
+                        // Serialize and save to results.value to persist the change
+                        const serializer = new XMLSerializer();
+                        const newContent = serializer.serializeToString(svg);
+                        skipCaptureBaseConfig.value = true;
+                        const idx = selectedResultIndex.value;
+                        if (idx >= 0 && results.value.length > idx) {
+                            results.value[idx] = { ...results.value[idx], content: newContent };
+                        }
+                        console.log(`Instant preview: updated ${elements.length} element(s) for ${svgId} to ${color}`);
+                    } else {
+                        console.log(`Instant preview: element ${svgId} not found in SVG`);
+                    }
+                } catch (e) {
+                    console.error('Instant preview error:', e);
                 }
             };
 
@@ -1589,6 +1623,7 @@
                 }
 
                 if (updatedCount > 0) {
+                    skipCaptureBaseConfig.value = true;
                     const idx = selectedResultIndex.value;
                     if (idx >= 0 && results.value.length > idx) {
                         const serializer = new XMLSerializer();
@@ -1668,6 +1703,7 @@
                 });
 
                 if (updatedCount > 0) {
+                    skipCaptureBaseConfig.value = true;
                     const idx = selectedResultIndex.value;
                     if (idx >= 0 && results.value.length > idx) {
                         const serializer = new XMLSerializer();
@@ -1797,6 +1833,7 @@
                 }
 
                 if (updatedCount > 0) {
+                    skipCaptureBaseConfig.value = true;
                     const idx = selectedResultIndex.value;
                     if (idx >= 0 && results.value.length > idx) {
                         const serializer = new XMLSerializer();
@@ -1855,6 +1892,7 @@
                 }
 
                 if (updated) {
+                    skipCaptureBaseConfig.value = true;
                     const idx = selectedResultIndex.value;
                     if (idx >= 0 && results.value.length > idx) {
                         const serializer = new XMLSerializer();
@@ -1882,9 +1920,15 @@
                     return false;
                 }
 
-                // Determine target group: feature_legend (linear) or legend (circular)
-                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
-                const targetGroup = featureLegendGroup || legendGroup;
+                // Get ALL feature legend groups (handles dual legends for linear mode)
+                const allTargetGroups = getAllFeatureLegendGroups(svg);
+                if (allTargetGroups.length === 0) {
+                    console.log('No feature legend groups found');
+                    return false;
+                }
+
+                // Use the first group to check existing entries (they should be in sync)
+                const targetGroup = allTargetGroups[0];
 
                 // Check existing legend entries
                 const existingTexts = targetGroup.querySelectorAll('text');
@@ -2000,34 +2044,73 @@
                     // Call Python to generate legend entry SVG with correct sizing and font settings
                     const escapedCaption = caption.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
                     const escapedFontFamily = fontFamily.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-                    const resultJson = pyodide.runPython(`generate_legend_entry_svg("${escapedCaption}", "${color}", ${newY}, ${rectSize}, ${fontSize}, "${escapedFontFamily}")`);
-                    const result = JSON.parse(resultJson);
-
-                    // Parse and insert the SVG elements
                     const parser = new DOMParser();
 
-                    // Insert rect
-                    const rectDoc = parser.parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${result.rect}</svg>`, 'image/svg+xml');
-                    const rectEl = rectDoc.querySelector('path');
-                    if (rectEl) {
-                        targetGroup.appendChild(document.importNode(rectEl, true));
-                    }
+                    // Add entry to ALL feature legend groups (handles dual legends)
+                    for (const group of allTargetGroups) {
+                        // Calculate Y position for THIS group (may differ between layouts)
+                        let groupMaxY = -lineMargin;
+                        const groupTextElements = group.querySelectorAll('text');
+                        groupTextElements.forEach(el => {
+                            const transform = el.getAttribute('transform');
+                            if (transform) {
+                                const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                                if (match) {
+                                    const y = parseFloat(match[1]);
+                                    if (y > groupMaxY) groupMaxY = y;
+                                }
+                            }
+                        });
 
-                    // Insert text
-                    const textDoc = parser.parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${result.text}</svg>`, 'image/svg+xml');
-                    const textEl = textDoc.querySelector('text');
-                    if (textEl) {
-                        targetGroup.appendChild(document.importNode(textEl, true));
+                        // If no text elements, check color rects
+                        if (groupTextElements.length === 0) {
+                            const colorRects = group.querySelectorAll('path');
+                            colorRects.forEach(el => {
+                                const fill = el.getAttribute('fill');
+                                if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                    const transform = el.getAttribute('transform');
+                                    if (transform) {
+                                        const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                                        if (match) {
+                                            const y = parseFloat(match[1]);
+                                            if (y > groupMaxY) groupMaxY = y;
+                                        }
+                                    }
+                                }
+                            });
+                        }
+
+                        const groupNewY = groupMaxY + lineMargin;
+
+                        // Generate SVG for this group's position
+                        const resultJson = pyodide.runPython(`generate_legend_entry_svg("${escapedCaption}", "${color}", ${groupNewY}, ${rectSize}, ${fontSize}, "${escapedFontFamily}")`);
+                        const result = JSON.parse(resultJson);
+
+                        // Insert rect
+                        const rectDoc = parser.parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${result.rect}</svg>`, 'image/svg+xml');
+                        const rectEl = rectDoc.querySelector('path');
+                        if (rectEl) {
+                            group.appendChild(document.importNode(rectEl, true));
+                        }
+
+                        // Insert text
+                        const textDoc = parser.parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${result.text}</svg>`, 'image/svg+xml');
+                        const textEl = textDoc.querySelector('text');
+                        if (textEl) {
+                            group.appendChild(document.importNode(textEl, true));
+                        }
                     }
 
                     // Update results for reactivity
+                    // Set flag to prevent captureBaseConfig from being called when svgContent watch triggers
+                    skipCaptureBaseConfig.value = true;
                     const idx = selectedResultIndex.value;
                     if (idx >= 0 && results.value.length > idx) {
                         const serializer = new XMLSerializer();
                         results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
                     }
 
-                    console.log(`Added legend entry: "${finalCaption}" at y=${newY} in ${featureLegendGroup ? 'feature_legend' : 'legend'}`);
+                    console.log(`Added legend entry: "${finalCaption}" to ${allTargetGroups.length} legend group(s)`);
                     return finalCaption;  // Return the actual caption used (may have (N) suffix)
                 } catch (e) {
                     console.error('Failed to add legend entry:', e);
@@ -2035,19 +2118,69 @@
                 }
             };
 
+            // Helper function to get all feature legend groups (handles dual legends for linear mode)
+            const getAllFeatureLegendGroups = (svg) => {
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return [];
+
+                const groups = [];
+
+                // Check for dual legends (linear mode with both horizontal and vertical)
+                const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+                const verticalLegend = legendGroup.querySelector('#legend_vertical');
+
+                if (horizontalLegend || verticalLegend) {
+                    // Dual legend mode
+                    if (horizontalLegend) {
+                        const hFeature = horizontalLegend.querySelector('#feature_legend');
+                        if (hFeature) groups.push(hFeature);
+                    }
+                    if (verticalLegend) {
+                        const vFeature = verticalLegend.querySelector('#feature_legend');
+                        if (vFeature) groups.push(vFeature);
+                    }
+                } else {
+                    // Single legend mode (circular or old linear)
+                    const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                    groups.push(featureLegendGroup || legendGroup);
+                }
+
+                return groups;
+            };
+
+            // Get the visible (active) feature legend group for extraction
+            const getVisibleFeatureLegendGroup = (svg) => {
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return null;
+
+                // Check for dual legends
+                const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+                const verticalLegend = legendGroup.querySelector('#legend_vertical');
+
+                if (horizontalLegend && verticalLegend) {
+                    // Return the visible one
+                    const hVisible = horizontalLegend.style.display !== 'none' &&
+                                    horizontalLegend.getAttribute('display') !== 'none';
+                    const targetLegend = hVisible ? horizontalLegend : verticalLegend;
+                    const featureGroup = targetLegend.querySelector('#feature_legend');
+                    return featureGroup || targetLegend;
+                }
+
+                // Single legend mode
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
+                return featureLegendGroup || legendGroup;
+            };
+
             // Function to update legend entry color by caption (without removing)
+            // Updates BOTH horizontal and vertical legends if they exist
             const updateLegendEntryColorByCaption = (caption, color) => {
                 if (!svgContainer.value) return false;
 
                 const svg = svgContainer.value.querySelector('svg');
                 if (!svg) return false;
 
-                const legendGroup = svg.getElementById('legend');
-                if (!legendGroup) return false;
-
-                // Determine target group: feature_legend (linear) or legend (circular)
-                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
-                const targetGroup = featureLegendGroup || legendGroup;
+                const targetGroups = getAllFeatureLegendGroups(svg);
+                if (targetGroups.length === 0) return false;
 
                 // Helper to parse Y from transform (handles both "translate(x, y)" and "translate(x,y)")
                 const getTransformY = (transform) => {
@@ -2056,34 +2189,39 @@
                     return match ? parseFloat(match[1]) : null;
                 };
 
-                // Find text element with this caption
-                const texts = targetGroup.querySelectorAll('text');
                 let updated = false;
 
-                for (const t of texts) {
-                    if (t.textContent?.trim() === caption.trim()) {
-                        const textY = getTransformY(t.getAttribute('transform'));
-                        if (textY !== null) {
-                            // Find and update the color rect at the same Y
-                            const rects = targetGroup.querySelectorAll('path');
-                            for (const r of rects) {
-                                const rectY = getTransformY(r.getAttribute('transform'));
-                                if (rectY !== null && Math.abs(rectY - textY) < 0.1) {
-                                    const fill = r.getAttribute('fill');
-                                    if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                                        r.setAttribute('fill', color);
-                                        updated = true;
-                                        break;
+                // Update in all legend groups
+                for (const targetGroup of targetGroups) {
+                    // Find text element with this caption
+                    const texts = targetGroup.querySelectorAll('text');
+
+                    for (const t of texts) {
+                        if (t.textContent?.trim() === caption.trim()) {
+                            const textY = getTransformY(t.getAttribute('transform'));
+                            if (textY !== null) {
+                                // Find and update the color rect at the same Y
+                                const rects = targetGroup.querySelectorAll('path');
+                                for (const r of rects) {
+                                    const rectY = getTransformY(r.getAttribute('transform'));
+                                    if (rectY !== null && Math.abs(rectY - textY) < 0.1) {
+                                        const fill = r.getAttribute('fill');
+                                        if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                            r.setAttribute('fill', color);
+                                            updated = true;
+                                            break;
+                                        }
                                     }
                                 }
                             }
+                            break;
                         }
-                        break;
                     }
                 }
 
                 if (updated) {
                     // Save to results
+                    skipCaptureBaseConfig.value = true;
                     const idx = selectedResultIndex.value;
                     if (idx >= 0 && results.value.length > idx) {
                         const serializer = new XMLSerializer();
@@ -2102,11 +2240,12 @@
                 const svg = svgContainer.value.querySelector('svg');
                 if (!svg) return false;
 
-                const legendGroup = svg.getElementById('legend');
-                if (!legendGroup) return false;
+                // Check all legend groups (handles dual legends)
+                const targetGroups = getAllFeatureLegendGroups(svg);
+                if (targetGroups.length === 0) return false;
 
-                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
-                const targetGroup = featureLegendGroup || legendGroup;
+                // Check the first group (they should be in sync)
+                const targetGroup = targetGroups[0];
 
                 const texts = targetGroup.querySelectorAll('text');
                 for (const t of texts) {
@@ -2126,47 +2265,49 @@
             };
 
             // Function to remove a legend entry by caption
+            // Removes from BOTH horizontal and vertical legends if they exist
             const removeLegendEntry = (caption) => {
                 if (!svgContainer.value) return false;
 
                 const svg = svgContainer.value.querySelector('svg');
                 if (!svg) return false;
 
-                const legendGroup = svg.getElementById('legend');
-                if (!legendGroup) return false;
+                const targetGroups = getAllFeatureLegendGroups(svg);
+                if (targetGroups.length === 0) return false;
 
-                // Determine target group: feature_legend (linear) or legend (circular)
-                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
-                const targetGroup = featureLegendGroup || legendGroup;
-
-                // Find text element with this caption
-                const texts = targetGroup.querySelectorAll('text');
                 let removed = false;
 
-                texts.forEach(t => {
-                    if (t.textContent?.trim() === caption.trim()) {
-                        const textY = parseTransformY(t.getAttribute('transform'));
-                        if (textY !== null) {
-                            // Find and remove the color rect at the same Y (within tolerance)
-                            const rects = targetGroup.querySelectorAll('path');
-                            rects.forEach(r => {
-                                const rectY = parseTransformY(r.getAttribute('transform'));
-                                // Check if Y coordinates match (within 0.1 tolerance for floating point)
-                                if (rectY !== null && Math.abs(rectY - textY) < 0.1) {
-                                    // Make sure it's a color rect (has solid fill, not gradient)
-                                    const fill = r.getAttribute('fill');
-                                    if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                                        r.remove();
+                // Remove from all legend groups
+                for (const targetGroup of targetGroups) {
+                    // Find text element with this caption
+                    const texts = targetGroup.querySelectorAll('text');
+
+                    texts.forEach(t => {
+                        if (t.textContent?.trim() === caption.trim()) {
+                            const textY = parseTransformY(t.getAttribute('transform'));
+                            if (textY !== null) {
+                                // Find and remove the color rect at the same Y (within tolerance)
+                                const rects = targetGroup.querySelectorAll('path');
+                                rects.forEach(r => {
+                                    const rectY = parseTransformY(r.getAttribute('transform'));
+                                    // Check if Y coordinates match (within 0.1 tolerance for floating point)
+                                    if (rectY !== null && Math.abs(rectY - textY) < 0.1) {
+                                        // Make sure it's a color rect (has solid fill, not gradient)
+                                        const fill = r.getAttribute('fill');
+                                        if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                            r.remove();
+                                        }
                                     }
-                                }
-                            });
+                                });
+                            }
+                            t.remove();
+                            removed = true;
                         }
-                        t.remove();
-                        removed = true;
-                    }
-                });
+                    });
+                }
 
                 if (removed) {
+                    skipCaptureBaseConfig.value = true;
                     const idx = selectedResultIndex.value;
                     if (idx >= 0 && results.value.length > idx) {
                         const serializer = new XMLSerializer();
@@ -2179,6 +2320,7 @@
             };
 
             // Extract legend entries from current SVG for the Legend Editor panel
+            // Uses the visible (active) legend group for extraction
             const extractLegendEntries = () => {
                 if (!svgContainer.value) {
                     legendEntries.value = [];
@@ -2191,15 +2333,11 @@
                     return;
                 }
 
-                const legendGroup = svg.getElementById('legend');
-                if (!legendGroup) {
+                const targetGroup = getVisibleFeatureLegendGroup(svg);
+                if (!targetGroup) {
                     legendEntries.value = [];
                     return;
                 }
-
-                // Determine target group: feature_legend (linear) or legend (circular)
-                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
-                const targetGroup = featureLegendGroup || legendGroup;
 
                 const entries = [];
 
@@ -2241,6 +2379,7 @@
             };
 
             // Update legend entry color
+            // Updates BOTH horizontal and vertical legends if they exist
             const updateLegendEntryColor = (idx, newColor) => {
                 if (!svgContainer.value) return;
                 const svg = svgContainer.value.querySelector('svg');
@@ -2249,32 +2388,46 @@
                 const entry = legendEntries.value[idx];
                 if (!entry) return;
 
-                const legendGroup = svg.getElementById('legend');
-                if (!legendGroup) return;
+                const targetGroups = getAllFeatureLegendGroups(svg);
+                if (targetGroups.length === 0) return;
 
-                // Determine target group: feature_legend (linear) or legend (circular)
-                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
-                const targetGroup = featureLegendGroup || legendGroup;
-
-                // Find and update the color rect at this Y position
-                const paths = targetGroup.querySelectorAll('path');
-                paths.forEach(p => {
-                    const pt = p.getAttribute('transform');
-                    if (pt) {
-                        const pMatch = pt.match(/translate\([^,]+,\s*([\d.-]+)\)/);
-                        if (pMatch && Math.abs(parseFloat(pMatch[1]) - entry.yPos) < 1) {
-                            const fill = p.getAttribute('fill');
-                            if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                                p.setAttribute('fill', newColor);
+                // Update in all legend groups (find by caption since Y positions differ between layouts)
+                for (const targetGroup of targetGroups) {
+                    // Find text element with matching caption
+                    const texts = targetGroup.querySelectorAll('text');
+                    for (const t of texts) {
+                        if (t.textContent?.trim() === entry.caption.trim()) {
+                            const transform = t.getAttribute('transform');
+                            if (transform) {
+                                const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                                if (match) {
+                                    const textY = parseFloat(match[1]);
+                                    // Find and update the color rect at this Y position
+                                    const paths = targetGroup.querySelectorAll('path');
+                                    paths.forEach(p => {
+                                        const pt = p.getAttribute('transform');
+                                        if (pt) {
+                                            const pMatch = pt.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                                            if (pMatch && Math.abs(parseFloat(pMatch[1]) - textY) < 1) {
+                                                const fill = p.getAttribute('fill');
+                                                if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                                    p.setAttribute('fill', newColor);
+                                                }
+                                            }
+                                        }
+                                    });
+                                }
                             }
+                            break;
                         }
                     }
-                });
+                }
 
                 // Update local state
                 legendEntries.value[idx].color = newColor;
 
                 // Save to results
+                skipCaptureBaseConfig.value = true;
                 const resultIdx = selectedResultIndex.value;
                 if (resultIdx >= 0 && results.value.length > resultIdx) {
                     const serializer = new XMLSerializer();
@@ -2283,6 +2436,7 @@
             };
 
             // Update legend entry caption
+            // Updates BOTH horizontal and vertical legends if they exist
             const updateLegendEntryCaption = (idx, newCaption) => {
                 if (!svgContainer.value || !newCaption.trim()) return;
                 const svg = svgContainer.value.querySelector('svg');
@@ -2291,29 +2445,25 @@
                 const entry = legendEntries.value[idx];
                 if (!entry) return;
 
-                const legendGroup = svg.getElementById('legend');
-                if (!legendGroup) return;
+                const oldCaption = entry.caption;
+                const targetGroups = getAllFeatureLegendGroups(svg);
+                if (targetGroups.length === 0) return;
 
-                // Determine target group: feature_legend (linear) or legend (circular)
-                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
-                const targetGroup = featureLegendGroup || legendGroup;
-
-                // Find and update the text element at this Y position
-                const texts = targetGroup.querySelectorAll('text');
-                texts.forEach(t => {
-                    const tt = t.getAttribute('transform');
-                    if (tt) {
-                        const tMatch = tt.match(/translate\([^,]+,\s*([\d.-]+)\)/);
-                        if (tMatch && Math.abs(parseFloat(tMatch[1]) - entry.yPos) < 1) {
+                // Update in all legend groups (find by old caption text)
+                for (const targetGroup of targetGroups) {
+                    const texts = targetGroup.querySelectorAll('text');
+                    texts.forEach(t => {
+                        if (t.textContent?.trim() === oldCaption.trim()) {
                             t.textContent = newCaption;
                         }
-                    }
-                });
+                    });
+                }
 
                 // Update local state
                 legendEntries.value[idx].caption = newCaption;
 
                 // Save to results
+                skipCaptureBaseConfig.value = true;
                 const resultIdx = selectedResultIndex.value;
                 if (resultIdx >= 0 && results.value.length > resultIdx) {
                     const serializer = new XMLSerializer();
@@ -2348,12 +2498,9 @@
                 const svg = svgContainer.value.querySelector('svg');
                 if (!svg) return;
 
-                const legendGroup = svg.getElementById('legend');
-                if (!legendGroup) return;
-
-                // Determine target group: feature_legend (linear) or legend (circular)
-                const featureLegendGroup = legendGroup.querySelector('#feature_legend');
-                const targetGroup = featureLegendGroup || legendGroup;
+                // Get all feature legend groups (handles dual legends)
+                const targetGroups = getAllFeatureLegendGroups(svg);
+                if (targetGroups.length === 0) return;
 
                 const entry1 = legendEntries.value[idx1];
                 const entry2 = legendEntries.value[idx2];
@@ -2362,27 +2509,29 @@
                 const y1 = entry1.yPos;
                 const y2 = entry2.yPos;
 
-                // Find and update elements at y1 position
-                const allElements = targetGroup.querySelectorAll('path, text');
-                allElements.forEach(el => {
-                    const transform = el.getAttribute('transform');
-                    if (!transform) return;
+                // Swap in all legend groups
+                for (const targetGroup of targetGroups) {
+                    const allElements = targetGroup.querySelectorAll('path, text');
+                    allElements.forEach(el => {
+                        const transform = el.getAttribute('transform');
+                        if (!transform) return;
 
-                    const match = transform.match(/translate\(([^,]+),\s*([\d.-]+)\)/);
-                    if (!match) return;
+                        const match = transform.match(/translate\(([^,]+),\s*([\d.-]+)\)/);
+                        if (!match) return;
 
-                    const x = match[1];
-                    const y = parseFloat(match[2]);
+                        const x = match[1];
+                        const y = parseFloat(match[2]);
 
-                    // Check if this element belongs to entry1 or entry2
-                    if (Math.abs(y - y1) < 1) {
-                        // This element belongs to entry1, move to y2
-                        el.setAttribute('transform', `translate(${x}, ${y2})`);
-                    } else if (Math.abs(y - y2) < 1) {
-                        // This element belongs to entry2, move to y1
-                        el.setAttribute('transform', `translate(${x}, ${y1})`);
-                    }
-                });
+                        // Check if this element belongs to entry1 or entry2
+                        if (Math.abs(y - y1) < 1) {
+                            // This element belongs to entry1, move to y2
+                            el.setAttribute('transform', `translate(${x}, ${y2})`);
+                        } else if (Math.abs(y - y2) < 1) {
+                            // This element belongs to entry2, move to y1
+                            el.setAttribute('transform', `translate(${x}, ${y1})`);
+                        }
+                    });
+                }
 
                 // Update local state (swap yPos values)
                 legendEntries.value[idx1].yPos = y2;
@@ -2394,6 +2543,7 @@
                 legendEntries.value[idx2] = { ...temp, yPos: y2 };
 
                 // Save to results
+                skipCaptureBaseConfig.value = true;
                 const resultIdx = selectedResultIndex.value;
                 if (resultIdx >= 0 && results.value.length > resultIdx) {
                     const serializer = new XMLSerializer();
@@ -2633,7 +2783,81 @@
                 resetLegendPosition();
             };
 
+            // Calculate absolute canvas configuration for circular mode based on position
+            // Uses base config to avoid accumulation errors
+            const getCircularAbsoluteConfig = (position, baseConfig) => {
+                const { viewBoxWidth, viewBoxHeight, diagramCenterX, diagramCenterY, legendWidth, legendHeight } = baseConfig;
+
+                switch (position) {
+                    case 'left':
+                        return {
+                            vbWidth: viewBoxWidth + legendWidth * 1.1,
+                            vbHeight: viewBoxHeight,
+                            diagramShiftX: legendWidth * 0.55,  // Shift diagram right
+                            diagramShiftY: 0,
+                            legendX: 10,
+                            legendY: (viewBoxHeight - legendHeight) / 2
+                        };
+                    case 'right':
+                        return {
+                            vbWidth: viewBoxWidth + legendWidth * 1.1,
+                            vbHeight: viewBoxHeight,
+                            diagramShiftX: 0,  // No shift, legend goes to expanded area
+                            diagramShiftY: 0,
+                            legendX: viewBoxWidth + legendWidth * 0.05,
+                            legendY: (viewBoxHeight - legendHeight) / 2
+                        };
+                    case 'upper_left':
+                        return {
+                            vbWidth: viewBoxWidth,
+                            vbHeight: viewBoxHeight,
+                            diagramShiftX: 0,
+                            diagramShiftY: 0,
+                            legendX: 0.025 * viewBoxWidth,
+                            legendY: 0.05 * viewBoxHeight
+                        };
+                    case 'upper_right':
+                        return {
+                            vbWidth: viewBoxWidth,
+                            vbHeight: viewBoxHeight,
+                            diagramShiftX: 0,
+                            diagramShiftY: 0,
+                            legendX: 0.85 * viewBoxWidth,
+                            legendY: 0.05 * viewBoxHeight
+                        };
+                    case 'lower_left':
+                        return {
+                            vbWidth: viewBoxWidth,
+                            vbHeight: viewBoxHeight,
+                            diagramShiftX: 0,
+                            diagramShiftY: 0,
+                            legendX: 0.025 * viewBoxWidth,
+                            legendY: 0.78 * viewBoxHeight
+                        };
+                    case 'lower_right':
+                        return {
+                            vbWidth: viewBoxWidth,
+                            vbHeight: viewBoxHeight,
+                            diagramShiftX: 0,
+                            diagramShiftY: 0,
+                            legendX: 0.875 * viewBoxWidth,
+                            legendY: 0.75 * viewBoxHeight
+                        };
+                    case 'none':
+                    default:
+                        return {
+                            vbWidth: viewBoxWidth,
+                            vbHeight: viewBoxHeight,
+                            diagramShiftX: 0,
+                            diagramShiftY: 0,
+                            legendX: 0,
+                            legendY: 0
+                        };
+                }
+            };
+
             // Reposition elements when legend position dropdown changes
+            // Uses ABSOLUTE positioning from base config to avoid accumulation errors
             const repositionForLegendChange = (newPosition, oldPosition) => {
                 if (!svgContainer.value || !svgContent.value) return;
                 const svg = svgContainer.value.querySelector('svg');
@@ -2642,391 +2866,259 @@
                 const legendGroup = svg.getElementById('legend');
                 const isLinear = mode.value === 'linear';
 
-                // Get SVG dimensions
-                let viewBox = svg.getAttribute('viewBox');
-                if (!viewBox) return;
-                const parts = viewBox.split(/\s+/).map(parseFloat);
-                if (parts.length !== 4) return;
-                let [vbX, vbY, vbW, vbH] = parts;
-
-                // Get legend dimensions (approximate from legend group bounds)
-                let legendWidth = 120;  // Default estimate
-                let legendHeight = 150; // Default estimate
+                // Get current legend dimensions
+                let legendWidth = 120, legendHeight = 150;
                 if (legendGroup) {
                     const bbox = legendGroup.getBBox();
                     legendWidth = bbox.width || legendWidth;
                     legendHeight = bbox.height || legendHeight;
                 }
 
-                // Calculate legend position based on position setting (different for linear vs circular)
-                const calcLegendPos = (pos) => {
-                    if (isLinear) {
-                        // Linear diagram positions
-                        const padding = 20;
-                        switch (pos) {
-                            case 'right':
-                                return { x: vbW - legendWidth - padding, y: (vbH - legendHeight) / 2 };
-                            case 'left':
-                                return { x: padding, y: (vbH - legendHeight) / 2 };
-                            case 'top':
-                                return { x: (vbW - legendWidth) / 2, y: padding };
-                            case 'bottom':
-                                return { x: (vbW - legendWidth) / 2, y: vbH - legendHeight - padding };
-                            case 'none':
-                                return null;
-                            default:
-                                return { x: vbW - legendWidth - padding, y: (vbH - legendHeight) / 2 };
-                        }
-                    } else {
-                        // Circular diagram positions
-                        switch (pos) {
-                            case 'right':
-                                return { x: vbW - legendWidth - 10, y: (vbH - legendHeight) / 2 };
-                            case 'left':
-                                return { x: 10, y: (vbH - legendHeight) / 2 };
-                            case 'upper_left':
-                                return { x: 0.025 * vbW, y: 0.05 * vbH };
-                            case 'upper_right':
-                                return { x: 0.85 * vbW, y: 0.05 * vbH };
-                            case 'lower_left':
-                                return { x: 0.025 * vbW, y: 0.78 * vbH };
-                            case 'lower_right':
-                                return { x: 0.875 * vbW, y: 0.75 * vbH };
-                            case 'none':
-                                return null;
-                            default:
-                                return { x: vbW - legendWidth - 10, y: (vbH - legendHeight) / 2 };
+                if (!isLinear) {
+                    // === CIRCULAR MODE: Use absolute positioning from base config ===
+                    console.log('[DEBUG] Circular mode reposition:', { newPosition, oldPosition });
+                    console.log('[DEBUG] circularBaseConfig:', circularBaseConfig.value);
+
+                    // Handle legend visibility
+                    if (legendGroup) {
+                        if (newPosition === 'none') {
+                            legendGroup.style.display = 'none';
+                        } else {
+                            legendGroup.style.display = '';
                         }
                     }
-                };
 
-                // Calculate diagram offset based on legend position
-                const calcDiagramOffset = (pos) => {
-                    if (isLinear) {
-                        // Linear: legend position affects diagram offset
-                        const verticalPadding = legendHeight + 40; // legend height + spacing
-                        switch (pos) {
-                            case 'left':
-                                return { x: legendWidth + 20, y: 0 };
-                            case 'right':
-                                return { x: 0, y: 0 };
-                            case 'top':
-                                return { x: 0, y: verticalPadding };
-                            case 'bottom':
-                                return { x: 0, y: 0 };
-                            default:
-                                return { x: 0, y: 0 };
-                        }
-                    } else {
-                        // Circular: only left/right affects diagram
-                        switch (pos) {
-                            case 'left':
-                                return { x: legendWidth * 0.5, y: 0 };
-                            case 'right':
-                                return { x: -legendWidth * 0.5, y: 0 };
-                            default:
-                                return { x: 0, y: 0 };
-                        }
-                    }
-                };
-
-                const oldLegendPos = calcLegendPos(oldPosition);
-                const newLegendPos = calcLegendPos(newPosition);
-                const oldDiagramOffset = calcDiagramOffset(oldPosition);
-                const newDiagramOffset = calcDiagramOffset(newPosition);
-
-                // Determine layout direction
-                const isHorizontalLayout = (pos) => pos === 'top' || pos === 'bottom';
-                const isVerticalLayout = (pos) => pos === 'left' || pos === 'right';
-                const oldIsHorizontal = isHorizontalLayout(oldPosition);
-                const newIsHorizontal = isHorizontalLayout(newPosition);
-                const layoutChanged = isLinear && (oldIsHorizontal !== newIsHorizontal) && newPosition !== 'none';
-
-                // Handle legend visibility and position
-                if (legendGroup) {
                     if (newPosition === 'none') {
-                        legendGroup.style.display = 'none';
-                    } else {
-                        legendGroup.style.display = '';
+                        generatedLegendPosition.value = newPosition;
+                        return;
+                    }
 
-                        // Rearrange legend entries if layout direction changed (horizontal <-> vertical)
-                        if (layoutChanged) {
-                            const featureLegendGroup = legendGroup.querySelector('#feature_legend');
-                            const pairwiseLegendGroup = legendGroup.querySelector('#pairwise_legend');
+                    // Update base config legend dimensions if they've changed
+                    const baseConfig = {
+                        ...circularBaseConfig.value,
+                        legendWidth: legendWidth,
+                        legendHeight: legendHeight
+                    };
+                    console.log('[DEBUG] baseConfig:', baseConfig);
 
-                            const entrySpacing = 24; // line_height = (24/14) * rect_size, rect_size ~= 14
-                            const textXOffset = 22;  // text_x_offset = (22/14) * rect_size
-                            const rectSize = 14;
+                    // Calculate absolute configuration for new position
+                    const config = getCircularAbsoluteConfig(newPosition, baseConfig);
+                    console.log('[DEBUG] calculated config:', config);
 
-                            // Store legend bounds before rearrangement for viewBox calculation
-                            const oldLegendBbox = legendGroup.getBBox();
-                            const oldLegendTransform = parseTransform(legendGroup.getAttribute('transform'));
+                    // Set viewBox to absolute value (not delta)
+                    svg.setAttribute('viewBox', `0 0 ${config.vbWidth} ${config.vbHeight}`);
 
-                            // Process feature_legend_group
-                            if (featureLegendGroup) {
-                                // Remove group-level transform first
-                                featureLegendGroup.removeAttribute('transform');
+                    // Set legend to absolute position
+                    if (legendGroup) {
+                        legendGroup.setAttribute('transform', `translate(${config.legendX}, ${config.legendY})`);
+                        legendInitialTransform.value = { x: config.legendX, y: config.legendY };
+                        legendCurrentOffset.x = 0;
+                        legendCurrentOffset.y = 0;
+                    }
 
-                                // NOTE: All legend elements are <path> - both color rectangles AND text
-                                // (generate_text_path creates path elements, not text elements)
-                                // Rectangle paths are at X offset ~0, text paths are at X offset ~22
-                                const allPaths = featureLegendGroup.querySelectorAll('path');
+                    // Set diagram elements to absolute positions based on base transforms + shift
+                    console.log('[DEBUG] Circular: diagramElementBaseTransforms size:', diagramElementBaseTransforms.value.size);
+                    console.log('[DEBUG] Circular: diagramElements count:', diagramElements.value.length);
+                    if (diagramElements.value.length > 0) {
+                        diagramElements.value.forEach((el, idx) => {
+                            const baseTransform = diagramElementBaseTransforms.value.get(el) || { x: 0, y: 0 };
+                            const foundInMap = diagramElementBaseTransforms.value.has(el);
+                            console.log(`[DEBUG] Element ${idx} (${el.id}): foundInMap=${foundInMap}, baseTransform=`, baseTransform);
+                            const newX = baseTransform.x + config.diagramShiftX;
+                            const newY = baseTransform.y + config.diagramShiftY;
+                            el.setAttribute('transform', `translate(${newX}, ${newY})`);
 
-                                // Collect all path data
-                                const pathData = [];
-                                allPaths.forEach(p => {
-                                    const t = parseTransform(p.getAttribute('transform'));
-                                    pathData.push({ el: p, x: t.x, y: t.y });
-                                });
+                            // Update current transforms (for drag operations)
+                            diagramElementOriginalTransforms.value.set(el, { x: newX, y: newY });
+                        });
+                        diagramOffset.x = 0;
+                        diagramOffset.y = 0;
+                    }
 
-                                // Build entry list: each entry is {rect, text}
-                                const entries = [];
+                } else {
+                    // === LINEAR MODE: Dual legend support with proper repositioning ===
+                    console.log('[DEBUG] Linear mode reposition:', { newPosition, oldPosition });
 
-                                if (oldIsHorizontal) {
-                                    // Horizontal layout: entries arranged by X
-                                    // Sort by X position
-                                    pathData.sort((a, b) => a.x - b.x);
+                    // Get SVG dimensions
+                    let viewBox = svg.getAttribute('viewBox');
+                    if (!viewBox) return;
+                    const parts = viewBox.split(/\s+/).map(parseFloat);
+                    if (parts.length !== 4) return;
+                    let [vbX, vbY, vbW, vbH] = parts;
+                    console.log('[DEBUG] viewBox:', { vbX, vbY, vbW, vbH });
 
-                                    // Pair consecutive elements (rect, text, rect, text, ...)
-                                    for (let i = 0; i < pathData.length; i += 2) {
-                                        const rect = pathData[i];
-                                        const text = pathData[i + 1] || null;
-                                        entries.push({ rect, text });
-                                    }
+                    // Helper to check layout type
+                    const isHorizontalLayout = (pos) => pos === 'top' || pos === 'bottom';
+                    const isVerticalLayout = (pos) => pos === 'left' || pos === 'right';
+
+                    // Get generated position to determine what shifts are needed
+                    const generatedPos = linearBaseConfig.value.generatedPosition || 'right';
+                    const wasHorizontal = isHorizontalLayout(generatedPos);
+                    const nowHorizontal = isHorizontalLayout(newPosition);
+                    console.log('[DEBUG] layout:', { generatedPos, wasHorizontal, nowHorizontal });
+
+                    // Handle legend visibility
+                    if (legendGroup) {
+                        if (newPosition === 'none') {
+                            legendGroup.setAttribute('display', 'none');
+                        } else {
+                            legendGroup.removeAttribute('display');
+
+                            // Find dual legend groups
+                            const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+                            const verticalLegend = legendGroup.querySelector('#legend_vertical');
+                            console.log('[DEBUG] dual legends found:', { horizontal: !!horizontalLegend, vertical: !!verticalLegend });
+
+                            // Toggle visibility between horizontal and vertical legends
+                            if (horizontalLegend && verticalLegend) {
+                                // Debug: Show the actual SVG structure of both legend groups
+                                console.log('[DEBUG] Horizontal legend innerHTML (first 500 chars):', horizontalLegend.innerHTML.substring(0, 500));
+                                console.log('[DEBUG] Vertical legend innerHTML (first 500 chars):', verticalLegend.innerHTML.substring(0, 500));
+                                console.log('[DEBUG] Before toggle - horizontal display:', horizontalLegend.getAttribute('display'));
+                                console.log('[DEBUG] Before toggle - vertical display:', verticalLegend.getAttribute('display'));
+
+                                // First, temporarily show both to get accurate dimensions
+                                horizontalLegend.removeAttribute('display');
+                                verticalLegend.removeAttribute('display');
+
+                                // Get dimensions from both legends
+                                const hBbox = horizontalLegend.getBBox();
+                                const vBbox = verticalLegend.getBBox();
+                                console.log('[DEBUG] Horizontal legend bbox:', { width: hBbox.width, height: hBbox.height });
+                                console.log('[DEBUG] Vertical legend bbox:', { width: vBbox.width, height: vBbox.height });
+
+                                // Now set proper visibility
+                                if (nowHorizontal) {
+                                    // Show horizontal legend, hide vertical
+                                    verticalLegend.setAttribute('display', 'none');
+                                    legendWidth = hBbox.width || linearBaseConfig.value.horizontalLegendWidth || legendWidth;
+                                    legendHeight = hBbox.height || linearBaseConfig.value.horizontalLegendHeight || legendHeight;
+                                    console.log('[DEBUG] Showing HORIZONTAL legend, using dimensions:', { legendWidth, legendHeight });
                                 } else {
-                                    // Vertical layout: entries arranged by Y
-                                    // Group by Y position, then separate rect (X~0) from text (X~22)
-                                    const byY = new Map();
-                                    pathData.forEach(p => {
-                                        const yKey = Math.round(p.y);
-                                        if (!byY.has(yKey)) byY.set(yKey, []);
-                                        byY.get(yKey).push(p);
-                                    });
-
-                                    // Sort Y positions and build entries
-                                    const yPositions = [...byY.keys()].sort((a, b) => a - b);
-                                    yPositions.forEach(y => {
-                                        const elements = byY.get(y);
-                                        // Sort by X - first is rect (X~0), second is text (X~22)
-                                        elements.sort((a, b) => a.x - b.x);
-                                        const rect = elements[0] || null;
-                                        const text = elements[1] || null;
-                                        entries.push({ rect, text });
-                                    });
+                                    // Show vertical legend, hide horizontal
+                                    horizontalLegend.setAttribute('display', 'none');
+                                    legendWidth = vBbox.width || linearBaseConfig.value.verticalLegendWidth || legendWidth;
+                                    legendHeight = vBbox.height || linearBaseConfig.value.verticalLegendHeight || legendHeight;
+                                    console.log('[DEBUG] Showing VERTICAL legend, using dimensions:', { legendWidth, legendHeight });
                                 }
 
-                                // Calculate text widths BEFORE moving anything
-                                // (getBBox is unreliable after transform changes)
-                                const entryWidths = entries.map(entry => {
-                                    if (entry.text) {
-                                        const bbox = entry.text.el.getBBox();
-                                        return rectSize + textXOffset + bbox.width + textXOffset;
-                                    }
-                                    return rectSize + textXOffset * 2;
-                                });
+                                console.log('[DEBUG] After toggle - horizontal display:', horizontalLegend.getAttribute('display'));
+                                console.log('[DEBUG] After toggle - vertical display:', verticalLegend.getAttribute('display'));
 
-                                // Now rearrange entries to new layout
-                                let featureLegendWidth = 0;
-                                let featureLegendHeight = 0;
-
-                                if (newIsHorizontal) {
-                                    // Vertical → Horizontal: Stack entries side by side
-                                    let currentX = 0;
-                                    const baseY = rectSize / 2;
-
-                                    entries.forEach((entry, idx) => {
-                                        if (entry.rect) {
-                                            entry.rect.el.setAttribute('transform', `translate(${currentX}, ${baseY})`);
-                                        }
-                                        if (entry.text) {
-                                            entry.text.el.setAttribute('transform', `translate(${currentX + textXOffset}, ${baseY})`);
-                                        }
-                                        currentX += entryWidths[idx];
-                                    });
-                                    featureLegendWidth = currentX;
-                                    featureLegendHeight = entrySpacing;
-                                } else {
-                                    // Horizontal → Vertical: Stack entries top to bottom
-                                    let currentY = rectSize / 2;
-
-                                    entries.forEach((entry, idx) => {
-                                        if (entry.rect) {
-                                            entry.rect.el.setAttribute('transform', `translate(0, ${currentY})`);
-                                        }
-                                        if (entry.text) {
-                                            entry.text.el.setAttribute('transform', `translate(${textXOffset}, ${currentY})`);
-                                        }
-                                        currentY += entrySpacing;
-                                    });
-                                    featureLegendHeight = currentY;
-                                    featureLegendWidth = Math.max(...entryWidths);
-                                }
-
-                                // Handle pairwise_legend_group positioning
-                                if (pairwiseLegendGroup) {
-                                    // Clear any existing transform first
-                                    pairwiseLegendGroup.removeAttribute('transform');
-
-                                    // Get actual bounding boxes for proper alignment
-                                    const featureBbox = featureLegendGroup.getBBox();
-                                    const pairwiseBbox = pairwiseLegendGroup.getBBox();
-
-                                    if (newIsHorizontal) {
-                                        // Place pairwise legend to the right of feature legend
-                                        // Both should be centered on the same Y baseline
-                                        // Feature legend center Y = featureBbox.y + featureBbox.height/2
-                                        // Pairwise legend should be vertically centered with feature legend
-                                        const featureCenterY = featureBbox.y + featureBbox.height / 2;
-                                        const pairwiseCenterY = pairwiseBbox.y + pairwiseBbox.height / 2;
-                                        const pairwiseY = featureCenterY - pairwiseCenterY;
-
-                                        // X position: right of feature legend with spacing
-                                        const pairwiseX = featureBbox.x + featureBbox.width + textXOffset;
-
-                                        pairwiseLegendGroup.setAttribute('transform', `translate(${pairwiseX}, ${pairwiseY})`);
-                                    } else {
-                                        // Place pairwise legend below feature legend
-                                        // Center horizontally relative to each other
-                                        const featureBbox = featureLegendGroup.getBBox();
-                                        const pairwiseBbox = pairwiseLegendGroup.getBBox();
-
-                                        // Y position: below feature legend with spacing
-                                        const pairwiseY = featureBbox.y + featureBbox.height + entrySpacing / 2;
-
-                                        // X position: center if pairwise is wider, otherwise align left
-                                        let pairwiseX = 0;
-                                        if (pairwiseBbox.width > featureBbox.width) {
-                                            // Center feature legend relative to pairwise
-                                            const featureXOffset = (pairwiseBbox.width - featureBbox.width) / 2;
-                                            entries.forEach(entry => {
-                                                if (entry.rect) {
-                                                    const t = parseTransform(entry.rect.el.getAttribute('transform'));
-                                                    entry.rect.el.setAttribute('transform', `translate(${t.x + featureXOffset}, ${t.y})`);
-                                                }
-                                                if (entry.text) {
-                                                    const t = parseTransform(entry.text.el.getAttribute('transform'));
-                                                    entry.text.el.setAttribute('transform', `translate(${t.x + featureXOffset}, ${t.y})`);
-                                                }
-                                            });
-                                        } else {
-                                            // Center pairwise legend relative to feature
-                                            pairwiseX = (featureBbox.width - pairwiseBbox.width) / 2;
-                                        }
-                                        pairwiseLegendGroup.setAttribute('transform', `translate(${pairwiseX}, ${pairwiseY})`);
+                                // Apply correct viewBox for the layout type
+                                const vbAttr = nowHorizontal
+                                    ? svg.getAttribute('data-horizontal-viewbox')
+                                    : svg.getAttribute('data-vertical-viewbox');
+                                console.log('[DEBUG] Applying viewBox attribute:', vbAttr);
+                                if (vbAttr) {
+                                    const vbParts = vbAttr.split(/\s+/).map(parseFloat);
+                                    if (vbParts.length === 4) {
+                                        [vbX, vbY, vbW, vbH] = vbParts;
+                                        svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                                        console.log('[DEBUG] ViewBox set to:', { vbX, vbY, vbW, vbH });
                                     }
                                 }
                             }
 
-                            // Update legend dimensions after rearrangement
-                            const newLegendBbox = legendGroup.getBBox();
-                            legendWidth = newLegendBbox.width || legendWidth;
-                            legendHeight = newLegendBbox.height || legendHeight;
-
-                            // Calculate viewBox change based on layout direction change
-                            // Vertical layout (left/right): legend adds to WIDTH
-                            // Horizontal layout (top/bottom): legend adds to HEIGHT
-                            const layoutPadding = 40; // Space between legend and content
-
-                            if (newIsHorizontal) {
-                                // Converting from vertical to horizontal
-                                // - Remove legend width from canvas width
-                                // - Add legend height to canvas height
-                                const widthReduction = oldLegendBbox.width + layoutPadding;
-                                const heightAddition = newLegendBbox.height + layoutPadding;
-
-                                vbW = vbW - widthReduction;
-                                vbH = vbH + heightAddition;
-                            } else {
-                                // Converting from horizontal to vertical
-                                // - Add legend width to canvas width
-                                // - Remove legend height from canvas height
-                                const widthAddition = newLegendBbox.width + layoutPadding;
-                                const heightReduction = oldLegendBbox.height + layoutPadding;
-
-                                vbW = vbW + widthAddition;
-                                vbH = vbH - heightReduction;
-                            }
-
-                            // Ensure minimum dimensions
-                            vbW = Math.max(vbW, 400);
-                            vbH = Math.max(vbH, 200);
-
-                            svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
-                        }
-
-                        if (newLegendPos || layoutChanged) {
-                            // Calculate position with updated legend dimensions
+                            // Calculate legend position based on new position and viewBox
                             const padding = 20;
                             let finalX, finalY;
 
-                            if (isLinear) {
-                                // Linear: position based on top/bottom/left/right
-                                switch (newPosition) {
-                                    case 'top':
-                                        finalX = (vbW - legendWidth) / 2;
-                                        finalY = padding;
-                                        break;
-                                    case 'bottom':
-                                        finalX = (vbW - legendWidth) / 2;
-                                        finalY = vbH - legendHeight - padding;
-                                        break;
-                                    case 'left':
-                                        finalX = padding;
-                                        finalY = (vbH - legendHeight) / 2;
-                                        break;
-                                    case 'right':
-                                    default:
-                                        finalX = vbW - legendWidth - padding;
-                                        finalY = (vbH - legendHeight) / 2;
-                                        break;
-                                }
-                            } else {
-                                // Circular: use calcLegendPos which handles all circular positions
-                                // (right, left, upper_left, upper_right, lower_left, lower_right)
-                                if (newLegendPos) {
-                                    finalX = newLegendPos.x;
-                                    finalY = newLegendPos.y;
-                                } else {
-                                    // Fallback
+                            switch (newPosition) {
+                                case 'top':
+                                    finalX = (vbW - legendWidth) / 2;
+                                    finalY = padding;
+                                    break;
+                                case 'bottom':
+                                    finalX = (vbW - legendWidth) / 2;
+                                    finalY = vbH - legendHeight - padding;
+                                    break;
+                                case 'left':
+                                    finalX = padding;
+                                    finalY = (vbH - legendHeight) / 2;
+                                    break;
+                                case 'right':
+                                default:
                                     finalX = vbW - legendWidth - padding;
                                     finalY = (vbH - legendHeight) / 2;
-                                }
+                                    break;
                             }
 
                             legendGroup.setAttribute('transform', `translate(${finalX}, ${finalY})`);
-
-                            // Update initial transform for reset
                             legendInitialTransform.value = { x: finalX, y: finalY };
                             legendCurrentOffset.x = 0;
                             legendCurrentOffset.y = 0;
                         }
                     }
-                }
 
-                // Determine if diagram elements should move
-                const shouldMoveDiagram = isLinear
-                    ? (oldPosition !== newPosition && newPosition !== 'none')  // Linear: move for any valid transition
-                    : ((oldPosition === 'left' || oldPosition === 'right') &&
-                       (newPosition === 'left' || newPosition === 'right'));   // Circular: only left/right
+                    // Calculate diagram element shifts based on layout change
+                    // The diagram elements were positioned for the generated layout.
+                    // When switching between horizontal and vertical layouts, we need to account for
+                    // the different viewBox dimensions and legend placement.
+                    const hasStoredViewBox = svg.hasAttribute('data-horizontal-viewbox') &&
+                                            svg.hasAttribute('data-vertical-viewbox');
 
-                if (shouldMoveDiagram && diagramElements.value.length > 0) {
-                    const diagramDeltaX = newDiagramOffset.x - oldDiagramOffset.x;
-                    const diagramDeltaY = newDiagramOffset.y - oldDiagramOffset.y;
+                    if (hasStoredViewBox && diagramElements.value.length > 0) {
+                        // Get both viewBox configs
+                        const hVbAttr = svg.getAttribute('data-horizontal-viewbox');
+                        const vVbAttr = svg.getAttribute('data-vertical-viewbox');
+                        const hVb = hVbAttr ? hVbAttr.split(/\s+/).map(parseFloat) : null;
+                        const vVb = vVbAttr ? vVbAttr.split(/\s+/).map(parseFloat) : null;
 
-                    if (diagramDeltaX !== 0 || diagramDeltaY !== 0) {
-                        const newOriginalTransforms = new Map();
+                        let shiftX = 0;
+                        let shiftY = 0;
 
-                        diagramElements.value.forEach(el => {
-                            const original = diagramElementOriginalTransforms.value.get(el) || { x: 0, y: 0 };
-                            const newX = original.x + diagramDeltaX;
-                            const newY = original.y + diagramDeltaY;
+                        if (hVb && vVb) {
+                            // Get legend dimensions
+                            const vLegendWidth = linearBaseConfig.value.verticalLegendWidth || legendWidth;
+                            const hLegendHeight = linearBaseConfig.value.horizontalLegendHeight || legendHeight;
 
+                            // Calculate shifts based on the generated position and new position
+                            // The key insight: Python positions diagram content differently based on legend position:
+                            // - horizontal (top): diagram shifts down by legend height
+                            // - horizontal (bottom): diagram at normal Y position
+                            // - vertical (left): diagram shifts right by legend width
+                            // - vertical (right): diagram at normal X position
+
+                            // Determine required X shift based on left positioning
+                            const generatedWithLeftLegend = generatedPos === 'left';
+                            const needsLeftLegend = newPosition === 'left';
+
+                            if (!generatedWithLeftLegend && needsLeftLegend) {
+                                // Diagram was NOT shifted right originally, but needs to be now
+                                shiftX = vLegendWidth;
+                            } else if (generatedWithLeftLegend && !needsLeftLegend) {
+                                // Diagram WAS shifted right originally, needs to shift back left
+                                shiftX = -vLegendWidth;
+                            }
+                            // If both are same (both left or both not-left), no X shift
+
+                            // Determine required Y shift based on top positioning
+                            const generatedWithTopLegend = generatedPos === 'top';
+                            const needsTopLegend = newPosition === 'top';
+
+                            if (!generatedWithTopLegend && needsTopLegend) {
+                                // Diagram was NOT shifted down originally, but needs to be now
+                                shiftY = hLegendHeight;
+                            } else if (generatedWithTopLegend && !needsTopLegend) {
+                                // Diagram WAS shifted down originally, needs to shift back up
+                                shiftY = -hLegendHeight;
+                            }
+                            // If both are same (both top or both not-top), no Y shift
+                        }
+
+                        // Apply shifts to diagram elements
+                        console.log('[DEBUG] Linear: diagramElementBaseTransforms size:', diagramElementBaseTransforms.value.size);
+                        console.log('[DEBUG] Linear: diagramElements count:', diagramElements.value.length);
+                        diagramElements.value.forEach((el, idx) => {
+                            const baseTransform = diagramElementBaseTransforms.value.get(el) || { x: 0, y: 0 };
+                            const foundInMap = diagramElementBaseTransforms.value.has(el);
+                            console.log(`[DEBUG] Linear Element ${idx} (${el.id}): foundInMap=${foundInMap}, baseTransform=`, baseTransform);
+                            const newX = baseTransform.x + shiftX;
+                            const newY = baseTransform.y + shiftY;
                             el.setAttribute('transform', `translate(${newX}, ${newY})`);
-                            newOriginalTransforms.set(el, { x: newX, y: newY });
+                            diagramElementOriginalTransforms.value.set(el, { x: newX, y: newY });
                         });
-
-                        // Update original transforms for reset
-                        diagramElementOriginalTransforms.value = newOriginalTransforms;
                         diagramOffset.x = 0;
                         diagramOffset.y = 0;
                     }
@@ -3034,6 +3126,15 @@
 
                 // Update tracked generated position
                 generatedLegendPosition.value = newPosition;
+
+                // Persist changes to results.value so they survive re-rendering
+                // Set flag to prevent captureBaseConfig from being called when svgContent watch triggers
+                skipCaptureBaseConfig.value = true;
+                const idx = selectedResultIndex.value;
+                if (idx >= 0 && results.value.length > idx) {
+                    const serializer = new XMLSerializer();
+                    results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                }
 
                 console.log(`Legend repositioned (${isLinear ? 'linear' : 'circular'}): ${oldPosition} -> ${newPosition}`);
             };
@@ -3194,30 +3295,178 @@
                 // 1. SVG exists
                 // 2. oldPos is defined (not initial setup)
                 // 3. Position actually changed
-                // 4. The generated position is already set (diagram was generated)
-                // 5. newPos is different from the generated position (actual user change)
+                // 4. newPos is different from the CURRENT tracked position
+                //    (generatedLegendPosition tracks the current position, updated after each reposition)
                 if (svgContent.value &&
                     oldPos !== undefined &&
                     newPos !== oldPos &&
-                    generatedLegendPosition.value &&
                     newPos !== generatedLegendPosition.value) {
                     Vue.nextTick(() => {
+                        // Pass the current tracked position as oldPosition for reference
                         repositionForLegendChange(newPos, generatedLegendPosition.value);
                     });
                 }
             });
 
+            // Capture base configuration from newly generated SVG (for non-accumulating repositioning)
+            const captureBaseConfig = () => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const viewBox = svg.getAttribute('viewBox');
+                if (!viewBox) return;
+                const parts = viewBox.split(/\s+/).map(parseFloat);
+                if (parts.length !== 4) return;
+                const [vbX, vbY, vbW, vbH] = parts;
+
+                const legendGroup = svg.getElementById('legend');
+                let legendWidth = 120, legendHeight = 150;
+                if (legendGroup) {
+                    const bbox = legendGroup.getBBox();
+                    legendWidth = bbox.width || legendWidth;
+                    legendHeight = bbox.height || legendHeight;
+                }
+
+                const isLinear = mode.value === 'linear';
+
+                if (isLinear) {
+                    // For linear mode, read data attributes if available, or calculate defaults
+                    const verticalVb = svg.getAttribute('data-vertical-viewbox');
+                    const horizontalVb = svg.getAttribute('data-horizontal-viewbox');
+
+                    if (verticalVb && horizontalVb) {
+                        const vParts = verticalVb.split(/\s+/).map(parseFloat);
+                        const hParts = horizontalVb.split(/\s+/).map(parseFloat);
+                        linearBaseConfig.value.verticalViewBox = { x: vParts[0], y: vParts[1], w: vParts[2], h: vParts[3] };
+                        linearBaseConfig.value.horizontalViewBox = { x: hParts[0], y: hParts[1], w: hParts[2], h: hParts[3] };
+                    } else {
+                        // Fallback: use current viewBox for both
+                        linearBaseConfig.value.verticalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
+                        linearBaseConfig.value.horizontalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
+                    }
+
+                    // Get legend dimensions from dual legend groups if they exist
+                    if (legendGroup) {
+                        const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+                        const verticalLegend = legendGroup.querySelector('#legend_vertical');
+
+                        if (horizontalLegend && verticalLegend) {
+                            // Temporarily show both to get accurate dimensions
+                            const hDisplay = horizontalLegend.getAttribute('display');
+                            const vDisplay = verticalLegend.getAttribute('display');
+                            horizontalLegend.removeAttribute('display');
+                            verticalLegend.removeAttribute('display');
+
+                            const hBbox = horizontalLegend.getBBox();
+                            const vBbox = verticalLegend.getBBox();
+
+                            linearBaseConfig.value.horizontalLegendWidth = hBbox.width || legendWidth;
+                            linearBaseConfig.value.horizontalLegendHeight = hBbox.height || legendHeight;
+                            linearBaseConfig.value.verticalLegendWidth = vBbox.width || legendWidth;
+                            linearBaseConfig.value.verticalLegendHeight = vBbox.height || legendHeight;
+
+                            // Restore original display states
+                            if (hDisplay) horizontalLegend.setAttribute('display', hDisplay);
+                            if (vDisplay) verticalLegend.setAttribute('display', vDisplay);
+                        } else {
+                            // Single legend - use same dimensions for both
+                            linearBaseConfig.value.verticalLegendWidth = legendWidth;
+                            linearBaseConfig.value.verticalLegendHeight = legendHeight;
+                            linearBaseConfig.value.horizontalLegendWidth = legendWidth;
+                            linearBaseConfig.value.horizontalLegendHeight = legendHeight;
+                        }
+                    }
+
+                    linearBaseConfig.value.generatedPosition = form.legend;
+
+                    // Store diagram element base transforms
+                    linearBaseConfig.value.diagramBaseTransforms = new Map(diagramElementOriginalTransforms.value);
+                } else {
+                    // For circular mode, calculate base viewBox (without legend-induced expansion)
+                    const legendPos = form.legend;
+                    let baseVbW = vbW;
+
+                    // If legend is on left or right, the viewBox was expanded - calculate base width
+                    if (legendPos === 'left' || legendPos === 'right') {
+                        baseVbW = vbW - legendWidth * 1.1;
+                    }
+
+                    // Calculate diagram center (typically half of the base width/height)
+                    const diagramCenterX = baseVbW / 2;
+                    const diagramCenterY = vbH / 2;
+
+                    circularBaseConfig.value = {
+                        viewBoxWidth: baseVbW,
+                        viewBoxHeight: vbH,
+                        diagramCenterX: diagramCenterX,
+                        diagramCenterY: diagramCenterY,
+                        legendWidth: legendWidth,
+                        legendHeight: legendHeight,
+                        generatedPosition: legendPos
+                    };
+                }
+
+                // Store base transforms for all diagram elements
+                diagramElementBaseTransforms.value = new Map(diagramElementOriginalTransforms.value);
+            };
+
             // Watch for SVG changes to refresh legend entries and setup drag
             watch(svgContent, () => {
                 Vue.nextTick(() => {
+                    // When skipping captureBaseConfig (incremental edits), we need to preserve
+                    // the base transforms but they're keyed by old element references.
+                    // Save the base transforms by ID before setupDiagramDrag creates new element refs.
+                    let savedBaseTransformsById = null;
+                    if (skipCaptureBaseConfig.value && diagramElementBaseTransforms.value.size > 0) {
+                        // Build ID -> transforms lookup (handle duplicate IDs by storing as arrays)
+                        savedBaseTransformsById = new Map();
+                        for (const [el, transform] of diagramElementBaseTransforms.value) {
+                            const id = el.id || '';
+                            if (!savedBaseTransformsById.has(id)) {
+                                savedBaseTransformsById.set(id, []);
+                            }
+                            savedBaseTransformsById.get(id).push(transform);
+                        }
+                    }
+
                     extractLegendEntries();
                     setupLegendDrag();
                     setupDiagramDrag();
-                    // Reset canvas padding for new SVG
-                    canvasPadding.top = 0;
-                    canvasPadding.right = 0;
-                    canvasPadding.bottom = 0;
-                    canvasPadding.left = 0;
+
+                    // Only capture base config and reset padding if this is NOT an incremental edit
+                    // When repositioning legend or adding entries, we want to keep the original base config intact
+                    if (!skipCaptureBaseConfig.value) {
+                        // Capture base config after diagram drag setup (which populates originalTransforms)
+                        captureBaseConfig();
+                        // Reset canvas padding for new SVG
+                        canvasPadding.top = 0;
+                        canvasPadding.right = 0;
+                        canvasPadding.bottom = 0;
+                        canvasPadding.left = 0;
+                    } else if (savedBaseTransformsById) {
+                        // Remap base transforms to new element references using saved ID lookup
+                        // This preserves the original base transforms even after DOM elements are recreated
+                        const newBaseTransforms = new Map();
+                        const idCounters = new Map(); // Track index for duplicate IDs
+
+                        diagramElements.value.forEach(newEl => {
+                            const id = newEl.id || '';
+                            const transforms = savedBaseTransformsById.get(id);
+                            if (transforms && transforms.length > 0) {
+                                const idx = idCounters.get(id) || 0;
+                                if (idx < transforms.length) {
+                                    newBaseTransforms.set(newEl, transforms[idx]);
+                                    idCounters.set(id, idx + 1);
+                                }
+                            }
+                        });
+
+                        diagramElementBaseTransforms.value = newBaseTransforms;
+                        console.log('[DEBUG] Remapped base transforms to new elements:', newBaseTransforms.size);
+                    }
+                    // Reset the flag
+                    skipCaptureBaseConfig.value = false;
                 });
             });
 
@@ -3313,8 +3562,23 @@
                 }
             };
 
-            // Clear feature list when switching modes
-            watch(() => mode.value, () => {
+            // Clear feature list and save/restore legend positions when switching modes
+            watch(() => mode.value, (newMode, oldMode) => {
+                // Save current legend position to the old mode's variable
+                if (oldMode === 'circular') {
+                    circularLegendPosition.value = form.legend;
+                } else if (oldMode === 'linear') {
+                    linearLegendPosition.value = form.legend;
+                }
+
+                // Restore legend position for the new mode
+                if (newMode === 'circular') {
+                    form.legend = circularLegendPosition.value;
+                } else if (newMode === 'linear') {
+                    form.legend = linearLegendPosition.value;
+                }
+
+                // Clear feature list
                 extractedFeatures.value = [];
                 featureRecordIds.value = [];
                 selectedFeatureRecordIdx.value = 0;

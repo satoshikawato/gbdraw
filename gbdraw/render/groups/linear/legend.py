@@ -11,6 +11,12 @@ from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 
 
 class LegendGroup:
+    """
+    Generates both horizontal and vertical legend layouts for linear diagrams.
+    Both layouts are always generated and added to the legend group.
+    The appropriate layout is shown/hidden based on legend_position.
+    """
+
     def __init__(
         self,
         config_dict,
@@ -31,233 +37,343 @@ class LegendGroup:
         self.font_size: float = self.legend_config.font_size
         self.rect_size: float = self.legend_config.color_rect_size
         self.legend_position = self.canvas_config.legend_position
-        self.line_height: float = (24/14) * self.rect_size
-        self.text_x_offset: float = (22/14) * self.rect_size
+        self.line_height: float = (24 / 14) * self.rect_size
+        self.text_x_offset: float = (22 / 14) * self.rect_size
         self.num_of_columns = self.legend_config.num_of_columns
         self.has_gradient = self.legend_config.has_gradient
         self.total_feature_legend_width = self.legend_config.total_feature_legend_width
         self.dpi: int = cfg.canvas.dpi
-        self.legend_width: float = 0
-        self.feature_legend_width: float = 0
-        self.feature_legend_height: float = 0
         self.pairwise_legend_width = self.legend_config.pairwise_legend_width
-        self.pairwise_legend_height: float = 0
+
+        # Dimensions for both layouts
+        self.horizontal_legend_width: float = 0
+        self.horizontal_legend_height: float = 0
+        self.vertical_legend_width: float = 0
+        self.vertical_legend_height: float = 0
+
+        # Current active legend dimensions (based on position)
+        self.legend_width: float = 0
         self.legend_height: float = 0
-        self.add_elements_to_group()
+
+        self._build_dual_legends()
 
     def create_rectangle_path_for_legend(self) -> str:
         start_y_top = -self.rect_size / 2
         start_y_bottom = self.rect_size / 2
         return f"M 0,{start_y_top} L {self.rect_size},{start_y_top} L {self.rect_size},{start_y_bottom} L 0,{start_y_bottom} z"
 
-    def add_elements_to_group(self):
-        self.feature_legend_height = self.rect_size
-        y_offset = self.rect_size / 2
-        initial_y_offset = y_offset
+    def _calculate_entry_widths(self) -> list[float]:
+        """Pre-calculate widths for each legend entry."""
+        entry_widths = []
+        for key, properties in self.legend_table.items():
+            if properties["type"] == "solid":
+                bbox_width, _ = calculate_bbox_dimensions(
+                    str(key), self.font_family, self.font_size, self.dpi
+                )
+                entry_widths.append(
+                    self.rect_size + self.text_x_offset + bbox_width + self.text_x_offset
+                )
+        return entry_widths
+
+    def _build_horizontal_feature_legend(self) -> tuple[Group, float, float]:
+        """Build horizontal layout (entries side by side, for top/bottom positions)."""
+        group = Group()
         path_desc = self.create_rectangle_path_for_legend()
         font = self.font_family
-        feature_legend_group = Group(id="feature_legend")
-        max_bbox_width = 0
+
+        y_offset = self.rect_size / 2
+        current_x_offset = 0
+        max_height = self.line_height
+        current_row_start_x = 0
+
+        # For horizontal layout, use canvas width as the wrap limit, not total_feature_legend_width
+        # total_feature_legend_width may be calculated for vertical layout (single item width)
+        # when legend_position is left/right at generation time
+        horizontal_wrap_width = self.canvas_config.total_width if self.canvas_config else 0
+
+        for key, properties in self.legend_table.items():
+            if properties["type"] != "solid":
+                continue
+
+            bbox_width, _ = calculate_bbox_dimensions(
+                str(key), self.font_family, self.font_size, self.dpi
+            )
+            entry_width = self.rect_size + self.text_x_offset + bbox_width + self.text_x_offset
+
+            # Check if we need to wrap to next row (use canvas width for horizontal layout)
+            if (
+                horizontal_wrap_width > 0
+                and current_x_offset + entry_width > horizontal_wrap_width
+            ):
+                current_x_offset = 0
+                y_offset += self.line_height
+                max_height += self.line_height
+
+            # Add rectangle
+            rect_path = Path(
+                d=path_desc,
+                fill=properties["fill"],
+                stroke=properties["stroke"],
+                stroke_width=properties["width"],
+            )
+            rect_path.translate(current_x_offset, y_offset)
+            group.add(rect_path)
+
+            # Add text
+            legend_path = generate_text_path(
+                key,
+                0,
+                0,
+                0,
+                self.font_size,
+                "normal",
+                font,
+                dominant_baseline="central",
+                text_anchor="start",
+            )
+            legend_path.translate(current_x_offset + self.text_x_offset, y_offset)
+            group.add(legend_path)
+
+            current_x_offset += entry_width
+
+        width = max(current_x_offset, current_row_start_x)
+        height = max_height
+
+        return group, width, height
+
+    def _build_vertical_feature_legend(self) -> tuple[Group, float, float]:
+        """Build vertical layout (entries stacked, for left/right positions)."""
+        group = Group()
+        path_desc = self.create_rectangle_path_for_legend()
+        font = self.font_family
+
+        y_offset = self.rect_size / 2
+        max_width = 0
+
+        for key, properties in self.legend_table.items():
+            if properties["type"] != "solid":
+                continue
+
+            bbox_width, _ = calculate_bbox_dimensions(
+                str(key), self.font_family, self.font_size, self.dpi
+            )
+
+            # Add rectangle
+            rect_path = Path(
+                d=path_desc,
+                fill=properties["fill"],
+                stroke=properties["stroke"],
+                stroke_width=properties["width"],
+            )
+            rect_path.translate(0, y_offset)
+            group.add(rect_path)
+
+            # Add text
+            legend_path = generate_text_path(
+                key,
+                0,
+                0,
+                0,
+                self.font_size,
+                "normal",
+                font,
+                dominant_baseline="central",
+                text_anchor="start",
+            )
+            legend_path.translate(self.text_x_offset, y_offset)
+            group.add(legend_path)
+
+            entry_width = self.text_x_offset + bbox_width
+            max_width = max(max_width, entry_width)
+            y_offset += self.line_height
+
+        height = y_offset
+        width = max_width
+
+        return group, width, height
+
+    def _build_pairwise_legend(self) -> tuple[Group, float, float]:
+        """Build pairwise (gradient) legend for BLAST comparisons."""
+        group = Group(id="pairwise_legend")
+        font = self.font_family
+        grad_bar_width = self.pairwise_legend_width
+
         gradient_y_offset = 0
-        grad_bar_width = 0
-        current_feature_legend_width = 0
-        pairwise_legend_group = Group(id="pairwise_legend")
-        if self.num_of_columns > 1:
-            if self.has_gradient:
-                max_items_per_column = self.num_of_columns - 1
+
+        for key, properties in self.legend_table.items():
+            if properties["type"] != "gradient":
+                continue
+
+            gradient_id = f"blast_legend_grad_{abs(hash(properties['min_color'] + properties['max_color']))}"
+
+            # Create gradient
+            gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
+            gradient.add_stop_color(offset="0%", color=properties["min_color"])
+            gradient.add_stop_color(offset="100%", color=properties["max_color"])
+            group.add(gradient)
+
+            # Title
+            title_path = generate_text_path(
+                key,
+                0,
+                0,
+                0,
+                self.font_size,
+                "normal",
+                font,
+                dominant_baseline="hanging",
+                text_anchor="middle",
+            )
+            _, title_path_bbox_height = calculate_bbox_dimensions(
+                str(key), self.font_family, self.font_size, self.dpi
+            )
+            title_x_offset = grad_bar_width / 2
+            title_path.translate(title_x_offset, gradient_y_offset)
+            group.add(title_path)
+            gradient_y_offset += title_path_bbox_height + (self.rect_size / 2)
+
+            # Gradient rectangle
+            grad_rect_path_desc = f"M 0,{-self.rect_size / 2} L {grad_bar_width},{-self.rect_size / 2} L {grad_bar_width},{self.rect_size / 2} L 0,{self.rect_size / 2} z"
+            grad_rect = Path(
+                d=grad_rect_path_desc,
+                fill=f"url(#{gradient_id})",
+                stroke=properties["stroke"],
+                stroke_width=properties["width"],
+            )
+            grad_rect.translate(0, gradient_y_offset)
+            group.add(grad_rect)
+
+            # Labels
+            min_identity = properties.get("min_value", 0)
+            if min_identity == int(min_identity):
+                min_label_text = f"{int(min_identity)}%"
             else:
-                max_items_per_column = self.num_of_columns
-            current_column = 0
-            current_x_offset = 0
-            for key, properties in self.legend_table.items():
-                if properties['type'] == 'solid':
-                    bbox_width, _ = calculate_bbox_dimensions(str(key), self.font_family, self.font_size, self.dpi)
-                    max_bbox_width = max(max_bbox_width, bbox_width)
-                    if current_feature_legend_width + self.text_x_offset + bbox_width + self.text_x_offset > self.total_feature_legend_width:
-                        current_feature_legend_width = 0
-                        current_column = 0
-                        current_x_offset = 0
-                        y_offset += self.line_height
-                        self.feature_legend_height += self.line_height
-                    rect_path = Path(
-                        d=path_desc,
-                        fill=properties['fill'],
-                        stroke=properties['stroke'],
-                        stroke_width=properties['width'])
-                    rect_path.translate(current_x_offset, y_offset)
-                    feature_legend_group.add(rect_path)
-                    current_x_offset +=  self.text_x_offset
-                    legend_path = generate_text_path(
-                            key, 0, 0, 0, self.font_size, "normal", font, 
-                            dominant_baseline='central', text_anchor="start"
-                        )
-                    legend_path.translate(current_x_offset, y_offset)
-                    feature_legend_group.add(legend_path)
-                    current_x_offset += (bbox_width + self.text_x_offset)
-                    current_feature_legend_width = current_x_offset 
-                    self.feature_legend_width = max(current_feature_legend_width, self.feature_legend_width)
-                    current_column += 1
+                min_label_text = f"{min_identity}%"
 
-                elif properties['type'] == 'gradient':
-                    grad_bar_x_start = 0
-                    title_x_offset = 0
-                    grad_bar_width = self.legend_config.pairwise_legend_width
-                    gradient_y_offset = 0
-                    gradient_id = f"blast_legend_grad_{abs(hash(properties['min_color'] + properties['max_color']))}"
-                    
-                    gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
-                    gradient.add_stop_color(offset="0%", color=properties['min_color'])
-                    gradient.add_stop_color(offset="100%", color=properties['max_color'])
-                    pairwise_legend_group.add(gradient)
-                    title_path = generate_text_path(
-                        key, 0, 0, 0, self.font_size, "normal", font, 
-                        dominant_baseline='hanging', text_anchor="middle"
-                    )
-                    title_path_bbox_width, title_path_bbox_height = calculate_bbox_dimensions(str(key), self.font_family, self.font_size, self.dpi)
-                    title_x_offset = grad_bar_x_start + (grad_bar_width / 2)
-                    title_path.translate(title_x_offset, gradient_y_offset) 
-                    pairwise_legend_group.add(title_path) 
-                    gradient_y_offset += title_path_bbox_height + (self.rect_size / 2)
-                    
-                    grad_rect_path_desc = f"M 0,{-self.rect_size / 2} L {grad_bar_width},{-self.rect_size / 2} L {grad_bar_width},{self.rect_size / 2} L 0,{self.rect_size / 2} z"
-                    grad_rect = Path(
-                        d=grad_rect_path_desc,
-                        fill=f"url(#{gradient_id})",
-                        stroke=properties['stroke'],
-                        stroke_width=properties['width']
-                    )
-                    grad_rect.translate(grad_bar_x_start, gradient_y_offset) 
-                    pairwise_legend_group.add(grad_rect)
-                    min_identity = properties.get('min_value', 0)
-                    if min_identity == int(min_identity):
-                        min_label_text = f"{int(min_identity)}%"
-                    else:
-                        min_label_text = f"{min_identity}%"
-                    label_0 = generate_text_path(
-                        min_label_text, 0, 0, 0, self.font_size, "normal", font,
-                        dominant_baseline='hanging', text_anchor="start"
-                     )
-                    label_0.translate(grad_bar_x_start, gradient_y_offset + self.rect_size / 2 + 2) 
-                    pairwise_legend_group.add(label_0)
-                    _, min_label_bbox_height = calculate_bbox_dimensions(min_label_text, self.font_family, self.font_size, self.dpi)
+            label_0 = generate_text_path(
+                min_label_text,
+                0,
+                0,
+                0,
+                self.font_size,
+                "normal",
+                font,
+                dominant_baseline="hanging",
+                text_anchor="start",
+            )
+            label_0.translate(0, gradient_y_offset + self.rect_size / 2 + 2)
+            group.add(label_0)
 
-                    label_100 = generate_text_path(
-                        "100%", 0, 0, 0, self.font_size, "normal", font,
-                        dominant_baseline='hanging', text_anchor="end"
-                    )
-                    label_100.translate(grad_bar_x_start + grad_bar_width, gradient_y_offset + self.rect_size / 2 + 2) 
-                    pairwise_legend_group.add(label_100)
-                    _, max_label_bbox_height = calculate_bbox_dimensions("100%", self.font_family, self.font_size, self.dpi)
-                    pairwise_legend_group.add(label_100)
-                    label_bbox_height = max(min_label_bbox_height, max_label_bbox_height)
-                    gradient_y_offset += (label_bbox_height + self.rect_size / 2 + 2)
+            label_100 = generate_text_path(
+                "100%",
+                0,
+                0,
+                0,
+                self.font_size,
+                "normal",
+                font,
+                dominant_baseline="hanging",
+                text_anchor="end",
+            )
+            label_100.translate(grad_bar_width, gradient_y_offset + self.rect_size / 2 + 2)
+            group.add(label_100)
 
-                    self.pairwise_legend_width = grad_bar_width
-                    self.pairwise_legend_height = gradient_y_offset
-            if self.pairwise_legend_width >0:
-                self.legend_width = self.feature_legend_width + self.pairwise_legend_width + self.text_x_offset
-            else:
-                self.legend_width = self.feature_legend_width
-            self.legend_height = max(self.feature_legend_height, self.pairwise_legend_height)
-            
-            if self.feature_legend_height > self.pairwise_legend_height:
-                pairwise_legend_group.translate(self.feature_legend_width + self.text_x_offset, (self.feature_legend_height - self.pairwise_legend_height)/2)
-            else:
-                pairwise_legend_group.translate(self.feature_legend_width  + self.text_x_offset, 0)
-                feature_legend_group.translate(0, (self.pairwise_legend_height - self.feature_legend_height)/2)
+            _, min_label_bbox_height = calculate_bbox_dimensions(
+                min_label_text, self.font_family, self.font_size, self.dpi
+            )
+            _, max_label_bbox_height = calculate_bbox_dimensions(
+                "100%", self.font_family, self.font_size, self.dpi
+            )
+            label_bbox_height = max(min_label_bbox_height, max_label_bbox_height)
+            gradient_y_offset += label_bbox_height + self.rect_size / 2 + 2
 
-            self.legend_group.add(pairwise_legend_group)
-            self.legend_group.add(feature_legend_group)
+        return group, grad_bar_width, gradient_y_offset
+
+    def _build_dual_legends(self):
+        """Build both horizontal and vertical legend layouts."""
+        # Check if we have any legend entries
+        has_solid = any(p["type"] == "solid" for p in self.legend_table.values())
+        has_gradient = any(p["type"] == "gradient" for p in self.legend_table.values())
+
+        if not has_solid and not has_gradient:
+            return
+
+        # Build feature legends for both orientations
+        h_feature_group, h_feature_width, h_feature_height = (
+            self._build_horizontal_feature_legend()
+        )
+        v_feature_group, v_feature_width, v_feature_height = (
+            self._build_vertical_feature_legend()
+        )
+
+        # Build pairwise legend (same for both orientations, positioned differently)
+        pairwise_width, pairwise_height = 0, 0
+        if has_gradient:
+            _, pairwise_width, pairwise_height = self._build_pairwise_legend()
+
+        # Create horizontal legend group
+        horizontal_group = Group(id="legend_horizontal")
+        horizontal_feature_group = Group(id="feature_legend")
+        for child in h_feature_group.elements:
+            horizontal_feature_group.add(child)
+
+        if has_gradient:
+            h_pairwise_group, _, _ = self._build_pairwise_legend()
+            # Position pairwise legend to the right of feature legend
+            h_pairwise_group.translate(h_feature_width + self.text_x_offset, 0)
+            # Vertically center both
+            if h_feature_height > pairwise_height:
+                h_pairwise_group.translate(0, (h_feature_height - pairwise_height) / 2)
+            elif pairwise_height > h_feature_height:
+                horizontal_feature_group.translate(0, (pairwise_height - h_feature_height) / 2)
+            horizontal_group.add(horizontal_feature_group)
+            horizontal_group.add(h_pairwise_group)
+            self.horizontal_legend_width = h_feature_width + self.text_x_offset + pairwise_width
+            self.horizontal_legend_height = max(h_feature_height, pairwise_height)
         else:
-            for key, properties in self.legend_table.items():
-                if properties['type'] == 'solid':
-                    current_feature_legend_width = 0
-                    rect_path = Path(
-                        d=path_desc,
-                        fill=properties['fill'],
-                        stroke=properties['stroke'],
-                        stroke_width=properties['width'])
-                    rect_path.translate(0, y_offset)
-                    feature_legend_group.add(rect_path)
-                    bbox_width, bbox_height = calculate_bbox_dimensions(key, self.font_family, self.font_size, self.dpi)
-                    max_bbox_width = max(max_bbox_width, bbox_width)
-                    legend_path = generate_text_path(
-                        key, 0, 0, 0, self.font_size, "normal", font, 
-                        dominant_baseline='central', text_anchor="start"
-                    )
-                    legend_path.translate(self.text_x_offset, y_offset)
-                    current_feature_legend_width = self.text_x_offset + bbox_width
-                    feature_legend_group.add(legend_path)
-                    
-                    y_offset += self.line_height 
-                    self.feature_legend_width = max(current_feature_legend_width, self.feature_legend_width)
-                    
-                elif properties['type'] == 'gradient':
-                    grad_bar_x_start = 0
-                    if self.legend_position == 'top' or self.legend_position == 'bottom':
-                        gradient_y_offset = 0
-                    else:
-                        gradient_y_offset = y_offset
-                    grad_bar_width = self.pairwise_legend_width
-                    gradient_id = f"blast_legend_grad_{abs(hash(properties['min_color'] + properties['max_color']))}"
-                    
-                    gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
-                    gradient.add_stop_color(offset="0%", color=properties['min_color'])
-                    gradient.add_stop_color(offset="100%", color=properties['max_color'])
-                    pairwise_legend_group.add(gradient)
-                    title_path = generate_text_path(
-                        key, 0, 0, 0, self.font_size, "normal", font, 
-                        dominant_baseline='hanging', text_anchor="middle"
-                    )
-                    title_path_bbox_width, title_path_bbox_height = calculate_bbox_dimensions(key, self.font_family, self.font_size, self.dpi)
-                    title_x_offset = grad_bar_x_start + (grad_bar_width / 2)
+            horizontal_group.add(horizontal_feature_group)
+            self.horizontal_legend_width = h_feature_width
+            self.horizontal_legend_height = h_feature_height
 
-                    title_path.translate(title_x_offset, gradient_y_offset) 
-                    pairwise_legend_group.add(title_path) 
-                    gradient_y_offset += (title_path_bbox_height + self.rect_size / 2)  # self.line_height 
+        # Create vertical legend group
+        vertical_group = Group(id="legend_vertical")
+        vertical_feature_group = Group(id="feature_legend")
+        for child in v_feature_group.elements:
+            vertical_feature_group.add(child)
 
+        if has_gradient:
+            v_pairwise_group, _, _ = self._build_pairwise_legend()
+            # Position pairwise legend below feature legend
+            v_pairwise_group.translate(0, v_feature_height + self.line_height / 2)
+            # Horizontally center
+            if pairwise_width > v_feature_width:
+                vertical_feature_group.translate((pairwise_width - v_feature_width) / 2, 0)
+            elif v_feature_width > pairwise_width:
+                v_pairwise_group.translate((v_feature_width - pairwise_width) / 2, 0)
+            vertical_group.add(vertical_feature_group)
+            vertical_group.add(v_pairwise_group)
+            self.vertical_legend_width = max(v_feature_width, pairwise_width)
+            self.vertical_legend_height = v_feature_height + self.line_height / 2 + pairwise_height
+        else:
+            vertical_group.add(vertical_feature_group)
+            self.vertical_legend_width = v_feature_width
+            self.vertical_legend_height = v_feature_height
 
-                    
-                    grad_rect_path_desc = f"M 0,{-self.rect_size / 2} L {grad_bar_width},{-self.rect_size / 2} L {grad_bar_width},{self.rect_size / 2} L 0,{self.rect_size / 2} z"
-                    grad_rect = Path(
-                        d=grad_rect_path_desc,
-                        fill=f"url(#{gradient_id})",
-                        stroke=properties['stroke'],
-                        stroke_width=properties['width']
-                    )
-                    grad_rect.translate(grad_bar_x_start, gradient_y_offset) 
-                    pairwise_legend_group.add(grad_rect)
-                    min_identity = properties.get('min_value', 0)
-                    if min_identity == int(min_identity):
-                        min_label_text = f"{int(min_identity)}%"
-                    else:
-                        min_label_text = f"{min_identity}%"
-                    label_0 = generate_text_path(
-                        min_label_text, 0, 0, 0, self.font_size, "normal", font,
-                        dominant_baseline='hanging', text_anchor="start"
-                    )
-                    label_0.translate(grad_bar_x_start, gradient_y_offset + self.rect_size / 2 + 2)
-                    _, min_label_bbox_height = calculate_bbox_dimensions(min_label_text, self.font_family, self.font_size, self.dpi)
-                    pairwise_legend_group.add(label_0)
-                    label_100 = generate_text_path(
-                        "100%", 0, 0, 0, self.font_size, "normal", font,
-                        dominant_baseline='hanging', text_anchor="end"
-                    )
-                    label_100.translate(grad_bar_x_start + grad_bar_width, gradient_y_offset + self.rect_size / 2 + 2) 
-                    _, max_label_bbox_height = calculate_bbox_dimensions("100%", self.font_family, self.font_size, self.dpi)
-                    pairwise_legend_group.add(label_100)
-                    label_bbox_height = max(min_label_bbox_height, max_label_bbox_height)
-                    gradient_y_offset += label_bbox_height 
-            if self.pairwise_legend_width > 0:
-                if self.pairwise_legend_width > self.feature_legend_width:
-                    feature_legend_group.translate((self.pairwise_legend_width - self.feature_legend_width)/2, 0)
-                    self.legend_group.add(pairwise_legend_group)
-                else:
-                    self.legend_group.add(pairwise_legend_group)
-            self.legend_width = max(self.feature_legend_width, self.pairwise_legend_width)
-            self.legend_height = max(gradient_y_offset, y_offset) + initial_y_offset
-            self.legend_group.add(feature_legend_group)
-        return self.legend_group
+        # Set visibility based on current legend position
+        is_horizontal = self.legend_position in ("top", "bottom")
+        if is_horizontal:
+            vertical_group.attribs["display"] = "none"
+            self.legend_width = self.horizontal_legend_width
+            self.legend_height = self.horizontal_legend_height
+        else:
+            horizontal_group.attribs["display"] = "none"
+            self.legend_width = self.vertical_legend_width
+            self.legend_height = self.vertical_legend_height
+
+        # Add both groups to the main legend group
+        self.legend_group.add(horizontal_group)
+        self.legend_group.add(vertical_group)
+
     def get_group(self) -> Group:
         """
         Retrieves the SVG group containing the figure legends.
@@ -267,7 +383,13 @@ class LegendGroup:
         """
         return self.legend_group
 
+    def get_horizontal_dimensions(self) -> tuple[float, float]:
+        """Get dimensions of the horizontal legend layout."""
+        return self.horizontal_legend_width, self.horizontal_legend_height
+
+    def get_vertical_dimensions(self) -> tuple[float, float]:
+        """Get dimensions of the vertical legend layout."""
+        return self.vertical_legend_width, self.vertical_legend_height
+
 
 __all__ = ["LegendGroup"]
-
-

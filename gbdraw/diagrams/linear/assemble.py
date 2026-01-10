@@ -254,6 +254,30 @@ def assemble_linear_diagram(
     canvas_config.recalculate_canvas_dimensions(legend_group, max_def_width)
     canvas: Drawing = canvas_config.create_svg_canvas()
 
+    # Embed both viewBox configurations as data attributes for JavaScript repositioning
+    # This allows switching between horizontal and vertical legend layouts without accumulation errors
+    h_legend_width, h_legend_height = legend_group.get_horizontal_dimensions()
+    v_legend_width, v_legend_height = legend_group.get_vertical_dimensions()
+
+    # Calculate viewBox for vertical layout (left/right legend positions)
+    vertical_vb_width = canvas_config.total_width
+    vertical_vb_height = canvas_config.total_height
+    if canvas_config.legend_position in ["top", "bottom"]:
+        # Current dimensions are for horizontal layout, calculate vertical
+        vertical_vb_width = canvas_config.total_width - h_legend_width + v_legend_width
+        vertical_vb_height = canvas_config.total_height - h_legend_height
+
+    # Calculate viewBox for horizontal layout (top/bottom legend positions)
+    horizontal_vb_width = canvas_config.total_width
+    horizontal_vb_height = canvas_config.total_height
+    if canvas_config.legend_position in ["left", "right"]:
+        # Current dimensions are for vertical layout, calculate horizontal
+        horizontal_vb_width = canvas_config.total_width - v_legend_width
+        horizontal_vb_height = canvas_config.total_height + h_legend_height
+
+    canvas.attribs["data-vertical-viewbox"] = f"0 0 {vertical_vb_width} {vertical_vb_height}"
+    canvas.attribs["data-horizontal-viewbox"] = f"0 0 {horizontal_vb_width} {horizontal_vb_height}"
+
     if canvas_config.legend_position != "none":
         canvas = add_legends_on_linear_canvas(canvas, config_dict, canvas_config, legend_group, legend_table)
     if not canvas_config.normalize_length:
