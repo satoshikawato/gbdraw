@@ -53,7 +53,7 @@ For a complete guide, see the "Feature-Specific Colors" section in the **[Advanc
 
 **A:** This is almost always due to one of two issues:
 
-1.  **Incorrect BLAST Format**: `gbdraw` strictly requires BLAST tabular output with headers, which is **`outfmt 7`**. Standard `outfmt 6` will not work. Re-run your BLAST search with the `-outfmt 7` flag.
+1.  **Incorrect BLAST Format**: `gbdraw` requires BLAST tabular output in **`outfmt 6`** or **`outfmt 7`** format. Both formats work correctly. Re-run your BLAST search with the `-outfmt 6` or `-outfmt 7` flag.
 2.  **Incorrect File Order**: The order of genome files (`--gbk`) and BLAST files (`-b`) must correspond. For `gbdraw linear --gbk A B C -b A_vs_B B_vs_C`, the first BLAST file must be the comparison between A and B, and the second between B and C.
 
 See the **[Comparative Genomics Tutorial](./TUTORIALS/2_Comparative_Genomics.md)** for a working example.

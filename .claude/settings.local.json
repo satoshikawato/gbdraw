@@ -23,7 +23,9 @@
       "Bash(python -m build:*)",
       "Bash(unzip:*)",
       "Bash(git checkout:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(gbdraw:*)",
+      "Bash(python -m gbdraw.cli:*)"
     ]
   }
 }

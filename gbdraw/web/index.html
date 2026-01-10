@@ -2290,6 +2290,11 @@ json.dumps({"width": width})
                         }
                     }
 
+                    // Update pairwise legend position after adding entry (before canvas expansion check)
+                    updatePairwiseLegendPositions(svg);
+
+                    // Note: expandCanvasForVerticalLegend is called by updatePairwiseLegendPositions
+
                     // Update results for reactivity
                     // Set flag to prevent captureBaseConfig from being called when svgContent watch triggers
                     skipCaptureBaseConfig.value = true;
@@ -2540,6 +2545,9 @@ json.dumps({"width": width})
                 }
 
                 if (removed) {
+                    // Compact remaining entries to fill gaps
+                    compactLegendEntries(svg);
+
                     skipCaptureBaseConfig.value = true;
                     const idx = selectedResultIndex.value;
                     if (idx >= 0 && results.value.length > idx) {
@@ -2550,6 +2558,308 @@ json.dumps({"width": width})
                 }
 
                 return removed;
+            };
+
+            // Expand canvas height if vertical legend exceeds canvas
+            const expandCanvasForVerticalLegend = (svg) => {
+                // Only expand for linear mode with vertical legend visible
+                if (mode.value !== 'linear') return;
+                if (isCurrentLegendHorizontal(svg)) return;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return;
+
+                // Get vertical legend dimensions
+                const verticalLegend = legendGroup.querySelector('#legend_vertical');
+                if (!verticalLegend || verticalLegend.getAttribute('display') === 'none') return;
+
+                // Get legend group's Y position in canvas
+                let legendGroupY = 0;
+                const legendGroupTransform = legendGroup.getAttribute('transform');
+                if (legendGroupTransform) {
+                    const match = legendGroupTransform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
+                    if (match) legendGroupY = parseFloat(match[2]);
+                }
+
+                // Calculate total legend content height by measuring feature + pairwise legend
+                const featureLegend = verticalLegend.querySelector('#feature_legend');
+                const pairwiseLegend = verticalLegend.querySelector('#pairwise_legend');
+
+                let legendContentHeight = 0;
+                if (featureLegend) {
+                    const featureBBox = featureLegend.getBBox();
+                    legendContentHeight = featureBBox.y + featureBBox.height;
+                }
+
+                if (pairwiseLegend) {
+                    // Get pairwise legend position and height
+                    const pairwiseTransform = pairwiseLegend.getAttribute('transform');
+                    let pairwiseY = 0;
+                    if (pairwiseTransform) {
+                        const match = pairwiseTransform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
+                        if (match) pairwiseY = parseFloat(match[2]);
+                    }
+                    const pairwiseBBox = pairwiseLegend.getBBox();
+                    const pairwiseBottom = pairwiseY + pairwiseBBox.y + pairwiseBBox.height;
+                    legendContentHeight = Math.max(legendContentHeight, pairwiseBottom);
+                }
+
+                // Get current viewBox
+                const viewBox = svg.getAttribute('viewBox');
+                if (!viewBox) return;
+                const parts = viewBox.split(/\s+/).map(parseFloat);
+                if (parts.length !== 4) return;
+                let [vbX, vbY, vbW, vbH] = parts;
+
+                // Calculate the bottom edge of the legend in canvas coordinates
+                const legendBottomEdge = legendGroupY + legendContentHeight;
+                const bottomPadding = 20;  // Padding from canvas edge
+
+                console.log(`Canvas expansion check: legendGroupY=${legendGroupY.toFixed(1)}, legendContentHeight=${legendContentHeight.toFixed(1)}, legendBottomEdge=${legendBottomEdge.toFixed(1)}, vbH=${vbH.toFixed(1)}`);
+
+                // Check if expansion needed (legend bottom + padding exceeds canvas)
+                if (legendBottomEdge + bottomPadding > vbH) {
+                    const newVbH = legendBottomEdge + bottomPadding;
+                    console.log(`Expanding canvas for vertical legend: ${vbH.toFixed(1)} -> ${newVbH.toFixed(1)}`);
+
+                    // Just expand viewBox - don't shift diagram elements (keeps diagram in place)
+                    svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${newVbH}`);
+                }
+            };
+
+            // Update pairwise legend positions after feature legend changes
+            const updatePairwiseLegendPositions = (svg) => {
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return;
+
+                // Detect rect_size and line_height from existing entries
+                let rectSize = 14;
+                const firstColorRect = legendGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
+                if (firstColorRect) {
+                    const d = firstColorRect.getAttribute('d');
+                    if (d) {
+                        const lMatch = d.match(/L\s+([\d.]+),/);
+                        if (lMatch) rectSize = parseFloat(lMatch[1]);
+                    }
+                }
+                const lineMargin = (24 / 14) * rectSize;
+
+                // Reposition pairwise legend in vertical layout
+                const verticalLegend = legendGroup.querySelector('#legend_vertical');
+                if (verticalLegend) {
+                    const vFeatureLegend = verticalLegend.querySelector('#feature_legend');
+                    const vPairwiseLegend = verticalLegend.querySelector('#pairwise_legend');
+
+                    if (vFeatureLegend && vPairwiseLegend) {
+                        // Calculate new feature legend height
+                        let maxFeatureY = 0;
+                        const featureTexts = vFeatureLegend.querySelectorAll('text');
+                        featureTexts.forEach(el => {
+                            const pos = parseTransformXY(el.getAttribute('transform'));
+                            if (pos.y > maxFeatureY) maxFeatureY = pos.y;
+                        });
+
+                        // Calculate new pairwise legend position
+                        const newPairwiseY = maxFeatureY + lineMargin + lineMargin / 2;
+
+                        // Get current pairwise transform to preserve X
+                        const currentTransform = vPairwiseLegend.getAttribute('transform');
+                        let pairwiseX = 0;
+                        if (currentTransform) {
+                            const match = currentTransform.match(/translate\(\s*([\d.-]+)\s*,/);
+                            if (match) pairwiseX = parseFloat(match[1]);
+                        }
+
+                        vPairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${newPairwiseY})`);
+                        console.log(`Repositioned vertical pairwise legend to y=${newPairwiseY}`);
+                    }
+                }
+
+                // Reposition pairwise legend in horizontal layout (vertical centering)
+                const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+                if (horizontalLegend) {
+                    const hFeatureLegend = horizontalLegend.querySelector('#feature_legend');
+                    const hPairwiseLegend = horizontalLegend.querySelector('#pairwise_legend');
+
+                    if (hFeatureLegend && hPairwiseLegend) {
+                        // Calculate feature legend height (from rows)
+                        let minFeatureY = Infinity, maxFeatureY = -Infinity;
+                        const featureTexts = hFeatureLegend.querySelectorAll('text');
+                        featureTexts.forEach(el => {
+                            const pos = parseTransformXY(el.getAttribute('transform'));
+                            if (pos.y < minFeatureY) minFeatureY = pos.y;
+                            if (pos.y > maxFeatureY) maxFeatureY = pos.y;
+                        });
+
+                        if (minFeatureY !== Infinity && maxFeatureY !== -Infinity) {
+                            const featureHeight = maxFeatureY - minFeatureY + lineMargin;
+
+                            // Get pairwise legend height
+                            const pairwiseBBox = hPairwiseLegend.getBBox();
+                            const pairwiseHeight = pairwiseBBox.height;
+
+                            // Get current pairwise transform to preserve X
+                            const currentTransform = hPairwiseLegend.getAttribute('transform');
+                            let pairwiseX = 0, currentPairwiseY = 0;
+                            if (currentTransform) {
+                                const match = currentTransform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
+                                if (match) {
+                                    pairwiseX = parseFloat(match[1]);
+                                    currentPairwiseY = parseFloat(match[2]);
+                                }
+                            }
+
+                            // Vertically center pairwise legend with feature legend
+                            let newPairwiseY = currentPairwiseY;
+                            if (featureHeight > pairwiseHeight) {
+                                newPairwiseY = (featureHeight - pairwiseHeight) / 2;
+                            }
+
+                            hPairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${newPairwiseY})`);
+                            console.log(`Repositioned horizontal pairwise legend to y=${newPairwiseY}`);
+                        }
+                    }
+                }
+
+                // After repositioning, check if canvas needs expansion
+                expandCanvasForVerticalLegend(svg);
+            };
+
+            // Compact legend entries after deletion to remove gaps
+            const compactLegendEntries = (svg) => {
+                const targetGroups = getAllFeatureLegendGroups(svg);
+                if (targetGroups.length === 0) return;
+
+                for (const targetGroup of targetGroups) {
+                    // Detect rect_size and line_height from existing entries
+                    let rectSize = 14;
+                    const firstColorRect = targetGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
+                    if (firstColorRect) {
+                        const d = firstColorRect.getAttribute('d');
+                        if (d) {
+                            const lMatch = d.match(/L\s+([\d.]+),/);
+                            if (lMatch) rectSize = parseFloat(lMatch[1]);
+                        }
+                    }
+                    const lineHeight = (24 / 14) * rectSize;
+                    const textXOffset = (22 / 14) * rectSize;
+
+                    // Get all text elements and their positions
+                    const texts = Array.from(targetGroup.querySelectorAll('text'));
+                    if (texts.length === 0) continue;
+
+                    // Get all color rects
+                    const allRects = Array.from(targetGroup.querySelectorAll('path')).filter(r => {
+                        const fill = r.getAttribute('fill');
+                        return fill && fill !== 'none' && !fill.startsWith('url(');
+                    });
+
+                    // Get positions and find matching rect for each text BEFORE any moves
+                    const entries = texts.map(t => {
+                        const pos = parseTransformXY(t.getAttribute('transform'));
+                        // Find matching rect by position (before any moves happen)
+                        const expectedRectX = pos.x - textXOffset;
+                        let matchedRect = null;
+                        let bestDistance = Infinity;
+                        for (const r of allRects) {
+                            const rectPos = parseTransformXY(r.getAttribute('transform'));
+                            if (Math.abs(rectPos.y - pos.y) < 1) {
+                                const distance = Math.abs(rectPos.x - expectedRectX);
+                                if (distance < textXOffset && distance < bestDistance) {
+                                    bestDistance = distance;
+                                    matchedRect = r;
+                                }
+                            }
+                        }
+                        return { text: t, rect: matchedRect, x: pos.x, y: pos.y };
+                    });
+
+                    // Detect if horizontal or vertical layout
+                    const uniqueYs = [...new Set(entries.map(e => Math.round(e.y)))];
+                    const isHorizontal = uniqueYs.length < entries.length; // Multiple entries per row = horizontal
+
+                    if (isHorizontal) {
+                        // Horizontal layout: re-flow all entries to fill gaps
+                        // Sort by original position (Y then X) to maintain order
+                        entries.sort((a, b) => {
+                            if (Math.abs(a.y - b.y) < 1) return a.x - b.x;
+                            return a.y - b.y;
+                        });
+
+                        // Get max width from pairwise legend position or canvas
+                        let maxWidth = 800;  // Default fallback
+                        const legendGroup = svg.getElementById('legend');
+                        if (legendGroup) {
+                            const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+                            if (horizontalLegend) {
+                                const hPairwiseLegend = horizontalLegend.querySelector('#pairwise_legend');
+                                if (hPairwiseLegend) {
+                                    const pairwiseTransform = hPairwiseLegend.getAttribute('transform');
+                                    if (pairwiseTransform) {
+                                        const match = pairwiseTransform.match(/translate\(\s*([\d.-]+)\s*,/);
+                                        if (match) {
+                                            maxWidth = parseFloat(match[1]) - textXOffset;
+                                        }
+                                    }
+                                } else {
+                                    // No pairwise, use canvas width from viewBox
+                                    const viewBox = svg.getAttribute('viewBox');
+                                    if (viewBox) {
+                                        const parts = viewBox.split(/\s+/).map(parseFloat);
+                                        if (parts.length === 4) maxWidth = parts[2] - textXOffset;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Re-flow entries: place each entry, wrap to next row if needed
+                        let newX = textXOffset;
+                        let newY = rectSize / 2;
+
+                        entries.forEach(entry => {
+                            // Calculate width of this entry
+                            const textBBox = entry.text.getBBox();
+                            const entryWidth = rectSize + textXOffset + textBBox.width + textXOffset;
+
+                            // Check if entry fits on current row
+                            if (newX + entryWidth > maxWidth && newX > textXOffset) {
+                                // Wrap to next row
+                                newX = textXOffset;
+                                newY += lineHeight;
+                            }
+
+                            // Move text
+                            entry.text.setAttribute('transform', `translate(${newX}, ${newY})`);
+
+                            // Move pre-captured rect (no searching needed)
+                            if (entry.rect) {
+                                const expectedRectX = newX - textXOffset;
+                                entry.rect.setAttribute('transform', `translate(${expectedRectX}, ${newY})`);
+                            }
+
+                            newX += entryWidth;
+                        });
+                    } else {
+                        // Vertical layout: sort by Y, compact
+                        entries.sort((a, b) => a.y - b.y);
+
+                        let newY = rectSize / 2;
+                        entries.forEach(entry => {
+                            // Move text
+                            entry.text.setAttribute('transform', `translate(${textXOffset}, ${newY})`);
+
+                            // Move pre-captured rect (no searching needed)
+                            if (entry.rect) {
+                                entry.rect.setAttribute('transform', `translate(0, ${newY})`);
+                            }
+
+                            newY += lineHeight;
+                        });
+                    }
+                }
+
+                // Update pairwise legend position after compaction
+                updatePairwiseLegendPositions(svg);
             };
 
             // Extract legend entries from current SVG for the Legend Editor panel
@@ -3317,29 +3627,13 @@ json.dumps({"width": width})
                                 }
 
                                 // Expand canvas height if vertical legend exceeds canvas height
-                                // (Same logic as Python: assemble.py lines 177-185)
                                 const legendPadding = 40;  // Top + bottom padding
                                 const requiredHeight = legendHeight + legendPadding;
                                 if (!nowHorizontal && requiredHeight > vbH) {
-                                    const heightDifference = requiredHeight - vbH;
                                     const newVbH = requiredHeight;
-                                    console.log('[DEBUG] Expanding canvas height:', { oldHeight: vbH, newHeight: newVbH, heightDifference });
+                                    console.log('[DEBUG] Expanding canvas height:', { oldHeight: vbH, newHeight: newVbH });
 
-                                    // Shift all diagram elements down by half the difference to center them
-                                    const verticalShift = heightDifference / 2;
-                                    diagramElements.value.forEach(el => {
-                                        const currentTransform = parseTransform(el.getAttribute('transform'));
-                                        const newY = currentTransform.y + verticalShift;
-                                        el.setAttribute('transform', `translate(${currentTransform.x}, ${newY})`);
-                                        diagramElementOriginalTransforms.value.set(el, { x: currentTransform.x, y: newY });
-                                        // Also update base transforms so subsequent shifts work correctly
-                                        const baseTransform = diagramElementBaseTransforms.value.get(el);
-                                        if (baseTransform) {
-                                            diagramElementBaseTransforms.value.set(el, { x: baseTransform.x, y: baseTransform.y + verticalShift });
-                                        }
-                                    });
-
-                                    // Update viewBox height
+                                    // Just expand viewBox - don't shift diagram elements (keeps diagram in place)
                                     vbH = newVbH;
                                     svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
                                     console.log('[DEBUG] ViewBox after height expansion:', { vbX, vbY, vbW, vbH });
