@@ -1162,6 +1162,7 @@
             // Legend Editor state
             const showLegendPanel = ref(false);
             const legendEntries = ref([]);  // [{caption, color, yPos}]
+            const deletedLegendEntries = ref([]);  // Track deleted entries for restoration
             const newLegendCaption = ref('');
             const newLegendColor = ref('#808080');
 
@@ -3318,8 +3319,22 @@ json.dumps({"width": width})
                 const entry = legendEntries.value[idx];
                 if (!entry) return;
 
+                // Save to deleted entries for potential restoration
+                deletedLegendEntries.value.push({ ...entry });
+
                 removeLegendEntry(entry.caption);
                 extractLegendEntries();  // Refresh the list
+            };
+
+            // Restore all deleted legend entries
+            const restoreDeletedLegendEntries = () => {
+                if (deletedLegendEntries.value.length === 0) return;
+
+                for (const entry of deletedLegendEntries.value) {
+                    addLegendEntry(entry.caption, entry.color);
+                }
+                deletedLegendEntries.value = [];
+                extractLegendEntries();
             };
 
             // Move legend entry up (swap with previous)
@@ -3507,6 +3522,9 @@ json.dumps({"width": width})
                 }
                 legendCurrentOffset.x = 0;
                 legendCurrentOffset.y = 0;
+
+                // Also restore any deleted legend entries
+                restoreDeletedLegendEntries();
             };
 
             const setupLegendDrag = () => {
@@ -4982,6 +5000,8 @@ json.dumps({"width": width})
                 // Clear feature color overrides (custom legend entries from previous records)
                 Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
                 legendEntries.value = [];
+                // Clear deleted legend entries (fresh start)
+                deletedLegendEntries.value = [];
                 // Store current palette's pairwise colors as reference for interpolation
                 window._origPairwiseMin = currentColors.value.pairwise_match_min || '#FFE7E7';
                 window._origPairwiseMax = currentColors.value.pairwise_match_max || '#FF7272';
