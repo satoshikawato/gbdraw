@@ -28,7 +28,8 @@
       "Bash(python -m gbdraw.cli:*)",
       "Bash(python -m http.server:*)",
       "Bash(curl:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(git stash:*)"
     ]
   }
 }

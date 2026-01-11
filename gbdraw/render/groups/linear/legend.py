@@ -110,7 +110,6 @@ class LegendGroup:
                 max_height += self.line_height
 
             # Create entry group with data attribute for identification
-            # Use debug=False to allow custom data-* attributes
             entry_group = Group(debug=False)
             entry_group.attribs["data-legend-key"] = str(key)
 
@@ -121,6 +120,7 @@ class LegendGroup:
                 stroke=properties["stroke"],
                 stroke_width=properties["width"],
             )
+            rect_path.translate(current_x_offset, y_offset)
             entry_group.add(rect_path)
 
             # Add text
@@ -135,11 +135,8 @@ class LegendGroup:
                 dominant_baseline="central",
                 text_anchor="start",
             )
-            legend_path.translate(self.text_x_offset, 0)
+            legend_path.translate(current_x_offset + self.text_x_offset, y_offset)
             entry_group.add(legend_path)
-
-            # Position the entire entry group
-            entry_group.translate(current_x_offset, y_offset)
             group.add(entry_group)
 
             current_x_offset += entry_width
@@ -167,7 +164,6 @@ class LegendGroup:
             )
 
             # Create entry group with data attribute for identification
-            # Use debug=False to allow custom data-* attributes
             entry_group = Group(debug=False)
             entry_group.attribs["data-legend-key"] = str(key)
 
@@ -178,6 +174,7 @@ class LegendGroup:
                 stroke=properties["stroke"],
                 stroke_width=properties["width"],
             )
+            rect_path.translate(0, y_offset)
             entry_group.add(rect_path)
 
             # Add text
@@ -192,11 +189,8 @@ class LegendGroup:
                 dominant_baseline="central",
                 text_anchor="start",
             )
-            legend_path.translate(self.text_x_offset, 0)
+            legend_path.translate(self.text_x_offset, y_offset)
             entry_group.add(legend_path)
-
-            # Position the entire entry group
-            entry_group.translate(0, y_offset)
             group.add(entry_group)
 
             entry_width = self.text_x_offset + bbox_width
