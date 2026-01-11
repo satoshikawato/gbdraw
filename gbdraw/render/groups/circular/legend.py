@@ -48,19 +48,27 @@ class LegendGroup:
         x_margin = (22 / 14) * self.color_rect_size
         for key, properties in self.legend_table.items():
             if properties["type"] == "solid":
+                # Create entry group with data attribute for identification
+                entry_group = Group()
+                entry_group.attribs["data-legend-key"] = str(key)
+
                 rect_path = Path(
                     d=path_desc,
                     fill=properties["fill"],
                     stroke=properties["stroke"],
                     stroke_width=properties["width"],
                 )
-                rect_path.translate(0, count * line_margin)
-                self.legend_group.add(rect_path)
+                entry_group.add(rect_path)
+
                 legend_path = generate_text_path(
                     key, 0, 0, 0, self.font_size, "normal", font, dominant_baseline="central", text_anchor="start"
                 )
-                legend_path.translate(x_margin, count * line_margin)
-                self.legend_group.add(legend_path)
+                legend_path.translate(x_margin, 0)
+                entry_group.add(legend_path)
+
+                # Position the entire entry group
+                entry_group.translate(0, count * line_margin)
+                self.legend_group.add(entry_group)
                 count += 1
         return self.legend_group
 
