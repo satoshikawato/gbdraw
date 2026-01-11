@@ -1407,6 +1407,7 @@
             const legendEntries = ref([]);  // [{caption, originalCaption, color, yPos, showStroke, featureIds}]
             const deletedLegendEntries = ref([]);  // Track deleted entries for restoration
             const originalLegendOrder = ref([]);  // Store original order from generation
+            const originalLegendColors = ref({});  // Store original colors: { caption: color }
             const newLegendCaption = ref('');
             const newLegendColor = ref('#808080');
 
@@ -2767,6 +2768,8 @@
 
             // Track legend entries added by specific rules
             const addedLegendCaptions = ref(new Set());
+            // Track legend entries added from file-loaded rules (preserved on reset)
+            const fileLegendCaptions = ref(new Set());
 
             // Watch for specific rules changes - only apply styles and handle removals
             // Legend ADDITIONS are handled by setFeatureColor to avoid race conditions
@@ -4107,9 +4110,15 @@ json.dumps({"width": width})
 
                 legendEntries.value = entries;
 
-                // Store original order if this is the first extraction (after diagram generation)
+                // Store original order and colors if this is the first extraction (after diagram generation)
                 if (originalLegendOrder.value.length === 0 && entries.length > 0) {
                     originalLegendOrder.value = entries.map(e => e.caption);
+                    // Store original colors for each legend entry
+                    entries.forEach(e => {
+                        if (!originalLegendColors.value[e.caption]) {
+                            originalLegendColors.value[e.caption] = e.color;
+                        }
+                    });
                 }
             };
 
@@ -4995,8 +5004,70 @@ json.dumps({"width": width})
                 Object.keys(legendColorOverrides).forEach(key => delete legendColorOverrides[key]);
                 applyPaletteToSvg();
 
+                const featureLegendGroups = getAllFeatureLegendGroups(svg);
+
+                // Remove dynamically added legend entries (not in original order and not from file)
+                if (originalLegendOrder.value.length > 0) {
+                    const originalCaptions = new Set(originalLegendOrder.value);
+                    for (const targetGroup of featureLegendGroups) {
+                        const entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
+                        for (const entryGroup of entryGroups) {
+                            const caption = entryGroup.getAttribute('data-legend-key');
+                            if (caption && !originalCaptions.has(caption) && !fileLegendCaptions.value.has(caption)) {
+                                // This entry was added dynamically (not from file) - remove it
+                                entryGroup.remove();
+                            }
+                        }
+                    }
+                }
+
+                // Restore original legend colors for entries not handled by palette
+                // (e.g., "hypothetical protein" and other dynamic captions)
+                for (const caption of Object.keys(originalLegendColors.value)) {
+                    const originalColor = originalLegendColors.value[caption];
+                    if (!originalColor) continue;
+
+                    // Update legend entry color in all legend groups
+                    for (const targetGroup of featureLegendGroups) {
+                        const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(caption)}"]`);
+                        if (entryGroup) {
+                            const paths = entryGroup.querySelectorAll('path');
+                            for (const path of paths) {
+                                const fill = path.getAttribute('fill');
+                                if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                    path.setAttribute('fill', originalColor);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Also restore any deleted legend entries
                 restoreDeletedLegendEntries();
+
+                // Clear the list of captions added via Legend Editor (keep file-loaded ones)
+                for (const cap of addedLegendCaptions.value) {
+                    if (!fileLegendCaptions.value.has(cap)) {
+                        addedLegendCaptions.value.delete(cap);
+                    }
+                }
+
+                // Clear manual specific rules (feature color overrides) - but keep file-loaded rules
+                for (let i = manualSpecificRules.length - 1; i >= 0; i--) {
+                    if (!manualSpecificRules[i].fromFile) {
+                        manualSpecificRules.splice(i, 1);
+                    }
+                }
+
+                // Clear feature color overrides
+                Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
+
+                // Re-apply palette to features (now that specific rules are cleared)
+                applyPaletteToSvg();
+
+                // Re-extract legend entries to refresh the UI
+                extractLegendEntries();
             };
 
             const setupLegendDrag = () => {
@@ -6238,7 +6309,8 @@ json.dumps({"width": width})
                                 qual: parts[1].trim(),
                                 val: parts[2].trim(),
                                 color: parts[3].trim(),
-                                cap: parts[4] ? parts[4].trim() : ""
+                                cap: parts[4] ? parts[4].trim() : "",
+                                fromFile: true  // Mark as loaded from file (preserved on reset)
                             };
                             manualSpecificRules.push(rule);
                             count++;
@@ -6257,6 +6329,8 @@ json.dumps({"width": width})
                             const actualCaption = await addLegendEntry(rule.cap, rule.color);
                             if (actualCaption && typeof actualCaption === 'string') {
                                 addedLegendCaptions.value.add(actualCaption);
+                                // Also track as file-loaded (preserved on reset)
+                                fileLegendCaptions.value.add(actualCaption);
                             }
                         }
                         extractLegendEntries();
@@ -6636,6 +6710,7 @@ json.dumps({"width": width})
                 pairwiseMatchFactors.value = {};
                 // Clear tracked legend entries (will be regenerated)
                 addedLegendCaptions.value = new Set();
+                fileLegendCaptions.value = new Set();
                 // Clear feature color overrides (custom legend entries from previous records)
                 Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
                 legendEntries.value = [];
@@ -6643,8 +6718,9 @@ json.dumps({"width": width})
                 deletedLegendEntries.value = [];
                 // Clear legend color overrides (custom colors from Legend Editor)
                 Object.keys(legendColorOverrides).forEach(k => delete legendColorOverrides[k]);
-                // Clear original legend order (will be captured on first extraction)
+                // Clear original legend order and colors (will be captured on first extraction)
                 originalLegendOrder.value = [];
+                originalLegendColors.value = {};
                 // Store current palette's pairwise colors as reference for interpolation
                 window._origPairwiseMin = currentColors.value.pairwise_match_min || '#FFE7E7';
                 window._origPairwiseMax = currentColors.value.pairwise_match_max || '#FF7272';

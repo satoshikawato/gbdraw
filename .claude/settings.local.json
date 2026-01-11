@@ -29,7 +29,9 @@
       "Bash(python -m http.server:*)",
       "Bash(curl:*)",
       "Bash(node:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(git add:*)",
+      "Bash(git status:*)"
     ]
   }
 }
