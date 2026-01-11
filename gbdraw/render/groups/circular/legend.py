@@ -49,7 +49,8 @@ class LegendGroup:
         for key, properties in self.legend_table.items():
             if properties["type"] == "solid":
                 # Create entry group with data attribute for identification
-                entry_group = Group()
+                # Use debug=False to allow custom data-* attributes
+                entry_group = Group(debug=False)
                 entry_group.attribs["data-legend-key"] = str(key)
 
                 rect_path = Path(
