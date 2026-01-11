@@ -41,7 +41,8 @@ class DefinitionGroup:
         self.font_size = cfg.objects.definition.circular.font_size
         self.font = cfg.objects.text.font_family
         self.track_id: str = str(self.gb_record.id).replace(" ", "_")
-        self.definition_group = Group(id=self.track_id)
+        self.definition_group_id: str = f"{self.track_id}_definition"
+        self.definition_group = Group(id=self.definition_group_id)
         self.radius: float = self.canvas_config.radius
         self.calculate_coordinates()
         self.find_organism_name()
