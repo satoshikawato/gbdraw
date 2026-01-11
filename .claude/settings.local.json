@@ -30,6 +30,7 @@
       "Bash(curl:*)",
       "Bash(node:*)",
       "Bash(git stash:*)"
+
     ]
   }
 }
