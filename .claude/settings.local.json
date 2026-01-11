@@ -27,7 +27,8 @@
       "Bash(gbdraw:*)",
       "Bash(python -m gbdraw.cli:*)",
       "Bash(python -m http.server:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(node:*)"
     ]
   }
 }

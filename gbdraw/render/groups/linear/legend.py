@@ -109,6 +109,10 @@ class LegendGroup:
                 y_offset += self.line_height
                 max_height += self.line_height
 
+            # Create entry group with data attribute for identification
+            entry_group = Group()
+            entry_group.attribs["data-legend-key"] = str(key)
+
             # Add rectangle
             rect_path = Path(
                 d=path_desc,
@@ -116,8 +120,7 @@ class LegendGroup:
                 stroke=properties["stroke"],
                 stroke_width=properties["width"],
             )
-            rect_path.translate(current_x_offset, y_offset)
-            group.add(rect_path)
+            entry_group.add(rect_path)
 
             # Add text
             legend_path = generate_text_path(
@@ -131,8 +134,12 @@ class LegendGroup:
                 dominant_baseline="central",
                 text_anchor="start",
             )
-            legend_path.translate(current_x_offset + self.text_x_offset, y_offset)
-            group.add(legend_path)
+            legend_path.translate(self.text_x_offset, 0)
+            entry_group.add(legend_path)
+
+            # Position the entire entry group
+            entry_group.translate(current_x_offset, y_offset)
+            group.add(entry_group)
 
             current_x_offset += entry_width
 
@@ -158,6 +165,10 @@ class LegendGroup:
                 str(key), self.font_family, self.font_size, self.dpi
             )
 
+            # Create entry group with data attribute for identification
+            entry_group = Group()
+            entry_group.attribs["data-legend-key"] = str(key)
+
             # Add rectangle
             rect_path = Path(
                 d=path_desc,
@@ -165,8 +176,7 @@ class LegendGroup:
                 stroke=properties["stroke"],
                 stroke_width=properties["width"],
             )
-            rect_path.translate(0, y_offset)
-            group.add(rect_path)
+            entry_group.add(rect_path)
 
             # Add text
             legend_path = generate_text_path(
@@ -180,8 +190,12 @@ class LegendGroup:
                 dominant_baseline="central",
                 text_anchor="start",
             )
-            legend_path.translate(self.text_x_offset, y_offset)
-            group.add(legend_path)
+            legend_path.translate(self.text_x_offset, 0)
+            entry_group.add(legend_path)
+
+            # Position the entire entry group
+            entry_group.translate(0, y_offset)
+            group.add(entry_group)
 
             entry_width = self.text_x_offset + bbox_width
             max_width = max(max_width, entry_width)
