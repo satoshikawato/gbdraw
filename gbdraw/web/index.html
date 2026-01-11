@@ -111,9 +111,9 @@
         </div>
     </header>
 
-    <main class="flex-grow container max-w-[1600px] mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-8 overflow-hidden h-[calc(100vh-64px)]">
-        
-        <div class="lg:col-span-4 flex flex-col h-full overflow-hidden relative border-r border-slate-100 pr-4">
+    <main class="flex-grow px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-hidden h-[calc(100vh-64px)]">
+
+        <div class="lg:col-span-3 flex flex-col h-full overflow-hidden relative border-r border-slate-100 pr-4">
             
             <div class="flex-grow overflow-y-auto custom-scrollbar pr-2 pb-4 space-y-4">
                 
@@ -126,7 +126,7 @@
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="cInputType" value="gff" class="text-blue-600 focus:ring-blue-500"> GFF3 + FASTA</label>
                         </div>
                         <div v-if="cInputType === 'gb'">
-                            <file-uploader label="GenBank File (.gb)" accept=".gb,.gbk,.txt" v-model="files.c_gb"></file-uploader>
+                            <file-uploader label="GenBank File (.gb)" v-model="files.c_gb"></file-uploader>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
                             <file-uploader label="GFF3 File" accept=".gff,.gff3" v-model="files.c_gff"></file-uploader>
@@ -142,7 +142,7 @@
                         <div v-for="(seq, idx) in linearSeqs" :key="idx" class="p-3 bg-slate-50 rounded-lg border border-slate-200 relative group text-sm transition-all hover:border-blue-300">
                             <div class="absolute top-2 right-2 text-[10px] font-bold text-white bg-slate-400 px-1.5 py-0.5 rounded-full">#{{ idx + 1 }}</div>
                             <div v-if="lInputType === 'gb'" class="space-y-2">
-                                <file-uploader label="GenBank File" accept=".gb,.gbk" v-model="seq.gb"></file-uploader>
+                                <file-uploader label="GenBank File" v-model="seq.gb"></file-uploader>
                             </div>
                             <div v-else class="space-y-2 mb-2">
                                 <file-uploader label="GFF3" accept=".gff" v-model="seq.gff"></file-uploader>
@@ -552,7 +552,7 @@
 
         </div>
 
-        <div class="lg:col-span-8 space-y-6 flex flex-col h-full overflow-hidden">
+        <div class="lg:col-span-9 space-y-6 flex flex-col h-full overflow-hidden">
             
             <div v-if="errorLog" class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
                 <div class="text-red-700 font-bold mb-2 flex items-center gap-2"><i class="ph ph-warning-circle"></i> Error Occurred</div>
@@ -654,7 +654,14 @@
                         <p class="text-[9px] text-slate-400 mt-2 text-center">Add space around the diagram</p>
                     </div>
 
-                    <div class="absolute inset-0 overflow-auto flex p-8 custom-scrollbar">
+                    <div class="absolute inset-0 overflow-auto flex p-2 custom-scrollbar"
+                         ref="canvasContainerRef"
+                         style="cursor: grab;"
+                         @wheel.prevent="handleWheel"
+                         @mousedown="startPan"
+                         @mousemove="doPan"
+                         @mouseup="endPan"
+                         @mouseleave="endPan">
                         <div v-if="svgContent" v-html="svgContent" ref="svgContainer"
                             :key="`svg-${mode}-${selectedResultIndex}-${results.length}`"
                             :style="{transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.2s'}"
@@ -769,11 +776,30 @@
                             <span class="text-[10px] text-slate-500 flex items-center gap-1">
                                 <i class="ph ph-hand-grabbing"></i> Drag legend to reposition
                             </span>
-                            <button @click="resetLegendPosition"
-                                    class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
-                                    title="Reset legend to original position">
-                                <i class="ph ph-arrow-counter-clockwise"></i> Reset
-                            </button>
+                            <div class="flex items-center gap-1">
+                                <!-- Sort buttons -->
+                                <button @click="sortLegendEntries('asc')"
+                                        class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100 transition-colors"
+                                        title="Sort A-Z">
+                                    <i class="ph ph-sort-ascending"></i>
+                                </button>
+                                <button @click="sortLegendEntries('desc')"
+                                        class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100 transition-colors"
+                                        title="Sort Z-A">
+                                    <i class="ph ph-sort-descending"></i>
+                                </button>
+                                <button @click="sortLegendEntriesByDefault"
+                                        class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100 transition-colors"
+                                        title="Sort by default (generation order)">
+                                    <i class="ph ph-list-numbers"></i>
+                                </button>
+                                <span class="text-slate-300">|</span>
+                                <button @click="resetLegendPosition"
+                                        class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                                        title="Reset legend position and restore deleted entries">
+                                    <i class="ph ph-arrow-counter-clockwise"></i> Reset
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -1073,6 +1099,52 @@
             });
 
             const zoom = ref(1.0);
+
+            // Scroll wheel zoom handler
+            const handleWheel = (event) => {
+                const delta = event.deltaY > 0 ? -0.1 : 0.1;
+                const newZoom = Math.max(0.1, Math.min(5, zoom.value + delta));
+                zoom.value = Math.round(newZoom * 10) / 10; // Round to 1 decimal place
+            };
+
+            // Pan (drag) functionality
+            const isPanning = ref(false);
+            const panStart = reactive({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
+            const canvasContainerRef = ref(null);
+
+            const startPan = (event) => {
+                // Only pan with left mouse button and not on interactive elements
+                if (event.button !== 0) return;
+                const container = canvasContainerRef.value;
+                if (!container) return;
+
+                isPanning.value = true;
+                panStart.x = event.clientX;
+                panStart.y = event.clientY;
+                panStart.scrollLeft = container.scrollLeft;
+                panStart.scrollTop = container.scrollTop;
+                container.style.cursor = 'grabbing';
+            };
+
+            const doPan = (event) => {
+                if (!isPanning.value) return;
+                const container = canvasContainerRef.value;
+                if (!container) return;
+
+                const dx = event.clientX - panStart.x;
+                const dy = event.clientY - panStart.y;
+                container.scrollLeft = panStart.scrollLeft - dx;
+                container.scrollTop = panStart.scrollTop - dy;
+            };
+
+            const endPan = () => {
+                isPanning.value = false;
+                const container = canvasContainerRef.value;
+                if (container) {
+                    container.style.cursor = 'grab';
+                }
+            };
+
             let pyodide = null;
 
             // App State
@@ -1163,6 +1235,7 @@
             const showLegendPanel = ref(false);
             const legendEntries = ref([]);  // [{caption, color, yPos}]
             const deletedLegendEntries = ref([]);  // Track deleted entries for restoration
+            const originalLegendOrder = ref([]);  // Store original order from generation
             const newLegendCaption = ref('');
             const newLegendColor = ref('#808080');
 
@@ -3219,6 +3292,11 @@ json.dumps({"width": width})
                     return a.yPos - b.yPos;
                 });
                 legendEntries.value = entries;
+
+                // Store original order if this is the first extraction (after diagram generation)
+                if (originalLegendOrder.value.length === 0 && entries.length > 0) {
+                    originalLegendOrder.value = entries.map(e => e.caption);
+                }
             };
 
             // Update legend entry color
@@ -3347,6 +3425,151 @@ json.dumps({"width": width})
             const moveLegendEntryDown = (idx) => {
                 if (idx >= legendEntries.value.length - 1) return;
                 swapLegendEntries(idx, idx + 1);
+            };
+
+            // Sort legend entries alphabetically
+            const sortLegendEntries = (direction = 'asc') => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const entries = [...legendEntries.value];
+                if (entries.length < 2) return;
+
+                // Collect all current Y positions
+                const yPositions = entries.map(e => e.yPos).sort((a, b) => a - b);
+
+                // Sort entries by caption
+                const sortedEntries = [...entries].sort((a, b) => {
+                    const cmp = a.caption.localeCompare(b.caption, undefined, { sensitivity: 'base' });
+                    return direction === 'asc' ? cmp : -cmp;
+                });
+
+                // Get all feature legend groups
+                const targetGroups = getAllFeatureLegendGroups(svg);
+                if (targetGroups.length === 0) return;
+
+                // Create a mapping from old Y position to new Y position
+                const yMapping = new Map();
+                entries.forEach((entry, idx) => {
+                    const sortedIdx = sortedEntries.findIndex(e => e.caption === entry.caption && e.color === entry.color);
+                    if (sortedIdx !== -1) {
+                        yMapping.set(entry.yPos, yPositions[sortedIdx]);
+                    }
+                });
+
+                // Update SVG elements
+                for (const targetGroup of targetGroups) {
+                    const allElements = targetGroup.querySelectorAll('path, text');
+                    allElements.forEach(el => {
+                        const transform = el.getAttribute('transform');
+                        if (!transform) return;
+
+                        const match = transform.match(/translate\(([^,]+),\s*([\d.-]+)\)/);
+                        if (!match) return;
+
+                        const x = match[1];
+                        const y = parseFloat(match[2]);
+
+                        // Find matching Y position
+                        for (const [oldY, newY] of yMapping) {
+                            if (Math.abs(y - oldY) < 1) {
+                                el.setAttribute('transform', `translate(${x}, ${newY})`);
+                                break;
+                            }
+                        }
+                    });
+                }
+
+                // Save to results
+                skipCaptureBaseConfig.value = true;
+                const resultIdx = selectedResultIndex.value;
+                if (resultIdx >= 0 && results.value.length > resultIdx) {
+                    const serializer = new XMLSerializer();
+                    results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                }
+
+                // Re-extract to reflect new order
+                extractLegendEntries();
+            };
+
+            // Sort legend entries by default (generation) order
+            // Original entries keep their generation order, new entries go to end
+            const sortLegendEntriesByDefault = () => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const entries = [...legendEntries.value];
+                if (entries.length < 2) return;
+                if (originalLegendOrder.value.length === 0) return; // No original order stored
+
+                // Collect all current Y positions
+                const yPositions = entries.map(e => e.yPos).sort((a, b) => a - b);
+
+                // Sort entries: original entries in original order, then new entries alphabetically
+                const sortedEntries = [...entries].sort((a, b) => {
+                    const aOrigIdx = originalLegendOrder.value.indexOf(a.caption);
+                    const bOrigIdx = originalLegendOrder.value.indexOf(b.caption);
+
+                    // Both in original order
+                    if (aOrigIdx !== -1 && bOrigIdx !== -1) {
+                        return aOrigIdx - bOrigIdx;
+                    }
+                    // Only a in original order - a comes first
+                    if (aOrigIdx !== -1) return -1;
+                    // Only b in original order - b comes first
+                    if (bOrigIdx !== -1) return 1;
+                    // Neither in original order - sort alphabetically
+                    return a.caption.localeCompare(b.caption, undefined, { sensitivity: 'base' });
+                });
+
+                // Get all feature legend groups
+                const targetGroups = getAllFeatureLegendGroups(svg);
+                if (targetGroups.length === 0) return;
+
+                // Create a mapping from old Y position to new Y position
+                const yMapping = new Map();
+                entries.forEach((entry) => {
+                    const sortedIdx = sortedEntries.findIndex(e => e.caption === entry.caption && e.color === entry.color);
+                    if (sortedIdx !== -1) {
+                        yMapping.set(entry.yPos, yPositions[sortedIdx]);
+                    }
+                });
+
+                // Update SVG elements
+                for (const targetGroup of targetGroups) {
+                    const allElements = targetGroup.querySelectorAll('path, text');
+                    allElements.forEach(el => {
+                        const transform = el.getAttribute('transform');
+                        if (!transform) return;
+
+                        const match = transform.match(/translate\(([^,]+),\s*([\d.-]+)\)/);
+                        if (!match) return;
+
+                        const x = match[1];
+                        const y = parseFloat(match[2]);
+
+                        // Find matching Y position
+                        for (const [oldY, newY] of yMapping) {
+                            if (Math.abs(y - oldY) < 1) {
+                                el.setAttribute('transform', `translate(${x}, ${newY})`);
+                                break;
+                            }
+                        }
+                    });
+                }
+
+                // Save to results
+                skipCaptureBaseConfig.value = true;
+                const resultIdx = selectedResultIndex.value;
+                if (resultIdx >= 0 && results.value.length > resultIdx) {
+                    const serializer = new XMLSerializer();
+                    results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                }
+
+                // Re-extract to reflect new order
+                extractLegendEntries();
             };
 
             // Swap two legend entries by exchanging their Y positions in the SVG
@@ -5002,6 +5225,8 @@ json.dumps({"width": width})
                 legendEntries.value = [];
                 // Clear deleted legend entries (fresh start)
                 deletedLegendEntries.value = [];
+                // Clear original legend order (will be captured on first extraction)
+                originalLegendOrder.value = [];
                 // Store current palette's pairwise colors as reference for interpolation
                 window._origPairwiseMin = currentColors.value.pairwise_match_min || '#FFE7E7';
                 window._origPairwiseMax = currentColors.value.pairwise_match_max || '#FF7272';
@@ -5451,7 +5676,8 @@ json.dumps({"width": width})
             };
 
             return {
-                pyodideReady, processing, loadingStatus, errorLog, results, selectedResultIndex, svgContent, zoom,
+                pyodideReady, processing, loadingStatus, errorLog, results, selectedResultIndex, svgContent, zoom, handleWheel,
+                canvasContainerRef, startPan, doPan, endPan,
                 mode, cInputType, lInputType, files, linearSeqs, form, adv,
                 paletteNames, selectedPalette, currentColors, updatePalette, resetColors,
                 filterMode, manualBlacklist, manualWhitelist, featureKeys, newColorFeat, newColorVal, addCustomColor,
@@ -5467,7 +5693,7 @@ json.dumps({"width": width})
                 // Legend Editor
                 showLegendPanel, legendEntries, newLegendCaption, newLegendColor,
                 updateLegendEntryColor, updateLegendEntryCaption, deleteLegendEntry, addNewLegendEntry,
-                moveLegendEntryUp, moveLegendEntryDown, resetLegendPosition,
+                moveLegendEntryUp, moveLegendEntryDown, sortLegendEntries, sortLegendEntriesByDefault, resetLegendPosition,
                 // Diagram Drag & Canvas
                 resetAllPositions, canvasPadding, showCanvasControls, resetCanvasPadding,
                 downloadDpi, runAnalysis, downloadSVG, downloadPNG, downloadPDF,
