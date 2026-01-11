@@ -25,7 +25,9 @@
       "Bash(git checkout:*)",
       "Bash(grep:*)",
       "Bash(gbdraw:*)",
-      "Bash(python -m gbdraw.cli:*)"
+      "Bash(python -m gbdraw.cli:*)",
+      "Bash(python -m http.server:*)",
+      "Bash(curl:*)"
     ]
   }
 }

@@ -689,6 +689,55 @@
                         </div>
                     </div>
 
+                    <!-- Color Change Scope Dialog -->
+                    <div v-if="colorScopeDialog.show"
+                         class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
+                        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">Color Change Scope</h3>
+                            <p class="text-sm text-slate-600 mb-4">
+                                <template v-if="colorScopeDialog.matchingRule">
+                                    This feature matches the rule "<span class="font-bold text-blue-600">{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val }}</span>".
+                                </template>
+                                <template v-else-if="colorScopeDialog.siblingCount > 0">
+                                    There are <span class="font-bold text-blue-600">{{ colorScopeDialog.siblingCount }}</span> other features with the caption "<span class="font-bold text-blue-600">{{ colorScopeDialog.legendName }}</span>".
+                                </template>
+                                <template v-else>
+                                    How do you want to apply the color change?
+                                </template>
+                            </p>
+
+                            <div class="flex flex-col gap-2">
+                                <!-- Apply to all features with same caption -->
+                                <button @click="handleColorScopeChoice('all')"
+                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-users text-lg"></i>
+                                    <span>Apply to all "{{ colorScopeDialog.legendName }}" features ({{ colorScopeDialog.siblingCount + 1 }})</span>
+                                </button>
+
+                                <!-- Apply to this feature only -->
+                                <button @click="handleColorScopeChoice('single')"
+                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-user text-lg"></i>
+                                    <span>This feature only</span>
+                                </button>
+
+                                <!-- Use existing caption color (if available) -->
+                                <button v-if="colorScopeDialog.existingCaptionColor"
+                                        @click="handleColorScopeChoice('useExisting')"
+                                        class="w-full px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <span class="w-5 h-5 rounded border border-purple-300 shrink-0"
+                                          :style="{ backgroundColor: colorScopeDialog.existingCaptionColor }"></span>
+                                    <span>Use existing "{{ colorScopeDialog.legendName }}" color</span>
+                                </button>
+                            </div>
+
+                            <button @click="handleColorScopeChoice('cancel')"
+                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+
                 </div>
 
                 <!-- Legend Editor Toggle Button -->
@@ -1097,6 +1146,19 @@
             const clickedFeature = ref(null);  // {id, svg_id, label, color, feat}
             const clickedFeaturePos = reactive({ x: 0, y: 0 });
 
+            // Color Change Scope Dialog state
+            const colorScopeDialog = reactive({
+                show: false,
+                feat: null,
+                color: null,
+                matchingRule: null,  // Existing regex rule from -t table
+                legendName: null,
+                siblingCount: 0,  // Number of other features with same caption
+                existingCaptionRule: null,  // Existing hash rule for same caption (already colored)
+                existingCaptionColor: null,  // Color of existing caption rule
+                resolve: null  // Promise resolver
+            });
+
             // Legend Editor state
             const showLegendPanel = ref(false);
             const legendEntries = ref([]);  // [{caption, color, yPos}]
@@ -1191,7 +1253,7 @@
                 }
             };
         
-            const addSpecificRule = () => {
+            const addSpecificRule = async () => {
                 if(!newSpecRule.val) return;
 
                 // If the regex is too long (>50 chars), warn the user about potential performance impact.
@@ -1215,13 +1277,25 @@
                     return;
                 }
 
-                manualSpecificRules.push({
+                const rule = {
                     feat: String(newSpecRule.feat || ''),
                     qual: String(newSpecRule.qual || ''),
                     val: String(newSpecRule.val),
                     color: String(newSpecRule.color || '#000000'),
                     cap: String(newSpecRule.cap || '')
-                });
+                };
+                manualSpecificRules.push(rule);
+
+                // Add legend entry if caption is provided
+                if (rule.cap && pyodideReady.value) {
+                    await Vue.nextTick();
+                    const actualCaption = await addLegendEntry(rule.cap, rule.color);
+                    if (actualCaption && typeof actualCaption === 'string') {
+                        addedLegendCaptions.value.add(actualCaption);
+                    }
+                    extractLegendEntries();
+                }
+
                 newSpecRule.val = "";
             };
             const newFeatureToAdd = ref("mobile_element");
@@ -1331,6 +1405,78 @@
                 // Always use hash - it's the most reliable unique identifier
                 // svg_id is pre-computed for each feature (e.g., "f1a2b3c4")
                 return { qual: 'hash', val: feat.svg_id };
+            };
+
+            // Find if a feature matches an existing regex-based rule (non-hash rule)
+            // Returns the matching rule or null
+            const findMatchingRegexRule = (feat) => {
+                for (const rule of manualSpecificRules) {
+                    if (rule.feat !== feat.type) continue;
+                    if (rule.qual === 'hash') continue; // Skip hash rules
+
+                    let matches = false;
+                    if (rule.qual === 'product' && feat.product) {
+                        try {
+                            const regex = new RegExp(rule.val, 'i');
+                            matches = regex.test(feat.product);
+                        } catch {
+                            matches = feat.product === rule.val;
+                        }
+                    } else if (rule.qual === 'gene' && feat.gene) {
+                        try {
+                            const regex = new RegExp(rule.val, 'i');
+                            matches = regex.test(feat.gene);
+                        } catch {
+                            matches = feat.gene === rule.val;
+                        }
+                    } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
+                        try {
+                            const regex = new RegExp(rule.val, 'i');
+                            matches = regex.test(feat.locus_tag);
+                        } catch {
+                            matches = feat.locus_tag === rule.val;
+                        }
+                    }
+
+                    if (matches) {
+                        return rule;
+                    }
+                }
+                return null;
+            };
+
+            // Find features that share the same legend caption (excluding the current feature)
+            const findFeaturesWithSameCaption = (currentFeat, caption) => {
+                if (!caption) return [];
+                return extractedFeatures.value.filter(f => {
+                    if (f.svg_id === currentFeat.svg_id) return false; // Exclude self
+                    // Determine this feature's caption
+                    const featCaption = f.product || f.gene || f.locus_tag || f.type;
+                    return featCaption === caption;
+                });
+            };
+
+            // Find if there's an existing hash-based rule for features with the same caption
+            // Returns {rule, color} if found, null otherwise
+            const findExistingColorForCaption = (currentFeat, caption) => {
+                if (!caption) return null;
+
+                // First, check if there's a rule with this caption
+                for (const rule of manualSpecificRules) {
+                    if (rule.cap === caption && rule.qual === 'hash') {
+                        // Found a hash rule with this caption
+                        return { rule, color: rule.color };
+                    }
+                }
+
+                // Also check for regex rules that match features with this caption
+                for (const rule of manualSpecificRules) {
+                    if (rule.cap === caption && rule.qual !== 'hash') {
+                        return { rule, color: rule.color };
+                    }
+                }
+
+                return null;
             };
 
             // Instant preview: update SVG path colors directly without regeneration
@@ -1446,14 +1592,108 @@
             };
 
             // Update color from the popup picker
-            const updateClickedFeatureColor = (color) => {
+            const updateClickedFeatureColor = async (color) => {
                 if (!clickedFeature.value) return;
                 const feat = clickedFeature.value.feat;
                 // Use custom legendName if provided (check for non-empty trimmed string)
                 const customName = clickedFeature.value.legendName?.trim();
                 const legendName = customName ? customName : clickedFeature.value.label;
-                clickedFeature.value.color = color;
-                setFeatureColor(feat, color, legendName);
+
+                // Check if this feature matches an existing regex rule (from -t table)
+                const matchingRule = findMatchingRegexRule(feat);
+
+                // Find sibling features with the same caption
+                const siblings = findFeaturesWithSameCaption(feat, legendName);
+                const siblingCount = siblings.length;
+
+                // Find if there's an existing color rule for this caption
+                const existingCaption = findExistingColorForCaption(feat, legendName);
+
+                // Determine if we need to show the dialog
+                const needsDialog = matchingRule || siblingCount > 0 || existingCaption;
+
+                if (needsDialog) {
+                    // Show dialog with appropriate options
+                    colorScopeDialog.show = true;
+                    colorScopeDialog.feat = feat;
+                    colorScopeDialog.color = color;
+                    colorScopeDialog.matchingRule = matchingRule;
+                    colorScopeDialog.legendName = legendName;
+                    colorScopeDialog.siblingCount = siblingCount;
+                    colorScopeDialog.existingCaptionRule = existingCaption?.rule || null;
+                    colorScopeDialog.existingCaptionColor = existingCaption?.color || null;
+                    // Close the color picker popup
+                    clickedFeature.value = null;
+                } else {
+                    // No siblings and no existing rule - just apply to this feature
+                    clickedFeature.value.color = color;
+                    setFeatureColor(feat, color, legendName);
+                }
+            };
+
+            // Handle user's choice from the color scope dialog
+            const handleColorScopeChoice = async (choice) => {
+                const { feat, color, matchingRule, legendName, siblingCount, existingCaptionRule, existingCaptionColor } = colorScopeDialog;
+
+                if (choice === 'all') {
+                    // Apply to all features with same caption
+                    if (matchingRule) {
+                        // Update the existing rule's color - affects all matching features
+                        matchingRule.color = color;
+                        if (matchingRule.cap) {
+                            updateLegendEntryColorByCaption(matchingRule.cap, color);
+                            extractLegendEntries();
+                        }
+                    } else {
+                        // Create a new product-based rule for all features with this caption
+                        const newRule = {
+                            feat: feat.type,
+                            qual: 'product',  // Use product as qualifier for caption matching
+                            val: legendName,  // Exact match
+                            color: color,
+                            cap: legendName
+                        };
+                        manualSpecificRules.push(newRule);
+                        addLegendEntry(legendName, color);
+                    }
+                    // Trigger SVG update
+                    applySpecificRulesToSvg();
+                } else if (choice === 'single') {
+                    // Create a new hash-based rule for this specific feature only
+                    await setFeatureColor(feat, color, legendName);
+                } else if (choice === 'useExisting') {
+                    // Apply the existing caption's color to this feature
+                    if (existingCaptionColor) {
+                        // Create a hash-based rule for this feature with the existing color
+                        const existingRule = manualSpecificRules.find(r =>
+                            r.qual === 'hash' && r.val === feat.svg_id
+                        );
+                        if (existingRule) {
+                            existingRule.color = existingCaptionColor;
+                        } else {
+                            manualSpecificRules.push({
+                                feat: feat.type,
+                                qual: 'hash',
+                                val: feat.svg_id,
+                                color: existingCaptionColor,
+                                cap: legendName
+                            });
+                        }
+                        applyInstantPreview(feat, existingCaptionColor, legendName);
+                        applySpecificRulesToSvg();
+                    }
+                }
+                // choice === 'cancel' - do nothing
+
+                // Close dialog and reset all state
+                colorScopeDialog.show = false;
+                colorScopeDialog.feat = null;
+                colorScopeDialog.color = null;
+                colorScopeDialog.matchingRule = null;
+                colorScopeDialog.legendName = null;
+                colorScopeDialog.siblingCount = 0;
+                colorScopeDialog.existingCaptionRule = null;
+                colorScopeDialog.existingCaptionColor = null;
             };
 
             // Watch for SVG content changes to reattach handlers
@@ -1484,8 +1724,13 @@
                     const paletteColor = colors[feat.type];
                     if (!paletteColor) return;
 
-                    // Don't update if feature has a specific color rule
+                    // Don't update if feature has a specific color rule (including hash-based rules)
                     const hasSpecificRule = manualSpecificRules.some(r => {
+                        // Check for hash-based rule (individual feature override)
+                        if (r.qual === 'hash' && r.val === feat.svg_id) {
+                            return true;
+                        }
+                        // Check for qualifier-based rule (product, gene, locus_tag)
                         const qualInfo = getFeatureQualifier(feat);
                         return qualInfo && r.feat === feat.type && r.qual === qualInfo.qual && r.val === qualInfo.val;
                     });
@@ -1639,6 +1884,8 @@
             // Watch for palette color changes
             watch(currentColors, () => {
                 applyPaletteToSvg();
+                // Re-apply specific rules to ensure custom colors are preserved
+                applySpecificRulesToSvg();
             }, { deep: true });
 
             // Function to apply specific rules to SVG immediately
@@ -1656,40 +1903,53 @@
                     if (!feat.svg_id) return;
 
                     // Check if there's a matching specific rule
+                    // Priority: hash rules (highest) > regex rules (product/gene/locus_tag)
                     let matchingRule = null;
+
+                    // First pass: check hash-based rules (most specific, individual feature overrides)
                     for (const rule of manualSpecificRules) {
                         if (rule.feat !== feat.type) continue;
-
-                        let matches = false;
-                        if (rule.qual === 'product' && feat.product) {
-                            // Support regex matching
-                            try {
-                                const regex = new RegExp(rule.val, 'i');
-                                matches = regex.test(feat.product);
-                            } catch {
-                                matches = feat.product === rule.val;
-                            }
-                        } else if (rule.qual === 'gene' && feat.gene) {
-                            try {
-                                const regex = new RegExp(rule.val, 'i');
-                                matches = regex.test(feat.gene);
-                            } catch {
-                                matches = feat.gene === rule.val;
-                            }
-                        } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
-                            try {
-                                const regex = new RegExp(rule.val, 'i');
-                                matches = regex.test(feat.locus_tag);
-                            } catch {
-                                matches = feat.locus_tag === rule.val;
-                            }
-                        } else if (rule.qual === 'hash' && feat.svg_id === rule.val) {
-                            matches = true;
-                        }
-
-                        if (matches) {
+                        if (rule.qual === 'hash' && feat.svg_id === rule.val) {
                             matchingRule = rule;
                             break;
+                        }
+                    }
+
+                    // Second pass: if no hash match, check regex-based rules
+                    if (!matchingRule) {
+                        for (const rule of manualSpecificRules) {
+                            if (rule.feat !== feat.type) continue;
+                            if (rule.qual === 'hash') continue; // Already checked in first pass
+
+                            let matches = false;
+                            if (rule.qual === 'product' && feat.product) {
+                                // Support regex matching
+                                try {
+                                    const regex = new RegExp(rule.val, 'i');
+                                    matches = regex.test(feat.product);
+                                } catch {
+                                    matches = feat.product === rule.val;
+                                }
+                            } else if (rule.qual === 'gene' && feat.gene) {
+                                try {
+                                    const regex = new RegExp(rule.val, 'i');
+                                    matches = regex.test(feat.gene);
+                                } catch {
+                                    matches = feat.gene === rule.val;
+                                }
+                            } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
+                                try {
+                                    const regex = new RegExp(rule.val, 'i');
+                                    matches = regex.test(feat.locus_tag);
+                                } catch {
+                                    matches = feat.locus_tag === rule.val;
+                                }
+                            }
+
+                            if (matches) {
+                                matchingRule = rule;
+                                break;
+                            }
                         }
                     }
 
@@ -4307,25 +4567,44 @@ json.dumps({"width": width})
                     const text = await newFile.text();
                     const lines = text.split(/\r?\n/);
                     let count = 0;
-                    
+                    const rulesWithCaptions = [];
+
                     for (const line of lines) {
                         // Skip comments and empty lines
                         if (!line.trim() || line.trim().startsWith('#')) continue;
-                        
+
                         const parts = line.split('\t');
                         // TSV format: Feature, Qualifier, Regex, Color, [Caption]
                         if (parts.length >= 4) {
-                            manualSpecificRules.push({
+                            const rule = {
                                 feat: parts[0].trim(),
                                 qual: parts[1].trim(),
                                 val: parts[2].trim(),
                                 color: parts[3].trim(),
-                                cap: parts[4] ? parts[4].trim() : "" 
-                            });
+                                cap: parts[4] ? parts[4].trim() : ""
+                            };
+                            manualSpecificRules.push(rule);
                             count++;
+                            // Track rules with captions for legend entry creation
+                            if (rule.cap) {
+                                rulesWithCaptions.push(rule);
+                            }
                         }
                     }
                     console.log(`Loaded ${count} rules from file.`);
+
+                    // Add legend entries for rules with captions
+                    if (rulesWithCaptions.length > 0 && pyodideReady.value) {
+                        await Vue.nextTick();
+                        for (const rule of rulesWithCaptions) {
+                            const actualCaption = await addLegendEntry(rule.cap, rule.color);
+                            if (actualCaption && typeof actualCaption === 'string') {
+                                addedLegendCaptions.value.add(actualCaption);
+                            }
+                        }
+                        extractLegendEntries();
+                        console.log(`Added ${rulesWithCaptions.length} legend entries from specific table.`);
+                    }
                 } catch (e) {
                     console.error("Failed to load rules file:", e);
                     alert("Failed to load rules file. Please check the TSV format.");
@@ -4408,6 +4687,90 @@ json.dumps({"width": width})
                     alert("Failed to load blacklist file.");
                 }
             });
+
+            // Debounce helper for definition text updates
+            let definitionUpdateTimeout = null;
+            const updateDefinitionText = async () => {
+                if (!pyodideReady.value || !svgContent.value || mode.value !== 'circular') return;
+                if (!svgContainer.value) return;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                // Find the current GenBank file path
+                const gbPath = cInputType.value === 'gb' ? '/input.gb' : '/input.gb';
+
+                try {
+                    const species = form.species || '';
+                    const strain = form.strain || '';
+                    const fontSize = adv.def_font_size || 18;
+
+                    const resultJson = pyodide.runPython(
+                        `regenerate_definition_svg("${gbPath}", ${species ? `"${species.replace(/"/g, '\\"')}"` : 'None'}, ${strain ? `"${strain.replace(/"/g, '\\"')}"` : 'None'}, ${fontSize})`
+                    );
+                    const result = JSON.parse(resultJson);
+
+                    if (result.error) {
+                        console.error("Definition update error:", result.error);
+                        return;
+                    }
+
+                    // Find and replace the definition group in the SVG (using _definition suffix)
+                    const definitionGroupId = result.definition_group_id;
+                    console.log('Looking for definition group:', definitionGroupId);
+                    const existingGroup = svg.getElementById(definitionGroupId);
+
+                    if (existingGroup) {
+                        // Parse the new SVG group
+                        const parser = new DOMParser();
+                        const newDoc = parser.parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${result.svg}</svg>`, 'image/svg+xml');
+                        const newGroup = newDoc.querySelector('g');
+
+                        if (newGroup) {
+                            // Preserve the transform of the existing group
+                            const existingTransform = existingGroup.getAttribute('transform');
+                            if (existingTransform) {
+                                newGroup.setAttribute('transform', existingTransform);
+                            }
+
+                            // Replace the old group with the new one
+                            existingGroup.parentNode.replaceChild(
+                                svg.ownerDocument.importNode(newGroup, true),
+                                existingGroup
+                            );
+
+                            // Update the stored SVG content
+                            skipCaptureBaseConfig.value = true;
+                            const idx = selectedResultIndex.value;
+                            if (idx >= 0 && results.value.length > idx) {
+                                const serializer = new XMLSerializer();
+                                results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+                            }
+
+                            console.log('Definition text updated');
+                        }
+                    } else {
+                        console.log('Definition group not found in SVG:', definitionGroupId);
+                    }
+                } catch (e) {
+                    console.error("Failed to update definition text:", e);
+                }
+            };
+
+            // Watch for species/strain changes with debounce
+            watch(() => form.species, () => {
+                if (definitionUpdateTimeout) clearTimeout(definitionUpdateTimeout);
+                definitionUpdateTimeout = setTimeout(updateDefinitionText, 500);
+            });
+            watch(() => form.strain, () => {
+                if (definitionUpdateTimeout) clearTimeout(definitionUpdateTimeout);
+                definitionUpdateTimeout = setTimeout(updateDefinitionText, 500);
+            });
+            watch(() => adv.def_font_size, () => {
+                if (definitionUpdateTimeout) clearTimeout(definitionUpdateTimeout);
+                definitionUpdateTimeout = setTimeout(updateDefinitionText, 500);
+            });
+
             onMounted(async () => {
                 try {
                     pyodide = await loadPyodide();
@@ -4473,6 +4836,58 @@ json.dumps({"width": width})
                             text_svg = f'<text font-size="{font_size}" font-family="{font_family}" dominant-baseline="central" text-anchor="start" transform="translate({x_offset + x_margin}, {y_offset})">{caption}</text>'
 
                             return json.dumps({"rect": rect_svg, "text": text_svg})
+
+                        def regenerate_definition_svg(gb_path, species=None, strain=None, font_size=18):
+                            """Regenerate just the definition group SVG for instant preview"""
+                            from Bio import SeqIO
+                            from gbdraw.render.groups.circular.definition import DefinitionGroup
+                            from gbdraw.canvas import CircularCanvasConfigurator
+                            from importlib import resources
+
+                            try:
+                                # Load default config
+                                with resources.files("gbdraw.data").joinpath("config.toml").open("rb") as fh:
+                                    config_dict = tomllib.load(fh)
+
+                                # Override font size if provided
+                                if font_size:
+                                    config_dict["objects"]["definition"]["circular"]["font_size"] = font_size
+
+                                # Parse the GenBank file
+                                records = list(SeqIO.parse(gb_path, "genbank"))
+                                if not records:
+                                    return json.dumps({"error": "No records found"})
+
+                                record = records[0]
+
+                                # Create canvas config
+                                canvas_config = CircularCanvasConfigurator(
+                                    output_prefix="temp",
+                                    config_dict=config_dict,
+                                    legend="none",
+                                    gb_record=record,
+                                )
+
+                                # Create definition group with custom species/strain
+                                def_group = DefinitionGroup(
+                                    gb_record=record,
+                                    canvas_config=canvas_config,
+                                    config_dict=config_dict,
+                                    species=species if species else None,
+                                    strain=strain if strain else None,
+                                )
+
+                                # Get the SVG content
+                                group = def_group.get_group()
+                                # Serialize to string using svgwrite's tostring() method
+                                svg_content = group.tostring()
+
+                                # Return the definition group ID (with _definition suffix)
+                                definition_group_id = def_group.definition_group_id
+                                return json.dumps({"svg": svg_content, "definition_group_id": definition_group_id})
+                            except Exception as e:
+                                import traceback
+                                return json.dumps({"error": traceback.format_exc()})
 
                         def extract_features_from_genbank(gb_path):
                             """Extract feature info from GenBank file for UI display"""
@@ -5027,6 +5442,8 @@ json.dumps({"width": width})
                 featureColorOverrides, getFeatureColor, setFeatureColor, canEditFeatureColor,
                 // SVG Feature Click
                 svgContainer, clickedFeature, clickedFeaturePos, updateClickedFeatureColor,
+                // Color Scope Dialog
+                colorScopeDialog, handleColorScopeChoice,
                 // Legend Editor
                 showLegendPanel, legendEntries, newLegendCaption, newLegendColor,
                 updateLegendEntryColor, updateLegendEntryCaption, deleteLegendEntry, addNewLegendEntry,
