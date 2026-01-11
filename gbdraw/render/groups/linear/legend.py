@@ -110,7 +110,8 @@ class LegendGroup:
                 max_height += self.line_height
 
             # Create entry group with data attribute for identification
-            entry_group = Group()
+            # Use debug=False to allow custom data-* attributes
+            entry_group = Group(debug=False)
             entry_group.attribs["data-legend-key"] = str(key)
 
             # Add rectangle
@@ -166,7 +167,8 @@ class LegendGroup:
             )
 
             # Create entry group with data attribute for identification
-            entry_group = Group()
+            # Use debug=False to allow custom data-* attributes
+            entry_group = Group(debug=False)
             entry_group.attribs["data-legend-key"] = str(key)
 
             # Add rectangle
