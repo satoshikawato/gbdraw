@@ -1,0 +1,31 @@
+{
+  "name": "gbdraw-web",
+  "private": true,
+  "version": "0.8.3",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc --noEmit",
+    "lint": "eslint src --ext .vue,.ts"
+  },
+  "dependencies": {
+    "dompurify": "^3.2.7",
+    "jspdf": "^3.0.3",
+    "svg2pdf.js": "^2.6.0",
+    "vue": "^3.5.25"
+  },
+  "devDependencies": {
+    "@types/dompurify": "^3.0.5",
+    "@types/node": "^25.0.6",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.6.3",
+    "vite": "^6.0.7",
+    "vite-plugin-singlefile": "^2.0.3",
+    "vue-tsc": "^2.2.0"
+  }
+}

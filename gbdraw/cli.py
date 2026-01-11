@@ -141,18 +141,22 @@ def main() -> None:
     elif command == "linear":
         linear_main(args)
     elif command == "gui":
+            import os
             try:
                 # Python 3.9+
-                web_dir = resources.files('gbdraw').joinpath('web')
+                web_base = resources.files('gbdraw').joinpath('web')
             except AttributeError:
-                import os
-                web_dir = os.path.join(os.path.dirname(__file__), 'web')
+                web_base = os.path.join(os.path.dirname(__file__), 'web')
 
-            if not str(web_dir).endswith("index.html") and not str(web_dir).endswith("web"):
-                pass
-            
+            # Check for dist/ directory (Vite build output) first
+            dist_dir = os.path.join(str(web_base), 'dist')
+            if os.path.exists(dist_dir) and os.path.isfile(os.path.join(dist_dir, 'index.html')):
+                web_dir = dist_dir
+            else:
+                web_dir = str(web_base)
+
             print("Launching gbdraw GUI (Local Mode)...")
-            start_local_server(str(web_dir))
+            start_local_server(web_dir)
     else:
         print("Oops! It seems like you entered an invalid command.")
         print("Please use 'circular' or 'linear' followed by the respective options.")

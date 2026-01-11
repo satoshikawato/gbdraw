@@ -59,6 +59,9 @@ gbdraw = [
     "data/config.toml",
     "data/*.ttf",
     "web/index.html",
+    "web/index.legacy.html",
+    "web/dist/index.html",
+    "web/*.whl",
 ]
 
 [tool.pytest.ini_options]

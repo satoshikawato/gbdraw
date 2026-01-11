@@ -25,7 +25,11 @@
       "Bash(git checkout:*)",
       "Bash(grep:*)",
       "Bash(gbdraw:*)",
-      "Bash(python -m gbdraw.cli:*)"
+      "Bash(python -m gbdraw.cli:*)",
+      "Bash(awk:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run dev:*)"
     ]
   }
 }
