@@ -6436,7 +6436,9 @@ json.dumps({"width": width})
                     const micropip = pyodide.pyimport("micropip");
                     await micropip.install(["biopython","svgwrite", "pandas", "fonttools", "bcbio-gff"]);
                     loadingStatus.value = "Installing gbdraw...";
-                    await micropip.install(GBDRAW_WHEEL_NAME);
+                    // Add cache-busting timestamp to force fresh wheel download
+                    const wheelUrl = `${GBDRAW_WHEEL_NAME}?t=${Date.now()}`;
+                    await micropip.install(wheelUrl);
                     await pyodide.runPythonAsync(`
                         import warnings
                         warnings.simplefilter('ignore', SyntaxWarning)
