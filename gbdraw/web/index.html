@@ -82,13 +82,13 @@
         <h3 class="text-xl font-bold text-slate-800 animate-pulse">Generating Diagram...</h3>
     </div>
 
-    <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-16 shrink-0">
-        <div class="max-w-[1600px] mx-auto px-4 h-full flex items-center justify-between">
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-14 shrink-0">
+        <div class="px-4 h-full flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <div class="bg-blue-600 text-white w-9 h-9 rounded-lg flex items-center justify-center font-bold text-xl shadow-md">🧬</div>
-                <h1 class="text-xl font-bold text-slate-800 tracking-tight flex items-baseline">
-                    gbdraw 
-                    <span class="text-slate-400 text-xs font-normal ml-3">A genome diagram generator for microbes and organelles</span>
+                <div class="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center font-bold text-lg shadow-md">🧬</div>
+                <h1 class="text-lg font-bold text-slate-800 tracking-tight flex items-baseline">
+                    gbdraw
+                    <span class="text-slate-400 text-sm font-normal ml-3">A genome diagram generator for microbes and organelles</span>
                 </h1>
             </div>
             
@@ -111,7 +111,7 @@
         </div>
     </header>
 
-    <main class="flex-grow px-4 py-4 flex overflow-hidden h-[calc(100vh-64px)]">
+    <main class="flex-grow px-4 py-3 flex overflow-hidden h-[calc(100vh-88px)]">
 
         <div class="flex flex-col h-full overflow-hidden relative shrink-0"
              :style="{ width: sidebarWidth + 'px' }">
@@ -526,16 +526,13 @@
                                 </div>
                             </div>
 
-                            <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center">
-                                <i class="ph ph-github-logo text-lg"></i> GitHub
-                            </a>
-                            <a href="https://github.com/satoshikawato/gbdraw/issues" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center">
-                                <i class="ph ph-bug text-lg"></i> Issues
-                            </a>
-
-                            <div class="pt-2 border-t border-slate-200 text-[10px] text-slate-400 leading-relaxed">
-                                <strong>Disclaimer:</strong> This tool is provided "as is" without warranty of any kind. The author is not liable for any damages arising from its use.<br>
-                                <span class="mt-1 block">License: MIT | Author: Satoshi Kawato</span>
+                            <div class="flex gap-2">
+                                <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
+                                    <i class="ph ph-github-logo text-lg"></i> GitHub
+                                </a>
+                                <a href="https://github.com/satoshikawato/gbdraw/issues" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
+                                    <i class="ph ph-bug text-lg"></i> Issues
+                                </a>
                             </div>
                         </div>
                     </details>
@@ -566,20 +563,20 @@
             </div>
 
             <div v-if="results.length > 0" class="card border-2 border-green-100 ring-4 ring-green-50/50 flex flex-col flex-grow overflow-hidden relative">
-                <div class="card-header bg-green-50/50 -m-5 mb-0 p-4 border-green-100 flex justify-between items-center shrink-0">
-                    <span class="text-green-600 flex items-center gap-2">
-                        <i class="ph ph-check-circle text-xl"></i> 
+                <div class="card-header bg-green-50/50 -m-4 mb-0 p-3 pr-6 border-green-100 flex justify-between items-center shrink-0 flex-wrap gap-2">
+                    <span class="text-green-600 flex items-center gap-2 text-base font-bold">
+                        <i class="ph ph-check-circle text-xl"></i>
                         <span v-if="results.length === 1">Result Preview</span>
                         <span v-else>
-                            <select v-model="selectedResultIndex" class="bg-white border border-green-300 text-green-700 text-xs font-bold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-green-500">
+                            <select v-model="selectedResultIndex" class="bg-white border border-green-300 text-green-700 text-sm font-bold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-green-500">
                                 <option v-for="(res, idx) in results" :key="idx" :value="idx">Preview: {{ res.name }}</option>
                             </select>
                         </span>
                     </span>
-                    <div class="flex gap-2 items-center">
-                        <div class="flex items-center gap-1 bg-white px-2 py-1 rounded border border-green-200">
-                            <span class="text-[10px] font-bold text-green-700">DPI</span>
-                            <select v-model="downloadDpi" class="text-xs bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
+                    <div class="flex gap-2 items-center flex-wrap mr-2">
+                        <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded border border-green-200">
+                            <span class="text-sm font-bold text-green-700">DPI</span>
+                            <select v-model="downloadDpi" class="text-sm bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
                                 <option value="72">72 (Web)</option>
                                 <option value="96">96 (Screen)</option>
                                 <option value="150">150 (Draft)</option>
@@ -587,9 +584,9 @@
                                 <option value="600">600 (High)</option>
                             </select>
                         </div>
-                        <button @click="downloadSVG" class="btn btn-secondary text-xs"><i class="ph ph-download-simple"></i> SVG</button>
-                        <button @click="downloadPNG" class="btn btn-primary text-xs"><i class="ph ph-download-simple"></i> PNG</button>
-                        <button @click="downloadPDF" class="btn btn-secondary text-xs"><i class="ph ph-file-pdf"></i> PDF</button>
+                        <button @click="downloadSVG" class="btn btn-secondary text-sm"><i class="ph ph-download-simple"></i> SVG</button>
+                        <button @click="downloadPNG" class="btn btn-primary text-sm"><i class="ph ph-download-simple"></i> PNG</button>
+                        <button @click="downloadPDF" class="btn btn-secondary text-sm"><i class="ph ph-file-pdf"></i> PDF</button>
                     </div>
                 </div>
 
@@ -619,9 +616,9 @@
                     </div>
 
                     <!-- Drag hint -->
-                    <div v-if="svgContent" class="absolute top-4 left-4 bg-white/90 shadow rounded-lg px-3 py-2 z-20 border border-slate-200">
-                        <p class="text-[10px] text-slate-500 flex items-center gap-1">
-                            <i class="ph ph-hand-grabbing"></i> Drag diagram or legend to reposition
+                    <div v-if="svgContent" class="absolute top-4 left-4 bg-white/90 shadow rounded-lg px-4 py-2 z-20 border border-slate-200">
+                        <p class="text-sm text-slate-500 flex items-center gap-2">
+                            <i class="ph ph-hand-grabbing text-base"></i> Drag diagram or legend to reposition
                         </p>
                     </div>
 
@@ -937,6 +934,16 @@
             </div>
         </div>
     </main>
+
+    <footer class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-sm text-slate-500 flex items-center justify-center gap-6 shrink-0 h-8">
+        <span>
+            <strong>Disclaimer:</strong> This tool is provided "as is" without warranty of any kind.
+        </span>
+        <span>
+            License: <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">MIT</a> |
+            Author: <a href="https://researchmap.jp/satoshi_kawato?lang=en" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">Satoshi Kawato</a>
+        </span>
+    </footer>
 </div>
 
 <script type="text/x-template" id="help-tip-template">
