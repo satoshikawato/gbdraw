@@ -690,8 +690,8 @@
                                    :placeholder="clickedFeature.label"
                                    class="w-full text-base border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                         </div>
-                        <div>
-                            <label class="text-sm font-medium text-slate-500 block mb-2">Color</label>
+                        <div class="mb-5">
+                            <label class="text-sm font-medium text-slate-500 block mb-2">Fill Color</label>
                             <div class="flex items-center gap-4">
                                 <input type="color"
                                        :value="clickedFeature.color"
@@ -699,6 +699,41 @@
                                        @change="updateClickedFeatureColor($event.target.value)"
                                        class="w-16 h-12 cursor-pointer border-2 border-slate-200 rounded-lg">
                                 <span class="text-base font-mono text-slate-600 bg-slate-50 px-4 py-3 rounded-lg">{{ clickedFeature.color }}</span>
+                                <button @click="resetClickedFeatureFillColor"
+                                        class="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100"
+                                        title="Reset fill color to default">
+                                    <i class="ph ph-arrow-counter-clockwise text-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium text-slate-500 block mb-2">Stroke</label>
+                            <div class="flex items-center gap-4">
+                                <input type="color"
+                                       :value="clickedFeature.strokeColor || '#000000'"
+                                       @input="clickedFeature.strokeColor = $event.target.value"
+                                       @change="updateClickedFeatureStroke($event.target.value, null)"
+                                       class="w-12 h-10 cursor-pointer border-2 border-slate-200 rounded-lg"
+                                       title="Stroke color">
+                                <input type="number"
+                                       :value="clickedFeature.strokeWidth"
+                                       @input="clickedFeature.strokeWidth = $event.target.value"
+                                       @change="updateClickedFeatureStroke(null, $event.target.value)"
+                                       class="w-20 text-base border border-slate-200 rounded-lg px-3 py-2"
+                                       placeholder="Width"
+                                       step="0.1"
+                                       min="0"
+                                       title="Stroke width">
+                                <button @click="resetClickedFeatureStroke"
+                                        class="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100"
+                                        title="Reset stroke to default">
+                                    <i class="ph ph-arrow-counter-clockwise text-lg"></i>
+                                </button>
+                                <button @click="applyStrokeToAllSiblings"
+                                        class="text-slate-400 hover:text-blue-600 p-2 rounded-lg hover:bg-blue-50"
+                                        title="Apply this stroke to all features with the same legend">
+                                    <i class="ph ph-users-three text-lg"></i>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -746,6 +781,46 @@
                             </div>
 
                             <button @click="handleColorScopeChoice('cancel')"
+                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Reset Color Dialog -->
+                    <div v-if="resetColorDialog.show"
+                         class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
+                        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">Reset Fill Color</h3>
+                            <p class="text-sm text-slate-600 mb-4">
+                                There are <span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span> other features with the caption "<span class="font-bold text-blue-600">{{ resetColorDialog.caption }}</span>".
+                                <br>How do you want to reset the color?
+                            </p>
+
+                            <div class="flex flex-col gap-2">
+                                <!-- Reset all features with same caption -->
+                                <button @click="handleResetColorChoice('all')"
+                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-users text-lg"></i>
+                                    <span>Reset all "{{ resetColorDialog.caption }}" ({{ resetColorDialog.siblingCount + 1 }})</span>
+                                </button>
+
+                                <!-- Reset this feature only with new legend entry -->
+                                <button @click="handleResetColorChoice('this_with_legend')"
+                                        class="w-full px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-user-plus text-lg"></i>
+                                    <span>This only + add legend entry</span>
+                                </button>
+
+                                <!-- Reset this feature only -->
+                                <button @click="handleResetColorChoice('this')"
+                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-user text-lg"></i>
+                                    <span>This feature only</span>
+                                </button>
+                            </div>
+
+                            <button @click="resetColorDialog.show = false"
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
                                 Cancel
                             </button>
@@ -812,39 +887,80 @@
 
                     <div class="flex-1 overflow-y-auto p-3 space-y-2">
                         <div v-for="(entry, idx) in legendEntries" :key="idx"
-                             class="flex items-center gap-1 p-2 bg-slate-50 rounded border border-slate-100">
-                            <!-- Up/Down buttons -->
-                            <div class="flex flex-col shrink-0">
-                                <button @click="moveLegendEntryUp(idx)"
-                                        :disabled="idx === 0"
-                                        class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none"
-                                        title="Move up">
-                                    <i class="ph ph-caret-up text-xs"></i>
+                             class="p-2 bg-slate-50 rounded border border-slate-100">
+                            <!-- Main row: Up/Down, Color, Caption, Delete -->
+                            <div class="flex items-center gap-1">
+                                <!-- Up/Down buttons -->
+                                <div class="flex flex-col shrink-0">
+                                    <button @click="moveLegendEntryUp(idx)"
+                                            :disabled="idx === 0"
+                                            class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none"
+                                            title="Move up">
+                                        <i class="ph ph-caret-up text-xs"></i>
+                                    </button>
+                                    <button @click="moveLegendEntryDown(idx)"
+                                            :disabled="idx === legendEntries.length - 1"
+                                            class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none"
+                                            title="Move down">
+                                        <i class="ph ph-caret-down text-xs"></i>
+                                    </button>
+                                </div>
+                                <!-- Color display (read-only) -->
+                                <div class="w-6 h-6 rounded border border-slate-300 shrink-0"
+                                     :style="{ backgroundColor: entry.color }"
+                                     :title="entry.color"></div>
+                                <input type="text"
+                                       :value="entry.caption"
+                                       @change="updateLegendEntryCaption(idx, $event.target.value)"
+                                       class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0">
+                                <!-- Expand/Collapse stroke options -->
+                                <button @click="entry.showStroke = !entry.showStroke"
+                                        class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5"
+                                        :title="entry.showStroke ? 'Hide stroke options' : 'Show stroke options'">
+                                    <i class="ph text-xs" :class="entry.showStroke ? 'ph-caret-up' : 'ph-sliders-horizontal'"></i>
                                 </button>
-                                <button @click="moveLegendEntryDown(idx)"
-                                        :disabled="idx === legendEntries.length - 1"
-                                        class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none"
-                                        title="Move down">
-                                    <i class="ph ph-caret-down text-xs"></i>
+                                <button @click="deleteLegendEntry(idx)"
+                                        class="text-red-400 hover:text-red-600 shrink-0"
+                                        title="Remove entry">
+                                    <i class="ph ph-trash text-sm"></i>
                                 </button>
                             </div>
-                            <!-- Color display (read-only) -->
-                            <div class="w-6 h-6 rounded border border-slate-300 shrink-0"
-                                 :style="{ backgroundColor: entry.color }"
-                                 :title="entry.color"></div>
-                            <input type="text"
-                                   :value="entry.caption"
-                                   @change="updateLegendEntryCaption(idx, $event.target.value)"
-                                   class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0">
-                            <button @click="deleteLegendEntry(idx)"
-                                    class="text-red-400 hover:text-red-600 shrink-0"
-                                    title="Remove entry">
-                                <i class="ph ph-trash text-sm"></i>
-                            </button>
+                            <!-- Stroke options row (collapsible) -->
+                            <div v-if="entry.showStroke" class="mt-2 pt-2 border-t border-slate-200 flex items-center gap-2 text-[10px]">
+                                <span class="text-slate-500 shrink-0">Stroke:</span>
+                                <input type="color"
+                                       :value="getLegendEntryStrokeColor(idx)"
+                                       @change="updateLegendEntryStrokeColor(idx, $event.target.value)"
+                                       class="w-6 h-5 p-0 border rounded shrink-0 cursor-pointer"
+                                       title="Stroke color">
+                                <input type="number"
+                                       :value="getLegendEntryStrokeWidth(idx)"
+                                       @change="updateLegendEntryStrokeWidth(idx, $event.target.value)"
+                                       class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5"
+                                       placeholder="Width"
+                                       step="0.5"
+                                       min="0"
+                                       title="Stroke width (Enter to apply)">
+                                <button @click="resetLegendEntryStroke(idx)"
+                                        class="text-slate-400 hover:text-slate-600 shrink-0"
+                                        title="Reset stroke to default">
+                                    <i class="ph ph-arrow-counter-clockwise text-xs"></i>
+                                </button>
+                            </div>
                         </div>
                         <div v-if="legendEntries.length === 0" class="text-center text-slate-400 text-sm py-4">
                             No legend entries found
                         </div>
+                    </div>
+
+                    <!-- Reset All Strokes button -->
+                    <div class="px-3 py-2 border-t border-slate-200">
+                        <button @click="resetAllStrokes"
+                                class="w-full text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded flex items-center justify-center gap-1 transition-colors"
+                                title="Reset all stroke colors and widths to default">
+                            <i class="ph ph-arrow-counter-clockwise"></i>
+                            Reset All Strokes
+                        </button>
                     </div>
 
                     <!-- Info message -->
@@ -1269,11 +1385,17 @@
 
             // Legend Editor state
             const showLegendPanel = ref(false);
-            const legendEntries = ref([]);  // [{caption, color, yPos}]
+            const legendEntries = ref([]);  // [{caption, color, yPos, showStroke}]
             const deletedLegendEntries = ref([]);  // Track deleted entries for restoration
             const originalLegendOrder = ref([]);  // Store original order from generation
             const newLegendCaption = ref('');
             const newLegendColor = ref('#808080');
+
+            // Legend stroke overrides: { caption: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth } }
+            const legendStrokeOverrides = reactive({});
+
+            // Original stroke values from SVG generation (gbdraw's auto-determined defaults)
+            const originalSvgStroke = ref({ color: null, width: null });
 
             // Legend Drag state
             const legendDragging = ref(false);
@@ -1680,6 +1802,10 @@
                             const existingOverride = featureColorOverrides[feat.id];
                             const existingCaption = existingOverride?.caption || '';
 
+                            // Get current stroke values from SVG element
+                            const currentStrokeColor = path.getAttribute('stroke') || '#000000';
+                            const currentStrokeWidth = parseFloat(path.getAttribute('stroke-width')) || 0.5;
+
                             clickedFeature.value = {
                                 id: feat.id,
                                 svg_id: svgId,
@@ -1687,7 +1813,12 @@
                                 color: currentColor,
                                 feat: feat,
                                 // Pre-fill with existing caption if available, otherwise empty
-                                legendName: existingCaption
+                                legendName: existingCaption,
+                                // Stroke properties
+                                strokeColor: currentStrokeColor,
+                                strokeWidth: currentStrokeWidth,
+                                originalStrokeColor: currentStrokeColor,
+                                originalStrokeWidth: currentStrokeWidth
                             };
                             // Position popup near click
                             clickedFeaturePos.x = Math.min(e.clientX + 10, window.innerWidth - 280);
@@ -1804,6 +1935,409 @@
                 colorScopeDialog.siblingCount = 0;
                 colorScopeDialog.existingCaptionRule = null;
                 colorScopeDialog.existingCaptionColor = null;
+            };
+
+            // Update stroke from the popup picker (for individual feature)
+            const updateClickedFeatureStroke = (strokeColor, strokeWidth) => {
+                if (!clickedFeature.value) return;
+                if (!svgContainer.value) return;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const svgId = clickedFeature.value.svg_id;
+                const elements = svg.querySelectorAll(`#${CSS.escape(svgId)}`);
+
+                elements.forEach(el => {
+                    if (strokeColor !== null) {
+                        el.setAttribute('stroke', strokeColor);
+                        clickedFeature.value.strokeColor = strokeColor;
+                    }
+                    if (strokeWidth !== null) {
+                        const widthVal = parseFloat(strokeWidth);
+                        if (!isNaN(widthVal)) {
+                            el.setAttribute('stroke-width', widthVal);
+                            clickedFeature.value.strokeWidth = widthVal;
+                        }
+                    }
+                });
+
+                // Save to results
+                skipCaptureBaseConfig.value = true;
+                const resultIdx = selectedResultIndex.value;
+                if (resultIdx >= 0 && results.value.length > resultIdx) {
+                    const serializer = new XMLSerializer();
+                    results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                }
+            };
+
+            // Reset stroke to original values for clicked feature (gbdraw's auto-determined defaults)
+            const resetClickedFeatureStroke = () => {
+                if (!clickedFeature.value) return;
+                if (!svgContainer.value) return;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const svgId = clickedFeature.value.svg_id;
+                const elements = svg.querySelectorAll(`#${CSS.escape(svgId)}`);
+
+                // Use captured original values - restore exact state (including no stroke)
+                const originalColor = originalSvgStroke.value.color;
+                const originalWidth = originalSvgStroke.value.width;
+
+                elements.forEach(el => {
+                    if (originalColor === null) {
+                        el.removeAttribute('stroke');
+                    } else {
+                        el.setAttribute('stroke', originalColor);
+                    }
+                    if (originalWidth === null) {
+                        el.removeAttribute('stroke-width');
+                    } else {
+                        el.setAttribute('stroke-width', originalWidth);
+                    }
+                });
+
+                // Update UI state
+                clickedFeature.value.strokeColor = originalColor || '';
+                clickedFeature.value.strokeWidth = originalWidth ?? '';
+
+                // Save to results
+                skipCaptureBaseConfig.value = true;
+                const resultIdx = selectedResultIndex.value;
+                if (resultIdx >= 0 && results.value.length > resultIdx) {
+                    const serializer = new XMLSerializer();
+                    results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                }
+            };
+
+            // Reset fill color dialog state
+            const resetColorDialog = reactive({
+                show: false,
+                caption: '',
+                defaultColor: '',
+                siblingCount: 0
+            });
+
+            // Reset fill color to default palette color for clicked feature
+            const resetClickedFeatureFillColor = () => {
+                if (!clickedFeature.value) return;
+                if (!svgContainer.value) return;
+
+                const feat = clickedFeature.value.feat;
+                if (!feat) return;
+
+                // Get the default color from the current palette
+                const defaultColor = currentColors.value[feat.type];
+                if (!defaultColor) {
+                    console.warn('No default color found for feature type:', feat.type);
+                    return;
+                }
+
+                // Get caption for this feature
+                const caption = feat.product || feat.gene || feat.locus_tag || feat.note || `${feat.type} at ${feat.start}..${feat.end}`;
+
+                // Count siblings with the same caption
+                const getFeatureCaption = (f) => f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
+                const siblings = extractedFeatures.value.filter(f => getFeatureCaption(f) === caption && f.svg_id !== clickedFeature.value.svg_id);
+
+                if (siblings.length > 0) {
+                    // Show dialog to let user choose
+                    resetColorDialog.show = true;
+                    resetColorDialog.caption = caption;
+                    resetColorDialog.defaultColor = defaultColor;
+                    resetColorDialog.siblingCount = siblings.length;
+                } else {
+                    // No siblings, just reset this one
+                    doResetFillColor('this');
+                }
+            };
+
+            // Handle reset color dialog choice
+            const handleResetColorChoice = async (choice) => {
+                resetColorDialog.show = false;
+                await doResetFillColor(choice);
+            };
+
+            // Actually perform the fill color reset
+            const doResetFillColor = async (choice) => {
+                if (!clickedFeature.value) return;
+                if (!svgContainer.value) return;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const feat = clickedFeature.value.feat;
+                if (!feat) return;
+
+                const defaultColor = resetColorDialog.defaultColor || currentColors.value[feat.type];
+                const caption = resetColorDialog.caption || feat.product || feat.gene || feat.locus_tag || feat.note || `${feat.type} at ${feat.start}..${feat.end}`;
+                const svgId = clickedFeature.value.svg_id;
+
+                if (choice === 'this' || choice === 'this_with_legend') {
+                    // Reset only this feature
+                    const elements = svg.querySelectorAll(`#${CSS.escape(svgId)}`);
+                    elements.forEach(el => {
+                        el.setAttribute('fill', defaultColor);
+                    });
+
+                    // Update UI state
+                    clickedFeature.value.color = defaultColor;
+
+                    // Remove any specific color rule for this feature
+                    const ruleIdx = manualSpecificRules.findIndex(r =>
+                        r.qual === 'hash' && r.val === svgId
+                    );
+                    if (ruleIdx !== -1) {
+                        manualSpecificRules.splice(ruleIdx, 1);
+                    }
+
+                    // Add legend entry if requested
+                    if (choice === 'this_with_legend') {
+                        console.log(`Attempting to add legend entry: caption="${caption}", color="${defaultColor}"`);
+                        // Always add a legend entry - addLegendEntry will handle duplicate captions
+                        // by appending a number if needed
+                        const addedCaption = await addLegendEntry(caption, defaultColor);
+                        console.log(`addLegendEntry returned: ${addedCaption}`);
+                        if (addedCaption) {
+                            extractLegendEntries();
+                            console.log(`Added legend entry: ${addedCaption} with color: ${defaultColor}`);
+                        } else {
+                            console.error(`Failed to add legend entry for caption="${caption}"`);
+                        }
+                    }
+
+                    console.log(`Reset fill color to default (${defaultColor}) for feature: ${svgId}`);
+                } else if (choice === 'all') {
+                    // Reset all features with the same caption
+                    const getFeatureCaption = (f) => f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
+                    const matchingFeatures = extractedFeatures.value.filter(f => getFeatureCaption(f) === caption);
+
+                    for (const matchFeat of matchingFeatures) {
+                        const elements = svg.querySelectorAll(`#${CSS.escape(matchFeat.svg_id)}`);
+                        elements.forEach(el => {
+                            el.setAttribute('fill', defaultColor);
+                        });
+                    }
+
+                    // Update UI state for clicked feature
+                    clickedFeature.value.color = defaultColor;
+
+                    // Remove all specific color rules for features with this caption
+                    for (let i = manualSpecificRules.length - 1; i >= 0; i--) {
+                        const rule = manualSpecificRules[i];
+                        if (rule.cap === caption) {
+                            manualSpecificRules.splice(i, 1);
+                        }
+                    }
+
+                    // Also remove the legend entry for this caption if it exists
+                    const legendIdx = legendEntries.value.findIndex(e => e.caption === caption);
+                    if (legendIdx !== -1) {
+                        await removeLegendEntry(caption);
+                        extractLegendEntries();
+                    }
+
+                    console.log(`Reset fill color to default (${defaultColor}) for all ${matchingFeatures.length} features with caption: ${caption}`);
+                }
+
+                // Save to results
+                skipCaptureBaseConfig.value = true;
+                const resultIdx = selectedResultIndex.value;
+                if (resultIdx >= 0 && results.value.length > resultIdx) {
+                    const serializer = new XMLSerializer();
+                    results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                }
+
+                // Close the feature popup
+                clickedFeature.value = null;
+            };
+
+            // Apply current stroke to all siblings (features with the same caption AND same fill color)
+            const applyStrokeToAllSiblings = async () => {
+                if (!clickedFeature.value) return;
+                if (!svgContainer.value) return;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const currentStrokeColor = clickedFeature.value.strokeColor;
+                const currentStrokeWidth = clickedFeature.value.strokeWidth;
+                const currentFillColor = clickedFeature.value.color;  // The fill color of the clicked feature
+
+                // Get the caption for the clicked feature
+                // The actual feature data is in clickedFeature.value.feat
+                const feat = clickedFeature.value.feat;
+                if (!feat) {
+                    console.warn('No feature data found in clickedFeature');
+                    return;
+                }
+                const caption = feat.product || feat.gene || feat.locus_tag || feat.note || `${feat.type} at ${feat.start}..${feat.end}`;
+
+                // Find all features with the same caption AND same fill color
+                const getFeatureCaption = (f) => f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
+                const siblingFeatures = extractedFeatures.value.filter(f => {
+                    if (getFeatureCaption(f) !== caption) return false;
+                    // Check fill color matches
+                    const el = svg.querySelector(`#${CSS.escape(f.svg_id)}`);
+                    if (!el) return false;
+                    const fillColor = el.getAttribute('fill');
+                    return fillColor && fillColor.toLowerCase() === currentFillColor?.toLowerCase();
+                });
+
+                let updatedCount = 0;
+                for (const siblingFeat of siblingFeatures) {
+                    const elements = svg.querySelectorAll(`#${CSS.escape(siblingFeat.svg_id)}`);
+                    elements.forEach(el => {
+                        if (currentStrokeColor) {
+                            el.setAttribute('stroke', currentStrokeColor);
+                            updatedCount++;
+                        }
+                        if (currentStrokeWidth !== null && currentStrokeWidth !== '') {
+                            el.setAttribute('stroke-width', parseFloat(currentStrokeWidth));
+                            updatedCount++;
+                        }
+                    });
+                }
+
+                console.log(`Applied stroke to ${siblingFeatures.length} features with caption="${caption}" and color="${currentFillColor}"`);
+
+                // Update legend rect stroke - find legend entry by caption AND color
+                const legendGroups = getAllFeatureLegendGroups(svg);
+                for (const targetGroup of legendGroups) {
+                    const texts = targetGroup.querySelectorAll('text');
+                    for (const t of texts) {
+                        if (t.textContent?.trim() === caption.trim()) {
+                            const transform = t.getAttribute('transform');
+                            if (transform) {
+                                const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                                if (match) {
+                                    const textY = parseFloat(match[1]);
+                                    const paths = targetGroup.querySelectorAll('path');
+                                    paths.forEach(p => {
+                                        const pt = p.getAttribute('transform');
+                                        const fill = p.getAttribute('fill');
+                                        // Match by Y position AND fill color
+                                        if (pt && fill && fill.toLowerCase() === currentFillColor?.toLowerCase()) {
+                                            const pMatch = pt.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                                            if (pMatch && Math.abs(parseFloat(pMatch[1]) - textY) < 1) {
+                                                if (currentStrokeColor) {
+                                                    p.setAttribute('stroke', currentStrokeColor);
+                                                }
+                                                if (currentStrokeWidth !== null && currentStrokeWidth !== '') {
+                                                    p.setAttribute('stroke-width', parseFloat(currentStrokeWidth));
+                                                }
+                                                console.log(`Updated legend rect stroke for "${caption}" (color: ${fill})`);
+                                            }
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Update legend stroke overrides - create legend entry if it doesn't exist
+                let legendEntry = legendEntries.value.find(e => e.caption === caption);
+                if (!legendEntry) {
+                    // Create a new legend entry with the current fill color
+                    const fillColor = clickedFeature.value.color || '#cccccc';
+
+                    // Add to SVG legend using existing function (requires pyodide)
+                    const addedCaption = await addLegendEntry(caption, fillColor);
+                    if (addedCaption) {
+                        // Refresh legend entries to pick up the new entry
+                        extractLegendEntries();
+                        // Find the newly created entry
+                        legendEntry = legendEntries.value.find(e => e.caption === addedCaption);
+                        if (legendEntry) {
+                            legendEntry.showStroke = true;  // Show stroke controls since we're applying stroke
+                        }
+                        console.log(`Created new legend entry for caption: ${addedCaption} with color: ${fillColor}`);
+                    } else {
+                        // If SVG legend addition failed, at least add to legendEntries for UI
+                        legendEntry = {
+                            caption: caption,
+                            color: fillColor,
+                            visible: true,
+                            showStroke: true
+                        };
+                        legendEntries.value.push(legendEntry);
+                        console.log(`Added legend entry to UI only (SVG legend not available): ${caption}`);
+                    }
+                }
+
+                // Update stroke overrides
+                if (!legendStrokeOverrides[caption]) {
+                    legendStrokeOverrides[caption] = {};
+                }
+                if (currentStrokeColor) {
+                    legendStrokeOverrides[caption].strokeColor = currentStrokeColor;
+                }
+                if (currentStrokeWidth !== null && currentStrokeWidth !== '') {
+                    legendStrokeOverrides[caption].strokeWidth = parseFloat(currentStrokeWidth);
+                }
+
+                // Save to results
+                skipCaptureBaseConfig.value = true;
+                const resultIdx = selectedResultIndex.value;
+                if (resultIdx >= 0 && results.value.length > resultIdx) {
+                    const serializer = new XMLSerializer();
+                    results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                }
+
+                console.log(`Applied stroke (color: ${currentStrokeColor}, width: ${currentStrokeWidth}) to ${siblingFeatures.length} features with caption: ${caption}`);
+            };
+
+            // Re-apply stroke overrides to SVG (called after fresh generation to preserve customizations)
+            const reapplyStrokeOverrides = () => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                const overrideCount = Object.keys(legendStrokeOverrides).length;
+                if (overrideCount === 0) {
+                    console.log('[DEBUG] No stroke overrides to reapply');
+                    return;
+                }
+
+                console.log(`[DEBUG] Reapplying ${overrideCount} stroke overrides to new SVG`);
+
+                const getFeatureCaption = (f) => f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
+                let totalUpdated = 0;
+
+                for (const [caption, overrides] of Object.entries(legendStrokeOverrides)) {
+                    const { strokeColor, strokeWidth } = overrides;
+                    if (!strokeColor && strokeWidth === undefined) continue;
+
+                    // Find all features with this caption
+                    const matchingFeatures = extractedFeatures.value.filter(f => getFeatureCaption(f) === caption);
+
+                    for (const feat of matchingFeatures) {
+                        const elements = svg.querySelectorAll(`#${CSS.escape(feat.svg_id)}`);
+                        elements.forEach(el => {
+                            if (strokeColor) {
+                                el.setAttribute('stroke', strokeColor);
+                            }
+                            if (strokeWidth !== undefined && strokeWidth !== null) {
+                                el.setAttribute('stroke-width', strokeWidth);
+                            }
+                            totalUpdated++;
+                        });
+                    }
+                }
+
+                if (totalUpdated > 0) {
+                    // Save the updated SVG
+                    skipCaptureBaseConfig.value = true;
+                    const resultIdx = selectedResultIndex.value;
+                    if (resultIdx >= 0 && results.value.length > resultIdx) {
+                        const serializer = new XMLSerializer();
+                        results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                    }
+                    console.log(`[DEBUG] Reapplied stroke overrides to ${totalUpdated} elements`);
+                }
             };
 
             // Watch for SVG content changes to reattach handlers
@@ -2283,7 +2817,11 @@
 
             // Function to add a legend entry dynamically using Pyodide
             const addLegendEntry = async (caption, color) => {
-                if (!svgContainer.value || !pyodideReady.value) return false;
+                console.log(`addLegendEntry called with caption="${caption}", color="${color}"`);
+                if (!svgContainer.value || !pyodideReady.value) {
+                    console.log(`addLegendEntry early return: svgContainer=${!!svgContainer.value}, pyodideReady=${pyodideReady.value}`);
+                    return false;
+                }
 
                 const svg = svgContainer.value.querySelector('svg');
                 if (!svg) return false;
@@ -2326,6 +2864,7 @@
                                         const existingColor = r.getAttribute('fill');
                                         if (existingColor === color) {
                                             // Same caption, same color - no change needed
+                                            console.log(`addLegendEntry: same caption and color already exist, returning: ${finalCaption}`);
                                             return finalCaption;
                                         }
                                         // Same caption, different color - need unique name
@@ -3317,7 +3856,11 @@ json.dumps({"width": width})
                         color = bestMatch;
                     }
 
-                    entries.push({ caption, color, xPos, yPos });
+                    // Preserve showStroke state from existing entry with same caption
+                    const existingEntry = legendEntries.value.find(e => e.caption === caption);
+                    const showStroke = existingEntry?.showStroke || false;
+
+                    entries.push({ caption, color, xPos, yPos, showStroke });
                 });
 
                 // Sort by Y position first, then by X position (for horizontal layout)
@@ -3425,6 +3968,368 @@ json.dumps({"width": width})
                 if (resultIdx >= 0 && results.value.length > resultIdx) {
                     const serializer = new XMLSerializer();
                     results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                }
+            };
+
+            // Get stroke color for a legend entry (from overrides or from SVG default)
+            const getLegendEntryStrokeColor = (idx) => {
+                const entry = legendEntries.value[idx];
+                if (!entry) return '#000000';
+                const override = legendStrokeOverrides[entry.caption];
+                if (override?.strokeColor) return override.strokeColor;
+                // Return original if stored, otherwise default black
+                return override?.originalStrokeColor || '#000000';
+            };
+
+            // Get stroke width for a legend entry
+            const getLegendEntryStrokeWidth = (idx) => {
+                const entry = legendEntries.value[idx];
+                if (!entry) return '';
+                const override = legendStrokeOverrides[entry.caption];
+                if (override?.strokeWidth !== undefined && override?.strokeWidth !== null) return override.strokeWidth;
+                // Return original if stored
+                return override?.originalStrokeWidth ?? '';
+            };
+
+            // Update stroke color for a legend entry and apply to matching features
+            const updateLegendEntryStrokeColor = (idx, color) => {
+                const entry = legendEntries.value[idx];
+                if (!entry) return;
+
+                // Initialize override if not exists (capture original values)
+                if (!legendStrokeOverrides[entry.caption]) {
+                    const originalValues = captureOriginalStrokeValues(entry.caption);
+                    legendStrokeOverrides[entry.caption] = {
+                        originalStrokeColor: originalValues.strokeColor,
+                        originalStrokeWidth: originalValues.strokeWidth
+                    };
+                }
+                legendStrokeOverrides[entry.caption].strokeColor = color;
+
+                // Apply to SVG features
+                applyStrokeToFeaturesByCaption(entry.caption, color, null);
+            };
+
+            // Update stroke width for a legend entry and apply to matching features
+            const updateLegendEntryStrokeWidth = (idx, width) => {
+                const entry = legendEntries.value[idx];
+                if (!entry) return;
+
+                const widthVal = width === '' ? null : parseFloat(width);
+
+                // Initialize override if not exists
+                if (!legendStrokeOverrides[entry.caption]) {
+                    const originalValues = captureOriginalStrokeValues(entry.caption);
+                    legendStrokeOverrides[entry.caption] = {
+                        originalStrokeColor: originalValues.strokeColor,
+                        originalStrokeWidth: originalValues.strokeWidth
+                    };
+                }
+                legendStrokeOverrides[entry.caption].strokeWidth = widthVal;
+
+                // Apply to SVG features
+                applyStrokeToFeaturesByCaption(entry.caption, null, widthVal);
+            };
+
+            // Reset stroke for a legend entry to original values
+            const resetLegendEntryStroke = (idx) => {
+                const entry = legendEntries.value[idx];
+                if (!entry) return;
+                if (!svgContainer.value) return;
+
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                // Get original stroke values (can be null)
+                const originalColor = originalSvgStroke.value.color;
+                const originalWidth = originalSvgStroke.value.width;
+
+                // Find all features matching this caption by fill color
+                const legendFillColor = entry.color;
+                let updatedCount = 0;
+
+                if (legendFillColor) {
+                    const normalizedColor = legendFillColor.toLowerCase();
+                    const featurePaths = svg.querySelectorAll('path[id^="f"]');
+                    featurePaths.forEach(path => {
+                        const fill = path.getAttribute('fill');
+                        if (fill && fill.toLowerCase() === normalizedColor) {
+                            if (originalColor === null) {
+                                path.removeAttribute('stroke');
+                            } else {
+                                path.setAttribute('stroke', originalColor);
+                            }
+                            if (originalWidth === null) {
+                                path.removeAttribute('stroke-width');
+                            } else {
+                                path.setAttribute('stroke-width', originalWidth);
+                            }
+                            updatedCount++;
+                        }
+                    });
+                }
+
+                // Remove override
+                delete legendStrokeOverrides[entry.caption];
+
+                // Save to results
+                if (updatedCount > 0) {
+                    skipCaptureBaseConfig.value = true;
+                    const resultIdx = selectedResultIndex.value;
+                    if (resultIdx >= 0 && results.value.length > resultIdx) {
+                        const serializer = new XMLSerializer();
+                        results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                    }
+                }
+            };
+
+            // Reset ALL strokes to original values (gbdraw's auto-determined defaults)
+            const resetAllStrokes = () => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                // Get original stroke values captured from SVG generation (can be null)
+                const originalColor = originalSvgStroke.value.color;
+                const originalWidth = originalSvgStroke.value.width;
+
+                // Reset all feature paths
+                const featurePaths = svg.querySelectorAll('path[id^="f"]');
+                let updatedCount = 0;
+                featurePaths.forEach(path => {
+                    if (originalColor === null) {
+                        path.removeAttribute('stroke');
+                    } else {
+                        path.setAttribute('stroke', originalColor);
+                    }
+                    if (originalWidth === null) {
+                        path.removeAttribute('stroke-width');
+                    } else {
+                        path.setAttribute('stroke-width', originalWidth);
+                    }
+                    updatedCount++;
+                });
+
+                // Reset legend rect strokes too
+                const legendGroups = getAllFeatureLegendGroups(svg);
+                for (const targetGroup of legendGroups) {
+                    const paths = targetGroup.querySelectorAll('path');
+                    paths.forEach(p => {
+                        const fill = p.getAttribute('fill');
+                        if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                            if (originalColor === null) {
+                                p.removeAttribute('stroke');
+                            } else {
+                                p.setAttribute('stroke', originalColor);
+                            }
+                            if (originalWidth === null) {
+                                p.removeAttribute('stroke-width');
+                            } else {
+                                p.setAttribute('stroke-width', originalWidth);
+                            }
+                        }
+                    });
+                }
+
+                // Clear all stroke overrides
+                Object.keys(legendStrokeOverrides).forEach(key => delete legendStrokeOverrides[key]);
+
+                // Save to results
+                if (updatedCount > 0) {
+                    skipCaptureBaseConfig.value = true;
+                    const resultIdx = selectedResultIndex.value;
+                    if (resultIdx >= 0 && results.value.length > resultIdx) {
+                        const serializer = new XMLSerializer();
+                        results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                    }
+                    console.log(`Reset all strokes: updated ${updatedCount} elements to original (color=${originalColor}, width=${originalWidth})`);
+                }
+            };
+
+            // Capture original stroke values for features matching a caption
+            const captureOriginalStrokeValues = (caption) => {
+                if (!svgContainer.value) return { strokeColor: '#000000', strokeWidth: 0.5 };
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return { strokeColor: '#000000', strokeWidth: 0.5 };
+
+                // Get the fill color for this legend entry to match features by color
+                const legendEntry = legendEntries.value.find(e => e.caption === caption);
+                const legendFillColor = legendEntry?.color;
+
+                // Find features matching this caption
+                const matchingFeatures = extractedFeatures.value.filter(f => {
+                    const featureCaption = f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
+                    return featureCaption === caption;
+                });
+
+                // Also check manualSpecificRules for caption matches
+                const ruleMatch = manualSpecificRules.find(r => r.cap === caption);
+                if (ruleMatch) {
+                    const ruleFeatures = extractedFeatures.value.filter(f =>
+                        f.type === ruleMatch.feat &&
+                        (ruleMatch.qual === 'hash' ? f.svg_id === ruleMatch.val :
+                         f[ruleMatch.qual] === ruleMatch.val)
+                    );
+                    matchingFeatures.push(...ruleFeatures);
+                }
+
+                // Get first matching element's stroke values
+                for (const feat of matchingFeatures) {
+                    const el = svg.querySelector(`#${CSS.escape(feat.svg_id)}`);
+                    if (el) {
+                        return {
+                            strokeColor: el.getAttribute('stroke') || '#000000',
+                            strokeWidth: parseFloat(el.getAttribute('stroke-width')) || 0.5
+                        };
+                    }
+                }
+
+                // Try to find by fill color if no match found by caption
+                if (legendFillColor) {
+                    const normalizedLegendColor = legendFillColor.toLowerCase();
+                    const featurePaths = svg.querySelectorAll('path[id^="f"]');
+                    for (const path of featurePaths) {
+                        const fill = path.getAttribute('fill');
+                        if (fill && fill.toLowerCase() === normalizedLegendColor) {
+                            return {
+                                strokeColor: path.getAttribute('stroke') || '#000000',
+                                strokeWidth: parseFloat(path.getAttribute('stroke-width')) || 0.5
+                            };
+                        }
+                    }
+                }
+
+                return { strokeColor: '#000000', strokeWidth: 0.5 };
+            };
+
+            // Apply stroke settings to all features matching a caption
+            const applyStrokeToFeaturesByCaption = (caption, strokeColor, strokeWidth) => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                let updatedCount = 0;
+                const processedIds = new Set();  // Track processed feature IDs to avoid duplicates
+
+                // Get the fill color for this legend entry to match features by color
+                const legendEntry = legendEntries.value.find(e => e.caption === caption);
+                const legendFillColor = legendEntry?.color;
+
+                // Find all features matching this caption via manualSpecificRules
+                const matchingRules = manualSpecificRules.filter(r => r.cap === caption);
+
+                for (const rule of matchingRules) {
+                    const matchingFeatures = extractedFeatures.value.filter(f => {
+                        if (rule.qual === 'hash') {
+                            return f.svg_id === rule.val;
+                        }
+                        return f.type === rule.feat && f[rule.qual] === rule.val;
+                    });
+
+                    for (const feat of matchingFeatures) {
+                        if (processedIds.has(feat.svg_id)) continue;
+                        processedIds.add(feat.svg_id);
+                        const elements = svg.querySelectorAll(`#${CSS.escape(feat.svg_id)}`);
+                        elements.forEach(el => {
+                            if (strokeColor !== null) {
+                                el.setAttribute('stroke', strokeColor);
+                                updatedCount++;
+                            }
+                            if (strokeWidth !== null) {
+                                el.setAttribute('stroke-width', strokeWidth);
+                                updatedCount++;
+                            }
+                        });
+                    }
+                }
+
+                // Also find features directly by caption (for features without manual rules)
+                const directMatches = extractedFeatures.value.filter(f => {
+                    const featureCaption = f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
+                    return featureCaption === caption;
+                });
+
+                for (const feat of directMatches) {
+                    if (processedIds.has(feat.svg_id)) continue;
+                    processedIds.add(feat.svg_id);
+                    const elements = svg.querySelectorAll(`#${CSS.escape(feat.svg_id)}`);
+                    elements.forEach(el => {
+                        if (strokeColor !== null) {
+                            el.setAttribute('stroke', strokeColor);
+                            updatedCount++;
+                        }
+                        if (strokeWidth !== null) {
+                            el.setAttribute('stroke-width', strokeWidth);
+                            updatedCount++;
+                        }
+                    });
+                }
+
+                // Match by fill color (for features that have the same fill as legend entry)
+                if (legendFillColor) {
+                    const normalizedLegendColor = legendFillColor.toLowerCase();
+                    const featurePaths = svg.querySelectorAll('path[id^="f"]');
+                    featurePaths.forEach(path => {
+                        const fill = path.getAttribute('fill');
+                        if (fill && fill.toLowerCase() === normalizedLegendColor) {
+                            const pathId = path.getAttribute('id');
+                            if (pathId && !processedIds.has(pathId)) {
+                                processedIds.add(pathId);
+                                if (strokeColor !== null) {
+                                    path.setAttribute('stroke', strokeColor);
+                                    updatedCount++;
+                                }
+                                if (strokeWidth !== null) {
+                                    path.setAttribute('stroke-width', strokeWidth);
+                                    updatedCount++;
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Also apply to legend rect stroke (if visible)
+                const legendGroups = getAllFeatureLegendGroups(svg);
+                for (const targetGroup of legendGroups) {
+                    const texts = targetGroup.querySelectorAll('text');
+                    for (const t of texts) {
+                        if (t.textContent?.trim() === caption.trim()) {
+                            const transform = t.getAttribute('transform');
+                            if (transform) {
+                                const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                                if (match) {
+                                    const textY = parseFloat(match[1]);
+                                    const paths = targetGroup.querySelectorAll('path');
+                                    paths.forEach(p => {
+                                        const pt = p.getAttribute('transform');
+                                        if (pt) {
+                                            const pMatch = pt.match(/translate\([^,]+,\s*([\d.-]+)\)/);
+                                            if (pMatch && Math.abs(parseFloat(pMatch[1]) - textY) < 1) {
+                                                if (strokeColor !== null) {
+                                                    p.setAttribute('stroke', strokeColor);
+                                                }
+                                                if (strokeWidth !== null) {
+                                                    p.setAttribute('stroke-width', strokeWidth);
+                                                }
+                                            }
+                                        }
+                                    });
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (updatedCount > 0) {
+                    // Save to results
+                    skipCaptureBaseConfig.value = true;
+                    const resultIdx = selectedResultIndex.value;
+                    if (resultIdx >= 0 && results.value.length > resultIdx) {
+                        const serializer = new XMLSerializer();
+                        results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                    }
+                    console.log(`Applied stroke to ${updatedCount} elements for caption "${caption}"`);
                 }
             };
 
@@ -3781,6 +4686,20 @@ json.dumps({"width": width})
                 }
                 legendCurrentOffset.x = 0;
                 legendCurrentOffset.y = 0;
+
+                // Reset all stroke overrides to original values
+                for (const caption of Object.keys(legendStrokeOverrides)) {
+                    const override = legendStrokeOverrides[caption];
+                    if (override) {
+                        applyStrokeToFeaturesByCaption(
+                            caption,
+                            override.originalStrokeColor || null,
+                            override.originalStrokeWidth ?? null
+                        );
+                    }
+                }
+                // Clear all stroke overrides
+                Object.keys(legendStrokeOverrides).forEach(key => delete legendStrokeOverrides[key]);
 
                 // Also restore any deleted legend entries
                 restoreDeletedLegendEntries();
@@ -4479,6 +5398,25 @@ json.dumps({"width": width})
                 }
             });
 
+            // Capture original stroke values from SVG (gbdraw's auto-determined defaults)
+            const captureOriginalStroke = () => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+
+                // Find first feature path and capture its stroke values
+                const firstFeaturePath = svg.querySelector('path[id^="f"]');
+                if (firstFeaturePath) {
+                    // Preserve exact values including null/none - don't default
+                    const strokeColor = firstFeaturePath.getAttribute('stroke'); // null, 'none', or color
+                    const strokeWidthAttr = firstFeaturePath.getAttribute('stroke-width');
+                    const strokeWidth = strokeWidthAttr !== null ? parseFloat(strokeWidthAttr) : null;
+
+                    originalSvgStroke.value = { color: strokeColor, width: strokeWidth };
+                    console.log(`Captured original stroke: color=${strokeColor}, width=${strokeWidth}`);
+                }
+            };
+
             // Capture base configuration from newly generated SVG (for non-accumulating repositioning)
             const captureBaseConfig = () => {
                 if (!svgContainer.value) return;
@@ -4629,6 +5567,7 @@ json.dumps({"width": width})
                     if (!isIncrementalEdit) {
                         // Full capture for fresh generation
                         captureBaseConfig();
+                        captureOriginalStroke();
                         console.log('[DEBUG] Full base config capture (fresh generation)');
 
                         // Reset canvas padding for new SVG
@@ -4636,6 +5575,9 @@ json.dumps({"width": width})
                         canvasPadding.right = 0;
                         canvasPadding.bottom = 0;
                         canvasPadding.left = 0;
+
+                        // Re-apply stroke overrides to new SVG (preserve user customizations)
+                        reapplyStrokeOverrides();
                     } else if (savedBaseTransformsById && savedBaseTransformsById.size > 0) {
                         // Incremental edit - remap saved base transforms to new elements
                         console.log('[DEBUG] Incremental edit - remapping base transforms');
@@ -5725,12 +6667,18 @@ json.dumps({"width": width})
                 featureColorOverrides, getFeatureColor, setFeatureColor, canEditFeatureColor,
                 // SVG Feature Click
                 svgContainer, clickedFeature, clickedFeaturePos, updateClickedFeatureColor,
+                resetClickedFeatureFillColor, updateClickedFeatureStroke, resetClickedFeatureStroke, applyStrokeToAllSiblings,
                 // Color Scope Dialog
                 colorScopeDialog, handleColorScopeChoice,
+                // Reset Color Dialog
+                resetColorDialog, handleResetColorChoice,
                 // Legend Editor
                 showLegendPanel, legendEntries, newLegendCaption, newLegendColor,
                 updateLegendEntryColor, updateLegendEntryCaption, deleteLegendEntry, addNewLegendEntry,
                 moveLegendEntryUp, moveLegendEntryDown, sortLegendEntries, sortLegendEntriesByDefault, resetLegendPosition,
+                // Legend Entry Stroke
+                getLegendEntryStrokeColor, getLegendEntryStrokeWidth,
+                updateLegendEntryStrokeColor, updateLegendEntryStrokeWidth, resetLegendEntryStroke, resetAllStrokes,
                 // Diagram Drag & Canvas
                 resetAllPositions, canvasPadding, showCanvasControls, resetCanvasPadding,
                 downloadDpi, runAnalysis, downloadSVG, downloadPNG, downloadPDF,
