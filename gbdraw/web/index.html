@@ -5274,9 +5274,25 @@ json.dumps({"width": width})
                 diagramOffset.x = 0;
                 diagramOffset.y = 0;
 
+                console.log('[DEBUG] resetDiagramPosition called');
+                console.log('[DEBUG] diagramElements count:', diagramElements.value.length);
+                console.log('[DEBUG] originalTransforms size:', diagramElementOriginalTransforms.value.size);
+                // Log all entries in originalTransforms Map
+                console.log('[DEBUG] All originalTransforms entries:');
+                diagramElementOriginalTransforms.value.forEach((transform, mapEl) => {
+                    console.log(`[DEBUG]   Map entry: ${mapEl.id} -> (${transform.x}, ${transform.y})`);
+                });
+
                 // Restore original transforms for all diagram elements
-                diagramElements.value.forEach(el => {
+                diagramElements.value.forEach((el, idx) => {
                     const original = diagramElementOriginalTransforms.value.get(el);
+                    const currentTransform = el.getAttribute('transform');
+                    // Check if element reference matches any key in the Map
+                    let foundInMap = false;
+                    diagramElementOriginalTransforms.value.forEach((_, mapEl) => {
+                        if (mapEl === el) foundInMap = true;
+                    });
+                    console.log(`[DEBUG] Reset element ${idx} (${el.id}): current="${currentTransform}", foundInMap=${foundInMap}, original=`, original);
                     if (original && (original.x !== 0 || original.y !== 0)) {
                         el.setAttribute('transform', `translate(${original.x}, ${original.y})`);
                     } else {
@@ -5462,9 +5478,11 @@ json.dumps({"width": width})
 
                             // Update current transforms (for drag operations)
                             diagramElementOriginalTransforms.value.set(el, { x: newX, y: newY });
+                            console.log(`[DEBUG] repositionForLegendChange UPDATED originalTransforms for ${el.id}: (${newX}, ${newY})`);
                         });
                         diagramOffset.x = 0;
                         diagramOffset.y = 0;
+                        console.log(`[DEBUG] repositionForLegendChange FINISHED updating ${diagramElements.value.length} elements`);
                     }
 
                 } else {
@@ -5827,8 +5845,10 @@ json.dumps({"width": width})
             // Discover and setup draggable diagram elements
             // Store actual DOM elements since IDs can be duplicated (record and definition share same ID)
             const diagramElements = ref([]);
+            let setupDiagramDragCallCount = 0;  // Debug counter
 
             const setupDiagramDrag = (preserveOffset = false) => {
+                setupDiagramDragCallCount++;
                 if (!svgContainer.value) return;
                 const svg = svgContainer.value.querySelector('svg');
                 if (!svg) return;
@@ -5889,20 +5909,30 @@ json.dumps({"width": width})
 
                 // Store original transforms for each element
                 const originalTransforms = new Map();
-                foundElements.forEach(el => {
+                console.log(`[DEBUG] ========== setupDiagramDrag CALL #${setupDiagramDragCallCount} ==========`);
+                console.log(`[DEBUG] setupDiagramDrag: preserveOffset=${preserveOffset}, offset=(${diagramOffset.x}, ${diagramOffset.y}), generatedLegendPosition=${generatedLegendPosition.value}`);
+                foundElements.forEach((el, idx) => {
                     const transform = parseTransform(el.getAttribute('transform'));
+                    console.log(`[DEBUG] setupDiagramDrag element ${idx} (${el.id}): DOM transform=(${transform.x}, ${transform.y})`);
                     if (preserveOffset && (diagramOffset.x !== 0 || diagramOffset.y !== 0)) {
                         // For incremental edits, the current DOM transform includes the user's drag offset.
                         // Subtract the offset to get the "true" original transform for correct drag behavior.
-                        originalTransforms.set(el, {
+                        const adjusted = {
                             x: transform.x - diagramOffset.x,
                             y: transform.y - diagramOffset.y
-                        });
+                        };
+                        console.log(`[DEBUG] setupDiagramDrag element ${idx}: adjusted to (${adjusted.x}, ${adjusted.y})`);
+                        originalTransforms.set(el, adjusted);
                     } else {
                         originalTransforms.set(el, transform);
                     }
                 });
                 diagramElementOriginalTransforms.value = originalTransforms;
+                // Debug: Log the final originalTransforms that were set
+                console.log(`[DEBUG] setupDiagramDrag FINISHED: Set ${originalTransforms.size} original transforms`);
+                originalTransforms.forEach((transform, el) => {
+                    console.log(`[DEBUG]   -> ${el.id}: (${transform.x}, ${transform.y})`);
+                });
 
                 // Set cursor on all diagram elements
                 foundElements.forEach(el => {
@@ -6226,25 +6256,34 @@ json.dumps({"width": width})
                         diagramElementBaseTransforms.value = newBaseTransforms;
                         debugLog('Remapped', newBaseTransforms.size, 'base transforms to new elements');
 
-                        // After DOM update, reapply legend position if it differs from generated position
+                        // After DOM update, reapply legend position if it differs from CURRENT position
                         // This is needed because Python regenerates SVG with the original position
-                        // BUT skip if this watch was triggered by repositionForLegendChange itself
+                        // BUT skip if:
+                        // 1. This watch was triggered by repositionForLegendChange itself
+                        // 2. The diagram has already been repositioned to the current legend position
+                        //    (generatedLegendPosition tracks the CURRENT position after any repositioning)
                         if (!shouldSkipPositionReapply) {
                             const isLinear = mode.value === 'linear';
                             const currentLegendPos = form.legend;
-                            const generatedPos = isLinear
-                                ? linearBaseConfig.value.generatedPosition
-                                : circularBaseConfig.value.generatedPosition;
+                            // Use generatedLegendPosition which is updated after repositioning,
+                            // NOT circularBaseConfig.generatedPosition which is the original generation position
+                            const currentDiagramPos = generatedLegendPosition.value;
 
-                            debugLog('Checking position after incremental edit:', { currentLegendPos, generatedPos, isLinear, shouldSkipPositionReapply });
+                            debugLog('Checking position after incremental edit:', { currentLegendPos, currentDiagramPos, isLinear, shouldSkipPositionReapply });
 
-                            if (currentLegendPos && generatedPos && currentLegendPos !== generatedPos) {
-                                debugLog('Position differs from generated - reapplying position shift');
+                            // Only reposition if the diagram position doesn't match the current legend setting
+                            // After repositioning, generatedLegendPosition is updated to match form.legend
+                            if (currentLegendPos && currentDiagramPos && currentLegendPos !== currentDiagramPos) {
+                                debugLog('Position differs from current - reapplying position shift');
                                 // IMPORTANT: Set flag BEFORE calling repositionForLegendChange
                                 // to ensure the subsequent watch(svgContent) doesn't call captureBaseConfig()
                                 skipCaptureBaseConfig.value = true;
+                                // Get the ORIGINAL generation position for the shift calculation
+                                const originalGeneratedPos = isLinear
+                                    ? linearBaseConfig.value.generatedPosition
+                                    : circularBaseConfig.value.generatedPosition;
                                 // Call synchronously - repositionForLegendChange will set the flag again anyway
-                                repositionForLegendChange(currentLegendPos, generatedPos);
+                                repositionForLegendChange(currentLegendPos, originalGeneratedPos);
                                 // Don't reset the flag here - let it be reset after the watch triggered by
                                 // repositionForLegendChange's serialization completes
                                 return;
@@ -6256,8 +6295,9 @@ json.dumps({"width": width})
                         debugLog('Incremental edit but no base transforms to remap');
                     }
 
-                    // Reset the flag
-                    skipCaptureBaseConfig.value = false;
+                    // NOTE: Do NOT reset skipCaptureBaseConfig here!
+                    // The flag should stay true for subsequent incremental edits.
+                    // It will be reset to false only when a fresh generation starts.
                 });
             });
 
@@ -6849,6 +6889,10 @@ json.dumps({"width": width})
                 selectedResultIndex.value = 0;
                 errorLog.value = null;
                 zoom.value = 1.0;
+                // Reset incremental edit flags for fresh generation
+                // This ensures the watch(svgContent) treats this as a new diagram, not an edit
+                skipCaptureBaseConfig.value = false;
+                skipPositionReapply.value = false;
                 // Clear stored pairwise match factors for re-calculation
                 pairwiseMatchFactors.value = {};
                 // Clear tracked legend entries (will be regenerated)
