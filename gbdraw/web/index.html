@@ -294,7 +294,7 @@
                             <div>
                                 <div class="flex items-center justify-between mb-2">
                                     <h4 class="text-xs font-bold text-slate-500">SPECIFIC RULES (-t) <help-tip text="Color features matching specific qualifier values (Regex supported)."></help-tip></h4>
-                                    <button v-if="manualSpecificRules.length > 0" @click="manualSpecificRules.splice(0)" class="text-[10px] text-red-500 hover:text-red-700 hover:underline"><i class="ph ph-trash"></i> Clear All</button>
+                                    <button v-if="manualSpecificRules.length > 0" @click="clearAllSpecificRules" class="text-[10px] text-red-500 hover:text-red-700 hover:underline"><i class="ph ph-trash"></i> Clear All</button>
                                 </div>
 
                                 <div class="space-y-1 mb-3">
@@ -1584,6 +1584,26 @@
 
                 newSpecRule.val = "";
             };
+
+            // Clear all specific rules and remove their legend entries
+            const clearAllSpecificRules = async () => {
+                // Collect captions to remove from legend
+                const captionsToRemove = manualSpecificRules
+                    .filter(rule => rule.cap)
+                    .map(rule => rule.cap);
+
+                // Remove legend entries for each caption
+                for (const cap of captionsToRemove) {
+                    await removeLegendEntry(cap);
+                }
+
+                // Clear the rules array
+                manualSpecificRules.splice(0);
+
+                // Update legend entries display
+                extractLegendEntries();
+            };
+
             const newFeatureToAdd = ref("mobile_element");
             const addFeature = () => { if(newFeatureToAdd.value && !adv.features.includes(newFeatureToAdd.value)){ adv.features.push(newFeatureToAdd.value); } };
 
@@ -3382,19 +3402,26 @@ json.dumps({"width": width})
                         const resultJson = pyodide.runPython(`generate_legend_entry_svg("${escapedCaption}", "${color}", ${newY}, ${rectSize}, ${fontSize}, "${escapedFontFamily}", ${newX})`);
                         const result = JSON.parse(resultJson);
 
+                        // Create wrapper group with data-legend-key attribute
+                        const entryGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                        entryGroup.setAttribute('data-legend-key', caption);
+
                         // Insert rect
                         const rectDoc = parser.parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${result.rect}</svg>`, 'image/svg+xml');
                         const rectEl = rectDoc.querySelector('path');
                         if (rectEl) {
-                            group.appendChild(document.importNode(rectEl, true));
+                            entryGroup.appendChild(document.importNode(rectEl, true));
                         }
 
                         // Insert text
                         const textDoc = parser.parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${result.text}</svg>`, 'image/svg+xml');
                         const textEl = textDoc.querySelector('text');
                         if (textEl) {
-                            group.appendChild(document.importNode(textEl, true));
+                            entryGroup.appendChild(document.importNode(textEl, true));
                         }
+
+                        // Add entry group to legend group
+                        group.appendChild(entryGroup);
                     }
 
                     // Reposition pairwise legend in vertical layout if needed
@@ -3625,13 +3652,8 @@ json.dumps({"width": width})
                 // Check the first group (they should be in sync)
                 const targetGroup = targetGroups[0];
 
-                const texts = targetGroup.querySelectorAll('text');
-                for (const t of texts) {
-                    if (t.textContent?.trim() === caption.trim()) {
-                        return true;
-                    }
-                }
-                return false;
+                const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(caption)}"]`);
+                return entryGroup !== null;
             };
 
             // Helper to parse both X and Y from transform attribute
@@ -4151,21 +4173,12 @@ json.dumps({"width": width})
 
                 // Update in all legend groups
                 for (const targetGroup of targetGroups) {
-                    // Try new structure first: find entry group by data-legend-key
                     const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(oldCaption)}"]`);
                     if (entryGroup) {
                         // Update the data-legend-key attribute
                         entryGroup.setAttribute('data-legend-key', newCaption);
                         // Update text content within the entry group
                         const texts = entryGroup.querySelectorAll('text');
-                        texts.forEach(t => {
-                            if (t.textContent?.trim() === oldCaption.trim()) {
-                                t.textContent = newCaption;
-                            }
-                        });
-                    } else {
-                        // Fallback: old structure - just update text
-                        const texts = targetGroup.querySelectorAll('text');
                         texts.forEach(t => {
                             if (t.textContent?.trim() === oldCaption.trim()) {
                                 t.textContent = newCaption;
@@ -6319,6 +6332,21 @@ json.dumps({"width": width})
             watch(() => files.t_color, async (newFile) => {
                 if (!newFile) return;
                 try {
+                    // Remove previous file-loaded rules and their legend entries
+                    const previousFileRules = manualSpecificRules.filter(r => r.fromFile);
+                    for (const rule of previousFileRules) {
+                        if (rule.cap) {
+                            await removeLegendEntry(rule.cap);
+                            fileLegendCaptions.value.delete(rule.cap);
+                        }
+                    }
+                    // Remove fromFile rules from array (keep manually added ones)
+                    for (let i = manualSpecificRules.length - 1; i >= 0; i--) {
+                        if (manualSpecificRules[i].fromFile) {
+                            manualSpecificRules.splice(i, 1);
+                        }
+                    }
+
                     const text = await newFile.text();
                     const lines = text.split(/\r?\n/);
                     let count = 0;
@@ -7211,7 +7239,7 @@ json.dumps({"width": width})
                 mode, cInputType, lInputType, files, linearSeqs, form, adv,
                 paletteNames, selectedPalette, currentColors, updatePalette, resetColors,
                 filterMode, manualBlacklist, manualWhitelist, featureKeys, newColorFeat, newColorVal, addCustomColor,
-                newFeatureToAdd, addFeature, manualSpecificRules, newSpecRule, addSpecificRule,
+                newFeatureToAdd, addFeature, manualSpecificRules, newSpecRule, addSpecificRule, clearAllSpecificRules,
                 // Feature Color Editor
                 extractedFeatures, featureRecordIds, selectedFeatureRecordIdx,
                 showFeaturePanel, featureSearch, filteredFeatures,
