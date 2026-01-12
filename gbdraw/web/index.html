@@ -2329,37 +2329,24 @@
 
                 console.log(`Applied stroke to ${siblingFeatureIds.length} features`);
 
-                // Update legend rect stroke using the legend entry's position
+                // Update legend rect stroke using data-legend-key
                 if (targetLegendEntry) {
                     const legendGroups = getAllFeatureLegendGroups(svg);
                     for (const targetGroup of legendGroups) {
-                        const texts = targetGroup.querySelectorAll('text');
-                        for (const t of texts) {
-                            // Match by current caption (which may have been edited)
-                            if (t.textContent?.trim() === targetLegendEntry.caption.trim()) {
-                                const transform = t.getAttribute('transform');
-                                if (transform) {
-                                    const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
-                                    if (match) {
-                                        const textY = parseFloat(match[1]);
-                                        const paths = targetGroup.querySelectorAll('path');
-                                        paths.forEach(p => {
-                                            const pt = p.getAttribute('transform');
-                                            const fill = p.getAttribute('fill');
-                                            if (pt && fill && fill.toLowerCase() === targetLegendEntry.color.toLowerCase()) {
-                                                const pMatch = pt.match(/translate\([^,]+,\s*([\d.-]+)\)/);
-                                                if (pMatch && Math.abs(parseFloat(pMatch[1]) - textY) < 1) {
-                                                    if (currentStrokeColor) {
-                                                        p.setAttribute('stroke', currentStrokeColor);
-                                                    }
-                                                    if (currentStrokeWidth !== null && currentStrokeWidth !== '') {
-                                                        p.setAttribute('stroke-width', parseFloat(currentStrokeWidth));
-                                                    }
-                                                    console.log(`Updated legend rect stroke for "${targetLegendEntry.caption}"`);
-                                                }
-                                            }
-                                        });
+                        const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(targetLegendEntry.caption)}"]`);
+                        if (entryGroup) {
+                            const paths = entryGroup.querySelectorAll('path');
+                            for (const path of paths) {
+                                const fill = path.getAttribute('fill');
+                                if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                    if (currentStrokeColor) {
+                                        path.setAttribute('stroke', currentStrokeColor);
                                     }
+                                    if (currentStrokeWidth !== null && currentStrokeWidth !== '') {
+                                        path.setAttribute('stroke-width', parseFloat(currentStrokeWidth));
+                                    }
+                                    console.log(`Updated legend rect stroke for "${targetLegendEntry.caption}"`);
+                                    break;
                                 }
                             }
                         }
@@ -3596,45 +3583,14 @@ json.dumps({"width": width})
 
                 // Update in all legend groups
                 for (const targetGroup of targetGroups) {
-                    // Try new structure first: find entry group by data-legend-key
                     const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(caption)}"]`);
                     if (entryGroup) {
-                        // New structure: entry group contains rect path and text path
                         const paths = entryGroup.querySelectorAll('path');
                         for (const path of paths) {
                             const fill = path.getAttribute('fill');
                             if (fill && fill !== 'none' && !fill.startsWith('url(')) {
                                 path.setAttribute('fill', color);
                                 updated = true;
-                                break;
-                            }
-                        }
-                    } else {
-                        // Fallback: old structure - find text element and match by Y position
-                        const getTransformY = (transform) => {
-                            if (!transform) return null;
-                            const match = transform.match(/translate\(\s*[\d.-]+\s*,\s*([\d.-]+)\s*\)/);
-                            return match ? parseFloat(match[1]) : null;
-                        };
-
-                        const texts = targetGroup.querySelectorAll('text');
-                        for (const t of texts) {
-                            if (t.textContent?.trim() === caption.trim()) {
-                                const textY = getTransformY(t.getAttribute('transform'));
-                                if (textY !== null) {
-                                    const rects = targetGroup.querySelectorAll('path');
-                                    for (const r of rects) {
-                                        const rectY = getTransformY(r.getAttribute('transform'));
-                                        if (rectY !== null && Math.abs(rectY - textY) < 0.1) {
-                                            const fill = r.getAttribute('fill');
-                                            if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                                                r.setAttribute('fill', color);
-                                                updated = true;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
                                 break;
                             }
                         }
@@ -3678,14 +3634,6 @@ json.dumps({"width": width})
                 return false;
             };
 
-            // Helper to parse Y coordinate from transform attribute
-            const parseTransformY = (transform) => {
-                if (!transform) return null;
-                // Match both "translate(x, y)" and "translate(x,y)" formats
-                const match = transform.match(/translate\(\s*[\d.-]+\s*,\s*([\d.-]+)\s*\)/);
-                return match ? parseFloat(match[1]) : null;
-            };
-
             // Helper to parse both X and Y from transform attribute
             const parseTransformXY = (transform) => {
                 if (!transform) return { x: 0, y: 0 };
@@ -3708,51 +3656,11 @@ json.dumps({"width": width})
 
                 // Remove from all legend groups
                 for (const targetGroup of targetGroups) {
-                    // Detect rect_size from existing entries to calculate text_x_offset
-                    let rectSize = 14;
-                    const firstColorRect = targetGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
-                    if (firstColorRect) {
-                        const d = firstColorRect.getAttribute('d');
-                        if (d) {
-                            const lMatch = d.match(/L\s+([\d.]+),/);
-                            if (lMatch) rectSize = parseFloat(lMatch[1]);
-                        }
+                    const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(caption)}"]`);
+                    if (entryGroup) {
+                        entryGroup.remove();
+                        removed = true;
                     }
-                    const textXOffset = (22 / 14) * rectSize;
-
-                    // Find text element with this caption
-                    const texts = targetGroup.querySelectorAll('text');
-
-                    texts.forEach(t => {
-                        if (t.textContent?.trim() === caption.trim()) {
-                            // Use X+Y coordinate matching (same as extractLegendEntries)
-                            const textTransform = parseTransformXY(t.getAttribute('transform'));
-                            const textX = textTransform.x;
-                            const textY = textTransform.y;
-
-                            // Find and remove the color rect at the correct X+Y position
-                            const rects = targetGroup.querySelectorAll('path');
-                            const expectedRectX = textX - textXOffset;
-
-                            rects.forEach(r => {
-                                const rectTransform = parseTransformXY(r.getAttribute('transform'));
-                                const rectX = rectTransform.x;
-                                const rectY = rectTransform.y;
-
-                                // Check both Y matches AND X position is correct for this text
-                                if (Math.abs(rectY - textY) < 1 && Math.abs(rectX - expectedRectX) < textXOffset) {
-                                    // Make sure it's a color rect (has solid fill, not gradient)
-                                    const fill = r.getAttribute('fill');
-                                    if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                                        r.remove();
-                                    }
-                                }
-                            });
-
-                            t.remove();
-                            removed = true;
-                        }
-                    });
                 }
 
                 if (removed) {
@@ -4102,68 +4010,43 @@ json.dumps({"width": width})
                     return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : { x: 0, y: 0 };
                 };
 
-                // Detect rect_size from existing entries to calculate text_x_offset
-                let rectSize = 14;
-                const firstColorRect = targetGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
-                if (firstColorRect) {
-                    const d = firstColorRect.getAttribute('d');
-                    if (d) {
-                        const lMatch = d.match(/L\s+([\d.]+),/);
-                        if (lMatch) rectSize = parseFloat(lMatch[1]);
-                    }
-                }
-                const textXOffset = (22 / 14) * rectSize;
-
-                // Find all text elements in legend (these are the captions)
-                const textElements = targetGroup.querySelectorAll('text');
-                textElements.forEach(textEl => {
-                    const caption = textEl.textContent?.trim();
+                // Find all legend entry groups with data-legend-key
+                const entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
+                entryGroups.forEach(entryGroup => {
+                    const caption = entryGroup.getAttribute('data-legend-key');
                     if (!caption) return;
 
-                    const textTransform = parseTransform(textEl.getAttribute('transform'));
-                    const xPos = textTransform.x;
-                    const yPos = textTransform.y;
-
-                    // Find the color rect matching this text element
-                    // For vertical layout: same Y, rect X ≈ 0
-                    // For horizontal layout: same Y, rect X ≈ text X - textXOffset
+                    // Get color from the rect path
                     let color = '#cccccc';
-                    const paths = targetGroup.querySelectorAll('path');
-                    let bestMatch = null;
-                    let bestDistance = Infinity;
-
-                    paths.forEach(p => {
-                        const fill = p.getAttribute('fill');
-                        if (!fill || fill === 'none' || fill.startsWith('url(')) return;
-
-                        const rectTransform = parseTransform(p.getAttribute('transform'));
-                        const rectX = rectTransform.x;
-                        const rectY = rectTransform.y;
-
-                        // Check if Y positions match (within tolerance)
-                        if (Math.abs(rectY - yPos) < 1) {
-                            // Calculate expected rect X position based on text X
-                            const expectedRectX = xPos - textXOffset;
-                            const distance = Math.abs(rectX - expectedRectX);
-
-                            // Find the closest matching rect
-                            if (distance < bestDistance) {
-                                bestDistance = distance;
-                                bestMatch = fill;
-                            }
+                    const paths = entryGroup.querySelectorAll('path');
+                    for (const path of paths) {
+                        const fill = path.getAttribute('fill');
+                        if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                            color = fill;
+                            break;
                         }
-                    });
+                    }
 
-                    if (bestMatch) {
-                        color = bestMatch;
+                    // Get position from the group's transform or text element
+                    let xPos = 0, yPos = 0;
+                    const groupTransform = parseTransform(entryGroup.getAttribute('transform'));
+                    if (groupTransform.x !== 0 || groupTransform.y !== 0) {
+                        xPos = groupTransform.x;
+                        yPos = groupTransform.y;
+                    } else {
+                        // Fallback to text element position
+                        const textEl = entryGroup.querySelector('text');
+                        if (textEl) {
+                            const textTransform = parseTransform(textEl.getAttribute('transform'));
+                            xPos = textTransform.x;
+                            yPos = textTransform.y;
+                        }
                     }
 
                     // Preserve state from existing entry with same caption
                     const existingEntry = legendEntries.value.find(e => e.caption === caption);
                     const showStroke = existingEntry?.showStroke || false;
-                    // Preserve featureIds if they exist, otherwise they'll be built later
                     const existingFeatureIds = existingEntry?.featureIds || [];
-                    // Use existing originalCaption if available, otherwise set it to current caption
                     const originalCaption = existingEntry?.originalCaption || caption;
 
                     entries.push({ caption, originalCaption, color, xPos, yPos, showStroke, featureIds: existingFeatureIds });
@@ -4221,43 +4104,13 @@ json.dumps({"width": width})
 
                 // Update in all legend groups
                 for (const targetGroup of targetGroups) {
-                    // Try new structure first: find entry group by data-legend-key
                     const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(entry.caption)}"]`);
                     if (entryGroup) {
-                        // New structure: entry group contains rect path and text path
                         const paths = entryGroup.querySelectorAll('path');
                         for (const path of paths) {
                             const fill = path.getAttribute('fill');
                             if (fill && fill !== 'none' && !fill.startsWith('url(')) {
                                 path.setAttribute('fill', newColor);
-                                break;
-                            }
-                        }
-                    } else {
-                        // Fallback: old structure - find text element and match by Y position
-                        const texts = targetGroup.querySelectorAll('text');
-                        for (const t of texts) {
-                            if (t.textContent?.trim() === entry.caption.trim()) {
-                                const transform = t.getAttribute('transform');
-                                if (transform) {
-                                    const match = transform.match(/translate\([^,]+,\s*([\d.-]+)\)/);
-                                    if (match) {
-                                        const textY = parseFloat(match[1]);
-                                        const paths = targetGroup.querySelectorAll('path');
-                                        paths.forEach(p => {
-                                            const pt = p.getAttribute('transform');
-                                            if (pt) {
-                                                const pMatch = pt.match(/translate\([^,]+,\s*([\d.-]+)\)/);
-                                                if (pMatch && Math.abs(parseFloat(pMatch[1]) - textY) < 1) {
-                                                    const fill = p.getAttribute('fill');
-                                                    if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                                                        p.setAttribute('fill', newColor);
-                                                    }
-                                                }
-                                            }
-                                        });
-                                    }
-                                }
                                 break;
                             }
                         }
