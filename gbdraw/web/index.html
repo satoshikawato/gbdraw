@@ -793,6 +793,14 @@
                                     <span>This feature only</span>
                                 </button>
 
+                                <!-- Apply to all features with same individual label (when feature belongs to multi-feature rule and has label siblings) -->
+                                <button v-if="colorScopeDialog.matchingRule && colorScopeDialog.ruleMatchCount > 1 && colorScopeDialog.individualLabelSiblingCount > 0"
+                                        @click="handleColorScopeChoice('individualLabel')"
+                                        class="w-full px-4 py-2 bg-teal-100 hover:bg-teal-200 text-teal-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-users text-lg"></i>
+                                    <span>Apply to all "{{ colorScopeDialog.individualLabel }}" ({{ colorScopeDialog.individualLabelSiblingCount + 1 }})</span>
+                                </button>
+
                                 <!-- Use existing caption color (if available) -->
                                 <button v-if="colorScopeDialog.existingCaptionColor"
                                         @click="handleColorScopeChoice('useExisting')"
@@ -1404,8 +1412,12 @@
                 feat: null,
                 color: null,
                 matchingRule: null,  // Existing regex rule from -t table
+                ruleMatchCount: 0,   // Number of features matching the rule
                 legendName: null,
                 siblingCount: 0,  // Number of other features with same caption
+                // For individual label option when feature belongs to multi-feature rule
+                individualLabel: null,  // Feature's own label (product/gene/locus_tag)
+                individualLabelSiblingCount: 0,  // Number of other features with same individual label
                 existingCaptionRule: null,  // Existing hash rule for same caption (already colored)
                 existingCaptionColor: null,  // Color of existing caption rule
                 resolve: null  // Promise resolver
@@ -1968,6 +1980,20 @@
                 // Find if there's an existing color rule for this caption
                 const existingCaption = findExistingColorForCaption(feat, legendName);
 
+                // For multi-feature rules: check siblings with the feature's individual label
+                // This allows "Apply to all [individual label]" option when the legendName is the rule's caption
+                const individualLabel = feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`;
+                let individualLabelSiblingCount = 0;
+                if (matchingRule && ruleMatchCount > 1) {
+                    const ruleCaption = matchingRule.cap || matchingRule.val;
+                    // Only compute if legendName differs from individualLabel (e.g., user typed rule's caption)
+                    // or if individual label differs from rule caption
+                    if (individualLabel !== ruleCaption) {
+                        const individualSiblings = findFeaturesWithSameCaption(feat, individualLabel);
+                        individualLabelSiblingCount = individualSiblings.length;
+                    }
+                }
+
                 // Determine if we need to show the dialog
                 const needsDialog = matchingRule || siblingCount > 0 || existingCaption;
 
@@ -1980,6 +2006,8 @@
                     colorScopeDialog.ruleMatchCount = ruleMatchCount;
                     colorScopeDialog.legendName = legendName;
                     colorScopeDialog.siblingCount = siblingCount;
+                    colorScopeDialog.individualLabel = individualLabel;
+                    colorScopeDialog.individualLabelSiblingCount = individualLabelSiblingCount;
                     colorScopeDialog.existingCaptionRule = existingCaption?.rule || null;
                     colorScopeDialog.existingCaptionColor = existingCaption?.color || null;
                     // Close the color picker popup
@@ -2032,7 +2060,44 @@
                     applySpecificRulesToSvg();
                 } else if (choice === 'single') {
                     // Create a new hash-based rule for this specific feature only
-                    await setFeatureColor(feat, color, legendName);
+                    // When feature belongs to a multi-feature rule, use feature's own label
+                    // to avoid updating the shared rule legend
+                    let singleCaption = legendName;
+                    if (matchingRule && colorScopeDialog.ruleMatchCount > 1) {
+                        const ruleCaption = matchingRule.cap || matchingRule.val;
+                        // If legendName matches the rule's caption, use feature's own label instead
+                        if (legendName === ruleCaption) {
+                            singleCaption = feat.product || feat.gene || feat.locus_tag
+                                           || `${feat.type} at ${feat.start}..${feat.end}`;
+                        }
+                    }
+                    await setFeatureColor(feat, color, singleCaption);
+                } else if (choice === 'individualLabel') {
+                    // Apply to all features with the same individual label (product/gene/locus_tag)
+                    // This creates separate hash rules for each feature, keeping them independent from the regex rule
+                    const individualLabel = colorScopeDialog.individualLabel;
+                    const individualSiblings = findFeaturesWithSameCaption(feat, individualLabel);
+                    const allFeatures = [feat, ...individualSiblings];
+
+                    for (const f of allFeatures) {
+                        const existingIdx = manualSpecificRules.findIndex(r =>
+                            r.qual === 'hash' && r.val === f.svg_id
+                        );
+                        if (existingIdx >= 0) {
+                            manualSpecificRules[existingIdx].color = color;
+                            manualSpecificRules[existingIdx].cap = individualLabel;
+                        } else {
+                            manualSpecificRules.push({
+                                feat: f.type,
+                                qual: 'hash',
+                                val: f.svg_id,
+                                color: color,
+                                cap: individualLabel
+                            });
+                        }
+                    }
+                    addLegendEntry(individualLabel, color);
+                    applySpecificRulesToSvg();
                 } else if (choice === 'useExisting') {
                     // Apply the existing caption's color to this feature
                     if (existingCaptionColor) {
@@ -2065,6 +2130,8 @@
                 colorScopeDialog.ruleMatchCount = 0;
                 colorScopeDialog.legendName = null;
                 colorScopeDialog.siblingCount = 0;
+                colorScopeDialog.individualLabel = null;
+                colorScopeDialog.individualLabelSiblingCount = 0;
                 colorScopeDialog.existingCaptionRule = null;
                 colorScopeDialog.existingCaptionColor = null;
             };
