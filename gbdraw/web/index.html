@@ -18,6 +18,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>gbdraw Web App</title>
     <script src="https://unpkg.com/vue@3.5.25/dist/vue.global.js" integrity="sha384-E8hqvY4j8uyv6njj1udAOIuT4tsPt3lJET321mQPDQ29OMiTOYMuG/UDD6o52yW4" crossorigin="anonymous"></script>
+    <!--
+        SECURITY NOTE: TailwindCSS Play CDN uses JIT compilation, so Subresource Integrity (SRI)
+        cannot be applied. This CDN dynamically generates CSS based on the page content.
+        For production with stricter security requirements, consider using a static Tailwind build.
+        See: https://tailwindcss.com/docs/installation
+    -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js" integrity="sha384-l95tshxQlbjf4kdyWZf10uUL5Dw8/iN9q16SQ+ttOEWA8SN0cLG6BGDGY17GxToh" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/@phosphor-icons/web@2.1.2/src/index.js" integrity="sha384-J7cw2fbG1T4C5MirTVUxsZGaMfw2m0XsCgOQEqUvB1OF9VIsHWuZF1GmyVRzs7eu" crossorigin="anonymous"></script>
@@ -597,21 +603,23 @@
                         <!-- Reset all positions button -->
                         <button v-if="svgContent" @click="resetAllPositions"
                                 class="w-8 h-8 flex items-center justify-center bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600"
-                                title="Reset all element positions">
+                                title="Reset all element positions"
+                                aria-label="Reset all element positions">
                             <i class="ph ph-arrow-counter-clockwise"></i>
                         </button>
                         <!-- Canvas size toggle -->
                         <button v-if="svgContent" @click="showCanvasControls = !showCanvasControls"
                                 class="w-8 h-8 flex items-center justify-center bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600"
                                 :class="{ 'bg-blue-50 text-blue-600 border-blue-300': showCanvasControls }"
-                                title="Canvas padding controls">
+                                title="Canvas padding controls"
+                                aria-label="Toggle canvas padding controls">
                             <i class="ph ph-frame-corners"></i>
                         </button>
                         <!-- Zoom controls -->
                         <div class="flex gap-1 bg-white shadow rounded-lg p-1 border border-slate-200">
-                            <button @click="zoom+=0.1" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded"><i class="ph ph-plus"></i></button>
-                            <button @click="zoom = 1.0" class="w-12 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-xs font-mono rounded">{{Math.round(zoom*100)}}%</button>
-                            <button @click="zoom = Math.max(0.1, zoom-0.1)" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded"><i class="ph ph-minus"></i></button>
+                            <button @click="zoom+=0.1" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded" aria-label="Zoom in"><i class="ph ph-plus"></i></button>
+                            <button @click="zoom = 1.0" class="w-12 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-xs font-mono rounded" aria-label="Reset zoom">{{Math.round(zoom*100)}}%</button>
+                            <button @click="zoom = Math.max(0.1, zoom-0.1)" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded" aria-label="Zoom out"><i class="ph ph-minus"></i></button>
                         </div>
                     </div>
 
@@ -745,7 +753,10 @@
                             <h3 class="text-lg font-bold text-slate-800 mb-2">Color Change Scope</h3>
                             <p class="text-sm text-slate-600 mb-4">
                                 <template v-if="colorScopeDialog.matchingRule">
-                                    This feature matches the rule "<span class="font-bold text-blue-600">{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val }}</span>".
+                                    This feature matches the rule "<span class="font-bold text-blue-600">{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val }}</span>" ({{ colorScopeDialog.ruleMatchCount }} features).
+                                    <template v-if="colorScopeDialog.siblingCount > 0">
+                                        <br>Caption "<span class="font-bold text-green-600">{{ colorScopeDialog.legendName }}</span>" is shared by {{ colorScopeDialog.siblingCount + 1 }} features.
+                                    </template>
                                 </template>
                                 <template v-else-if="colorScopeDialog.siblingCount > 0">
                                     There are <span class="font-bold text-blue-600">{{ colorScopeDialog.siblingCount }}</span> other features with the caption "<span class="font-bold text-blue-600">{{ colorScopeDialog.legendName }}</span>".
@@ -756,11 +767,20 @@
                             </p>
 
                             <div class="flex flex-col gap-2">
-                                <!-- Apply to all features with same caption -->
-                                <button @click="handleColorScopeChoice('all')"
+                                <!-- Apply to all features matching the rule (when rule exists) -->
+                                <button v-if="colorScopeDialog.matchingRule"
+                                        @click="handleColorScopeChoice('rule')"
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-users text-lg"></i>
-                                    <span>Apply to all "{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val || colorScopeDialog.legendName }}" features ({{ colorScopeDialog.siblingCount + 1 }})</span>
+                                    <span>Apply to all "{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val }}" ({{ colorScopeDialog.ruleMatchCount }})</span>
+                                </button>
+
+                                <!-- Apply to all features with same caption (when siblings exist) -->
+                                <button v-if="colorScopeDialog.siblingCount > 0"
+                                        @click="handleColorScopeChoice('caption')"
+                                        class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-users-three text-lg"></i>
+                                    <span>Apply to all "{{ colorScopeDialog.legendName }}" ({{ colorScopeDialog.siblingCount + 1 }})</span>
                                 </button>
 
                                 <!-- Apply to this feature only -->
@@ -776,7 +796,7 @@
                                         class="w-full px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <span class="w-5 h-5 rounded border border-purple-300 shrink-0"
                                           :style="{ backgroundColor: colorScopeDialog.existingCaptionColor }"></span>
-                                    <span>Use existing "{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val || colorScopeDialog.legendName }}" color</span>
+                                    <span>Use existing "{{ colorScopeDialog.legendName }}" color</span>
                                 </button>
                             </div>
 
@@ -847,7 +867,7 @@
                             <i class="ph ph-list-bullets text-purple-600"></i>
                             <span class="font-bold text-slate-700">Legend Editor</span>
                         </div>
-                        <button @click="showLegendPanel = false" class="text-slate-400 hover:text-slate-600">
+                        <button @click="showLegendPanel = false" class="text-slate-400 hover:text-slate-600" aria-label="Close legend editor">
                             <i class="ph ph-x text-lg"></i>
                         </button>
                     </div>
@@ -989,7 +1009,7 @@
                             <span class="font-bold text-slate-700">Feature Colors</span>
                             <span class="text-xs text-slate-400">({{ filteredFeatures.length }})</span>
                         </div>
-                        <button @click="showFeaturePanel = false" class="text-slate-400 hover:text-slate-600">
+                        <button @click="showFeaturePanel = false" class="text-slate-400 hover:text-slate-600" aria-label="Close feature color editor">
                             <i class="ph ph-x text-lg"></i>
                         </button>
                     </div>
@@ -1095,8 +1115,12 @@
 </script>
 
 <script>
-    const { createApp, ref, reactive, onMounted, computed, watch } = Vue;
-    const GBDRAW_WHEEL_NAME = "gbdraw-0.8.3-py3-none-any.whl"; 
+    const { createApp, ref, reactive, onMounted, onUnmounted, computed, watch } = Vue;
+    const GBDRAW_WHEEL_NAME = "gbdraw-0.8.3-py3-none-any.whl";
+
+    // Debug logging - set to true to enable verbose debug output
+    const DEBUG = false;
+    const debugLog = (...args) => { if (DEBUG) console.log('[DEBUG]', ...args); };
 
     // HelpTip & FileUploader Components
     const HelpTip = {
@@ -1217,9 +1241,9 @@
                         ADD_TAGS: ['use', 'g', 'defs', 'linearGradient', 'radialGradient', 'stop', 'path', 'rect', 'circle', 'line', 'polyline', 'polygon', 'text', 'tspan'],
                         // Allowed attributes list (event handlers are automatically excluded, but can be explicitly forbidden as well)
                         ADD_ATTR: [
-                            'xlink:href', 'href', 'id', 'class',
-                            'fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin', 
-                            'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 
+                            'xlink:href', 'href', 'id', 'class', 'data-legend-key',
+                            'fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin',
+                            'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry',
                             'width', 'height', 'transform', 'viewBox', 'preserveAspectRatio',
                             'font-family', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline', 'writing-mode', 'letter-spacing'
                         ],
@@ -1407,6 +1431,7 @@
             const legendEntries = ref([]);  // [{caption, originalCaption, color, yPos, showStroke, featureIds}]
             const deletedLegendEntries = ref([]);  // Track deleted entries for restoration
             const originalLegendOrder = ref([]);  // Store original order from generation
+            const originalLegendColors = ref({});  // Store original colors: { caption: color }
             const newLegendCaption = ref('');
             const newLegendColor = ref('#808080');
 
@@ -1447,6 +1472,10 @@
             // Flag to skip position reapply after repositionForLegendChange is called
             // This prevents infinite loop when repositionForLegendChange triggers watch(svgContent)
             const skipPositionReapply = ref(false);
+
+            // Flag to skip extractLegendEntries in watch(svgContent) when setFeatureColor is handling it
+            // This prevents race condition where watcher overwrites correct legend state
+            const skipExtractOnSvgChange = ref(false);
 
             // Base configuration for circular mode (stored when SVG is generated)
             // Used to calculate absolute positions without accumulation
@@ -1652,6 +1681,9 @@
                 return true;  // Location is always available
             };
 
+            // Helper to get display caption for a feature (used for legend entries and sibling matching)
+            const getFeatureCaption = (f) => f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
+
             // Helper to get the best qualifier for a feature
             // Uses hash pseudo-qualifier which is always unique (based on type+position+strand)
             // The svg_id is computed the same way in both Python and JavaScript
@@ -1697,6 +1729,43 @@
                     }
                 }
                 return null;
+            };
+
+            // Count all features that match a specific regex rule
+            const countFeaturesMatchingRule = (rule) => {
+                if (!rule || rule.qual === 'hash') return 0;
+
+                let count = 0;
+                for (const feat of extractedFeatures.value) {
+                    if (feat.type !== rule.feat) continue;
+
+                    let matches = false;
+                    if (rule.qual === 'product' && feat.product) {
+                        try {
+                            const regex = new RegExp(rule.val, 'i');
+                            matches = regex.test(feat.product);
+                        } catch {
+                            matches = feat.product === rule.val;
+                        }
+                    } else if (rule.qual === 'gene' && feat.gene) {
+                        try {
+                            const regex = new RegExp(rule.val, 'i');
+                            matches = regex.test(feat.gene);
+                        } catch {
+                            matches = feat.gene === rule.val;
+                        }
+                    } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
+                        try {
+                            const regex = new RegExp(rule.val, 'i');
+                            matches = regex.test(feat.locus_tag);
+                        } catch {
+                            matches = feat.locus_tag === rule.val;
+                        }
+                    }
+
+                    if (matches) count++;
+                }
+                return count;
             };
 
             // Find features that share the same legend caption (excluding the current feature)
@@ -1865,7 +1934,10 @@
                 // Check if this feature matches an existing regex rule (from -t table)
                 const matchingRule = findMatchingRegexRule(feat);
 
-                // Find sibling features with the same caption
+                // Count features matching the regex rule (if any)
+                const ruleMatchCount = matchingRule ? countFeaturesMatchingRule(matchingRule) : 0;
+
+                // Find sibling features with the same caption (different from regex rule matches)
                 const siblings = findFeaturesWithSameCaption(feat, legendName);
                 const siblingCount = siblings.length;
 
@@ -1881,6 +1953,7 @@
                     colorScopeDialog.feat = feat;
                     colorScopeDialog.color = color;
                     colorScopeDialog.matchingRule = matchingRule;
+                    colorScopeDialog.ruleMatchCount = ruleMatchCount;
                     colorScopeDialog.legendName = legendName;
                     colorScopeDialog.siblingCount = siblingCount;
                     colorScopeDialog.existingCaptionRule = existingCaption?.rule || null;
@@ -1898,28 +1971,40 @@
             const handleColorScopeChoice = async (choice) => {
                 const { feat, color, matchingRule, legendName, siblingCount, existingCaptionRule, existingCaptionColor } = colorScopeDialog;
 
-                if (choice === 'all') {
-                    // Apply to all features with same caption
+                if (choice === 'rule') {
+                    // Apply to all features matching the regex rule (update the rule color)
                     if (matchingRule) {
-                        // Update the existing rule's color - affects all matching features
                         matchingRule.color = color;
                         if (matchingRule.cap) {
                             updateLegendEntryColorByCaption(matchingRule.cap, color);
                             extractLegendEntries();
                         }
-                    } else {
-                        // Create a new product-based rule for all features with this caption
-                        const newRule = {
-                            feat: feat.type,
-                            qual: 'product',  // Use product as qualifier for caption matching
-                            val: legendName,  // Exact match
-                            color: color,
-                            cap: legendName
-                        };
-                        manualSpecificRules.push(newRule);
-                        addLegendEntry(legendName, color);
                     }
-                    // Trigger SVG update
+                    applySpecificRulesToSvg();
+                } else if (choice === 'caption') {
+                    // Apply to all features with the same caption
+                    // Create hash-based rules for each feature (takes priority over regex rules)
+                    const siblings = findFeaturesWithSameCaption(feat, legendName);
+                    const allFeatures = [feat, ...siblings];
+
+                    for (const f of allFeatures) {
+                        const existingIdx = manualSpecificRules.findIndex(r =>
+                            r.qual === 'hash' && r.val === f.svg_id
+                        );
+                        if (existingIdx >= 0) {
+                            manualSpecificRules[existingIdx].color = color;
+                            manualSpecificRules[existingIdx].cap = legendName;
+                        } else {
+                            manualSpecificRules.push({
+                                feat: f.type,
+                                qual: 'hash',
+                                val: f.svg_id,
+                                color: color,
+                                cap: legendName
+                            });
+                        }
+                    }
+                    addLegendEntry(legendName, color);
                     applySpecificRulesToSvg();
                 } else if (choice === 'single') {
                     // Create a new hash-based rule for this specific feature only
@@ -1953,6 +2038,7 @@
                 colorScopeDialog.feat = null;
                 colorScopeDialog.color = null;
                 colorScopeDialog.matchingRule = null;
+                colorScopeDialog.ruleMatchCount = 0;
                 colorScopeDialog.legendName = null;
                 colorScopeDialog.siblingCount = 0;
                 colorScopeDialog.existingCaptionRule = null;
@@ -2061,7 +2147,6 @@
                 const caption = feat.product || feat.gene || feat.locus_tag || feat.note || `${feat.type} at ${feat.start}..${feat.end}`;
 
                 // Count siblings with the same caption
-                const getFeatureCaption = (f) => f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
                 const siblings = extractedFeatures.value.filter(f => getFeatureCaption(f) === caption && f.svg_id !== clickedFeature.value.svg_id);
 
                 if (siblings.length > 0) {
@@ -2133,7 +2218,6 @@
                     console.log(`Reset fill color to default (${defaultColor}) for feature: ${svgId}`);
                 } else if (choice === 'all') {
                     // Reset all features with the same caption
-                    const getFeatureCaption = (f) => f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
                     const matchingFeatures = extractedFeatures.value.filter(f => getFeatureCaption(f) === caption);
 
                     for (const matchFeat of matchingFeatures) {
@@ -2214,7 +2298,6 @@
                     console.log(`Found legend entry "${targetLegendEntry.caption}" with ${siblingFeatureIds.length} features`);
                 } else {
                     // Fallback: find features by caption and color
-                    const getFeatureCaption = (f) => f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
                     const siblingFeatures = extractedFeatures.value.filter(f => {
                         if (getFeatureCaption(f) !== caption) return false;
                         const el = svg.querySelector(`#${CSS.escape(f.svg_id)}`);
@@ -2342,13 +2425,12 @@
 
                 const overrideCount = Object.keys(legendStrokeOverrides).length;
                 if (overrideCount === 0) {
-                    console.log('[DEBUG] No stroke overrides to reapply');
+                    debugLog('No stroke overrides to reapply');
                     return;
                 }
 
                 console.log(`[DEBUG] Reapplying ${overrideCount} stroke overrides to new SVG`);
 
-                const getFeatureCaption = (f) => f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
                 let totalUpdated = 0;
 
                 for (const [caption, overrides] of Object.entries(legendStrokeOverrides)) {
@@ -2767,6 +2849,8 @@
 
             // Track legend entries added by specific rules
             const addedLegendCaptions = ref(new Set());
+            // Track legend entries added from file-loaded rules (preserved on reset)
+            const fileLegendCaptions = ref(new Set());
 
             // Watch for specific rules changes - only apply styles and handle removals
             // Legend ADDITIONS are handled by setFeatureColor to avoid race conditions
@@ -4107,9 +4191,15 @@ json.dumps({"width": width})
 
                 legendEntries.value = entries;
 
-                // Store original order if this is the first extraction (after diagram generation)
+                // Store original order and colors if this is the first extraction (after diagram generation)
                 if (originalLegendOrder.value.length === 0 && entries.length > 0) {
                     originalLegendOrder.value = entries.map(e => e.caption);
+                    // Store original colors for each legend entry
+                    entries.forEach(e => {
+                        if (!originalLegendColors.value[e.caption]) {
+                            originalLegendColors.value[e.caption] = e.color;
+                        }
+                    });
                 }
             };
 
@@ -4995,8 +5085,70 @@ json.dumps({"width": width})
                 Object.keys(legendColorOverrides).forEach(key => delete legendColorOverrides[key]);
                 applyPaletteToSvg();
 
+                const featureLegendGroups = getAllFeatureLegendGroups(svg);
+
+                // Remove dynamically added legend entries (not in original order and not from file)
+                if (originalLegendOrder.value.length > 0) {
+                    const originalCaptions = new Set(originalLegendOrder.value);
+                    for (const targetGroup of featureLegendGroups) {
+                        const entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
+                        for (const entryGroup of entryGroups) {
+                            const caption = entryGroup.getAttribute('data-legend-key');
+                            if (caption && !originalCaptions.has(caption) && !fileLegendCaptions.value.has(caption)) {
+                                // This entry was added dynamically (not from file) - remove it
+                                entryGroup.remove();
+                            }
+                        }
+                    }
+                }
+
+                // Restore original legend colors for entries not handled by palette
+                // (e.g., "hypothetical protein" and other dynamic captions)
+                for (const caption of Object.keys(originalLegendColors.value)) {
+                    const originalColor = originalLegendColors.value[caption];
+                    if (!originalColor) continue;
+
+                    // Update legend entry color in all legend groups
+                    for (const targetGroup of featureLegendGroups) {
+                        const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(caption)}"]`);
+                        if (entryGroup) {
+                            const paths = entryGroup.querySelectorAll('path');
+                            for (const path of paths) {
+                                const fill = path.getAttribute('fill');
+                                if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                    path.setAttribute('fill', originalColor);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Also restore any deleted legend entries
                 restoreDeletedLegendEntries();
+
+                // Clear the list of captions added via Legend Editor (keep file-loaded ones)
+                for (const cap of addedLegendCaptions.value) {
+                    if (!fileLegendCaptions.value.has(cap)) {
+                        addedLegendCaptions.value.delete(cap);
+                    }
+                }
+
+                // Clear manual specific rules (feature color overrides) - but keep file-loaded rules
+                for (let i = manualSpecificRules.length - 1; i >= 0; i--) {
+                    if (!manualSpecificRules[i].fromFile) {
+                        manualSpecificRules.splice(i, 1);
+                    }
+                }
+
+                // Clear feature color overrides
+                Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
+
+                // Re-apply palette to features (now that specific rules are cleared)
+                applyPaletteToSvg();
+
+                // Re-extract legend entries to refresh the UI
+                extractLegendEntries();
             };
 
             const setupLegendDrag = () => {
@@ -5130,7 +5282,7 @@ json.dumps({"width": width})
 
                 switch (position) {
                     case 'left':
-                        console.log('[DEBUG] Matched case: left');
+                        debugLog('Matched case: left');
                         return {
                             vbWidth: viewBoxWidth + legendWidth * 1.1,
                             vbHeight: viewBoxHeight,
@@ -5140,7 +5292,7 @@ json.dumps({"width": width})
                             legendY: (viewBoxHeight - legendHeight) / 2
                         };
                     case 'right':
-                        console.log('[DEBUG] Matched case: right');
+                        debugLog('Matched case: right');
                         return {
                             vbWidth: viewBoxWidth + legendWidth * 1.1,
                             vbHeight: viewBoxHeight,
@@ -5220,8 +5372,8 @@ json.dumps({"width": width})
 
                 if (!isLinear) {
                     // === CIRCULAR MODE: Use absolute positioning from base config ===
-                    console.log('[DEBUG] Circular mode reposition:', { newPosition, oldPosition });
-                    console.log('[DEBUG] circularBaseConfig:', circularBaseConfig.value);
+                    debugLog('Circular mode reposition:', { newPosition, oldPosition });
+                    debugLog('circularBaseConfig:', circularBaseConfig.value);
 
                     // Handle legend visibility
                     if (legendGroup) {
@@ -5250,11 +5402,11 @@ json.dumps({"width": width})
                         console.log(`[DEBUG] ⚠️ Legend size CHANGED: ${origLegendWidth.toFixed(1)}x${origLegendHeight.toFixed(1)} -> ${legendWidth.toFixed(1)}x${legendHeight.toFixed(1)}`);
                         console.log(`[DEBUG] ⚠️ Shift calculation affected: old=${(origLegendWidth * 0.55).toFixed(1)}, new=${(legendWidth * 0.55).toFixed(1)}`);
                     }
-                    console.log('[DEBUG] baseConfig:', baseConfig);
+                    debugLog('baseConfig:', baseConfig);
 
                     // Calculate absolute configuration for new position
                     const config = getCircularAbsoluteConfig(newPosition, baseConfig);
-                    console.log('[DEBUG] calculated config:', config);
+                    debugLog('calculated config:', config);
 
                     // Set viewBox to absolute value (not delta)
                     svg.setAttribute('viewBox', `0 0 ${config.vbWidth} ${config.vbHeight}`);
@@ -5268,11 +5420,11 @@ json.dumps({"width": width})
                     }
 
                     // Set diagram elements to absolute positions based on base transforms + shift
-                    console.log('[DEBUG] Circular: diagramElementBaseTransforms size:', diagramElementBaseTransforms.value.size);
-                    console.log('[DEBUG] Circular: diagramElements count:', diagramElements.value.length);
+                    debugLog('Circular: diagramElementBaseTransforms size:', diagramElementBaseTransforms.value.size);
+                    debugLog('Circular: diagramElements count:', diagramElements.value.length);
 
                     // Debug: Show all base transforms at start of repositioning
-                    console.log('[DEBUG] Base transforms at reposition start:');
+                    debugLog('Base transforms at reposition start:');
                     for (const [el, transform] of diagramElementBaseTransforms.value) {
                         console.log(`  ${el.id}: {x:${transform.x}, y:${transform.y}}`);
                     }
@@ -5296,7 +5448,7 @@ json.dumps({"width": width})
 
                 } else {
                     // === LINEAR MODE: Dual legend support with proper repositioning ===
-                    console.log('[DEBUG] Linear mode reposition:', { newPosition, oldPosition });
+                    debugLog('Linear mode reposition:', { newPosition, oldPosition });
 
                     // Get SVG dimensions
                     let viewBox = svg.getAttribute('viewBox');
@@ -5304,7 +5456,7 @@ json.dumps({"width": width})
                     const parts = viewBox.split(/\s+/).map(parseFloat);
                     if (parts.length !== 4) return;
                     let [vbX, vbY, vbW, vbH] = parts;
-                    console.log('[DEBUG] viewBox:', { vbX, vbY, vbW, vbH });
+                    debugLog('viewBox:', { vbX, vbY, vbW, vbH });
 
                     // Helper to check layout type
                     const isHorizontalLayout = (pos) => pos === 'top' || pos === 'bottom';
@@ -5314,7 +5466,7 @@ json.dumps({"width": width})
                     const generatedPos = linearBaseConfig.value.generatedPosition || 'right';
                     const wasHorizontal = isHorizontalLayout(generatedPos);
                     const nowHorizontal = isHorizontalLayout(newPosition);
-                    console.log('[DEBUG] layout:', { generatedPos, wasHorizontal, nowHorizontal });
+                    debugLog('layout:', { generatedPos, wasHorizontal, nowHorizontal });
 
                     // Handle legend visibility
                     if (legendGroup) {
@@ -5326,15 +5478,15 @@ json.dumps({"width": width})
                             // Find dual legend groups
                             const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
                             const verticalLegend = legendGroup.querySelector('#legend_vertical');
-                            console.log('[DEBUG] dual legends found:', { horizontal: !!horizontalLegend, vertical: !!verticalLegend });
+                            debugLog('dual legends found:', { horizontal: !!horizontalLegend, vertical: !!verticalLegend });
 
                             // Toggle visibility between horizontal and vertical legends
                             if (horizontalLegend && verticalLegend) {
                                 // Debug: Show the actual SVG structure of both legend groups
-                                console.log('[DEBUG] Horizontal legend innerHTML (first 500 chars):', horizontalLegend.innerHTML.substring(0, 500));
-                                console.log('[DEBUG] Vertical legend innerHTML (first 500 chars):', verticalLegend.innerHTML.substring(0, 500));
-                                console.log('[DEBUG] Before toggle - horizontal display:', horizontalLegend.getAttribute('display'));
-                                console.log('[DEBUG] Before toggle - vertical display:', verticalLegend.getAttribute('display'));
+                                debugLog('Horizontal legend innerHTML (first 500 chars):', horizontalLegend.innerHTML.substring(0, 500));
+                                debugLog('Vertical legend innerHTML (first 500 chars):', verticalLegend.innerHTML.substring(0, 500));
+                                debugLog('Before toggle - horizontal display:', horizontalLegend.getAttribute('display'));
+                                debugLog('Before toggle - vertical display:', verticalLegend.getAttribute('display'));
 
                                 // First, temporarily show both to get accurate dimensions
                                 horizontalLegend.removeAttribute('display');
@@ -5343,8 +5495,8 @@ json.dumps({"width": width})
                                 // Get dimensions from both legends
                                 const hBbox = horizontalLegend.getBBox();
                                 const vBbox = verticalLegend.getBBox();
-                                console.log('[DEBUG] Horizontal legend bbox:', { width: hBbox.width, height: hBbox.height });
-                                console.log('[DEBUG] Vertical legend bbox:', { width: vBbox.width, height: vBbox.height });
+                                debugLog('Horizontal legend bbox:', { width: hBbox.width, height: hBbox.height });
+                                debugLog('Vertical legend bbox:', { width: vBbox.width, height: vBbox.height });
 
                                 // Now set proper visibility
                                 if (nowHorizontal) {
@@ -5352,17 +5504,17 @@ json.dumps({"width": width})
                                     verticalLegend.setAttribute('display', 'none');
                                     legendWidth = hBbox.width || linearBaseConfig.value.horizontalLegendWidth || legendWidth;
                                     legendHeight = hBbox.height || linearBaseConfig.value.horizontalLegendHeight || legendHeight;
-                                    console.log('[DEBUG] Showing HORIZONTAL legend, using dimensions:', { legendWidth, legendHeight });
+                                    debugLog('Showing HORIZONTAL legend, using dimensions:', { legendWidth, legendHeight });
                                 } else {
                                     // Show vertical legend, hide horizontal
                                     horizontalLegend.setAttribute('display', 'none');
                                     legendWidth = vBbox.width || linearBaseConfig.value.verticalLegendWidth || legendWidth;
                                     legendHeight = vBbox.height || linearBaseConfig.value.verticalLegendHeight || legendHeight;
-                                    console.log('[DEBUG] Showing VERTICAL legend, using dimensions:', { legendWidth, legendHeight });
+                                    debugLog('Showing VERTICAL legend, using dimensions:', { legendWidth, legendHeight });
                                 }
 
-                                console.log('[DEBUG] After toggle - horizontal display:', horizontalLegend.getAttribute('display'));
-                                console.log('[DEBUG] After toggle - vertical display:', verticalLegend.getAttribute('display'));
+                                debugLog('After toggle - horizontal display:', horizontalLegend.getAttribute('display'));
+                                debugLog('After toggle - vertical display:', verticalLegend.getAttribute('display'));
 
                                 // Ensure gradient IDs are unique and update colors for BOTH legends
                                 ensureUniquePairwiseGradientIds(svg);
@@ -5390,13 +5542,13 @@ json.dumps({"width": width})
                                 const vbAttr = nowHorizontal
                                     ? svg.getAttribute('data-horizontal-viewbox')
                                     : svg.getAttribute('data-vertical-viewbox');
-                                console.log('[DEBUG] Applying viewBox attribute:', vbAttr);
+                                debugLog('Applying viewBox attribute:', vbAttr);
                                 if (vbAttr) {
                                     const vbParts = vbAttr.split(/\s+/).map(parseFloat);
                                     if (vbParts.length === 4) {
                                         [vbX, vbY, vbW, vbH] = vbParts;
                                         svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
-                                        console.log('[DEBUG] ViewBox set to:', { vbX, vbY, vbW, vbH });
+                                        debugLog('ViewBox set to:', { vbX, vbY, vbW, vbH });
                                     }
                                 }
 
@@ -5405,12 +5557,12 @@ json.dumps({"width": width})
                                 const requiredHeight = legendHeight + legendPadding;
                                 if (!nowHorizontal && requiredHeight > vbH) {
                                     const newVbH = requiredHeight;
-                                    console.log('[DEBUG] Expanding canvas height:', { oldHeight: vbH, newHeight: newVbH });
+                                    debugLog('Expanding canvas height:', { oldHeight: vbH, newHeight: newVbH });
 
                                     // Just expand viewBox - don't shift diagram elements (keeps diagram in place)
                                     vbH = newVbH;
                                     svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
-                                    console.log('[DEBUG] ViewBox after height expansion:', { vbX, vbY, vbW, vbH });
+                                    debugLog('ViewBox after height expansion:', { vbX, vbY, vbW, vbH });
                                 }
                             }
 
@@ -5502,8 +5654,8 @@ json.dumps({"width": width})
                         }
 
                         // Apply shifts to diagram elements
-                        console.log('[DEBUG] Linear: diagramElementBaseTransforms size:', diagramElementBaseTransforms.value.size);
-                        console.log('[DEBUG] Linear: diagramElements count:', diagramElements.value.length);
+                        debugLog('Linear: diagramElementBaseTransforms size:', diagramElementBaseTransforms.value.size);
+                        debugLog('Linear: diagramElements count:', diagramElements.value.length);
                         diagramElements.value.forEach((el, idx) => {
                             const baseTransform = diagramElementBaseTransforms.value.get(el) || { x: 0, y: 0 };
                             const foundInMap = diagramElementBaseTransforms.value.has(el);
@@ -5967,7 +6119,7 @@ json.dumps({"width": width})
                             savedBaseTransformsById.get(id).push(transform);
                         }
                     }
-                    console.log('[DEBUG] Saved', savedBaseTransformsById.size, 'base transform IDs before DOM update');
+                    debugLog('Saved', savedBaseTransformsById.size, 'base transform IDs before DOM update');
                 }
 
                 Vue.nextTick(() => {
@@ -5982,7 +6134,11 @@ json.dumps({"width": width})
                         }
                     }
 
-                    extractLegendEntries();
+                    // Skip extractLegendEntries when setFeatureColor is handling it
+                    // This prevents race condition where watcher overwrites correct legend state
+                    if (!skipExtractOnSvgChange.value) {
+                        extractLegendEntries();
+                    }
                     setupLegendDrag();
                     setupDiagramDrag();
 
@@ -5990,7 +6146,7 @@ json.dumps({"width": width})
                         // Full capture for fresh generation
                         captureBaseConfig();
                         captureOriginalStroke();
-                        console.log('[DEBUG] Full base config capture (fresh generation)');
+                        debugLog('Full base config capture (fresh generation)');
 
                         // Reset canvas padding for new SVG
                         canvasPadding.top = 0;
@@ -6018,7 +6174,7 @@ json.dumps({"width": width})
                         }
                     } else if (savedBaseTransformsById && savedBaseTransformsById.size > 0) {
                         // Incremental edit - remap saved base transforms to new elements
-                        console.log('[DEBUG] Incremental edit - remapping base transforms');
+                        debugLog('Incremental edit - remapping base transforms');
 
                         const newBaseTransforms = new Map();
                         const idCounters = new Map();
@@ -6036,7 +6192,7 @@ json.dumps({"width": width})
                         });
 
                         diagramElementBaseTransforms.value = newBaseTransforms;
-                        console.log('[DEBUG] Remapped', newBaseTransforms.size, 'base transforms to new elements');
+                        debugLog('Remapped', newBaseTransforms.size, 'base transforms to new elements');
 
                         // After DOM update, reapply legend position if it differs from generated position
                         // This is needed because Python regenerates SVG with the original position
@@ -6048,10 +6204,10 @@ json.dumps({"width": width})
                                 ? linearBaseConfig.value.generatedPosition
                                 : circularBaseConfig.value.generatedPosition;
 
-                            console.log('[DEBUG] Checking position after incremental edit:', { currentLegendPos, generatedPos, isLinear, shouldSkipPositionReapply });
+                            debugLog('Checking position after incremental edit:', { currentLegendPos, generatedPos, isLinear, shouldSkipPositionReapply });
 
                             if (currentLegendPos && generatedPos && currentLegendPos !== generatedPos) {
-                                console.log('[DEBUG] Position differs from generated - reapplying position shift');
+                                debugLog('Position differs from generated - reapplying position shift');
                                 // IMPORTANT: Set flag BEFORE calling repositionForLegendChange
                                 // to ensure the subsequent watch(svgContent) doesn't call captureBaseConfig()
                                 skipCaptureBaseConfig.value = true;
@@ -6062,10 +6218,10 @@ json.dumps({"width": width})
                                 return;
                             }
                         } else {
-                            console.log('[DEBUG] Skipping position reapply (triggered by repositionForLegendChange)');
+                            debugLog('Skipping position reapply (triggered by repositionForLegendChange)');
                         }
                     } else {
-                        console.log('[DEBUG] Incremental edit but no base transforms to remap');
+                        debugLog('Incremental edit but no base transforms to remap');
                     }
 
                     // Reset the flag
@@ -6080,8 +6236,24 @@ json.dumps({"width": width})
                 }
             };
 
+            // Close popups and panels with Escape key
+            const handleEscapeKey = (e) => {
+                if (e.key === 'Escape') {
+                    if (clickedFeature.value) clickedFeature.value = null;
+                    if (showCanvasControls.value) showCanvasControls.value = false;
+                    if (showLegendPanel.value) showLegendPanel.value = false;
+                    if (showFeaturePanel.value) showFeaturePanel.value = false;
+                }
+            };
+
             onMounted(() => {
                 document.addEventListener('click', closeFeaturePopup);
+                document.addEventListener('keydown', handleEscapeKey);
+            });
+
+            onUnmounted(() => {
+                document.removeEventListener('click', closeFeaturePopup);
+                document.removeEventListener('keydown', handleEscapeKey);
             });
 
             const setFeatureColor = async (feat, color, customCaption = null) => {
@@ -6140,8 +6312,12 @@ json.dumps({"width": width})
                     if (actualCaption && typeof actualCaption === 'string' && actualCaption !== caption) {
                         featureColorOverrides[featureKey] = { color, caption: actualCaption };
                     }
-                    extractLegendEntries();  // Refresh legend editor
+                    // Don't call extractLegendEntries here - will be called after rule is added
                 }
+
+                // Set flag to skip extractLegendEntries in watch(svgContent) during rule update
+                // This prevents race condition where watcher overwrites correct legend state
+                skipExtractOnSvgChange.value = true;
 
                 // NOW add/update the rule with the correct caption (possibly numbered)
                 const finalCaption = (actualCaption && typeof actualCaption === 'string') ? actualCaption : caption;
@@ -6163,6 +6339,12 @@ json.dumps({"width": width})
                         cap: finalCaption
                     });
                 }
+
+                // Wait for watchers to complete, then refresh legend editor
+                await Vue.nextTick();
+                await Vue.nextTick();  // Double nextTick to ensure watcher completes
+                skipExtractOnSvgChange.value = false;
+                extractLegendEntries();  // Final refresh with correct legend state
             };
 
             // Clear feature list and save/restore legend positions when switching modes
@@ -6238,7 +6420,8 @@ json.dumps({"width": width})
                                 qual: parts[1].trim(),
                                 val: parts[2].trim(),
                                 color: parts[3].trim(),
-                                cap: parts[4] ? parts[4].trim() : ""
+                                cap: parts[4] ? parts[4].trim() : "",
+                                fromFile: true  // Mark as loaded from file (preserved on reset)
                             };
                             manualSpecificRules.push(rule);
                             count++;
@@ -6257,6 +6440,8 @@ json.dumps({"width": width})
                             const actualCaption = await addLegendEntry(rule.cap, rule.color);
                             if (actualCaption && typeof actualCaption === 'string') {
                                 addedLegendCaptions.value.add(actualCaption);
+                                // Also track as file-loaded (preserved on reset)
+                                fileLegendCaptions.value.add(actualCaption);
                             }
                         }
                         extractLegendEntries();
@@ -6636,6 +6821,7 @@ json.dumps({"width": width})
                 pairwiseMatchFactors.value = {};
                 // Clear tracked legend entries (will be regenerated)
                 addedLegendCaptions.value = new Set();
+                fileLegendCaptions.value = new Set();
                 // Clear feature color overrides (custom legend entries from previous records)
                 Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
                 legendEntries.value = [];
@@ -6643,8 +6829,9 @@ json.dumps({"width": width})
                 deletedLegendEntries.value = [];
                 // Clear legend color overrides (custom colors from Legend Editor)
                 Object.keys(legendColorOverrides).forEach(k => delete legendColorOverrides[k]);
-                // Clear original legend order (will be captured on first extraction)
+                // Clear original legend order and colors (will be captured on first extraction)
                 originalLegendOrder.value = [];
+                originalLegendColors.value = {};
                 // Store current palette's pairwise colors as reference for interpolation
                 window._origPairwiseMin = currentColors.value.pairwise_match_min || '#FFE7E7';
                 window._origPairwiseMax = currentColors.value.pairwise_match_max || '#FF7272';
@@ -6942,6 +7129,10 @@ json.dumps({"width": width})
                          link.download = fname; link.href = downloadUrl; link.click();
                          URL.revokeObjectURL(downloadUrl); URL.revokeObjectURL(url);
                     }, "image/png");
+                };
+                img.onerror = () => {
+                    console.error('Failed to load SVG for PNG conversion');
+                    URL.revokeObjectURL(url);
                 };
                 img.src = url;
             };
