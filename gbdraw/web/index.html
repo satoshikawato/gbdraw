@@ -18,6 +18,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>gbdraw Web App</title>
     <script src="https://unpkg.com/vue@3.5.25/dist/vue.global.js" integrity="sha384-E8hqvY4j8uyv6njj1udAOIuT4tsPt3lJET321mQPDQ29OMiTOYMuG/UDD6o52yW4" crossorigin="anonymous"></script>
+    <!--
+        SECURITY NOTE: TailwindCSS Play CDN uses JIT compilation, so Subresource Integrity (SRI)
+        cannot be applied. This CDN dynamically generates CSS based on the page content.
+        For production with stricter security requirements, consider using a static Tailwind build.
+        See: https://tailwindcss.com/docs/installation
+    -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js" integrity="sha384-l95tshxQlbjf4kdyWZf10uUL5Dw8/iN9q16SQ+ttOEWA8SN0cLG6BGDGY17GxToh" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/@phosphor-icons/web@2.1.2/src/index.js" integrity="sha384-J7cw2fbG1T4C5MirTVUxsZGaMfw2m0XsCgOQEqUvB1OF9VIsHWuZF1GmyVRzs7eu" crossorigin="anonymous"></script>
@@ -597,21 +603,23 @@
                         <!-- Reset all positions button -->
                         <button v-if="svgContent" @click="resetAllPositions"
                                 class="w-8 h-8 flex items-center justify-center bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600"
-                                title="Reset all element positions">
+                                title="Reset all element positions"
+                                aria-label="Reset all element positions">
                             <i class="ph ph-arrow-counter-clockwise"></i>
                         </button>
                         <!-- Canvas size toggle -->
                         <button v-if="svgContent" @click="showCanvasControls = !showCanvasControls"
                                 class="w-8 h-8 flex items-center justify-center bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600"
                                 :class="{ 'bg-blue-50 text-blue-600 border-blue-300': showCanvasControls }"
-                                title="Canvas padding controls">
+                                title="Canvas padding controls"
+                                aria-label="Toggle canvas padding controls">
                             <i class="ph ph-frame-corners"></i>
                         </button>
                         <!-- Zoom controls -->
                         <div class="flex gap-1 bg-white shadow rounded-lg p-1 border border-slate-200">
-                            <button @click="zoom+=0.1" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded"><i class="ph ph-plus"></i></button>
-                            <button @click="zoom = 1.0" class="w-12 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-xs font-mono rounded">{{Math.round(zoom*100)}}%</button>
-                            <button @click="zoom = Math.max(0.1, zoom-0.1)" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded"><i class="ph ph-minus"></i></button>
+                            <button @click="zoom+=0.1" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded" aria-label="Zoom in"><i class="ph ph-plus"></i></button>
+                            <button @click="zoom = 1.0" class="w-12 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-xs font-mono rounded" aria-label="Reset zoom">{{Math.round(zoom*100)}}%</button>
+                            <button @click="zoom = Math.max(0.1, zoom-0.1)" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded" aria-label="Zoom out"><i class="ph ph-minus"></i></button>
                         </div>
                     </div>
 
@@ -847,7 +855,7 @@
                             <i class="ph ph-list-bullets text-purple-600"></i>
                             <span class="font-bold text-slate-700">Legend Editor</span>
                         </div>
-                        <button @click="showLegendPanel = false" class="text-slate-400 hover:text-slate-600">
+                        <button @click="showLegendPanel = false" class="text-slate-400 hover:text-slate-600" aria-label="Close legend editor">
                             <i class="ph ph-x text-lg"></i>
                         </button>
                     </div>
@@ -989,7 +997,7 @@
                             <span class="font-bold text-slate-700">Feature Colors</span>
                             <span class="text-xs text-slate-400">({{ filteredFeatures.length }})</span>
                         </div>
-                        <button @click="showFeaturePanel = false" class="text-slate-400 hover:text-slate-600">
+                        <button @click="showFeaturePanel = false" class="text-slate-400 hover:text-slate-600" aria-label="Close feature color editor">
                             <i class="ph ph-x text-lg"></i>
                         </button>
                     </div>
@@ -1095,7 +1103,7 @@
 </script>
 
 <script>
-    const { createApp, ref, reactive, onMounted, computed, watch } = Vue;
+    const { createApp, ref, reactive, onMounted, onUnmounted, computed, watch } = Vue;
     const GBDRAW_WHEEL_NAME = "gbdraw-0.8.3-py3-none-any.whl"; 
 
     // HelpTip & FileUploader Components
@@ -1653,6 +1661,9 @@
                 return true;  // Location is always available
             };
 
+            // Helper to get display caption for a feature (used for legend entries and sibling matching)
+            const getFeatureCaption = (f) => f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
+
             // Helper to get the best qualifier for a feature
             // Uses hash pseudo-qualifier which is always unique (based on type+position+strand)
             // The svg_id is computed the same way in both Python and JavaScript
@@ -2062,7 +2073,6 @@
                 const caption = feat.product || feat.gene || feat.locus_tag || feat.note || `${feat.type} at ${feat.start}..${feat.end}`;
 
                 // Count siblings with the same caption
-                const getFeatureCaption = (f) => f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
                 const siblings = extractedFeatures.value.filter(f => getFeatureCaption(f) === caption && f.svg_id !== clickedFeature.value.svg_id);
 
                 if (siblings.length > 0) {
@@ -2134,7 +2144,6 @@
                     console.log(`Reset fill color to default (${defaultColor}) for feature: ${svgId}`);
                 } else if (choice === 'all') {
                     // Reset all features with the same caption
-                    const getFeatureCaption = (f) => f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
                     const matchingFeatures = extractedFeatures.value.filter(f => getFeatureCaption(f) === caption);
 
                     for (const matchFeat of matchingFeatures) {
@@ -2215,7 +2224,6 @@
                     console.log(`Found legend entry "${targetLegendEntry.caption}" with ${siblingFeatureIds.length} features`);
                 } else {
                     // Fallback: find features by caption and color
-                    const getFeatureCaption = (f) => f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
                     const siblingFeatures = extractedFeatures.value.filter(f => {
                         if (getFeatureCaption(f) !== caption) return false;
                         const el = svg.querySelector(`#${CSS.escape(f.svg_id)}`);
@@ -2349,7 +2357,6 @@
 
                 console.log(`[DEBUG] Reapplying ${overrideCount} stroke overrides to new SVG`);
 
-                const getFeatureCaption = (f) => f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
                 let totalUpdated = 0;
 
                 for (const [caption, overrides] of Object.entries(legendStrokeOverrides)) {
@@ -6151,8 +6158,24 @@ json.dumps({"width": width})
                 }
             };
 
+            // Close popups and panels with Escape key
+            const handleEscapeKey = (e) => {
+                if (e.key === 'Escape') {
+                    if (clickedFeature.value) clickedFeature.value = null;
+                    if (showCanvasControls.value) showCanvasControls.value = false;
+                    if (showLegendPanel.value) showLegendPanel.value = false;
+                    if (showFeaturePanel.value) showFeaturePanel.value = false;
+                }
+            };
+
             onMounted(() => {
                 document.addEventListener('click', closeFeaturePopup);
+                document.addEventListener('keydown', handleEscapeKey);
+            });
+
+            onUnmounted(() => {
+                document.removeEventListener('click', closeFeaturePopup);
+                document.removeEventListener('keydown', handleEscapeKey);
             });
 
             const setFeatureColor = async (feat, color, customCaption = null) => {
