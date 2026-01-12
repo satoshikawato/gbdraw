@@ -3599,6 +3599,10 @@ json.dumps({"width": width})
                     // Update pairwise legend position after adding entry (before canvas expansion check)
                     updatePairwiseLegendPositions(svg);
 
+                    if (mode.value === 'linear' && (form.legend === 'top' || form.legend === 'bottom')) {
+                        ensureHorizontalLegendFit(svg);
+                    }
+
                     // Note: expandCanvasForVerticalLegend is called by updatePairwiseLegendPositions
 
                     // Update results for reactivity
@@ -4310,6 +4314,83 @@ json.dumps({"width": width})
                 diagramOffset.y = 0;
             };
 
+            const ensureHorizontalLegendFit = (svg) => {
+                if (mode.value !== 'linear') return;
+                if (form.legend !== 'top' && form.legend !== 'bottom') return;
+
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return;
+
+                const viewBox = svg.getAttribute('viewBox');
+                if (!viewBox) return;
+                const parts = viewBox.split(/\s+/).map(parseFloat);
+                if (parts.length !== 4) return;
+                let [vbX, vbY, vbW, vbH] = parts;
+
+                const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+                const verticalLegend = legendGroup.querySelector('#legend_vertical');
+                const hasDualLegends = !!(horizontalLegend && verticalLegend);
+
+                if (hasDualLegends) {
+                    horizontalLegend.removeAttribute('display');
+                    verticalLegend.setAttribute('display', 'none');
+                } else {
+                    reflowSingleLegendLayout(svg, 'horizontal', vbW);
+                }
+
+                const legendBBox = legendGroup.getBBox();
+                let legendWidth = legendBBox.width || linearBaseConfig.value.horizontalLegendWidth || 0;
+                let legendHeight = legendBBox.height || linearBaseConfig.value.horizontalLegendHeight || 0;
+                linearBaseConfig.value.horizontalLegendWidth = legendWidth;
+                linearBaseConfig.value.horizontalLegendHeight = legendHeight;
+
+                const padding = 20;
+                let viewBoxChanged = false;
+
+                if (legendWidth + padding * 2 > vbW) {
+                    vbW = legendWidth + padding * 2;
+                    viewBoxChanged = true;
+                }
+
+                let finalX = (vbW - legendWidth) / 2;
+                let finalY = form.legend === 'top' ? padding : vbH - legendHeight - padding;
+                legendGroup.setAttribute('transform', `translate(${finalX}, ${finalY})`);
+                legendInitialTransform.value = { x: finalX, y: finalY };
+                legendCurrentOffset.x = 0;
+                legendCurrentOffset.y = 0;
+
+                const legendBounds = getTransformedBBox(legendGroup);
+                const diagramBounds = getElementsBounds(diagramElements.value);
+
+                if (legendBounds && diagramBounds) {
+                    if (form.legend === 'top') {
+                        const overlap = legendBounds.y + legendBounds.height + padding - diagramBounds.y;
+                        if (overlap > 0) {
+                            applyDiagramShift(0, overlap);
+                            vbH += overlap;
+                            viewBoxChanged = true;
+                        }
+                    } else {
+                        const overlap = diagramBounds.y + diagramBounds.height + padding - legendBounds.y;
+                        if (overlap > 0) {
+                            vbH += overlap;
+                            viewBoxChanged = true;
+                            finalY = vbH - legendHeight - padding;
+                            legendGroup.setAttribute('transform', `translate(${finalX}, ${finalY})`);
+                            legendInitialTransform.value = { x: finalX, y: finalY };
+                            legendCurrentOffset.x = 0;
+                            legendCurrentOffset.y = 0;
+                        }
+                    }
+                }
+
+                if (viewBoxChanged) {
+                    svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                    svg.setAttribute('data-horizontal-viewbox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                    linearBaseConfig.value.horizontalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
+                }
+            };
+
             // Extract legend entries from current SVG for the Legend Editor panel
             // Uses the visible (active) legend group for extraction
             const extractLegendEntries = () => {
@@ -4528,6 +4609,11 @@ json.dumps({"width": width})
 
                 // Update local state
                 legendEntries.value[idx].caption = newCaption;
+
+                updatePairwiseLegendPositions(svg);
+                if (mode.value === 'linear' && (form.legend === 'top' || form.legend === 'bottom')) {
+                    ensureHorizontalLegendFit(svg);
+                }
 
                 // Save to results
                 skipCaptureBaseConfig.value = true;
@@ -4966,6 +5052,11 @@ json.dumps({"width": width})
                 }
 
                 // Save to results
+                updatePairwiseLegendPositions(svg);
+                if (mode.value === 'linear' && (form.legend === 'top' || form.legend === 'bottom')) {
+                    ensureHorizontalLegendFit(svg);
+                }
+
                 skipCaptureBaseConfig.value = true;
                 const resultIdx = selectedResultIndex.value;
                 if (resultIdx >= 0 && results.value.length > resultIdx) {
@@ -5045,6 +5136,11 @@ json.dumps({"width": width})
                 }
 
                 // Save to results
+                updatePairwiseLegendPositions(svg);
+                if (mode.value === 'linear' && (form.legend === 'top' || form.legend === 'bottom')) {
+                    ensureHorizontalLegendFit(svg);
+                }
+
                 skipCaptureBaseConfig.value = true;
                 const resultIdx = selectedResultIndex.value;
                 if (resultIdx >= 0 && results.value.length > resultIdx) {
@@ -5107,6 +5203,11 @@ json.dumps({"width": width})
                 legendEntries.value[idx2] = { ...temp, yPos: y2 };
 
                 // Save to results
+                updatePairwiseLegendPositions(svg);
+                if (mode.value === 'linear' && (form.legend === 'top' || form.legend === 'bottom')) {
+                    ensureHorizontalLegendFit(svg);
+                }
+
                 skipCaptureBaseConfig.value = true;
                 const resultIdx = selectedResultIndex.value;
                 if (resultIdx >= 0 && results.value.length > resultIdx) {
