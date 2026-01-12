@@ -794,7 +794,8 @@
                                 </button>
 
                                 <!-- Apply to all features with same individual label (when feature belongs to multi-feature rule and has label siblings) -->
-                                <button v-if="colorScopeDialog.matchingRule && colorScopeDialog.ruleMatchCount > 1 && colorScopeDialog.individualLabelSiblingCount > 0"
+                                <!-- Hide this button if individualLabel === legendName to avoid duplicate buttons -->
+                                <button v-if="colorScopeDialog.matchingRule && colorScopeDialog.ruleMatchCount > 1 && colorScopeDialog.individualLabelSiblingCount > 0 && colorScopeDialog.individualLabel !== colorScopeDialog.legendName"
                                         @click="handleColorScopeChoice('individualLabel')"
                                         class="w-full px-4 py-2 bg-teal-100 hover:bg-teal-200 text-teal-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-users text-lg"></i>
@@ -3064,16 +3065,16 @@
                         if (featureLegend) legendGroups.push(featureLegend);
                         else legendGroups.push(mainLegend);
                     }
-                    // Also check for horizontal legend
+                    // Also check for horizontal legend (linear mode uses unique IDs)
                     const hLegend = svg.getElementById('legend_horizontal');
                     if (hLegend) {
-                        const hFeatureLegend = hLegend.querySelector('#feature_legend');
+                        const hFeatureLegend = hLegend.querySelector('#feature_legend_h');
                         if (hFeatureLegend) legendGroups.push(hFeatureLegend);
                     }
-                    // Also check for vertical legend
+                    // Also check for vertical legend (linear mode uses unique IDs)
                     const vLegend = svg.getElementById('legend_vertical');
                     if (vLegend) {
-                        const vFeatureLegend = vLegend.querySelector('#feature_legend');
+                        const vFeatureLegend = vLegend.querySelector('#feature_legend_v');
                         if (vFeatureLegend) legendGroups.push(vFeatureLegend);
                     }
 
@@ -3280,6 +3281,30 @@
                     if (ff) fontFamily = ff;
                 }
 
+                // Detect stroke settings from existing legend entries or use current adv settings
+                let strokeColor = 'black';
+                let strokeWidth = 0.5;
+                // First check user's custom settings
+                if (adv.block_stroke_color) {
+                    strokeColor = adv.block_stroke_color;
+                }
+                if (adv.block_stroke_width !== null && adv.block_stroke_width !== undefined) {
+                    strokeWidth = adv.block_stroke_width;
+                }
+                // If no custom settings, detect from existing legend entries
+                if (!adv.block_stroke_color && firstColorRect) {
+                    const existingStroke = firstColorRect.getAttribute('stroke');
+                    if (existingStroke && existingStroke !== 'none') {
+                        strokeColor = existingStroke;
+                    }
+                }
+                if ((adv.block_stroke_width === null || adv.block_stroke_width === undefined) && firstColorRect) {
+                    const existingStrokeWidth = firstColorRect.getAttribute('stroke-width');
+                    if (existingStrokeWidth) {
+                        strokeWidth = parseFloat(existingStrokeWidth);
+                    }
+                }
+
                 const lineMargin = (24 / 14) * rectSize;
                 const xMargin = (22 / 14) * rectSize;
 
@@ -3467,7 +3492,7 @@ json.dumps({"width": width})
                         }
 
                         // Generate SVG for this group's position
-                        const resultJson = pyodide.runPython(`generate_legend_entry_svg("${escapedCaption}", "${color}", ${newY}, ${rectSize}, ${fontSize}, "${escapedFontFamily}", ${newX})`);
+                        const resultJson = pyodide.runPython(`generate_legend_entry_svg("${escapedCaption}", "${color}", ${newY}, ${rectSize}, ${fontSize}, "${escapedFontFamily}", ${newX}, "${strokeColor}", ${strokeWidth})`);
                         const result = JSON.parse(resultJson);
 
                         // Create wrapper group with data-legend-key attribute
@@ -3495,7 +3520,7 @@ json.dumps({"width": width})
                     // Reposition pairwise legend in vertical layout if needed
                     const verticalLegend = legendGroup.querySelector('#legend_vertical');
                     if (verticalLegend) {
-                        const vFeatureLegend = verticalLegend.querySelector('#feature_legend');
+                        const vFeatureLegend = verticalLegend.querySelector('#feature_legend_v');
                         const vPairwiseLegend = verticalLegend.querySelector('#pairwise_legend');
 
                         if (vFeatureLegend && vPairwiseLegend) {
@@ -3527,7 +3552,7 @@ json.dumps({"width": width})
                     // Reposition pairwise legend in horizontal layout if needed (vertical centering)
                     const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
                     if (horizontalLegend) {
-                        const hFeatureLegend = horizontalLegend.querySelector('#feature_legend');
+                        const hFeatureLegend = horizontalLegend.querySelector('#feature_legend_h');
                         const hPairwiseLegend = horizontalLegend.querySelector('#pairwise_legend');
 
                         if (hFeatureLegend && hPairwiseLegend) {
@@ -3586,6 +3611,10 @@ json.dumps({"width": width})
                     }
 
                     console.log(`Added legend entry: "${finalCaption}" to ${allTargetGroups.length} legend group(s)`);
+
+                    // Apply current stroke settings to the newly added legend entry
+                    applyStylesToSvg();
+
                     return finalCaption;  // Return the actual caption used (may have (N) suffix)
                 } catch (e) {
                     console.error('Failed to add legend entry:', e);
@@ -3605,13 +3634,13 @@ json.dumps({"width": width})
                 const verticalLegend = legendGroup.querySelector('#legend_vertical');
 
                 if (horizontalLegend || verticalLegend) {
-                    // Dual legend mode
+                    // Dual legend mode (linear) - uses unique IDs
                     if (horizontalLegend) {
-                        const hFeature = horizontalLegend.querySelector('#feature_legend');
+                        const hFeature = horizontalLegend.querySelector('#feature_legend_h');
                         if (hFeature) groups.push(hFeature);
                     }
                     if (verticalLegend) {
-                        const vFeature = verticalLegend.querySelector('#feature_legend');
+                        const vFeature = verticalLegend.querySelector('#feature_legend_v');
                         if (vFeature) groups.push(vFeature);
                     }
                 } else {
@@ -3633,11 +3662,13 @@ json.dumps({"width": width})
                 const verticalLegend = legendGroup.querySelector('#legend_vertical');
 
                 if (horizontalLegend && verticalLegend) {
-                    // Return the visible one
+                    // Return the visible one (linear mode uses unique IDs)
                     const hVisible = horizontalLegend.style.display !== 'none' &&
                                     horizontalLegend.getAttribute('display') !== 'none';
                     const targetLegend = hVisible ? horizontalLegend : verticalLegend;
-                    const featureGroup = targetLegend.querySelector('#feature_legend');
+                    const featureGroup = hVisible
+                        ? targetLegend.querySelector('#feature_legend_h')
+                        : targetLegend.querySelector('#feature_legend_v');
                     return featureGroup || targetLegend;
                 }
 
@@ -3791,7 +3822,7 @@ json.dumps({"width": width})
                 }
 
                 // Calculate total legend content height by measuring feature + pairwise legend
-                const featureLegend = verticalLegend.querySelector('#feature_legend');
+                const featureLegend = verticalLegend.querySelector('#feature_legend_v');
                 const pairwiseLegend = verticalLegend.querySelector('#pairwise_legend');
 
                 let legendContentHeight = 0;
@@ -3856,7 +3887,7 @@ json.dumps({"width": width})
                 // Reposition pairwise legend in vertical layout
                 const verticalLegend = legendGroup.querySelector('#legend_vertical');
                 if (verticalLegend) {
-                    const vFeatureLegend = verticalLegend.querySelector('#feature_legend');
+                    const vFeatureLegend = verticalLegend.querySelector('#feature_legend_v');
                     const vPairwiseLegend = verticalLegend.querySelector('#pairwise_legend');
 
                     if (vFeatureLegend && vPairwiseLegend) {
@@ -3887,7 +3918,7 @@ json.dumps({"width": width})
                 // Reposition pairwise legend in horizontal layout (vertical centering)
                 const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
                 if (horizontalLegend) {
-                    const hFeatureLegend = horizontalLegend.querySelector('#feature_legend');
+                    const hFeatureLegend = horizontalLegend.querySelector('#feature_legend_h');
                     const hPairwiseLegend = horizontalLegend.querySelector('#pairwise_legend');
 
                     if (hFeatureLegend && hPairwiseLegend) {
@@ -4069,6 +4100,136 @@ json.dumps({"width": width})
 
                 // Update pairwise legend position after compaction
                 updatePairwiseLegendPositions(svg);
+            };
+
+            // Reflow single-legend layouts when dual legends are unavailable (legacy SVGs)
+            const reflowSingleLegendLayout = (svg, layout, maxWidthOverride = null) => {
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return null;
+
+                const featureLegendGroup = legendGroup.querySelector('#feature_legend') || legendGroup;
+                const pairwiseLegend = legendGroup.querySelector('#pairwise_legend');
+
+                // Collect text elements (exclude pairwise legend labels if needed)
+                const textElements = Array.from(featureLegendGroup.querySelectorAll('text')).filter(el => {
+                    if (!pairwiseLegend) return true;
+                    return !el.closest('#pairwise_legend');
+                });
+                if (textElements.length === 0) return null;
+
+                // Detect rect_size from existing legend entries
+                let rectSize = 14;
+                const colorRects = Array.from(featureLegendGroup.querySelectorAll('path')).filter(r => {
+                    const fill = r.getAttribute('fill');
+                    if (!fill || fill === 'none' || fill.startsWith('url(')) return false;
+                    if (pairwiseLegend && r.closest('#pairwise_legend')) return false;
+                    return true;
+                });
+                if (colorRects.length > 0) {
+                    const d = colorRects[0].getAttribute('d');
+                    if (d) {
+                        const lMatch = d.match(/L\s+([\d.]+),/);
+                        if (lMatch) rectSize = parseFloat(lMatch[1]);
+                    }
+                }
+
+                const lineHeight = (24 / 14) * rectSize;
+                const textXOffset = (22 / 14) * rectSize;
+
+                // Map text elements to their matching rects
+                const entries = textElements.map(t => {
+                    const pos = parseTransformXY(t.getAttribute('transform'));
+                    return { text: t, rect: null, x: pos.x, y: pos.y };
+                });
+                entries.forEach(entry => {
+                    const expectedRectX = entry.x - textXOffset;
+                    let matchedRect = null;
+                    let bestDistance = Infinity;
+                    for (const r of colorRects) {
+                        const rectPos = parseTransformXY(r.getAttribute('transform'));
+                        if (Math.abs(rectPos.y - entry.y) < 1) {
+                            const distance = Math.abs(rectPos.x - expectedRectX);
+                            if (distance < textXOffset && distance < bestDistance) {
+                                bestDistance = distance;
+                                matchedRect = r;
+                            }
+                        }
+                    }
+                    entry.rect = matchedRect;
+                });
+
+                if (layout === 'horizontal') {
+                    // Horizontal layout: re-flow entries left-to-right with wrapping
+                    let maxWidth = maxWidthOverride || 800;
+                    if (!maxWidthOverride) {
+                        const viewBox = svg.getAttribute('viewBox');
+                        if (viewBox) {
+                            const parts = viewBox.split(/\s+/).map(parseFloat);
+                            if (parts.length === 4) maxWidth = parts[2];
+                        }
+                    }
+
+                    entries.sort((a, b) => {
+                        if (Math.abs(a.y - b.y) < 1) return a.x - b.x;
+                        return a.y - b.y;
+                    });
+
+                    let newX = textXOffset;
+                    let newY = rectSize / 2;
+
+                    entries.forEach(entry => {
+                        const textBBox = entry.text.getBBox();
+                        const entryWidth = rectSize + textXOffset + textBBox.width + textXOffset;
+
+                        if (newX + entryWidth > maxWidth && newX > textXOffset) {
+                            newX = textXOffset;
+                            newY += lineHeight;
+                        }
+
+                        entry.text.setAttribute('transform', `translate(${newX}, ${newY})`);
+                        if (entry.rect) {
+                            entry.rect.setAttribute('transform', `translate(${newX - textXOffset}, ${newY})`);
+                        }
+
+                        newX += entryWidth;
+                    });
+                } else {
+                    // Vertical layout: stack entries
+                    entries.sort((a, b) => a.y - b.y);
+                    let newY = rectSize / 2;
+                    entries.forEach(entry => {
+                        entry.text.setAttribute('transform', `translate(${textXOffset}, ${newY})`);
+                        if (entry.rect) {
+                            entry.rect.setAttribute('transform', `translate(0, ${newY})`);
+                        }
+                        newY += lineHeight;
+                    });
+                }
+
+                // Reposition pairwise legend if present (single-legend layout)
+                if (pairwiseLegend) {
+                    const featureBBox = featureLegendGroup.getBBox();
+                    const pairwiseBBox = pairwiseLegend.getBBox();
+                    const featureOffset = parseTransformXY(featureLegendGroup.getAttribute('transform'));
+
+                    let pairwiseX = featureOffset.x;
+                    let pairwiseY = featureOffset.y;
+
+                    if (layout === 'horizontal') {
+                        const yOffset = Math.max((featureBBox.height - pairwiseBBox.height) / 2, 0);
+                        pairwiseX = featureOffset.x + featureBBox.width + textXOffset;
+                        pairwiseY = featureOffset.y + yOffset;
+                    } else {
+                        const xOffset = Math.max((featureBBox.width - pairwiseBBox.width) / 2, 0);
+                        pairwiseX = featureOffset.x + xOffset;
+                        pairwiseY = featureOffset.y + featureBBox.height + lineHeight / 2;
+                    }
+
+                    pairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${pairwiseY})`);
+                }
+
+                const bbox = legendGroup.getBBox();
+                return { legendWidth: bbox.width, legendHeight: bbox.height };
             };
 
             // Extract legend entries from current SVG for the Legend Editor panel
@@ -5365,10 +5526,11 @@ json.dumps({"width": width})
                             // Find dual legend groups
                             const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
                             const verticalLegend = legendGroup.querySelector('#legend_vertical');
+                            const hasDualLegends = !!(horizontalLegend && verticalLegend);
                             debugLog('dual legends found:', { horizontal: !!horizontalLegend, vertical: !!verticalLegend });
 
                             // Toggle visibility between horizontal and vertical legends
-                            if (horizontalLegend && verticalLegend) {
+                            if (hasDualLegends) {
                                 // Debug: Show the actual SVG structure of both legend groups
                                 debugLog('Horizontal legend innerHTML (first 500 chars):', horizontalLegend.innerHTML.substring(0, 500));
                                 debugLog('Vertical legend innerHTML (first 500 chars):', verticalLegend.innerHTML.substring(0, 500));
@@ -5424,33 +5586,65 @@ json.dumps({"width": width})
                                         }
                                     });
                                 }
+                            }
 
-                                // Apply correct viewBox for the layout type
-                                const vbAttr = nowHorizontal
-                                    ? svg.getAttribute('data-horizontal-viewbox')
-                                    : svg.getAttribute('data-vertical-viewbox');
-                                debugLog('Applying viewBox attribute:', vbAttr);
-                                if (vbAttr) {
-                                    const vbParts = vbAttr.split(/\s+/).map(parseFloat);
-                                    if (vbParts.length === 4) {
-                                        [vbX, vbY, vbW, vbH] = vbParts;
-                                        svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
-                                        debugLog('ViewBox set to:', { vbX, vbY, vbW, vbH });
+                            // Apply correct viewBox for the layout type
+                            // First try data attributes, then fall back to stored config values
+                            const vbAttr = nowHorizontal
+                                ? svg.getAttribute('data-horizontal-viewbox')
+                                : svg.getAttribute('data-vertical-viewbox');
+                            debugLog('Applying viewBox attribute:', vbAttr);
+                            if (vbAttr) {
+                                const vbParts = vbAttr.split(/\s+/).map(parseFloat);
+                                if (vbParts.length === 4) {
+                                    [vbX, vbY, vbW, vbH] = vbParts;
+                                    svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                                    debugLog('ViewBox set to:', { vbX, vbY, vbW, vbH });
+                                }
+                            } else {
+                                // Fallback: use stored config viewBox values
+                                // These were calculated in captureBaseConfig based on legend dimensions
+                                const configVb = nowHorizontal
+                                    ? linearBaseConfig.value.horizontalViewBox
+                                    : linearBaseConfig.value.verticalViewBox;
+                                debugLog('Using config viewBox:', { nowHorizontal, configVb });
+                                if (configVb && configVb.w > 0 && configVb.h > 0) {
+                                    vbX = configVb.x;
+                                    vbY = configVb.y;
+                                    vbW = configVb.w;
+                                    vbH = configVb.h;
+                                    svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                                    debugLog('ViewBox set from config:', { vbX, vbY, vbW, vbH });
+                                }
+                            }
+
+                            if (!hasDualLegends) {
+                                const layout = nowHorizontal ? 'horizontal' : 'vertical';
+                                const reflowResult = reflowSingleLegendLayout(svg, layout, vbW);
+                                if (reflowResult) {
+                                    legendWidth = reflowResult.legendWidth || legendWidth;
+                                    legendHeight = reflowResult.legendHeight || legendHeight;
+                                    if (nowHorizontal) {
+                                        linearBaseConfig.value.horizontalLegendWidth = legendWidth;
+                                        linearBaseConfig.value.horizontalLegendHeight = legendHeight;
+                                    } else {
+                                        linearBaseConfig.value.verticalLegendWidth = legendWidth;
+                                        linearBaseConfig.value.verticalLegendHeight = legendHeight;
                                     }
                                 }
+                            }
 
-                                // Expand canvas height if vertical legend exceeds canvas height
-                                const legendPadding = 40;  // Top + bottom padding
-                                const requiredHeight = legendHeight + legendPadding;
-                                if (!nowHorizontal && requiredHeight > vbH) {
-                                    const newVbH = requiredHeight;
-                                    debugLog('Expanding canvas height:', { oldHeight: vbH, newHeight: newVbH });
+                            // Expand canvas height if vertical legend exceeds canvas height
+                            const legendPadding = 40;  // Top + bottom padding
+                            const requiredHeight = legendHeight + legendPadding;
+                            if (!nowHorizontal && requiredHeight > vbH) {
+                                const newVbH = requiredHeight;
+                                debugLog('Expanding canvas height:', { oldHeight: vbH, newHeight: newVbH });
 
-                                    // Just expand viewBox - don't shift diagram elements (keeps diagram in place)
-                                    vbH = newVbH;
-                                    svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
-                                    debugLog('ViewBox after height expansion:', { vbX, vbY, vbW, vbH });
-                                }
+                                // Just expand viewBox - don't shift diagram elements (keeps diagram in place)
+                                vbH = newVbH;
+                                svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                                debugLog('ViewBox after height expansion:', { vbX, vbY, vbW, vbH });
                             }
 
                             // Calculate legend position based on new position and viewBox
@@ -5934,9 +6128,61 @@ json.dumps({"width": width})
                         linearBaseConfig.value.verticalViewBox = { x: vParts[0], y: vParts[1], w: vParts[2], h: vParts[3] };
                         linearBaseConfig.value.horizontalViewBox = { x: hParts[0], y: hParts[1], w: hParts[2], h: hParts[3] };
                     } else {
-                        // Fallback: use current viewBox for both
-                        linearBaseConfig.value.verticalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
-                        linearBaseConfig.value.horizontalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
+                        // Fallback: calculate viewBox for both layouts based on legend dimensions
+                        // First get legend dimensions (will be refined below after checking dual legend groups)
+                        let vLegendW = legendWidth, vLegendH = legendHeight;
+                        let hLegendW = legendWidth, hLegendH = legendHeight;
+
+                        if (legendGroup) {
+                            const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+                            const verticalLegend = legendGroup.querySelector('#legend_vertical');
+                            if (horizontalLegend && verticalLegend) {
+                                // Temporarily show both to get accurate dimensions
+                                const hDisplay = horizontalLegend.getAttribute('display');
+                                const vDisplay = verticalLegend.getAttribute('display');
+                                horizontalLegend.removeAttribute('display');
+                                verticalLegend.removeAttribute('display');
+
+                                const hBbox = horizontalLegend.getBBox();
+                                const vBbox = verticalLegend.getBBox();
+                                hLegendW = hBbox.width || legendWidth;
+                                hLegendH = hBbox.height || legendHeight;
+                                vLegendW = vBbox.width || legendWidth;
+                                vLegendH = vBbox.height || legendHeight;
+
+                                // Restore original display states
+                                if (hDisplay) horizontalLegend.setAttribute('display', hDisplay);
+                                else horizontalLegend.removeAttribute('display');
+                                if (vDisplay) verticalLegend.setAttribute('display', vDisplay);
+                                else verticalLegend.removeAttribute('display');
+                            }
+                        }
+
+                        // Calculate viewBox based on generated position
+                        const genPos = form.legend;
+                        const isGeneratedVertical = genPos === 'left' || genPos === 'right';
+
+                        if (isGeneratedVertical) {
+                            // Generated with vertical layout (left/right)
+                            // Current viewBox fits vertical legend
+                            linearBaseConfig.value.verticalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
+                            // Calculate horizontal viewBox: remove vertical legend width, add horizontal legend height
+                            linearBaseConfig.value.horizontalViewBox = {
+                                x: vbX, y: vbY,
+                                w: vbW - vLegendW,
+                                h: vbH + hLegendH
+                            };
+                        } else {
+                            // Generated with horizontal layout (top/bottom)
+                            // Current viewBox fits horizontal legend
+                            linearBaseConfig.value.horizontalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
+                            // Calculate vertical viewBox: add vertical legend width, remove horizontal legend height
+                            linearBaseConfig.value.verticalViewBox = {
+                                x: vbX, y: vbY,
+                                w: vbW + vLegendW,
+                                h: vbH - hLegendH
+                            };
+                        }
                     }
 
                     // Get legend dimensions from dual legend groups if they exist
@@ -6597,16 +6843,16 @@ json.dumps({"width": width})
                                     results.append({"name": fname, "content": f.read()})
                             return json.dumps(results)
 
-                        def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=14, font_family="Arial", x_offset=0):
+                        def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=14, font_family="Arial", x_offset=0, stroke_color="black", stroke_width=0.5):
                             """Generate SVG elements for a single legend entry"""
                             from svgwrite.path import Path
                             from svgwrite.text import Text
                             import io
 
-                            # Create color rectangle path
+                            # Create color rectangle path with proper stroke (matching original legend entries)
                             half = rect_size / 2
                             rect_d = f"M 0,{-half} L {rect_size},{-half} L {rect_size},{half} L 0,{half} z"
-                            rect_svg = f'<path d="{rect_d}" fill="{color}" stroke="none" transform="translate({x_offset}, {y_offset})"/>'
+                            rect_svg = f'<path d="{rect_d}" fill="{color}" stroke="{stroke_color}" stroke-width="{stroke_width}" transform="translate({x_offset}, {y_offset})"/>'
 
                             # Create text element
                             x_margin = (22 / 14) * rect_size
