@@ -4135,6 +4135,9 @@ json.dumps({"width": width})
 
                 const lineHeight = (24 / 14) * rectSize;
                 const textXOffset = (22 / 14) * rectSize;
+                const featureOffset = parseTransformXY(featureLegendGroup.getAttribute('transform'));
+                const pairwiseBBox = pairwiseLegend ? pairwiseLegend.getBBox() : null;
+                const pairwiseWidth = pairwiseBBox ? pairwiseBBox.width : 0;
 
                 // Map text elements to their matching rects
                 const entries = textElements.map(t => {
@@ -4158,6 +4161,24 @@ json.dumps({"width": width})
                     entry.rect = matchedRect;
                 });
 
+                const computeFeatureBounds = () => {
+                    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                    entries.forEach(entry => {
+                        if (entry.newX === undefined || entry.newY === undefined) return;
+                        const textWidth = entry.textWidth || 0;
+                        const rectX = entry.newX - textXOffset;
+                        const rectY = entry.newY - rectSize / 2;
+                        const entryRight = entry.newX + textWidth + textXOffset;
+                        const entryBottom = entry.newY + rectSize / 2;
+                        minX = Math.min(minX, rectX);
+                        minY = Math.min(minY, rectY);
+                        maxX = Math.max(maxX, entryRight);
+                        maxY = Math.max(maxY, entryBottom);
+                    });
+                    if (minX === Infinity) return null;
+                    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+                };
+
                 if (layout === 'horizontal') {
                     // Horizontal layout: re-flow entries left-to-right with wrapping
                     let maxWidth = maxWidthOverride || 800;
@@ -4166,6 +4187,15 @@ json.dumps({"width": width})
                         if (viewBox) {
                             const parts = viewBox.split(/\s+/).map(parseFloat);
                             if (parts.length === 4) maxWidth = parts[2];
+                        }
+                    }
+
+                    const reservedOffset = Math.max(featureOffset.x, 0);
+                    let maxFeatureWidth = maxWidth - reservedOffset;
+                    if (pairwiseLegend && pairwiseWidth > 0) {
+                        maxFeatureWidth = maxWidth - reservedOffset - pairwiseWidth - textXOffset;
+                        if (maxFeatureWidth < rectSize + textXOffset * 2) {
+                            maxFeatureWidth = maxWidth - reservedOffset;
                         }
                     }
 
@@ -4181,7 +4211,7 @@ json.dumps({"width": width})
                         const textBBox = entry.text.getBBox();
                         const entryWidth = rectSize + textXOffset + textBBox.width + textXOffset;
 
-                        if (newX + entryWidth > maxWidth && newX > textXOffset) {
+                        if (newX + entryWidth > maxFeatureWidth && newX > textXOffset) {
                             newX = textXOffset;
                             newY += lineHeight;
                         }
@@ -4190,6 +4220,9 @@ json.dumps({"width": width})
                         if (entry.rect) {
                             entry.rect.setAttribute('transform', `translate(${newX - textXOffset}, ${newY})`);
                         }
+                        entry.newX = newX;
+                        entry.newY = newY;
+                        entry.textWidth = textBBox.width;
 
                         newX += entryWidth;
                     });
@@ -4198,31 +4231,41 @@ json.dumps({"width": width})
                     entries.sort((a, b) => a.y - b.y);
                     let newY = rectSize / 2;
                     entries.forEach(entry => {
+                        const textBBox = entry.text.getBBox();
                         entry.text.setAttribute('transform', `translate(${textXOffset}, ${newY})`);
                         if (entry.rect) {
                             entry.rect.setAttribute('transform', `translate(0, ${newY})`);
                         }
+                        entry.newX = textXOffset;
+                        entry.newY = newY;
+                        entry.textWidth = textBBox.width;
                         newY += lineHeight;
                     });
                 }
 
                 // Reposition pairwise legend if present (single-legend layout)
                 if (pairwiseLegend) {
-                    const featureBBox = featureLegendGroup.getBBox();
-                    const pairwiseBBox = pairwiseLegend.getBBox();
-                    const featureOffset = parseTransformXY(featureLegendGroup.getAttribute('transform'));
+                    const featureBounds = computeFeatureBounds();
+                    const fallbackBBox = featureLegendGroup.getBBox();
+                    const featureBBox = featureBounds || fallbackBBox;
 
-                    let pairwiseX = featureOffset.x;
-                    let pairwiseY = featureOffset.y;
+                    const featureX = featureOffset.x + (featureBounds ? featureBounds.x : fallbackBBox.x);
+                    const featureY = featureOffset.y + (featureBounds ? featureBounds.y : fallbackBBox.y);
+                    const featureWidth = featureBBox.width;
+                    const featureHeight = featureBBox.height;
+                    const effectivePairwiseBBox = pairwiseBBox || pairwiseLegend.getBBox();
+
+                    let pairwiseX = featureX;
+                    let pairwiseY = featureY;
 
                     if (layout === 'horizontal') {
-                        const yOffset = Math.max((featureBBox.height - pairwiseBBox.height) / 2, 0);
-                        pairwiseX = featureOffset.x + featureBBox.width + textXOffset;
-                        pairwiseY = featureOffset.y + yOffset;
+                        const yOffset = Math.max((featureHeight - effectivePairwiseBBox.height) / 2, 0);
+                        pairwiseX = featureX + featureWidth + textXOffset;
+                        pairwiseY = featureY + yOffset;
                     } else {
-                        const xOffset = Math.max((featureBBox.width - pairwiseBBox.width) / 2, 0);
-                        pairwiseX = featureOffset.x + xOffset;
-                        pairwiseY = featureOffset.y + featureBBox.height + lineHeight / 2;
+                        const xOffset = Math.max((featureWidth - effectivePairwiseBBox.width) / 2, 0);
+                        pairwiseX = featureX + xOffset;
+                        pairwiseY = featureY + featureHeight + lineHeight / 2;
                     }
 
                     pairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${pairwiseY})`);
@@ -4230,6 +4273,41 @@ json.dumps({"width": width})
 
                 const bbox = legendGroup.getBBox();
                 return { legendWidth: bbox.width, legendHeight: bbox.height };
+            };
+
+            const getTransformedBBox = (el) => {
+                if (!el) return null;
+                const bbox = el.getBBox();
+                const offset = parseTransformXY(el.getAttribute('transform'));
+                return { x: bbox.x + offset.x, y: bbox.y + offset.y, width: bbox.width, height: bbox.height };
+            };
+
+            const getElementsBounds = (elements) => {
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                elements.forEach(el => {
+                    if (!el) return;
+                    const bounds = getTransformedBBox(el);
+                    if (!bounds) return;
+                    minX = Math.min(minX, bounds.x);
+                    minY = Math.min(minY, bounds.y);
+                    maxX = Math.max(maxX, bounds.x + bounds.width);
+                    maxY = Math.max(maxY, bounds.y + bounds.height);
+                });
+                if (minX === Infinity) return null;
+                return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+            };
+
+            const applyDiagramShift = (deltaX, deltaY) => {
+                if (diagramElements.value.length === 0) return;
+                diagramElements.value.forEach(el => {
+                    const current = parseTransformXY(el.getAttribute('transform'));
+                    const newX = current.x + deltaX;
+                    const newY = current.y + deltaY;
+                    el.setAttribute('transform', `translate(${newX}, ${newY})`);
+                    diagramElementOriginalTransforms.value.set(el, { x: newX, y: newY });
+                });
+                diagramOffset.x = 0;
+                diagramOffset.y = 0;
             };
 
             // Extract legend entries from current SVG for the Legend Editor panel
@@ -5515,6 +5593,7 @@ json.dumps({"width": width})
                     const wasHorizontal = isHorizontalLayout(generatedPos);
                     const nowHorizontal = isHorizontalLayout(newPosition);
                     debugLog('layout:', { generatedPos, wasHorizontal, nowHorizontal });
+                    const prevHorizontalLegendHeight = linearBaseConfig.value.horizontalLegendHeight || legendHeight;
 
                     // Handle legend visibility
                     if (legendGroup) {
@@ -5546,19 +5625,27 @@ json.dumps({"width": width})
                                 const vBbox = verticalLegend.getBBox();
                                 debugLog('Horizontal legend bbox:', { width: hBbox.width, height: hBbox.height });
                                 debugLog('Vertical legend bbox:', { width: vBbox.width, height: vBbox.height });
+                                const hLegendWidth = hBbox.width || linearBaseConfig.value.horizontalLegendWidth || legendWidth;
+                                const hLegendHeight = hBbox.height || linearBaseConfig.value.horizontalLegendHeight || legendHeight;
+                                const vLegendWidth = vBbox.width || linearBaseConfig.value.verticalLegendWidth || legendWidth;
+                                const vLegendHeight = vBbox.height || linearBaseConfig.value.verticalLegendHeight || legendHeight;
+                                linearBaseConfig.value.horizontalLegendWidth = hLegendWidth;
+                                linearBaseConfig.value.horizontalLegendHeight = hLegendHeight;
+                                linearBaseConfig.value.verticalLegendWidth = vLegendWidth;
+                                linearBaseConfig.value.verticalLegendHeight = vLegendHeight;
 
                                 // Now set proper visibility
                                 if (nowHorizontal) {
                                     // Show horizontal legend, hide vertical
                                     verticalLegend.setAttribute('display', 'none');
-                                    legendWidth = hBbox.width || linearBaseConfig.value.horizontalLegendWidth || legendWidth;
-                                    legendHeight = hBbox.height || linearBaseConfig.value.horizontalLegendHeight || legendHeight;
+                                    legendWidth = hLegendWidth;
+                                    legendHeight = hLegendHeight;
                                     debugLog('Showing HORIZONTAL legend, using dimensions:', { legendWidth, legendHeight });
                                 } else {
                                     // Show vertical legend, hide horizontal
                                     horizontalLegend.setAttribute('display', 'none');
-                                    legendWidth = vBbox.width || linearBaseConfig.value.verticalLegendWidth || legendWidth;
-                                    legendHeight = vBbox.height || linearBaseConfig.value.verticalLegendHeight || legendHeight;
+                                    legendWidth = vLegendWidth;
+                                    legendHeight = vLegendHeight;
                                     debugLog('Showing VERTICAL legend, using dimensions:', { legendWidth, legendHeight });
                                 }
 
@@ -5624,14 +5711,30 @@ json.dumps({"width": width})
                                 if (reflowResult) {
                                     legendWidth = reflowResult.legendWidth || legendWidth;
                                     legendHeight = reflowResult.legendHeight || legendHeight;
-                                    if (nowHorizontal) {
-                                        linearBaseConfig.value.horizontalLegendWidth = legendWidth;
-                                        linearBaseConfig.value.horizontalLegendHeight = legendHeight;
-                                    } else {
-                                        linearBaseConfig.value.verticalLegendWidth = legendWidth;
-                                        linearBaseConfig.value.verticalLegendHeight = legendHeight;
-                                    }
                                 }
+                            }
+
+                            const padding = 20;
+
+                            if (nowHorizontal) {
+                                linearBaseConfig.value.horizontalLegendWidth = legendWidth;
+                                linearBaseConfig.value.horizontalLegendHeight = legendHeight;
+
+                                if (legendWidth + padding * 2 > vbW) {
+                                    vbW = legendWidth + padding * 2;
+                                }
+
+                                const heightDelta = legendHeight - prevHorizontalLegendHeight;
+                                if (heightDelta > 0) {
+                                    vbH += heightDelta;
+                                }
+
+                                svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                                svg.setAttribute('data-horizontal-viewbox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                                linearBaseConfig.value.horizontalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
+                            } else {
+                                linearBaseConfig.value.verticalLegendWidth = legendWidth;
+                                linearBaseConfig.value.verticalLegendHeight = legendHeight;
                             }
 
                             // Expand canvas height if vertical legend exceeds canvas height
@@ -5644,11 +5747,15 @@ json.dumps({"width": width})
                                 // Just expand viewBox - don't shift diagram elements (keeps diagram in place)
                                 vbH = newVbH;
                                 svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                                svg.setAttribute('data-vertical-viewbox', `${vbX} ${vbY} ${vbW} ${vbH}`);
                                 debugLog('ViewBox after height expansion:', { vbX, vbY, vbW, vbH });
+                                linearBaseConfig.value.verticalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
+                            } else if (!nowHorizontal) {
+                                svg.setAttribute('data-vertical-viewbox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                                linearBaseConfig.value.verticalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
                             }
 
                             // Calculate legend position based on new position and viewBox
-                            const padding = 20;
                             let finalX, finalY;
 
                             switch (newPosition) {
@@ -5748,6 +5855,39 @@ json.dumps({"width": width})
                         });
                         diagramOffset.x = 0;
                         diagramOffset.y = 0;
+
+                        if (nowHorizontal && legendGroup) {
+                            const legendBounds = getTransformedBBox(legendGroup);
+                            const diagramBounds = getElementsBounds(diagramElements.value);
+                            const overlapPadding = 20;
+
+                            if (legendBounds && diagramBounds) {
+                                if (newPosition === 'top') {
+                                    const overlap = legendBounds.y + legendBounds.height + overlapPadding - diagramBounds.y;
+                                    if (overlap > 0) {
+                                        applyDiagramShift(0, overlap);
+                                        vbH += overlap;
+                                        svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                                        svg.setAttribute('data-horizontal-viewbox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                                        linearBaseConfig.value.horizontalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
+                                    }
+                                } else if (newPosition === 'bottom') {
+                                    const overlap = diagramBounds.y + diagramBounds.height + overlapPadding - legendBounds.y;
+                                    if (overlap > 0) {
+                                        vbH += overlap;
+                                        svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                                        svg.setAttribute('data-horizontal-viewbox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                                        linearBaseConfig.value.horizontalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
+                                        const finalX = (vbW - legendWidth) / 2;
+                                        const finalY = vbH - legendHeight - overlapPadding;
+                                        legendGroup.setAttribute('transform', `translate(${finalX}, ${finalY})`);
+                                        legendInitialTransform.value = { x: finalX, y: finalY };
+                                        legendCurrentOffset.x = 0;
+                                        legendCurrentOffset.y = 0;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
