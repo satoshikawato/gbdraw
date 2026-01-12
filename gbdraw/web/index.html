@@ -1104,7 +1104,11 @@
 
 <script>
     const { createApp, ref, reactive, onMounted, onUnmounted, computed, watch } = Vue;
-    const GBDRAW_WHEEL_NAME = "gbdraw-0.8.3-py3-none-any.whl"; 
+    const GBDRAW_WHEEL_NAME = "gbdraw-0.8.3-py3-none-any.whl";
+
+    // Debug logging - set to true to enable verbose debug output
+    const DEBUG = false;
+    const debugLog = (...args) => { if (DEBUG) console.log('[DEBUG]', ...args); };
 
     // HelpTip & FileUploader Components
     const HelpTip = {
@@ -2351,7 +2355,7 @@
 
                 const overrideCount = Object.keys(legendStrokeOverrides).length;
                 if (overrideCount === 0) {
-                    console.log('[DEBUG] No stroke overrides to reapply');
+                    debugLog('No stroke overrides to reapply');
                     return;
                 }
 
@@ -5208,7 +5212,7 @@ json.dumps({"width": width})
 
                 switch (position) {
                     case 'left':
-                        console.log('[DEBUG] Matched case: left');
+                        debugLog('Matched case: left');
                         return {
                             vbWidth: viewBoxWidth + legendWidth * 1.1,
                             vbHeight: viewBoxHeight,
@@ -5218,7 +5222,7 @@ json.dumps({"width": width})
                             legendY: (viewBoxHeight - legendHeight) / 2
                         };
                     case 'right':
-                        console.log('[DEBUG] Matched case: right');
+                        debugLog('Matched case: right');
                         return {
                             vbWidth: viewBoxWidth + legendWidth * 1.1,
                             vbHeight: viewBoxHeight,
@@ -5298,8 +5302,8 @@ json.dumps({"width": width})
 
                 if (!isLinear) {
                     // === CIRCULAR MODE: Use absolute positioning from base config ===
-                    console.log('[DEBUG] Circular mode reposition:', { newPosition, oldPosition });
-                    console.log('[DEBUG] circularBaseConfig:', circularBaseConfig.value);
+                    debugLog('Circular mode reposition:', { newPosition, oldPosition });
+                    debugLog('circularBaseConfig:', circularBaseConfig.value);
 
                     // Handle legend visibility
                     if (legendGroup) {
@@ -5328,11 +5332,11 @@ json.dumps({"width": width})
                         console.log(`[DEBUG] ⚠️ Legend size CHANGED: ${origLegendWidth.toFixed(1)}x${origLegendHeight.toFixed(1)} -> ${legendWidth.toFixed(1)}x${legendHeight.toFixed(1)}`);
                         console.log(`[DEBUG] ⚠️ Shift calculation affected: old=${(origLegendWidth * 0.55).toFixed(1)}, new=${(legendWidth * 0.55).toFixed(1)}`);
                     }
-                    console.log('[DEBUG] baseConfig:', baseConfig);
+                    debugLog('baseConfig:', baseConfig);
 
                     // Calculate absolute configuration for new position
                     const config = getCircularAbsoluteConfig(newPosition, baseConfig);
-                    console.log('[DEBUG] calculated config:', config);
+                    debugLog('calculated config:', config);
 
                     // Set viewBox to absolute value (not delta)
                     svg.setAttribute('viewBox', `0 0 ${config.vbWidth} ${config.vbHeight}`);
@@ -5346,11 +5350,11 @@ json.dumps({"width": width})
                     }
 
                     // Set diagram elements to absolute positions based on base transforms + shift
-                    console.log('[DEBUG] Circular: diagramElementBaseTransforms size:', diagramElementBaseTransforms.value.size);
-                    console.log('[DEBUG] Circular: diagramElements count:', diagramElements.value.length);
+                    debugLog('Circular: diagramElementBaseTransforms size:', diagramElementBaseTransforms.value.size);
+                    debugLog('Circular: diagramElements count:', diagramElements.value.length);
 
                     // Debug: Show all base transforms at start of repositioning
-                    console.log('[DEBUG] Base transforms at reposition start:');
+                    debugLog('Base transforms at reposition start:');
                     for (const [el, transform] of diagramElementBaseTransforms.value) {
                         console.log(`  ${el.id}: {x:${transform.x}, y:${transform.y}}`);
                     }
@@ -5374,7 +5378,7 @@ json.dumps({"width": width})
 
                 } else {
                     // === LINEAR MODE: Dual legend support with proper repositioning ===
-                    console.log('[DEBUG] Linear mode reposition:', { newPosition, oldPosition });
+                    debugLog('Linear mode reposition:', { newPosition, oldPosition });
 
                     // Get SVG dimensions
                     let viewBox = svg.getAttribute('viewBox');
@@ -5382,7 +5386,7 @@ json.dumps({"width": width})
                     const parts = viewBox.split(/\s+/).map(parseFloat);
                     if (parts.length !== 4) return;
                     let [vbX, vbY, vbW, vbH] = parts;
-                    console.log('[DEBUG] viewBox:', { vbX, vbY, vbW, vbH });
+                    debugLog('viewBox:', { vbX, vbY, vbW, vbH });
 
                     // Helper to check layout type
                     const isHorizontalLayout = (pos) => pos === 'top' || pos === 'bottom';
@@ -5392,7 +5396,7 @@ json.dumps({"width": width})
                     const generatedPos = linearBaseConfig.value.generatedPosition || 'right';
                     const wasHorizontal = isHorizontalLayout(generatedPos);
                     const nowHorizontal = isHorizontalLayout(newPosition);
-                    console.log('[DEBUG] layout:', { generatedPos, wasHorizontal, nowHorizontal });
+                    debugLog('layout:', { generatedPos, wasHorizontal, nowHorizontal });
 
                     // Handle legend visibility
                     if (legendGroup) {
@@ -5404,15 +5408,15 @@ json.dumps({"width": width})
                             // Find dual legend groups
                             const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
                             const verticalLegend = legendGroup.querySelector('#legend_vertical');
-                            console.log('[DEBUG] dual legends found:', { horizontal: !!horizontalLegend, vertical: !!verticalLegend });
+                            debugLog('dual legends found:', { horizontal: !!horizontalLegend, vertical: !!verticalLegend });
 
                             // Toggle visibility between horizontal and vertical legends
                             if (horizontalLegend && verticalLegend) {
                                 // Debug: Show the actual SVG structure of both legend groups
-                                console.log('[DEBUG] Horizontal legend innerHTML (first 500 chars):', horizontalLegend.innerHTML.substring(0, 500));
-                                console.log('[DEBUG] Vertical legend innerHTML (first 500 chars):', verticalLegend.innerHTML.substring(0, 500));
-                                console.log('[DEBUG] Before toggle - horizontal display:', horizontalLegend.getAttribute('display'));
-                                console.log('[DEBUG] Before toggle - vertical display:', verticalLegend.getAttribute('display'));
+                                debugLog('Horizontal legend innerHTML (first 500 chars):', horizontalLegend.innerHTML.substring(0, 500));
+                                debugLog('Vertical legend innerHTML (first 500 chars):', verticalLegend.innerHTML.substring(0, 500));
+                                debugLog('Before toggle - horizontal display:', horizontalLegend.getAttribute('display'));
+                                debugLog('Before toggle - vertical display:', verticalLegend.getAttribute('display'));
 
                                 // First, temporarily show both to get accurate dimensions
                                 horizontalLegend.removeAttribute('display');
@@ -5421,8 +5425,8 @@ json.dumps({"width": width})
                                 // Get dimensions from both legends
                                 const hBbox = horizontalLegend.getBBox();
                                 const vBbox = verticalLegend.getBBox();
-                                console.log('[DEBUG] Horizontal legend bbox:', { width: hBbox.width, height: hBbox.height });
-                                console.log('[DEBUG] Vertical legend bbox:', { width: vBbox.width, height: vBbox.height });
+                                debugLog('Horizontal legend bbox:', { width: hBbox.width, height: hBbox.height });
+                                debugLog('Vertical legend bbox:', { width: vBbox.width, height: vBbox.height });
 
                                 // Now set proper visibility
                                 if (nowHorizontal) {
@@ -5430,17 +5434,17 @@ json.dumps({"width": width})
                                     verticalLegend.setAttribute('display', 'none');
                                     legendWidth = hBbox.width || linearBaseConfig.value.horizontalLegendWidth || legendWidth;
                                     legendHeight = hBbox.height || linearBaseConfig.value.horizontalLegendHeight || legendHeight;
-                                    console.log('[DEBUG] Showing HORIZONTAL legend, using dimensions:', { legendWidth, legendHeight });
+                                    debugLog('Showing HORIZONTAL legend, using dimensions:', { legendWidth, legendHeight });
                                 } else {
                                     // Show vertical legend, hide horizontal
                                     horizontalLegend.setAttribute('display', 'none');
                                     legendWidth = vBbox.width || linearBaseConfig.value.verticalLegendWidth || legendWidth;
                                     legendHeight = vBbox.height || linearBaseConfig.value.verticalLegendHeight || legendHeight;
-                                    console.log('[DEBUG] Showing VERTICAL legend, using dimensions:', { legendWidth, legendHeight });
+                                    debugLog('Showing VERTICAL legend, using dimensions:', { legendWidth, legendHeight });
                                 }
 
-                                console.log('[DEBUG] After toggle - horizontal display:', horizontalLegend.getAttribute('display'));
-                                console.log('[DEBUG] After toggle - vertical display:', verticalLegend.getAttribute('display'));
+                                debugLog('After toggle - horizontal display:', horizontalLegend.getAttribute('display'));
+                                debugLog('After toggle - vertical display:', verticalLegend.getAttribute('display'));
 
                                 // Ensure gradient IDs are unique and update colors for BOTH legends
                                 ensureUniquePairwiseGradientIds(svg);
@@ -5468,13 +5472,13 @@ json.dumps({"width": width})
                                 const vbAttr = nowHorizontal
                                     ? svg.getAttribute('data-horizontal-viewbox')
                                     : svg.getAttribute('data-vertical-viewbox');
-                                console.log('[DEBUG] Applying viewBox attribute:', vbAttr);
+                                debugLog('Applying viewBox attribute:', vbAttr);
                                 if (vbAttr) {
                                     const vbParts = vbAttr.split(/\s+/).map(parseFloat);
                                     if (vbParts.length === 4) {
                                         [vbX, vbY, vbW, vbH] = vbParts;
                                         svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
-                                        console.log('[DEBUG] ViewBox set to:', { vbX, vbY, vbW, vbH });
+                                        debugLog('ViewBox set to:', { vbX, vbY, vbW, vbH });
                                     }
                                 }
 
@@ -5483,12 +5487,12 @@ json.dumps({"width": width})
                                 const requiredHeight = legendHeight + legendPadding;
                                 if (!nowHorizontal && requiredHeight > vbH) {
                                     const newVbH = requiredHeight;
-                                    console.log('[DEBUG] Expanding canvas height:', { oldHeight: vbH, newHeight: newVbH });
+                                    debugLog('Expanding canvas height:', { oldHeight: vbH, newHeight: newVbH });
 
                                     // Just expand viewBox - don't shift diagram elements (keeps diagram in place)
                                     vbH = newVbH;
                                     svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
-                                    console.log('[DEBUG] ViewBox after height expansion:', { vbX, vbY, vbW, vbH });
+                                    debugLog('ViewBox after height expansion:', { vbX, vbY, vbW, vbH });
                                 }
                             }
 
@@ -5580,8 +5584,8 @@ json.dumps({"width": width})
                         }
 
                         // Apply shifts to diagram elements
-                        console.log('[DEBUG] Linear: diagramElementBaseTransforms size:', diagramElementBaseTransforms.value.size);
-                        console.log('[DEBUG] Linear: diagramElements count:', diagramElements.value.length);
+                        debugLog('Linear: diagramElementBaseTransforms size:', diagramElementBaseTransforms.value.size);
+                        debugLog('Linear: diagramElements count:', diagramElements.value.length);
                         diagramElements.value.forEach((el, idx) => {
                             const baseTransform = diagramElementBaseTransforms.value.get(el) || { x: 0, y: 0 };
                             const foundInMap = diagramElementBaseTransforms.value.has(el);
@@ -6045,7 +6049,7 @@ json.dumps({"width": width})
                             savedBaseTransformsById.get(id).push(transform);
                         }
                     }
-                    console.log('[DEBUG] Saved', savedBaseTransformsById.size, 'base transform IDs before DOM update');
+                    debugLog('Saved', savedBaseTransformsById.size, 'base transform IDs before DOM update');
                 }
 
                 Vue.nextTick(() => {
@@ -6068,7 +6072,7 @@ json.dumps({"width": width})
                         // Full capture for fresh generation
                         captureBaseConfig();
                         captureOriginalStroke();
-                        console.log('[DEBUG] Full base config capture (fresh generation)');
+                        debugLog('Full base config capture (fresh generation)');
 
                         // Reset canvas padding for new SVG
                         canvasPadding.top = 0;
@@ -6096,7 +6100,7 @@ json.dumps({"width": width})
                         }
                     } else if (savedBaseTransformsById && savedBaseTransformsById.size > 0) {
                         // Incremental edit - remap saved base transforms to new elements
-                        console.log('[DEBUG] Incremental edit - remapping base transforms');
+                        debugLog('Incremental edit - remapping base transforms');
 
                         const newBaseTransforms = new Map();
                         const idCounters = new Map();
@@ -6114,7 +6118,7 @@ json.dumps({"width": width})
                         });
 
                         diagramElementBaseTransforms.value = newBaseTransforms;
-                        console.log('[DEBUG] Remapped', newBaseTransforms.size, 'base transforms to new elements');
+                        debugLog('Remapped', newBaseTransforms.size, 'base transforms to new elements');
 
                         // After DOM update, reapply legend position if it differs from generated position
                         // This is needed because Python regenerates SVG with the original position
@@ -6126,10 +6130,10 @@ json.dumps({"width": width})
                                 ? linearBaseConfig.value.generatedPosition
                                 : circularBaseConfig.value.generatedPosition;
 
-                            console.log('[DEBUG] Checking position after incremental edit:', { currentLegendPos, generatedPos, isLinear, shouldSkipPositionReapply });
+                            debugLog('Checking position after incremental edit:', { currentLegendPos, generatedPos, isLinear, shouldSkipPositionReapply });
 
                             if (currentLegendPos && generatedPos && currentLegendPos !== generatedPos) {
-                                console.log('[DEBUG] Position differs from generated - reapplying position shift');
+                                debugLog('Position differs from generated - reapplying position shift');
                                 // IMPORTANT: Set flag BEFORE calling repositionForLegendChange
                                 // to ensure the subsequent watch(svgContent) doesn't call captureBaseConfig()
                                 skipCaptureBaseConfig.value = true;
@@ -6140,10 +6144,10 @@ json.dumps({"width": width})
                                 return;
                             }
                         } else {
-                            console.log('[DEBUG] Skipping position reapply (triggered by repositionForLegendChange)');
+                            debugLog('Skipping position reapply (triggered by repositionForLegendChange)');
                         }
                     } else {
-                        console.log('[DEBUG] Incremental edit but no base transforms to remap');
+                        debugLog('Incremental edit but no base transforms to remap');
                     }
 
                     // Reset the flag
@@ -7041,6 +7045,10 @@ json.dumps({"width": width})
                          link.download = fname; link.href = downloadUrl; link.click();
                          URL.revokeObjectURL(downloadUrl); URL.revokeObjectURL(url);
                     }, "image/png");
+                };
+                img.onerror = () => {
+                    console.error('Failed to load SVG for PNG conversion');
+                    URL.revokeObjectURL(url);
                 };
                 img.src = url;
             };
