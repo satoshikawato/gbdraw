@@ -31,7 +31,9 @@
       "Bash(node:*)",
       "Bash(git stash:*)",
       "Bash(git add:*)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "Bash(ss:*)",
+      "Bash(file:*)"
     ]
   }
 }

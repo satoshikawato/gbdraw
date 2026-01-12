@@ -753,7 +753,10 @@
                             <h3 class="text-lg font-bold text-slate-800 mb-2">Color Change Scope</h3>
                             <p class="text-sm text-slate-600 mb-4">
                                 <template v-if="colorScopeDialog.matchingRule">
-                                    This feature matches the rule "<span class="font-bold text-blue-600">{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val }}</span>".
+                                    This feature matches the rule "<span class="font-bold text-blue-600">{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val }}</span>" ({{ colorScopeDialog.ruleMatchCount }} features).
+                                    <template v-if="colorScopeDialog.siblingCount > 0">
+                                        <br>Caption "<span class="font-bold text-green-600">{{ colorScopeDialog.legendName }}</span>" is shared by {{ colorScopeDialog.siblingCount + 1 }} features.
+                                    </template>
                                 </template>
                                 <template v-else-if="colorScopeDialog.siblingCount > 0">
                                     There are <span class="font-bold text-blue-600">{{ colorScopeDialog.siblingCount }}</span> other features with the caption "<span class="font-bold text-blue-600">{{ colorScopeDialog.legendName }}</span>".
@@ -764,11 +767,20 @@
                             </p>
 
                             <div class="flex flex-col gap-2">
-                                <!-- Apply to all features with same caption -->
-                                <button @click="handleColorScopeChoice('all')"
+                                <!-- Apply to all features matching the rule (when rule exists) -->
+                                <button v-if="colorScopeDialog.matchingRule"
+                                        @click="handleColorScopeChoice('rule')"
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-users text-lg"></i>
-                                    <span>Apply to all "{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val || colorScopeDialog.legendName }}" features ({{ colorScopeDialog.siblingCount + 1 }})</span>
+                                    <span>Apply to all "{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val }}" ({{ colorScopeDialog.ruleMatchCount }})</span>
+                                </button>
+
+                                <!-- Apply to all features with same caption (when siblings exist) -->
+                                <button v-if="colorScopeDialog.siblingCount > 0"
+                                        @click="handleColorScopeChoice('caption')"
+                                        class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-users-three text-lg"></i>
+                                    <span>Apply to all "{{ colorScopeDialog.legendName }}" ({{ colorScopeDialog.siblingCount + 1 }})</span>
                                 </button>
 
                                 <!-- Apply to this feature only -->
@@ -784,7 +796,7 @@
                                         class="w-full px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <span class="w-5 h-5 rounded border border-purple-300 shrink-0"
                                           :style="{ backgroundColor: colorScopeDialog.existingCaptionColor }"></span>
-                                    <span>Use existing "{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val || colorScopeDialog.legendName }}" color</span>
+                                    <span>Use existing "{{ colorScopeDialog.legendName }}" color</span>
                                 </button>
                             </div>
 
@@ -1229,9 +1241,9 @@
                         ADD_TAGS: ['use', 'g', 'defs', 'linearGradient', 'radialGradient', 'stop', 'path', 'rect', 'circle', 'line', 'polyline', 'polygon', 'text', 'tspan'],
                         // Allowed attributes list (event handlers are automatically excluded, but can be explicitly forbidden as well)
                         ADD_ATTR: [
-                            'xlink:href', 'href', 'id', 'class',
-                            'fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin', 
-                            'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 
+                            'xlink:href', 'href', 'id', 'class', 'data-legend-key',
+                            'fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin',
+                            'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry',
                             'width', 'height', 'transform', 'viewBox', 'preserveAspectRatio',
                             'font-family', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline', 'writing-mode', 'letter-spacing'
                         ],
@@ -1460,6 +1472,10 @@
             // Flag to skip position reapply after repositionForLegendChange is called
             // This prevents infinite loop when repositionForLegendChange triggers watch(svgContent)
             const skipPositionReapply = ref(false);
+
+            // Flag to skip extractLegendEntries in watch(svgContent) when setFeatureColor is handling it
+            // This prevents race condition where watcher overwrites correct legend state
+            const skipExtractOnSvgChange = ref(false);
 
             // Base configuration for circular mode (stored when SVG is generated)
             // Used to calculate absolute positions without accumulation
@@ -1715,6 +1731,43 @@
                 return null;
             };
 
+            // Count all features that match a specific regex rule
+            const countFeaturesMatchingRule = (rule) => {
+                if (!rule || rule.qual === 'hash') return 0;
+
+                let count = 0;
+                for (const feat of extractedFeatures.value) {
+                    if (feat.type !== rule.feat) continue;
+
+                    let matches = false;
+                    if (rule.qual === 'product' && feat.product) {
+                        try {
+                            const regex = new RegExp(rule.val, 'i');
+                            matches = regex.test(feat.product);
+                        } catch {
+                            matches = feat.product === rule.val;
+                        }
+                    } else if (rule.qual === 'gene' && feat.gene) {
+                        try {
+                            const regex = new RegExp(rule.val, 'i');
+                            matches = regex.test(feat.gene);
+                        } catch {
+                            matches = feat.gene === rule.val;
+                        }
+                    } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
+                        try {
+                            const regex = new RegExp(rule.val, 'i');
+                            matches = regex.test(feat.locus_tag);
+                        } catch {
+                            matches = feat.locus_tag === rule.val;
+                        }
+                    }
+
+                    if (matches) count++;
+                }
+                return count;
+            };
+
             // Find features that share the same legend caption (excluding the current feature)
             const findFeaturesWithSameCaption = (currentFeat, caption) => {
                 if (!caption) return [];
@@ -1881,7 +1934,10 @@
                 // Check if this feature matches an existing regex rule (from -t table)
                 const matchingRule = findMatchingRegexRule(feat);
 
-                // Find sibling features with the same caption
+                // Count features matching the regex rule (if any)
+                const ruleMatchCount = matchingRule ? countFeaturesMatchingRule(matchingRule) : 0;
+
+                // Find sibling features with the same caption (different from regex rule matches)
                 const siblings = findFeaturesWithSameCaption(feat, legendName);
                 const siblingCount = siblings.length;
 
@@ -1897,6 +1953,7 @@
                     colorScopeDialog.feat = feat;
                     colorScopeDialog.color = color;
                     colorScopeDialog.matchingRule = matchingRule;
+                    colorScopeDialog.ruleMatchCount = ruleMatchCount;
                     colorScopeDialog.legendName = legendName;
                     colorScopeDialog.siblingCount = siblingCount;
                     colorScopeDialog.existingCaptionRule = existingCaption?.rule || null;
@@ -1914,28 +1971,40 @@
             const handleColorScopeChoice = async (choice) => {
                 const { feat, color, matchingRule, legendName, siblingCount, existingCaptionRule, existingCaptionColor } = colorScopeDialog;
 
-                if (choice === 'all') {
-                    // Apply to all features with same caption
+                if (choice === 'rule') {
+                    // Apply to all features matching the regex rule (update the rule color)
                     if (matchingRule) {
-                        // Update the existing rule's color - affects all matching features
                         matchingRule.color = color;
                         if (matchingRule.cap) {
                             updateLegendEntryColorByCaption(matchingRule.cap, color);
                             extractLegendEntries();
                         }
-                    } else {
-                        // Create a new product-based rule for all features with this caption
-                        const newRule = {
-                            feat: feat.type,
-                            qual: 'product',  // Use product as qualifier for caption matching
-                            val: legendName,  // Exact match
-                            color: color,
-                            cap: legendName
-                        };
-                        manualSpecificRules.push(newRule);
-                        addLegendEntry(legendName, color);
                     }
-                    // Trigger SVG update
+                    applySpecificRulesToSvg();
+                } else if (choice === 'caption') {
+                    // Apply to all features with the same caption
+                    // Create hash-based rules for each feature (takes priority over regex rules)
+                    const siblings = findFeaturesWithSameCaption(feat, legendName);
+                    const allFeatures = [feat, ...siblings];
+
+                    for (const f of allFeatures) {
+                        const existingIdx = manualSpecificRules.findIndex(r =>
+                            r.qual === 'hash' && r.val === f.svg_id
+                        );
+                        if (existingIdx >= 0) {
+                            manualSpecificRules[existingIdx].color = color;
+                            manualSpecificRules[existingIdx].cap = legendName;
+                        } else {
+                            manualSpecificRules.push({
+                                feat: f.type,
+                                qual: 'hash',
+                                val: f.svg_id,
+                                color: color,
+                                cap: legendName
+                            });
+                        }
+                    }
+                    addLegendEntry(legendName, color);
                     applySpecificRulesToSvg();
                 } else if (choice === 'single') {
                     // Create a new hash-based rule for this specific feature only
@@ -1969,6 +2038,7 @@
                 colorScopeDialog.feat = null;
                 colorScopeDialog.color = null;
                 colorScopeDialog.matchingRule = null;
+                colorScopeDialog.ruleMatchCount = 0;
                 colorScopeDialog.legendName = null;
                 colorScopeDialog.siblingCount = 0;
                 colorScopeDialog.existingCaptionRule = null;
@@ -6064,7 +6134,11 @@ json.dumps({"width": width})
                         }
                     }
 
-                    extractLegendEntries();
+                    // Skip extractLegendEntries when setFeatureColor is handling it
+                    // This prevents race condition where watcher overwrites correct legend state
+                    if (!skipExtractOnSvgChange.value) {
+                        extractLegendEntries();
+                    }
                     setupLegendDrag();
                     setupDiagramDrag();
 
@@ -6238,8 +6312,12 @@ json.dumps({"width": width})
                     if (actualCaption && typeof actualCaption === 'string' && actualCaption !== caption) {
                         featureColorOverrides[featureKey] = { color, caption: actualCaption };
                     }
-                    extractLegendEntries();  // Refresh legend editor
+                    // Don't call extractLegendEntries here - will be called after rule is added
                 }
+
+                // Set flag to skip extractLegendEntries in watch(svgContent) during rule update
+                // This prevents race condition where watcher overwrites correct legend state
+                skipExtractOnSvgChange.value = true;
 
                 // NOW add/update the rule with the correct caption (possibly numbered)
                 const finalCaption = (actualCaption && typeof actualCaption === 'string') ? actualCaption : caption;
@@ -6261,6 +6339,12 @@ json.dumps({"width": width})
                         cap: finalCaption
                     });
                 }
+
+                // Wait for watchers to complete, then refresh legend editor
+                await Vue.nextTick();
+                await Vue.nextTick();  // Double nextTick to ensure watcher completes
+                skipExtractOnSvgChange.value = false;
+                extractLegendEntries();  // Final refresh with correct legend state
             };
 
             // Clear feature list and save/restore legend positions when switching modes
