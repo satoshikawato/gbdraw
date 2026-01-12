@@ -5050,6 +5050,27 @@ json.dumps({"width": width})
                 }
             };
 
+            // Reset ONLY the legend position - does not affect colors, legend entries, or feature edits
+            const resetLegendPositionOnly = () => {
+                if (!svgContainer.value) return;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return;
+                const legendGroup = svg.getElementById('legend');
+                if (!legendGroup) return;
+
+                // Reset to original position (restore initial transform)
+                const initial = legendInitialTransform.value;
+                if (initial.x !== 0 || initial.y !== 0) {
+                    legendGroup.setAttribute('transform', `translate(${initial.x}, ${initial.y})`);
+                } else {
+                    legendGroup.removeAttribute('transform');
+                }
+                legendCurrentOffset.x = 0;
+                legendCurrentOffset.y = 0;
+            };
+
+            // Full legend reset - resets position AND all color/legend edits
+            // Only used for complete diagram regeneration, NOT for position-only reset
             const resetLegendPosition = () => {
                 if (!svgContainer.value) return;
                 const svg = svgContainer.value.querySelector('svg');
@@ -5266,7 +5287,7 @@ json.dumps({"width": width})
 
             const resetAllPositions = () => {
                 resetDiagramPosition();
-                resetLegendPosition();
+                resetLegendPositionOnly();  // Only reset position, preserve color/legend edits
             };
 
             // Calculate absolute canvas configuration for circular mode based on position
@@ -5807,14 +5828,16 @@ json.dumps({"width": width})
             // Store actual DOM elements since IDs can be duplicated (record and definition share same ID)
             const diagramElements = ref([]);
 
-            const setupDiagramDrag = () => {
+            const setupDiagramDrag = (preserveOffset = false) => {
                 if (!svgContainer.value) return;
                 const svg = svgContainer.value.querySelector('svg');
                 if (!svg) return;
 
-                // Reset offset
-                diagramOffset.x = 0;
-                diagramOffset.y = 0;
+                // Reset offset only for fresh diagram generation, not for incremental edits
+                if (!preserveOffset) {
+                    diagramOffset.x = 0;
+                    diagramOffset.y = 0;
+                }
 
                 // Known main diagram element IDs
                 const knownIds = ['tick', 'labels', 'Axis', 'gc_content', 'skew', 'gc_skew', 'length_bar'];
@@ -5868,7 +5891,16 @@ json.dumps({"width": width})
                 const originalTransforms = new Map();
                 foundElements.forEach(el => {
                     const transform = parseTransform(el.getAttribute('transform'));
-                    originalTransforms.set(el, transform);
+                    if (preserveOffset && (diagramOffset.x !== 0 || diagramOffset.y !== 0)) {
+                        // For incremental edits, the current DOM transform includes the user's drag offset.
+                        // Subtract the offset to get the "true" original transform for correct drag behavior.
+                        originalTransforms.set(el, {
+                            x: transform.x - diagramOffset.x,
+                            y: transform.y - diagramOffset.y
+                        });
+                    } else {
+                        originalTransforms.set(el, transform);
+                    }
                 });
                 diagramElementOriginalTransforms.value = originalTransforms;
 
@@ -6140,7 +6172,7 @@ json.dumps({"width": width})
                         extractLegendEntries();
                     }
                     setupLegendDrag();
-                    setupDiagramDrag();
+                    setupDiagramDrag(isIncrementalEdit);  // Preserve offset during incremental edits
 
                     if (!isIncrementalEdit) {
                         // Full capture for fresh generation
