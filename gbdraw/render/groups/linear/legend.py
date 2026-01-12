@@ -323,7 +323,7 @@ class LegendGroup:
 
         # Create horizontal legend group
         horizontal_group = Group(id="legend_horizontal")
-        horizontal_feature_group = Group(id="feature_legend")
+        horizontal_feature_group = Group(id="feature_legend_h")
         for child in h_feature_group.elements:
             horizontal_feature_group.add(child)
 
@@ -347,7 +347,7 @@ class LegendGroup:
 
         # Create vertical legend group
         vertical_group = Group(id="legend_vertical")
-        vertical_feature_group = Group(id="feature_legend")
+        vertical_feature_group = Group(id="feature_legend_v")
         for child in v_feature_group.elements:
             vertical_feature_group.add(child)
 

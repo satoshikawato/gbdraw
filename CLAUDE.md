@@ -159,8 +159,8 @@ Tests compare generated SVG against `tests/reference_outputs/` files.
 ## CI/CD
 
 - **Python versions tested:** 3.10, 3.11, 3.12
-- **Lint job:** Uses ruff for code formatting checks
-- **CairoSVG job:** Separate test with export dependencies on Python 3.11
+- **Lint job:** Uses ruff for code formatting checks (currently non-blocking with `continue-on-error: true`)
+- **CairoSVG job:** Separate test on Python 3.11 requiring system packages (`libcairo2-dev`, `libpango1.0-dev` on Ubuntu)
 - **Slow tests:** Only run on push to main branch
 
 ## Dependencies
@@ -173,7 +173,7 @@ Tests compare generated SVG against `tests/reference_outputs/` files.
 - **bcbio-gff** - GFF3 parsing
 
 ### Optional
-- **cairosvg** - PNG/PDF/EPS/PS export
+- **cairosvg** - PNG/PDF/EPS/PS export (requires `libcairo2-dev libpango1.0-dev` on Ubuntu)
 
 ## Important Notes
 
