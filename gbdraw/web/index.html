@@ -1248,7 +1248,8 @@
                             'fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin',
                             'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry',
                             'width', 'height', 'transform', 'viewBox', 'preserveAspectRatio',
-                            'font-family', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline', 'writing-mode', 'letter-spacing'
+                            'font-family', 'font-size', 'font-weight', 'text-anchor', 'dominant-baseline', 'writing-mode', 'letter-spacing',
+                            'display'
                         ],
                         // Forbid <style> tags (to prevent breaking parent page CSS). Also forbid script-related tags.
                         FORBID_TAGS: ['style', 'script', 'foreignObject', 'iframe', 'embed', 'object', 'animate', 'set', 'animateTransform', 'image'],
@@ -2997,13 +2998,13 @@
                         else legendGroups.push(mainLegend);
                     }
                     // Also check for horizontal legend
-                    const hLegend = svg.getElementById('horizontal_legend');
+                    const hLegend = svg.getElementById('legend_horizontal');
                     if (hLegend) {
                         const hFeatureLegend = hLegend.querySelector('#feature_legend');
                         if (hFeatureLegend) legendGroups.push(hFeatureLegend);
                     }
                     // Also check for vertical legend
-                    const vLegend = svg.getElementById('vertical_legend');
+                    const vLegend = svg.getElementById('legend_vertical');
                     if (vLegend) {
                         const vFeatureLegend = vLegend.querySelector('#feature_legend');
                         if (vFeatureLegend) legendGroups.push(vFeatureLegend);
