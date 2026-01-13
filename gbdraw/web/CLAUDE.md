@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 
 `index.html` is a **self-contained single-page application (SPA)** that runs gbdraw entirely in the browser using WebAssembly. No server is required - all genome data processing happens client-side via Pyodide (Python compiled to WebAssembly).
 
-- **File size:** ~7300 lines (HTML + embedded JavaScript + CSS)
+- **File size:** ~7750 lines (HTML + embedded JavaScript + CSS)
 - **Location:** `gbdraw/web/index.html`
 - **Served by:** `gbdraw gui` command or hosted at https://gbdraw.app/
 
@@ -30,13 +30,13 @@ python -m build
 |---------|-------|-------------|
 | CSP Header | 5-17 | Content Security Policy |
 | CSS Styles | 33-73 | TailwindCSS custom classes |
-| Vue App Template | 77-1180 | HTML structure |
-| State Management | 1339-1500 | Reactive refs and form data |
-| Legend Management | 2856-3200, 4958-5030 | Legend CRUD operations |
-| Drag & Drop | 4970-5100 | Element repositioning |
-| Feature Color Editing | 6259-6400 | Per-feature color changes |
-| Python Integration | 6806-7050 | `runAnalysis()`, file I/O |
-| Export Functions | 7141-7200 | PDF/PNG download |
+| Vue App Template | 77-1127 | HTML structure |
+| State Management | 1236-1543 | Reactive refs and form data |
+| Legend Management | 3184-5232 | Legend CRUD operations |
+| Drag & Drop | 5235-5495 | Element repositioning |
+| Feature Color Editing | 1844-2100, 6666-6755 | Per-feature color changes |
+| Python Integration | 7038-7233 | Pyodide init + helper functions |
+| Export Functions | 7520-7605 | PDF/PNG download |
 
 ## Technology Stack
 
@@ -114,27 +114,27 @@ index.html
 
 ### Key Reactive State (Vue refs)
 ```javascript
-// System state (lines ~1339-1360)
+// System state (lines ~1236-1239)
 pyodideReady            // Pyodide initialization status
 processing              // Diagram generation in progress
 errorLog                // Error messages
 
-// Results (lines ~1360-1380)
+// Results (lines ~1241-1269)
 results                 // Array of {name, content} SVG outputs
 selectedResultIndex     // Currently viewed result
 svgContent              // Computed sanitized SVG
 
-// UI state (lines ~1380-1430)
+// UI state (lines ~1271-1480)
 mode                    // 'circular' | 'linear'
 zoom                    // Preview zoom level
 showFeaturePanel        // Feature color editor visibility
 showLegendPanel         // Legend editor visibility
 
-// Legend state (lines ~1429-1450)
+// Legend state (lines ~1447-1463, ~2930-2932)
 legendEntries           // Extracted legend entries [{caption, color, yPos}]
 addedLegendCaptions     // Set of manually added legend captions
 
-// Feature editor state (lines ~1450-1480)
+// Feature editor state (lines ~1398-1409)
 extractedFeatures       // Features from last generation
 featureColorOverrides   // {featureKey: {color, caption}}
 ```
@@ -166,10 +166,10 @@ adv = {
 ### Main Entry Points
 | Function | Line | Description |
 |----------|------|-------------|
-| `runAnalysis()` | 6813 | Main diagram generation |
-| `downloadSVG()` | ~7100 | SVG export |
-| `downloadPNG()` | ~7120 | PNG export via canvas |
-| `downloadPDF()` | 7141 | PDF export via jsPDF |
+| `runAnalysis()` | 7235 | Main diagram generation |
+| `downloadSVG()` | 7520 | SVG export |
+| `downloadPNG()` | 7531 | PNG export via canvas |
+| `downloadPDF()` | 7567 | PDF export via jsPDF |
 
 ### Legend Management
 | Function | Description |
@@ -183,9 +183,9 @@ adv = {
 ### Feature Color Editing
 | Function | Line | Description |
 |----------|------|-------------|
-| `setFeatureColor()` | 6259 | Set color and update rules |
-| `applyInstantPreview()` | ~6280 | Update SVG instantly |
-| `updateClickedFeatureColor()` | 1927 | Handle popup color change |
+| `setFeatureColor()` | 6666 | Set color and update rules |
+| `applyInstantPreview()` | 1844 | Update SVG instantly |
+| `updateClickedFeatureColor()` | 1964 | Handle popup color change |
 
 ### Drag & Drop
 | Function | Description |
@@ -215,7 +215,7 @@ extract_features_from_genbank()  # Extract features for UI color editor
 
 ### File System Access Pattern
 ```javascript
-// Write file to Pyodide virtual FS (line 6806)
+// Write file to Pyodide virtual FS (line 7228)
 const writeToFS = async (fileObj, path) => {
     const buffer = await fileObj.arrayBuffer();
     pyodide.FS.writeFile(path, new Uint8Array(buffer));
@@ -257,9 +257,9 @@ User-provided regex patterns are validated:
 - Collapsible sections: `<details>` element with custom styling
 
 ### Adding New Settings
-1. Add reactive state to `setup()` function (~line 1339)
+1. Add reactive state to `setup()` function (~line 1232)
 2. Add form element in appropriate card
-3. Include in args array passed to Python (~line 6840)
+3. Include in args array passed to Python (~line 7265)
 4. Update Python-side handling if needed
 
 ### Debugging
