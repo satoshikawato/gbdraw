@@ -6,41 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 
 `index.html` is a **self-contained single-page application (SPA)** that runs gbdraw entirely in the browser using WebAssembly. No server is required - all genome data processing happens client-side via Pyodide (Python compiled to WebAssembly).
 
-- **File size:** ~7750 lines (HTML + embedded JavaScript + CSS)
 - **Location:** `gbdraw/web/index.html`
 - **Served by:** `gbdraw gui` command or hosted at https://gbdraw.app/
+- **Constraint:** Must remain a single file with no build step
 
 ## Quick Reference
 
 ```bash
 # Run locally
-gbdraw gui                    # Opens browser at http://localhost:8080
+gbdraw gui                    # Opens browser at http://localhost:<port>
 
-# Build wheel for web deployment (version must match pyproject.toml)
+# Build wheel for web deployment
 python -m build
-# Copy dist/gbdraw-X.X.X-py3-none-any.whl to web server
+# Wheel version in GBDRAW_WHEEL_NAME constant must match pyproject.toml
 
-# Test in browser
+# Debug in browser
 # Open DevTools Console (F12) to see Pyodide output and errors
 ```
 
-### Key Line Number References
-
-| Section | Lines | Description |
-|---------|-------|-------------|
-| CSP Header | 5-17 | Content Security Policy |
-| CSS Styles | 33-73 | TailwindCSS custom classes |
-| Vue App Template | 77-1127 | HTML structure |
-| State Management | 1236-1543 | Reactive refs and form data |
-| Legend Management | 3184-5232 | Legend CRUD operations |
-| Drag & Drop | 5235-5495 | Element repositioning |
-| Feature Color Editing | 1844-2100, 6666-6755 | Per-feature color changes |
-| Python Integration | 7038-7233 | Pyodide init + helper functions |
-| Export Functions | 7520-7605 | PDF/PNG download |
-
 ## Technology Stack
 
-### Core Libraries (CDN)
 | Library | Version | Purpose |
 |---------|---------|---------|
 | Vue.js 3 | 3.5.25 | Reactive UI framework |
@@ -51,243 +36,125 @@ python -m build
 | DOMPurify | 3.2.7 | XSS protection for SVG output |
 | Phosphor Icons | 2.1.2 | Icon library |
 
-### Fonts
-- Inter (Latin)
-- Noto Sans JP (Japanese support)
-
 ## Architecture
 
 ```
 index.html
 ├── <head>
-│   ├── Content Security Policy (CSP)
-│   ├── CDN script imports
-│   └── TailwindCSS styles & custom CSS
+│   ├── Content Security Policy (CSP) - lines 5-17
+│   ├── CDN script imports with SRI hashes - lines 20-32
+│   └── TailwindCSS styles & custom CSS - lines 33-73
 ├── <body>
-│   ├── Vue app container (#app)
-│   │   ├── Loading overlay (Pyodide init)
-│   │   ├── Processing overlay
+│   ├── Vue app container (#app) - lines 77-1095
+│   │   ├── Loading/Processing overlays
 │   │   ├── Header (mode toggle, config save/load)
-│   │   ├── Left Panel (4 columns)
-│   │   │   ├── Input Genomes card
-│   │   │   ├── Basic Settings card
-│   │   │   ├── Colors & Filters (collapsible)
-│   │   │   ├── Advanced Options (collapsible)
-│   │   │   ├── About & Citation (collapsible)
-│   │   │   └── Generate button
-│   │   └── Right Panel (8 columns)
-│   │       ├── Error display
-│   │       ├── Result preview (SVG container with zoom)
-│   │       ├── Floating controls (zoom, padding, reset)
-│   │       ├── Feature Color Picker Popup
-│   │       ├── Legend Editor (slide-out drawer)
-│   │       └── Feature Color Editor (slide-out drawer)
-│   ├── Vue component templates (HelpTip, FileUploader)
-│   └── Main Vue application script
+│   │   ├── Left Panel: Input, Settings, Colors, Advanced
+│   │   └── Right Panel: Preview, Controls, Editors
+│   ├── Vue component templates (HelpTip, FileUploader) - lines 1097-1127
+│   └── Main Vue application script - lines 1129-7629
 ```
+
+## Key Code Sections
+
+Use these approximate line ranges to navigate the codebase:
+
+| Section | Description |
+|---------|-------------|
+| **State Management** (~1236-1480) | Reactive refs: `pyodideReady`, `processing`, `results`, `mode`, etc. |
+| **Form Data** (~1353-1400) | `form` and `adv` reactive objects for settings |
+| **Feature Color Editing** (~1878-2150) | `applyInstantPreview()`, `setFeatureColor()` |
+| **Legend Management** (~3162-4500) | `addLegendEntry()`, `removeLegendEntry()`, `extractLegendEntries()` |
+| **Drag & Drop** (~5137-5400) | Legend and diagram element repositioning |
+| **Pyodide Init** (~6900-7100) | Python environment setup and helper functions |
+| **Main Entry** (~7112) | `runAnalysis()` - diagram generation |
+| **Export Functions** (~7397-7500) | `downloadSVG()`, `downloadPNG()`, `downloadPDF()` |
 
 ## Key Features
 
-### 1. Serverless Architecture
-- **Pyodide** loads a Python environment in-browser
-- gbdraw wheel is installed dynamically (version must match `pyproject.toml`)
-- All processing (genome parsing, SVG generation) runs locally
-- **Privacy:** Genomic data never leaves the user's device
+### Serverless Architecture
+- Pyodide loads Python environment in-browser
+- gbdraw wheel installed dynamically (version in `GBDRAW_WHEEL_NAME` constant ~line 1131)
+- All processing runs locally - genomic data never leaves user's device
 
-### 2. Dual Mode Support
-- **Circular mode:** Single genome with track type options (tuckin/middle/spreadout)
-- **Linear mode:** Multi-genome comparison with BLAST tracks
+### Dual Mode Support
+- **Circular:** Single genome with track type options (tuckin/middle/spreadout)
+- **Linear:** Multi-genome comparison with BLAST tracks
 
-### 3. Interactive SVG Editing (Post-generation)
-- **Drag & Drop:** Reposition legend and diagram elements
-- **Feature Click:** Change individual feature colors with popup picker
-- **Legend Editor:** Reorder, rename, delete legend entries
-- **Canvas Padding:** Adjust whitespace (top/right/bottom/left)
-
-### 4. Color Management
-- **Default Colors (-d):** Base palette with 16+ presets
-- **Specific Rules (-t):** Regex-based conditional coloring
-- **Feature Overrides:** Per-feature color customization
-- **Dual Legend Support:** Horizontal and vertical legends synchronized in linear mode
-
-## State Management
-
-### Key Reactive State (Vue refs)
-```javascript
-// System state (lines ~1236-1239)
-pyodideReady            // Pyodide initialization status
-processing              // Diagram generation in progress
-errorLog                // Error messages
-
-// Results (lines ~1241-1269)
-results                 // Array of {name, content} SVG outputs
-selectedResultIndex     // Currently viewed result
-svgContent              // Computed sanitized SVG
-
-// UI state (lines ~1271-1480)
-mode                    // 'circular' | 'linear'
-zoom                    // Preview zoom level
-showFeaturePanel        // Feature color editor visibility
-showLegendPanel         // Legend editor visibility
-
-// Legend state (lines ~1447-1463, ~2930-2932)
-legendEntries           // Extracted legend entries [{caption, color, yPos}]
-addedLegendCaptions     // Set of manually added legend captions
-
-// Feature editor state (lines ~1398-1409)
-extractedFeatures       // Features from last generation
-featureColorOverrides   // {featureKey: {color, caption}}
-```
-
-### Form Data Structure
-```javascript
-form = {
-    prefix, species, strain,      // Metadata
-    track_type,                   // 'tuckin' | 'middle' | 'spreadout'
-    legend,                       // Position: 'right' | 'left' | 'none' | ...
-    scale_style,                  // 'bar' | 'ruler' (linear)
-    show_labels,                  // boolean (circular)
-    show_labels_linear,           // 'none' | 'all' | 'first'
-    separate_strands,
-    suppress_gc, suppress_skew,   // Circular options
-    show_gc, show_skew,           // Linear options
-}
-
-adv = {
-    features,                     // Array of feature types to draw
-    window_size, step_size, nt,   // GC calculation
-    def_font_size, label_font_size,
-    // Stroke settings, legend settings, etc.
-}
-```
-
-## Key JavaScript Functions
-
-### Main Entry Points
-| Function | Line | Description |
-|----------|------|-------------|
-| `runAnalysis()` | 7235 | Main diagram generation |
-| `downloadSVG()` | 7520 | SVG export |
-| `downloadPNG()` | 7531 | PNG export via canvas |
-| `downloadPDF()` | 7567 | PDF export via jsPDF |
-
-### Legend Management
-| Function | Description |
-|----------|-------------|
-| `getAllFeatureLegendGroups(svg)` | Get all legend groups (handles dual legends) |
-| `addLegendEntry(caption, color)` | Add entry to all legend groups |
-| `removeLegendEntry(caption)` | Remove entry from all legend groups |
-| `extractLegendEntries()` | Extract entries for Legend Editor panel |
-| `moveLegendEntryUp/Down(idx)` | Reorder entries |
-
-### Feature Color Editing
-| Function | Line | Description |
-|----------|------|-------------|
-| `setFeatureColor()` | 6666 | Set color and update rules |
-| `applyInstantPreview()` | 1844 | Update SVG instantly |
-| `updateClickedFeatureColor()` | 1964 | Handle popup color change |
-
-### Drag & Drop
-| Function | Description |
-|----------|-------------|
-| `startLegendDrag(e)` / `onLegendDrag(e)` / `endLegendDrag()` | Legend positioning |
-| `startDiagramDrag(e)` / `onDiagramDrag(e)` / `endDiagramDrag()` | Diagram element positioning |
-| `parseTransform(str)` | Extract x,y from transform attribute |
-| `resetAllPositions()` | Reset to original positions |
+### Interactive SVG Editing
+- Drag & drop legend and diagram elements
+- Click features to change colors with popup picker
+- Legend editor for reordering, renaming, deleting entries
+- Canvas padding adjustment (top/right/bottom/left)
 
 ## Python Integration
 
-### Pyodide Initialization Flow
+### Initialization Flow (~6900-7100)
 1. Load Pyodide runtime
 2. Install micropip
-3. Load gbdraw wheel from same origin
-4. Install Python dependencies (biopython, svgwrite, pandas, fonttools, bcbio-gff)
-5. Initialize helper functions
+3. Install Python dependencies (biopython, svgwrite, pandas, fonttools, bcbio-gff)
+4. Load gbdraw wheel from same origin
+5. Define helper functions
 6. Mark `pyodideReady = true`
 
-### Python Helper Functions (defined in index.html)
+### Python Helper Functions
 ```python
-get_palettes_json()              # Load color palettes from TOML
-run_gbdraw_wrapper()             # Execute circular or linear mode
-generate_legend_entry_svg()      # Generate SVG for dynamic legend entry
-extract_features_from_genbank()  # Extract features for UI color editor
+get_palettes_json()              # Load color palettes from TOML (~6935)
+run_gbdraw_wrapper()             # Execute circular or linear mode (~6941)
+generate_legend_entry_svg()      # Generate SVG for dynamic legend entry (~6964)
+extract_features_from_genbank()  # Extract features for UI color editor (~7033)
 ```
 
 ### File System Access Pattern
 ```javascript
-// Write file to Pyodide virtual FS (line 7228)
-const writeToFS = async (fileObj, path) => {
-    const buffer = await fileObj.arrayBuffer();
-    pyodide.FS.writeFile(path, new Uint8Array(buffer));
-};
+// Write file to Pyodide virtual FS
+pyodide.FS.writeFile(path, new Uint8Array(buffer));
 
 // Read Python results via JSON
 const resultJson = pyodide.runPython("run_gbdraw_wrapper('circular', args)");
 const results = JSON.parse(resultJson);
 ```
 
-## Security Considerations
+## Security
 
 ### Content Security Policy (lines 5-17)
-```
-default-src 'self';
-script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com ...;
-style-src 'self' 'unsafe-inline' https://fonts.googleapis.com ...;
-connect-src 'self' https://cdn.jsdelivr.net https://pypi.org https://files.pythonhosted.org ...;
-frame-ancestors 'none';
-```
+Restricts script/style sources to trusted CDNs. Update CSP when adding new dependencies.
 
 ### SVG Sanitization
-All generated SVG passes through DOMPurify:
-- `FORBID_TAGS: ['style', 'script', 'foreignObject', 'iframe', 'animate', ...]`
-- `FORBID_ATTR: ['onload', 'onclick', 'onerror', ...]`
+All generated SVG passes through DOMPurify with forbidden tags/attributes for XSS protection.
 
 ### Regex Validation
-User-provided regex patterns are validated:
-- Length check (warn if >50 chars)
-- ReDoS pattern detection
-- Try-catch around `new RegExp()`
+User-provided regex patterns are validated for length and ReDoS patterns.
 
 ## Development Notes
+
+### Adding New Settings
+1. Add reactive state to `setup()` function (~line 1232)
+2. Add form element in appropriate card
+3. Include in args array passed to Python (~line 7200)
+4. Update Python-side handling if needed
 
 ### Modifying the UI
 - CSS: Tailwind utility classes inline + custom classes in `<style>` block
 - Custom classes: `.card`, `.btn-*`, `.form-input`, etc. (lines 43-72)
 - Colors: Slate palette with Blue/Indigo accents
-- Collapsible sections: `<details>` element with custom styling
-
-### Adding New Settings
-1. Add reactive state to `setup()` function (~line 1232)
-2. Add form element in appropriate card
-3. Include in args array passed to Python (~line 7265)
-4. Update Python-side handling if needed
 
 ### Debugging
 - Browser DevTools Console shows Pyodide output
-- `[DEBUG]` prefixed logs for incremental edit tracking
-- Vue DevTools compatible
+- Set `DEBUG = true` (~line 1134) for verbose logging
 - Check `errorLog.value` for Python exceptions
 
 ### Common Issues
 1. **"Pyodide not ready"**: Wait for initialization (~5-15 seconds on first load)
 2. **Memory errors**: Large genomes may exhaust browser memory
-3. **Wheel version mismatch**: Ensure wheel version matches `pyproject.toml`
+3. **Wheel version mismatch**: Ensure `GBDRAW_WHEEL_NAME` matches `pyproject.toml`
 4. **CSP errors**: Check CDN URLs in CSP header if adding new dependencies
-
-## File Dependencies
-
-When deploying:
-- `index.html` (this file)
-- `gbdraw-X.X.X-py3-none-any.whl` (Python wheel, same origin)
-- CDN dependencies (Vue, Pyodide, TailwindCSS, icons, jsPDF, DOMPurify)
 
 ## Known Limitations
 
 1. **Memory:** Large genomes may exhaust browser memory
 2. **Performance:** Initial Pyodide load takes 5-15 seconds
-3. **Fonts:** Custom fonts require paths accessible to Pyodide
-4. **CairoSVG:** Not available in browser (PNG/PDF use canvas instead)
-5. **Incremental Updates:** Some edits require full regeneration
+3. **CairoSVG:** Not available in browser (PNG/PDF use canvas instead)
+4. **Fonts:** Custom fonts require paths accessible to Pyodide
 
 ## Related Files
 

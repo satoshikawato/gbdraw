@@ -6,7 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **gbdraw** is a Python bioinformatics tool for creating publication-quality genome diagrams from microbial genomes and organelles. It generates circular and linear visualizations of genomic features (CDS, tRNA, regulatory elements, etc.) with optional GC content/skew plots and BLAST comparison tracks.
 
-- **Version:** 0.8.3
 - **Python:** ≥3.10
 - **Output formats:** SVG, PNG, PDF, EPS, PS
 
@@ -86,7 +85,7 @@ gbdraw/
    - `assemble_linear_diagram_from_records()` - Build linear diagram from multiple SeqRecords
    - Configurator classes (`FeatureDrawingConfigurator`, `GcContentConfigurator`, etc.)
    - Canvas configurators (`CircularCanvasConfigurator`, `LinearCanvasConfigurator`)
-   - Track specs (`TrackSpec`, `parse_track_specs()`) - Control individual track visibility/styling
+   - Track specs (`TrackSpec`, `parse_track_specs()`, `CircularTrackPlacement`, `LinearTrackPlacement`) - Control individual track visibility/styling
 
 ### Data Flow
 
@@ -183,6 +182,13 @@ Tests compare generated SVG against `tests/reference_outputs/` files.
 4. **Genome size thresholds:** Window/step sizes auto-adjust (<1M, 1-10M, >10M bp)
 5. **Label filtering:** Supports priority files, blacklists, whitelists
 6. **BLAST comparison:** Linear diagrams only, requires outfmt 6/7
+
+## Editing Expectations
+
+- Keep `gbdraw/web/index.html` as a single-file SPA; do not introduce a build step
+- If adding CDN dependencies to the web app, update the CSP header in `gbdraw/web/index.html`
+- If diagram output changes, update reference SVGs in `tests/reference_outputs/`
+- Do not manually edit generated artifacts under `dist/` or `gbdraw.egg-info/`
 
 ## Updating Reference Outputs
 

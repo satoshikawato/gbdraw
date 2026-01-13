@@ -16,7 +16,7 @@ Usage:
 Subcommands:
   circular  Generate a circular genome diagram
   linear    Generate a linear genome diagram
-  gui       Launch the graphical user interface (requires Streamlit)
+  gui       Launch the local web UI (no Streamlit required)
 
 For each subcommand, you can get additional help by running:
   gbdraw <subcommand> --help

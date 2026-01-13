@@ -31,6 +31,9 @@ Look here for detailed information, examples, and answers to specific questions.
 * **[Command-Line Reference](./CLI_Reference.md)**: A complete list of all command-line options.
 * **[Gallery](./GALLERY.md)**: A gallery of examples created with `gbdraw`.
 * **[FAQ](./FAQ.md)**: Frequently Asked Questions and solutions to known issues.
+* **[Web App Guide](./WEBAPP.md)**: How to use the browser-based interface.
+* **[Web App Screenshot Guide](./WEBAPP_SCREENSHOTS.md)**: Naming, captions, and callouts for UI captures.
+* **[Testing](./TESTING.md)**: Test suites and release checks.
 * **[About](./ABOUT.md)**: Information on how to cite `gbdraw`.
 
 ---
