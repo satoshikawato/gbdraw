@@ -2971,7 +2971,7 @@
 
                 // Update block stroke (feature paths)
                 if (adv.block_stroke_color || adv.block_stroke_width !== null) {
-                    const featurePaths = svg.querySelectorAll('path[id^="f"]');
+                    const featurePaths = svg.querySelectorAll('path[id^="f"], polygon[id^="f"]');
                     featurePaths.forEach(path => {
                         if (adv.block_stroke_color) {
                             path.setAttribute('stroke', adv.block_stroke_color);
@@ -5438,12 +5438,14 @@ json.dumps({"width": width})
                 });
             };
 
-            const endDiagramDrag = () => {
+            const endDiagramDrag = (e) => {
                 if (!diagramDragging.value) return;
 
                 // Update stored offset
-                const deltaX = (event.clientX - diagramDragStart.x) / zoom.value;
-                const deltaY = (event.clientY - diagramDragStart.y) / zoom.value;
+                const clientX = e ? e.clientX : diagramDragStart.x;
+                const clientY = e ? e.clientY : diagramDragStart.y;
+                const deltaX = (clientX - diagramDragStart.x) / zoom.value;
+                const deltaY = (clientY - diagramDragStart.y) / zoom.value;
                 diagramOffset.x += deltaX;
                 diagramOffset.y += deltaY;
 
@@ -6956,13 +6958,14 @@ json.dumps({"width": width})
             let definitionUpdateTimeout = null;
             const updateDefinitionText = async () => {
                 if (!pyodideReady.value || !svgContent.value || mode.value !== 'circular') return;
+                if (cInputType.value !== 'gb') return;
                 if (!svgContainer.value) return;
 
                 const svg = svgContainer.value.querySelector('svg');
                 if (!svg) return;
 
                 // Find the current GenBank file path
-                const gbPath = cInputType.value === 'gb' ? '/input.gb' : '/input.gb';
+                const gbPath = '/input.gb';
 
                 try {
                     const species = form.species || '';
@@ -7547,6 +7550,12 @@ json.dumps({"width": width})
                 img.onload = () => {
                     ctx.fillStyle = "white"; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                     canvas.toBlob(async (blob) => {
+                         if (!blob) {
+                             console.error('Failed to export PNG');
+                             alert('Failed to export PNG.');
+                             URL.revokeObjectURL(url);
+                             return;
+                         }
                          const fixedBlob = await setDpiInPng(blob, dpi);
                          const downloadUrl = URL.createObjectURL(fixedBlob);
                          const link = document.createElement('a');
