@@ -1057,7 +1057,7 @@
                             <input type="color"
                                    :value="getFeatureColor(feat)"
                                    @click.stop
-                                   @change="setFeatureColor(feat, $event.target.value)"
+                                   @change="updateFeatureListColor(feat, $event.target.value)"
                                    :disabled="!canEditFeatureColor(feat)"
                                    :title="canEditFeatureColor(feat) ? 'Click to change color' : 'No identifier available (no locus_tag, gene, or product)'"
                                    :class="['w-7 h-5 border rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
@@ -2180,13 +2180,8 @@
                 console.log(`Attached handlers to ${featurePaths.length} feature paths (${Object.keys(pathsByIdMap).length} unique features)`);
             };
 
-            // Update color from the popup picker
-            const updateClickedFeatureColor = async (color) => {
-                if (!clickedFeature.value) return;
-                const feat = clickedFeature.value.feat;
-                // Use custom legendName if provided (check for non-empty trimmed string)
-                const customName = clickedFeature.value.legendName?.trim();
-                const legendName = customName ? customName : clickedFeature.value.label;
+            const openColorScopeDialogForFeature = (feat, color, legendName, options = {}) => {
+                if (!feat) return false;
 
                 // Check if this feature matches an existing regex rule (from -t table)
                 const matchingRule = findMatchingRegexRule(feat);
@@ -2217,23 +2212,46 @@
 
                 // Determine if we need to show the dialog
                 const needsDialog = matchingRule || siblingCount > 0 || existingCaption;
+                if (!needsDialog) return false;
 
-                if (needsDialog) {
-                    // Show dialog with appropriate options
-                    colorScopeDialog.show = true;
-                    colorScopeDialog.feat = feat;
-                    colorScopeDialog.color = color;
-                    colorScopeDialog.matchingRule = matchingRule;
-                    colorScopeDialog.ruleMatchCount = ruleMatchCount;
-                    colorScopeDialog.legendName = legendName;
-                    colorScopeDialog.siblingCount = siblingCount;
-                    colorScopeDialog.individualLabel = individualLabel;
-                    colorScopeDialog.individualLabelSiblingCount = individualLabelSiblingCount;
-                    colorScopeDialog.existingCaptionRule = existingCaption?.rule || null;
-                    colorScopeDialog.existingCaptionColor = existingCaption?.color || null;
-                    // Close the color picker popup
+                // Show dialog with appropriate options
+                colorScopeDialog.show = true;
+                colorScopeDialog.feat = feat;
+                colorScopeDialog.color = color;
+                colorScopeDialog.matchingRule = matchingRule;
+                colorScopeDialog.ruleMatchCount = ruleMatchCount;
+                colorScopeDialog.legendName = legendName;
+                colorScopeDialog.siblingCount = siblingCount;
+                colorScopeDialog.individualLabel = individualLabel;
+                colorScopeDialog.individualLabelSiblingCount = individualLabelSiblingCount;
+                colorScopeDialog.existingCaptionRule = existingCaption?.rule || null;
+                colorScopeDialog.existingCaptionColor = existingCaption?.color || null;
+
+                if (options.closePopup && clickedFeature.value) {
                     clickedFeature.value = null;
-                } else {
+                }
+
+                return true;
+            };
+
+            const updateFeatureListColor = (feat, color) => {
+                const legendName = getFeatureCaption(feat);
+                const opened = openColorScopeDialogForFeature(feat, color, legendName);
+                if (!opened) {
+                    setFeatureColor(feat, color, legendName);
+                }
+            };
+
+            // Update color from the popup picker
+            const updateClickedFeatureColor = async (color) => {
+                if (!clickedFeature.value) return;
+                const feat = clickedFeature.value.feat;
+                // Use custom legendName if provided (check for non-empty trimmed string)
+                const customName = clickedFeature.value.legendName?.trim();
+                const legendName = customName ? customName : clickedFeature.value.label;
+
+                const opened = openColorScopeDialogForFeature(feat, color, legendName, { closePopup: true });
+                if (!opened) {
                     // No siblings and no existing rule - just apply to this feature
                     clickedFeature.value.color = color;
                     setFeatureColor(feat, color, legendName);
@@ -2277,22 +2295,25 @@
                             });
                         }
                     }
-                    addLegendEntry(legendName, color);
+                    // Keep regex rules with the same caption in sync
+                    manualSpecificRules.forEach(rule => {
+                        if (rule.qual !== 'hash' && rule.cap === legendName) {
+                            rule.color = color;
+                        }
+                    });
+                    // Update existing legend entry if present; otherwise add a new one
+                    const updatedLegend = updateLegendEntryColorByCaption(legendName, color);
+                    if (!updatedLegend) {
+                        const actualCaption = await addLegendEntry(legendName, color);
+                        if (actualCaption && typeof actualCaption === 'string') {
+                            addedLegendCaptions.value.add(actualCaption);
+                        }
+                    }
                     applySpecificRulesToSvg();
                 } else if (choice === 'single') {
                     // Create a new hash-based rule for this specific feature only
-                    // When feature belongs to a multi-feature rule, use feature's own label
-                    // to avoid updating the shared rule legend
-                    let singleCaption = legendName;
-                    if (matchingRule && colorScopeDialog.ruleMatchCount > 1) {
-                        const ruleCaption = matchingRule.cap || matchingRule.val;
-                        // If legendName matches the rule's caption, use feature's own label instead
-                        if (legendName === ruleCaption) {
-                            singleCaption = feat.product || feat.gene || feat.locus_tag
-                                           || `${feat.type} at ${feat.start}..${feat.end}`;
-                        }
-                    }
-                    await setFeatureColor(feat, color, singleCaption);
+                    const shouldForceNewEntry = colorScopeDialog.ruleMatchCount > 1 || colorScopeDialog.siblingCount > 0;
+                    await setFeatureColor(feat, color, legendName, { forceNewLegendEntry: shouldForceNewEntry });
                 } else if (choice === 'individualLabel') {
                     // Apply to all features with the same individual label (product/gene/locus_tag)
                     // This creates separate hash rules for each feature, keeping them independent from the regex rule
@@ -4027,6 +4048,10 @@ json.dumps({"width": width})
                 const legendGroup = svg.getElementById('legend');
                 if (!legendGroup) return;
 
+                const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+                const verticalLegend = legendGroup.querySelector('#legend_vertical');
+                const hasDualLegends = !!(horizontalLegend || verticalLegend);
+
                 // Detect rect_size and line_height from existing entries
                 let rectSize = 14;
                 const firstColorRect = legendGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
@@ -4038,9 +4063,45 @@ json.dumps({"width": width})
                     }
                 }
                 const lineMargin = (24 / 14) * rectSize;
+                const textXOffset = (22 / 14) * rectSize;
+
+                if (!hasDualLegends) {
+                    const pairwiseLegend = legendGroup.querySelector('#pairwise_legend');
+                    if (!pairwiseLegend) return;
+
+                    const featureLegendGroup = legendGroup.querySelector('#feature_legend') || legendGroup;
+                    const featureOffset = parseTransform(featureLegendGroup.getAttribute('transform'));
+                    const featureElements = [
+                        ...getLegendTextElements(featureLegendGroup),
+                        ...getLegendColorRects(featureLegendGroup)
+                    ];
+                    const featureBounds = getElementsBounds(featureElements);
+                    const fallbackBBox = featureLegendGroup.getBBox();
+                    const featureX = featureOffset.x + (featureBounds ? featureBounds.x : fallbackBBox.x);
+                    const featureY = featureOffset.y + (featureBounds ? featureBounds.y : fallbackBBox.y);
+                    const featureWidth = featureBounds ? featureBounds.width : fallbackBBox.width;
+                    const featureHeight = featureBounds ? featureBounds.height : fallbackBBox.height;
+
+                    const pairwiseBBox = pairwiseLegend.getBBox();
+                    const layout = (form.legend === 'top' || form.legend === 'bottom') ? 'horizontal' : 'vertical';
+                    let pairwiseX = featureX;
+                    let pairwiseY = featureY;
+
+                    if (layout === 'horizontal') {
+                        const yOffset = Math.max((featureHeight - pairwiseBBox.height) / 2, 0);
+                        pairwiseX = featureX + featureWidth + textXOffset;
+                        pairwiseY = featureY + yOffset;
+                    } else {
+                        const xOffset = Math.max((featureWidth - pairwiseBBox.width) / 2, 0);
+                        pairwiseX = featureX + xOffset;
+                        pairwiseY = featureY + featureHeight + lineMargin / 2;
+                    }
+
+                    pairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${pairwiseY})`);
+                    return;
+                }
 
                 // Reposition pairwise legend in vertical layout
-                const verticalLegend = legendGroup.querySelector('#legend_vertical');
                 if (verticalLegend) {
                     const vFeatureLegend = verticalLegend.querySelector('#feature_legend_v');
                     const vPairwiseLegend = verticalLegend.querySelector('#pairwise_legend');
@@ -4071,7 +4132,6 @@ json.dumps({"width": width})
                 }
 
                 // Reposition pairwise legend in horizontal layout (vertical centering)
-                const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
                 if (horizontalLegend) {
                     const hFeatureLegend = horizontalLegend.querySelector('#feature_legend_h');
                     const hPairwiseLegend = horizontalLegend.querySelector('#pairwise_legend');
@@ -4563,6 +4623,13 @@ json.dumps({"width": width})
                 }
 
                 const entries = [];
+                const seenCaptions = new Set();
+                const addEntry = (entry) => {
+                    if (!entry || !entry.caption) return;
+                    if (seenCaptions.has(entry.caption)) return;
+                    seenCaptions.add(entry.caption);
+                    entries.push(entry);
+                };
 
                 // Find all legend entry groups with data-legend-key
                 const entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
@@ -4604,38 +4671,39 @@ json.dumps({"width": width})
                         const existingFeatureIds = existingEntry?.featureIds || [];
                         const originalCaption = existingEntry?.originalCaption || caption;
 
-                        entries.push({ caption, originalCaption, color, xPos, yPos, showStroke, featureIds: existingFeatureIds });
-                    });
-                } else {
-                    // Legacy legend structure: match text elements to colored paths by position
-                    const texts = getLegendTextElements(targetGroup);
-                    const rects = getLegendColorRects(targetGroup);
-
-                    texts.forEach(textEl => {
-                        const caption = textEl.textContent?.trim();
-                        if (!caption) return;
-
-                        const rectEl = findLegendRectForText(textEl, rects);
-                        const color = rectEl?.getAttribute('fill') || '#cccccc';
-                        const textTransform = parseTransform(textEl.getAttribute('transform'));
-
-                        // Preserve state from existing entry with same caption
-                        const existingEntry = legendEntries.value.find(e => e.caption === caption);
-                        const showStroke = existingEntry?.showStroke || false;
-                        const existingFeatureIds = existingEntry?.featureIds || [];
-                        const originalCaption = existingEntry?.originalCaption || caption;
-
-                        entries.push({
-                            caption,
-                            originalCaption,
-                            color,
-                            xPos: textTransform.x,
-                            yPos: textTransform.y,
-                            showStroke,
-                            featureIds: existingFeatureIds
-                        });
+                        addEntry({ caption, originalCaption, color, xPos, yPos, showStroke, featureIds: existingFeatureIds });
                     });
                 }
+
+                // Legacy legend structure: match text elements to colored paths by position
+                const texts = getLegendTextElements(targetGroup);
+                const rects = getLegendColorRects(targetGroup);
+
+                texts.forEach(textEl => {
+                    const caption = textEl.textContent?.trim();
+                    if (!caption) return;
+                    if (seenCaptions.has(caption)) return;
+
+                    const rectEl = findLegendRectForText(textEl, rects);
+                    const color = rectEl?.getAttribute('fill') || '#cccccc';
+                    const textTransform = parseTransform(textEl.getAttribute('transform'));
+
+                    // Preserve state from existing entry with same caption
+                    const existingEntry = legendEntries.value.find(e => e.caption === caption);
+                    const showStroke = existingEntry?.showStroke || false;
+                    const existingFeatureIds = existingEntry?.featureIds || [];
+                    const originalCaption = existingEntry?.originalCaption || caption;
+
+                    addEntry({
+                        caption,
+                        originalCaption,
+                        color,
+                        xPos: textTransform.x,
+                        yPos: textTransform.y,
+                        showStroke,
+                        featureIds: existingFeatureIds
+                    });
+                });
 
                 // Sort by Y position first, then by X position (for horizontal layout)
                 entries.sort((a, b) => {
@@ -6801,7 +6869,7 @@ json.dumps({"width": width})
                 document.removeEventListener('keydown', handleEscapeKey);
             });
 
-            const setFeatureColor = async (feat, color, customCaption = null) => {
+            const setFeatureColor = async (feat, color, customCaption = null, options = {}) => {
                 // Use the best available qualifier for TSV generation
                 const qualInfo = getFeatureQualifier(feat);
                 if (!qualInfo) {
@@ -6810,12 +6878,35 @@ json.dumps({"width": width})
                 }
                 const { qual, val } = qualInfo;
                 const normalizedColor = normalizeColorValue(color, '#cccccc');
+                const respectExistingRule = options?.respectExistingRule === true;
+                const forceNewLegendEntry = options?.forceNewLegendEntry === true;
 
                 // Use internal ID for UI tracking (unique across all features)
                 const featureKey = feat.id;
 
                 // Default caption if not provided
                 const caption = customCaption || feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`;
+
+                if (respectExistingRule) {
+                    const matchingRule = findMatchingRegexRule(feat);
+                    if (matchingRule) {
+                        matchingRule.color = normalizedColor;
+                        if (matchingRule.cap) {
+                            const updated = updateLegendEntryColorByCaption(matchingRule.cap, normalizedColor);
+                            if (!updated) {
+                                const actualCaption = await addLegendEntry(matchingRule.cap, normalizedColor);
+                                if (actualCaption && typeof actualCaption === 'string') {
+                                    addedLegendCaptions.value.add(actualCaption);
+                                }
+                            }
+                        }
+                        applySpecificRulesToSvg();
+                        if (extractedFeatures.value.length > 0) {
+                            syncFeatureOverridesFromRules(extractedFeatures.value);
+                        }
+                        return;
+                    }
+                }
 
                 // Track override for UI display (store both color and caption)
                 const oldOverride = featureColorOverrides[featureKey];
@@ -6833,7 +6924,21 @@ json.dumps({"width": width})
                     // - oldCaption exists → this feature already has a legend entry
                     // - oldCaption is undefined → this feature doesn't have a legend entry yet
 
-                    if (oldCaption) {
+                    if (forceNewLegendEntry) {
+                        let updatedExisting = false;
+                        if (oldCaption && oldCaption !== caption) {
+                            updatedExisting = updateLegendEntryColorByCaption(oldCaption, normalizedColor);
+                            if (updatedExisting) {
+                                actualCaption = oldCaption;
+                            }
+                        }
+                        if (!updatedExisting) {
+                            actualCaption = await addLegendEntry(caption, normalizedColor);
+                            if (actualCaption && typeof actualCaption === 'string') {
+                                addedLegendCaptions.value.add(actualCaption);
+                            }
+                        }
+                    } else if (oldCaption) {
                         // This feature already has a legend entry
                         if (oldCaption === caption) {
                             // Same caption - just update the color of THIS feature's entry
@@ -7919,7 +8024,7 @@ json.dumps({"width": width})
                 // Feature Color Editor
                 extractedFeatures, featureRecordIds, selectedFeatureRecordIdx,
                 showFeaturePanel, featureSearch, filteredFeatures,
-                featureColorOverrides, getFeatureColor, setFeatureColor, canEditFeatureColor,
+                featureColorOverrides, getFeatureColor, setFeatureColor, updateFeatureListColor, canEditFeatureColor,
                 // SVG Feature Click
                 svgContainer, clickedFeature, clickedFeaturePos, updateClickedFeatureColor,
                 resetClickedFeatureFillColor, updateClickedFeatureStroke, resetClickedFeatureStroke, applyStrokeToAllSiblings,
