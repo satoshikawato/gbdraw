@@ -11,7 +11,7 @@ Guidance for automated agents working in this repository.
 
 - `gbdraw` is a Python 3.10+ bioinformatics tool for publication-quality genome diagrams.
 - Outputs: SVG, PNG, PDF, EPS, PS.
-- Main package lives in `gbdraw/`; tests in `tests/`; web UI in `gbdraw/web/index.html`.
+- Main package lives in `gbdraw/`; tests in `tests/`; web UI in `gbdraw/web/index.html` with JS modules under `gbdraw/web/js/`.
 
 ## Common Commands
 
@@ -31,7 +31,7 @@ python -m build
 
 ## Expectations When Editing
 
-- Keep the web UI as a single-page app with no build step; multi-file (e.g., `index.html` + ES modules/CSS under `gbdraw/web/`) is allowed.
+- Keep the web UI as a single-page app with no build step; `gbdraw/web/index.html` hosts HTML/CSS/templates and loads ES modules from `gbdraw/web/js/` (`app.js` entry with `app/`, `services/`, `utils/`).
 - If adding CDN dependencies, update the CSP in `gbdraw/web/index.html`.
 - If diagram output changes, update reference SVGs in `tests/reference_outputs/`.
 - Do not manually edit generated artifacts under `dist/` or `gbdraw.egg-info/`.
