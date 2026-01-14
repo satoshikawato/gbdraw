@@ -4065,8 +4065,31 @@ json.dumps({"width": width})
                 const lineMargin = (24 / 14) * rectSize;
                 const textXOffset = (22 / 14) * rectSize;
 
+                const displayedStates = [];
+                const showLegendForMeasure = (legend) => {
+                    if (!legend) return;
+                    const prev = legend.getAttribute('display');
+                    displayedStates.push({ legend, prev });
+                    if (prev === 'none') {
+                        legend.removeAttribute('display');
+                    }
+                };
+                const restoreLegendDisplay = () => {
+                    displayedStates.forEach(({ legend, prev }) => {
+                        if (prev === null || prev === undefined) {
+                            legend.removeAttribute('display');
+                        } else {
+                            legend.setAttribute('display', prev);
+                        }
+                    });
+                };
+
+                if (horizontalLegend) showLegendForMeasure(horizontalLegend);
+                if (verticalLegend) showLegendForMeasure(verticalLegend);
+
                 if (!hasDualLegends) {
                     const pairwiseLegend = legendGroup.querySelector('#pairwise_legend');
+                    restoreLegendDisplay();
                     if (!pairwiseLegend) return;
 
                     const featureLegendGroup = legendGroup.querySelector('#feature_legend') || legendGroup;
@@ -4107,27 +4130,25 @@ json.dumps({"width": width})
                     const vPairwiseLegend = verticalLegend.querySelector('#pairwise_legend');
 
                     if (vFeatureLegend && vPairwiseLegend) {
-                        // Calculate new feature legend height
-                        let maxFeatureY = 0;
-                        const featureTexts = vFeatureLegend.querySelectorAll('text');
-                        featureTexts.forEach(el => {
-                            const pos = parseTransform(el.getAttribute('transform'));
-                            if (pos.y > maxFeatureY) maxFeatureY = pos.y;
-                        });
+                        const featureBBox = vFeatureLegend.getBBox();
+                        const pairwiseBBox = vPairwiseLegend.getBBox();
+                        const featureWidth = featureBBox.width;
+                        const featureHeight = featureBBox.height;
+                        const pairwiseWidth = pairwiseBBox.width;
 
-                        // Calculate new pairwise legend position
-                        const newPairwiseY = maxFeatureY + lineMargin + lineMargin / 2;
-
-                        // Get current pairwise transform to preserve X
-                        const currentTransform = vPairwiseLegend.getAttribute('transform');
+                        let featureX = 0;
                         let pairwiseX = 0;
-                        if (currentTransform) {
-                            const match = currentTransform.match(/translate\(\s*([\d.-]+)\s*,/);
-                            if (match) pairwiseX = parseFloat(match[1]);
+
+                        if (pairwiseWidth > featureWidth) {
+                            featureX = (pairwiseWidth - featureWidth) / 2;
+                        } else if (featureWidth > pairwiseWidth) {
+                            pairwiseX = (featureWidth - pairwiseWidth) / 2;
                         }
 
-                        vPairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${newPairwiseY})`);
-                        console.log(`Repositioned vertical pairwise legend to y=${newPairwiseY}`);
+                        const pairwiseY = featureHeight + lineMargin / 2;
+                        vFeatureLegend.setAttribute('transform', `translate(${featureX}, 0)`);
+                        vPairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${pairwiseY})`);
+                        console.log(`Repositioned vertical pairwise legend to x=${pairwiseX}, y=${pairwiseY}`);
                     }
                 }
 
@@ -4137,44 +4158,31 @@ json.dumps({"width": width})
                     const hPairwiseLegend = horizontalLegend.querySelector('#pairwise_legend');
 
                     if (hFeatureLegend && hPairwiseLegend) {
-                        // Calculate feature legend height (from rows)
-                        let minFeatureY = Infinity, maxFeatureY = -Infinity;
-                        const featureTexts = hFeatureLegend.querySelectorAll('text');
-                        featureTexts.forEach(el => {
-                            const pos = parseTransform(el.getAttribute('transform'));
-                            if (pos.y < minFeatureY) minFeatureY = pos.y;
-                            if (pos.y > maxFeatureY) maxFeatureY = pos.y;
-                        });
+                        const featureBBox = hFeatureLegend.getBBox();
+                        const pairwiseBBox = hPairwiseLegend.getBBox();
+                        const featureWidth = featureBBox.width;
+                        const featureHeight = featureBBox.height;
+                        const pairwiseHeight = pairwiseBBox.height;
 
-                        if (minFeatureY !== Infinity && maxFeatureY !== -Infinity) {
-                            const featureHeight = maxFeatureY - minFeatureY + lineMargin;
+                        const featureOffset = parseTransform(hFeatureLegend.getAttribute('transform'));
+                        const featureX = featureOffset.x || 0;
+                        let featureY = 0;
+                        let pairwiseY = 0;
 
-                            // Get pairwise legend height
-                            const pairwiseBBox = hPairwiseLegend.getBBox();
-                            const pairwiseHeight = pairwiseBBox.height;
-
-                            // Get current pairwise transform to preserve X
-                            const currentTransform = hPairwiseLegend.getAttribute('transform');
-                            let pairwiseX = 0, currentPairwiseY = 0;
-                            if (currentTransform) {
-                                const match = currentTransform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
-                                if (match) {
-                                    pairwiseX = parseFloat(match[1]);
-                                    currentPairwiseY = parseFloat(match[2]);
-                                }
-                            }
-
-                            // Vertically center pairwise legend with feature legend
-                            let newPairwiseY = currentPairwiseY;
-                            if (featureHeight > pairwiseHeight) {
-                                newPairwiseY = (featureHeight - pairwiseHeight) / 2;
-                            }
-
-                            hPairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${newPairwiseY})`);
-                            console.log(`Repositioned horizontal pairwise legend to y=${newPairwiseY}`);
+                        if (featureHeight > pairwiseHeight) {
+                            pairwiseY = (featureHeight - pairwiseHeight) / 2;
+                        } else if (pairwiseHeight > featureHeight) {
+                            featureY = (pairwiseHeight - featureHeight) / 2;
                         }
+
+                        hFeatureLegend.setAttribute('transform', `translate(${featureX}, ${featureY})`);
+                        const pairwiseX = featureX + featureWidth + textXOffset;
+                        hPairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${pairwiseY})`);
+                        console.log(`Repositioned horizontal pairwise legend to x=${pairwiseX}, y=${pairwiseY}`);
                     }
                 }
+
+                restoreLegendDisplay();
 
                 // After repositioning, check if canvas needs expansion
                 expandCanvasForVerticalLegend(svg);
@@ -6028,6 +6036,8 @@ json.dumps({"width": width})
                                     legendHeight = reflowResult.legendHeight || legendHeight;
                                 }
                             }
+
+                            updatePairwiseLegendPositions(svg);
 
                             const padding = 20;
 
