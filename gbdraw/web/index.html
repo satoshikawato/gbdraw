@@ -1303,7 +1303,7 @@
                     }
                 }
                 // Also skip if clicking directly on a path inside SVG (feature or legend element)
-                if (target.tagName === 'path' && target.closest('svg')) {
+                if ((target.tagName === 'path' || target.tagName === 'polygon') && target.closest('svg')) {
                     return;
                 }
 
@@ -1494,6 +1494,9 @@
             // This prevents race condition where watcher overwrites correct legend state
             const skipExtractOnSvgChange = ref(false);
 
+            // Flag to sync feature svg_id values after a new diagram render
+            const pendingSvgIdSync = ref(false);
+
             // Persist SVG updates with consistent flags
             const commitSvg = (svg, options = {}) => {
                 if (!svg) return options.returnSerialized ? '' : false;
@@ -1671,6 +1674,7 @@
                         (f.product || '').toLowerCase().includes(q) ||
                         (f.gene || '').toLowerCase().includes(q) ||
                         (f.locus_tag || '').toLowerCase().includes(q) ||
+                        (f.function || '').toLowerCase().includes(q) ||
                         (f.note || '').toLowerCase().includes(q) ||
                         f.type.toLowerCase().includes(q)
                     );
@@ -1694,6 +1698,64 @@
                     const hex = Math.round(Math.max(0, Math.min(255, x))).toString(16);
                     return hex.length === 1 ? '0' + hex : hex;
                 }).join('');
+            };
+
+            const expandShortHex = (value) => {
+                const match = /^#([0-9a-f]{3})$/i.exec(value);
+                if (!match) return value;
+                return '#' + match[1].split('').map(ch => ch + ch).join('');
+            };
+
+            const normalizeRgbString = (value) => {
+                const match = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(value);
+                if (!match) return '';
+                return rgbToHex(parseInt(match[1], 10), parseInt(match[2], 10), parseInt(match[3], 10));
+            };
+
+            const colorNormalizerCtx = (() => {
+                if (typeof document === 'undefined') return null;
+                const canvas = document.createElement('canvas');
+                return canvas.getContext('2d');
+            })();
+
+            let colorProbeEl = null;
+            const getComputedColorHex = (value) => {
+                if (typeof document === 'undefined') return '';
+                if (!document.body) return '';
+                if (!colorProbeEl) {
+                    colorProbeEl = document.createElement('span');
+                    colorProbeEl.style.display = 'none';
+                    document.body.appendChild(colorProbeEl);
+                }
+                colorProbeEl.style.color = '';
+                colorProbeEl.style.color = value;
+                if (!colorProbeEl.style.color) return '';
+                const computed = getComputedStyle(colorProbeEl).color;
+                return normalizeRgbString(computed);
+            };
+
+            const normalizeCssColor = (value) => {
+                if (!value || typeof value !== 'string') return '';
+                const trimmed = value.trim();
+                if (!trimmed) return '';
+                const lower = trimmed.toLowerCase();
+                if (/^#([0-9a-f]{6})$/i.test(lower)) return lower;
+                if (/^#([0-9a-f]{3})$/i.test(lower)) return expandShortHex(lower);
+                if (typeof CSS !== 'undefined' && CSS.supports && !CSS.supports('color', trimmed)) return '';
+                if (!colorNormalizerCtx) return '';
+                colorNormalizerCtx.fillStyle = '#000000';
+                colorNormalizerCtx.fillStyle = trimmed;
+                const normalized = colorNormalizerCtx.fillStyle;
+                if (!normalized) return '';
+                if (normalized.startsWith('#')) return normalized.toLowerCase();
+                const rgbHex = normalizeRgbString(normalized);
+                if (rgbHex) return rgbHex;
+                return getComputedColorHex(trimmed);
+            };
+
+            const normalizeColorValue = (value, fallback = '#cccccc') => {
+                const normalized = normalizeCssColor(value);
+                return normalized || fallback;
             };
 
             // Helper: parse translate(x, y) from transform
@@ -1736,14 +1798,193 @@
                 return Math.max(0, Math.min(1, currentDist / totalDist));
             };
 
+            const getRuleMatchValues = (feat, qualifier) => {
+                if (!feat || !qualifier) return [];
+                if (qualifier === 'hash') return [feat.svg_id || ''];
+                if (qualifier === 'location') return [`${feat.start}..${feat.end}`];
+
+                const directValue = feat[qualifier];
+                if (directValue) {
+                    return Array.isArray(directValue) ? directValue : [directValue];
+                }
+
+                const qualifierValues = feat.qualifiers?.[qualifier];
+                if (qualifierValues) {
+                    return Array.isArray(qualifierValues) ? qualifierValues : [qualifierValues];
+                }
+
+                return [];
+            };
+
+            const ruleMatchesFeature = (feat, rule) => {
+                if (!rule || !feat) return false;
+                if (rule.feat !== feat.type) return false;
+
+                const values = getRuleMatchValues(feat, rule.qual);
+                if (!values.length) return false;
+
+                for (const value of values) {
+                    if (!value) continue;
+                    try {
+                        const regex = new RegExp(rule.val, 'i');
+                        if (regex.test(String(value))) return true;
+                    } catch {
+                        if (String(value).toLowerCase() === String(rule.val).toLowerCase()) return true;
+                    }
+                }
+                return false;
+            };
+
+            // Find the most specific rule for a feature (hash first, then regex-based)
+            const findMatchingSpecificRule = (feat) => {
+                if (!feat) return null;
+
+                for (const rule of manualSpecificRules) {
+                    if (rule.qual !== 'hash') continue;
+                    if (ruleMatchesFeature(feat, rule)) return rule;
+                }
+
+                for (const rule of manualSpecificRules) {
+                    if (rule.qual === 'hash') continue;
+                    if (ruleMatchesFeature(feat, rule)) return rule;
+                }
+
+                return null;
+            };
+
+            const syncFeatureOverridesFromRules = (features) => {
+                if (!features || features.length === 0) return;
+                Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
+                for (const feat of features) {
+                    const matchingRule = findMatchingSpecificRule(feat);
+                    const ruleColor = normalizeCssColor(matchingRule?.color || '');
+                    if (ruleColor) {
+                        featureColorOverrides[feat.id] = {
+                            color: ruleColor,
+                            caption: matchingRule.cap
+                        };
+                    }
+                }
+            };
+
+            const getSvgFeatureIds = (svg) => {
+                const ids = new Set();
+                if (!svg) return ids;
+                const nodes = svg.querySelectorAll('path[id^="f"], polygon[id^="f"]');
+                nodes.forEach(node => {
+                    const id = node.getAttribute('id');
+                    if (id) ids.add(id);
+                });
+                return ids;
+            };
+
+            const normalizeHashStrand = (strand) => {
+                if (strand === 1) return 'positive';
+                if (strand === -1) return 'negative';
+                if (strand === 0 || strand === null || strand === undefined) return 'undefined';
+                return strand;
+            };
+
+            const computeFeatureHashes = (features, offset = 0) => {
+                if (!pyodideReady.value || !pyodide) return [];
+                try {
+                    const entries = features.map(f => {
+                        const baseStart = f.hash_start ?? f.start ?? 0;
+                        const baseEnd = f.hash_end ?? f.end ?? 0;
+                        const baseStrand = normalizeHashStrand(f.hash_strand ?? f.strand_num ?? null);
+                        return [
+                            f.type,
+                            baseStart + offset,
+                            baseEnd + offset,
+                            baseStrand
+                        ];
+                    });
+                    const result = pyodide.globals.get("compute_feature_hashes")(pyodide.toPy(entries));
+                    return JSON.parse(result);
+                } catch (e) {
+                    console.warn('Failed to compute feature hashes:', e);
+                    return [];
+                }
+            };
+
+            const syncFeatureSvgIdsToDom = (features) => {
+                if (!features || features.length === 0) return false;
+                if (!svgContainer.value) return false;
+                const svg = svgContainer.value.querySelector('svg');
+                if (!svg) return false;
+
+                const domIds = getSvgFeatureIds(svg);
+                if (domIds.size === 0) return false;
+
+                const expectedCount = domIds.size;
+                const currentMatchCount = features.filter(f => f.svg_id && domIds.has(f.svg_id)).length;
+                const currentRatio = expectedCount ? currentMatchCount / expectedCount : 0;
+                if (currentRatio >= 0.7) return false;
+
+                const offsets = [0, -1, 1];
+                let best = { matchCount: currentMatchCount, ids: null, offset: 0 };
+
+                for (const offset of offsets) {
+                    const ids = computeFeatureHashes(features, offset);
+                    if (!ids.length) continue;
+                    const matchCount = ids.filter(id => domIds.has(id)).length;
+                    if (matchCount > best.matchCount) {
+                        best = { matchCount, ids, offset };
+                    }
+                }
+
+                const bestRatio = expectedCount ? best.matchCount / expectedCount : 0;
+                if (!best.ids || best.ids.length !== features.length || best.matchCount <= currentMatchCount || bestRatio < 0.5) {
+                    if (currentMatchCount === 0) {
+                        console.warn('Could not reconcile svg_id values for feature selection.');
+                    }
+                    return false;
+                }
+
+                const svgIdMap = new Map();
+                features.forEach((feat, idx) => {
+                    const nextId = best.ids[idx];
+                    if (nextId && feat.svg_id && feat.svg_id !== nextId) {
+                        svgIdMap.set(feat.svg_id, nextId);
+                    }
+                    if (nextId) {
+                        feat.svg_id = nextId;
+                    }
+                });
+
+                if (svgIdMap.size > 0) {
+                    manualSpecificRules.forEach(rule => {
+                        if (rule.qual === 'hash' && svgIdMap.has(rule.val)) {
+                            rule.val = svgIdMap.get(rule.val);
+                        }
+                    });
+                }
+
+                syncFeatureOverridesFromRules(features);
+                extractLegendEntries();
+                if (manualSpecificRules.length > 0) {
+                    applySpecificRulesToSvg();
+                }
+                console.log(`Reconciled svg_id mapping using offset ${best.offset} (${best.matchCount}/${expectedCount} matched).`);
+                return true;
+            };
+
+            const getOverrideColorValue = (override) => {
+                if (!override) return '';
+                if (typeof override === 'string') return override;
+                if (typeof override === 'object' && override.color) return override.color;
+                return '';
+            };
+
             const getFeatureColor = (feat) => {
                 // Use internal ID for tracking (unique per feature)
-                const override = featureColorOverrides[feat.id];
-                if (override) {
-                    return override.color || override;  // Support both {color, caption} and legacy string format
-                }
+                const overrideColor = normalizeCssColor(getOverrideColorValue(featureColorOverrides[feat.id]));
+                if (overrideColor) return overrideColor;
+                const matchingRule = findMatchingSpecificRule(feat);
+                const ruleColor = normalizeCssColor(matchingRule?.color || '');
+                if (ruleColor) return ruleColor;
                 // Otherwise use the default color for this feature type from the palette
-                return currentColors.value[feat.type] || '#cccccc';
+                return normalizeColorValue(currentColors.value[feat.type], '#cccccc');
             };
 
             // Helper to check if a feature can be identified for color editing
@@ -1761,43 +2002,18 @@
             const getFeatureQualifier = (feat) => {
                 // Always use hash - it's the most reliable unique identifier
                 // svg_id is pre-computed for each feature (e.g., "f1a2b3c4")
-                return { qual: 'hash', val: feat.svg_id };
+                if (feat.svg_id) {
+                    return { qual: 'hash', val: feat.svg_id };
+                }
+                return { qual: 'location', val: `${feat.start}..${feat.end}` };
             };
 
             // Find if a feature matches an existing regex-based rule (non-hash rule)
             // Returns the matching rule or null
             const findMatchingRegexRule = (feat) => {
                 for (const rule of manualSpecificRules) {
-                    if (rule.feat !== feat.type) continue;
                     if (rule.qual === 'hash') continue; // Skip hash rules
-
-                    let matches = false;
-                    if (rule.qual === 'product' && feat.product) {
-                        try {
-                            const regex = new RegExp(rule.val, 'i');
-                            matches = regex.test(feat.product);
-                        } catch {
-                            matches = feat.product === rule.val;
-                        }
-                    } else if (rule.qual === 'gene' && feat.gene) {
-                        try {
-                            const regex = new RegExp(rule.val, 'i');
-                            matches = regex.test(feat.gene);
-                        } catch {
-                            matches = feat.gene === rule.val;
-                        }
-                    } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
-                        try {
-                            const regex = new RegExp(rule.val, 'i');
-                            matches = regex.test(feat.locus_tag);
-                        } catch {
-                            matches = feat.locus_tag === rule.val;
-                        }
-                    }
-
-                    if (matches) {
-                        return rule;
-                    }
+                    if (ruleMatchesFeature(feat, rule)) return rule;
                 }
                 return null;
             };
@@ -1806,37 +2022,7 @@
             const countFeaturesMatchingRule = (rule) => {
                 if (!rule || rule.qual === 'hash') return 0;
 
-                let count = 0;
-                for (const feat of extractedFeatures.value) {
-                    if (feat.type !== rule.feat) continue;
-
-                    let matches = false;
-                    if (rule.qual === 'product' && feat.product) {
-                        try {
-                            const regex = new RegExp(rule.val, 'i');
-                            matches = regex.test(feat.product);
-                        } catch {
-                            matches = feat.product === rule.val;
-                        }
-                    } else if (rule.qual === 'gene' && feat.gene) {
-                        try {
-                            const regex = new RegExp(rule.val, 'i');
-                            matches = regex.test(feat.gene);
-                        } catch {
-                            matches = feat.gene === rule.val;
-                        }
-                    } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
-                        try {
-                            const regex = new RegExp(rule.val, 'i');
-                            matches = regex.test(feat.locus_tag);
-                        } catch {
-                            matches = feat.locus_tag === rule.val;
-                        }
-                    }
-
-                    if (matches) count++;
-                }
-                return count;
+                return extractedFeatures.value.filter(f => ruleMatchesFeature(f, rule)).length;
             };
 
             // Find features that share the same legend caption (excluding the current feature)
@@ -1949,9 +2135,15 @@
                     path.addEventListener('click', (e) => {
                         e.stopPropagation();
                         // Find matching feature from extractedFeatures
-                        const feat = extractedFeatures.value.find(f => f.svg_id === svgId);
+                        let feat = extractedFeatures.value.find(f => f.svg_id === svgId);
+                        if (!feat && extractedFeatures.value.length > 0) {
+                            const reconciled = syncFeatureSvgIdsToDom(extractedFeatures.value);
+                            if (reconciled) {
+                                feat = extractedFeatures.value.find(f => f.svg_id === svgId);
+                            }
+                        }
                         if (feat) {
-                            const currentColor = path.getAttribute('fill') || getFeatureColor(feat);
+                            const currentColor = normalizeColorValue(path.getAttribute('fill') || getFeatureColor(feat), '#cccccc');
                             const defaultLabel = feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`;
 
                             // Check if there's an existing override with a caption
@@ -1959,7 +2151,7 @@
                             const existingCaption = existingOverride?.caption || '';
 
                             // Get current stroke values from SVG element
-                            const currentStrokeColor = path.getAttribute('stroke') || '#000000';
+                            const currentStrokeColor = normalizeColorValue(path.getAttribute('stroke') || '#000000', '#000000');
                             const currentStrokeWidth = parseFloat(path.getAttribute('stroke-width')) || 0.5;
 
                             clickedFeature.value = {
@@ -2288,7 +2480,7 @@
                 const feat = clickedFeature.value.feat;
                 if (!feat) return;
 
-                const defaultColor = resetColorDialog.defaultColor || currentColors.value[feat.type];
+                const defaultColor = normalizeColorValue(resetColorDialog.defaultColor || currentColors.value[feat.type], '#cccccc');
                 const caption = resetColorDialog.caption || feat.product || feat.gene || feat.locus_tag || feat.note || `${feat.type} at ${feat.start}..${feat.end}`;
                 const svgId = clickedFeature.value.svg_id;
 
@@ -2391,9 +2583,11 @@
 
                 // Fallback: if no legend entry found by svg_id, find by color match
                 if (!targetLegendEntry) {
-                    targetLegendEntry = legendEntries.value.find(e =>
-                        e.color && e.color.toLowerCase() === currentFillColor?.toLowerCase()
-                    );
+                    const currentFill = normalizeCssColor(currentFillColor);
+                    targetLegendEntry = legendEntries.value.find(e => {
+                        const entryColor = normalizeCssColor(e.color);
+                        return entryColor && currentFill && entryColor === currentFill;
+                    });
                 }
 
                 // Get sibling features from the legend entry's featureIds, or fallback to color matching
@@ -2407,8 +2601,9 @@
                         if (getFeatureCaption(f) !== caption) return false;
                         const el = svg.querySelector(`#${CSS.escape(f.svg_id)}`);
                         if (!el) return false;
-                        const fillColor = el.getAttribute('fill');
-                        return fillColor && fillColor.toLowerCase() === currentFillColor?.toLowerCase();
+                        const fillColor = normalizeCssColor(el.getAttribute('fill'));
+                        const currentFill = normalizeCssColor(currentFillColor);
+                        return fillColor && currentFill && fillColor === currentFill;
                     });
                     siblingFeatureIds = siblingFeatures.map(f => f.svg_id);
                     console.log(`Fallback: Found ${siblingFeatureIds.length} features by caption="${caption}" and color="${currentFillColor}"`);
@@ -2433,26 +2628,25 @@
 
                 // Update legend rect stroke using data-legend-key
                 if (targetLegendEntry) {
-                    const legendGroups = getAllFeatureLegendGroups(svg);
-                    for (const targetGroup of legendGroups) {
-                        const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(targetLegendEntry.caption)}"]`);
-                        if (entryGroup) {
-                            const paths = entryGroup.querySelectorAll('path');
-                            for (const path of paths) {
-                                const fill = path.getAttribute('fill');
-                                if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                                    if (currentStrokeColor) {
-                                        path.setAttribute('stroke', currentStrokeColor);
-                                    }
-                                    if (currentStrokeWidth !== null && currentStrokeWidth !== '') {
-                                        path.setAttribute('stroke-width', parseFloat(currentStrokeWidth));
-                                    }
-                                    console.log(`Updated legend rect stroke for "${targetLegendEntry.caption}"`);
-                                    break;
-                                }
+                const legendTargets = getLegendEntryTargets(svg, targetLegendEntry.caption);
+                for (const target of legendTargets) {
+                    const paths = target.entryGroup
+                        ? target.entryGroup.querySelectorAll('path')
+                        : (target.rectEl ? [target.rectEl] : []);
+                    for (const path of paths) {
+                        const fill = path.getAttribute('fill');
+                        if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                            if (currentStrokeColor) {
+                                path.setAttribute('stroke', currentStrokeColor);
                             }
+                            if (currentStrokeWidth !== null && currentStrokeWidth !== '') {
+                                path.setAttribute('stroke-width', parseFloat(currentStrokeWidth));
+                            }
+                            console.log(`Updated legend rect stroke for "${targetLegendEntry.caption}"`);
+                            break;
                         }
                     }
+                }
                 }
 
                 // Get the caption to use for stroke overrides (use legend entry caption if available)
@@ -2624,23 +2818,18 @@
                     if (!feat) return;
 
                     const paletteColor = colors[feat.type];
-                    if (!paletteColor) return;
+                    const normalizedPalette = normalizeCssColor(paletteColor);
+                    if (!normalizedPalette) return;
 
                     // Don't update if feature has a specific color rule (including hash-based rules)
-                    const hasSpecificRule = manualSpecificRules.some(r => {
-                        // Check for hash-based rule (individual feature override)
-                        if (r.qual === 'hash' && r.val === feat.svg_id) {
-                            return true;
-                        }
-                        // Check for qualifier-based rule (product, gene, locus_tag)
-                        const qualInfo = getFeatureQualifier(feat);
-                        return qualInfo && r.feat === feat.type && r.qual === qualInfo.qual && r.val === qualInfo.val;
-                    });
+                    const matchingRule = findMatchingSpecificRule(feat);
+                    const ruleColor = normalizeCssColor(matchingRule?.color || '');
+                    const overrideColor = normalizeCssColor(getOverrideColorValue(featureColorOverrides[feat.id]));
 
-                    if (!hasSpecificRule && !featureColorOverrides[feat.id]) {
+                    if (!ruleColor && !overrideColor) {
                         const currentFill = path.getAttribute('fill');
-                        if (currentFill !== paletteColor) {
-                            path.setAttribute('fill', paletteColor);
+                        if (currentFill !== normalizedPalette) {
+                            path.setAttribute('fill', normalizedPalette);
                             updatedCount++;
                         }
                     }
@@ -2648,10 +2837,11 @@
 
                 // Update GC content track
                 const gcContentGroup = svg.getElementById('gc_content');
-                if (gcContentGroup && colors.gc_content) {
+                const gcContentColor = normalizeCssColor(colors.gc_content);
+                if (gcContentGroup && gcContentColor) {
                     const gcPaths = gcContentGroup.querySelectorAll('path');
                     gcPaths.forEach(path => {
-                        path.setAttribute('fill', colors.gc_content);
+                        path.setAttribute('fill', gcContentColor);
                         updatedCount++;
                     });
                 }
@@ -2660,6 +2850,8 @@
                 const skewGroup = svg.getElementById('skew') || svg.getElementById('gc_skew');
                 if (skewGroup) {
                     const skewPaths = skewGroup.querySelectorAll('path');
+                    const highColor = normalizeCssColor(colors.skew_high);
+                    const lowColor = normalizeCssColor(colors.skew_low);
                     // In circular: first visible path is high (after clipPath), second is low
                     // In linear: similar structure
                     let pathIndex = 0;
@@ -2667,11 +2859,11 @@
                         const fill = path.getAttribute('fill');
                         // Skip clipPath paths (fill="white") and non-filled paths
                         if (fill && fill !== 'white' && fill !== 'none') {
-                            if (pathIndex === 0 && colors.skew_high) {
-                                path.setAttribute('fill', colors.skew_high);
+                            if (pathIndex === 0 && highColor) {
+                                path.setAttribute('fill', highColor);
                                 updatedCount++;
-                            } else if (pathIndex === 1 && colors.skew_low) {
-                                path.setAttribute('fill', colors.skew_low);
+                            } else if (pathIndex === 1 && lowColor) {
+                                path.setAttribute('fill', lowColor);
                                 updatedCount++;
                             }
                             pathIndex++;
@@ -2747,7 +2939,7 @@
 
                                 // Get the color for this legend key
                                 const colorKey = keyToColorKey[legendKey];
-                                const newColor = colorKey ? colors[colorKey] : colors[legendKey];
+                                const newColor = normalizeCssColor(colorKey ? colors[colorKey] : colors[legendKey]);
                                 if (!newColor) return;
 
                                 // Find the color rectangle (first path with solid fill) in this entry group
@@ -2772,7 +2964,7 @@
                                 if (legendColorOverrides[textContent]) return;
 
                                 const colorKey = keyToColorKey[textContent];
-                                const newColor = colorKey ? colors[colorKey] : colors[textContent];
+                                const newColor = normalizeCssColor(colorKey ? colors[colorKey] : colors[textContent]);
                                 if (!newColor) return;
 
                                 const textPos = parseTransform(textEl.getAttribute('transform'));
@@ -2843,61 +3035,14 @@
                 extractedFeatures.value.forEach(feat => {
                     if (!feat.svg_id) return;
 
-                    // Check if there's a matching specific rule
-                    // Priority: hash rules (highest) > regex rules (product/gene/locus_tag)
-                    let matchingRule = null;
-
-                    // First pass: check hash-based rules (most specific, individual feature overrides)
-                    for (const rule of manualSpecificRules) {
-                        if (rule.feat !== feat.type) continue;
-                        if (rule.qual === 'hash' && feat.svg_id === rule.val) {
-                            matchingRule = rule;
-                            break;
-                        }
-                    }
-
-                    // Second pass: if no hash match, check regex-based rules
-                    if (!matchingRule) {
-                        for (const rule of manualSpecificRules) {
-                            if (rule.feat !== feat.type) continue;
-                            if (rule.qual === 'hash') continue; // Already checked in first pass
-
-                            let matches = false;
-                            if (rule.qual === 'product' && feat.product) {
-                                // Support regex matching
-                                try {
-                                    const regex = new RegExp(rule.val, 'i');
-                                    matches = regex.test(feat.product);
-                                } catch {
-                                    matches = feat.product === rule.val;
-                                }
-                            } else if (rule.qual === 'gene' && feat.gene) {
-                                try {
-                                    const regex = new RegExp(rule.val, 'i');
-                                    matches = regex.test(feat.gene);
-                                } catch {
-                                    matches = feat.gene === rule.val;
-                                }
-                            } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
-                                try {
-                                    const regex = new RegExp(rule.val, 'i');
-                                    matches = regex.test(feat.locus_tag);
-                                } catch {
-                                    matches = feat.locus_tag === rule.val;
-                                }
-                            }
-
-                            if (matches) {
-                                matchingRule = rule;
-                                break;
-                            }
-                        }
-                    }
+                    const matchingRule = findMatchingSpecificRule(feat);
+                    const ruleColor = normalizeCssColor(matchingRule?.color || '');
+                    const fallbackColor = normalizeColorValue(currentColors.value[feat.type], '#cccccc');
+                    const newColor = ruleColor || fallbackColor;
 
                     // Apply color based on matching rule or default palette
                     const elements = svg.querySelectorAll(`#${CSS.escape(feat.svg_id)}`);
                     if (elements.length > 0) {
-                        const newColor = matchingRule ? matchingRule.color : (currentColors.value[feat.type] || '#cccccc');
                         elements.forEach(el => {
                             if (el.getAttribute('fill') !== newColor) {
                                 el.setAttribute('fill', newColor);
@@ -2921,6 +3066,9 @@
             // Watch for specific rules changes - only apply styles and handle removals
             // Legend ADDITIONS are handled by setFeatureColor to avoid race conditions
             watch(() => [...manualSpecificRules], async (newRules, oldRules) => {
+                if (extractedFeatures.value.length > 0) {
+                    syncFeatureOverridesFromRules(extractedFeatures.value);
+                }
                 applySpecificRulesToSvg();
 
                 // Get captions from current and old rules
@@ -3621,6 +3769,63 @@ json.dumps({"width": width})
                 return groups;
             };
 
+            const getLegendTextElements = (group) => {
+                if (!group) return [];
+                return Array.from(group.querySelectorAll('text')).filter(el => !el.closest('#pairwise_legend'));
+            };
+
+            const getLegendColorRects = (group) => {
+                if (!group) return [];
+                return Array.from(group.querySelectorAll('path')).filter(el => {
+                    if (el.closest('#pairwise_legend')) return false;
+                    const fill = el.getAttribute('fill');
+                    return fill && fill !== 'none' && !fill.startsWith('url(');
+                });
+            };
+
+            const findLegendRectForText = (textEl, rects) => {
+                if (!textEl || rects.length === 0) return null;
+                const textPos = parseTransform(textEl.getAttribute('transform'));
+                let bestRect = null;
+                let bestX = -Infinity;
+                rects.forEach(rect => {
+                    const rectPos = parseTransform(rect.getAttribute('transform'));
+                    if (Math.abs(rectPos.y - textPos.y) < 2 && rectPos.x < textPos.x) {
+                        if (rectPos.x > bestX) {
+                            bestX = rectPos.x;
+                            bestRect = rect;
+                        }
+                    }
+                });
+                return bestRect;
+            };
+
+            const getLegendEntryTargets = (svg, caption) => {
+                if (!svg || !caption) return [];
+                const targetGroups = getAllFeatureLegendGroups(svg);
+                const targets = [];
+                const trimmed = caption.trim();
+
+                for (const targetGroup of targetGroups) {
+                    if (!targetGroup) continue;
+                    const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(trimmed)}"]`);
+                    if (entryGroup) {
+                        targets.push({ group: targetGroup, entryGroup });
+                        continue;
+                    }
+
+                    const texts = getLegendTextElements(targetGroup);
+                    const textEl = texts.find(t => t.textContent?.trim() === trimmed);
+                    if (!textEl) continue;
+
+                    const rects = getLegendColorRects(targetGroup);
+                    const rectEl = findLegendRectForText(textEl, rects);
+                    targets.push({ group: targetGroup, textEl, rectEl });
+                }
+
+                return targets;
+            };
+
             // Get the visible (active) feature legend group for extraction
             const getVisibleFeatureLegendGroup = (svg) => {
                 const legendGroup = svg.getElementById('legend');
@@ -3671,23 +3876,21 @@ json.dumps({"width": width})
                 const svg = svgContainer.value.querySelector('svg');
                 if (!svg) return false;
 
-                const targetGroups = getAllFeatureLegendGroups(svg);
-                if (targetGroups.length === 0) return false;
-
+                const targets = getLegendEntryTargets(svg, caption);
+                if (targets.length === 0) return false;
                 let updated = false;
 
                 // Update in all legend groups
-                for (const targetGroup of targetGroups) {
-                    const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(caption)}"]`);
-                    if (entryGroup) {
-                        const paths = entryGroup.querySelectorAll('path');
-                        for (const path of paths) {
-                            const fill = path.getAttribute('fill');
-                            if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                                path.setAttribute('fill', color);
-                                updated = true;
-                                break;
-                            }
+                for (const target of targets) {
+                    const paths = target.entryGroup
+                        ? target.entryGroup.querySelectorAll('path')
+                        : (target.rectEl ? [target.rectEl] : []);
+                    for (const path of paths) {
+                        const fill = path.getAttribute('fill');
+                        if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                            path.setAttribute('fill', color);
+                            updated = true;
+                            break;
                         }
                     }
                 }
@@ -3708,15 +3911,8 @@ json.dumps({"width": width})
                 const svg = svgContainer.value.querySelector('svg');
                 if (!svg) return false;
 
-                // Check all legend groups (handles dual legends)
-                const targetGroups = getAllFeatureLegendGroups(svg);
-                if (targetGroups.length === 0) return false;
-
-                // Check the first group (they should be in sync)
-                const targetGroup = targetGroups[0];
-
-                const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(caption)}"]`);
-                return entryGroup !== null;
+                const targets = getLegendEntryTargets(svg, caption);
+                return targets.length > 0;
             };
 
             // Function to remove a legend entry by caption
@@ -3727,16 +3923,23 @@ json.dumps({"width": width})
                 const svg = svgContainer.value.querySelector('svg');
                 if (!svg) return false;
 
-                const targetGroups = getAllFeatureLegendGroups(svg);
-                if (targetGroups.length === 0) return false;
-
+                const targets = getLegendEntryTargets(svg, caption);
+                if (targets.length === 0) return false;
                 let removed = false;
 
                 // Remove from all legend groups
-                for (const targetGroup of targetGroups) {
-                    const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(caption)}"]`);
-                    if (entryGroup) {
-                        entryGroup.remove();
+                for (const target of targets) {
+                    if (target.entryGroup) {
+                        target.entryGroup.remove();
+                        removed = true;
+                        continue;
+                    }
+                    if (target.rectEl) {
+                        target.rectEl.remove();
+                        removed = true;
+                    }
+                    if (target.textEl) {
+                        target.textEl.remove();
                         removed = true;
                     }
                 }
@@ -4363,45 +4566,76 @@ json.dumps({"width": width})
 
                 // Find all legend entry groups with data-legend-key
                 const entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
-                entryGroups.forEach(entryGroup => {
-                    const caption = entryGroup.getAttribute('data-legend-key');
-                    if (!caption) return;
+                if (entryGroups.length > 0) {
+                    entryGroups.forEach(entryGroup => {
+                        const caption = entryGroup.getAttribute('data-legend-key');
+                        if (!caption) return;
 
-                    // Get color from the rect path
-                    let color = '#cccccc';
-                    const paths = entryGroup.querySelectorAll('path');
-                    for (const path of paths) {
-                        const fill = path.getAttribute('fill');
-                        if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                            color = fill;
-                            break;
+                        // Get color from the rect path
+                        let color = '#cccccc';
+                        const paths = entryGroup.querySelectorAll('path');
+                        for (const path of paths) {
+                            const fill = path.getAttribute('fill');
+                            if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                                color = fill;
+                                break;
+                            }
                         }
-                    }
 
-                    // Get position from the group's transform or text element
-                    let xPos = 0, yPos = 0;
-                    const groupTransform = parseTransform(entryGroup.getAttribute('transform'));
-                    if (groupTransform.x !== 0 || groupTransform.y !== 0) {
-                        xPos = groupTransform.x;
-                        yPos = groupTransform.y;
-                    } else {
-                        // Fallback to text element position
-                        const textEl = entryGroup.querySelector('text');
-                        if (textEl) {
-                            const textTransform = parseTransform(textEl.getAttribute('transform'));
-                            xPos = textTransform.x;
-                            yPos = textTransform.y;
+                        // Get position from the group's transform or text element
+                        let xPos = 0, yPos = 0;
+                        const groupTransform = parseTransform(entryGroup.getAttribute('transform'));
+                        if (groupTransform.x !== 0 || groupTransform.y !== 0) {
+                            xPos = groupTransform.x;
+                            yPos = groupTransform.y;
+                        } else {
+                            // Fallback to text element position
+                            const textEl = entryGroup.querySelector('text');
+                            if (textEl) {
+                                const textTransform = parseTransform(textEl.getAttribute('transform'));
+                                xPos = textTransform.x;
+                                yPos = textTransform.y;
+                            }
                         }
-                    }
 
-                    // Preserve state from existing entry with same caption
-                    const existingEntry = legendEntries.value.find(e => e.caption === caption);
-                    const showStroke = existingEntry?.showStroke || false;
-                    const existingFeatureIds = existingEntry?.featureIds || [];
-                    const originalCaption = existingEntry?.originalCaption || caption;
+                        // Preserve state from existing entry with same caption
+                        const existingEntry = legendEntries.value.find(e => e.caption === caption);
+                        const showStroke = existingEntry?.showStroke || false;
+                        const existingFeatureIds = existingEntry?.featureIds || [];
+                        const originalCaption = existingEntry?.originalCaption || caption;
 
-                    entries.push({ caption, originalCaption, color, xPos, yPos, showStroke, featureIds: existingFeatureIds });
-                });
+                        entries.push({ caption, originalCaption, color, xPos, yPos, showStroke, featureIds: existingFeatureIds });
+                    });
+                } else {
+                    // Legacy legend structure: match text elements to colored paths by position
+                    const texts = getLegendTextElements(targetGroup);
+                    const rects = getLegendColorRects(targetGroup);
+
+                    texts.forEach(textEl => {
+                        const caption = textEl.textContent?.trim();
+                        if (!caption) return;
+
+                        const rectEl = findLegendRectForText(textEl, rects);
+                        const color = rectEl?.getAttribute('fill') || '#cccccc';
+                        const textTransform = parseTransform(textEl.getAttribute('transform'));
+
+                        // Preserve state from existing entry with same caption
+                        const existingEntry = legendEntries.value.find(e => e.caption === caption);
+                        const showStroke = existingEntry?.showStroke || false;
+                        const existingFeatureIds = existingEntry?.featureIds || [];
+                        const originalCaption = existingEntry?.originalCaption || caption;
+
+                        entries.push({
+                            caption,
+                            originalCaption,
+                            color,
+                            xPos: textTransform.x,
+                            yPos: textTransform.y,
+                            showStroke,
+                            featureIds: existingFeatureIds
+                        });
+                    });
+                }
 
                 // Sort by Y position first, then by X position (for horizontal layout)
                 entries.sort((a, b) => {
@@ -4416,11 +4650,12 @@ json.dumps({"width": width})
                 // Always rebuild to ensure the mapping reflects current state (e.g., after color changes)
                 if (extractedFeatures.value.length > 0) {
                     for (const entry of entries) {
+                        const entryColor = normalizeCssColor(entry.color);
                         const matchingFeatures = extractedFeatures.value.filter(f => {
                             const el = svg.querySelector(`#${CSS.escape(f.svg_id)}`);
                             if (!el) return false;
-                            const fillColor = el.getAttribute('fill');
-                            return fillColor && fillColor.toLowerCase() === entry.color.toLowerCase();
+                            const fillColor = normalizeCssColor(el.getAttribute('fill'));
+                            return entryColor && fillColor && fillColor === entryColor;
                         });
                         entry.featureIds = matchingFeatures.map(f => f.svg_id);
                     }
@@ -4450,20 +4685,19 @@ json.dumps({"width": width})
                 const entry = legendEntries.value[idx];
                 if (!entry) return;
 
-                const targetGroups = getAllFeatureLegendGroups(svg);
-                if (targetGroups.length === 0) return;
+                const targets = getLegendEntryTargets(svg, entry.caption);
+                if (targets.length === 0) return;
 
                 // Update in all legend groups
-                for (const targetGroup of targetGroups) {
-                    const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(entry.caption)}"]`);
-                    if (entryGroup) {
-                        const paths = entryGroup.querySelectorAll('path');
-                        for (const path of paths) {
-                            const fill = path.getAttribute('fill');
-                            if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                                path.setAttribute('fill', newColor);
-                                break;
-                            }
+                for (const target of targets) {
+                    const paths = target.entryGroup
+                        ? target.entryGroup.querySelectorAll('path')
+                        : (target.rectEl ? [target.rectEl] : []);
+                    for (const path of paths) {
+                        const fill = path.getAttribute('fill');
+                        if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                            path.setAttribute('fill', newColor);
+                            break;
                         }
                     }
                 }
@@ -4492,22 +4726,25 @@ json.dumps({"width": width})
                 const oldCaption = entry.caption;
                 if (oldCaption === newCaption) return; // No change needed
 
-                const targetGroups = getAllFeatureLegendGroups(svg);
-                if (targetGroups.length === 0) return;
+                const targets = getLegendEntryTargets(svg, oldCaption);
+                if (targets.length === 0) return;
 
                 // Update in all legend groups
-                for (const targetGroup of targetGroups) {
-                    const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(oldCaption)}"]`);
-                    if (entryGroup) {
+                for (const target of targets) {
+                    if (target.entryGroup) {
                         // Update the data-legend-key attribute
-                        entryGroup.setAttribute('data-legend-key', newCaption);
+                        target.entryGroup.setAttribute('data-legend-key', newCaption);
                         // Update text content within the entry group
-                        const texts = entryGroup.querySelectorAll('text');
+                        const texts = target.entryGroup.querySelectorAll('text');
                         texts.forEach(t => {
                             if (t.textContent?.trim() === oldCaption.trim()) {
                                 t.textContent = newCaption;
                             }
                         });
+                        continue;
+                    }
+                    if (target.textEl && target.textEl.textContent?.trim() === oldCaption.trim()) {
+                        target.textEl.textContent = newCaption;
                     }
                 }
 
@@ -4560,9 +4797,8 @@ json.dumps({"width": width})
                 const entry = legendEntries.value[idx];
                 if (!entry) return '#000000';
                 const override = legendStrokeOverrides[entry.caption];
-                if (override?.strokeColor) return override.strokeColor;
-                // Return original if stored, otherwise default black
-                return override?.originalStrokeColor || '#000000';
+                const color = override?.strokeColor || override?.originalStrokeColor || '#000000';
+                return normalizeColorValue(color, '#000000');
             };
 
             // Get stroke width for a legend entry
@@ -4651,11 +4887,11 @@ json.dumps({"width": width})
                     // Fallback: match by fill color
                     const legendFillColor = entry.color;
                     if (legendFillColor) {
-                        const normalizedColor = legendFillColor.toLowerCase();
+                        const normalizedColor = normalizeCssColor(legendFillColor);
                         const featurePaths = svg.querySelectorAll('path[id^="f"]');
                         featurePaths.forEach(path => {
-                            const fill = path.getAttribute('fill');
-                            if (fill && fill.toLowerCase() === normalizedColor) {
+                            const fill = normalizeCssColor(path.getAttribute('fill'));
+                            if (fill && normalizedColor && fill === normalizedColor) {
                                 if (originalColor === null) {
                                     path.removeAttribute('stroke');
                                 } else {
@@ -4779,11 +5015,11 @@ json.dumps({"width": width})
 
                 // Try to find by fill color if no match found by caption
                 if (legendFillColor) {
-                    const normalizedLegendColor = legendFillColor.toLowerCase();
+                    const normalizedLegendColor = normalizeCssColor(legendFillColor);
                     const featurePaths = svg.querySelectorAll('path[id^="f"]');
                     for (const path of featurePaths) {
-                        const fill = path.getAttribute('fill');
-                        if (fill && fill.toLowerCase() === normalizedLegendColor) {
+                        const fill = normalizeCssColor(path.getAttribute('fill'));
+                        if (fill && normalizedLegendColor && fill === normalizedLegendColor) {
                             return {
                                 strokeColor: path.getAttribute('stroke') || '#000000',
                                 strokeWidth: parseFloat(path.getAttribute('stroke-width')) || 0.5
@@ -4828,11 +5064,11 @@ json.dumps({"width": width})
                     // Fallback: match by fill color
                     const legendFillColor = legendEntry?.color;
                     if (legendFillColor) {
-                        const normalizedLegendColor = legendFillColor.toLowerCase();
+                        const normalizedLegendColor = normalizeCssColor(legendFillColor);
                         const featurePaths = svg.querySelectorAll('path[id^="f"]');
                         featurePaths.forEach(path => {
-                            const fill = path.getAttribute('fill');
-                            if (fill && fill.toLowerCase() === normalizedLegendColor) {
+                            const fill = normalizeCssColor(path.getAttribute('fill'));
+                            if (fill && normalizedLegendColor && fill === normalizedLegendColor) {
                                 const pathId = path.getAttribute('id');
                                 if (pathId && !processedIds.has(pathId)) {
                                     processedIds.add(pathId);
@@ -4851,22 +5087,21 @@ json.dumps({"width": width})
                 }
 
                 // Also apply to legend rect stroke
-                const legendGroups = getAllFeatureLegendGroups(svg);
-                for (const targetGroup of legendGroups) {
-                    const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(caption)}"]`);
-                    if (entryGroup) {
-                        const paths = entryGroup.querySelectorAll('path');
-                        for (const path of paths) {
-                            const fill = path.getAttribute('fill');
-                            if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                                if (strokeColor !== null) {
-                                    path.setAttribute('stroke', strokeColor);
-                                }
-                                if (strokeWidth !== null) {
-                                    path.setAttribute('stroke-width', strokeWidth);
-                                }
-                                break;
+                const legendTargets = getLegendEntryTargets(svg, caption);
+                for (const target of legendTargets) {
+                    const paths = target.entryGroup
+                        ? target.entryGroup.querySelectorAll('path')
+                        : (target.rectEl ? [target.rectEl] : []);
+                    for (const path of paths) {
+                        const fill = path.getAttribute('fill');
+                        if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                            if (strokeColor !== null) {
+                                path.setAttribute('stroke', strokeColor);
                             }
+                            if (strokeWidth !== null) {
+                                path.setAttribute('stroke-width', strokeWidth);
+                            }
+                            break;
                         }
                     }
                 }
@@ -5205,6 +5440,13 @@ json.dumps({"width": width})
                         }
                     }
                 }
+
+                if (svgContainer.value) {
+                    const svg = svgContainer.value.querySelector('svg');
+                    if (svg) {
+                        commitSvg(svg);
+                    }
+                }
             };
 
             // Reset ONLY the legend position - does not affect colors, legend entries, or feature edits
@@ -5252,7 +5494,7 @@ json.dumps({"width": width})
                 extractLegendEntries();
             };
 
-            const setupLegendDrag = () => {
+            const setupLegendDrag = (preserveInitial = false) => {
                 if (!svgContainer.value) return;
                 const svg = svgContainer.value.querySelector('svg');
                 if (!svg) return;
@@ -5261,7 +5503,9 @@ json.dumps({"width": width})
 
                 // Store the legend's initial transform from the SVG
                 const initialTransform = parseTransform(legendGroup.getAttribute('transform'));
-                legendInitialTransform.value = { ...initialTransform };
+                if (!preserveInitial) {
+                    legendInitialTransform.value = { ...initialTransform };
+                }
 
                 // Reset offset tracking
                 legendCurrentOffset.x = 0;
@@ -5280,8 +5524,9 @@ json.dumps({"width": width})
             const startDiagramDrag = (e) => {
                 // Don't start if clicking on legend or feature elements
                 if (e.target.closest('#legend') ||
-                    e.target.closest('path[data-feature-id]') ||
-                    e.target.closest('rect[data-feature-id]')) {
+                    e.target.closest('path[id^="f"]') ||
+                    e.target.closest('polygon[id^="f"]') ||
+                    e.target.closest('[data-feature-id]')) {
                     return;
                 }
                 if (!svgContainer.value) return;
@@ -5349,6 +5594,13 @@ json.dumps({"width": width})
                 diagramElements.value.forEach(el => {
                     el.style.opacity = '1';
                 });
+
+                if (svgContainer.value) {
+                    const svg = svgContainer.value.querySelector('svg');
+                    if (svg) {
+                        commitSvg(svg);
+                    }
+                }
             };
 
             const resetDiagramPosition = () => {
@@ -6422,8 +6674,13 @@ json.dumps({"width": width})
                     if (!skipExtractOnSvgChange.value) {
                         extractLegendEntries();
                     }
-                    setupLegendDrag();
+                    setupLegendDrag(isIncrementalEdit);
                     setupDiagramDrag(isIncrementalEdit);  // Preserve offset during incremental edits
+
+                    if (pendingSvgIdSync.value && extractedFeatures.value.length > 0) {
+                        syncFeatureSvgIdsToDom(extractedFeatures.value);
+                        pendingSvgIdSync.value = false;
+                    }
 
                     if (!isIncrementalEdit) {
                         // Full capture for fresh generation
@@ -6552,6 +6809,7 @@ json.dumps({"width": width})
                     return;
                 }
                 const { qual, val } = qualInfo;
+                const normalizedColor = normalizeColorValue(color, '#cccccc');
 
                 // Use internal ID for UI tracking (unique across all features)
                 const featureKey = feat.id;
@@ -6562,10 +6820,10 @@ json.dumps({"width": width})
                 // Track override for UI display (store both color and caption)
                 const oldOverride = featureColorOverrides[featureKey];
                 const oldCaption = oldOverride?.caption;
-                featureColorOverrides[featureKey] = { color, caption };
+                featureColorOverrides[featureKey] = { color: normalizedColor, caption };
 
                 // Apply instant preview (update SVG feature color directly)
-                applyInstantPreview(feat, color, caption);
+                applyInstantPreview(feat, normalizedColor, caption);
 
                 // Handle legend entry FIRST, before adding rule to prevent watch race condition
                 await Vue.nextTick();
@@ -6579,18 +6837,18 @@ json.dumps({"width": width})
                         // This feature already has a legend entry
                         if (oldCaption === caption) {
                             // Same caption - just update the color of THIS feature's entry
-                            updateLegendEntryColorByCaption(oldCaption, color);
+                            updateLegendEntryColorByCaption(oldCaption, normalizedColor);
                         } else {
                             // Caption changed - remove old entry, add new one
                             removeLegendEntry(oldCaption);
-                            actualCaption = await addLegendEntry(caption, color);
+                            actualCaption = await addLegendEntry(caption, normalizedColor);
                             if (actualCaption && typeof actualCaption === 'string') {
                                 addedLegendCaptions.value.add(actualCaption);
                             }
                         }
                     } else {
                         // This feature doesn't have a legend entry yet - add new one
-                        actualCaption = await addLegendEntry(caption, color);
+                        actualCaption = await addLegendEntry(caption, normalizedColor);
                         if (actualCaption && typeof actualCaption === 'string') {
                             addedLegendCaptions.value.add(actualCaption);
                         }
@@ -6615,7 +6873,7 @@ json.dumps({"width": width})
 
                 if (existingIdx >= 0) {
                     // Update existing rule with final caption
-                    manualSpecificRules[existingIdx].color = color;
+                    manualSpecificRules[existingIdx].color = normalizedColor;
                     manualSpecificRules[existingIdx].cap = finalCaption;
                 } else {
                     // Add new rule with final caption
@@ -6623,7 +6881,7 @@ json.dumps({"width": width})
                         feat: feat.type,
                         qual: qual,
                         val: val,
-                        color: color,
+                        color: normalizedColor,
                         cap: finalCaption
                     });
                 }
@@ -6656,6 +6914,7 @@ json.dumps({"width": width})
                 featureRecordIds.value = [];
                 selectedFeatureRecordIdx.value = 0;
                 Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
+                pendingSvgIdSync.value = false;
                 showFeaturePanel.value = false;
             });
 
@@ -6677,8 +6936,11 @@ json.dumps({"width": width})
                             
                             // Apply if it's a color code (#...) or color name (red, blue, etc.)
                             if (key && (color.startsWith('#') || /^[a-z]+$/i.test(color))) {
-                                currentColors.value[key] = color;
-                                count++;
+                                const normalized = normalizeCssColor(color);
+                                if (normalized) {
+                                    currentColors.value[key] = normalized;
+                                    count++;
+                                }
                             }
                         }
                     }
@@ -6718,11 +6980,13 @@ json.dumps({"width": width})
                         const parts = line.split('\t');
                         // TSV format: Feature, Qualifier, Regex, Color, [Caption]
                         if (parts.length >= 4) {
+                            const rawColor = parts[3].trim();
+                            const normalizedColor = normalizeCssColor(rawColor) || rawColor;
                             const rule = {
                                 feat: parts[0].trim(),
                                 qual: parts[1].trim(),
                                 val: parts[2].trim(),
-                                color: parts[3].trim(),
+                                color: normalizedColor,
                                 cap: parts[4] ? parts[4].trim() : "",
                                 fromFile: true  // Mark as loaded from file (preserved on reset)
                             };
@@ -6736,10 +7000,16 @@ json.dumps({"width": width})
                     }
                     console.log(`Loaded ${count} rules from file.`);
 
-                    // Add legend entries for rules with captions
-                    if (rulesWithCaptions.length > 0 && pyodideReady.value) {
+                    // Add legend entries for rules with captions (only if they match features)
+                    if (rulesWithCaptions.length > 0 && pyodideReady.value && svgContent.value) {
                         await Vue.nextTick();
-                        for (const rule of rulesWithCaptions) {
+                        const matchingRules = extractedFeatures.value.length > 0
+                            ? rulesWithCaptions.filter(rule =>
+                                extractedFeatures.value.some(feat => ruleMatchesFeature(feat, rule))
+                            )
+                            : rulesWithCaptions;
+
+                        for (const rule of matchingRules) {
                             const actualCaption = await addLegendEntry(rule.cap, rule.color);
                             if (actualCaption && typeof actualCaption === 'string') {
                                 addedLegendCaptions.value.add(actualCaption);
@@ -6748,7 +7018,10 @@ json.dumps({"width": width})
                             }
                         }
                         extractLegendEntries();
-                        console.log(`Added ${rulesWithCaptions.length} legend entries from specific table.`);
+                        console.log(`Added ${matchingRules.length} legend entries from specific table.`);
+                    }
+                    if (extractedFeatures.value.length > 0) {
+                        syncFeatureOverridesFromRules(extractedFeatures.value);
                     }
                 } catch (e) {
                     console.error("Failed to load rules file:", e);
@@ -6966,6 +7239,7 @@ json.dumps({"width": width})
                             from svgwrite.path import Path
                             from svgwrite.text import Text
                             import io
+                            import html
 
                             # Create color rectangle path with proper stroke (matching original legend entries)
                             half = rect_size / 2
@@ -6974,7 +7248,8 @@ json.dumps({"width": width})
 
                             # Create text element
                             x_margin = (22 / 14) * rect_size
-                            text_svg = f'<text font-size="{font_size}" font-family="{font_family}" dominant-baseline="central" text-anchor="start" transform="translate({x_offset + x_margin}, {y_offset})">{caption}</text>'
+                            safe_caption = html.escape(str(caption), quote=False)
+                            text_svg = f'<text font-size="{font_size}" font-family="{font_family}" dominant-baseline="central" text-anchor="start" transform="translate({x_offset + x_margin}, {y_offset})">{safe_caption}</text>'
 
                             return json.dumps({"rect": rect_svg, "text": text_svg})
 
@@ -7030,9 +7305,54 @@ json.dumps({"width": width})
                                 import traceback
                                 return json.dumps({"error": traceback.format_exc()})
 
+                        def _get_feature_hash_fields(feature, genome_length):
+                            try:
+                                coords = feature.location.parts
+                            except Exception:
+                                coords = None
+                            if coords:
+                                from gbdraw.features.coordinates import get_exon_and_intron_coordinates
+                                is_trans_spliced = "trans_splicing" in getattr(feature, "qualifiers", {})
+                                location = get_exon_and_intron_coordinates(coords, genome_length, is_trans_spliced)
+                                if location:
+                                    loc = location[0]
+                                    return int(loc.start), int(loc.end), loc.strand
+                            loc = feature.location
+                            strand_raw = getattr(loc, "strand", None)
+                            if strand_raw == 1:
+                                strand = "positive"
+                            elif strand_raw == -1:
+                                strand = "negative"
+                            else:
+                                strand = "undefined"
+                            return int(loc.start), int(loc.end), strand
+
+                        def _compute_hash_from_values(feat_type, start, end, strand):
+                            import hashlib
+                            key = f"{feat_type}:{int(start)}:{int(end)}:{strand}"
+                            return "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+
+                        def compute_feature_hashes(entries):
+                            hashes = []
+                            for feat_type, start, end, strand in entries:
+                                hashes.append(_compute_hash_from_values(feat_type, start, end, strand))
+                            return json.dumps(hashes)
+
+                        def compute_feature_hash(feature):
+                            if not getattr(feature, "location", None):
+                                return None
+                            loc = feature.location
+                            strand_raw = getattr(loc, "strand", None)
+                            if strand_raw == 1:
+                                strand = "positive"
+                            elif strand_raw == -1:
+                                strand = "negative"
+                            else:
+                                strand = "undefined"
+                            return _compute_hash_from_values(feature.type, int(loc.start), int(loc.end), strand)
+
                         def extract_features_from_genbank(gb_path):
                             """Extract feature info from GenBank file for UI display"""
-                            import hashlib
                             from Bio import SeqIO
                             features = []
                             record_ids = []
@@ -7042,29 +7362,45 @@ json.dumps({"width": width})
                                     record_id = record.id or f"Record_{rec_idx}"
                                     record_ids.append(record_id)
                                     for feat in record.features:
-                                        if feat.type in ['CDS', 'tRNA', 'rRNA', 'ncRNA', 'misc_RNA', 'tmRNA',
-                                                         'repeat_region', 'misc_feature', 'mobile_element',
-                                                         'regulatory', 'gene', 'mRNA', 'exon', 'intron']:
+                                        if not getattr(feat, "location", None):
+                                            continue
+                                        try:
                                             # Overall coordinates for display
                                             start = int(feat.location.start)
                                             end = int(feat.location.end)
                                             strand_raw = feat.location.strand
+                                            strand_num = strand_raw if strand_raw in (-1, 0, 1) else None
 
-                                            # For svg_id hash, use FIRST part's coordinates (matches Python drawer)
-                                            # CompoundLocation has .parts, SimpleLocation doesn't
-                                            if hasattr(feat.location, 'parts') and feat.location.parts:
-                                                first_part = feat.location.parts[0]
-                                                hash_start = int(first_part.start)
-                                                hash_end = int(first_part.end)
-                                                hash_strand = first_part.strand
-                                            else:
+                                            try:
+                                                hash_start, hash_end, hash_strand = _get_feature_hash_fields(feat, len(record))
+                                            except Exception:
+                                                if strand_raw == 1:
+                                                    hash_strand = "positive"
+                                                elif strand_raw == -1:
+                                                    hash_strand = "negative"
+                                                else:
+                                                    hash_strand = "undefined"
                                                 hash_start = start
                                                 hash_end = end
-                                                hash_strand = strand_raw
 
                                             # Compute same hash as SVG rendering uses (must match Python drawer)
-                                            key = f"{feat.type}:{hash_start}:{hash_end}:{hash_strand}"
-                                            svg_id = "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+                                            svg_id = _compute_hash_from_values(feat.type, hash_start, hash_end, hash_strand)
+
+                                            qualifiers = {}
+                                            for key, values in feat.qualifiers.items():
+                                                if key == "translation":
+                                                    continue
+                                                cleaned = []
+                                                for val in values:
+                                                    if val is None:
+                                                        continue
+                                                    text_val = str(val)
+                                                    if len(text_val) > 200:
+                                                        text_val = text_val[:200]
+                                                    cleaned.append(text_val)
+                                                if cleaned:
+                                                    qualifiers[key] = cleaned
+
                                             features.append({
                                                 "id": f"f{idx}",  # Unique internal ID for UI tracking
                                                 "svg_id": svg_id,  # Matches SVG path id attribute
@@ -7073,13 +7409,21 @@ json.dumps({"width": width})
                                                 "type": feat.type,
                                                 "start": start,
                                                 "end": end,
-                                                "strand": "+" if strand_raw == 1 else "-",
+                                                "strand": "+" if strand_raw == 1 else "-" if strand_raw == -1 else "",
+                                                "strand_num": strand_num,
+                                                "hash_start": hash_start,
+                                                "hash_end": hash_end,
+                                                "hash_strand": hash_strand,
                                                 "locus_tag": feat.qualifiers.get("locus_tag", [""])[0],
                                                 "gene": feat.qualifiers.get("gene", [""])[0],
                                                 "product": feat.qualifiers.get("product", [""])[0],
+                                                "function": feat.qualifiers.get("function", [""])[0],
                                                 "note": feat.qualifiers.get("note", [""])[0][:50] if feat.qualifiers.get("note") else "",
+                                                "qualifiers": qualifiers,
                                             })
                                             idx += 1
+                                        except Exception:
+                                            continue
                             except Exception as e:
                                 return json.dumps({"error": str(e)})
                             return json.dumps({"features": features, "record_ids": record_ids})
@@ -7287,68 +7631,21 @@ json.dumps({"width": width})
 
                     // Extract features for color editor (only for GenBank input)
                     extractedFeatures.value = [];
-
-                    // Helper to rebuild featureColorOverrides from manualSpecificRules
-                    const rebuildColorOverrides = (features) => {
-                        // Clear existing overrides
-                        Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
-
-                        // For each feature, check if there's a matching rule
-                        for (const feat of features) {
-                            // Look for a matching rule in manualSpecificRules
-                            for (const rule of manualSpecificRules) {
-                                if (rule.feat !== feat.type) continue;
-
-                                let matches = false;
-                                // Hash qualifier - highest priority, most reliable
-                                if (rule.qual === 'hash' && feat.svg_id) {
-                                    try {
-                                        const regex = new RegExp(rule.val, 'i');
-                                        matches = regex.test(feat.svg_id);
-                                    } catch (e) {
-                                        matches = feat.svg_id === rule.val;
-                                    }
-                                } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
-                                    try {
-                                        const regex = new RegExp(rule.val, 'i');
-                                        matches = regex.test(feat.locus_tag);
-                                    } catch (e) {
-                                        matches = feat.locus_tag === rule.val;
-                                    }
-                                } else if (rule.qual === 'gene' && feat.gene) {
-                                    try {
-                                        const regex = new RegExp(rule.val, 'i');
-                                        matches = regex.test(feat.gene);
-                                    } catch (e) {
-                                        matches = feat.gene.toLowerCase().includes(rule.val.toLowerCase());
-                                    }
-                                } else if (rule.qual === 'product' && feat.product) {
-                                    try {
-                                        const regex = new RegExp(rule.val, 'i');
-                                        matches = regex.test(feat.product);
-                                    } catch (e) {
-                                        matches = feat.product.toLowerCase().includes(rule.val.toLowerCase());
-                                    }
-                                }
-
-                                if (matches) {
-                                    // Use internal ID as key, store {color, caption} object
-                                    featureColorOverrides[feat.id] = { color: rule.color, caption: rule.cap };
-                                    break; // First match wins
-                                }
-                            }
-                        }
-                    };
+                    pendingSvgIdSync.value = false;
 
                     if (mode.value === 'circular' && cInputType.value === 'gb') {
                         try {
                             const featJson = pyodide.globals.get("extract_features_from_genbank")("/input.gb");
                             const featData = JSON.parse(featJson);
+                            if (featData.error) {
+                                console.warn("Feature extraction error:", featData.error);
+                            }
                             if (!featData.error && featData.features) {
                                 extractedFeatures.value = featData.features;
                                 featureRecordIds.value = featData.record_ids || [];
                                 selectedFeatureRecordIdx.value = 0;
-                                rebuildColorOverrides(featData.features);
+                                syncFeatureOverridesFromRules(featData.features);
+                                pendingSvgIdSync.value = true;
                                 console.log(`Extracted ${featData.features.length} features from ${featData.record_ids.length} record(s) for color editor.`);
                             }
                         } catch (e) {
@@ -7362,6 +7659,9 @@ json.dumps({"width": width})
                             for (let i = 0; i < linearSeqs.length; i++) {
                                 const featJson = pyodide.globals.get("extract_features_from_genbank")(`/seq_${i}.gb`);
                                 const featData = JSON.parse(featJson);
+                                if (featData.error) {
+                                    console.warn(`Feature extraction error (file ${i}):`, featData.error);
+                                }
                                 if (!featData.error && featData.features) {
                                     // Add file index to each feature and create unique record labels
                                     featData.features.forEach(f => {
@@ -7380,7 +7680,8 @@ json.dumps({"width": width})
                             extractedFeatures.value = allFeatures;
                             featureRecordIds.value = allRecordLabels.map(r => r.label);
                             selectedFeatureRecordIdx.value = 0;
-                            rebuildColorOverrides(allFeatures);
+                            syncFeatureOverridesFromRules(allFeatures);
+                            pendingSvgIdSync.value = true;
                             console.log(`Extracted ${allFeatures.length} features from ${linearSeqs.length} file(s) for color editor.`);
                         } catch (e) {
                             console.log("Could not extract features:", e);
@@ -7394,21 +7695,34 @@ json.dumps({"width": width})
                 }
             };
 
+            const getCurrentSvgMarkup = () => {
+                if (svgContainer.value) {
+                    const svg = svgContainer.value.querySelector('svg');
+                    if (svg) {
+                        const serializer = new XMLSerializer();
+                        return serializer.serializeToString(svg);
+                    }
+                }
+                return svgContent.value || '';
+            };
+
             const downloadSVG = () => {
-            if(!svgContent.value) return;
-            const blob = new Blob([svgContent.value], {type: "image/svg+xml"});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = results.value[selectedResultIndex.value].name;
-            a.click();
-            URL.revokeObjectURL(url);
+                const svgMarkup = getCurrentSvgMarkup();
+                if (!svgMarkup) return;
+                const blob = new Blob([svgMarkup], {type: "image/svg+xml"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = results.value[selectedResultIndex.value].name;
+                a.click();
+                URL.revokeObjectURL(url);
             };
 
             const downloadPNG = () => {
-                if(!svgContent.value) return;
+                const svgMarkup = getCurrentSvgMarkup();
+                if (!svgMarkup) return;
                 const svgEl = document.createElement('div');
-                svgEl.innerHTML = svgContent.value;
+                svgEl.innerHTML = svgMarkup;
                 const svg = svgEl.querySelector('svg');
                 if(!svg) return;
                 let w = parseFloat(svg.getAttribute('width')); let h = parseFloat(svg.getAttribute('height'));
@@ -7448,11 +7762,12 @@ json.dumps({"width": width})
 
             // ---- New PDF Download Function ----
             const downloadPDF = async () => {
-                if(!svgContent.value) return;
+                const svgMarkup = getCurrentSvgMarkup();
+                if (!svgMarkup) return;
 
                 // 1. Create temporary SVG element to read dimensions
                 const svgEl = document.createElement('div');
-                svgEl.innerHTML = svgContent.value;
+                svgEl.innerHTML = svgMarkup;
                 const svg = svgEl.querySelector('svg');
                 if(!svg) return;
 
