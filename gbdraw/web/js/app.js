@@ -326,6 +326,62 @@ createApp({
             // Helper to get display caption for a feature (used for legend entries and sibling matching)
             const getFeatureCaption = (f) => f.product || f.gene || f.locus_tag || f.note || `${f.type} at ${f.start}..${f.end}`;
 
+            const getFeatureQualifierValue = (feat, qual) => {
+                if (!qual) return null;
+                const key = qual.toLowerCase();
+                if (key === 'product') return feat.product || null;
+                if (key === 'gene') return feat.gene || null;
+                if (key === 'locus_tag') return feat.locus_tag || null;
+                if (key === 'note') return feat.note || null;
+                return feat.qualifiers && Object.prototype.hasOwnProperty.call(feat.qualifiers, key)
+                    ? feat.qualifiers[key]
+                    : null;
+            };
+
+            const matchRuleValue = (value, ruleVal, strictEquals = false) => {
+                if (!value || !ruleVal) return false;
+                try {
+                    const regex = new RegExp(ruleVal, 'i');
+                    return regex.test(value);
+                } catch {
+                    if (strictEquals) return value === ruleVal;
+                    return value.toLowerCase().includes(String(ruleVal).toLowerCase());
+                }
+            };
+
+            const ruleMatchesFeature = (feat, rule) => {
+                if (!rule || rule.feat !== feat.type) return false;
+                const qualKey = (rule.qual || '').toLowerCase();
+
+                if (qualKey === 'hash') {
+                    if (!feat.svg_id) return false;
+                    return matchRuleValue(feat.svg_id, rule.val, true);
+                }
+
+                if (qualKey === 'location') {
+                    const location = `${feat.start}..${feat.end}`;
+                    return matchRuleValue(location, rule.val);
+                }
+
+                const value = getFeatureQualifierValue(feat, qualKey);
+                if (!value) return false;
+                const strictEquals = qualKey === 'locus_tag';
+                return matchRuleValue(value, rule.val, strictEquals);
+            };
+
+            const refreshFeatureOverrides = (features) => {
+                Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
+                if (!features || features.length === 0) return;
+
+                for (const feat of features) {
+                    for (const rule of manualSpecificRules) {
+                        if (!ruleMatchesFeature(feat, rule)) continue;
+                        featureColorOverrides[feat.id] = { color: rule.color, caption: rule.cap };
+                        break;
+                    }
+                }
+            };
+
             // Helper to get the best qualifier for a feature
             // Uses hash pseudo-qualifier which is always unique (based on type+position+strand)
             // The svg_id is computed the same way in both Python and JavaScript
@@ -342,31 +398,7 @@ createApp({
                     if (rule.feat !== feat.type) continue;
                     if (rule.qual === 'hash') continue; // Skip hash rules
 
-                    let matches = false;
-                    if (rule.qual === 'product' && feat.product) {
-                        try {
-                            const regex = new RegExp(rule.val, 'i');
-                            matches = regex.test(feat.product);
-                        } catch {
-                            matches = feat.product === rule.val;
-                        }
-                    } else if (rule.qual === 'gene' && feat.gene) {
-                        try {
-                            const regex = new RegExp(rule.val, 'i');
-                            matches = regex.test(feat.gene);
-                        } catch {
-                            matches = feat.gene === rule.val;
-                        }
-                    } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
-                        try {
-                            const regex = new RegExp(rule.val, 'i');
-                            matches = regex.test(feat.locus_tag);
-                        } catch {
-                            matches = feat.locus_tag === rule.val;
-                        }
-                    }
-
-                    if (matches) {
+                    if (ruleMatchesFeature(feat, rule)) {
                         return rule;
                     }
                 }
@@ -381,31 +413,7 @@ createApp({
                 for (const feat of extractedFeatures.value) {
                     if (feat.type !== rule.feat) continue;
 
-                    let matches = false;
-                    if (rule.qual === 'product' && feat.product) {
-                        try {
-                            const regex = new RegExp(rule.val, 'i');
-                            matches = regex.test(feat.product);
-                        } catch {
-                            matches = feat.product === rule.val;
-                        }
-                    } else if (rule.qual === 'gene' && feat.gene) {
-                        try {
-                            const regex = new RegExp(rule.val, 'i');
-                            matches = regex.test(feat.gene);
-                        } catch {
-                            matches = feat.gene === rule.val;
-                        }
-                    } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
-                        try {
-                            const regex = new RegExp(rule.val, 'i');
-                            matches = regex.test(feat.locus_tag);
-                        } catch {
-                            matches = feat.locus_tag === rule.val;
-                        }
-                    }
-
-                    if (matches) count++;
+                    if (ruleMatchesFeature(feat, rule)) count++;
                 }
                 return count;
             };
@@ -1142,14 +1150,6 @@ createApp({
                 }
             };
 
-            // Watch for SVG content changes to reattach handlers
-            watch(() => svgContent.value, () => {
-                // Use nextTick to ensure DOM is updated
-                nextTick(() => {
-                    attachSvgFeatureHandlers();
-                });
-            });
-
             // Ensure pairwise gradient IDs are unique between horizontal and vertical legends
             // This fixes the issue where both legends have gradients with the same ID,
             // causing only one gradient to be used by the browser
@@ -1221,15 +1221,7 @@ createApp({
                     if (!paletteColor) return;
 
                     // Don't update if feature has a specific color rule (including hash-based rules)
-                    const hasSpecificRule = manualSpecificRules.some(r => {
-                        // Check for hash-based rule (individual feature override)
-                        if (r.qual === 'hash' && r.val === feat.svg_id) {
-                            return true;
-                        }
-                        // Check for qualifier-based rule (product, gene, locus_tag)
-                        const qualInfo = getFeatureQualifier(feat);
-                        return qualInfo && r.feat === feat.type && r.qual === qualInfo.qual && r.val === qualInfo.val;
-                    });
+                    const hasSpecificRule = manualSpecificRules.some(rule => ruleMatchesFeature(feat, rule));
 
                     if (!hasSpecificRule && !featureColorOverrides[feat.id]) {
                         const currentFill = path.getAttribute('fill');
@@ -1454,8 +1446,8 @@ createApp({
 
                     // First pass: check hash-based rules (most specific, individual feature overrides)
                     for (const rule of manualSpecificRules) {
-                        if (rule.feat !== feat.type) continue;
-                        if (rule.qual === 'hash' && feat.svg_id === rule.val) {
+                        if ((rule.qual || '').toLowerCase() !== 'hash') continue;
+                        if (ruleMatchesFeature(feat, rule)) {
                             matchingRule = rule;
                             break;
                         }
@@ -1464,35 +1456,8 @@ createApp({
                     // Second pass: if no hash match, check regex-based rules
                     if (!matchingRule) {
                         for (const rule of manualSpecificRules) {
-                            if (rule.feat !== feat.type) continue;
-                            if (rule.qual === 'hash') continue; // Already checked in first pass
-
-                            let matches = false;
-                            if (rule.qual === 'product' && feat.product) {
-                                // Support regex matching
-                                try {
-                                    const regex = new RegExp(rule.val, 'i');
-                                    matches = regex.test(feat.product);
-                                } catch {
-                                    matches = feat.product === rule.val;
-                                }
-                            } else if (rule.qual === 'gene' && feat.gene) {
-                                try {
-                                    const regex = new RegExp(rule.val, 'i');
-                                    matches = regex.test(feat.gene);
-                                } catch {
-                                    matches = feat.gene === rule.val;
-                                }
-                            } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
-                                try {
-                                    const regex = new RegExp(rule.val, 'i');
-                                    matches = regex.test(feat.locus_tag);
-                                } catch {
-                                    matches = feat.locus_tag === rule.val;
-                                }
-                            }
-
-                            if (matches) {
+                            if ((rule.qual || '').toLowerCase() === 'hash') continue; // Already checked in first pass
+                            if (ruleMatchesFeature(feat, rule)) {
                                 matchingRule = rule;
                                 break;
                             }
@@ -1527,6 +1492,9 @@ createApp({
             // Legend ADDITIONS are handled by setFeatureColor to avoid race conditions
             watch(() => [...manualSpecificRules], async (newRules, oldRules) => {
                 applySpecificRulesToSvg();
+                if (extractedFeatures.value.length > 0) {
+                    refreshFeatureOverrides(extractedFeatures.value);
+                }
 
                 // Get captions from current and old rules
                 const currentCaptions = new Set(newRules.filter(r => r.cap).map(r => r.cap));
@@ -2931,8 +2899,55 @@ json.dumps({"width": width})
                     return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : { x: 0, y: 0 };
                 };
 
+                // Normalize legacy legend structure (path + text) into data-legend-key groups
+                let entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
+                if (entryGroups.length === 0) {
+                    const texts = Array.from(targetGroup.querySelectorAll('text'));
+                    const allPaths = Array.from(targetGroup.querySelectorAll('path'));
+                    const groupsToAdd = [];
+
+                    texts.forEach(textEl => {
+                        const caption = textEl.textContent?.trim();
+                        if (!caption) return;
+
+                        const textPos = parseTransform(textEl.getAttribute('transform'));
+                        let bestPath = null;
+                        let bestX = -Infinity;
+
+                        for (const path of allPaths) {
+                            const fill = path.getAttribute('fill');
+                            if (!fill || fill === 'none' || fill.startsWith('url(')) continue;
+                            const pathPos = parseTransform(path.getAttribute('transform'));
+                            if (Math.abs(pathPos.y - textPos.y) < 2 && pathPos.x < textPos.x) {
+                                if (pathPos.x > bestX) {
+                                    bestX = pathPos.x;
+                                    bestPath = path;
+                                }
+                            }
+                        }
+
+                        if (bestPath) {
+                            const entryGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                            entryGroup.setAttribute('data-legend-key', caption);
+                            entryGroup.appendChild(bestPath);
+                            entryGroup.appendChild(textEl);
+                            groupsToAdd.push(entryGroup);
+                        }
+                    });
+
+                    if (groupsToAdd.length > 0) {
+                        groupsToAdd.forEach(group => targetGroup.appendChild(group));
+                        skipCaptureBaseConfig.value = true;
+                        const resultIdx = selectedResultIndex.value;
+                        if (resultIdx >= 0 && results.value.length > resultIdx) {
+                            const serializer = new XMLSerializer();
+                            results.value[resultIdx] = { ...results.value[resultIdx], content: serializer.serializeToString(svg) };
+                        }
+                        entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
+                    }
+                }
+
                 // Find all legend entry groups with data-legend-key
-                const entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
                 entryGroups.forEach(entryGroup => {
                     const caption = entryGroup.getAttribute('data-legend-key');
                     if (!caption) return;
@@ -3343,11 +3358,7 @@ json.dumps({"width": width})
                 // Also check manualSpecificRules for caption matches
                 const ruleMatch = manualSpecificRules.find(r => r.cap === caption);
                 if (ruleMatch) {
-                    const ruleFeatures = extractedFeatures.value.filter(f =>
-                        f.type === ruleMatch.feat &&
-                        (ruleMatch.qual === 'hash' ? f.svg_id === ruleMatch.val :
-                         f[ruleMatch.qual] === ruleMatch.val)
-                    );
+                    const ruleFeatures = extractedFeatures.value.filter(f => ruleMatchesFeature(f, ruleMatch));
                     matchingFeatures.push(...ruleFeatures);
                 }
 
@@ -5028,6 +5039,7 @@ json.dumps({"width": width})
                     }
                     setupLegendDrag();
                     setupDiagramDrag(isIncrementalEdit);  // Preserve offset during incremental edits
+                    attachSvgFeatureHandlers();
 
                     if (!isIncrementalEdit) {
                         // Full capture for fresh generation
@@ -5678,6 +5690,15 @@ json.dumps({"width": width})
                                             # Compute same hash as SVG rendering uses (must match Python drawer)
                                             key = f"{feat.type}:{hash_start}:{hash_end}:{hash_strand}"
                                             svg_id = "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+                                            qualifiers = {}
+                                            for q_key, q_vals in feat.qualifiers.items():
+                                                if not q_vals:
+                                                    continue
+                                                try:
+                                                    q_text = ",".join([str(v) for v in q_vals])
+                                                except Exception:
+                                                    q_text = str(q_vals)
+                                                qualifiers[q_key.lower()] = q_text
                                             features.append({
                                                 "id": f"f{idx}",  # Unique internal ID for UI tracking
                                                 "svg_id": svg_id,  # Matches SVG path id attribute
@@ -5691,6 +5712,7 @@ json.dumps({"width": width})
                                                 "gene": feat.qualifiers.get("gene", [""])[0],
                                                 "product": feat.qualifiers.get("product", [""])[0],
                                                 "note": feat.qualifiers.get("note", [""])[0][:50] if feat.qualifiers.get("note") else "",
+                                                "qualifiers": qualifiers,
                                             })
                                             idx += 1
                             except Exception as e:
@@ -5901,58 +5923,6 @@ json.dumps({"width": width})
                     // Extract features for color editor (only for GenBank input)
                     extractedFeatures.value = [];
 
-                    // Helper to rebuild featureColorOverrides from manualSpecificRules
-                    const rebuildColorOverrides = (features) => {
-                        // Clear existing overrides
-                        Object.keys(featureColorOverrides).forEach(k => delete featureColorOverrides[k]);
-
-                        // For each feature, check if there's a matching rule
-                        for (const feat of features) {
-                            // Look for a matching rule in manualSpecificRules
-                            for (const rule of manualSpecificRules) {
-                                if (rule.feat !== feat.type) continue;
-
-                                let matches = false;
-                                // Hash qualifier - highest priority, most reliable
-                                if (rule.qual === 'hash' && feat.svg_id) {
-                                    try {
-                                        const regex = new RegExp(rule.val, 'i');
-                                        matches = regex.test(feat.svg_id);
-                                    } catch (e) {
-                                        matches = feat.svg_id === rule.val;
-                                    }
-                                } else if (rule.qual === 'locus_tag' && feat.locus_tag) {
-                                    try {
-                                        const regex = new RegExp(rule.val, 'i');
-                                        matches = regex.test(feat.locus_tag);
-                                    } catch (e) {
-                                        matches = feat.locus_tag === rule.val;
-                                    }
-                                } else if (rule.qual === 'gene' && feat.gene) {
-                                    try {
-                                        const regex = new RegExp(rule.val, 'i');
-                                        matches = regex.test(feat.gene);
-                                    } catch (e) {
-                                        matches = feat.gene.toLowerCase().includes(rule.val.toLowerCase());
-                                    }
-                                } else if (rule.qual === 'product' && feat.product) {
-                                    try {
-                                        const regex = new RegExp(rule.val, 'i');
-                                        matches = regex.test(feat.product);
-                                    } catch (e) {
-                                        matches = feat.product.toLowerCase().includes(rule.val.toLowerCase());
-                                    }
-                                }
-
-                                if (matches) {
-                                    // Use internal ID as key, store {color, caption} object
-                                    featureColorOverrides[feat.id] = { color: rule.color, caption: rule.cap };
-                                    break; // First match wins
-                                }
-                            }
-                        }
-                    };
-
                     if (mode.value === 'circular' && cInputType.value === 'gb') {
                         try {
                             const featJson = pyodide.globals.get("extract_features_from_genbank")("/input.gb");
@@ -5961,7 +5931,7 @@ json.dumps({"width": width})
                                 extractedFeatures.value = featData.features;
                                 featureRecordIds.value = featData.record_ids || [];
                                 selectedFeatureRecordIdx.value = 0;
-                                rebuildColorOverrides(featData.features);
+                                refreshFeatureOverrides(featData.features);
                                 console.log(`Extracted ${featData.features.length} features from ${featData.record_ids.length} record(s) for color editor.`);
                             }
                         } catch (e) {
@@ -5993,7 +5963,7 @@ json.dumps({"width": width})
                             extractedFeatures.value = allFeatures;
                             featureRecordIds.value = allRecordLabels.map(r => r.label);
                             selectedFeatureRecordIdx.value = 0;
-                            rebuildColorOverrides(allFeatures);
+                            refreshFeatureOverrides(allFeatures);
                             console.log(`Extracted ${allFeatures.length} features from ${linearSeqs.length} file(s) for color editor.`);
                         } catch (e) {
                             console.log("Could not extract features:", e);
