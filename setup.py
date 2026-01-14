@@ -20,6 +20,9 @@ setup(
             'data/config.toml', 
             'data/*.ttf',
             'web/index.html',
+            'web/js/*.js',
+            'web/js/services/*.js',
+            'web/js/utils/*.js',
         ]
     },
     include_package_data=True,

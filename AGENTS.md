@@ -31,7 +31,7 @@ python -m build
 
 ## Expectations When Editing
 
-- Keep `gbdraw/web/index.html` as a single-file SPA; no new build step.
+- Keep the web UI as a single-page app with no build step; multi-file (e.g., `index.html` + ES modules/CSS under `gbdraw/web/`) is allowed.
 - If adding CDN dependencies, update the CSP in `gbdraw/web/index.html`.
 - If diagram output changes, update reference SVGs in `tests/reference_outputs/`.
 - Do not manually edit generated artifacts under `dist/` or `gbdraw.egg-info/`.

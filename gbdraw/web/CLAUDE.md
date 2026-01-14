@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 
 ## Overview
 
-`index.html` is a **self-contained single-page application (SPA)** that runs gbdraw entirely in the browser using WebAssembly. No server is required - all genome data processing happens client-side via Pyodide (Python compiled to WebAssembly).
+`index.html` is the **SPA entry point** and loads ES modules from `gbdraw/web/js` (no build step). The app runs gbdraw entirely in the browser using WebAssembly. No server is required - all genome data processing happens client-side via Pyodide (Python compiled to WebAssembly).
 
-- **File size:** ~7300 lines (HTML + embedded JavaScript + CSS)
+- **File size:** `index.html` contains HTML/CSS/templates; JavaScript lives under `gbdraw/web/js/`
 - **Location:** `gbdraw/web/index.html`
 - **Served by:** `gbdraw gui` command or hosted at https://gbdraw.app/
 
@@ -24,19 +24,19 @@ python -m build
 # Open DevTools Console (F12) to see Pyodide output and errors
 ```
 
-### Key Line Number References
+### Key File References
 
-| Section | Lines | Description |
-|---------|-------|-------------|
-| CSP Header | 5-17 | Content Security Policy |
-| CSS Styles | 33-73 | TailwindCSS custom classes |
-| Vue App Template | 77-1180 | HTML structure |
-| State Management | 1339-1500 | Reactive refs and form data |
-| Legend Management | 2856-3200, 4958-5030 | Legend CRUD operations |
-| Drag & Drop | 4970-5100 | Element repositioning |
-| Feature Color Editing | 6259-6400 | Per-feature color changes |
-| Python Integration | 6806-7050 | `runAnalysis()`, file I/O |
-| Export Functions | 7141-7200 | PDF/PNG download |
+| Section | File | Description |
+|---------|------|-------------|
+| CSP Header | gbdraw/web/index.html | Content Security Policy |
+| CSS Styles | gbdraw/web/index.html | TailwindCSS custom classes |
+| Vue App Template | gbdraw/web/index.html | HTML structure |
+| Core UI Logic | gbdraw/web/js/app.js | Vue setup, handlers, Pyodide integration |
+| State Management | gbdraw/web/js/state.js | Reactive refs and computed |
+| Components | gbdraw/web/js/components.js | HelpTip / FileUploader |
+| Export Functions | gbdraw/web/js/services/export.js | PDF/PNG/SVG download |
+| Config I/O | gbdraw/web/js/services/config.js | Save/load settings |
+| PNG Helper | gbdraw/web/js/utils/png.js | DPI injection |
 
 ## Technology Stack
 

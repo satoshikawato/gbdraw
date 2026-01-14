@@ -59,6 +59,9 @@ gbdraw = [
     "data/config.toml",
     "data/*.ttf",
     "web/index.html",
+    "web/js/*.js",
+    "web/js/services/*.js",
+    "web/js/utils/*.js",
 ]
 
 [tool.pytest.ini_options]
