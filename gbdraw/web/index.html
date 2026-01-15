@@ -106,7 +106,7 @@
                     <button @click="$refs.configInput.click()" class="text-xs font-bold text-slate-500 hover:text-blue-600 px-2 py-1 rounded border border-slate-200 bg-white flex items-center gap-1">
                         <i class="ph ph-arrow-square-in"></i> Load Config
                     </button>
-                    <input type="file" ref="configInput" class="hidden" @change="importConfig">
+                    <input type="file" ref="configInput" accept=".json" class="hidden" @change="importConfig">
                 </div>
 
                 <div class="flex bg-slate-100 p-1 rounded-lg">
