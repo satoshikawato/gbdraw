@@ -31,7 +31,7 @@ export const createLegendRepositionActions = ({
     form
   } = state;
 
-  const { getAllFeatureLegendGroups, reflowSingleLegendLayout } = legendActions;
+  const { getAllFeatureLegendGroups, reflowDualLegendLayout, reflowSingleLegendLayout } = legendActions;
   const { ensureUniquePairwiseGradientIds } = svgActions;
   const { applyDiagramShift } = diagramActions;
 
@@ -326,6 +326,55 @@ export const createLegendRepositionActions = ({
               vbH = configVb.h;
               svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
               debugLog('ViewBox set from config:', { vbX, vbY, vbW, vbH });
+            }
+          }
+
+          if (hasDualLegends) {
+            reflowDualLegendLayout(svg);
+
+            const hDisplay = horizontalLegend.getAttribute('display');
+            const vDisplay = verticalLegend.getAttribute('display');
+            horizontalLegend.removeAttribute('display');
+            verticalLegend.removeAttribute('display');
+
+            const hBbox = horizontalLegend.getBBox();
+            const vBbox = verticalLegend.getBBox();
+
+            if (hDisplay !== null) {
+              horizontalLegend.setAttribute('display', hDisplay);
+            } else {
+              horizontalLegend.removeAttribute('display');
+            }
+            if (vDisplay !== null) {
+              verticalLegend.setAttribute('display', vDisplay);
+            } else {
+              verticalLegend.removeAttribute('display');
+            }
+
+            const hLegendWidth = hBbox.width || linearBaseConfig.value.horizontalLegendWidth || legendWidth;
+            const hLegendHeight = hBbox.height || linearBaseConfig.value.horizontalLegendHeight || legendHeight;
+            const vLegendWidth = vBbox.width || linearBaseConfig.value.verticalLegendWidth || legendWidth;
+            const vLegendHeight = vBbox.height || linearBaseConfig.value.verticalLegendHeight || legendHeight;
+
+            linearBaseConfig.value.horizontalLegendWidth = hLegendWidth;
+            linearBaseConfig.value.horizontalLegendHeight = hLegendHeight;
+            linearBaseConfig.value.verticalLegendWidth = vLegendWidth;
+            linearBaseConfig.value.verticalLegendHeight = vLegendHeight;
+
+            if (nowHorizontal) {
+              legendWidth = hLegendWidth;
+              legendHeight = hLegendHeight;
+            } else {
+              legendWidth = vLegendWidth;
+              legendHeight = vLegendHeight;
+            }
+
+            const updatedViewBox = svg.getAttribute('viewBox');
+            if (updatedViewBox) {
+              const updatedParts = updatedViewBox.split(/\s+/).map(parseFloat);
+              if (updatedParts.length === 4) {
+                [vbX, vbY, vbW, vbH] = updatedParts;
+              }
             }
           }
 

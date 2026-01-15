@@ -7,7 +7,7 @@ import {
 } from './utils.js';
 
 export const createLegendLayoutActions = ({ state }) => {
-  const { mode, form } = state;
+  const { mode, form, linearBaseConfig } = state;
 
   const expandCanvasForVerticalLegend = (svg) => {
     if (mode.value !== 'linear') return;
@@ -67,6 +67,35 @@ export const createLegendLayoutActions = ({ state }) => {
       console.log(`Expanding canvas for vertical legend: ${vbH.toFixed(1)} -> ${newVbH.toFixed(1)}`);
 
       svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${newVbH}`);
+      svg.setAttribute('data-vertical-viewbox', `${vbX} ${vbY} ${vbW} ${newVbH}`);
+      linearBaseConfig.value.verticalViewBox = { x: vbX, y: vbY, w: vbW, h: newVbH };
+    }
+  };
+
+  const expandCanvasForHorizontalLegend = (svg) => {
+    if (mode.value !== 'linear') return;
+    if (!isCurrentLegendHorizontal(svg)) return;
+
+    const legendGroup = svg.getElementById('legend');
+    if (!legendGroup) return;
+
+    const viewBox = svg.getAttribute('viewBox');
+    if (!viewBox) return;
+    const parts = viewBox.split(/\s+/).map(parseFloat);
+    if (parts.length !== 4) return;
+    const [vbX, vbY, vbW, vbH] = parts;
+
+    const legendOffset = parseTransform(legendGroup.getAttribute('transform'));
+    const legendBox = legendGroup.getBBox();
+    const legendBottomEdge = legendOffset.y + legendBox.y + legendBox.height;
+    const bottomPadding = 20;
+
+    if (legendBottomEdge + bottomPadding > vbY + vbH) {
+      const newVbH = legendBottomEdge + bottomPadding - vbY;
+      console.log(`Expanding canvas for horizontal legend: ${vbH.toFixed(1)} -> ${newVbH.toFixed(1)}`);
+      svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${newVbH}`);
+      svg.setAttribute('data-horizontal-viewbox', `${vbX} ${vbY} ${vbW} ${newVbH}`);
+      linearBaseConfig.value.horizontalViewBox = { x: vbX, y: vbY, w: vbW, h: newVbH };
     }
   };
 
@@ -164,6 +193,7 @@ export const createLegendLayoutActions = ({ state }) => {
     }
 
     expandCanvasForVerticalLegend(svg);
+    expandCanvasForHorizontalLegend(svg);
   };
 
   const reflowDualLegendLayout = (svg) => {
@@ -331,6 +361,7 @@ export const createLegendLayoutActions = ({ state }) => {
     }
 
     expandCanvasForVerticalLegend(svg);
+    expandCanvasForHorizontalLegend(svg);
   };
 
   const compactLegendEntries = (svg) => {
@@ -638,6 +669,7 @@ export const createLegendLayoutActions = ({ state }) => {
 
   return {
     compactLegendEntries,
+    expandCanvasForHorizontalLegend,
     expandCanvasForVerticalLegend,
     reflowDualLegendLayout,
     reflowSingleLegendLayout,
