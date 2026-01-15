@@ -538,7 +538,24 @@ export const createFeatureColorActions = ({
     if (pyodideReady.value && caption) {
       if (oldCaption) {
         if (oldCaption === caption) {
-          updateLegendEntryColorByCaption(oldCaption, color);
+          const hasNonHashRule = manualSpecificRules.some(
+            (rule) => rule.cap === caption && String(rule.qual || '').toLowerCase() !== 'hash'
+          );
+          const hasOtherUses = extractedFeatures.value.some((f) => {
+            if (f.svg_id === feat.svg_id) return false;
+            const override = featureColorOverrides[f.id];
+            const featCaption = override?.caption || f.product || f.gene || f.locus_tag || f.type;
+            return featCaption === caption;
+          });
+
+          if (hasNonHashRule || hasOtherUses) {
+            actualCaption = await addLegendEntry(caption, color);
+            if (actualCaption && typeof actualCaption === 'string') {
+              addedLegendCaptions.value.add(actualCaption);
+            }
+          } else {
+            updateLegendEntryColorByCaption(oldCaption, color);
+          }
         } else {
           removeLegendEntry(oldCaption);
           actualCaption = await addLegendEntry(caption, color);
