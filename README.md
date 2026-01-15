@@ -21,6 +21,7 @@
 - **Various output formats:** Vector and raster graphics suitable for publication and further editing.
 - **Flexible Label Control:** Provides advanced control over feature labels, including priority rules, blacklists, and whitelists.
 - **Comparative genomics:** Visualizes sequence similarity between genomes using BLAST results.
+- **Accurate text metrics:** CLI uses kerning-aware font measurements for improved label placement and legend sizing.
 
 ## 📖 Documentation & Tutorials
 
@@ -41,6 +42,17 @@ For detailed instructions on how to use `gbdraw`, please visit our main document
 A GUI web app of `gbdraw` (latest commit on `main` branch) is available without any local installation:
 
 [![Static Badge](https://img.shields.io/badge/gbdraw%20webapp-8A2BE2)](https://gbdraw.app/)
+
+The web app runs entirely in your browser.
+
+### Local Web UI
+If you have `gbdraw` installed and prefer to run the GUI locally, use:
+
+```bash
+gbdraw gui
+```
+
+This starts a local HTTP server on a free port and opens the app in your browser.
 
 ## Bug reports and suggestions
 Please feel free to submit a new issue if you find a bug or have a suggestion:

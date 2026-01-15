@@ -14,6 +14,17 @@ Here are answers to some common questions about `gbdraw`.
 
 ---
 
+### Q: Is there a web GUI? Do I need Streamlit?
+**A:** Use [https://gbdraw.app/](https://gbdraw.app/) for the hosted web app, or run `gbdraw gui` locally after installing `gbdraw`. The `gbdraw gui` command starts a local HTTP server on a free port and opens the web UI in your browser. Streamlit is not required.
+
+---
+
+### Q: My labels or legend spacing changed after upgrading. Is that expected?
+
+**A:** Yes. The CLI now uses kerning-aware font metrics for bounding box calculations, which can slightly change label placement and legend sizing. The web UI uses browser text metrics, so small differences between CLI and browser renders are expected.
+
+---
+
 ### Q: Can I generate a plot if I only have a GFF3 file containing the genome sequence?
 **A:** No. The genome sequence must be provided in a separate file. gbdraw cannot read the embedded sequence from the `##FASTA` section of a GFF3 file.
 To generate a diagram, you must provide the GFF3 annotation with `--gff` and the corresponding sequence in a FASTA file with `--fasta`.

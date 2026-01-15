@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 
 ```bash
 # Run locally
-gbdraw gui                    # Opens browser at http://localhost:8080
+gbdraw gui                    # Opens browser at http://localhost:<free port>
 
 # Build wheel for web deployment (version must match pyproject.toml)
 python -m build
@@ -107,6 +107,7 @@ index.html
 - **Drag & Drop:** Reposition legend and diagram elements
 - **Feature Click:** Change individual feature colors with popup picker
 - **Legend Editor:** Reorder, rename, delete legend entries
+- **Legend Layout:** Reflows entries after edits, aligns pairwise legends, and expands the canvas for tall vertical legends
 - **Canvas Padding:** Adjust whitespace (top/right/bottom/left)
 
 ### 4. Color Management
@@ -180,8 +181,13 @@ adv = {
 | Function | File | Description |
 |----------|------|-------------|
 | `getAllFeatureLegendGroups(svg)` | gbdraw/web/js/app/legend.js | Get all legend groups (handles dual legends) |
+| `getVisibleFeatureLegendGroup(svg)` | gbdraw/web/js/app/legend.js | Select the active legend group when dual legends are present |
 | `addLegendEntry(caption, color)` | gbdraw/web/js/app/legend.js | Add entry to all legend groups |
 | `removeLegendEntry(caption)` | gbdraw/web/js/app/legend.js | Remove entry from all legend groups |
+| `compactLegendEntries(svg)` | gbdraw/web/js/app/legend.js | Reflow legend entries after add/remove |
+| `updatePairwiseLegendPositions(svg)` | gbdraw/web/js/app/legend.js | Keep pairwise legend aligned with feature legend layout |
+| `expandCanvasForVerticalLegend(svg)` | gbdraw/web/js/app/legend.js | Extend viewBox when a vertical legend would clip |
+| `reflowSingleLegendLayout(svg, layout, maxWidthOverride)` | gbdraw/web/js/app/legend.js | Reflow a single legend layout (horizontal/vertical) |
 | `extractLegendEntries()` | gbdraw/web/js/app/legend.js | Extract entries for Legend Editor panel |
 | `moveLegendEntryUp/Down(idx)` | gbdraw/web/js/app/legend.js | Reorder entries |
 
