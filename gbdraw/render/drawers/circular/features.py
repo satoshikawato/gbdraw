@@ -34,7 +34,7 @@ class FeatureDrawer:
     def get_feature_data_id(feature_object: FeatureObject) -> Optional[str]:
         """
         Generate a stable identifier for SVG id attribute.
-        Hashes feature properties (type, start, end, strand) to create a unique ID.
+        Hashes feature properties (record id, type, start, end, strand) to create a unique ID.
         Must use original coordinates (not processed location) to match colors.py compute_feature_hash().
         """
         # Use original coordinates (SimpleLocation from BioPython) for consistent hashing
@@ -43,8 +43,12 @@ class FeatureDrawer:
             return None
         coord = coords[0]  # First SimpleLocation
         feat_type = getattr(feature_object, 'feature_type', '') or ''
+        record_id = getattr(feature_object, 'record_id', None)
         # Use integer strand directly from SimpleLocation
-        key = f"{feat_type}:{int(coord.start)}:{int(coord.end)}:{coord.strand}"
+        if record_id is not None:
+            key = f"{record_id}:{feat_type}:{int(coord.start)}:{int(coord.end)}:{coord.strand}"
+        else:
+            key = f"{feat_type}:{int(coord.start)}:{int(coord.end)}:{coord.strand}"
         return "f" + hashlib.md5(key.encode()).hexdigest()[:8]
 
     def draw_path(

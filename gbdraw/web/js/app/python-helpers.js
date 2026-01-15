@@ -115,14 +115,15 @@ def regenerate_definition_svg(gb_path, species=None, strain=None, font_size=18):
 
 def extract_features_from_genbank(gb_path):
     """Extract feature info from GenBank file for UI display"""
-    import hashlib
     from Bio import SeqIO
+    from gbdraw.features.colors import compute_feature_hash
     features = []
     record_ids = []
     idx = 0
     try:
         for rec_idx, record in enumerate(SeqIO.parse(gb_path, "genbank")):
             record_id = record.id or f"Record_{rec_idx}"
+            hash_record_id = record.id
             record_ids.append(record_id)
             for feat in record.features:
                 if feat.type in ['CDS', 'tRNA', 'rRNA', 'ncRNA', 'misc_RNA', 'tmRNA',
@@ -133,21 +134,24 @@ def extract_features_from_genbank(gb_path):
                     end = int(feat.location.end)
                     strand_raw = feat.location.strand
 
-                    # For svg_id hash, use FIRST part's coordinates (matches Python drawer)
-                    # CompoundLocation has .parts, SimpleLocation doesn't
-                    if hasattr(feat.location, 'parts') and feat.location.parts:
-                        first_part = feat.location.parts[0]
-                        hash_start = int(first_part.start)
-                        hash_end = int(first_part.end)
-                        hash_strand = first_part.strand
-                    else:
-                        hash_start = start
-                        hash_end = end
-                        hash_strand = strand_raw
-
-                    # Compute same hash as SVG rendering uses (must match Python drawer)
-                    key = f"{feat.type}:{hash_start}:{hash_end}:{hash_strand}"
-                    svg_id = "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+                    try:
+                        svg_id = compute_feature_hash(feat, record_id=hash_record_id)
+                    except Exception:
+                        svg_id = None
+                    if not svg_id:
+                        # Fallback to raw location if coordinate conversion fails
+                        if hasattr(feat.location, 'parts') and feat.location.parts:
+                            first_part = feat.location.parts[0]
+                            hash_start = int(first_part.start)
+                            hash_end = int(first_part.end)
+                            hash_strand = first_part.strand
+                        else:
+                            hash_start = start
+                            hash_end = end
+                            hash_strand = strand_raw
+                        import hashlib
+                        key = f"{feat.type}:{hash_start}:{hash_end}:{hash_strand}"
+                        svg_id = "f" + hashlib.md5(key.encode()).hexdigest()[:8]
                     qualifiers = {}
                     for q_key, q_vals in feat.qualifiers.items():
                         if not q_vals:
