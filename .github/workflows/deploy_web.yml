@@ -39,6 +39,8 @@ jobs:
           mkdir public
           # Copy the index.html file
           cp gbdraw/web/index.html public/
+          # Copy the JavaScript modules
+          cp -r gbdraw/web/js public/js
           # Copy the built wheel file
           cp dist/*.whl public/
           # Create CNAME file for custom domain
