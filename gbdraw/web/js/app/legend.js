@@ -28,6 +28,14 @@ export const createLegendManager = ({ state, getPyodide, debugLog }) => {
     skipCaptureBaseConfig
   } = state;
 
+  const getLegendChildById = (parent, id) => {
+    if (!parent) return null;
+    for (const child of parent.children || []) {
+      if (child.id === id) return child;
+    }
+    return null;
+  };
+
   const addLegendEntry = async (caption, color) => {
     console.log(`addLegendEntry called with caption="${caption}", color="${color}"`);
     if (!svgContainer.value || !pyodideReady.value) {
@@ -217,7 +225,7 @@ json.dumps({"width": width})
           let featureLegendMaxWidth = canvasWidth;
           const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
           if (horizontalLegend) {
-            const hPairwiseLegend = horizontalLegend.querySelector('#pairwise_legend');
+            const hPairwiseLegend = getLegendChildById(horizontalLegend, 'pairwise_legend');
             if (hPairwiseLegend) {
               const pairwiseTransform = hPairwiseLegend.getAttribute('transform');
               if (pairwiseTransform) {
@@ -531,7 +539,7 @@ json.dumps({"width": width})
     }
 
     const featureLegend = verticalLegend.querySelector('#feature_legend_v');
-    const pairwiseLegend = verticalLegend.querySelector('#pairwise_legend');
+    const pairwiseLegend = getLegendChildById(verticalLegend, 'pairwise_legend');
 
     let legendContentHeight = 0;
     if (featureLegend) {
@@ -592,7 +600,7 @@ json.dumps({"width": width})
     const verticalLegend = legendGroup.querySelector('#legend_vertical');
     if (verticalLegend) {
       const vFeatureLegend = verticalLegend.querySelector('#feature_legend_v');
-      const vPairwiseLegend = verticalLegend.querySelector('#pairwise_legend');
+      const vPairwiseLegend = getLegendChildById(verticalLegend, 'pairwise_legend');
 
       if (vFeatureLegend && vPairwiseLegend) {
         let maxFeatureY = 0;
@@ -619,7 +627,7 @@ json.dumps({"width": width})
     const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
     if (horizontalLegend) {
       const hFeatureLegend = horizontalLegend.querySelector('#feature_legend_h');
-      const hPairwiseLegend = horizontalLegend.querySelector('#pairwise_legend');
+      const hPairwiseLegend = getLegendChildById(horizontalLegend, 'pairwise_legend');
 
       if (hFeatureLegend && hPairwiseLegend) {
         let minFeatureY = Infinity,
@@ -691,7 +699,7 @@ json.dumps({"width": width})
           : legend.querySelector('#feature_legend_v');
       if (!featureGroup) return;
 
-      const pairwiseLegend = legend.querySelector('#pairwise_legend');
+      const pairwiseLegend = getLegendChildById(legend, 'pairwise_legend');
 
       featureGroup.setAttribute('transform', 'translate(0, 0)');
       if (pairwiseLegend) {
@@ -896,7 +904,7 @@ json.dumps({"width": width})
         if (legendGroup) {
           const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
           if (horizontalLegend) {
-            const hPairwiseLegend = horizontalLegend.querySelector('#pairwise_legend');
+            const hPairwiseLegend = getLegendChildById(horizontalLegend, 'pairwise_legend');
             if (hPairwiseLegend) {
               const pairwiseTransform = hPairwiseLegend.getAttribute('transform');
               if (pairwiseTransform) {
