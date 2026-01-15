@@ -106,7 +106,7 @@
                     <button @click="$refs.configInput.click()" class="text-xs font-bold text-slate-500 hover:text-blue-600 px-2 py-1 rounded border border-slate-200 bg-white flex items-center gap-1">
                         <i class="ph ph-arrow-square-in"></i> Load Config
                     </button>
-                    <input type="file" ref="configInput" accept=".json" class="hidden" @change="importConfig">
+                    <input type="file" ref="configInput" class="hidden" @change="importConfig">
                 </div>
 
                 <div class="flex bg-slate-100 p-1 rounded-lg">
@@ -136,8 +136,8 @@
                             <file-uploader label="GenBank File (.gb)" v-model="files.c_gb"></file-uploader>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
-                            <file-uploader label="GFF3 File" accept=".gff,.gff3" v-model="files.c_gff"></file-uploader>
-                            <file-uploader label="FASTA File" accept=".fasta,.fa,.fna" v-model="files.c_fasta"></file-uploader>
+                            <file-uploader label="GFF3 File" v-model="files.c_gff"></file-uploader>
+                            <file-uploader label="FASTA File" v-model="files.c_fasta"></file-uploader>
                         </div>
                     </div>
 
@@ -152,8 +152,8 @@
                                 <file-uploader label="GenBank File" v-model="seq.gb"></file-uploader>
                             </div>
                             <div v-else class="space-y-2 mb-2">
-                                <file-uploader label="GFF3" accept=".gff" v-model="seq.gff"></file-uploader>
-                                <file-uploader label="FASTA" accept=".fasta" v-model="seq.fasta"></file-uploader>
+                                <file-uploader label="GFF3" v-model="seq.gff"></file-uploader>
+                                <file-uploader label="FASTA" v-model="seq.fasta"></file-uploader>
                             </div>
                             <div v-if="idx < linearSeqs.length - 1" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1"><i class="ph ph-arrows-down-up"></i> Compare to next (BLAST)</div>
@@ -1113,7 +1113,7 @@
             <button v-if="modelValue" @click.stop="clearFile" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash"></i> Remove</button>
         </div>
         <div class="upload-zone cursor-pointer" :class="{'ready': modelValue, 'py-1 min-h-[36px]': small}" @click="$refs.input.click()">
-            <input type="file" ref="input" @change="handleFile" :accept="accept" class="hidden">
+            <input type="file" ref="input" @change="handleFile" class="hidden">
             <div v-if="!modelValue" class="flex items-center justify-center gap-2 text-slate-400 group-hover:text-blue-600 transition-colors">
                 <i class="ph ph-upload-simple" :class="small ? 'text-base' : 'text-xl'"></i>
                 <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">Click to Browse</span>
