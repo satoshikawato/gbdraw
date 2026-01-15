@@ -602,27 +602,29 @@
                 <div class="relative flex-grow overflow-hidden bg-slate-50/30">
 
                     <!-- Zoom and Canvas controls -->
-                    <div class="absolute bottom-4 right-4 flex flex-col gap-2 z-20">
+                    <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
                         <!-- Reset all positions button -->
                         <button v-if="svgContent" @click="resetAllPositions"
-                                class="w-8 h-8 flex items-center justify-center bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600"
+                                class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
                                 title="Reset all element positions"
                                 aria-label="Reset all element positions">
                             <i class="ph ph-arrow-counter-clockwise"></i>
+                            <span>Reset positions</span>
                         </button>
                         <!-- Canvas size toggle -->
                         <button v-if="svgContent" @click="showCanvasControls = !showCanvasControls"
-                                class="w-8 h-8 flex items-center justify-center bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600"
+                                class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
                                 :class="{ 'bg-blue-50 text-blue-600 border-blue-300': showCanvasControls }"
                                 title="Canvas padding controls"
                                 aria-label="Toggle canvas padding controls">
                             <i class="ph ph-frame-corners"></i>
+                            <span>Canvas padding</span>
                         </button>
                         <!-- Zoom controls -->
-                        <div class="flex gap-1 bg-white shadow rounded-lg p-1 border border-slate-200">
-                            <button @click="zoom+=0.1" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded" aria-label="Zoom in"><i class="ph ph-plus"></i></button>
-                            <button @click="zoom = 1.0" class="w-12 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-xs font-mono rounded" aria-label="Reset zoom">{{Math.round(zoom*100)}}%</button>
-                            <button @click="zoom = Math.max(0.1, zoom-0.1)" class="w-8 h-8 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded" aria-label="Zoom out"><i class="ph ph-minus"></i></button>
+                        <div class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">
+                            <button @click="zoom+=0.1" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom in"><i class="ph ph-plus"></i></button>
+                            <button @click="zoom = 1.0" class="w-16 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-sm font-mono rounded" aria-label="Reset zoom">{{Math.round(zoom*100)}}%</button>
+                            <button @click="zoom = Math.max(0.1, zoom-0.1)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom out"><i class="ph ph-minus"></i></button>
                         </div>
                     </div>
 
@@ -635,7 +637,7 @@
 
                     <!-- Canvas padding controls panel -->
                     <div v-if="showCanvasControls && svgContent"
-                         class="absolute bottom-4 right-36 bg-white shadow-lg rounded-lg p-3 z-20 border border-slate-200 w-48">
+                         class="absolute bottom-20 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-lg p-3 z-20 border border-slate-200 w-48">
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-xs font-bold text-slate-700">Canvas Padding</span>
                             <button @click="resetCanvasPadding" class="text-[10px] text-blue-600 hover:text-blue-800">Reset</button>

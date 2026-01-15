@@ -8,7 +8,6 @@
 | Method | Ease of Use | Access to Latest Version | Performance | Customization | Ideal User / Use Case |
 | ------ | ------- | ------- | ------- | ------- | ------- |
 | Web App (gbdraw.app) | ★★★★★ | Development | Medium | High | Researchers wanting quick visualization with zero installation; educational use. | 
-| Google Colab | ★★★★★ | Stable | Medium | Medium | Users with a Google account who want to try gbdraw in a cloud environment. | 
 | Bioconda | ★★★★☆ | Stable | High | High | Bioinformaticians needing a reproducible environment; pipeline integration. | 
 | Local Build | ★☆☆☆☆ | Development | High | High | Developers wanting to test the latest features or contribute to the project. | 
  
@@ -23,11 +22,6 @@ The `gbdraw` GUI is available as a browser-based web app, ready to use without a
 **Simply visit**: [https://gbdraw.app/](https://gbdraw.app/)
 
 The legacy Streamlit deployment now redirects to the new web app. If you have a local install, you can also run the same web UI with `gbdraw gui`.
-
-### Google Colab
-
-`gbdraw` also provides a Google Colaboratory notebook, although the functionality is limited. A Google account is required.
-**Open in Colab**: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/satoshikawato/gbdraw/blob/main/gbdraw_colab.ipynb)
 
 ---
 
