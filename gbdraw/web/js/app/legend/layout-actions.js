@@ -9,6 +9,23 @@ import {
 export const createLegendLayoutActions = ({ state }) => {
   const { mode, form, linearBaseConfig } = state;
 
+  const getHorizontalWrapWidth = (svg) => {
+    if (!svg) return null;
+    const wrapAttr = svg.getAttribute('data-horizontal-wrap-width');
+    if (wrapAttr) {
+      const width = parseFloat(wrapAttr);
+      if (Number.isFinite(width) && width > 0) return width;
+    }
+    const baseViewBox = svg.getAttribute('data-horizontal-viewbox');
+    if (baseViewBox) {
+      const parts = baseViewBox.split(/\s+/).map(parseFloat);
+      if (parts.length === 4 && parts[2] > 0) return parts[2];
+    }
+    const fallbackWidth = linearBaseConfig.value?.horizontalViewBox?.w;
+    if (fallbackWidth && fallbackWidth > 0) return fallbackWidth;
+    return null;
+  };
+
   const expandCanvasForVerticalLegend = (svg) => {
     if (mode.value !== 'linear') return;
 
@@ -130,7 +147,8 @@ export const createLegendLayoutActions = ({ state }) => {
 
     if (!hasDualLegends) {
       const layout = form.legend === 'top' || form.legend === 'bottom' ? 'horizontal' : 'vertical';
-      reflowSingleLegendLayout(svg, layout);
+      const maxWidth = layout === 'horizontal' ? getHorizontalWrapWidth(svg) : null;
+      reflowSingleLegendLayout(svg, layout, maxWidth);
       expandCanvasForVerticalLegend(svg);
       expandCanvasForHorizontalLegend(svg);
       return;
@@ -240,6 +258,8 @@ export const createLegendLayoutActions = ({ state }) => {
       const parts = horizontalViewBox.split(/\s+/).map(parseFloat);
       if (parts.length === 4) horizontalWidth = parts[2];
     }
+    const wrapWidth = getHorizontalWrapWidth(svg);
+    if (wrapWidth) horizontalWidth = wrapWidth;
 
     const layoutLegendGroup = (legend, layout, maxWidth) => {
       const featureGroup =
@@ -449,9 +469,10 @@ export const createLegendLayoutActions = ({ state }) => {
           return a.y - b.y;
         });
 
-        let maxWidth = 800;
+        const wrapWidth = getHorizontalWrapWidth(svg);
+        let maxWidth = wrapWidth || 800;
         const legendGroup = svg.getElementById('legend');
-        if (legendGroup) {
+        if (legendGroup && !wrapWidth) {
           const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
           if (horizontalLegend) {
             const hPairwiseLegend = getLegendChildById(horizontalLegend, 'pairwise_legend');

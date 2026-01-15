@@ -199,6 +199,11 @@ export const createLegendCanvasActions = ({ state }) => {
 
       linearBaseConfig.value.generatedPosition = form.legend;
       linearBaseConfig.value.diagramBaseTransforms = new Map(diagramElementOriginalTransforms.value);
+
+      const baseHorizontal = linearBaseConfig.value.horizontalViewBox;
+      if (baseHorizontal && baseHorizontal.w > 0) {
+        svg.setAttribute('data-horizontal-wrap-width', `${baseHorizontal.w}`);
+      }
     } else {
       const legendPos = form.legend;
       let baseVbW = vbW;

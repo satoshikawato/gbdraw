@@ -386,7 +386,17 @@ export const createLegendRepositionActions = ({
 
           if (!hasDualLegends) {
             const layout = nowHorizontal ? 'horizontal' : 'vertical';
-            const reflowResult = reflowSingleLegendLayout(svg, layout, vbW);
+            let maxWidthOverride = vbW;
+            if (layout === 'horizontal') {
+              const wrapAttr = svg.getAttribute('data-horizontal-wrap-width');
+              if (wrapAttr) {
+                const wrapWidth = parseFloat(wrapAttr);
+                if (Number.isFinite(wrapWidth) && wrapWidth > 0) {
+                  maxWidthOverride = wrapWidth;
+                }
+              }
+            }
+            const reflowResult = reflowSingleLegendLayout(svg, layout, maxWidthOverride);
             if (reflowResult) {
               legendWidth = reflowResult.legendWidth || legendWidth;
               legendHeight = reflowResult.legendHeight || legendHeight;
@@ -398,10 +408,6 @@ export const createLegendRepositionActions = ({
           if (nowHorizontal) {
             linearBaseConfig.value.horizontalLegendWidth = legendWidth;
             linearBaseConfig.value.horizontalLegendHeight = legendHeight;
-
-            if (legendWidth + padding * 2 > vbW) {
-              vbW = legendWidth + padding * 2;
-            }
 
             const heightDelta = legendHeight - prevHorizontalLegendHeight;
             if (heightDelta > 0) {
@@ -432,26 +438,45 @@ export const createLegendRepositionActions = ({
             linearBaseConfig.value.verticalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
           }
 
+          const computeVerticalLegendY = () => {
+            const ignoredIds = new Set(['length_bar', 'tick', 'labels', 'Axis']);
+            const legendElements = diagramElements.value.filter((el) => !ignoredIds.has(el.id));
+            const bounds = getElementsBounds(legendElements.length > 0 ? legendElements : diagramElements.value);
+            if (!bounds) {
+              return vbY + (vbH - legendHeight) / 2;
+            }
+
+            const centerY = bounds.y + bounds.height / 2;
+            let legendY = centerY - legendHeight / 2;
+            const viewportBottom = vbY + vbH;
+
+            if (legendY < vbY || legendY + legendHeight > viewportBottom) {
+              legendY = Math.max(vbY + (vbH - legendHeight) / 2, vbY + padding);
+            }
+
+            return legendY;
+          };
+
           let finalX;
           let finalY;
 
           switch (newPosition) {
             case 'top':
-              finalX = (vbW - legendWidth) / 2;
-              finalY = padding;
+              finalX = vbX + (vbW - legendWidth) / 2;
+              finalY = vbY + padding;
               break;
             case 'bottom':
-              finalX = (vbW - legendWidth) / 2;
-              finalY = vbH - legendHeight - padding;
+              finalX = vbX + (vbW - legendWidth) / 2;
+              finalY = vbY + vbH - legendHeight - padding;
               break;
             case 'left':
-              finalX = padding;
-              finalY = (vbH - legendHeight) / 2;
+              finalX = vbX + padding;
+              finalY = computeVerticalLegendY();
               break;
             case 'right':
             default:
-              finalX = vbW - legendWidth - padding;
-              finalY = (vbH - legendHeight) / 2;
+              finalX = vbX + vbW - legendWidth - padding;
+              finalY = computeVerticalLegendY();
               break;
           }
 
@@ -462,14 +487,31 @@ export const createLegendRepositionActions = ({
         }
       }
 
-      const hasStoredViewBox =
-        svg.hasAttribute('data-horizontal-viewbox') && svg.hasAttribute('data-vertical-viewbox');
+      const hVbAttr = svg.getAttribute('data-horizontal-viewbox');
+      const vVbAttr = svg.getAttribute('data-vertical-viewbox');
+      const hVb = hVbAttr
+        ? hVbAttr.split(/\s+/).map(parseFloat)
+        : linearBaseConfig.value.horizontalViewBox?.w > 0
+          ? [
+              linearBaseConfig.value.horizontalViewBox.x,
+              linearBaseConfig.value.horizontalViewBox.y,
+              linearBaseConfig.value.horizontalViewBox.w,
+              linearBaseConfig.value.horizontalViewBox.h
+            ]
+          : null;
+      const vVb = vVbAttr
+        ? vVbAttr.split(/\s+/).map(parseFloat)
+        : linearBaseConfig.value.verticalViewBox?.w > 0
+          ? [
+              linearBaseConfig.value.verticalViewBox.x,
+              linearBaseConfig.value.verticalViewBox.y,
+              linearBaseConfig.value.verticalViewBox.w,
+              linearBaseConfig.value.verticalViewBox.h
+            ]
+          : null;
+      const canRepositionDiagram = diagramElements.value.length > 0 && diagramElementBaseTransforms.value.size > 0;
 
-      if (hasStoredViewBox && diagramElements.value.length > 0) {
-        const hVbAttr = svg.getAttribute('data-horizontal-viewbox');
-        const vVbAttr = svg.getAttribute('data-vertical-viewbox');
-        const hVb = hVbAttr ? hVbAttr.split(/\s+/).map(parseFloat) : null;
-        const vVb = vVbAttr ? vVbAttr.split(/\s+/).map(parseFloat) : null;
+      if (canRepositionDiagram) {
 
         let shiftX = 0;
         let shiftY = 0;
@@ -533,8 +575,8 @@ export const createLegendRepositionActions = ({
                 svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
                 svg.setAttribute('data-horizontal-viewbox', `${vbX} ${vbY} ${vbW} ${vbH}`);
                 linearBaseConfig.value.horizontalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
-                const finalX = (vbW - legendWidth) / 2;
-                const finalY = vbH - legendHeight - overlapPadding;
+                const finalX = vbX + (vbW - legendWidth) / 2;
+                const finalY = vbY + vbH - legendHeight - overlapPadding;
                 legendGroup.setAttribute('transform', `translate(${finalX}, ${finalY})`);
                 legendInitialTransform.value = { x: finalX, y: finalY };
                 legendCurrentOffset.x = 0;
