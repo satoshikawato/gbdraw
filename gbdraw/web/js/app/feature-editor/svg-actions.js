@@ -1,3 +1,4 @@
+import { resolveColorToHex } from '../color-utils.js';
 import { getFeatureCaption } from '../feature-utils.js';
 
 export const createFeatureSvgActions = ({ state, getFeatureColor }) => {
@@ -81,7 +82,7 @@ export const createFeatureSvgActions = ({ state, getFeatureColor }) => {
         e.stopPropagation();
         const feat = extractedFeatures.value.find((f) => f.svg_id === svgId);
         if (feat) {
-          const currentColor = path.getAttribute('fill') || getFeatureColor(feat);
+          const currentColor = resolveColorToHex(path.getAttribute('fill') || getFeatureColor(feat));
           const defaultLabel = getFeatureCaption(feat);
 
           const existingOverride = featureColorOverrides[feat.id];

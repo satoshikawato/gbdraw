@@ -1,3 +1,5 @@
+import { resolveColorToHex } from './color-utils.js';
+
 export const parseColorTable = (text) => {
   const colors = {};
   let count = 0;
@@ -10,7 +12,7 @@ export const parseColorTable = (text) => {
     const key = parts[0].trim();
     const color = parts[1].trim();
     if (key && (color.startsWith('#') || /^[a-z]+$/i.test(color))) {
-      colors[key] = color;
+      colors[key] = resolveColorToHex(color);
       count++;
     }
   }
@@ -32,7 +34,7 @@ export const parseSpecificRules = (text) => {
       feat: parts[0].trim(),
       qual: parts[1].trim(),
       val: parts[2].trim(),
-      color: parts[3].trim(),
+      color: resolveColorToHex(parts[3].trim()),
       cap: parts[4] ? parts[4].trim() : '',
       fromFile: true
     };

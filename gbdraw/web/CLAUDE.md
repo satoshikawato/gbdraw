@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 
 ## Overview
 
-`index.html` is the **SPA entry point** and loads ES modules from `gbdraw/web/js` (no build step). `gbdraw/web/js/app.js` mounts Vue and delegates to modules under `gbdraw/web/js/app/` (setup, Pyodide, run analysis, legend layout, watchers). The app runs gbdraw entirely in the browser using WebAssembly. No server is required - all genome data processing happens client-side via Pyodide (Python compiled to WebAssembly).
+`index.html` is the **SPA entry point** and loads ES modules from `gbdraw/web/js` (no build step). `gbdraw/web/js/app.js` mounts Vue and delegates to modules under `gbdraw/web/js/app/` (setup, Pyodide, run analysis, watchers, plus feature subfolders such as `legend/`, `legend-layout/`, and `feature-editor/`). The app runs gbdraw entirely in the browser using WebAssembly. No server is required - all genome data processing happens client-side via Pyodide (Python compiled to WebAssembly).
 
 - **File size:** `index.html` contains HTML/CSS/templates; JavaScript lives under `gbdraw/web/js/`
 - **Location:** `gbdraw/web/index.html`
@@ -35,7 +35,9 @@ python -m build
 | App Setup | gbdraw/web/js/app/app-setup.js | Composition root and module wiring |
 | Pyodide Init | gbdraw/web/js/app/pyodide.js | Pyodide startup + wheel install |
 | Run Analysis | gbdraw/web/js/app/run-analysis.js | Build args + execute gbdraw + extract features |
-| Legend Layout | gbdraw/web/js/app/legend-layout.js | Legend/diagram positioning + canvas padding |
+| Legend Management | gbdraw/web/js/app/legend.js | Legend actions (entry point; helpers under `gbdraw/web/js/app/legend/`) |
+| Legend Layout | gbdraw/web/js/app/legend-layout.js | Legend/diagram positioning + canvas padding (entry point; helpers under `gbdraw/web/js/app/legend-layout/`) |
+| Feature Editor | gbdraw/web/js/app/feature-editor.js | Feature color editor logic (entry point; helpers under `gbdraw/web/js/app/feature-editor/`) |
 | Watchers | gbdraw/web/js/app/watchers.js | Vue watch hooks and lifecycle wiring |
 | State Management | gbdraw/web/js/state.js | Reactive refs and computed |
 | Components | gbdraw/web/js/components.js | HelpTip / FileUploader |

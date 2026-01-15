@@ -1,3 +1,4 @@
+import { resolveColorToHex } from '../color-utils.js';
 import { ruleMatchesFeature } from '../feature-utils.js';
 
 export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => {
@@ -104,9 +105,9 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   const getFeatureColor = (feat) => {
     const override = featureColorOverrides[feat.id];
     if (override) {
-      return override.color || override;
+      return resolveColorToHex(override.color || override);
     }
-    return currentColors.value[feat.type] || '#cccccc';
+    return resolveColorToHex(currentColors.value[feat.type]) || '#cccccc';
   };
 
   const canEditFeatureColor = () => true;

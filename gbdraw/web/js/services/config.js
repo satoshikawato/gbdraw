@@ -1,4 +1,5 @@
 import { state } from '../state.js';
+import { resolveColorToHex } from '../app/color-utils.js';
 
 const safeDeepMerge = (target, source) => {
   if (!source || typeof source !== 'object') return;
@@ -82,7 +83,13 @@ export const importConfig = (e) => {
 
       if (data.form) safeDeepMerge(state.form, data.form);
       if (data.adv) safeDeepMerge(state.adv, data.adv);
-      if (data.colors) state.currentColors.value = data.colors;
+      if (data.colors) {
+        const normalized = {};
+        Object.entries(data.colors).forEach(([key, value]) => {
+          normalized[key] = resolveColorToHex(String(value || '').trim());
+        });
+        state.currentColors.value = normalized;
+      }
       if (data.palette) state.selectedPalette.value = data.palette;
 
       if (data.rules && Array.isArray(data.rules)) {
@@ -92,7 +99,7 @@ export const importConfig = (e) => {
             feat: String(r.feat || ''),
             qual: String(r.qual || ''),
             val: String(r.val || ''),
-            color: String(r.color || '#000000'),
+            color: resolveColorToHex(String(r.color || '#000000')),
             cap: String(r.cap || '')
           });
         });
