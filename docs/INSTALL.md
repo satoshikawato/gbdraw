@@ -7,20 +7,22 @@
 `gbdraw` offers several installation methods to suit different needs. Use this table to choose the best option for your use case.
 | Method | Ease of Use | Access to Latest Version | Performance | Customization | Ideal User / Use Case |
 | ------ | ------- | ------- | ------- | ------- | ------- |
-| Streamlit Web App | ★★★★★ | Development | Medium | High | Researchers wanting quick visualization with zero installation; educational use. | 
+| Web App (gbdraw.app) | ★★★★★ | Development | Medium | High | Researchers wanting quick visualization with zero installation; educational use. | 
 | Google Colab | ★★★★★ | Stable | Medium | Medium | Users with a Google account who want to try gbdraw in a cloud environment. | 
 | Bioconda | ★★★★☆ | Stable | High | High | Bioinformaticians needing a reproducible environment; pipeline integration. | 
- | Local Build | ★☆☆☆☆ | Development | High | High | Developers wanting to test the latest features or contribute to the project. | 
+| Local Build | ★☆☆☆☆ | Development | High | High | Developers wanting to test the latest features or contribute to the project. | 
  
 ---
 
 ## 1. Use Without Installation
 
-### Streamlit Web App
+### Web App (gbdraw.app)
 
-The `gbdraw` GUI is available as a web app, ready to use without any local installation.
+The `gbdraw` GUI is available as a browser-based web app, ready to use without any local installation.
 
-**Simply visit**: [https://gbdraw.streamlit.app/](https://gbdraw.streamlit.app/)
+**Simply visit**: [https://gbdraw.app/](https://gbdraw.app/)
+
+The legacy Streamlit deployment now redirects to the new web app. If you have a local install, you can also run the same web UI with `gbdraw gui`.
 
 ### Google Colab
 
@@ -39,20 +41,18 @@ You must have a [conda](https://docs.conda.io/en/latest/)-compatible package man
 
 ### Bioconda (Recommended)
 
-`gbdraw` is available from the Bioconda channel. Creating a dedicated environment prevents dependency conflicts. If you also want to use the graphical interface (`gbdraw gui`), install streamlit into the same environment.
+`gbdraw` is available from the Bioconda channel. Creating a dedicated environment prevents dependency conflicts. The graphical interface (`gbdraw gui`) runs as a local web app and does not require Streamlit.
 
 1.  **Create and activate a new conda environment for `gbdraw`.**
-    * **For both CLI and GUI:**
-        ```bash
-        mamba create -n gbdraw -c conda-forge -c bioconda gbdraw streamlit
-        conda activate gbdraw
-        ```
-    * **For CLI only:**
-        ```bash
-        mamba create -n gbdraw -c conda-forge -c bioconda gbdraw
-        conda activate gbdraw
-        ```
-2.  **Verify the installation.**
+    ```bash
+    mamba create -n gbdraw -c conda-forge -c bioconda gbdraw
+    conda activate gbdraw
+    ```
+2.  **(Optional) Launch the local web UI.**
+    ```bash
+    gbdraw gui
+    ```
+3.  **Verify the installation.**
     ```bash
     gbdraw -h
     ```

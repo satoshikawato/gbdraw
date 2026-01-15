@@ -3,6 +3,8 @@
 This page is the official documentation for `gbdraw`.
 Here you will find all the information you need to make the most of `gbdraw`, from installation and basic usage to advanced techniques.
 
+Prefer the browser-based GUI? Use [https://gbdraw.app/](https://gbdraw.app/) or run `gbdraw gui` after installing `gbdraw` locally.
+
 ---
 
 ### **🔰 Getting Started**

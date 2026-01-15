@@ -5,6 +5,8 @@
 
 This tutorial will guide you from a fresh installation to generating your first circular genome plot.
 
+If you prefer a GUI, you can use the web app at [https://gbdraw.app/](https://gbdraw.app/) or run `gbdraw gui` locally after installation. This quickstart focuses on the CLI.
+
 ### 1. Prerequisites
 
 Ensure you have `gbdraw` installed locally via one of the methods described on the **[Installation](./INSTALL.md)** page. Make sure your conda environment is activated.

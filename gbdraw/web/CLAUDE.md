@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 
 ## Overview
 
-`index.html` is a **self-contained single-page application (SPA)** that runs gbdraw entirely in the browser using WebAssembly. No server is required - all genome data processing happens client-side via Pyodide (Python compiled to WebAssembly).
+`index.html` is the **SPA entry point** and loads ES modules from `gbdraw/web/js` (no build step). `gbdraw/web/js/app.js` mounts Vue and delegates to modules under `gbdraw/web/js/app/` (setup, Pyodide, run analysis, watchers, plus feature subfolders such as `legend/`, `legend-layout/`, and `feature-editor/`). The app runs gbdraw entirely in the browser using WebAssembly. No server is required - all genome data processing happens client-side via Pyodide (Python compiled to WebAssembly).
 
-- **File size:** ~7300 lines (HTML + embedded JavaScript + CSS)
+- **File size:** `index.html` contains HTML/CSS/templates; JavaScript lives under `gbdraw/web/js/`
 - **Location:** `gbdraw/web/index.html`
 - **Served by:** `gbdraw gui` command or hosted at https://gbdraw.app/
 
@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 
 ```bash
 # Run locally
-gbdraw gui                    # Opens browser at http://localhost:8080
+gbdraw gui                    # Opens browser at http://localhost:<free port>
 
 # Build wheel for web deployment (version must match pyproject.toml)
 python -m build
@@ -24,19 +24,26 @@ python -m build
 # Open DevTools Console (F12) to see Pyodide output and errors
 ```
 
-### Key Line Number References
+### Key File References
 
-| Section | Lines | Description |
-|---------|-------|-------------|
-| CSP Header | 5-17 | Content Security Policy |
-| CSS Styles | 33-73 | TailwindCSS custom classes |
-| Vue App Template | 77-1180 | HTML structure |
-| State Management | 1339-1500 | Reactive refs and form data |
-| Legend Management | 2856-3200, 4958-5030 | Legend CRUD operations |
-| Drag & Drop | 4970-5100 | Element repositioning |
-| Feature Color Editing | 6259-6400 | Per-feature color changes |
-| Python Integration | 6806-7050 | `runAnalysis()`, file I/O |
-| Export Functions | 7141-7200 | PDF/PNG download |
+| Section | File | Description |
+|---------|------|-------------|
+| CSP Header | gbdraw/web/index.html | Content Security Policy |
+| CSS Styles | gbdraw/web/index.html | TailwindCSS custom classes |
+| Vue App Template | gbdraw/web/index.html | HTML structure |
+| App Entry | gbdraw/web/js/app.js | Mounts Vue and delegates to app setup |
+| App Setup | gbdraw/web/js/app/app-setup.js | Composition root and module wiring |
+| Pyodide Init | gbdraw/web/js/app/pyodide.js | Pyodide startup + wheel install |
+| Run Analysis | gbdraw/web/js/app/run-analysis.js | Build args + execute gbdraw + extract features |
+| Legend Management | gbdraw/web/js/app/legend.js | Legend actions (entry point; helpers under `gbdraw/web/js/app/legend/`) |
+| Legend Layout | gbdraw/web/js/app/legend-layout.js | Legend/diagram positioning + canvas padding (entry point; helpers under `gbdraw/web/js/app/legend-layout/`) |
+| Feature Editor | gbdraw/web/js/app/feature-editor.js | Feature color editor logic (entry point; helpers under `gbdraw/web/js/app/feature-editor/`) |
+| Watchers | gbdraw/web/js/app/watchers.js | Vue watch hooks and lifecycle wiring |
+| State Management | gbdraw/web/js/state.js | Reactive refs and computed |
+| Components | gbdraw/web/js/components.js | HelpTip / FileUploader |
+| Export Functions | gbdraw/web/js/services/export.js | PDF/PNG/SVG download |
+| Config I/O | gbdraw/web/js/services/config.js | Save/load settings |
+| PNG Helper | gbdraw/web/js/utils/png.js | DPI injection |
 
 ## Technology Stack
 
@@ -102,6 +109,7 @@ index.html
 - **Drag & Drop:** Reposition legend and diagram elements
 - **Feature Click:** Change individual feature colors with popup picker
 - **Legend Editor:** Reorder, rename, delete legend entries
+- **Legend Layout:** Reflows entries after edits, aligns pairwise legends, and expands the canvas for tall vertical legends
 - **Canvas Padding:** Adjust whitespace (top/right/bottom/left)
 
 ### 4. Color Management
@@ -114,27 +122,27 @@ index.html
 
 ### Key Reactive State (Vue refs)
 ```javascript
-// System state (lines ~1339-1360)
+// System state
 pyodideReady            // Pyodide initialization status
 processing              // Diagram generation in progress
 errorLog                // Error messages
 
-// Results (lines ~1360-1380)
+// Results
 results                 // Array of {name, content} SVG outputs
 selectedResultIndex     // Currently viewed result
 svgContent              // Computed sanitized SVG
 
-// UI state (lines ~1380-1430)
+// UI state
 mode                    // 'circular' | 'linear'
 zoom                    // Preview zoom level
 showFeaturePanel        // Feature color editor visibility
 showLegendPanel         // Legend editor visibility
 
-// Legend state (lines ~1429-1450)
+// Legend state
 legendEntries           // Extracted legend entries [{caption, color, yPos}]
 addedLegendCaptions     // Set of manually added legend captions
 
-// Feature editor state (lines ~1450-1480)
+// Feature editor state
 extractedFeatures       // Features from last generation
 featureColorOverrides   // {featureKey: {color, caption}}
 ```
@@ -164,36 +172,41 @@ adv = {
 ## Key JavaScript Functions
 
 ### Main Entry Points
-| Function | Line | Description |
+| Function | File | Description |
 |----------|------|-------------|
-| `runAnalysis()` | 6813 | Main diagram generation |
-| `downloadSVG()` | ~7100 | SVG export |
-| `downloadPNG()` | ~7120 | PNG export via canvas |
-| `downloadPDF()` | 7141 | PDF export via jsPDF |
+| `runAnalysis()` | gbdraw/web/js/app/run-analysis.js | Main diagram generation |
+| `downloadSVG()` | gbdraw/web/js/services/export.js | SVG export |
+| `downloadPNG()` | gbdraw/web/js/services/export.js | PNG export via canvas |
+| `downloadPDF()` | gbdraw/web/js/services/export.js | PDF export via jsPDF |
 
 ### Legend Management
-| Function | Description |
-|----------|-------------|
-| `getAllFeatureLegendGroups(svg)` | Get all legend groups (handles dual legends) |
-| `addLegendEntry(caption, color)` | Add entry to all legend groups |
-| `removeLegendEntry(caption)` | Remove entry from all legend groups |
-| `extractLegendEntries()` | Extract entries for Legend Editor panel |
-| `moveLegendEntryUp/Down(idx)` | Reorder entries |
+| Function | File | Description |
+|----------|------|-------------|
+| `getAllFeatureLegendGroups(svg)` | gbdraw/web/js/app/legend.js | Get all legend groups (handles dual legends) |
+| `getVisibleFeatureLegendGroup(svg)` | gbdraw/web/js/app/legend.js | Select the active legend group when dual legends are present |
+| `addLegendEntry(caption, color)` | gbdraw/web/js/app/legend.js | Add entry to all legend groups |
+| `removeLegendEntry(caption)` | gbdraw/web/js/app/legend.js | Remove entry from all legend groups |
+| `compactLegendEntries(svg)` | gbdraw/web/js/app/legend.js | Reflow legend entries after add/remove |
+| `updatePairwiseLegendPositions(svg)` | gbdraw/web/js/app/legend.js | Keep pairwise legend aligned with feature legend layout |
+| `expandCanvasForVerticalLegend(svg)` | gbdraw/web/js/app/legend.js | Extend viewBox when a vertical legend would clip |
+| `reflowSingleLegendLayout(svg, layout, maxWidthOverride)` | gbdraw/web/js/app/legend.js | Reflow a single legend layout (horizontal/vertical) |
+| `extractLegendEntries()` | gbdraw/web/js/app/legend.js | Extract entries for Legend Editor panel |
+| `moveLegendEntryUp/Down(idx)` | gbdraw/web/js/app/legend.js | Reorder entries |
 
 ### Feature Color Editing
-| Function | Line | Description |
+| Function | File | Description |
 |----------|------|-------------|
-| `setFeatureColor()` | 6259 | Set color and update rules |
-| `applyInstantPreview()` | ~6280 | Update SVG instantly |
-| `updateClickedFeatureColor()` | 1927 | Handle popup color change |
+| `setFeatureColor()` | gbdraw/web/js/app/feature-editor.js | Set color and update rules |
+| `applyInstantPreview()` | gbdraw/web/js/app/feature-editor.js | Update SVG instantly |
+| `updateClickedFeatureColor()` | gbdraw/web/js/app/feature-editor.js | Handle popup color change |
 
 ### Drag & Drop
-| Function | Description |
-|----------|-------------|
-| `startLegendDrag(e)` / `onLegendDrag(e)` / `endLegendDrag()` | Legend positioning |
-| `startDiagramDrag(e)` / `onDiagramDrag(e)` / `endDiagramDrag()` | Diagram element positioning |
-| `parseTransform(str)` | Extract x,y from transform attribute |
-| `resetAllPositions()` | Reset to original positions |
+| Function | File | Description |
+|----------|------|-------------|
+| `startLegendDrag(e)` / `onLegendDrag(e)` / `endLegendDrag()` | gbdraw/web/js/app/legend.js | Legend positioning |
+| `startDiagramDrag(e)` / `onDiagramDrag(e)` / `endDiagramDrag()` | gbdraw/web/js/app/legend-layout.js | Diagram element positioning |
+| `parseTransform(str)` | gbdraw/web/js/app/legend-layout.js | Extract x,y from transform attribute |
+| `resetAllPositions()` | gbdraw/web/js/app/legend-layout.js | Reset to original positions |
 
 ## Python Integration
 
@@ -205,7 +218,8 @@ adv = {
 5. Initialize helper functions
 6. Mark `pyodideReady = true`
 
-### Python Helper Functions (defined in index.html)
+### Python Helper Functions (loaded in Pyodide)
+Defined in `gbdraw/web/js/app/python-helpers.js` and executed during Pyodide init.
 ```python
 get_palettes_json()              # Load color palettes from TOML
 run_gbdraw_wrapper()             # Execute circular or linear mode
@@ -215,8 +229,8 @@ extract_features_from_genbank()  # Extract features for UI color editor
 
 ### File System Access Pattern
 ```javascript
-// Write file to Pyodide virtual FS (line 6806)
-const writeToFS = async (fileObj, path) => {
+// Write file to Pyodide virtual FS (gbdraw/web/js/app/pyodide.js)
+const writeFileToFs = async (fileObj, path) => {
     const buffer = await fileObj.arrayBuffer();
     pyodide.FS.writeFile(path, new Uint8Array(buffer));
 };

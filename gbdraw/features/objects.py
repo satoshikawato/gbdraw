@@ -16,7 +16,7 @@ Core feature data models.
 
 from __future__ import annotations
 
-from typing import Any, List, Literal, NamedTuple, Tuple
+from typing import Any, List, Literal, NamedTuple, Optional, Tuple
 
 
 FeatureSegmentKind = Literal["block", "line"]
@@ -53,6 +53,7 @@ class FeatureObject:
         coordinates: Any,
         type: str,
         qualifiers: dict,
+        record_id: Optional[str] = None,
     ) -> None:
         """
         Represents a general genomic feature.
@@ -69,6 +70,7 @@ class FeatureObject:
         self.note: str = note
         self.label_text: str = label_text
         self.qualifiers: dict = qualifiers
+        self.record_id: Optional[str] = record_id
         self.feature_track_id: int = 0
         self._feature_type: str = type
         # Frequently used derived attribute (historically added dynamically elsewhere)
@@ -127,11 +129,23 @@ class GeneObject(FeatureObject):
         coordinates: Any,
         type: str,
         qualifiers: dict,
+        record_id: Optional[str] = None,
     ) -> None:
         """
         Represents a gene, inheriting from FeatureObject.
         """
-        super().__init__(feature_id, location, is_directional, color, note, label_text, coordinates, type, qualifiers)
+        super().__init__(
+            feature_id,
+            location,
+            is_directional,
+            color,
+            note,
+            label_text,
+            coordinates,
+            type,
+            qualifiers,
+            record_id=record_id,
+        )
         self.gene_biotype: str = gene_biotype
         self.product: str = product
         self.gene: str = gene
@@ -161,11 +175,23 @@ class RepeatObject(FeatureObject):
         coordinates: Any,
         type: str,
         qualifiers: dict,
+        record_id: Optional[str] = None,
     ) -> None:
         """
         Represents a repeat region, inheriting from FeatureObject.
         """
-        super().__init__(feature_id, location, is_directional, color, note, label_text, coordinates, type, qualifiers)
+        super().__init__(
+            feature_id,
+            location,
+            is_directional,
+            color,
+            note,
+            label_text,
+            coordinates,
+            type,
+            qualifiers,
+            record_id=record_id,
+        )
         self.rpt_family: str = rpt_family
         self.rpt_type: str = rpt_type
         

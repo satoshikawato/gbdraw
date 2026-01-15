@@ -9,9 +9,9 @@ from pandas import DataFrame
 from Bio.SeqFeature import SeqFeature
 
 
-def compute_feature_hash(feature: SeqFeature) -> str:
+def compute_feature_hash(feature: SeqFeature, record_id: Optional[str] = None) -> str:
     """
-    Compute a stable hash for a feature based on type, start, end, strand.
+    Compute a stable hash for a feature based on record id, type, start, end, strand.
     This matches the hash computed in render/drawers for SVG IDs.
     For multi-exon features (CompoundLocation), uses first part's coordinates.
     """
@@ -26,7 +26,10 @@ def compute_feature_hash(feature: SeqFeature) -> str:
         start = int(loc.start)
         end = int(loc.end)
         strand = loc.strand
-    key = f"{feature.type}:{start}:{end}:{strand}"
+    if record_id is not None:
+        key = f"{record_id}:{feature.type}:{start}:{end}:{strand}"
+    else:
+        key = f"{feature.type}:{start}:{end}:{strand}"
     return "f" + hashlib.md5(key.encode()).hexdigest()[:8]
 
 
@@ -59,7 +62,12 @@ def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -
     return color_map, default_color_map
 
 
-def get_color_with_info(feature: SeqFeature, color_map: dict, default_color_map: dict) -> Tuple[str, Optional[str]]:
+def get_color_with_info(
+    feature: SeqFeature,
+    color_map: dict,
+    default_color_map: dict,
+    record_id: Optional[str] = None,
+) -> Tuple[str, Optional[str]]:
     """
     Determines the color for a given feature based on its type and qualifiers.
 
@@ -69,13 +77,14 @@ def get_color_with_info(feature: SeqFeature, color_map: dict, default_color_map:
 
     Returns:
         Tuple of (color, caption). Caption is None if default color was used.
+        If record_id is provided, hash matching includes the record id.
     """
     # Check for specific rules first
     rules_for_feature_type = color_map.get(feature.type)
     if rules_for_feature_type:
         # First, check hash pseudo-qualifier (highest priority for individual targeting)
         if 'hash' in rules_for_feature_type:
-            feature_hash = compute_feature_hash(feature)
+            feature_hash = compute_feature_hash(feature, record_id=record_id)
             for rule in rules_for_feature_type['hash']:
                 if len(rule) >= 3:
                     pattern, color, caption = rule[0], rule[1], rule[2]
@@ -117,14 +126,15 @@ def get_color_with_info(feature: SeqFeature, color_map: dict, default_color_map:
     return default_color_map.get(feature.type, "#d3d3d3"), None
 
 
-def get_color(feature: SeqFeature, color_map: dict, default_color_map: dict) -> str:
+def get_color(feature: SeqFeature, color_map: dict, default_color_map: dict, record_id: Optional[str] = None) -> str:
     """
     Determines the color for a given feature based on its type and qualifiers.
 
     This is a convenience wrapper that returns only the color.
     Use get_color_with_info() if you also need the matched caption.
+    If record_id is provided, hash matching includes the record id.
     """
-    color, _ = get_color_with_info(feature, color_map, default_color_map)
+    color, _ = get_color_with_info(feature, color_map, default_color_map, record_id=record_id)
     return color
 
 
@@ -157,7 +167,7 @@ def precompute_used_color_rules(
         for feature in record.features:
             if feature.type not in selected_features_set:
                 continue
-            color, caption = get_color_with_info(feature, color_map, default_color_map)
+            color, caption = get_color_with_info(feature, color_map, default_color_map, record_id=record.id)
             if caption:
                 used_rules.add((caption, color))
     return used_rules

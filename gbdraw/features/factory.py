@@ -21,6 +21,7 @@ def create_repeat_object(
     default_colors,
     genome_length: int,
     label_filtering,
+    record_id: Optional[str] = None,
 ) -> RepeatObject:
     """
     Creates a RepeatObject representing a repeat region in a genome.
@@ -31,7 +32,7 @@ def create_repeat_object(
     rpt_type: str = feature.qualifiers.get("rpt_type", ["undefined"])[0]
     note: str = feature.qualifiers.get("note", [""])[0]
     location = get_exon_and_intron_coordinates(coordinates, genome_length)
-    color: str = get_color(feature, color_table, default_colors)
+    color: str = get_color(feature, color_table, default_colors, record_id=record_id)
     feature_type = feature.type
     label_text = get_label_text(feature, label_filtering)
 
@@ -47,6 +48,7 @@ def create_repeat_object(
         coordinates,
         feature_type,
         qualifiers=feature.qualifiers,
+        record_id=record_id,
     )
     return repeat_object
 
@@ -58,6 +60,7 @@ def create_feature_object(
     default_colors,
     genome_length: int,
     label_filtering,
+    record_id: Optional[str] = None,
 ) -> FeatureObject:
     """
     Creates a FeatureObject representing a generic genomic feature.
@@ -66,7 +69,7 @@ def create_feature_object(
     is_directional: bool = False
     note: str = feature.qualifiers.get("note", [""])[0]
     location = get_exon_and_intron_coordinates(coordinates, genome_length)
-    color: str = get_color(feature, color_table, default_colors)
+    color: str = get_color(feature, color_table, default_colors, record_id=record_id)
     feature_type = feature.type
     label_text = get_label_text(feature, label_filtering)
 
@@ -80,6 +83,7 @@ def create_feature_object(
         coordinates,
         feature_type,
         qualifiers=feature.qualifiers,
+        record_id=record_id,
     )
     return feature_object
 
@@ -91,6 +95,7 @@ def create_gene_object(
     default_colors,
     genome_length: int,
     label_filtering,
+    record_id: Optional[str] = None,
 ) -> GeneObject:
     """
     Creates a GeneObject representing a gene in a genome.
@@ -103,7 +108,7 @@ def create_gene_object(
     is_trans_spliced = "trans_splicing" in feature.qualifiers
     feature_type = feature.type
     location = get_exon_and_intron_coordinates(coordinates, genome_length, is_trans_spliced)
-    color: str = get_color(feature, color_table, default_colors)
+    color: str = get_color(feature, color_table, default_colors, record_id=record_id)
     label_text = get_label_text(feature, label_filtering)
 
     gene_object = GeneObject(
@@ -119,6 +124,7 @@ def create_gene_object(
         coordinates,
         feature_type,
         qualifiers=feature.qualifiers,
+        record_id=record_id,
     )
     return gene_object
 
@@ -154,7 +160,7 @@ def create_feature_dict(
             continue
 
         # Track which color rules are actually used
-        color, caption = get_color_with_info(feature, color_table, default_colors)
+        color, caption = get_color_with_info(feature, color_table, default_colors, record_id=gb_record.id)
         if caption:
             used_color_rules.add((caption, color))
 
@@ -162,21 +168,39 @@ def create_feature_dict(
             locus_count += 1
             locus_id: str = "gene_" + str(locus_count).zfill(9)
             gene_object: GeneObject = create_gene_object(
-                locus_id, feature, color_table, default_colors, genome_length, label_filtering
+                locus_id,
+                feature,
+                color_table,
+                default_colors,
+                genome_length,
+                label_filtering,
+                record_id=gb_record.id,
             )
             feature_dict[locus_id] = gene_object
         elif feature.type == "repeat_region":
             repeat_count += 1
             repeat_id: str = "crt_" + str(repeat_count).zfill(9)
             repeat_object: RepeatObject = create_repeat_object(
-                repeat_id, feature, color_table, default_colors, genome_length, label_filtering
+                repeat_id,
+                feature,
+                color_table,
+                default_colors,
+                genome_length,
+                label_filtering,
+                record_id=gb_record.id,
             )
             feature_dict[repeat_id] = repeat_object
         else:
             feature_count += 1
             feature_id: str = "feature_" + str(feature_count).zfill(9)
             feature_object: FeatureObject = create_feature_object(
-                feature_id, feature, color_table, default_colors, genome_length, label_filtering
+                feature_id,
+                feature,
+                color_table,
+                default_colors,
+                genome_length,
+                label_filtering,
+                record_id=gb_record.id,
             )
             feature_dict[feature_id] = feature_object
 

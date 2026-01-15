@@ -1,0 +1,182 @@
+export const PYTHON_HELPERS = `
+import warnings
+warnings.simplefilter('ignore', SyntaxWarning)
+import tomllib
+from importlib import resources
+import json
+import traceback
+import glob
+import os
+from gbdraw.circular import circular_main
+from gbdraw.linear import linear_main
+
+def get_palettes_json():
+    try:
+        with resources.files("gbdraw.data").joinpath("color_palettes.toml").open("rb") as fh:
+            return json.dumps(tomllib.load(fh))
+    except:
+        return "{}"
+
+def run_gbdraw_wrapper(mode, args):
+    for f in glob.glob("*.svg"):
+        try:
+            os.remove(f)
+        except:
+            pass
+
+    full_args = args + ["-f", "svg"]
+    try:
+        if mode == 'circular':
+            circular_main(full_args)
+        else:
+            linear_main(full_args)
+    except SystemExit as e:
+        if e.code != 0:
+            return json.dumps({"error": f"SystemExit: {e}"})
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
+
+    files = glob.glob("*.svg")
+    if not files:
+        return json.dumps({"error": "No output files generated."})
+    results = []
+    for fname in sorted(files):
+        with open(fname, "r") as f:
+            results.append({"name": fname, "content": f.read()})
+    return json.dumps(results)
+
+def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=14, font_family="Arial", x_offset=0, stroke_color="black", stroke_width=0.5):
+    """Generate SVG elements for a single legend entry"""
+    from xml.sax.saxutils import escape as xml_escape
+
+    # Create color rectangle path with proper stroke (matching original legend entries)
+    half = rect_size / 2
+    rect_d = f"M 0,{-half} L {rect_size},{-half} L {rect_size},{half} L 0,{half} z"
+    rect_svg = f'<path d="{rect_d}" fill="{color}" stroke="{stroke_color}" stroke-width="{stroke_width}" transform="translate({x_offset}, {y_offset})"/>'
+
+    # Create text element
+    x_margin = (22 / 14) * rect_size
+    safe_caption = xml_escape(str(caption))
+    text_svg = f'<text font-size="{font_size}" font-family="{font_family}" dominant-baseline="central" text-anchor="start" transform="translate({x_offset + x_margin}, {y_offset})">{safe_caption}</text>'
+
+    return json.dumps({"rect": rect_svg, "text": text_svg})
+
+def regenerate_definition_svg(gb_path, species=None, strain=None, font_size=18):
+    """Regenerate just the definition group SVG for instant preview"""
+    from Bio import SeqIO
+    from gbdraw.render.groups.circular.definition import DefinitionGroup
+    from gbdraw.canvas import CircularCanvasConfigurator
+    from importlib import resources
+
+    try:
+        # Load default config
+        with resources.files("gbdraw.data").joinpath("config.toml").open("rb") as fh:
+            config_dict = tomllib.load(fh)
+
+        # Override font size if provided
+        if font_size:
+            config_dict["objects"]["definition"]["circular"]["font_size"] = font_size
+
+        # Parse the GenBank file
+        records = list(SeqIO.parse(gb_path, "genbank"))
+        if not records:
+            return json.dumps({"error": "No records found"})
+
+        record = records[0]
+
+        # Create canvas config
+        canvas_config = CircularCanvasConfigurator(
+            output_prefix="temp",
+            config_dict=config_dict,
+            legend="none",
+            gb_record=record,
+        )
+
+        # Create definition group with custom species/strain
+        def_group = DefinitionGroup(
+            gb_record=record,
+            canvas_config=canvas_config,
+            config_dict=config_dict,
+            species=species if species else None,
+            strain=strain if strain else None,
+        )
+
+        # Get the SVG content
+        group = def_group.get_group()
+        # Serialize to string using svgwrite's tostring() method
+        svg_content = group.tostring()
+
+        # Return the definition group ID (with _definition suffix)
+        definition_group_id = def_group.definition_group_id
+        return json.dumps({"svg": svg_content, "definition_group_id": definition_group_id})
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
+
+def extract_features_from_genbank(gb_path):
+    """Extract feature info from GenBank file for UI display"""
+    from Bio import SeqIO
+    from gbdraw.features.colors import compute_feature_hash
+    features = []
+    record_ids = []
+    idx = 0
+    try:
+        for rec_idx, record in enumerate(SeqIO.parse(gb_path, "genbank")):
+            record_id = record.id or f"Record_{rec_idx}"
+            hash_record_id = record.id
+            record_ids.append(record_id)
+            for feat in record.features:
+                if feat.type in ['CDS', 'tRNA', 'rRNA', 'ncRNA', 'misc_RNA', 'tmRNA',
+                                 'repeat_region', 'misc_feature', 'mobile_element',
+                                 'regulatory', 'gene', 'mRNA', 'exon', 'intron']:
+                    # Overall coordinates for display
+                    start = int(feat.location.start)
+                    end = int(feat.location.end)
+                    strand_raw = feat.location.strand
+
+                    try:
+                        svg_id = compute_feature_hash(feat, record_id=hash_record_id)
+                    except Exception:
+                        svg_id = None
+                    if not svg_id:
+                        # Fallback to raw location if coordinate conversion fails
+                        if hasattr(feat.location, 'parts') and feat.location.parts:
+                            first_part = feat.location.parts[0]
+                            hash_start = int(first_part.start)
+                            hash_end = int(first_part.end)
+                            hash_strand = first_part.strand
+                        else:
+                            hash_start = start
+                            hash_end = end
+                            hash_strand = strand_raw
+                        import hashlib
+                        key = f"{feat.type}:{hash_start}:{hash_end}:{hash_strand}"
+                        svg_id = "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+                    qualifiers = {}
+                    for q_key, q_vals in feat.qualifiers.items():
+                        if not q_vals:
+                            continue
+                        try:
+                            q_text = ",".join([str(v) for v in q_vals])
+                        except Exception:
+                            q_text = str(q_vals)
+                        qualifiers[q_key.lower()] = q_text
+                    features.append({
+                        "id": f"f{idx}",  # Unique internal ID for UI tracking
+                        "svg_id": svg_id,  # Matches SVG path id attribute
+                        "record_id": record_id,  # For multi-record filtering
+                        "record_idx": rec_idx,
+                        "type": feat.type,
+                        "start": start,
+                        "end": end,
+                        "strand": "+" if strand_raw == 1 else "-",
+                        "locus_tag": feat.qualifiers.get("locus_tag", [""])[0],
+                        "gene": feat.qualifiers.get("gene", [""])[0],
+                        "product": feat.qualifiers.get("product", [""])[0],
+                        "note": feat.qualifiers.get("note", [""])[0][:50] if feat.qualifiers.get("note") else "",
+                        "qualifiers": qualifiers,
+                    })
+                    idx += 1
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+    return json.dumps({"features": features, "record_ids": record_ids})
+`;

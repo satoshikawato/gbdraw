@@ -67,7 +67,9 @@ gbdraw/
 │   ├── legend/                # Legend generation
 │   ├── render/                # SVG rendering (drawers/, groups/, export)
 │   ├── data/                  # Built-in data (config.toml, color_palettes.toml, fonts)
-│   └── web/                   # Web app assets
+│   └── web/                   # Web app (SPA, no build step)
+│       ├── index.html         # Entry point, templates, CSP, CSS
+│       └── js/                # ES modules (app.js entry, app/ with feature subfolders, services/, utils/)
 ├── tests/                     # Test suite (pytest)
 │   ├── reference_outputs/     # Reference SVG files for comparison
 │   └── utils/                 # Test utilities
@@ -112,6 +114,11 @@ The `gbdraw/render/` module has a two-tier architecture:
 - **drawers/**: Low-level SVG element builders (individual shapes, paths)
 - **groups/**: High-level SVG group assemblers that compose drawers
 - **export.py**: Format conversion (`save_figure()`, `parse_formats()`)
+
+### Web UI Structure
+
+- `gbdraw/web/index.html` is the SPA entry point (HTML/CSS/templates + CSP) and loads `gbdraw/web/js/app.js`.
+- JavaScript is split into ES modules under `gbdraw/web/js/` (`state.js`, `config.js`, `components.js`, `services/`, `utils/`, `app/`). Larger UI modules are grouped under `gbdraw/web/js/app/` subfolders (for example `legend/`, `legend-layout/`, `feature-editor/`) while the top-level `app/*.js` files keep the `create*` entry points.
 
 ## Coding Conventions
 
