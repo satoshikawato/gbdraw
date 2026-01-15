@@ -47,9 +47,7 @@ def run_gbdraw_wrapper(mode, args):
 
 def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=14, font_family="Arial", x_offset=0, stroke_color="black", stroke_width=0.5):
     """Generate SVG elements for a single legend entry"""
-    from svgwrite.path import Path
-    from svgwrite.text import Text
-    import io
+    from xml.sax.saxutils import escape as xml_escape
 
     # Create color rectangle path with proper stroke (matching original legend entries)
     half = rect_size / 2
@@ -58,7 +56,8 @@ def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=
 
     # Create text element
     x_margin = (22 / 14) * rect_size
-    text_svg = f'<text font-size="{font_size}" font-family="{font_family}" dominant-baseline="central" text-anchor="start" transform="translate({x_offset + x_margin}, {y_offset})">{caption}</text>'
+    safe_caption = xml_escape(str(caption))
+    text_svg = f'<text font-size="{font_size}" font-family="{font_family}" dominant-baseline="central" text-anchor="start" transform="translate({x_offset + x_margin}, {y_offset})">{safe_caption}</text>'
 
     return json.dumps({"rect": rect_svg, "text": text_svg})
 
