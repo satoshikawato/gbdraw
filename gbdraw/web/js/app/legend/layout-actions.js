@@ -11,13 +11,19 @@ export const createLegendLayoutActions = ({ state }) => {
 
   const expandCanvasForVerticalLegend = (svg) => {
     if (mode.value !== 'linear') return;
-    if (isCurrentLegendHorizontal(svg)) return;
 
     const legendGroup = svg.getElementById('legend');
     if (!legendGroup) return;
 
+    const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
     const verticalLegend = legendGroup.querySelector('#legend_vertical');
-    if (!verticalLegend || verticalLegend.getAttribute('display') === 'none') return;
+    const hasDualLegends = !!(horizontalLegend && verticalLegend);
+    const isHorizontalLayout = hasDualLegends
+      ? isCurrentLegendHorizontal(svg)
+      : form.legend === 'top' || form.legend === 'bottom';
+    if (isHorizontalLayout) return;
+
+    if (form.legend === 'none') return;
 
     let legendGroupY = 0;
     const legendGroupTransform = legendGroup.getAttribute('transform');
@@ -26,25 +32,31 @@ export const createLegendLayoutActions = ({ state }) => {
       if (match) legendGroupY = parseFloat(match[2]);
     }
 
-    const featureLegend = verticalLegend.querySelector('#feature_legend_v');
-    const pairwiseLegend = getLegendChildById(verticalLegend, 'pairwise_legend');
-
     let legendContentHeight = 0;
-    if (featureLegend) {
-      const featureBBox = featureLegend.getBBox();
-      legendContentHeight = featureBBox.y + featureBBox.height;
-    }
+    if (hasDualLegends) {
+      if (!verticalLegend || verticalLegend.getAttribute('display') === 'none') return;
+      const featureLegend = verticalLegend.querySelector('#feature_legend_v');
+      const pairwiseLegend = getLegendChildById(verticalLegend, 'pairwise_legend');
 
-    if (pairwiseLegend) {
-      const pairwiseTransform = pairwiseLegend.getAttribute('transform');
-      let pairwiseY = 0;
-      if (pairwiseTransform) {
-        const match = pairwiseTransform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
-        if (match) pairwiseY = parseFloat(match[2]);
+      if (featureLegend) {
+        const featureBBox = featureLegend.getBBox();
+        legendContentHeight = featureBBox.y + featureBBox.height;
       }
-      const pairwiseBBox = pairwiseLegend.getBBox();
-      const pairwiseBottom = pairwiseY + pairwiseBBox.y + pairwiseBBox.height;
-      legendContentHeight = Math.max(legendContentHeight, pairwiseBottom);
+
+      if (pairwiseLegend) {
+        const pairwiseTransform = pairwiseLegend.getAttribute('transform');
+        let pairwiseY = 0;
+        if (pairwiseTransform) {
+          const match = pairwiseTransform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
+          if (match) pairwiseY = parseFloat(match[2]);
+        }
+        const pairwiseBBox = pairwiseLegend.getBBox();
+        const pairwiseBottom = pairwiseY + pairwiseBBox.y + pairwiseBBox.height;
+        legendContentHeight = Math.max(legendContentHeight, pairwiseBottom);
+      }
+    } else {
+      const legendBBox = legendGroup.getBBox();
+      legendContentHeight = legendBBox.y + legendBBox.height;
     }
 
     const viewBox = svg.getAttribute('viewBox');
@@ -74,10 +86,19 @@ export const createLegendLayoutActions = ({ state }) => {
 
   const expandCanvasForHorizontalLegend = (svg) => {
     if (mode.value !== 'linear') return;
-    if (!isCurrentLegendHorizontal(svg)) return;
 
     const legendGroup = svg.getElementById('legend');
     if (!legendGroup) return;
+
+    const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+    const verticalLegend = legendGroup.querySelector('#legend_vertical');
+    const hasDualLegends = !!(horizontalLegend && verticalLegend);
+    const isHorizontalLayout = hasDualLegends
+      ? isCurrentLegendHorizontal(svg)
+      : form.legend === 'top' || form.legend === 'bottom';
+    if (!isHorizontalLayout) return;
+
+    if (form.legend === 'none') return;
 
     const viewBox = svg.getAttribute('viewBox');
     if (!viewBox) return;
@@ -110,6 +131,8 @@ export const createLegendLayoutActions = ({ state }) => {
     if (!hasDualLegends) {
       const layout = form.legend === 'top' || form.legend === 'bottom' ? 'horizontal' : 'vertical';
       reflowSingleLegendLayout(svg, layout);
+      expandCanvasForVerticalLegend(svg);
+      expandCanvasForHorizontalLegend(svg);
       return;
     }
 
@@ -497,9 +520,6 @@ export const createLegendLayoutActions = ({ state }) => {
     const featureLegendGroup = legendGroup.querySelector('#feature_legend') || legendGroup;
     const isRootLegendGroup = featureLegendGroup === legendGroup;
     const pairwiseLegend = legendGroup.querySelector('#pairwise_legend');
-    const pairwiseTransform = pairwiseLegend
-      ? parseTransform(pairwiseLegend.getAttribute('transform'))
-      : { x: 0, y: 0 };
 
     const textElements = Array.from(featureLegendGroup.querySelectorAll('text')).filter((el) => {
       if (!pairwiseLegend) return true;
@@ -524,11 +544,17 @@ export const createLegendLayoutActions = ({ state }) => {
 
     const lineHeight = (24 / 14) * rectSize;
     const textXOffset = (22 / 14) * rectSize;
-    const featureOffset = isRootLegendGroup
-      ? { x: 0, y: 0 }
-      : parseTransformXY(featureLegendGroup.getAttribute('transform'));
+
+    if (!isRootLegendGroup) {
+      featureLegendGroup.setAttribute('transform', 'translate(0, 0)');
+    }
+    if (pairwiseLegend) {
+      pairwiseLegend.setAttribute('transform', 'translate(0, 0)');
+    }
+
+    const featureOffset = { x: 0, y: 0 };
     const pairwiseBBox = pairwiseLegend ? pairwiseLegend.getBBox() : null;
-    const pairwiseContentOffsetY = pairwiseBBox ? pairwiseBBox.y - pairwiseTransform.y : 0;
+    const pairwiseContentOffsetY = pairwiseBBox ? pairwiseBBox.y : 0;
     const pairwiseWidth = pairwiseBBox ? pairwiseBBox.width : 0;
 
     const entries = textElements.map((t) => {
@@ -648,17 +674,30 @@ export const createLegendLayoutActions = ({ state }) => {
 
       let pairwiseX = featureX;
       let pairwiseY = featureY;
+      let featureShiftX = 0;
+      let featureShiftY = 0;
 
       if (layout === 'horizontal') {
-        const yOffset = Math.max((featureHeight - effectivePairwiseBBox.height) / 2, 0);
+        const heightDiff = effectivePairwiseBBox.height - featureHeight;
+        if (heightDiff > 0 && !isRootLegendGroup) {
+          featureShiftY = heightDiff / 2;
+        } else if (heightDiff < 0) {
+          pairwiseY += (-heightDiff) / 2;
+        }
         pairwiseX = featureX + featureWidth + textXOffset;
-        pairwiseY = featureY + yOffset;
       } else {
-        const xOffset = Math.max((featureWidth - effectivePairwiseBBox.width) / 2, 0);
-        pairwiseX = featureX + xOffset;
+        const widthDiff = effectivePairwiseBBox.width - featureWidth;
+        if (widthDiff > 0 && !isRootLegendGroup) {
+          featureShiftX = widthDiff / 2;
+        } else if (widthDiff < 0) {
+          pairwiseX += (-widthDiff) / 2;
+        }
         pairwiseY = featureY + featureHeight + lineHeight / 2;
       }
 
+      if (!isRootLegendGroup) {
+        featureLegendGroup.setAttribute('transform', `translate(${featureShiftX}, ${featureShiftY})`);
+      }
       const adjustedPairwiseY = pairwiseY - pairwiseContentOffsetY;
       pairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${adjustedPairwiseY})`);
     }
