@@ -227,6 +227,8 @@ export const createLegendRepositionActions = ({
       const wasHorizontal = isHorizontalLayout(generatedPos);
       const nowHorizontal = isHorizontalLayout(newPosition);
       debugLog('layout:', { generatedPos, wasHorizontal, nowHorizontal });
+      const prevLegendPos = oldPosition || generatedLegendPosition.value || generatedPos;
+      const wasHorizontalPos = isHorizontalLayout(prevLegendPos);
       const prevHorizontalLegendHeight = linearBaseConfig.value.horizontalLegendHeight || legendHeight;
 
       if (legendGroup) {
@@ -239,6 +241,10 @@ export const createLegendRepositionActions = ({
           const verticalLegend = legendGroup.querySelector('#legend_vertical');
           const hasDualLegends = !!(horizontalLegend && verticalLegend);
           debugLog('dual legends found:', { horizontal: !!horizontalLegend, vertical: !!verticalLegend });
+
+          if (!nowHorizontal && wasHorizontalPos) {
+            legendGroup.setAttribute('transform', 'translate(0, 0)');
+          }
 
           if (hasDualLegends) {
             debugLog('Horizontal legend innerHTML (first 500 chars):', horizontalLegend.innerHTML.substring(0, 500));
