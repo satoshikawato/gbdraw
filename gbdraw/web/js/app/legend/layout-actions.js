@@ -2,6 +2,7 @@ import {
   getAllFeatureLegendGroups,
   getLegendChildById,
   isCurrentLegendHorizontal,
+  parseTransform,
   parseTransformXY
 } from './utils.js';
 
@@ -465,6 +466,9 @@ export const createLegendLayoutActions = ({ state }) => {
     const featureLegendGroup = legendGroup.querySelector('#feature_legend') || legendGroup;
     const isRootLegendGroup = featureLegendGroup === legendGroup;
     const pairwiseLegend = legendGroup.querySelector('#pairwise_legend');
+    const pairwiseTransform = pairwiseLegend
+      ? parseTransform(pairwiseLegend.getAttribute('transform'))
+      : { x: 0, y: 0 };
 
     const textElements = Array.from(featureLegendGroup.querySelectorAll('text')).filter((el) => {
       if (!pairwiseLegend) return true;
@@ -493,6 +497,7 @@ export const createLegendLayoutActions = ({ state }) => {
       ? { x: 0, y: 0 }
       : parseTransformXY(featureLegendGroup.getAttribute('transform'));
     const pairwiseBBox = pairwiseLegend ? pairwiseLegend.getBBox() : null;
+    const pairwiseContentOffsetY = pairwiseBBox ? pairwiseBBox.y - pairwiseTransform.y : 0;
     const pairwiseWidth = pairwiseBBox ? pairwiseBBox.width : 0;
 
     const entries = textElements.map((t) => {
@@ -623,7 +628,8 @@ export const createLegendLayoutActions = ({ state }) => {
         pairwiseY = featureY + featureHeight + lineHeight / 2;
       }
 
-      pairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${pairwiseY})`);
+      const adjustedPairwiseY = pairwiseY - pairwiseContentOffsetY;
+      pairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${adjustedPairwiseY})`);
     }
 
     const bbox = legendGroup.getBBox();
