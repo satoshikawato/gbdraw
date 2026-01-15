@@ -157,7 +157,7 @@
                             </div>
                             <div v-if="idx < linearSeqs.length - 1" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1"><i class="ph ph-arrows-down-up"></i> Compare to next (BLAST)</div>
-                                <file-uploader label="BLAST TSV" accept=".txt,.tsv,.csv" v-model="seq.blast"></file-uploader>
+                                <file-uploader label="BLAST TSV" v-model="seq.blast"></file-uploader>
                             </div>
                         </div>
                         <div class="flex gap-2">
