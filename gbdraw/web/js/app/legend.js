@@ -333,77 +333,13 @@ json.dumps({"width": width})
         group.appendChild(entryGroup);
       }
 
-      const verticalLegend = legendGroup.querySelector('#legend_vertical');
-      if (verticalLegend) {
-        const vFeatureLegend = verticalLegend.querySelector('#feature_legend_v');
-        const vPairwiseLegend = verticalLegend.querySelector('#pairwise_legend');
-
-        if (vFeatureLegend && vPairwiseLegend) {
-          let maxFeatureY = 0;
-          const featureTexts = vFeatureLegend.querySelectorAll('text');
-          featureTexts.forEach((el) => {
-            const pos = parseTransformXY(el.getAttribute('transform'));
-            if (pos.y > maxFeatureY) maxFeatureY = pos.y;
-          });
-
-          const newPairwiseY = maxFeatureY + lineMargin + lineMargin / 2;
-
-          const currentTransform = vPairwiseLegend.getAttribute('transform');
-          let pairwiseX = 0;
-          if (currentTransform) {
-            const match = currentTransform.match(/translate\(\s*([\d.-]+)\s*,/);
-            if (match) pairwiseX = parseFloat(match[1]);
-          }
-
-          vPairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${newPairwiseY})`);
-          console.log(`Repositioned vertical pairwise legend to y=${newPairwiseY}`);
-        }
+      const hasDualLegends =
+        !!legendGroup.querySelector('#legend_horizontal') && !!legendGroup.querySelector('#legend_vertical');
+      if (hasDualLegends) {
+        reflowDualLegendLayout(svg);
+      } else {
+        updatePairwiseLegendPositions(svg);
       }
-
-      const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
-      if (horizontalLegend) {
-        const hFeatureLegend = horizontalLegend.querySelector('#feature_legend_h');
-        const hPairwiseLegend = horizontalLegend.querySelector('#pairwise_legend');
-
-        if (hFeatureLegend && hPairwiseLegend) {
-          let minFeatureY = Infinity,
-            maxFeatureY = -Infinity;
-          const featureTexts = hFeatureLegend.querySelectorAll('text');
-          featureTexts.forEach((el) => {
-            const pos = parseTransformXY(el.getAttribute('transform'));
-            if (pos.y < minFeatureY) minFeatureY = pos.y;
-            if (pos.y > maxFeatureY) maxFeatureY = pos.y;
-          });
-
-          if (minFeatureY !== Infinity && maxFeatureY !== -Infinity) {
-            const featureHeight = maxFeatureY - minFeatureY + lineMargin;
-
-            const pairwiseBBox = hPairwiseLegend.getBBox();
-            const pairwiseHeight = pairwiseBBox.height;
-
-            const currentTransform = hPairwiseLegend.getAttribute('transform');
-            let pairwiseX = 0,
-              currentPairwiseY = 0;
-            if (currentTransform) {
-              const match = currentTransform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
-              if (match) {
-                pairwiseX = parseFloat(match[1]);
-                currentPairwiseY = parseFloat(match[2]);
-              }
-            }
-
-            let newPairwiseY = currentPairwiseY;
-            if (featureHeight > pairwiseHeight) {
-              newPairwiseY = (featureHeight - pairwiseHeight) / 2;
-            }
-
-            hPairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${newPairwiseY})`);
-            console.log(`Repositioned horizontal pairwise legend to y=${newPairwiseY}`);
-          }
-        }
-      }
-
-      expandCanvasForVerticalLegend(svg);
 
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
@@ -726,7 +662,182 @@ json.dumps({"width": width})
     expandCanvasForVerticalLegend(svg);
   };
 
+  const reflowDualLegendLayout = (svg) => {
+    const legendGroup = svg.getElementById('legend');
+    if (!legendGroup) return;
+
+    const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+    const verticalLegend = legendGroup.querySelector('#legend_vertical');
+    if (!horizontalLegend || !verticalLegend) return;
+
+    const viewBox = svg.getAttribute('viewBox');
+    let baseWidth = 800;
+    if (viewBox) {
+      const parts = viewBox.split(/\s+/).map(parseFloat);
+      if (parts.length === 4) baseWidth = parts[2];
+    }
+
+    const horizontalViewBox = svg.getAttribute('data-horizontal-viewbox');
+    let horizontalWidth = baseWidth;
+    if (horizontalViewBox) {
+      const parts = horizontalViewBox.split(/\s+/).map(parseFloat);
+      if (parts.length === 4) horizontalWidth = parts[2];
+    }
+
+    const layoutLegendGroup = (legend, layout, maxWidth) => {
+      const featureGroup =
+        layout === 'horizontal'
+          ? legend.querySelector('#feature_legend_h')
+          : legend.querySelector('#feature_legend_v');
+      if (!featureGroup) return;
+
+      const pairwiseLegend = legend.querySelector('#pairwise_legend');
+
+      featureGroup.setAttribute('transform', 'translate(0, 0)');
+      if (pairwiseLegend) {
+        pairwiseLegend.setAttribute('transform', 'translate(0, 0)');
+      }
+
+      let rectSize = 14;
+      const firstColorRect = featureGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
+      if (firstColorRect) {
+        const d = firstColorRect.getAttribute('d');
+        if (d) {
+          const lMatch = d.match(/L\s+([\d.]+),/);
+          if (lMatch) rectSize = parseFloat(lMatch[1]);
+        }
+      }
+
+      const lineHeight = (24 / 14) * rectSize;
+      const textXOffset = (22 / 14) * rectSize;
+
+      const texts = Array.from(featureGroup.querySelectorAll('text'));
+      const rects = Array.from(featureGroup.querySelectorAll('path')).filter((r) => {
+        const fill = r.getAttribute('fill');
+        return fill && fill !== 'none' && !fill.startsWith('url(');
+      });
+
+      const entries = texts.map((t) => {
+        const pos = parseTransformXY(t.getAttribute('transform'));
+        const expectedRectX = pos.x - textXOffset;
+        let matchedRect = null;
+        let bestDistance = Infinity;
+        for (const r of rects) {
+          const rectPos = parseTransformXY(r.getAttribute('transform'));
+          if (Math.abs(rectPos.y - pos.y) < 1) {
+            const distance = Math.abs(rectPos.x - expectedRectX);
+            if (distance < textXOffset && distance < bestDistance) {
+              bestDistance = distance;
+              matchedRect = r;
+            }
+          }
+        }
+        return { text: t, rect: matchedRect, x: pos.x, y: pos.y };
+      });
+
+      if (layout === 'horizontal') {
+        entries.sort((a, b) => {
+          if (Math.abs(a.y - b.y) < 1) return a.x - b.x;
+          return a.y - b.y;
+        });
+
+        let newX = textXOffset;
+        let newY = rectSize / 2;
+        const wrapWidth = maxWidth || baseWidth;
+
+        entries.forEach((entry) => {
+          const textBBox = entry.text.getBBox();
+          const entryWidth = rectSize + textXOffset + textBBox.width + textXOffset;
+
+          if (newX + entryWidth > wrapWidth && newX > textXOffset) {
+            newX = textXOffset;
+            newY += lineHeight;
+          }
+
+          entry.text.setAttribute('transform', `translate(${newX}, ${newY})`);
+          if (entry.rect) {
+            entry.rect.setAttribute('transform', `translate(${newX - textXOffset}, ${newY})`);
+          }
+
+          newX += entryWidth;
+        });
+      } else {
+        entries.sort((a, b) => a.y - b.y);
+
+        let newY = rectSize / 2;
+        entries.forEach((entry) => {
+          entry.text.setAttribute('transform', `translate(${textXOffset}, ${newY})`);
+          if (entry.rect) {
+            entry.rect.setAttribute('transform', `translate(0, ${newY})`);
+          }
+          newY += lineHeight;
+        });
+      }
+
+      const featureBBox = featureGroup.getBBox();
+      const featureWidth = featureBBox.width || 0;
+      let featureHeight = featureBBox.height || 0;
+      if (featureHeight === 0) {
+        featureHeight = layout === 'horizontal' ? lineHeight : rectSize / 2;
+      }
+
+      if (pairwiseLegend) {
+        const pairwiseBBox = pairwiseLegend.getBBox();
+        const pairwiseWidth = pairwiseBBox.width || 0;
+        const pairwiseHeight = pairwiseBBox.height || 0;
+
+        if (layout === 'horizontal') {
+          const featureYOffset = pairwiseHeight > featureHeight ? (pairwiseHeight - featureHeight) / 2 : 0;
+          const pairwiseYOffset = featureHeight > pairwiseHeight ? (featureHeight - pairwiseHeight) / 2 : 0;
+          if (featureYOffset > 0) {
+            featureGroup.setAttribute('transform', `translate(0, ${featureYOffset})`);
+          }
+          const pairwiseX = featureWidth + textXOffset;
+          pairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${pairwiseYOffset})`);
+        } else {
+          const featureXOffset = pairwiseWidth > featureWidth ? (pairwiseWidth - featureWidth) / 2 : 0;
+          const pairwiseXOffset = featureWidth > pairwiseWidth ? (featureWidth - pairwiseWidth) / 2 : 0;
+          if (featureXOffset > 0) {
+            featureGroup.setAttribute('transform', `translate(${featureXOffset}, 0)`);
+          }
+          const pairwiseY = featureHeight + lineHeight / 2;
+          pairwiseLegend.setAttribute('transform', `translate(${pairwiseXOffset}, ${pairwiseY})`);
+        }
+      }
+    };
+
+    const horizontalDisplay = horizontalLegend.getAttribute('display');
+    const verticalDisplay = verticalLegend.getAttribute('display');
+    horizontalLegend.removeAttribute('display');
+    verticalLegend.removeAttribute('display');
+
+    layoutLegendGroup(horizontalLegend, 'horizontal', horizontalWidth);
+    layoutLegendGroup(verticalLegend, 'vertical', baseWidth);
+
+    if (horizontalDisplay !== null) {
+      horizontalLegend.setAttribute('display', horizontalDisplay);
+    } else {
+      horizontalLegend.removeAttribute('display');
+    }
+
+    if (verticalDisplay !== null) {
+      verticalLegend.setAttribute('display', verticalDisplay);
+    } else {
+      verticalLegend.removeAttribute('display');
+    }
+
+    expandCanvasForVerticalLegend(svg);
+  };
+
   const compactLegendEntries = (svg) => {
+    const legendGroup = svg.getElementById('legend');
+    const hasDualLegends =
+      !!legendGroup?.querySelector('#legend_horizontal') && !!legendGroup?.querySelector('#legend_vertical');
+    if (hasDualLegends) {
+      reflowDualLegendLayout(svg);
+      return;
+    }
+
     const targetGroups = getAllFeatureLegendGroups(svg);
     if (targetGroups.length === 0) return;
 
