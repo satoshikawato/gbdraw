@@ -143,7 +143,7 @@ def precompute_used_color_rules(
     color_map: dict,
     default_color_map: dict,
     selected_features_set: set,
-) -> set:
+) -> tuple[set, set]:
     """
     Pre-compute which color rules will be used for a set of records.
 
@@ -156,21 +156,26 @@ def precompute_used_color_rules(
         selected_features_set: Set of feature types to consider
 
     Returns:
-        Set of (caption, color) tuples for rules that match features
+        (used_rules, default_used_features)
+        used_rules: Set of (caption, color) tuples for rules that match features
+        default_used_features: Set of feature types that fell back to default color
     """
     from Bio.SeqRecord import SeqRecord
     if isinstance(records, SeqRecord):
         records = [records]
 
     used_rules: set = set()
+    default_used_features: set = set()
     for record in records:
         for feature in record.features:
             if feature.type not in selected_features_set:
                 continue
             color, caption = get_color_with_info(feature, color_map, default_color_map, record_id=record.id)
-            if caption:
+            if caption is None:
+                default_used_features.add(feature.type)
+            elif caption:
                 used_rules.add((caption, color))
-    return used_rules
+    return used_rules, default_used_features
 
 
 __all__ = ["get_color", "get_color_with_info", "precompute_used_color_rules", "preprocess_color_tables"]

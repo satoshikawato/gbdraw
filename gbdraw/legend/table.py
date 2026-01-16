@@ -14,6 +14,7 @@ def prepare_legend_table(
     blast_config=None,
     has_blast: bool = False,
     used_color_rules: Optional[Set[Tuple[str, str]]] = None,
+    default_used_features: Optional[Set[str]] = None,
 ):
     """
     Prepare the legend table for the diagram.
@@ -23,6 +24,9 @@ def prepare_legend_table(
             matched during feature creation. If provided, only these rules will be
             included in the legend. If None, all rules for present feature types
             will be included (legacy behavior).
+        default_used_features: Optional set of feature types that fell back to
+            default colors. Used to decide whether to include "other X" entries
+            when specific rules exist.
     """
     legend_table = dict()
     color_table: Optional[DataFrame] = feature_config.color_table
@@ -42,6 +46,7 @@ def prepare_legend_table(
     skew_stroke_width: float = skew_config.stroke_width
     dinucleotide = gc_config.dinucleotide
     feature_specific_colors = dict()
+    default_used_features = default_used_features or set()
     if color_table is not None and not color_table.empty:
         for _, row in color_table.iterrows():
             feature_type = row["feature_type"]
@@ -65,6 +70,11 @@ def prepare_legend_table(
                     }
             # Only add "other X" entry if at least one specific rule was used
             if has_matching_rules:
+                allow_other_entry = False
+                if used_color_rules is None:
+                    allow_other_entry = True
+                elif selected_feature in default_used_features:
+                    allow_other_entry = True
                 if selected_feature == "CDS":
                     new_selected_key_name = "other proteins"
                 else:
@@ -72,12 +82,13 @@ def prepare_legend_table(
                 feature_fill_color = default_colors[default_colors["feature_type"] == selected_feature][
                     "color"
                 ].values[0]
-                legend_table[new_selected_key_name] = {
-                    "type": "solid",
-                    "fill": feature_fill_color,
-                    "stroke": block_stroke_color,
-                    "width": block_stroke_width,
-                }
+                if allow_other_entry:
+                    legend_table[new_selected_key_name] = {
+                        "type": "solid",
+                        "fill": feature_fill_color,
+                        "stroke": block_stroke_color,
+                        "width": block_stroke_width,
+                    }
             elif used_color_rules is None:
                 # Legacy behavior: add "other X" even if no rules matched
                 if selected_feature == "CDS":
