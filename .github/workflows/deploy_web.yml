@@ -37,10 +37,10 @@ jobs:
       - name: Prepare Web Directory
         run: |
           mkdir public
-          # Copy the index.html file
-          cp gbdraw/web/index.html public/
-          # Copy the JavaScript modules
-          cp -r gbdraw/web/js public/js
+          # Copy the web app assets
+          cp -r gbdraw/web/* public/
+          # Remove any prebundled wheels from the repo copy
+          rm -f public/*.whl
           # Copy the built wheel file
           cp dist/*.whl public/
           # Create CNAME file for custom domain
@@ -52,8 +52,8 @@ jobs:
           WHEEL_NAME=$(basename dist/*.whl)
           echo "Generated Wheel: $WHEEL_NAME"
           
-          # Update the wheel filename in index.html
-          sed -i "s/const GBDRAW_WHEEL_NAME = \".*\";/const GBDRAW_WHEEL_NAME = \"$WHEEL_NAME\";/" public/index.html
+          # Update the wheel filename in the JS config
+          sed -i "s/const GBDRAW_WHEEL_NAME = \".*\";/const GBDRAW_WHEEL_NAME = \"$WHEEL_NAME\";/" public/js/config.js
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
