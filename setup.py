@@ -23,6 +23,8 @@ setup(
             'web/js/*.js',
             'web/js/services/*.js',
             'web/js/utils/*.js',
+            'web/presets/*.txt',
+            'web/presets/*.tsv',
         ]
     },
     include_package_data=True,

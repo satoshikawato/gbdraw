@@ -1,0 +1,16 @@
+CDS	function	unknown function	#AAAAAA	Unknown function
+CDS	function	other	#4deeea	Other functions
+CDS	function	tail	#74ee15	Tail
+CDS	function	transcription regulation	#ffe700	Transcription regulation
+CDS	function	DNA	#f000ff	DNA/RNA & nucleotide metabolism
+CDS	function	lysis	#001eff	Lysis
+CDS	function	moron	#8900ff	Moron, auxiliary metabolic gene & host takeover
+CDS	function	integration and excision	#E0B0FF	Integration & excision
+CDS	function	head and packaging	#ff008d	Head & packaging
+CDS	function	connector	#5A5A5A	Connector
+CDS	phrog	vfdb	#FF0000	Virulence factor/AMR
+CDS	phrog	card	#FF0000	Virulence factor/AMR
+CDS	phrog	acr	#FF0000	Virulence factor/AMR
+CDS	phrog	defensefinder	#FF0000	Virulence factor/AMR
+CDS	vfdb_short_name	.+	#FF0000	Virulence factor/AMR
+CDS	AMR_Gene_Family	.+	#FF0000	Virulence factor/AMR

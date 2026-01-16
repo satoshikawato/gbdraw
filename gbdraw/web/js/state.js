@@ -196,6 +196,20 @@ const newSpecRule = reactive({
   color: '#ff0000',
   cap: ''
 });
+const specificRulePresets = [
+  {
+    id: 'pharokka',
+    label: 'Pharokka (function/phrog/vfdb)',
+    path: 'presets/pharokka_color_table.txt'
+  },
+  {
+    id: 'bakta',
+    label: 'Bakta (COG via note)',
+    path: 'presets/bakta_color_table.txt'
+  }
+];
+const selectedSpecificPreset = ref('');
+const specificRulePresetLoading = ref(false);
 const downloadDpi = ref(300);
 
 // Feature Color Editor state
@@ -438,6 +452,9 @@ export const state = {
   manualWhitelist,
   manualSpecificRules,
   newSpecRule,
+  specificRulePresets,
+  selectedSpecificPreset,
+  specificRulePresetLoading,
   downloadDpi,
   extractedFeatures,
   featureRecordIds,
