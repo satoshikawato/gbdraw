@@ -297,6 +297,20 @@
                                     <button v-if="manualSpecificRules.length > 0" @click="clearAllSpecificRules" class="text-[10px] text-red-500 hover:text-red-700 hover:underline"><i class="ph ph-trash"></i> Clear All</button>
                                 </div>
 
+                                <div class="mb-3">
+                                    <label class="text-[9px] font-bold text-slate-500 block mb-1">PRESET SCHEMES <help-tip text="Load a predefined -t table and replace existing rules."></help-tip></label>
+                                    <div class="flex items-center gap-2">
+                                        <select v-model="selectedSpecificPreset" class="form-input text-xs h-7 flex-grow">
+                                            <option disabled value="">Select preset...</option>
+                                            <option v-for="p in specificRulePresets" :value="p.id">{{ p.label }}</option>
+                                        </select>
+                                        <button @click="applySpecificRulePreset" class="btn btn-secondary text-xs h-7 px-3" :disabled="!selectedSpecificPreset || specificRulePresetLoading">
+                                            <span v-if="specificRulePresetLoading">Applying...</span>
+                                            <span v-else>Apply</span>
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <div class="space-y-1 mb-3">
                                     <div v-for="(rule, i) in manualSpecificRules" :key="i" class="flex items-center gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
                                         <span class="w-12 font-bold truncate" :title="rule.feat">{{rule.feat}}</span>

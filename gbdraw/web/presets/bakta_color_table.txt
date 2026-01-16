@@ -1,0 +1,26 @@
+CDS	note	^COG:A$	#c5000b	RNA processing and modification
+CDS	note	^COG:B$	#6a3d9a	Chromatin structure and dynamics
+CDS	note	^COG:C$	#bebada	Energy production and conversion
+CDS	note	^COG:D$	#ff7f00	Cell cycle control, cell division, chromosome partitioning
+CDS	note	^COG:E$	#ffffb3	Amino acid transport and metabolism
+CDS	note	^COG:F$	#e31a1c	Nucleotide transport and metabolism
+CDS	note	^COG:G$	#fb8072	Carbohydrate transport and metabolism
+CDS	note	^COG:H$	#b2df8a	Coenzyme transport and metabolism
+CDS	note	^COG:I$	#ccebc5	Lipid transport and metabolism
+CDS	note	^COG:J$	#a6cee3	Translation, ribosomal structure and biogenesis
+CDS	note	^COG:K$	#b3de69	Transcription
+CDS	note	^COG:L$	#80b1d3	Replication, recombination and repair
+CDS	note	^COG:M$	#bc80bd	Cell wall/membrane/envelope biogenesis
+CDS	note	^COG:N$	#cab2d6	Cell motility
+CDS	note	^COG:O$	#33a02c	Posttranslational modification, protein turnover, chaperones
+CDS	note	^COG:P$	#fccde5	Inorganic ion transport and metabolism
+CDS	note	^COG:Q$	#1f78b4	Secondary metabolites biosynthesis, transport and catabolism
+CDS	note	^COG:R$	#8dd3c7	General function prediction only
+CDS	note	^COG:S$	#222222	Function unknown
+CDS	note	^COG:T$	#fdb462	Signal transduction mechanisms
+CDS	note	^COG:U$	#fdbf6f	Intracellular trafficking, secretion, and vesicular transport
+CDS	note	^COG:V$	#fb9a99	Defense mechanisms
+CDS	note	^COG:W$	#0084d1	Extracellular structures
+CDS	note	^COG:X$	#d9d9d9	Mobilome: prophages, transposons
+CDS	note	^COG:Y$	#ffff38	Nuclear structure
+CDS	note	^COG:Z$	#ffff99	Cytoskeleton

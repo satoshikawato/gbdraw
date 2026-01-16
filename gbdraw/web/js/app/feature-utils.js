@@ -11,24 +11,35 @@ export const getFeatureCaption = (feature) => {
 export const getFeatureQualifierValue = (feat, qual) => {
   if (!qual) return null;
   const key = qual.toLowerCase();
+  if (feat.qualifiers && Object.prototype.hasOwnProperty.call(feat.qualifiers, key)) {
+    return feat.qualifiers[key];
+  }
   if (key === 'product') return feat.product || null;
   if (key === 'gene') return feat.gene || null;
   if (key === 'locus_tag') return feat.locus_tag || null;
   if (key === 'note') return feat.note || null;
-  return feat.qualifiers && Object.prototype.hasOwnProperty.call(feat.qualifiers, key)
-    ? feat.qualifiers[key]
-    : null;
+  return null;
 };
 
 export const matchRuleValue = (value, ruleVal, strictEquals = false) => {
   if (!value || !ruleVal) return false;
-  try {
-    const regex = new RegExp(ruleVal, 'i');
-    return regex.test(value);
-  } catch {
-    if (strictEquals) return value === ruleVal;
-    return value.toLowerCase().includes(String(ruleVal).toLowerCase());
+  const values = Array.isArray(value) ? value : [value];
+  const needle = String(ruleVal);
+  for (const item of values) {
+    if (item === null || item === undefined) continue;
+    const text = String(item);
+    try {
+      const regex = new RegExp(needle, 'i');
+      if (regex.test(text)) return true;
+    } catch {
+      if (strictEquals) {
+        if (text === needle) return true;
+      } else if (text.toLowerCase().includes(needle.toLowerCase())) {
+        return true;
+      }
+    }
   }
+  return false;
 };
 
 export const ruleMatchesFeature = (feat, rule) => {

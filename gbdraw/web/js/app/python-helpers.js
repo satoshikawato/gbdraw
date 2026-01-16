@@ -156,10 +156,10 @@ def extract_features_from_genbank(gb_path):
                         if not q_vals:
                             continue
                         try:
-                            q_text = ",".join([str(v) for v in q_vals])
+                            q_list = [str(v) for v in q_vals]
                         except Exception:
-                            q_text = str(q_vals)
-                        qualifiers[q_key.lower()] = q_text
+                            q_list = [str(q_vals)]
+                        qualifiers[q_key.lower()] = q_list
                     features.append({
                         "id": f"f{idx}",  # Unique internal ID for UI tracking
                         "svg_id": svg_id,  # Matches SVG path id attribute

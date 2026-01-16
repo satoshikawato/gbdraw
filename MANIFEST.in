@@ -3,4 +3,5 @@ include gbdraw/data/config.toml
 include gbdraw/data/*.ttf
 include gbdraw/web/index.html
 recursive-include gbdraw/web/js *.js
+recursive-include gbdraw/web/presets *.txt *.tsv
 

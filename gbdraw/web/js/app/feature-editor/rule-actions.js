@@ -1,4 +1,5 @@
 import { resolveColorToHex } from '../color-utils.js';
+import { parseSpecificRules } from '../file-imports.js';
 import { ruleMatchesFeature } from '../feature-utils.js';
 
 export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => {
@@ -9,13 +10,17 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     newColorVal,
     manualSpecificRules,
     newSpecRule,
+    specificRulePresets,
+    selectedSpecificPreset,
+    specificRulePresetLoading,
     manualPriorityRules,
     newPriorityRule,
     adv,
     newFeatureToAdd,
     extractedFeatures,
     featureColorOverrides,
-    addedLegendCaptions
+    addedLegendCaptions,
+    fileLegendCaptions
   } = state;
 
   const { addLegendEntry, removeLegendEntry, extractLegendEntries } = legendActions;
@@ -94,6 +99,62 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
 
     manualSpecificRules.splice(0);
     extractLegendEntries();
+  };
+
+  const applySpecificRulePreset = async () => {
+    if (specificRulePresetLoading.value) return;
+    const presetId = selectedSpecificPreset.value;
+    if (!presetId) return;
+    const preset = specificRulePresets.find((entry) => entry.id === presetId);
+    if (!preset) {
+      alert('Unknown preset selected.');
+      return;
+    }
+
+    specificRulePresetLoading.value = true;
+    try {
+      const response = await fetch(preset.path, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(`Preset fetch failed: ${response.status}`);
+      }
+      const text = await response.text();
+      const { rules, rulesWithCaptions } = parseSpecificRules(text);
+
+      const captionsToRemove = manualSpecificRules.filter((rule) => rule.cap).map((rule) => rule.cap);
+      for (const cap of captionsToRemove) {
+        await removeLegendEntry(cap);
+        addedLegendCaptions.value.delete(cap);
+        fileLegendCaptions.value.delete(cap);
+      }
+
+      manualSpecificRules.splice(0);
+      rules.forEach((rule) => manualSpecificRules.push(rule));
+
+      if (presetId === 'bakta') {
+        currentColors.value = { ...currentColors.value, CDS: '#cccccc' };
+        adv.legend_box_size = 12;
+        adv.legend_font_size = 12;
+      }
+
+      if (rulesWithCaptions.length > 0 && pyodideReady.value) {
+        await nextTick();
+        for (const rule of rulesWithCaptions) {
+          const actualCaption = await addLegendEntry(rule.cap, rule.color);
+          if (actualCaption && typeof actualCaption === 'string') {
+            addedLegendCaptions.value.add(actualCaption);
+            fileLegendCaptions.value.add(actualCaption);
+          }
+        }
+        extractLegendEntries();
+      } else {
+        extractLegendEntries();
+      }
+    } catch (e) {
+      console.error('Failed to load specific rule preset:', e);
+      alert('Failed to load preset. Please check the preset file and format.');
+    } finally {
+      specificRulePresetLoading.value = false;
+    }
   };
 
   const addFeature = () => {
@@ -185,6 +246,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     addFeature,
     addPriorityRule,
     addSpecificRule,
+    applySpecificRulePreset,
     canEditFeatureColor,
     clearAllSpecificRules,
     countFeaturesMatchingRule,

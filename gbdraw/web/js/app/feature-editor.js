@@ -19,6 +19,7 @@ export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions
     addPriorityRule: ruleActions.addPriorityRule,
     addFeature: ruleActions.addFeature,
     addSpecificRule: ruleActions.addSpecificRule,
+    applySpecificRulePreset: ruleActions.applySpecificRulePreset,
     clearAllSpecificRules: ruleActions.clearAllSpecificRules,
     getFeatureColor: ruleActions.getFeatureColor,
     canEditFeatureColor: ruleActions.canEditFeatureColor,

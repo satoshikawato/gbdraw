@@ -633,6 +633,24 @@ export const createLegendRepositionActions = ({
       'GC skew (+)': 'skew_high',
       'GC skew (-)': 'skew_low'
     };
+    const resolveOtherLegendColor = (legendKey, palette) => {
+      if (!legendKey) return null;
+      const lowerKey = legendKey.toLowerCase();
+      if (lowerKey === 'other proteins') return palette.CDS || null;
+      if (!lowerKey.startsWith('other ')) return null;
+      let raw = legendKey.slice(6).trim();
+      if (!raw) return null;
+      if (raw.toLowerCase() === 'proteins') return palette.CDS || null;
+      if (raw.endsWith('s')) raw = raw.slice(0, -1);
+      return palette[raw] || null;
+    };
+    const resolveLegendColor = (legendKey, palette) => {
+      if (!legendKey) return null;
+      const colorKey = keyToColorKey[legendKey];
+      if (colorKey && palette[colorKey]) return palette[colorKey];
+      if (palette[legendKey]) return palette[legendKey];
+      return resolveOtherLegendColor(legendKey, palette);
+    };
     featureLegendGroups.forEach((featureLegendGroup) => {
       if (!featureLegendGroup) return;
 
@@ -644,8 +662,7 @@ export const createLegendRepositionActions = ({
           if (!legendKey) return;
           if (legendColorOverrides[legendKey]) return;
 
-          const colorKey = keyToColorKey[legendKey];
-          const newColor = colorKey ? colors[colorKey] : colors[legendKey];
+          const newColor = resolveLegendColor(legendKey, colors);
           if (!newColor) return;
 
           const paths = entryGroup.querySelectorAll('path');
@@ -669,8 +686,7 @@ export const createLegendRepositionActions = ({
           const textContent = textEl.textContent?.trim();
           if (!textContent) return;
           if (legendColorOverrides[textContent]) return;
-          const colorKey = keyToColorKey[textContent];
-          const newColor = colorKey ? colors[colorKey] : colors[textContent];
+          const newColor = resolveLegendColor(textContent, colors);
           if (!newColor) return;
           const textPos = parseXY(textEl.getAttribute('transform'));
           let bestPath = null;
