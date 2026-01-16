@@ -104,8 +104,8 @@ const canvasContainerRef = ref(null);
 
 // App State
 const mode = ref('circular');
-const circularLegendPosition = ref('right'); // Separate legend position for circular mode
-const linearLegendPosition = ref('right'); // Separate legend position for linear mode
+const circularLegendPosition = ref('left'); // Separate legend position for circular mode
+const linearLegendPosition = ref('bottom'); // Separate legend position for linear mode
 const cInputType = ref('gb');
 const lInputType = ref('gb');
 const files = reactive({
@@ -126,7 +126,7 @@ const form = reactive({
   species: '',
   strain: '',
   track_type: 'tuckin',
-  legend: 'right',
+  legend: 'left',
   scale_style: 'bar',
   show_labels: false,
   show_labels_linear: 'none',
@@ -292,7 +292,7 @@ const canvasPadding = reactive({ top: 0, right: 0, bottom: 0, left: 0 });
 const showCanvasControls = ref(false);
 
 // Track legend position at generation time (for repositioning without regeneration)
-const generatedLegendPosition = ref('right');
+const generatedLegendPosition = ref('left');
 
 // Flag to skip captureBaseConfig when editing SVG (repositioning legend, adding legend entries, etc.)
 // This prevents base config from being overwritten during incremental edits

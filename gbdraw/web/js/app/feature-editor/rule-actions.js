@@ -130,6 +130,12 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
       manualSpecificRules.splice(0);
       rules.forEach((rule) => manualSpecificRules.push(rule));
 
+      if (presetId === 'bakta') {
+        currentColors.value = { ...currentColors.value, CDS: '#cccccc' };
+        adv.legend_box_size = 12;
+        adv.legend_font_size = 12;
+      }
+
       if (rulesWithCaptions.length > 0 && pyodideReady.value) {
         await nextTick();
         for (const rule of rulesWithCaptions) {
