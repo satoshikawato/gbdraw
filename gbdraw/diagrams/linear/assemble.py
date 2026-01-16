@@ -155,13 +155,14 @@ def assemble_linear_diagram(
     color_map, default_color_map = preprocess_color_tables(
         feature_config.color_table, feature_config.default_colors
     )
-    used_color_rules = precompute_used_color_rules(
+    used_color_rules, default_used_features = precompute_used_color_rules(
         records, color_map, default_color_map, set(feature_config.selected_features_set)
     )
     # Prepare legend table
     legend_table = prepare_legend_table(
         gc_config, skew_config, feature_config, features_present, blast_config, has_blast,
-        used_color_rules=used_color_rules
+        used_color_rules=used_color_rules,
+        default_used_features=default_used_features,
     )
     # Predetermine legend dimensions (number of columns etc.)
     legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)

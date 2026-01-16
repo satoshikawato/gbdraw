@@ -262,11 +262,16 @@ def assemble_circular_diagram(
     color_map, default_color_map = preprocess_color_tables(
         feature_config.color_table, feature_config.default_colors
     )
-    used_color_rules = precompute_used_color_rules(
+    used_color_rules, default_used_features = precompute_used_color_rules(
         gb_record, color_map, default_color_map, set(feature_config.selected_features_set)
     )
     legend_table = prepare_legend_table(
-        gc_config, skew_config, feature_config, features_present, used_color_rules=used_color_rules
+        gc_config,
+        skew_config,
+        feature_config,
+        features_present,
+        used_color_rules=used_color_rules,
+        default_used_features=default_used_features,
     )
     legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
     canvas_config.recalculate_canvas_dimensions(legend_config)
