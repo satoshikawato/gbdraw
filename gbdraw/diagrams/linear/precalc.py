@@ -48,6 +48,8 @@ def _precalculate_label_dimensions(
     canvas_config: LinearCanvasConfigurator,
     config_dict: dict,
     cfg: GbdrawConfig | None = None,
+    *,
+    feature_dicts: dict[str, dict] | None = None,
 ) -> tuple[float, dict, dict]:
     """Pre-calculates label placements for all records to determine the required canvas height."""
 
@@ -69,17 +71,23 @@ def _precalculate_label_dimensions(
             record_label_heights[record.id] = 0
             continue
 
-        color_table, default_colors = preprocess_color_tables(feature_config.color_table, feature_config.default_colors)
-        label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
-        feature_dict, _ = create_feature_dict(
-            record,
-            color_table,
-            feature_config.selected_features_set,
-            default_colors,
-            canvas_config.strandedness,
-            canvas_config.resolve_overlaps,
-            label_filtering,
-        )
+        feature_dict = None
+        if feature_dicts is not None:
+            feature_dict = feature_dicts.get(record.id)
+        if feature_dict is None:
+            color_table, default_colors = preprocess_color_tables(
+                feature_config.color_table, feature_config.default_colors
+            )
+            label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+            feature_dict, _ = create_feature_dict(
+                record,
+                color_table,
+                feature_config.selected_features_set,
+                default_colors,
+                canvas_config.strandedness,
+                canvas_config.resolve_overlaps,
+                label_filtering,
+            )
 
         record_length = len(record.seq)
         if normalize_length:

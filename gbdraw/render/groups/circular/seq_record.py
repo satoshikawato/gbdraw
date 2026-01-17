@@ -31,12 +31,16 @@ class SeqRecordGroup:
         canvas_config: CircularCanvasConfigurator,
         feature_config: FeatureDrawingConfigurator,
         config_dict: dict,
+        feature_dict: Optional[Dict[str, FeatureObject]] = None,
+        precalculated_labels: Optional[list] = None,
         cfg: GbdrawConfig | None = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
         self.feature_config: FeatureDrawingConfigurator = feature_config
         self.config_dict: dict = config_dict
+        self.precalculated_feature_dict = feature_dict
+        self.precalculated_labels = precalculated_labels
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
 
@@ -59,18 +63,13 @@ class SeqRecordGroup:
         self.track_ratio = self.canvas_config.track_ratio
         self.record_group: Group = self.setup_record_group()
 
-    def draw_record(self, feature_dict: Dict[str, FeatureObject], record_length: int, group: Group) -> Group:
-        label_list = []
-        if self.show_labels is True:
-            # Compute labels once; this group is responsible for embedded labels only.
-            label_list = prepare_label_list(
-                feature_dict,
-                record_length,
-                self.canvas_config.radius,
-                self.track_ratio,
-                self.config_dict,
-                cfg=self._cfg,
-            )
+    def draw_record(
+        self,
+        feature_dict: Dict[str, FeatureObject],
+        record_length: int,
+        group: Group,
+        label_list: list,
+    ) -> Group:
         for feature_object in feature_dict.values():
             group = FeatureDrawer(self.feature_config).draw(
                 feature_object,
@@ -92,25 +91,41 @@ class SeqRecordGroup:
         return group
 
     def setup_record_group(self) -> Group:
-        selected_features_set: str = self.feature_config.selected_features_set
-        color_table: Optional[DataFrame] = self.feature_config.color_table
-        default_colors: Optional[DataFrame] = self.feature_config.default_colors
-        label_filtering = preprocess_label_filtering(self.label_filtering)
-        color_table, default_colors = preprocess_color_tables(color_table, default_colors)
-        feature_dict, _ = create_feature_dict(
-            self.gb_record,
-            color_table,
-            selected_features_set,
-            default_colors,
-            self.strandedness,
-            self.resolve_overlaps,
-            label_filtering,
-        )
+        feature_dict = self.precalculated_feature_dict
+        if feature_dict is None:
+            selected_features_set: str = self.feature_config.selected_features_set
+            color_table: Optional[DataFrame] = self.feature_config.color_table
+            default_colors: Optional[DataFrame] = self.feature_config.default_colors
+            label_filtering = preprocess_label_filtering(self.label_filtering)
+            color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+            feature_dict, _ = create_feature_dict(
+                self.gb_record,
+                color_table,
+                selected_features_set,
+                default_colors,
+                self.strandedness,
+                self.resolve_overlaps,
+                label_filtering,
+            )
         track_id: str = self.gb_record.id
         record_group = Group(id=track_id)
         record_length: int = len(self.gb_record.seq)
 
-        record_group: Group = self.draw_record(feature_dict, record_length, record_group)
+        label_list = []
+        if self.show_labels is True:
+            if self.precalculated_labels is not None:
+                label_list = self.precalculated_labels
+            else:
+                # Compute labels once; this group is responsible for embedded labels only.
+                label_list = prepare_label_list(
+                    feature_dict,
+                    record_length,
+                    self.canvas_config.radius,
+                    self.track_ratio,
+                    self.config_dict,
+                    cfg=self._cfg,
+                )
+        record_group = self.draw_record(feature_dict, record_length, record_group, label_list)
         return record_group
 
     def get_group(self) -> Group:

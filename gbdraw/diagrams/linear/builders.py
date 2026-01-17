@@ -42,6 +42,7 @@ def add_record_group(
     feature_config: FeatureDrawingConfigurator,
     config_dict: dict,
     precalculated_labels: Optional[list],
+    precalculated_feature_dict: Optional[dict] = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Adds a record group to the linear canvas."""
@@ -51,6 +52,7 @@ def add_record_group(
         feature_config=feature_config,
         config_dict=config_dict,
         precalculated_labels=precalculated_labels,
+        precalculated_feature_dict=precalculated_feature_dict,
         cfg=cfg,
     ).get_group()
     position_record_group(record_group, offset_y, offset_x, canvas_config)

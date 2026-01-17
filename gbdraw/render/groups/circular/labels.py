@@ -34,6 +34,8 @@ class LabelsGroup:
         config_dict: dict,
         *,
         outer_arena: tuple[float, float] | None = None,
+        feature_dict: Dict[str, FeatureObject] | None = None,
+        precalculated_labels: Optional[list] = None,
         cfg: GbdrawConfig | None = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
@@ -41,6 +43,8 @@ class LabelsGroup:
         self.feature_config: FeatureDrawingConfigurator = feature_config
         self.config_dict: dict = config_dict
         self.outer_arena = outer_arena
+        self.precalculated_feature_dict = feature_dict
+        self.precalculated_labels = precalculated_labels
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
 
@@ -59,31 +63,35 @@ class LabelsGroup:
         if not self.show_labels:
             return group
 
-        selected_features_set: str = self.feature_config.selected_features_set
-        color_table: Optional[DataFrame] = self.feature_config.color_table
-        default_colors: Optional[DataFrame] = self.feature_config.default_colors
-        label_filtering = preprocess_label_filtering(self.label_filtering)
-        color_table, default_colors = preprocess_color_tables(color_table, default_colors)
-        feature_dict, _ = create_feature_dict(
-            self.gb_record,
-            color_table,
-            selected_features_set,
-            default_colors,
-            self.canvas_config.strandedness,
-            self.resolve_overlaps,
-            label_filtering,
-        )
+        label_list = self.precalculated_labels
+        feature_dict = self.precalculated_feature_dict
+        if label_list is None:
+            if feature_dict is None:
+                selected_features_set: str = self.feature_config.selected_features_set
+                color_table: Optional[DataFrame] = self.feature_config.color_table
+                default_colors: Optional[DataFrame] = self.feature_config.default_colors
+                label_filtering = preprocess_label_filtering(self.label_filtering)
+                color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+                feature_dict, _ = create_feature_dict(
+                    self.gb_record,
+                    color_table,
+                    selected_features_set,
+                    default_colors,
+                    self.canvas_config.strandedness,
+                    self.resolve_overlaps,
+                    label_filtering,
+                )
 
-        record_length: int = len(self.gb_record.seq)
-        label_list = prepare_label_list(
-            feature_dict,
-            record_length,
-            self.canvas_config.radius,
-            self.canvas_config.track_ratio,
-            self.config_dict,
-            cfg=self._cfg,
-            outer_arena=self.outer_arena,
-        )
+            record_length: int = len(self.gb_record.seq)
+            label_list = prepare_label_list(
+                feature_dict,
+                record_length,
+                self.canvas_config.radius,
+                self.canvas_config.track_ratio,
+                self.config_dict,
+                cfg=self._cfg,
+                outer_arena=self.outer_arena,
+            )
 
         drawer = LabelDrawer(self.config_dict, cfg=self._cfg)
         for label in label_list:

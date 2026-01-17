@@ -37,8 +37,8 @@ from .builders import (
     add_record_group,
 )
 from .precalc import _precalculate_definition_widths, _precalculate_label_dimensions
-from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
-from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
+from ...features.colors import preprocess_color_tables  # type: ignore[reportMissingImports]
+from ...features.factory import create_feature_dict, create_feature_dict_with_color_usage  # type: ignore[reportMissingImports]
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
 
 
@@ -47,6 +47,8 @@ def _precalculate_feature_track_heights(
     feature_config: FeatureDrawingConfigurator,
     canvas_config: LinearCanvasConfigurator,
     cfg: GbdrawConfig,
+    *,
+    feature_dicts: dict[str, dict] | None = None,
 ) -> tuple[dict[str, float], dict[str, float]]:
     """
     Pre-calculates the height required for feature tracks for each record.
@@ -58,22 +60,35 @@ def _precalculate_feature_track_heights(
     """
     record_heights_below: dict[str, float] = {}
     record_heights_above: dict[str, float] = {}
-    
-    color_table, default_colors = preprocess_color_tables(
-        feature_config.color_table, feature_config.default_colors
-    )
-    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
-    
-    for record in records:
-        feature_dict, _ = create_feature_dict(
-            record,
-            color_table,
-            feature_config.selected_features_set,
-            default_colors,
-            canvas_config.strandedness,
-            canvas_config.resolve_overlaps,
-            label_filtering,
+
+    color_table = None
+    default_colors = None
+    label_filtering = None
+    if feature_dicts is None:
+        color_table, default_colors = preprocess_color_tables(
+            feature_config.color_table, feature_config.default_colors
         )
+        label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+
+    for record in records:
+        feature_dict = None
+        if feature_dicts is not None:
+            feature_dict = feature_dicts.get(record.id)
+        if feature_dict is None:
+            if color_table is None or default_colors is None or label_filtering is None:
+                color_table, default_colors = preprocess_color_tables(
+                    feature_config.color_table, feature_config.default_colors
+                )
+                label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+            feature_dict, _ = create_feature_dict(
+                record,
+                color_table,
+                feature_config.selected_features_set,
+                default_colors,
+                canvas_config.strandedness,
+                canvas_config.resolve_overlaps,
+                label_filtering,
+            )
         
         # Find the maximum and minimum track IDs
         max_positive_track = 0
@@ -128,13 +143,35 @@ def assemble_linear_diagram(
     """
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
 
-    required_label_height, all_labels, record_label_heights = _precalculate_label_dimensions(
-        records, feature_config, canvas_config, config_dict, cfg=cfg
+    color_map, default_color_map = preprocess_color_tables(
+        feature_config.color_table, feature_config.default_colors
     )
-    
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+
+    feature_dicts: dict[str, dict] = {}
+    used_color_rules: set = set()
+    default_used_features: set = set()
+    for record in records:
+        feature_dict, record_used_rules, record_default_used = create_feature_dict_with_color_usage(
+            record,
+            color_map,
+            feature_config.selected_features_set,
+            default_color_map,
+            canvas_config.strandedness,
+            canvas_config.resolve_overlaps,
+            label_filtering,
+        )
+        feature_dicts[record.id] = feature_dict
+        used_color_rules.update(record_used_rules)
+        default_used_features.update(record_default_used)
+
+    required_label_height, all_labels, record_label_heights = _precalculate_label_dimensions(
+        records, feature_config, canvas_config, config_dict, cfg=cfg, feature_dicts=feature_dicts
+    )
+
     # Pre-calculate feature track heights for each record (needed for resolve_overlaps)
     record_heights_below, record_heights_above = _precalculate_feature_track_heights(
-        records, feature_config, canvas_config, cfg
+        records, feature_config, canvas_config, cfg, feature_dicts=feature_dicts
     )
     
     if required_label_height > 0:
@@ -151,13 +188,6 @@ def assemble_linear_diagram(
     has_blast = bool(blast_files)
     # Determine which features should be displayed in the legend
     features_present = check_feature_presence(records, feature_config.selected_features_set)
-    # Pre-compute which color rules are actually used for accurate legend
-    color_map, default_color_map = preprocess_color_tables(
-        feature_config.color_table, feature_config.default_colors
-    )
-    used_color_rules, default_used_features = precompute_used_color_rules(
-        records, color_map, default_color_map, set(feature_config.selected_features_set)
-    )
     # Prepare legend table
     legend_table = prepare_legend_table(
         gc_config, skew_config, feature_config, features_present, blast_config, has_blast,
@@ -343,6 +373,7 @@ def assemble_linear_diagram(
             feature_config,
             config_dict,
             precalculated_labels=labels_for_record,
+            precalculated_feature_dict=feature_dicts.get(record.id),
             cfg=record_cfg,
         )
         add_record_definition_group(

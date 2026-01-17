@@ -163,6 +163,8 @@ def add_record_group_on_canvas(
     feature_config: FeatureDrawingConfigurator,
     config_dict: dict,
     *,
+    feature_dict: dict | None = None,
+    precalculated_labels: list | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -184,6 +186,8 @@ def add_record_group_on_canvas(
         canvas_config=canvas_config,
         feature_config=feature_config,
         config_dict=config_dict,
+        feature_dict=feature_dict,
+        precalculated_labels=precalculated_labels,
         cfg=cfg or canvas_config._cfg,
     ).get_group()
     # Calculate start and end points for the 60-degree arc
@@ -265,6 +269,8 @@ def add_labels_group_on_canvas(
     config_dict: dict,
     *,
     outer_arena: tuple[float, float] | None = None,
+    feature_dict: dict | None = None,
+    precalculated_labels: list | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -287,6 +293,8 @@ def add_labels_group_on_canvas(
         feature_config=feature_config,
         config_dict=config_dict,
         outer_arena=outer_arena,
+        feature_dict=feature_dict,
+        precalculated_labels=precalculated_labels,
         cfg=cfg or canvas_config._cfg,
     ).get_group()
     labels_group = center_group_on_canvas(labels_group, canvas_config)

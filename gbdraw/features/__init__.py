@@ -3,6 +3,7 @@
 from .colors import preprocess_color_tables, get_color
 from .factory import (
     create_feature_dict,
+    create_feature_dict_with_color_usage,
     create_feature_object,
     create_gene_object,
     create_repeat_object,
@@ -27,6 +28,7 @@ __all__ = [
     "preprocess_color_tables",
     # factory
     "create_feature_dict",
+    "create_feature_dict_with_color_usage",
     "create_feature_object",
     "create_gene_object",
     "create_repeat_object",

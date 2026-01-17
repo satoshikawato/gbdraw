@@ -29,6 +29,7 @@ class SeqRecordGroup:
         feature_config: FeatureDrawingConfigurator,
         config_dict: dict,
         precalculated_labels: Optional[list] = None,
+        precalculated_feature_dict: Optional[dict] = None,
         cfg: GbdrawConfig | None = None,
     ) -> None:
         self.gb_record = gb_record
@@ -37,6 +38,7 @@ class SeqRecordGroup:
         self.feature_config = feature_config
         self.config_dict = config_dict
         self.precalculated_labels = precalculated_labels
+        self.precalculated_feature_dict = precalculated_feature_dict
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
 
@@ -141,11 +143,8 @@ class SeqRecordGroup:
         cds_height: float = self.canvas_config.cds_height
         longest_genome: int = self.canvas_config.longest_genome
         arrow_length: float = self.canvas_config.arrow_length
-        color_table: DataFrame | None = self.feature_config.color_table
-
         separate_strands = self.canvas_config.strandedness
         resolve_overlaps = self.canvas_config.resolve_overlaps
-        label_filtering = self.label_filtering  # type: ignore
         track_id = self.gb_record.id
 
         record_group: Group = Group(id=track_id)
@@ -159,31 +158,36 @@ class SeqRecordGroup:
             genome_size_normalization_factor: float = record_length / longest_genome
 
         selected_features_set: str = self.feature_config.selected_features_set
-
-        default_colors: DataFrame | None = self.feature_config.default_colors
-        label_filtering = preprocess_label_filtering(self.label_filtering)
-        color_table, default_colors = preprocess_color_tables(color_table, default_colors)
-        feature_dict, _ = create_feature_dict(
-            self.gb_record,
-            color_table,
-            selected_features_set,
-            default_colors,
-            separate_strands,
-            resolve_overlaps,
-            label_filtering,
-        )
+        feature_dict = self.precalculated_feature_dict
+        if feature_dict is None:
+            color_table: DataFrame | None = self.feature_config.color_table
+            default_colors: DataFrame | None = self.feature_config.default_colors
+            label_filtering = preprocess_label_filtering(self.label_filtering)
+            color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+            feature_dict, _ = create_feature_dict(
+                self.gb_record,
+                color_table,
+                selected_features_set,
+                default_colors,
+                separate_strands,
+                resolve_overlaps,
+                label_filtering,
+            )
         label_list = []
         if self.show_labels:
-            label_list = prepare_label_list_linear(
-                feature_dict,
-                record_length,
-                alignment_width,
-                genome_size_normalization_factor,
-                cds_height,
-                separate_strands,
-                self.config_dict,
-                cfg=self._cfg,
-            )
+            if self.precalculated_labels is not None:
+                label_list = self.precalculated_labels
+            else:
+                label_list = prepare_label_list_linear(
+                    feature_dict,
+                    record_length,
+                    alignment_width,
+                    genome_size_normalization_factor,
+                    cds_height,
+                    separate_strands,
+                    self.config_dict,
+                    cfg=self._cfg,
+                )
 
         record_group: Group = self.draw_record(
             feature_dict,

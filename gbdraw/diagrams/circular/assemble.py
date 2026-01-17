@@ -23,8 +23,11 @@ from ...configurators import (  # type: ignore[reportMissingImports]
     LegendDrawingConfigurator,
 )
 from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
-from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
+from ...features.colors import preprocess_color_tables  # type: ignore[reportMissingImports]
+from ...features.factory import create_feature_dict_with_color_usage  # type: ignore[reportMissingImports]
 from ...legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
+from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
+from ...labels.placement import prepare_label_list  # type: ignore[reportMissingImports]
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...tracks import TrackSpec  # type: ignore[reportMissingImports]
 
@@ -108,6 +111,7 @@ def add_record_on_circular_canvas(
     legend_table,
     *,
     cfg: GbdrawConfig | None = None,
+    feature_dict: dict | None = None,
     track_specs: list[TrackSpec] | None = None,
 ) -> Drawing:
     """
@@ -142,6 +146,8 @@ def add_record_on_circular_canvas(
     show_labels_base = (raw_show_labels != "none") if isinstance(raw_show_labels, str) else bool(raw_show_labels)
     features_ts = ts_by_kind.get("features")
     show_external_labels = show_labels_base and (labels_ts is None or labels_ts.show) and (features_ts is None or features_ts.show)
+    label_list = None
+    should_draw_features = features_ts is None or features_ts.show
     if show_external_labels:
         outer_arena = None
         if labels_ts is not None:
@@ -152,6 +158,16 @@ def add_record_on_circular_canvas(
                 if outer_px < inner_px:
                     inner_px, outer_px = outer_px, inner_px
                 outer_arena = (inner_px, outer_px)
+        if feature_dict is not None and should_draw_features:
+            label_list = prepare_label_list(
+                feature_dict,
+                len(gb_record.seq),
+                canvas_config.radius,
+                canvas_config.track_ratio,
+                config_dict,
+                cfg=cfg,
+                outer_arena=outer_arena,
+            )
         canvas = add_labels_group_on_canvas(
             canvas,
             gb_record,
@@ -159,13 +175,30 @@ def add_record_on_circular_canvas(
             feature_config,
             config_dict,
             outer_arena=outer_arena,
+            feature_dict=feature_dict,
+            precalculated_labels=label_list,
             cfg=cfg,
         )
 
-    features_ts = ts_by_kind.get("features")
-    if features_ts is None or features_ts.show:
+    if should_draw_features:
+        if feature_dict is not None and label_list is None and show_labels_base:
+            label_list = prepare_label_list(
+                feature_dict,
+                len(gb_record.seq),
+                canvas_config.radius,
+                canvas_config.track_ratio,
+                config_dict,
+                cfg=cfg,
+            )
         canvas = add_record_group_on_canvas(
-            canvas, gb_record, canvas_config, feature_config, config_dict, cfg=cfg
+            canvas,
+            gb_record,
+            canvas_config,
+            feature_config,
+            config_dict,
+            feature_dict=feature_dict,
+            precalculated_labels=label_list,
+            cfg=cfg,
         )
 
     definition_ts = ts_by_kind.get("definition")
@@ -262,8 +295,15 @@ def assemble_circular_diagram(
     color_map, default_color_map = preprocess_color_tables(
         feature_config.color_table, feature_config.default_colors
     )
-    used_color_rules, default_used_features = precompute_used_color_rules(
-        gb_record, color_map, default_color_map, set(feature_config.selected_features_set)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    feature_dict, used_color_rules, default_used_features = create_feature_dict_with_color_usage(
+        gb_record,
+        color_map,
+        feature_config.selected_features_set,
+        default_color_map,
+        canvas_config.strandedness,
+        canvas_config.resolve_overlaps,
+        label_filtering,
     )
     legend_table = prepare_legend_table(
         gc_config,
@@ -290,6 +330,7 @@ def assemble_circular_diagram(
         legend_config,
         legend_table,
         cfg=cfg,
+        feature_dict=feature_dict,
         track_specs=track_specs,
     )
     return canvas
