@@ -156,7 +156,6 @@
                                 <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="losatProgram" value="blastn" class="text-blue-600"> blastn</label>
                                 <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="losatProgram" value="tblastx" class="text-blue-600"> tblastx</label>
                             </div>
-                            <p class="text-[10px] text-slate-500 mt-2">tblastx uses WASM threads and may require COOP/COEP headers for SharedArrayBuffer.</p>
                             <div class="mt-3 pt-3 border-t border-slate-200">
                                 <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Settings</div>
                                 <div v-if="losatProgram === 'blastn'" class="space-y-2">
@@ -229,7 +228,6 @@
 
                                     <div class="grid grid-cols-2 gap-1">
                                         <input type="number" v-model.number="losat.tblastx.culling_limit" placeholder="Culling limit" class="form-input px-1 text-xs">
-                                        <input type="number" v-model.number="losat.tblastx.num_threads" placeholder="Threads" class="form-input px-1 text-xs">
                                     </div>
 
                                     <div class="grid grid-cols-2 gap-1">

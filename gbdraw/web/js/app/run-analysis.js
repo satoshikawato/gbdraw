@@ -219,9 +219,6 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
         let cacheInfo = [];
 
         if (useLosat) {
-          if (losatProgram.value === 'tblastx' && !window.crossOriginIsolated) {
-            throw new Error('LOSAT tblastx requires crossOriginIsolated (COOP/COEP) for WASM threads.');
-          }
           extractFirstFasta = pyodide.globals.get('extract_first_fasta');
         } else {
           losatCacheInfo.value = [];
@@ -319,7 +316,6 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
             pushArg(args, '--evalue', cfg.evalue);
             pushArg(args, '--threshold', cfg.threshold);
             pushArg(args, '--word-size', cfg.word_size);
-            if (Number(cfg.num_threads) > 0) pushArg(args, '--num-threads', cfg.num_threads);
             if (cfg.percent_identity !== null && Number(cfg.percent_identity) > 0) {
               pushArg(args, '--percent-identity', cfg.percent_identity);
             }

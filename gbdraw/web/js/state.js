@@ -212,7 +212,6 @@ const losat = reactive({
     evalue: 10.0,
     threshold: 13,
     word_size: 3,
-    num_threads: 0,
     percent_identity: null,
     min_hit_length: 0,
     max_target_seqs: 500,

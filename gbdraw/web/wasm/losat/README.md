@@ -10,4 +10,4 @@ cp target/wasm32-wasip1/release/LOSAT.wasm /mnt/c/Users/kawato/Documents/GitHub/
 
 Notes:
 - The web app expects `losat.wasm` (lowercase filename).
-- `tblastx` uses Rayon threads; ensure your WASI build supports threads and your hosting can set COOP/COEP if needed.
+- `tblastx` runs single-threaded in the browser build.
