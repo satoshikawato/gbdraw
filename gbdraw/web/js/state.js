@@ -108,6 +108,8 @@ const circularLegendPosition = ref('left'); // Separate legend position for circ
 const linearLegendPosition = ref('bottom'); // Separate legend position for linear mode
 const cInputType = ref('gb');
 const lInputType = ref('gb');
+const blastSource = ref('upload'); // 'upload' | 'losat'
+const losatProgram = ref('blastn'); // 'blastn' | 'tblastx'
 const files = reactive({
   c_gb: null,
   c_gff: null,
@@ -180,6 +182,56 @@ const adv = reactive({
   inner_label_x_offset: null,
   inner_label_y_offset: null
 });
+
+const losat = reactive({
+  outfmt: '6',
+  blastn: {
+    task: 'megablast',
+    word_size: 28,
+    evalue: null,
+    percent_identity: null,
+    min_hit_length: 0,
+    max_target_seqs: null,
+    hitlist_size: 500,
+    limit_lookup: false,
+    max_db_word_count: 30,
+    max_hsps_per_subject: 0,
+    min_diag_separation: 0,
+    scan_step: 0,
+    dust: true,
+    dust_level: 20,
+    dust_window: 64,
+    dust_linker: 1,
+    lcase_masking: false,
+    reward: 1,
+    penalty: -2,
+    gap_open: 0,
+    gap_extend: 0
+  },
+  tblastx: {
+    evalue: 10.0,
+    threshold: 13,
+    word_size: 3,
+    num_threads: 0,
+    percent_identity: null,
+    min_hit_length: 0,
+    max_target_seqs: 500,
+    window_size: 40,
+    seg: true,
+    seg_window: 12,
+    seg_locut: 2.2,
+    seg_hicut: 2.5,
+    include_stop_seeds: true,
+    ncbi_stop_stop_score: true,
+    neighbor_map: false,
+    ncbi_compat: false,
+    query_gencode: 1,
+    db_gencode: 1,
+    culling_limit: 0
+  }
+});
+
+const losatCacheInfo = ref([]);
 
 // Color & Filter State
 const paletteNames = ref(['default']);
@@ -440,10 +492,14 @@ export const state = {
   linearLegendPosition,
   cInputType,
   lInputType,
+  blastSource,
+  losatProgram,
   files,
   linearSeqs,
   form,
   adv,
+  losat,
+  losatCacheInfo,
   paletteNames,
   selectedPalette,
   currentColors,

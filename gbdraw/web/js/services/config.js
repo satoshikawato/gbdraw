@@ -44,12 +44,15 @@ export const exportConfig = () => {
   const configData = {
     form: state.form,
     adv: state.adv,
+    losat: state.losat,
     colors: state.currentColors.value,
     palette: state.selectedPalette.value,
     rules: state.manualSpecificRules,
     filterMode: state.filterMode.value,
     whitelist: state.manualWhitelist,
-    blacklistText: state.manualBlacklist.value
+    blacklistText: state.manualBlacklist.value,
+    blastSource: state.blastSource.value,
+    losatProgram: state.losatProgram.value
   };
   const blob = new Blob([JSON.stringify(configData, null, 2)], {
     type: 'application/json'
@@ -83,6 +86,7 @@ export const importConfig = (e) => {
 
       if (data.form) safeDeepMerge(state.form, data.form);
       if (data.adv) safeDeepMerge(state.adv, data.adv);
+      if (data.losat) safeDeepMerge(state.losat, data.losat);
       if (data.colors) {
         const normalized = {};
         Object.entries(data.colors).forEach(([key, value]) => {
@@ -116,6 +120,8 @@ export const importConfig = (e) => {
         });
       }
       if (data.blacklistText) state.manualBlacklist.value = String(data.blacklistText);
+      if (data.blastSource) state.blastSource.value = String(data.blastSource);
+      if (data.losatProgram) state.losatProgram.value = String(data.losatProgram);
 
       alert('Configuration loaded successfully!');
     } catch (err) {

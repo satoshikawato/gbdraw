@@ -45,6 +45,23 @@ def run_gbdraw_wrapper(mode, args):
             results.append({"name": fname, "content": f.read()})
     return json.dumps(results)
 
+def extract_first_fasta(path, fmt):
+    """Extract the first record as FASTA for LOSAT input."""
+    from Bio import SeqIO
+    from io import StringIO
+    try:
+        fmt_map = {"genbank": "genbank", "fasta": "fasta"}
+        if fmt not in fmt_map:
+            return json.dumps({"error": f"Unsupported format: {fmt}"})
+        record = next(SeqIO.parse(path, fmt_map[fmt]))
+        handle = StringIO()
+        SeqIO.write(record, handle, "fasta")
+        return json.dumps({"fasta": handle.getvalue(), "record_id": record.id})
+    except StopIteration:
+        return json.dumps({"error": "No records found"})
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
+
 def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=14, font_family="Arial", x_offset=0, stroke_color="black", stroke_width=0.5):
     """Generate SVG elements for a single legend entry"""
     from xml.sax.saxutils import escape as xml_escape

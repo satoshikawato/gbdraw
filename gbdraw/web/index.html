@@ -146,6 +146,134 @@
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="lInputType" value="gb" class="text-blue-600"> GenBank</label>
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="lInputType" value="gff" class="text-blue-600"> GFF3 + FASTA</label>
                         </div>
+                        <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="blastSource" value="upload" class="text-blue-600"> Upload BLAST TSV</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="blastSource" value="losat" class="text-blue-600"> Run LOSAT (WASM)</label>
+                        </div>
+                        <div v-if="blastSource === 'losat'" class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                            <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Mode</div>
+                            <div class="flex gap-4 text-sm font-bold">
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="losatProgram" value="blastn" class="text-blue-600"> blastn</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="losatProgram" value="tblastx" class="text-blue-600"> tblastx</label>
+                            </div>
+                            <p class="text-[10px] text-slate-500 mt-2">tblastx uses WASM threads and may require COOP/COEP headers for SharedArrayBuffer.</p>
+                            <div class="mt-3 pt-3 border-t border-slate-200">
+                                <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Settings</div>
+                                <div v-if="losatProgram === 'blastn'" class="space-y-2">
+                                    <div class="grid grid-cols-2 gap-1">
+                                        <div>
+                                            <label class="text-[9px] block">Task</label>
+                                            <select v-model="losat.blastn.task" class="form-input px-1 py-0.5 text-xs">
+                                                <option value="megablast">megablast</option>
+                                                <option value="blastn">blastn</option>
+                                                <option value="dc-megablast">dc-megablast</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="text-[9px] block">Word Size</label>
+                                            <input type="number" v-model.number="losat.blastn.word_size" class="form-input px-1 py-0.5 text-xs">
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-3 gap-1">
+                                        <input type="text" v-model="losat.blastn.evalue" placeholder="E-value (auto)" class="form-input px-1 text-xs" title="Leave empty to use LOSAT default">
+                                        <input type="number" v-model.number="losat.blastn.percent_identity" placeholder="Ident% (auto)" class="form-input px-1 text-xs" title="Leave empty to use LOSAT default">
+                                        <input type="number" v-model.number="losat.blastn.min_hit_length" placeholder="Min hit len" class="form-input px-1 text-xs">
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-1">
+                                        <input type="number" v-model.number="losat.blastn.hitlist_size" placeholder="Hitlist size" class="form-input px-1 text-xs">
+                                        <input type="number" v-model.number="losat.blastn.max_hsps_per_subject" placeholder="Max HSPs/subject" class="form-input px-1 text-xs">
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-1">
+                                        <input type="number" v-model.number="losat.blastn.min_diag_separation" placeholder="Min diag sep" class="form-input px-1 text-xs">
+                                        <input type="number" v-model.number="losat.blastn.scan_step" placeholder="Scan step" class="form-input px-1 text-xs">
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-2 text-[10px] text-slate-600">
+                                        <label class="flex items-center gap-2">
+                                            <input type="checkbox" v-model="losat.blastn.lcase_masking" class="form-checkbox"> lcase_masking
+                                        </label>
+                                        <label class="flex items-center gap-2">
+                                            <input type="checkbox" v-model="losat.blastn.dust" class="form-checkbox"> DUST
+                                        </label>
+                                    </div>
+
+                                    <div class="grid grid-cols-3 gap-1">
+                                        <input type="number" v-model.number="losat.blastn.dust_level" placeholder="Dust level" class="form-input px-1 text-xs" :disabled="!losat.blastn.dust">
+                                        <input type="number" v-model.number="losat.blastn.dust_window" placeholder="Dust window" class="form-input px-1 text-xs" :disabled="!losat.blastn.dust">
+                                        <input type="number" v-model.number="losat.blastn.dust_linker" placeholder="Dust linker" class="form-input px-1 text-xs" :disabled="!losat.blastn.dust">
+                                    </div>
+
+                                    <div class="grid grid-cols-4 gap-1">
+                                        <input type="number" v-model.number="losat.blastn.reward" placeholder="Reward" class="form-input px-1 text-xs">
+                                        <input type="number" v-model.number="losat.blastn.penalty" placeholder="Penalty" class="form-input px-1 text-xs">
+                                        <input type="number" v-model.number="losat.blastn.gap_open" placeholder="Gap open" class="form-input px-1 text-xs">
+                                        <input type="number" v-model.number="losat.blastn.gap_extend" placeholder="Gap extend" class="form-input px-1 text-xs">
+                                    </div>
+                                </div>
+
+                                <div v-else class="space-y-2">
+                                    <div class="grid grid-cols-3 gap-1">
+                                        <input type="text" v-model="losat.tblastx.evalue" placeholder="E-value" class="form-input px-1 text-xs">
+                                        <input type="number" v-model.number="losat.tblastx.threshold" placeholder="Threshold" class="form-input px-1 text-xs">
+                                        <input type="number" v-model.number="losat.tblastx.word_size" placeholder="Word size" class="form-input px-1 text-xs">
+                                    </div>
+
+                                    <div class="grid grid-cols-3 gap-1">
+                                        <input type="number" v-model.number="losat.tblastx.window_size" placeholder="Window size" class="form-input px-1 text-xs">
+                                        <input type="number" v-model.number="losat.tblastx.percent_identity" placeholder="Ident%" class="form-input px-1 text-xs">
+                                        <input type="number" v-model.number="losat.tblastx.min_hit_length" placeholder="Min hit len" class="form-input px-1 text-xs">
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-1">
+                                        <input type="number" v-model.number="losat.tblastx.culling_limit" placeholder="Culling limit" class="form-input px-1 text-xs">
+                                        <input type="number" v-model.number="losat.tblastx.num_threads" placeholder="Threads" class="form-input px-1 text-xs">
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-1">
+                                        <input type="number" v-model.number="losat.tblastx.query_gencode" placeholder="Query gencode" class="form-input px-1 text-xs">
+                                        <input type="number" v-model.number="losat.tblastx.db_gencode" placeholder="DB gencode" class="form-input px-1 text-xs">
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-2 text-[10px] text-slate-600">
+                                        <label class="flex items-center gap-2">
+                                            <input type="checkbox" v-model="losat.tblastx.seg" class="form-checkbox"> SEG
+                                        </label>
+                                        <label class="flex items-center gap-2">
+                                            <input type="checkbox" v-model="losat.tblastx.neighbor_map" class="form-checkbox"> neighbor_map
+                                        </label>
+                                        <label class="flex items-center gap-2">
+                                            <input type="checkbox" v-model="losat.tblastx.ncbi_compat" class="form-checkbox"> ncbi_compat
+                                        </label>
+                                        <label class="flex items-center gap-2">
+                                            <input type="checkbox" v-model="losat.tblastx.include_stop_seeds" class="form-checkbox"> include_stop_seeds
+                                        </label>
+                                        <label class="flex items-center gap-2">
+                                            <input type="checkbox" v-model="losat.tblastx.ncbi_stop_stop_score" class="form-checkbox"> ncbi_stop_stop_score
+                                        </label>
+                                    </div>
+
+                                    <div class="grid grid-cols-3 gap-1">
+                                        <input type="number" v-model.number="losat.tblastx.seg_window" placeholder="SEG window" class="form-input px-1 text-xs" :disabled="!losat.tblastx.seg">
+                                        <input type="number" step="0.1" v-model.number="losat.tblastx.seg_locut" placeholder="SEG locut" class="form-input px-1 text-xs" :disabled="!losat.tblastx.seg">
+                                        <input type="number" step="0.1" v-model.number="losat.tblastx.seg_hicut" placeholder="SEG hicut" class="form-input px-1 text-xs" :disabled="!losat.tblastx.seg">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-2 pt-2 border-t border-slate-200">
+                                <div class="flex gap-2">
+                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs w-full" :disabled="losatCacheInfo.length === 0">
+                                        <i class="ph ph-download-simple"></i> Save LOSAT TSV
+                                    </button>
+                                    <button @click="clearLosatCache" class="btn btn-danger text-xs w-full" :disabled="losatCacheInfo.length === 0">
+                                        <i class="ph ph-trash"></i> Clear Cache
+                                    </button>
+                                </div>
+                                <p class="text-[10px] text-slate-500 mt-1">Cached results are reused when inputs and settings match.</p>
+                            </div>
+                        </div>
                         <div v-for="(seq, idx) in linearSeqs" :key="idx" class="p-3 bg-slate-50 rounded-lg border border-slate-200 relative group text-sm transition-all hover:border-blue-300">
                             <div class="absolute top-2 right-2 text-[10px] font-bold text-white bg-slate-400 px-1.5 py-0.5 rounded-full">#{{ idx + 1 }}</div>
                             <div v-if="lInputType === 'gb'" class="space-y-2">
@@ -155,9 +283,12 @@
                                 <file-uploader label="GFF3" v-model="seq.gff"></file-uploader>
                                 <file-uploader label="FASTA" v-model="seq.fasta"></file-uploader>
                             </div>
-                            <div v-if="idx < linearSeqs.length - 1" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
+                            <div v-if="idx < linearSeqs.length - 1 && blastSource === 'upload'" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1"><i class="ph ph-arrows-down-up"></i> Compare to next (BLAST)</div>
                                 <file-uploader label="BLAST TSV" v-model="seq.blast"></file-uploader>
+                            </div>
+                            <div v-else-if="idx < linearSeqs.length - 1 && blastSource === 'losat'" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
+                                <div class="text-[10px] text-slate-500 font-bold flex items-center gap-1"><i class="ph ph-lightning"></i> LOSAT will run for this pair</div>
                             </div>
                         </div>
                         <div class="flex gap-2">

@@ -1,3 +1,38 @@
+import { runLosatPair } from '../services/losat.js';
+
+const losatCache = new Map();
+
+const downloadTextFile = (filename, text) => {
+  const safeName = filename || 'losat.tsv';
+  const blob = new Blob([text], { type: 'text/tab-separated-values' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = safeName;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+const hashText = async (text) => {
+  if (globalThis.crypto?.subtle) {
+    const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buffer))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `fnv1a-${(hash >>> 0).toString(16)}`;
+};
+
+const makeSafeFilename = (name) => {
+  const cleaned = String(name || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+  return cleaned || 'losat';
+};
+
 export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFeatureOverrides }) => {
   const {
     pyodideReady,
@@ -28,6 +63,10 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     mode,
     cInputType,
     lInputType,
+    blastSource,
+    losatProgram,
+    losat,
+    losatCacheInfo,
     files,
     linearSeqs,
     generatedLegendPosition,
@@ -172,6 +211,139 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
 
         let inputArgs = [];
         let blastArgs = [];
+        const useLosat = blastSource.value === 'losat';
+        const fastaCache = new Map();
+        const fastaHashCache = new Map();
+        const textEncoder = new TextEncoder();
+        let extractFirstFasta = null;
+        let cacheInfo = [];
+
+        if (useLosat) {
+          if (losatProgram.value === 'tblastx' && !window.crossOriginIsolated) {
+            throw new Error('LOSAT tblastx requires crossOriginIsolated (COOP/COEP) for WASM threads.');
+          }
+          extractFirstFasta = pyodide.globals.get('extract_first_fasta');
+        } else {
+          losatCacheInfo.value = [];
+        }
+
+        const getSeqEntry = (idx) => {
+          if (fastaCache.has(idx)) return fastaCache.get(idx);
+          const path = lInputType.value === 'gb' ? `/seq_${idx}.gb` : `/seq_${idx}.fasta`;
+          const fmt = lInputType.value === 'gb' ? 'genbank' : 'fasta';
+          const res = JSON.parse(extractFirstFasta(path, fmt));
+          if (res.error) throw new Error(res.error);
+          const entry = {
+            fasta: res.fasta,
+            recordId: res.record_id || `seq_${idx + 1}`
+          };
+          fastaCache.set(idx, entry);
+          return entry;
+        };
+
+        const getSeqHash = async (idx) => {
+          if (fastaHashCache.has(idx)) return fastaHashCache.get(idx);
+          const entry = getSeqEntry(idx);
+          const hash = await hashText(entry.fasta);
+          fastaHashCache.set(idx, hash);
+          return hash;
+        };
+
+        const buildCacheKey = async (argsKey, queryIdx, subjectIdx) => {
+          const queryHash = await getSeqHash(queryIdx);
+          const subjectHash = await getSeqHash(subjectIdx);
+          const payload = JSON.stringify({
+            program: losatProgram.value,
+            outfmt: String(losat.outfmt || '6'),
+            args: argsKey,
+            queryHash,
+            subjectHash
+          });
+          return hashText(payload);
+        };
+
+        const buildCacheFilename = (pairIndex, queryEntry, subjectEntry) => {
+          const left = makeSafeFilename(queryEntry.recordId || `seq_${pairIndex + 1}`);
+          const right = makeSafeFilename(subjectEntry.recordId || `seq_${pairIndex + 2}`);
+          return `${left}_vs_${right}.losat.tsv`;
+        };
+
+        const pushArg = (arr, flag, value) => {
+          if (value === null || value === undefined || value === '') return;
+          if (typeof value === 'number' && !Number.isFinite(value)) return;
+          const valueStr = String(value);
+          if (valueStr.startsWith('-')) {
+            arr.push(`${flag}=${valueStr}`);
+          } else {
+            arr.push(flag, valueStr);
+          }
+        };
+
+        const buildLosatArgs = () => {
+          const args = [];
+          if (losatProgram.value === 'blastn') {
+            const cfg = losat.blastn;
+            pushArg(args, '--task', cfg.task);
+            pushArg(args, '--word-size', cfg.word_size);
+            if (cfg.evalue !== null && cfg.evalue !== '') pushArg(args, '--evalue', cfg.evalue);
+            if (cfg.percent_identity !== null && Number(cfg.percent_identity) > 0) {
+              pushArg(args, '--percent-identity', cfg.percent_identity);
+            }
+            if (Number(cfg.min_hit_length) > 0) pushArg(args, '--min-hit-length', cfg.min_hit_length);
+            if (Number(cfg.max_target_seqs) > 0) pushArg(args, '--max-target-seqs', cfg.max_target_seqs);
+            if (Number(cfg.hitlist_size) > 0) pushArg(args, '--hitlist-size', cfg.hitlist_size);
+            if (cfg.limit_lookup) {
+              args.push('--limit-lookup');
+              pushArg(args, '--max-db-word-count', cfg.max_db_word_count);
+            }
+            if (Number(cfg.max_hsps_per_subject) > 0) {
+              pushArg(args, '--max-hsps-per-subject', cfg.max_hsps_per_subject);
+            }
+            if (Number(cfg.min_diag_separation) > 0) {
+              pushArg(args, '--min-diag-separation', cfg.min_diag_separation);
+            }
+            if (Number(cfg.scan_step) > 0) pushArg(args, '--scan-step', cfg.scan_step);
+            if (cfg.dust === false) args.push('--dust=false');
+            if (cfg.dust) {
+              pushArg(args, '--dust-level', cfg.dust_level);
+              pushArg(args, '--dust-window', cfg.dust_window);
+              pushArg(args, '--dust-linker', cfg.dust_linker);
+            }
+            if (cfg.lcase_masking) args.push('--lcase-masking');
+            pushArg(args, '--reward', cfg.reward);
+            pushArg(args, '--penalty', cfg.penalty);
+            pushArg(args, '--gap-open', cfg.gap_open);
+            pushArg(args, '--gap-extend', cfg.gap_extend);
+          } else {
+            const cfg = losat.tblastx;
+            pushArg(args, '--evalue', cfg.evalue);
+            pushArg(args, '--threshold', cfg.threshold);
+            pushArg(args, '--word-size', cfg.word_size);
+            if (Number(cfg.num_threads) > 0) pushArg(args, '--num-threads', cfg.num_threads);
+            if (cfg.percent_identity !== null && Number(cfg.percent_identity) > 0) {
+              pushArg(args, '--percent-identity', cfg.percent_identity);
+            }
+            if (Number(cfg.min_hit_length) > 0) pushArg(args, '--min-hit-length', cfg.min_hit_length);
+            if (Number(cfg.max_target_seqs) > 0) pushArg(args, '--max-target-seqs', cfg.max_target_seqs);
+            pushArg(args, '--window-size', cfg.window_size);
+            if (cfg.seg === false) args.push('--seg=false');
+            if (cfg.seg) {
+              pushArg(args, '--seg-window', cfg.seg_window);
+              pushArg(args, '--seg-locut', cfg.seg_locut);
+              pushArg(args, '--seg-hicut', cfg.seg_hicut);
+            }
+            if (cfg.include_stop_seeds === false) args.push('--include-stop-seeds=false');
+            if (cfg.ncbi_stop_stop_score === false) args.push('--ncbi-stop-stop-score=false');
+            if (cfg.neighbor_map) args.push('--neighbor-map');
+            if (cfg.ncbi_compat) args.push('--ncbi-compat');
+            pushArg(args, '--query-gencode', cfg.query_gencode);
+            pushArg(args, '--db-gencode', cfg.db_gencode);
+            pushArg(args, '--culling-limit', cfg.culling_limit);
+          }
+          return args;
+        };
+        const losatArgs = useLosat ? buildLosatArgs() : [];
+
         for (let i = 0; i < linearSeqs.length; i++) {
           const seq = linearSeqs[i];
           if (lInputType.value === 'gb') {
@@ -183,10 +355,43 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
             await writeFileToFs(seq.gff, `/seq_${i}.gff`);
             await writeFileToFs(seq.fasta, `/seq_${i}.fasta`);
           }
-          if (i < linearSeqs.length - 1 && seq.blast) {
+        }
+
+        for (let i = 0; i < linearSeqs.length - 1; i++) {
+          const seq = linearSeqs[i];
+          if (useLosat) {
+            const queryEntry = getSeqEntry(i);
+            const subjectEntry = getSeqEntry(i + 1);
+            const cacheKey = await buildCacheKey(losatArgs, i, i + 1);
+            const cached = losatCache.get(cacheKey);
+            const blastText = cached
+              ? cached.text
+              : await runLosatPair({
+                  program: losatProgram.value,
+                  queryFasta: queryEntry.fasta,
+                  subjectFasta: subjectEntry.fasta,
+                  outfmt: losat.outfmt || '6',
+                  extraArgs: losatArgs
+                });
+            if (!cached) {
+              losatCache.set(cacheKey, { text: blastText });
+            }
+            cacheInfo.push({
+              key: cacheKey,
+              filename: buildCacheFilename(i, queryEntry, subjectEntry)
+            });
+            pyodide.FS.writeFile(`/blast_${i}.txt`, textEncoder.encode(blastText));
+            blastArgs.push(`/blast_${i}.txt`);
+          } else if (seq.blast) {
             await writeFileToFs(seq.blast, `/blast_${i}.txt`);
             blastArgs.push(`/blast_${i}.txt`);
           }
+        }
+        if (extractFirstFasta) {
+          extractFirstFasta.destroy();
+        }
+        if (useLosat) {
+          losatCacheInfo.value = cacheInfo;
         }
         if (lInputType.value === 'gb') args.push('--gbk', ...inputArgs);
         else {
@@ -266,5 +471,20 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     }
   };
 
-  return { runAnalysis };
+  const downloadLosatCache = () => {
+    if (!losatCacheInfo.value || losatCacheInfo.value.length === 0) return;
+    losatCacheInfo.value.forEach((entry, idx) => {
+      const cached = losatCache.get(entry.key);
+      if (!cached) return;
+      const filename = entry.filename || `losat_pair_${idx + 1}.tsv`;
+      downloadTextFile(filename, cached.text);
+    });
+  };
+
+  const clearLosatCache = () => {
+    losatCache.clear();
+    losatCacheInfo.value = [];
+  };
+
+  return { runAnalysis, downloadLosatCache, clearLosatCache };
 };
