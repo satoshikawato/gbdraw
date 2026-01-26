@@ -146,6 +146,47 @@
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="lInputType" value="gb" class="text-blue-600"> GenBank</label>
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="lInputType" value="gff" class="text-blue-600"> GFF3 + FASTA</label>
                         </div>
+                        <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="blastSource" value="upload" class="text-blue-600"> Upload BLAST TSV</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="blastSource" value="losat" class="text-blue-600"> Run LOSAT (WASM)</label>
+                        </div>
+                        <div v-if="blastSource === 'losat'" class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                            <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Mode</div>
+                            <div class="flex gap-4 text-sm font-bold">
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="losatProgram" value="blastn" class="text-blue-600"> blastn</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="losatProgram" value="tblastx" class="text-blue-600"> tblastx</label>
+                            </div>
+                            <div class="mt-3 pt-3 border-t border-slate-200">
+                                <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Settings</div>
+                                <div v-if="losatProgram === 'blastn'" class="space-y-2">
+                                    <div class="grid grid-cols-1 gap-1">
+                                        <div>
+                                            <label class="text-[9px] block">Task</label>
+                                            <select v-model="losat.blastn.task" class="form-input px-1 py-0.5 text-xs">
+                                                <option value="megablast">megablast</option>
+                                                <option value="blastn">blastn</option>
+                                                <option value="dc-megablast">dc-megablast</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div v-else class="space-y-2">
+                                    <p class="text-[10px] text-slate-500">Query/DB gencode is set per entry below.</p>
+                                </div>
+                            </div>
+                            <div class="mt-2 pt-2 border-t border-slate-200">
+                                <div class="flex gap-2">
+                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs w-full" :disabled="losatCacheInfo.length === 0">
+                                        <i class="ph ph-download-simple"></i> Save LOSAT TSV
+                                    </button>
+                                    <button @click="clearLosatCache" class="btn btn-danger text-xs w-full" :disabled="losatCacheInfo.length === 0">
+                                        <i class="ph ph-trash"></i> Clear Cache
+                                    </button>
+                                </div>
+                                <p class="text-[10px] text-slate-500 mt-1">Cached results are reused when inputs and settings match.</p>
+                            </div>
+                        </div>
                         <div v-for="(seq, idx) in linearSeqs" :key="idx" class="p-3 bg-slate-50 rounded-lg border border-slate-200 relative group text-sm transition-all hover:border-blue-300">
                             <div class="absolute top-2 right-2 text-[10px] font-bold text-white bg-slate-400 px-1.5 py-0.5 rounded-full">#{{ idx + 1 }}</div>
                             <div v-if="lInputType === 'gb'" class="space-y-2">
@@ -155,13 +196,20 @@
                                 <file-uploader label="GFF3" v-model="seq.gff"></file-uploader>
                                 <file-uploader label="FASTA" v-model="seq.fasta"></file-uploader>
                             </div>
-                            <div v-if="idx < linearSeqs.length - 1" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
+                            <div v-if="blastSource === 'losat' && losatProgram === 'tblastx'" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
+                                <div class="text-[10px] text-slate-500 font-bold mb-1">LOSAT Gencode</div>
+                                <input type="number" v-model.number="seq.losat_gencode" placeholder="Gencode (this entry)" class="form-input px-1 py-0.5 text-xs">
+                            </div>
+                            <div v-if="idx < linearSeqs.length - 1 && blastSource === 'upload'" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1"><i class="ph ph-arrows-down-up"></i> Compare to next (BLAST)</div>
                                 <file-uploader label="BLAST TSV" v-model="seq.blast"></file-uploader>
                             </div>
+                            <div v-else-if="idx < linearSeqs.length - 1 && blastSource === 'losat'" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
+                                <div class="text-[10px] text-slate-500 font-bold flex items-center gap-1"><i class="ph ph-lightning"></i> LOSAT will run for this pair</div>
+                            </div>
                         </div>
                         <div class="flex gap-2">
-                            <button @click="linearSeqs.push({gb:null, gff:null, fasta:null, blast:null})" class="btn btn-secondary text-xs w-full"><i class="ph ph-plus"></i> Add Seq</button>
+                            <button @click="linearSeqs.push({gb:null, gff:null, fasta:null, blast:null, losat_gencode: 1})" class="btn btn-secondary text-xs w-full"><i class="ph ph-plus"></i> Add Seq</button>
                             <button v-if="linearSeqs.length > 1" @click="linearSeqs.pop()" class="btn btn-danger text-xs w-full"><i class="ph ph-minus"></i> Remove</button>
                         </div>
                     </div>

@@ -1,3 +1,38 @@
+import { runLosatPair } from '../services/losat.js';
+
+const losatCache = new Map();
+
+const downloadTextFile = (filename, text) => {
+  const safeName = filename || 'losat.tsv';
+  const blob = new Blob([text], { type: 'text/tab-separated-values' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = safeName;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+const hashText = async (text) => {
+  if (globalThis.crypto?.subtle) {
+    const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buffer))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `fnv1a-${(hash >>> 0).toString(16)}`;
+};
+
+const makeSafeFilename = (name) => {
+  const cleaned = String(name || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+  return cleaned || 'losat';
+};
+
 export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFeatureOverrides }) => {
   const {
     pyodideReady,
@@ -28,6 +63,10 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     mode,
     cInputType,
     lInputType,
+    blastSource,
+    losatProgram,
+    losat,
+    losatCacheInfo,
     files,
     linearSeqs,
     generatedLegendPosition,
@@ -172,6 +211,90 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
 
         let inputArgs = [];
         let blastArgs = [];
+        const useLosat = blastSource.value === 'losat';
+        const fastaCache = new Map();
+        const fastaHashCache = new Map();
+        const textEncoder = new TextEncoder();
+        let extractFirstFasta = null;
+        let cacheInfo = [];
+
+        if (useLosat) {
+          extractFirstFasta = pyodide.globals.get('extract_first_fasta');
+        } else {
+          losatCacheInfo.value = [];
+        }
+
+        const getSeqEntry = (idx) => {
+          if (fastaCache.has(idx)) return fastaCache.get(idx);
+          const path = lInputType.value === 'gb' ? `/seq_${idx}.gb` : `/seq_${idx}.fasta`;
+          const fmt = lInputType.value === 'gb' ? 'genbank' : 'fasta';
+          const res = JSON.parse(extractFirstFasta(path, fmt));
+          if (res.error) throw new Error(res.error);
+          const entry = {
+            fasta: res.fasta,
+            recordId: res.record_id || `seq_${idx + 1}`
+          };
+          fastaCache.set(idx, entry);
+          return entry;
+        };
+
+        const getSeqHash = async (idx) => {
+          if (fastaHashCache.has(idx)) return fastaHashCache.get(idx);
+          const entry = getSeqEntry(idx);
+          const hash = await hashText(entry.fasta);
+          fastaHashCache.set(idx, hash);
+          return hash;
+        };
+
+        const buildCacheKey = async (argsKey, queryIdx, subjectIdx) => {
+          const queryHash = await getSeqHash(queryIdx);
+          const subjectHash = await getSeqHash(subjectIdx);
+          const payload = JSON.stringify({
+            program: losatProgram.value,
+            outfmt: String(losat.outfmt || '6'),
+            args: argsKey,
+            queryHash,
+            subjectHash
+          });
+          return hashText(payload);
+        };
+
+        const buildCacheFilename = (pairIndex, queryEntry, subjectEntry) => {
+          const left = makeSafeFilename(queryEntry.recordId || `seq_${pairIndex + 1}`);
+          const right = makeSafeFilename(subjectEntry.recordId || `seq_${pairIndex + 2}`);
+          return `${left}_vs_${right}.losat.tsv`;
+        };
+
+        const pushArg = (arr, flag, value) => {
+          if (value === null || value === undefined || value === '') return;
+          if (typeof value === 'number' && !Number.isFinite(value)) return;
+          const valueStr = String(value);
+          if (valueStr.startsWith('-')) {
+            arr.push(`${flag}=${valueStr}`);
+          } else {
+            arr.push(flag, valueStr);
+          }
+        };
+
+        const getGencode = (idx) => {
+          const raw = linearSeqs[idx]?.losat_gencode;
+          if (raw === null || raw === undefined || raw === '') return null;
+          const num = Number(raw);
+          if (!Number.isFinite(num)) return null;
+          return num;
+        };
+
+        const buildLosatArgs = (queryIdx, subjectIdx) => {
+          const args = [];
+          if (losatProgram.value === 'blastn') {
+            pushArg(args, '--task', losat.blastn.task);
+          } else {
+            pushArg(args, '--query-gencode', getGencode(queryIdx));
+            pushArg(args, '--db-gencode', getGencode(subjectIdx));
+          }
+          return args;
+        };
+
         for (let i = 0; i < linearSeqs.length; i++) {
           const seq = linearSeqs[i];
           if (lInputType.value === 'gb') {
@@ -183,10 +306,44 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
             await writeFileToFs(seq.gff, `/seq_${i}.gff`);
             await writeFileToFs(seq.fasta, `/seq_${i}.fasta`);
           }
-          if (i < linearSeqs.length - 1 && seq.blast) {
+        }
+
+        for (let i = 0; i < linearSeqs.length - 1; i++) {
+          const seq = linearSeqs[i];
+          if (useLosat) {
+            const queryEntry = getSeqEntry(i);
+            const subjectEntry = getSeqEntry(i + 1);
+            const losatArgs = buildLosatArgs(i, i + 1);
+            const cacheKey = await buildCacheKey(losatArgs, i, i + 1);
+            const cached = losatCache.get(cacheKey);
+            const blastText = cached
+              ? cached.text
+              : await runLosatPair({
+                  program: losatProgram.value,
+                  queryFasta: queryEntry.fasta,
+                  subjectFasta: subjectEntry.fasta,
+                  outfmt: losat.outfmt || '6',
+                  extraArgs: losatArgs
+                });
+            if (!cached) {
+              losatCache.set(cacheKey, { text: blastText });
+            }
+            cacheInfo.push({
+              key: cacheKey,
+              filename: buildCacheFilename(i, queryEntry, subjectEntry)
+            });
+            pyodide.FS.writeFile(`/blast_${i}.txt`, textEncoder.encode(blastText));
+            blastArgs.push(`/blast_${i}.txt`);
+          } else if (seq.blast) {
             await writeFileToFs(seq.blast, `/blast_${i}.txt`);
             blastArgs.push(`/blast_${i}.txt`);
           }
+        }
+        if (extractFirstFasta) {
+          extractFirstFasta.destroy();
+        }
+        if (useLosat) {
+          losatCacheInfo.value = cacheInfo;
         }
         if (lInputType.value === 'gb') args.push('--gbk', ...inputArgs);
         else {
@@ -266,5 +423,20 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     }
   };
 
-  return { runAnalysis };
+  const downloadLosatCache = () => {
+    if (!losatCacheInfo.value || losatCacheInfo.value.length === 0) return;
+    losatCacheInfo.value.forEach((entry, idx) => {
+      const cached = losatCache.get(entry.key);
+      if (!cached) return;
+      const filename = entry.filename || `losat_pair_${idx + 1}.tsv`;
+      downloadTextFile(filename, cached.text);
+    });
+  };
+
+  const clearLosatCache = () => {
+    losatCache.clear();
+    losatCacheInfo.value = [];
+  };
+
+  return { runAnalysis, downloadLosatCache, clearLosatCache };
 };

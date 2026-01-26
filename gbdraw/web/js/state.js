@@ -108,6 +108,8 @@ const circularLegendPosition = ref('left'); // Separate legend position for circ
 const linearLegendPosition = ref('bottom'); // Separate legend position for linear mode
 const cInputType = ref('gb');
 const lInputType = ref('gb');
+const blastSource = ref('upload'); // 'upload' | 'losat'
+const losatProgram = ref('blastn'); // 'blastn' | 'tblastx'
 const files = reactive({
   c_gb: null,
   c_gff: null,
@@ -118,7 +120,7 @@ const files = reactive({
   whitelist: null,
   qualifier_priority: null
 });
-const linearSeqs = reactive([{ gb: null, gff: null, fasta: null, blast: null }]);
+const linearSeqs = reactive([{ gb: null, gff: null, fasta: null, blast: null, losat_gencode: 1 }]);
 
 // Configuration Forms
 const form = reactive({
@@ -180,6 +182,15 @@ const adv = reactive({
   inner_label_x_offset: null,
   inner_label_y_offset: null
 });
+
+const losat = reactive({
+  outfmt: '6',
+  blastn: {
+    task: 'megablast'
+  }
+});
+
+const losatCacheInfo = ref([]);
 
 // Color & Filter State
 const paletteNames = ref(['default']);
@@ -440,10 +451,14 @@ export const state = {
   linearLegendPosition,
   cInputType,
   lInputType,
+  blastSource,
+  losatProgram,
   files,
   linearSeqs,
   form,
   adv,
+  losat,
+  losatCacheInfo,
   paletteNames,
   selectedPalette,
   currentColors,
