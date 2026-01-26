@@ -120,7 +120,7 @@ const files = reactive({
   whitelist: null,
   qualifier_priority: null
 });
-const linearSeqs = reactive([{ gb: null, gff: null, fasta: null, blast: null }]);
+const linearSeqs = reactive([{ gb: null, gff: null, fasta: null, blast: null, losat_gencode: 1 }]);
 
 // Configuration Forms
 const form = reactive({
@@ -186,47 +186,7 @@ const adv = reactive({
 const losat = reactive({
   outfmt: '6',
   blastn: {
-    task: 'megablast',
-    word_size: 28,
-    evalue: null,
-    percent_identity: null,
-    min_hit_length: 0,
-    max_target_seqs: null,
-    hitlist_size: 500,
-    limit_lookup: false,
-    max_db_word_count: 30,
-    max_hsps_per_subject: 0,
-    min_diag_separation: 0,
-    scan_step: 0,
-    dust: true,
-    dust_level: 20,
-    dust_window: 64,
-    dust_linker: 1,
-    lcase_masking: false,
-    reward: 1,
-    penalty: -2,
-    gap_open: 0,
-    gap_extend: 0
-  },
-  tblastx: {
-    evalue: 10.0,
-    threshold: 13,
-    word_size: 3,
-    percent_identity: null,
-    min_hit_length: 0,
-    max_target_seqs: 500,
-    window_size: 40,
-    seg: true,
-    seg_window: 12,
-    seg_locut: 2.2,
-    seg_hicut: 2.5,
-    include_stop_seeds: true,
-    ncbi_stop_stop_score: true,
-    neighbor_map: false,
-    ncbi_compat: false,
-    query_gencode: 1,
-    db_gencode: 1,
-    culling_limit: 0
+    task: 'megablast'
   }
 });
 

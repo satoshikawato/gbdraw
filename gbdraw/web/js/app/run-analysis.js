@@ -276,69 +276,24 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
           }
         };
 
-        const buildLosatArgs = () => {
+        const getGencode = (idx) => {
+          const raw = linearSeqs[idx]?.losat_gencode;
+          if (raw === null || raw === undefined || raw === '') return null;
+          const num = Number(raw);
+          if (!Number.isFinite(num)) return null;
+          return num;
+        };
+
+        const buildLosatArgs = (queryIdx, subjectIdx) => {
           const args = [];
           if (losatProgram.value === 'blastn') {
-            const cfg = losat.blastn;
-            pushArg(args, '--task', cfg.task);
-            pushArg(args, '--word-size', cfg.word_size);
-            if (cfg.evalue !== null && cfg.evalue !== '') pushArg(args, '--evalue', cfg.evalue);
-            if (cfg.percent_identity !== null && Number(cfg.percent_identity) > 0) {
-              pushArg(args, '--percent-identity', cfg.percent_identity);
-            }
-            if (Number(cfg.min_hit_length) > 0) pushArg(args, '--min-hit-length', cfg.min_hit_length);
-            if (Number(cfg.max_target_seqs) > 0) pushArg(args, '--max-target-seqs', cfg.max_target_seqs);
-            if (Number(cfg.hitlist_size) > 0) pushArg(args, '--hitlist-size', cfg.hitlist_size);
-            if (cfg.limit_lookup) {
-              args.push('--limit-lookup');
-              pushArg(args, '--max-db-word-count', cfg.max_db_word_count);
-            }
-            if (Number(cfg.max_hsps_per_subject) > 0) {
-              pushArg(args, '--max-hsps-per-subject', cfg.max_hsps_per_subject);
-            }
-            if (Number(cfg.min_diag_separation) > 0) {
-              pushArg(args, '--min-diag-separation', cfg.min_diag_separation);
-            }
-            if (Number(cfg.scan_step) > 0) pushArg(args, '--scan-step', cfg.scan_step);
-            if (cfg.dust === false) args.push('--dust=false');
-            if (cfg.dust) {
-              pushArg(args, '--dust-level', cfg.dust_level);
-              pushArg(args, '--dust-window', cfg.dust_window);
-              pushArg(args, '--dust-linker', cfg.dust_linker);
-            }
-            if (cfg.lcase_masking) args.push('--lcase-masking');
-            pushArg(args, '--reward', cfg.reward);
-            pushArg(args, '--penalty', cfg.penalty);
-            pushArg(args, '--gap-open', cfg.gap_open);
-            pushArg(args, '--gap-extend', cfg.gap_extend);
+            pushArg(args, '--task', losat.blastn.task);
           } else {
-            const cfg = losat.tblastx;
-            pushArg(args, '--evalue', cfg.evalue);
-            pushArg(args, '--threshold', cfg.threshold);
-            pushArg(args, '--word-size', cfg.word_size);
-            if (cfg.percent_identity !== null && Number(cfg.percent_identity) > 0) {
-              pushArg(args, '--percent-identity', cfg.percent_identity);
-            }
-            if (Number(cfg.min_hit_length) > 0) pushArg(args, '--min-hit-length', cfg.min_hit_length);
-            if (Number(cfg.max_target_seqs) > 0) pushArg(args, '--max-target-seqs', cfg.max_target_seqs);
-            pushArg(args, '--window-size', cfg.window_size);
-            if (cfg.seg === false) args.push('--seg=false');
-            if (cfg.seg) {
-              pushArg(args, '--seg-window', cfg.seg_window);
-              pushArg(args, '--seg-locut', cfg.seg_locut);
-              pushArg(args, '--seg-hicut', cfg.seg_hicut);
-            }
-            if (cfg.include_stop_seeds === false) args.push('--include-stop-seeds=false');
-            if (cfg.ncbi_stop_stop_score === false) args.push('--ncbi-stop-stop-score=false');
-            if (cfg.neighbor_map) args.push('--neighbor-map');
-            if (cfg.ncbi_compat) args.push('--ncbi-compat');
-            pushArg(args, '--query-gencode', cfg.query_gencode);
-            pushArg(args, '--db-gencode', cfg.db_gencode);
-            pushArg(args, '--culling-limit', cfg.culling_limit);
+            pushArg(args, '--query-gencode', getGencode(queryIdx));
+            pushArg(args, '--db-gencode', getGencode(subjectIdx));
           }
           return args;
         };
-        const losatArgs = useLosat ? buildLosatArgs() : [];
 
         for (let i = 0; i < linearSeqs.length; i++) {
           const seq = linearSeqs[i];
@@ -358,6 +313,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
           if (useLosat) {
             const queryEntry = getSeqEntry(i);
             const subjectEntry = getSeqEntry(i + 1);
+            const losatArgs = buildLosatArgs(i, i + 1);
             const cacheKey = await buildCacheKey(losatArgs, i, i + 1);
             const cached = losatCache.get(cacheKey);
             const blastText = cached
