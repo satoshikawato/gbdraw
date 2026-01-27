@@ -480,12 +480,21 @@
                                 <label v-if="mode === 'linear'" class="input-label">Label Settings</label>
 
                                 <div class="grid grid-cols-2 gap-2">
-                                    <div v-if="mode === 'circular'">
-                                        <label class="text-[9px] text-slate-400">Def Font Size <help-tip text="Font size for the species/strain definition text."></help-tip></label>
-                                        <input type="number" v-model.number="adv.def_font_size" class="form-input" placeholder="18">
+                                    <div>
+                                        <label class="text-[9px] text-slate-400">
+                                            Definition Font Size
+                                            <help-tip text="Font size for the definition text (species/strain in circular, record name in linear)."></help-tip>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            :value="adv.def_font_size ?? ''"
+                                            @input="adv.def_font_size = $event.target.value === '' ? null : Number($event.target.value)"
+                                            class="form-input"
+                                            placeholder="Auto"
+                                        >
                                     </div>
-                                    
-                                    <div :class="mode === 'linear' ? 'col-span-2' : ''">
+
+                                    <div>
                                         <label class="text-[9px] text-slate-400">Label Font Size <help-tip text="Font size for feature labels."></help-tip></label>
                                         <input type="number" v-model.number="adv.label_font_size" class="form-input" placeholder="Auto">
                                     </div>
