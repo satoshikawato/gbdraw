@@ -43,16 +43,8 @@ A GUI web app of `gbdraw` (latest commit on `main` branch) is available without 
 
 [![Static Badge](https://img.shields.io/badge/gbdraw%20webapp-8A2BE2)](https://gbdraw.app/)
 
-The web app runs entirely in your browser.
+The web app runs entirely in your browser (serverless), which means your data never leaves your machine.
 
-### Local Web UI
-If you have `gbdraw` installed and prefer to run the GUI locally, use:
-
-```bash
-gbdraw gui
-```
-
-This starts a local HTTP server on a free port and opens the app in your browser.
 
 ## Bug reports and suggestions
 Please feel free to submit a new issue if you find a bug or have a suggestion:

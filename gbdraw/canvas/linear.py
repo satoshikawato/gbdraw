@@ -178,6 +178,9 @@ class LinearCanvasConfigurator:
         """
         Calculates final canvas dimensions and legend offsets, ensuring the legend fits within the canvas.
         """
+        # Keep the alignment width fixed to the configured figure width so the longest record fits.
+        # Horizontal offsets and legend widths expand the total canvas width around that baseline.
+        self.alignment_width = self.fig_width
 
         def calculate_optimal_legend_y():
             genome_area_top = self.vertical_offset
@@ -225,8 +228,6 @@ class LinearCanvasConfigurator:
             self.total_width = self.horizontal_offset + self.alignment_width + 2 * padding
             self.legend_offset_x = 0
             self.legend_offset_y = 0
-
-        self.alignment_width = self.fig_width
 
     def create_svg_canvas(self) -> Drawing:
         """

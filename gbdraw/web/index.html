@@ -196,6 +196,10 @@
                                 <file-uploader label="GFF3" v-model="seq.gff"></file-uploader>
                                 <file-uploader label="FASTA" v-model="seq.fasta"></file-uploader>
                             </div>
+                            <div class="mt-2">
+                                <div class="text-[10px] text-slate-500 font-bold mb-1">Definition (optional)</div>
+                                <input type="text" v-model="seq.definition" placeholder="Custom label (e.g., E. coli O157:H7 Sakai)" class="form-input px-1 py-0.5 text-xs">
+                            </div>
                             <div v-if="blastSource === 'losat' && losatProgram === 'tblastx'" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1">LOSAT Gencode</div>
                                 <input type="number" v-model.number="seq.losat_gencode" placeholder="Gencode (this entry)" class="form-input px-1 py-0.5 text-xs">
@@ -209,7 +213,7 @@
                             </div>
                         </div>
                         <div class="flex gap-2">
-                            <button @click="linearSeqs.push({gb:null, gff:null, fasta:null, blast:null, losat_gencode: 1})" class="btn btn-secondary text-xs w-full"><i class="ph ph-plus"></i> Add Seq</button>
+                            <button @click="linearSeqs.push({gb:null, gff:null, fasta:null, blast:null, losat_gencode: 1, definition: ''})" class="btn btn-secondary text-xs w-full"><i class="ph ph-plus"></i> Add Seq</button>
                             <button v-if="linearSeqs.length > 1" @click="linearSeqs.pop()" class="btn btn-danger text-xs w-full"><i class="ph ph-minus"></i> Remove</button>
                         </div>
                     </div>

@@ -64,7 +64,8 @@ def assemble_linear_diagram_from_records(
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
 
     seq_len_dict = create_dict_for_sequence_lengths(records)
-    longest_genome = max(seq_len_dict.values())
+    # Use raw records to avoid collapsing lengths when IDs are duplicated.
+    longest_genome = max(len(record.seq) for record in records)
 
     # Match legacy CLI behavior: linear window/step are based on the longest genome.
     if window is None:
@@ -94,7 +95,7 @@ def assemble_linear_diagram_from_records(
     )
 
     canvas_config = LinearCanvasConfigurator(
-        num_of_entries=len(seq_len_dict),
+        num_of_entries=len(records),
         longest_genome=longest_genome,
         config_dict=config_dict,
         legend=legend,
