@@ -404,6 +404,11 @@ export const createLegendRepositionActions = ({
           }
 
           const padding = 20;
+          const availableHorizontalWidth = vbW - padding * 2;
+          const wideHorizontalLegend =
+            nowHorizontal && availableHorizontalWidth > 0 && legendWidth > availableHorizontalWidth * 0.9;
+          const centeredHorizontalX = vbX + (vbW - legendWidth) / 2;
+          const leftAlignedHorizontalX = vbX + padding;
 
           if (nowHorizontal) {
             linearBaseConfig.value.horizontalLegendWidth = legendWidth;
@@ -462,11 +467,11 @@ export const createLegendRepositionActions = ({
 
           switch (newPosition) {
             case 'top':
-              finalX = vbX + (vbW - legendWidth) / 2;
+              finalX = wideHorizontalLegend ? leftAlignedHorizontalX : centeredHorizontalX;
               finalY = vbY + padding;
               break;
             case 'bottom':
-              finalX = vbX + (vbW - legendWidth) / 2;
+              finalX = wideHorizontalLegend ? leftAlignedHorizontalX : centeredHorizontalX;
               finalY = vbY + vbH - legendHeight - padding;
               break;
             case 'left':

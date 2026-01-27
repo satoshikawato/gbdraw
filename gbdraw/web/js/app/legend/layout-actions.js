@@ -8,6 +8,7 @@ import {
 
 export const createLegendLayoutActions = ({ state }) => {
   const { mode, form, linearBaseConfig } = state;
+  const horizontalLegendPadding = 20;
 
   const getHorizontalWrapWidth = (svg) => {
     if (!svg) return null;
@@ -320,7 +321,20 @@ export const createLegendLayoutActions = ({ state }) => {
 
         let newX = textXOffset;
         let newY = rectSize / 2;
-        const wrapWidth = maxWidth || baseWidth;
+        let wrapWidth = maxWidth || baseWidth;
+        if (Number.isFinite(wrapWidth)) {
+          wrapWidth = Math.max(wrapWidth - horizontalLegendPadding * 2, rectSize + textXOffset * 2);
+        }
+        if (pairwiseLegend) {
+          const pairwiseBBox = pairwiseLegend.getBBox();
+          const pairwiseWidth = pairwiseBBox.width || 0;
+          if (pairwiseWidth > 0) {
+            wrapWidth = Math.max(
+              wrapWidth - pairwiseWidth - textXOffset,
+              rectSize + textXOffset * 2
+            );
+          }
+        }
 
         entries.forEach((entry) => {
           const textBBox = entry.text.getBBox();
@@ -630,12 +644,13 @@ export const createLegendLayoutActions = ({ state }) => {
         }
       }
 
+      const availableWidth = Math.max(maxWidth - horizontalLegendPadding * 2, rectSize + textXOffset * 2);
       const reservedOffset = Math.max(isRootLegendGroup ? 0 : featureOffset.x, 0);
-      let maxFeatureWidth = maxWidth - reservedOffset;
+      let maxFeatureWidth = availableWidth - reservedOffset;
       if (pairwiseLegend && pairwiseWidth > 0) {
-        maxFeatureWidth = maxWidth - reservedOffset - pairwiseWidth - textXOffset;
+        maxFeatureWidth = availableWidth - reservedOffset - pairwiseWidth - textXOffset;
         if (maxFeatureWidth < rectSize + textXOffset * 2) {
-          maxFeatureWidth = maxWidth - reservedOffset;
+          maxFeatureWidth = availableWidth - reservedOffset;
         }
       }
 
