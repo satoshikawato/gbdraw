@@ -150,7 +150,7 @@ const adv = reactive({
   window_size: null,
   step_size: null,
   nt: 'GC',
-  def_font_size: 18,
+  def_font_size: null,
   label_font_size: null,
 
   // Styles
