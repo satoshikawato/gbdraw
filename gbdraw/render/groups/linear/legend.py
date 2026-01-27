@@ -84,12 +84,17 @@ class LegendGroup:
         y_offset = self.rect_size / 2
         current_x_offset = 0
         max_height = self.line_height
-        current_row_start_x = 0
+        current_row_width = 0
+        max_row_width = 0
 
         # For horizontal layout, use canvas width as the wrap limit, not total_feature_legend_width
         # total_feature_legend_width may be calculated for vertical layout (single item width)
         # when legend_position is left/right at generation time
         horizontal_wrap_width = self.canvas_config.total_width if self.canvas_config else 0
+        if self.has_gradient and horizontal_wrap_width > 0:
+            reserved_width = self.pairwise_legend_width + self.text_x_offset
+            min_width = self.rect_size + self.text_x_offset * 2
+            horizontal_wrap_width = max(horizontal_wrap_width - reserved_width, min_width)
 
         for key, properties in self.legend_table.items():
             if properties["type"] != "solid":
@@ -105,7 +110,9 @@ class LegendGroup:
                 horizontal_wrap_width > 0
                 and current_x_offset + entry_width > horizontal_wrap_width
             ):
+                max_row_width = max(max_row_width, current_row_width)
                 current_x_offset = 0
+                current_row_width = 0
                 y_offset += self.line_height
                 max_height += self.line_height
 
@@ -140,8 +147,10 @@ class LegendGroup:
             group.add(entry_group)
 
             current_x_offset += entry_width
+            current_row_width += entry_width
 
-        width = max(current_x_offset, current_row_start_x)
+        max_row_width = max(max_row_width, current_row_width)
+        width = max_row_width
         height = max_height
 
         return group, width, height

@@ -120,7 +120,7 @@ def add_record_definition_group(
 ) -> Drawing:
     """Adds a record definition group to the linear canvas."""
     definition_group_obj = DefinitionGroup(record, config_dict, canvas_config, cfg=cfg)
-    definition_offset_x = (definition_group_obj.definition_bounding_box_width / 2) + (0.1 * max_def_width)
+    definition_offset_x = (definition_group_obj.definition_bounding_box_width / 2) + canvas_config.canvas_padding
     record_definition_group: Group = definition_group_obj.get_group()
 
     position_record_definition_group(

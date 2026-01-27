@@ -179,6 +179,19 @@ export const createDiagramDragActions = ({ state }) => {
       }
     });
 
+    // Ensure top-level diagram groups (e.g., contig_1) are included even if IDs are lowercase.
+    Array.from(svg.children).forEach((el) => {
+      if (!el || el.tagName.toLowerCase() !== 'g') return;
+      const id = el.getAttribute('id');
+      if (!id) return;
+      if (id === 'legend') return;
+      if (foundElements.includes(el)) return;
+      foundElements.push(el);
+      if (!foundIds.includes(id)) {
+        foundIds.push(id);
+      }
+    });
+
     diagramElements.value = foundElements;
     diagramElementIds.value = foundIds;
 
