@@ -416,12 +416,13 @@ def linear_main(cmd_args) -> None:
     else:
         logger.error("A critical error occurred with input file arguments.")
         sys.exit(1)
-    sequence_length_dict: dict[str,
-                               int] = create_dict_for_sequence_lengths(records)
-    longest_genome: int = max(sequence_length_dict.values())
+    sequence_length_dict: dict[str, int] = create_dict_for_sequence_lengths(records)
+    # Use raw records to avoid collapsing lengths when IDs are duplicated.
+    longest_genome: int = max(len(record.seq) for record in records)
     cfg = GbdrawConfig.from_dict(config_dict)
     window, step = calculate_window_step(longest_genome, cfg, manual_window, manual_step)
-    num_of_entries: int = len(sequence_length_dict)
+    # Use raw record count to avoid collapsing entries when IDs are duplicated.
+    num_of_entries: int = len(records)
 
     canvas = assemble_linear_diagram_from_records(
         records=records,
