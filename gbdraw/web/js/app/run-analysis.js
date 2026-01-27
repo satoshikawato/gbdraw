@@ -209,6 +209,14 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
         if (adv.scale_stroke_width) args.push('--scale_stroke_width', adv.scale_stroke_width);
         if (adv.scale_stroke_color) args.push('--scale_stroke_color', adv.scale_stroke_color);
 
+        const recordLabels = linearSeqs.map((seq) => (seq.definition ?? '').toString());
+        const hasRecordLabels = recordLabels.some((label) => label.trim() !== '');
+        if (hasRecordLabels) {
+          recordLabels.forEach((label) => {
+            args.push('--record_label', label);
+          });
+        }
+
         let inputArgs = [];
         let blastArgs = [];
         const useLosat = blastSource.value === 'losat';

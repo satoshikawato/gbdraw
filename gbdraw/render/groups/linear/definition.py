@@ -3,9 +3,9 @@
 
 from Bio.SeqRecord import SeqRecord
 from svgwrite.container import Group
-from svgwrite.text import Text
+from svgwrite.text import Text, TSpan
 
-from ....core.text import create_text_element, calculate_bbox_dimensions
+from ....core.text import create_text_element, calculate_bbox_dimensions, parse_mixed_content_text
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 
 
@@ -73,7 +73,7 @@ class DefinitionGroup:
         self.linear_dominant_baseline: str = def_cfg.dominant_baseline
         self.get_id_and_length()
         self.name_bounding_box_width, self.name_bounding_box_height = calculate_bbox_dimensions(
-            self.record_name, self.linear_definition_font_family, self.linear_definition_font_size, self.dpi
+            self.record_name_plain, self.linear_definition_font_family, self.linear_definition_font_size, self.dpi
         )
         self.length_bounding_box_width, self.length_bounding_box_height = calculate_bbox_dimensions(
             self.length_label, self.linear_definition_font_family, self.linear_definition_font_size, self.dpi
@@ -97,7 +97,14 @@ class DefinitionGroup:
         Extracts the ID and length of the SeqRecord for display purposes.
         """
         self.track_id = str(self.record.id)
-        self.record_name: str = self.track_id
+        override = None
+        if getattr(self.record, "annotations", None):
+            override = self.record.annotations.get("gbdraw_record_label")
+        if override is not None:
+            override = str(override).strip()
+        self.record_name: str = override if override else self.track_id
+        parts = parse_mixed_content_text(self.record_name)
+        self.record_name_plain = "".join(part.get("text") or "" for part in parts)
         self.record_length: int = len(self.record.seq)
         self.length_label: str = "{:,} bp".format(self.record_length)
 
@@ -105,16 +112,7 @@ class DefinitionGroup:
         """
         Adds the definition elements (like record name and length) to the group.
         """
-        self.name_path: Text = create_text_element(
-            self.record_name,
-            self.title_start_x,
-            self.title_start_y,
-            self.linear_definition_font_size,
-            self.linear_definition_font_weight,
-            self.linear_definition_font_family,
-            text_anchor=self.linear_text_anchor,
-            dominant_baseline=self.linear_dominant_baseline,
-        )
+        self.name_path: Text = self._create_name_text()
         self.length_path: Text = create_text_element(
             self.length_label,
             self.length_start_x,
@@ -127,6 +125,29 @@ class DefinitionGroup:
         )
         self.definition_group.add(self.name_path)
         self.definition_group.add(self.length_path)
+
+    def _create_name_text(self) -> Text:
+        parts = parse_mixed_content_text(self.record_name)
+        text_el = Text(
+            "",
+            insert=(self.title_start_x, self.title_start_y),
+            stroke="none",
+            fill="black",
+            font_size=self.linear_definition_font_size,
+            font_weight=self.linear_definition_font_weight,
+            font_family=self.linear_definition_font_family,
+            text_anchor=self.linear_text_anchor,
+            dominant_baseline=self.linear_dominant_baseline,
+        )
+        for part in parts:
+            part_text = part.get("text")
+            if part_text is None:
+                continue
+            if part.get("italic"):
+                text_el.add(TSpan(part_text, font_style="italic"))
+            else:
+                text_el.add(TSpan(part_text))
+        return text_el
 
     def get_group(self) -> Group:
         """

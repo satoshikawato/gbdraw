@@ -191,6 +191,7 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--line_stroke_color LINE_STROKE_COLOR]
               [--line_stroke_width LINE_STROKE_WIDTH]
               [--definition_font_size DEFINITION_FONT_SIZE]
+              [--record_label RECORD_LABEL]
               [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [-l LEGEND]
               [--show_labels [{all,first,none}]] [--resolve_overlaps]
               [--label_whitelist LABEL_WHITELIST |
@@ -260,6 +261,9 @@ options:
   --definition_font_size DEFINITION_FONT_SIZE
                         Definition font size (optional; float; default: 24 pt
                         for genomes <= 50 kb, 10 pt for genomes >= 50 kb)
+  --record_label RECORD_LABEL
+                        Override record definition label (repeatable; order
+                        matches input records)
   --label_font_size LABEL_FONT_SIZE
                         Label font size (optional; default: 24 pt for genomes
                         <= 50 kb, 5 pt for genomes >= 50 kb)

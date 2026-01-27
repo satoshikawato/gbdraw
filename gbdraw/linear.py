@@ -184,6 +184,12 @@ def _get_args(args) -> argparse.Namespace:
         help='Definition font size (optional; float; default: 24 pt for genomes <= 50 kb, 10 pt for genomes >= 50 kb)',
         type=float)
     parser.add_argument(
+        '--record_label',
+        help='Override record definition label (repeatable; order matches input records)',
+        type=str,
+        action='append',
+        default=[])
+    parser.add_argument(
         '--label_font_size',
         help='Label font size (optional; default: 24 pt for genomes <= 50 kb, 5 pt for genomes >= 50 kb)',
         type=float)
@@ -416,6 +422,21 @@ def linear_main(cmd_args) -> None:
     else:
         logger.error("A critical error occurred with input file arguments.")
         sys.exit(1)
+    record_labels = args.record_label or []
+    if record_labels:
+        if len(record_labels) > len(records):
+            logger.warning(
+                "WARNING: More --record_label values were provided than records loaded; extra labels will be ignored."
+            )
+        for idx, label in enumerate(record_labels[: len(records)]):
+            if label is None:
+                continue
+            label = str(label).strip()
+            if not label:
+                continue
+            if getattr(records[idx], "annotations", None) is None:
+                records[idx].annotations = {}
+            records[idx].annotations["gbdraw_record_label"] = label
     sequence_length_dict: dict[str, int] = create_dict_for_sequence_lengths(records)
     # Use raw records to avoid collapsing lengths when IDs are duplicated.
     longest_genome: int = max(len(record.seq) for record in records)

@@ -50,7 +50,8 @@ export const setupWatchers = ({
     fileLegendCaptions,
     manualPriorityRules,
     manualWhitelist,
-    manualBlacklist
+    manualBlacklist,
+    linearSeqs
   } = state;
 
   const {
@@ -364,6 +365,7 @@ export const setupWatchers = ({
   watch(() => form.species, scheduleDefinitionUpdate);
   watch(() => form.strain, scheduleDefinitionUpdate);
   watch(() => state.adv.def_font_size, scheduleDefinitionUpdate);
+  watch(() => linearSeqs.map((seq) => seq.definition), scheduleDefinitionUpdate);
 
   onMounted(async () => {
     await pyodideManager.initPyodide();

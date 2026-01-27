@@ -120,7 +120,9 @@ const files = reactive({
   whitelist: null,
   qualifier_priority: null
 });
-const linearSeqs = reactive([{ gb: null, gff: null, fasta: null, blast: null, losat_gencode: 1 }]);
+const linearSeqs = reactive([
+  { gb: null, gff: null, fasta: null, blast: null, losat_gencode: 1, definition: '' }
+]);
 
 // Configuration Forms
 const form = reactive({
