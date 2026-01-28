@@ -200,6 +200,31 @@
                                 <div class="text-[10px] text-slate-500 font-bold mb-1">Definition (optional)</div>
                                 <input type="text" v-model="seq.definition" placeholder="Custom label (e.g., E. coli O157:H7 Sakai)" class="form-input px-1 py-0.5 text-xs">
                             </div>
+                            <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
+                                <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
+                                    <i class="ph ph-crop"></i> Region (optional)
+                                    <help-tip text="Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID."></help-tip>
+                                </div>
+                                <div class="grid grid-cols-1 gap-2">
+                                    <div>
+                                        <label class="text-[9px] block">Record ID (optional)</label>
+                                        <input type="text" v-model="seq.region_record_id" placeholder="NC_000913.3" class="form-input px-1 py-0.5 text-xs">
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label class="text-[9px] block">Start</label>
+                                            <input type="number" min="1" v-model.number="seq.region_start" placeholder="1028779" class="form-input px-1 py-0.5 text-xs">
+                                        </div>
+                                        <div>
+                                            <label class="text-[9px] block">End</label>
+                                            <input type="number" min="1" v-model.number="seq.region_end" placeholder="1035047" class="form-input px-1 py-0.5 text-xs">
+                                        </div>
+                                    </div>
+                                    <label class="flex items-center gap-2 text-[10px] text-slate-600">
+                                        <input type="checkbox" v-model="seq.region_reverse" class="form-checkbox"> Reverse complement
+                                    </label>
+                                </div>
+                            </div>
                             <div v-if="blastSource === 'losat' && losatProgram === 'tblastx'" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1">LOSAT Gencode</div>
                                 <input type="number" v-model.number="seq.losat_gencode" placeholder="Gencode (this entry)" class="form-input px-1 py-0.5 text-xs">
@@ -213,7 +238,7 @@
                             </div>
                         </div>
                         <div class="flex gap-2">
-                            <button @click="linearSeqs.push({gb:null, gff:null, fasta:null, blast:null, losat_gencode: 1, definition: ''})" class="btn btn-secondary text-xs w-full"><i class="ph ph-plus"></i> Add Seq</button>
+                            <button @click="linearSeqs.push({gb:null, gff:null, fasta:null, blast:null, losat_gencode: 1, definition: '', region_record_id: '', region_start: null, region_end: null, region_reverse: false})" class="btn btn-secondary text-xs w-full"><i class="ph ph-plus"></i> Add Seq</button>
                             <button v-if="linearSeqs.length > 1" @click="linearSeqs.pop()" class="btn btn-danger text-xs w-full"><i class="ph ph-minus"></i> Remove</button>
                         </div>
                     </div>

@@ -45,7 +45,7 @@ def run_gbdraw_wrapper(mode, args):
             results.append({"name": fname, "content": f.read()})
     return json.dumps(results)
 
-def extract_first_fasta(path, fmt):
+def extract_first_fasta(path, fmt, region_spec=None):
     """Extract the first record as FASTA for LOSAT input."""
     from Bio import SeqIO
     from io import StringIO
@@ -54,6 +54,9 @@ def extract_first_fasta(path, fmt):
         if fmt not in fmt_map:
             return json.dumps({"error": f"Unsupported format: {fmt}"})
         record = next(SeqIO.parse(path, fmt_map[fmt]))
+        if region_spec:
+            from gbdraw.io.regions import apply_region_specs, parse_region_specs
+            record = apply_region_specs([record], parse_region_specs([region_spec]))[0]
         handle = StringIO()
         SeqIO.write(record, handle, "fasta")
         return json.dumps({"fasta": handle.getvalue(), "record_id": record.id})
@@ -129,7 +132,7 @@ def regenerate_definition_svg(gb_path, species=None, strain=None, font_size=18):
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 
-def extract_features_from_genbank(gb_path):
+def extract_features_from_genbank(gb_path, region_spec=None):
     """Extract feature info from GenBank file for UI display"""
     from Bio import SeqIO
     from gbdraw.features.colors import compute_feature_hash
@@ -137,7 +140,11 @@ def extract_features_from_genbank(gb_path):
     record_ids = []
     idx = 0
     try:
-        for rec_idx, record in enumerate(SeqIO.parse(gb_path, "genbank")):
+        records = list(SeqIO.parse(gb_path, "genbank"))
+        if region_spec:
+            from gbdraw.io.regions import apply_region_specs, parse_region_specs
+            records = apply_region_specs(records, parse_region_specs([region_spec]))
+        for rec_idx, record in enumerate(records):
             record_id = record.id or f"Record_{rec_idx}"
             hash_record_id = record.id
             record_ids.append(record_id)
