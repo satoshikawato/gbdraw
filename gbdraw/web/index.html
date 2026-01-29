@@ -780,7 +780,7 @@
                          @mouseleave="endPan">
                         <div v-if="svgContent" v-html="svgContent" ref="svgContainer"
                             :key="`svg-${mode}-${selectedResultIndex}-${results.length}`"
-                            :style="{transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.2s'}"
+                            :style="{transform: `translate(${canvasPan.x}px, ${canvasPan.y}px) scale(${zoom})`, transformOrigin: 'top center', transition: isPanning ? 'none' : 'transform 0.2s'}"
                             class="shadow-xl bg-white m-auto origin-top">
                         </div>
                     </div>
