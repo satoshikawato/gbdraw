@@ -98,7 +98,7 @@
                 </h1>
             </div>
             
-            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-3">
                 <div class="flex gap-1 mr-4">
                     <button @click="exportConfig" class="text-xs font-bold text-slate-500 hover:text-blue-600 px-2 py-1 rounded border border-slate-200 bg-white flex items-center gap-1">
                         <i class="ph ph-export"></i> Save Config
@@ -107,6 +107,13 @@
                         <i class="ph ph-arrow-square-in"></i> Load Config
                     </button>
                     <input type="file" ref="configInput" accept=".json" class="hidden" @change="importConfig">
+                    <button @click="exportSession" class="text-xs font-bold text-slate-600 hover:text-blue-700 px-2 py-1 rounded border border-blue-200 bg-blue-50 flex items-center gap-1">
+                        <i class="ph ph-archive"></i> Save Session
+                    </button>
+                    <button @click="$refs.sessionInput.click()" class="text-xs font-bold text-slate-600 hover:text-blue-700 px-2 py-1 rounded border border-blue-200 bg-blue-50 flex items-center gap-1">
+                        <i class="ph ph-archive-tray"></i> Load Session
+                    </button>
+                    <input type="file" ref="sessionInput" accept=".json" class="hidden" @change="importSession">
                 </div>
 
                 <div class="flex bg-slate-100 p-1 rounded-lg">

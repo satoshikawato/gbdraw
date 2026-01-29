@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadPNG, downloadPDF } from '../services/export.js';
-import { exportConfig, importConfig } from '../services/config.js';
+import { exportConfig, exportSession, importConfig, importSession } from '../services/config.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { createSvgStyles } from './svg-styles.js';
@@ -293,7 +293,9 @@ export const createAppSetup = () => {
     downloadPNG,
     downloadPDF,
     exportConfig,
+    exportSession,
     importConfig,
+    importSession,
     manualPriorityRules,
     newPriorityRule,
     addPriorityRule
