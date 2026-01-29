@@ -99,7 +99,8 @@ const zoom = ref(1.0);
 
 // Pan (drag) functionality
 const isPanning = ref(false);
-const panStart = reactive({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
+const panStart = reactive({ x: 0, y: 0, panX: 0, panY: 0 });
+const canvasPan = reactive({ x: 0, y: 0 });
 const canvasContainerRef = ref(null);
 
 // App State
@@ -458,6 +459,7 @@ export const state = {
   zoom,
   isPanning,
   panStart,
+  canvasPan,
   canvasContainerRef,
   mode,
   circularLegendPosition,

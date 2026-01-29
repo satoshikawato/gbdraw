@@ -1,5 +1,5 @@
 export const createPanZoom = (state) => {
-  const { zoom, isPanning, panStart, canvasContainerRef } = state;
+  const { zoom, isPanning, panStart, canvasPan, canvasContainerRef } = state;
 
   const handleWheel = (event) => {
     const delta = event.deltaY > 0 ? -0.1 : 0.1;
@@ -36,8 +36,8 @@ export const createPanZoom = (state) => {
     isPanning.value = true;
     panStart.x = event.clientX;
     panStart.y = event.clientY;
-    panStart.scrollLeft = container.scrollLeft;
-    panStart.scrollTop = container.scrollTop;
+    panStart.panX = canvasPan.x;
+    panStart.panY = canvasPan.y;
     container.style.cursor = 'grabbing';
   };
 
@@ -48,8 +48,8 @@ export const createPanZoom = (state) => {
 
     const dx = event.clientX - panStart.x;
     const dy = event.clientY - panStart.y;
-    container.scrollLeft = panStart.scrollLeft - dx;
-    container.scrollTop = panStart.scrollTop - dy;
+    canvasPan.x = panStart.panX + dx;
+    canvasPan.y = panStart.panY + dy;
   };
 
   const endPan = () => {
