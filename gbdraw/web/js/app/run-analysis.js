@@ -1,7 +1,5 @@
 import { runLosatPair } from '../services/losat.js';
 
-const losatCache = new Map();
-
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
   const blob = new Blob([text], { type: 'text/tab-separated-values' });
@@ -67,6 +65,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     losatProgram,
     losat,
     losatCacheInfo,
+    losatCache,
     files,
     linearSeqs,
     generatedLegendPosition,
@@ -261,6 +260,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
         const textEncoder = new TextEncoder();
         let extractFirstFasta = null;
         let cacheInfo = [];
+        const cacheMap = losatCache.value || new Map();
 
         if (useLosat) {
           extractFirstFasta = pyodide.globals.get('extract_first_fasta');
@@ -360,7 +360,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
             const subjectEntry = getSeqEntry(i + 1);
             const losatArgs = buildLosatArgs(i, i + 1);
             const cacheKey = await buildCacheKey(losatArgs, i, i + 1);
-            const cached = losatCache.get(cacheKey);
+            const cached = cacheMap.get(cacheKey);
             const blastText = cached
               ? cached.text
               : await runLosatPair({
@@ -371,7 +371,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
                   extraArgs: losatArgs
                 });
             if (!cached) {
-              losatCache.set(cacheKey, { text: blastText });
+              cacheMap.set(cacheKey, { text: blastText });
             }
             cacheInfo.push({
               key: cacheKey,
@@ -389,6 +389,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
         }
         if (useLosat) {
           losatCacheInfo.value = cacheInfo;
+          losatCache.value = cacheMap;
         }
         if (lInputType.value === 'gb') args.push('--gbk', ...inputArgs);
         else {
@@ -469,18 +470,37 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     }
   };
 
-  const downloadLosatCache = () => {
+  const downloadLosatCache = async () => {
     if (!losatCacheInfo.value || losatCacheInfo.value.length === 0) return;
-    losatCacheInfo.value.forEach((entry, idx) => {
-      const cached = losatCache.get(entry.key);
-      if (!cached) return;
+    const cacheMap = losatCache.value;
+    if (!cacheMap || cacheMap.size === 0) return;
+
+    const totalChars = losatCacheInfo.value.reduce((sum, entry) => {
+      const cached = cacheMap.get(entry.key);
+      return sum + (cached?.text ? cached.text.length : 0);
+    }, 0);
+
+    if (totalChars > 50 * 1024 * 1024) {
+      const proceed = confirm(
+        `LOSAT TSV export will download about ${(totalChars / (1024 * 1024)).toFixed(1)} MB. Continue?`
+      );
+      if (!proceed) return;
+    }
+
+    for (let idx = 0; idx < losatCacheInfo.value.length; idx += 1) {
+      const entry = losatCacheInfo.value[idx];
+      const cached = cacheMap.get(entry.key);
+      if (!cached) continue;
       const filename = entry.filename || `losat_pair_${idx + 1}.tsv`;
       downloadTextFile(filename, cached.text);
-    });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
   };
 
   const clearLosatCache = () => {
-    losatCache.clear();
+    if (losatCache.value) {
+      losatCache.value.clear();
+    }
     losatCacheInfo.value = [];
   };
 

@@ -205,6 +205,7 @@ const losat = reactive({
 });
 
 const losatCacheInfo = ref([]);
+const losatCache = ref(new Map());
 
 // Color & Filter State
 const paletteNames = ref(['default']);
@@ -474,6 +475,7 @@ export const state = {
   adv,
   losat,
   losatCacheInfo,
+  losatCache,
   paletteNames,
   selectedPalette,
   currentColors,

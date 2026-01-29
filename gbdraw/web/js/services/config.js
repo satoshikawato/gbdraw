@@ -89,7 +89,8 @@ const applyConfigData = (data) => {
         qual: String(r.qual || ''),
         val: String(r.val || ''),
         color: resolveColorToHex(String(r.color || '#000000')),
-        cap: String(r.cap || '')
+        cap: String(r.cap || ''),
+        fromFile: !!r.fromFile
       });
     });
   }
@@ -163,6 +164,53 @@ const serializeResults = () => {
     name: res.name || `Result ${idx + 1}`,
     content: idx === state.selectedResultIndex.value && currentSvg ? currentSvg : res.content
   }));
+};
+
+const serializeLosatCache = () => {
+  const cacheMap = state.losatCache?.value;
+  if (!cacheMap || cacheMap.size === 0) return [];
+  const info = Array.isArray(state.losatCacheInfo.value) ? state.losatCacheInfo.value : [];
+  const entries = [];
+  const seen = new Set();
+
+  info.forEach((entry, idx) => {
+    if (!entry || !entry.key) return;
+    const cached = cacheMap.get(entry.key);
+    if (!cached || typeof cached.text !== 'string') return;
+    entries.push({
+      key: entry.key,
+      filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
+      text: cached.text
+    });
+    seen.add(entry.key);
+  });
+
+  cacheMap.forEach((value, key) => {
+    if (seen.has(key)) return;
+    if (!value || typeof value.text !== 'string') return;
+    entries.push({ key, filename: '', text: value.text });
+  });
+
+  return entries;
+};
+
+const applyLosatCache = (entries) => {
+  const map = new Map();
+  const info = [];
+
+  if (Array.isArray(entries)) {
+    entries.forEach((entry, idx) => {
+      if (!entry || !entry.key || typeof entry.text !== 'string') return;
+      map.set(entry.key, { text: entry.text });
+      info.push({
+        key: entry.key,
+        filename: entry.filename || `losat_pair_${idx + 1}.tsv`
+      });
+    });
+  }
+
+  state.losatCache.value = map;
+  state.losatCacheInfo.value = info;
 };
 
 const createEmptyLinearSeq = () => ({
@@ -260,6 +308,12 @@ export const exportConfig = () => {
 };
 
 export const exportSession = async () => {
+  const losatEntries = serializeLosatCache();
+  const losatBytes = losatEntries.reduce((sum, entry) => sum + (entry.text ? entry.text.length : 0), 0);
+  const currentLegend = state.form.legend;
+  const isLinear = state.mode.value === 'linear';
+  const savedCircularLegend = isLinear ? state.circularLegendPosition.value : currentLegend;
+  const savedLinearLegend = isLinear ? currentLegend : state.linearLegendPosition.value;
   const totalBytes =
     (state.files.c_gb?.size || 0) +
     (state.files.c_gff?.size || 0) +
@@ -277,7 +331,8 @@ export const exportSession = async () => {
         (seq.fasta?.size || 0) +
         (seq.blast?.size || 0)
       );
-    }, 0);
+    }, 0) +
+    losatBytes;
 
   if (totalBytes > 50 * 1024 * 1024) {
     const proceed = confirm(
@@ -300,8 +355,9 @@ export const exportSession = async () => {
       canvasPadding: { ...state.canvasPadding },
       selectedResultIndex: state.selectedResultIndex.value,
       generatedLegendPosition: state.generatedLegendPosition.value,
-      circularLegendPosition: state.circularLegendPosition.value,
-      linearLegendPosition: state.linearLegendPosition.value,
+      legend: currentLegend,
+      circularLegendPosition: savedCircularLegend,
+      linearLegendPosition: savedLinearLegend,
       cInputType: state.cInputType.value,
       lInputType: state.lInputType.value,
       downloadDpi: state.downloadDpi.value
@@ -313,6 +369,9 @@ export const exportSession = async () => {
       featureRecordIds: state.featureRecordIds.value,
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: JSON.parse(JSON.stringify(state.featureColorOverrides))
+    },
+    losatCache: {
+      entries: losatEntries
     }
   };
 
@@ -383,6 +442,7 @@ export const importSession = async (e) => {
     }
 
     applyFiles(data.files);
+    applyLosatCache(data.losatCache?.entries);
 
     state.skipCaptureBaseConfig.value = false;
     state.skipPositionReapply.value = false;
@@ -444,6 +504,25 @@ export const importSession = async (e) => {
     }
     if (typeof ui.zoom === 'number') {
       state.zoom.value = ui.zoom;
+    }
+
+    if (ui.legend) {
+      state.form.legend = ui.legend;
+    } else if (state.mode.value === 'linear' && ui.linearLegendPosition) {
+      state.form.legend = ui.linearLegendPosition;
+    } else if (state.mode.value === 'circular' && ui.circularLegendPosition) {
+      state.form.legend = ui.circularLegendPosition;
+    }
+
+    if (ui.circularLegendPosition && state.mode.value !== 'circular') {
+      state.circularLegendPosition.value = ui.circularLegendPosition;
+    } else if (state.mode.value === 'circular') {
+      state.circularLegendPosition.value = state.form.legend;
+    }
+    if (ui.linearLegendPosition && state.mode.value !== 'linear') {
+      state.linearLegendPosition.value = ui.linearLegendPosition;
+    } else if (state.mode.value === 'linear') {
+      state.linearLegendPosition.value = state.form.legend;
     }
 
     alert('Session loaded successfully!');
