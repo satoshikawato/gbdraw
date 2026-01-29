@@ -298,6 +298,24 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         action='append',
         default=[])
+    parser.add_argument(
+        '--record_id',
+        help=(
+            'Select a record by ID or #index per input file (repeatable; order matches input files). '
+            'Use an empty value to skip selection for a file.'
+        ),
+        type=str,
+        action='append',
+        default=[])
+    parser.add_argument(
+        '--reverse_complement',
+        help=(
+            'Reverse complement record per input file (repeatable; order matches input files). '
+            'Accepted values: 1/0, true/false, yes/no.'
+        ),
+        type=str,
+        action='append',
+        default=[])
     args = parser.parse_args(args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
@@ -425,10 +443,54 @@ def linear_main(cmd_args) -> None:
         normalize_length=normalize_length
         )
 
+    def _normalize_list(values, target_len, fill_value=""):
+        items = list(values or [])
+        if len(items) > target_len:
+            logger.error(
+                "ERROR: Too many --record_id/--reverse_complement values (expected at most %s).", target_len
+            )
+            sys.exit(1)
+        while len(items) < target_len:
+            items.append(fill_value)
+        return items
+
+    def _parse_bool(value: str | None) -> bool:
+        if value is None:
+            return False
+        text = str(value).strip().lower()
+        if text in {"1", "true", "yes", "y", "on"}:
+            return True
+        if text in {"0", "false", "no", "n", "off", "", "none", "null", "-"}:
+            return False
+        logger.error("ERROR: Invalid reverse_complement value: %s", value)
+        sys.exit(1)
+
     if args.gbk:
-        records = load_gbks(args.gbk, "linear", load_comparison)
+        file_count = len(args.gbk)
+        record_selectors = _normalize_list(args.record_id, file_count, "")
+        reverse_flags_raw = _normalize_list(args.reverse_complement, file_count, "")
+        reverse_flags = [_parse_bool(v) for v in reverse_flags_raw]
+        records = load_gbks(
+            args.gbk,
+            "linear",
+            load_comparison,
+            record_selectors=record_selectors,
+            reverse_flags=reverse_flags,
+        )
     elif args.gff and args.fasta:
-        records = load_gff_fasta(args.gff, args.fasta, "linear", selected_features_set, load_comparison)
+        file_count = len(args.gff)
+        record_selectors = _normalize_list(args.record_id, file_count, "")
+        reverse_flags_raw = _normalize_list(args.reverse_complement, file_count, "")
+        reverse_flags = [_parse_bool(v) for v in reverse_flags_raw]
+        records = load_gff_fasta(
+            args.gff,
+            args.fasta,
+            "linear",
+            selected_features_set,
+            load_comparison,
+            record_selectors=record_selectors,
+            reverse_flags=reverse_flags,
+        )
     else:
         logger.error("A critical error occurred with input file arguments.")
         sys.exit(1)

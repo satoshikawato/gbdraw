@@ -45,23 +45,60 @@ def run_gbdraw_wrapper(mode, args):
             results.append({"name": fname, "content": f.read()})
     return json.dumps(results)
 
-def extract_first_fasta(path, fmt, region_spec=None):
+def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, reverse_flag=None):
     """Extract the first record as FASTA for LOSAT input."""
     from Bio import SeqIO
     from io import StringIO
+    from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
     try:
         fmt_map = {"genbank": "genbank", "fasta": "fasta"}
         if fmt not in fmt_map:
             return json.dumps({"error": f"Unsupported format: {fmt}"})
-        record = next(SeqIO.parse(path, fmt_map[fmt]))
+        records = list(SeqIO.parse(path, fmt_map[fmt]))
+        if not records:
+            return json.dumps({"error": "No records found"})
+        selector = parse_record_selector(record_selector)
+        if selector is None:
+            records = [records[0]]
+        else:
+            records = select_record(records, selector)
+        reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
+        records = reverse_records(records, reverse)
         if region_spec:
             from gbdraw.io.regions import apply_region_specs, parse_region_specs
-            record = apply_region_specs([record], parse_region_specs([region_spec]))[0]
+            records = apply_region_specs(records, parse_region_specs([region_spec]))
+        record = records[0]
         handle = StringIO()
         SeqIO.write(record, handle, "fasta")
         return json.dumps({"fasta": handle.getvalue(), "record_id": record.id})
     except StopIteration:
         return json.dumps({"error": "No records found"})
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
+
+def get_record_length(path, fmt, record_id=None, record_index=None):
+    """Return record length for a GenBank/FASTA file."""
+    from Bio import SeqIO
+    try:
+        fmt_map = {"genbank": "genbank", "fasta": "fasta"}
+        if fmt not in fmt_map:
+            return json.dumps({"error": f"Unsupported format: {fmt}"})
+        records = list(SeqIO.parse(path, fmt_map[fmt]))
+        if not records:
+            return json.dumps({"error": "No records found"})
+        if record_id:
+            for idx, record in enumerate(records):
+                if record.id == record_id:
+                    return json.dumps({"length": len(record.seq), "record_id": record.id, "record_index": idx})
+            return json.dumps({"error": f"Record ID not found: {record_id}"})
+        if record_index is not None:
+            idx = int(record_index)
+            if idx < 0 or idx >= len(records):
+                return json.dumps({"error": f"Record index out of range: {idx + 1}"})
+            record = records[idx]
+            return json.dumps({"length": len(record.seq), "record_id": record.id, "record_index": idx})
+        record = records[0]
+        return json.dumps({"length": len(record.seq), "record_id": record.id, "record_index": 0})
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 
@@ -132,15 +169,20 @@ def regenerate_definition_svg(gb_path, species=None, strain=None, font_size=18):
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 
-def extract_features_from_genbank(gb_path, region_spec=None):
+def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None):
     """Extract feature info from GenBank file for UI display"""
     from Bio import SeqIO
     from gbdraw.features.colors import compute_feature_hash
+    from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
     features = []
     record_ids = []
     idx = 0
     try:
         records = list(SeqIO.parse(gb_path, "genbank"))
+        selector = parse_record_selector(record_selector)
+        records = select_record(records, selector)
+        reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
+        records = reverse_records(records, reverse)
         if region_spec:
             from gbdraw.io.regions import apply_region_specs, parse_region_specs
             records = apply_region_specs(records, parse_region_specs([region_spec]))

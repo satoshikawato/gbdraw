@@ -208,9 +208,14 @@
                                     <help-tip text="Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID."></help-tip>
                                 </div>
                                 <div class="grid grid-cols-1 gap-2">
-                                    <div>
-                                        <label class="text-[9px] block">Record ID (optional)</label>
-                                        <input type="text" v-model="seq.region_record_id" placeholder="NC_000913.3" class="form-input px-1 py-0.5 text-xs">
+                                    <div class="grid grid-cols-2 gap-2 items-end">
+                                        <div>
+                                            <label class="text-[9px] block">Record ID (optional)</label>
+                                            <input type="text" v-model="seq.region_record_id" placeholder="NC_000913.3" class="form-input px-1 py-0.5 text-xs">
+                                        </div>
+                                        <label class="flex items-center gap-2 text-[10px] text-slate-600 pb-1">
+                                            <input type="checkbox" v-model="seq.region_reverse" class="form-checkbox"> Reverse complement
+                                        </label>
                                     </div>
                                     <div class="grid grid-cols-2 gap-2">
                                         <div>
@@ -222,9 +227,6 @@
                                             <input type="number" min="1" v-model.number="seq.region_end" placeholder="1035047" class="form-input px-1 py-0.5 text-xs">
                                         </div>
                                     </div>
-                                    <label class="flex items-center gap-2 text-[10px] text-slate-600">
-                                        <input type="checkbox" v-model="seq.region_reverse" class="form-checkbox"> Reverse complement
-                                    </label>
                                 </div>
                             </div>
                             <div v-if="blastSource === 'losat' && losatProgram === 'tblastx'" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
