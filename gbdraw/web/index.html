@@ -80,7 +80,7 @@
         <div class="animate-spin text-5xl mb-6">🧬</div>
         <h3 class="text-2xl font-bold text-slate-800">Initializing gbdraw Serverless...</h3>
         <p class="text-slate-500 mt-2">Loading Python engine (Pyodide) and dependencies.</p>
-        <p class="text-xs text-slate-400 mt-4 font-mono">{{ loadingStatus }}</p>
+        <p class="text-xs text-slate-400 mt-4 font-mono" v-text="loadingStatus">Loading gbdraw...</p>
     </div>
 
     <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
@@ -327,6 +327,25 @@
                     <details>
                         <summary><i class="ph ph-palette"></i> Colors & Filters <help-tip text="Customize colors and filter labels by keyword."></help-tip></summary>
                         <div class="mt-4 space-y-6 pt-4 border-t border-slate-200">
+
+                            <div class="bg-blue-50/60 border border-blue-200 rounded-lg p-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h4 class="text-xs font-bold text-slate-600">PRESET SCHEMES <help-tip text="Applies both default colors (-d) and specific rules (-t)."></help-tip></h4>
+                                    <span class="text-[9px] font-semibold text-blue-600">Affects -d &amp; -t</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <select v-model="selectedSpecificPreset" class="form-input text-xs h-7 flex-grow bg-white">
+                                        <option disabled value="">Select preset...</option>
+                                        <option v-for="p in specificRulePresets" :value="p.id">{{ p.label }}</option>
+                                    </select>
+                                    <button @click="applySpecificRulePreset" class="btn btn-primary text-xs h-7 px-3 shadow-md shadow-blue-200" :disabled="!selectedSpecificPreset || specificRulePresetLoading">
+                                        <i class="ph ph-magic-wand"></i>
+                                        <span v-if="specificRulePresetLoading">Applying...</span>
+                                        <span v-else>Apply</span>
+                                    </button>
+                                </div>
+                                <p class="text-[9px] text-slate-500 mt-2">Preset schemes update the palette and replace existing specific rules.</p>
+                            </div>
                             
                             <div>
                                 <div class="flex justify-between items-center mb-2">
@@ -372,20 +391,6 @@
                                 <div class="flex items-center justify-between mb-2">
                                     <h4 class="text-xs font-bold text-slate-500">SPECIFIC RULES (-t) <help-tip text="Color features matching specific qualifier values (Regex supported)."></help-tip></h4>
                                     <button v-if="manualSpecificRules.length > 0" @click="clearAllSpecificRules" class="text-[10px] text-red-500 hover:text-red-700 hover:underline"><i class="ph ph-trash"></i> Clear All</button>
-                                </div>
-
-                                <div class="mb-3">
-                                    <label class="text-[9px] font-bold text-slate-500 block mb-1">PRESET SCHEMES <help-tip text="Load a predefined -t table and replace existing rules."></help-tip></label>
-                                    <div class="flex items-center gap-2">
-                                        <select v-model="selectedSpecificPreset" class="form-input text-xs h-7 flex-grow">
-                                            <option disabled value="">Select preset...</option>
-                                            <option v-for="p in specificRulePresets" :value="p.id">{{ p.label }}</option>
-                                        </select>
-                                        <button @click="applySpecificRulePreset" class="btn btn-secondary text-xs h-7 px-3" :disabled="!selectedSpecificPreset || specificRulePresetLoading">
-                                            <span v-if="specificRulePresetLoading">Applying...</span>
-                                            <span v-else>Apply</span>
-                                        </button>
-                                    </div>
                                 </div>
 
                                 <div class="space-y-1 mb-3">
