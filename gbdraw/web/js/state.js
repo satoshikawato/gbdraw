@@ -128,6 +128,7 @@ const linearSeqs = reactive([
     fasta: null,
     blast: null,
     losat_gencode: 1,
+    losat_filename: '',
     definition: '',
     region_record_id: '',
     region_start: null,

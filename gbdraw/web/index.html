@@ -182,17 +182,12 @@
                                     <p class="text-[10px] text-slate-500">Query/DB gencode is set per entry below.</p>
                                 </div>
                             </div>
-                            <div class="mt-2 pt-2 border-t border-slate-200">
-                                <div class="flex gap-2">
-                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs w-full" :disabled="losatCacheInfo.length === 0">
-                                        <i class="ph ph-download-simple"></i> Save LOSAT TSV
-                                    </button>
+                                <div class="mt-2 pt-2 border-t border-slate-200">
                                     <button @click="clearLosatCache" class="btn btn-danger text-xs w-full" :disabled="losatCacheInfo.length === 0">
                                         <i class="ph ph-trash"></i> Clear Cache
                                     </button>
+                                    <p class="text-[10px] text-slate-500 mt-1">Cached results are reused when inputs and settings match.</p>
                                 </div>
-                                <p class="text-[10px] text-slate-500 mt-1">Cached results are reused when inputs and settings match.</p>
-                            </div>
                         </div>
                         <div v-for="(seq, idx) in linearSeqs" :key="idx" class="p-3 bg-slate-50 rounded-lg border border-slate-200 relative group text-sm transition-all hover:border-blue-300">
                             <div class="absolute top-2 right-2 text-[10px] font-bold text-white bg-slate-400 px-1.5 py-0.5 rounded-full">#{{ idx + 1 }}</div>
@@ -241,11 +236,21 @@
                                 <file-uploader label="BLAST TSV" v-model="seq.blast"></file-uploader>
                             </div>
                             <div v-else-if="idx < linearSeqs.length - 1 && blastSource === 'losat'" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
-                                <div class="text-[10px] text-slate-500 font-bold flex items-center gap-1"><i class="ph ph-lightning"></i> LOSAT will run for this pair</div>
+                                <div class="text-[10px] text-slate-500 font-bold flex items-center gap-1"><i class="ph ph-lightning"></i> LOSAT (pair #{{ idx + 1 }} ↔ #{{ idx + 2 }})</div>
+                                <div class="mt-2">
+                                    <label class="text-[9px] block">Filename (optional)</label>
+                                    <input type="text" v-model="seq.losat_filename" :placeholder="getLosatPairDefaultName(idx)" class="form-input px-1 py-0.5 text-xs"
+                                           @change="setLosatPairFilename(idx, seq.losat_filename)">
+                                    <div class="text-[9px] text-slate-400 mt-1">Default: {{ getLosatPairDefaultName(idx) }}</div>
+                                </div>
+                                <button @click="downloadLosatPair(idx, seq.losat_filename)" class="btn btn-secondary text-xs w-full mt-2"
+                                        :disabled="!losatCacheInfo[idx]">
+                                    <i class="ph ph-download-simple"></i> Save LOSAT TSV
+                                </button>
                             </div>
                         </div>
                         <div class="flex gap-2">
-                            <button @click="linearSeqs.push({gb:null, gff:null, fasta:null, blast:null, losat_gencode: 1, definition: '', region_record_id: '', region_start: null, region_end: null, region_reverse: false})" class="btn btn-secondary text-xs w-full"><i class="ph ph-plus"></i> Add Seq</button>
+                            <button @click="linearSeqs.push({gb:null, gff:null, fasta:null, blast:null, losat_gencode: 1, losat_filename: '', definition: '', region_record_id: '', region_start: null, region_end: null, region_reverse: false})" class="btn btn-secondary text-xs w-full"><i class="ph ph-plus"></i> Add Seq</button>
                             <button v-if="linearSeqs.length > 1" @click="linearSeqs.pop()" class="btn btn-danger text-xs w-full"><i class="ph ph-minus"></i> Remove</button>
                         </div>
                     </div>

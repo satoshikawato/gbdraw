@@ -74,6 +74,69 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     selectedFeatureRecordIdx
   } = state;
 
+  const getSeqLabel = (seq, fallback) => {
+    const definition = String(seq?.definition || '').trim();
+    if (definition) return definition;
+    if (fallback) return fallback;
+    const file = seq?.gb || seq?.fasta || seq?.gff;
+    if (file?.name) {
+      return String(file.name).replace(/\.[^.]+$/, '');
+    }
+    return '';
+  };
+
+  const normalizeLabel = (label, fallback) => {
+    const base = String(label || '').trim() || String(fallback || '');
+    const dotted = base.replace(/[\\s/]+/g, '.').replace(/\.+/g, '.').replace(/^\.|\.$/g, '');
+    const safe = makeSafeFilename(dotted);
+    return safe || makeSafeFilename(String(fallback || 'losat'));
+  };
+
+  const buildLosatSuffix = () => (losatProgram.value === 'blastn' ? 'losatn' : 'tlosatx');
+
+  const buildLosatFilename = (leftLabel, rightLabel) => {
+    const left = normalizeLabel(leftLabel, 'seq_1');
+    const right = normalizeLabel(rightLabel, 'seq_2');
+    return `${left}.${right}.${buildLosatSuffix()}.tsv`;
+  };
+
+  const getLosatPairDefaultName = (pairIndex, queryEntry = null, subjectEntry = null) => {
+    const leftLabel = getSeqLabel(linearSeqs[pairIndex], queryEntry?.recordId || `seq_${pairIndex + 1}`);
+    const rightLabel = getSeqLabel(linearSeqs[pairIndex + 1], subjectEntry?.recordId || `seq_${pairIndex + 2}`);
+    return buildLosatFilename(leftLabel, rightLabel);
+  };
+
+  const normalizeLosatFilename = (name, fallback) => {
+    const raw = String(name || '').trim() || String(fallback || '');
+    const withExt = raw.toLowerCase().endsWith('.tsv') ? raw : `${raw}.tsv`;
+    return makeSafeFilename(withExt);
+  };
+
+  const downloadLosatPair = async (pairIndex, customName) => {
+    const entry = losatCacheInfo.value?.[pairIndex];
+    const cacheMap = losatCache.value;
+    if (!entry || !cacheMap) return;
+    const cached = cacheMap.get(entry.key);
+    if (!cached || typeof cached.text !== 'string') return;
+    const defaultName = getLosatPairDefaultName(pairIndex);
+    const filename = normalizeLosatFilename(
+      customName,
+      entry.filename || defaultName || `losat_pair_${pairIndex + 1}.tsv`
+    );
+    entry.filename = filename;
+    downloadTextFile(filename, cached.text);
+  };
+
+  const setLosatPairFilename = (pairIndex, customName) => {
+    const entry = losatCacheInfo.value?.[pairIndex];
+    if (!entry) return;
+    const defaultName = getLosatPairDefaultName(pairIndex);
+    entry.filename = normalizeLosatFilename(
+      customName,
+      entry.filename || defaultName || `losat_pair_${pairIndex + 1}.tsv`
+    );
+  };
+
   const runAnalysis = async () => {
     if (!pyodideReady.value) return;
     const pyodide = getPyodide();
@@ -304,11 +367,8 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
           return hashText(payload);
         };
 
-        const buildCacheFilename = (pairIndex, queryEntry, subjectEntry) => {
-          const left = makeSafeFilename(queryEntry.recordId || `seq_${pairIndex + 1}`);
-          const right = makeSafeFilename(subjectEntry.recordId || `seq_${pairIndex + 2}`);
-          return `${left}_vs_${right}.losat.tsv`;
-        };
+        const buildCacheFilename = (pairIndex, queryEntry, subjectEntry) =>
+          getLosatPairDefaultName(pairIndex, queryEntry, subjectEntry);
 
         const pushArg = (arr, flag, value) => {
           if (value === null || value === undefined || value === '') return;
@@ -504,5 +564,12 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     losatCacheInfo.value = [];
   };
 
-  return { runAnalysis, downloadLosatCache, clearLosatCache };
+  return {
+    runAnalysis,
+    downloadLosatCache,
+    downloadLosatPair,
+    setLosatPairFilename,
+    clearLosatCache,
+    getLosatPairDefaultName
+  };
 };

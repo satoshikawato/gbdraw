@@ -127,7 +127,14 @@ export const createAppSetup = () => {
 
   const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions });
   const resultsManager = createResultsManager({ state, getPyodide });
-  const { runAnalysis, downloadLosatCache, clearLosatCache } = createRunAnalysis({
+  const {
+    runAnalysis,
+    downloadLosatCache,
+    downloadLosatPair,
+    setLosatPairFilename,
+    clearLosatCache,
+    getLosatPairDefaultName
+  } = createRunAnalysis({
     state,
     getPyodide,
     writeFileToFs: pyodideManager.writeFileToFs,
@@ -224,7 +231,10 @@ export const createAppSetup = () => {
     updatePalette,
     resetColors,
     downloadLosatCache,
+    downloadLosatPair,
+    setLosatPairFilename,
     clearLosatCache,
+    getLosatPairDefaultName,
     filterMode,
     manualBlacklist,
     manualWhitelist,
