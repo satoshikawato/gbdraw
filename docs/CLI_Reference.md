@@ -179,7 +179,7 @@ options:
 ```bash
 $ gbdraw linear -h
 usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
-              [--fasta [FASTA_FILE ...]] [-b [BLAST ...]] [-t TABLE]
+              [--fasta [FASTA_FILE ...]] [--region REGION] [-b [BLAST ...]] [-t TABLE]
               [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT] [-n NT] [-w WINDOW]
               [-s STEP] [--separate_strands] [--show_gc] [--show_skew]
               [--align_center] [--evalue EVALUE] [--bitscore BITSCORE]
@@ -216,6 +216,11 @@ options:
                         GFF3 file (instead of --gbk; --fasta is required)
   --fasta [FASTA_FILE ...]
                         FASTA file (required with --gff)
+  --region REGION       Crop a region (repeatable). Format:
+                        record_id:start-end[:rc] or #index:start-end[:rc].
+                        Coordinates are 1-based inclusive. If no selector is
+                        used, provide one spec per record in input order
+                        (file order, then record order within each file).
   -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format
                         (-outfmt 6 or 7) (optional)

@@ -100,6 +100,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
 
     try {
       let args = [];
+      let regionSpecs = [];
 
       if (form.prefix && form.prefix.trim() !== '') args.push('-o', form.prefix.trim());
       if (form.species) args.push('--species', form.species);
@@ -217,6 +218,41 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
           });
         }
 
+        const buildRegionSpec = (seq, idx) => {
+          const hasStart = seq.region_start !== null && seq.region_start !== undefined && seq.region_start !== '';
+          const hasEnd = seq.region_end !== null && seq.region_end !== undefined && seq.region_end !== '';
+          const recordIdRaw = seq.region_record_id ? String(seq.region_record_id).trim() : '';
+          const hasAny =
+            hasStart ||
+            hasEnd ||
+            recordIdRaw !== '' ||
+            Boolean(seq.region_reverse);
+          if (!hasAny) return null;
+          if (!hasStart || !hasEnd) {
+            throw new Error(`Sequence #${idx + 1}: Region start and end are required.`);
+          }
+          const start = Number(seq.region_start);
+          const end = Number(seq.region_end);
+          if (!Number.isFinite(start) || !Number.isFinite(end)) {
+            throw new Error(`Sequence #${idx + 1}: Region start/end must be numbers.`);
+          }
+          if (!Number.isInteger(start) || !Number.isInteger(end)) {
+            throw new Error(`Sequence #${idx + 1}: Region start/end must be integers.`);
+          }
+          if (start < 1 || end < 1) {
+            throw new Error(`Sequence #${idx + 1}: Region start/end must be >= 1.`);
+          }
+          const specBody = `${start}-${end}${seq.region_reverse ? ':rc' : ''}`;
+          const cliSpec = recordIdRaw ? `${recordIdRaw}:${specBody}` : `#${idx + 1}:${specBody}`;
+          const fileSpec = recordIdRaw ? `${recordIdRaw}:${specBody}` : specBody;
+          return { cli: cliSpec, file: fileSpec };
+        };
+
+        regionSpecs = linearSeqs.map((seq, idx) => buildRegionSpec(seq, idx));
+        regionSpecs.forEach((spec) => {
+          if (spec?.cli) args.push('--region', spec.cli);
+        });
+
         let inputArgs = [];
         let blastArgs = [];
         const useLosat = blastSource.value === 'losat';
@@ -236,7 +272,8 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
           if (fastaCache.has(idx)) return fastaCache.get(idx);
           const path = lInputType.value === 'gb' ? `/seq_${idx}.gb` : `/seq_${idx}.fasta`;
           const fmt = lInputType.value === 'gb' ? 'genbank' : 'fasta';
-          const res = JSON.parse(extractFirstFasta(path, fmt));
+          const regionSpec = regionSpecs[idx]?.file || null;
+          const res = JSON.parse(extractFirstFasta(path, fmt, regionSpec));
           if (res.error) throw new Error(res.error);
           const entry = {
             fasta: res.fasta,
@@ -399,7 +436,8 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
           let allFeatures = [];
           let allRecordLabels = [];
           for (let i = 0; i < linearSeqs.length; i++) {
-            const featJson = pyodide.globals.get('extract_features_from_genbank')(`/seq_${i}.gb`);
+            const regionSpec = regionSpecs[i]?.file || null;
+            const featJson = pyodide.globals.get('extract_features_from_genbank')(`/seq_${i}.gb`, regionSpec);
             const featData = JSON.parse(featJson);
             if (!featData.error && featData.features) {
               featData.features.forEach((f) => {

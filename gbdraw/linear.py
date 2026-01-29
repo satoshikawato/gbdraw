@@ -10,6 +10,7 @@ from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .io.colors import load_default_colors, read_color_table
 from .io.genome import load_gbks, load_gff_fasta
+from .io.regions import apply_region_specs, parse_region_specs
 from .config.toml import load_config_toml
 from .render.export import parse_formats, save_figure
 from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[reportMissingImports]
@@ -288,6 +289,15 @@ def _get_args(args) -> argparse.Namespace:
         '--normalize_length',
         help='Normalize record length (experimental; default: False). ',
         action='store_true')
+    parser.add_argument(
+        '--region',
+        help=(
+            'Crop a region (repeatable). Format: record_id:start-end[:rc] or #index:start-end[:rc]. '
+            'Coordinates are 1-based inclusive. For multiple records without selectors, provide one spec per record in input order (file order, then record order within each file).'
+        ),
+        type=str,
+        action='append',
+        default=[])
     args = parser.parse_args(args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
@@ -437,6 +447,17 @@ def linear_main(cmd_args) -> None:
             if getattr(records[idx], "annotations", None) is None:
                 records[idx].annotations = {}
             records[idx].annotations["gbdraw_record_label"] = label
+    region_specs = parse_region_specs(args.region)
+    if region_specs:
+        try:
+            records = apply_region_specs(records, region_specs, log=logger)
+        except ValueError as exc:
+            logger.error(f"ERROR: {exc}")
+            sys.exit(1)
+        if blast_files:
+            logger.warning(
+                "WARNING: Region cropping is enabled; ensure BLAST coordinates match the cropped regions (and reverse complements if specified)."
+            )
     sequence_length_dict: dict[str, int] = create_dict_for_sequence_lengths(records)
     # Use raw records to avoid collapsing lengths when IDs are duplicated.
     longest_genome: int = max(len(record.seq) for record in records)

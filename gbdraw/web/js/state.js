@@ -121,7 +121,18 @@ const files = reactive({
   qualifier_priority: null
 });
 const linearSeqs = reactive([
-  { gb: null, gff: null, fasta: null, blast: null, losat_gencode: 1, definition: '' }
+  {
+    gb: null,
+    gff: null,
+    fasta: null,
+    blast: null,
+    losat_gencode: 1,
+    definition: '',
+    region_record_id: '',
+    region_start: null,
+    region_end: null,
+    region_reverse: false
+  }
 ]);
 
 // Configuration Forms
