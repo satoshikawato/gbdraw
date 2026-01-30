@@ -90,42 +90,42 @@
 
     <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-14 shrink-0">
         <div class="px-4 h-full flex items-center justify-between">
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-1 min-w-0">
                 <div class="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center font-bold text-lg shadow-md">🧬</div>
-                <h1 class="text-lg font-bold text-slate-800 tracking-tight flex items-baseline">
+                <h1 class="text-lg font-bold text-slate-800 tracking-tight flex items-center whitespace-nowrap leading-none mt-0.5">
                     gbdraw
-                    <span class="text-slate-400 text-sm font-normal ml-3">A genome diagram generator for microbes and organelles</span>
+                    <span class="text-slate-400 text-sm font-normal ml-2">A genome diagram generator for microbes and organelles</span>
                 </h1>
             </div>
             
-                <div class="flex items-center gap-3">
-                <div class="flex gap-1 mr-4">
-                    <button @click="exportConfig" class="text-xs font-bold text-slate-500 hover:text-blue-600 px-2 py-1 rounded border border-slate-200 bg-white flex items-center gap-1">
+                <div class="flex items-center gap-2 min-w-0">
+                <div class="flex gap-0.5">
+                    <button @click="exportConfig" class="text-[11px] font-bold text-slate-500 hover:text-blue-600 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5">
                         <i class="ph ph-export"></i> Save Config
                     </button>
-                    <button @click="$refs.configInput.click()" class="text-xs font-bold text-slate-500 hover:text-blue-600 px-2 py-1 rounded border border-slate-200 bg-white flex items-center gap-1">
+                    <button @click="$refs.configInput.click()" class="text-[11px] font-bold text-slate-500 hover:text-blue-600 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5">
                         <i class="ph ph-arrow-square-in"></i> Load Config
                     </button>
                     <input type="file" ref="configInput" accept=".json" class="hidden" @change="importConfig">
-                    <button @click="saveSessionWithTitle" class="text-xs font-bold text-slate-600 hover:text-blue-700 px-2 py-1 rounded border border-blue-200 bg-blue-50 flex items-center gap-1">
+                    <button @click="saveSessionWithTitle" class="text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5">
                         <i class="ph ph-archive"></i> Save Session
                     </button>
-                    <button @click="$refs.sessionInput.click()" class="text-xs font-bold text-slate-600 hover:text-blue-700 px-2 py-1 rounded border border-blue-200 bg-blue-50 flex items-center gap-1">
+                    <button @click="$refs.sessionInput.click()" class="text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5">
                         <i class="ph ph-archive-tray"></i> Load Session
                     </button>
                     <input type="file" ref="sessionInput" accept=".json" class="hidden" @change="importSession">
                 </div>
-                <div class="flex items-center gap-2 mr-4">
+                <div class="flex items-center gap-1 min-w-0">
                     <span class="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Session</span>
-                    <button @click="editSessionTitle" class="text-xs font-semibold text-slate-600 hover:text-blue-700 px-2 py-1 rounded border border-slate-200 bg-white flex items-center gap-1 max-w-[180px]">
+                    <button @click="editSessionTitle" class="text-[11px] font-semibold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5 w-32 min-w-0 justify-start">
                         <i class="ph ph-pencil-simple"></i>
                         <span class="truncate">{{ sessionTitleLabel }}</span>
                     </button>
                 </div>
 
                 <div class="flex bg-slate-100 p-1 rounded-lg">
-                    <button @click="mode = 'circular'" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="px-4 py-1.5 rounded-md text-sm font-bold transition-all flex items-center gap-2"><i class="ph ph-circle"></i> Circular</button>
-                    <button @click="mode = 'linear'" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="px-4 py-1.5 rounded-md text-sm font-bold transition-all flex items-center gap-2"><i class="ph ph-ruler"></i> Linear</button>
+                    <button @click="mode = 'circular'" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-circle"></i> Circular</button>
+                    <button @click="mode = 'linear'" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-ruler"></i> Linear</button>
                 </div>
             </div>
         </div>
@@ -147,7 +147,7 @@
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="cInputType" value="gff" class="text-blue-600 focus:ring-blue-500"> GFF3 + FASTA</label>
                         </div>
                         <div v-if="cInputType === 'gb'">
-                            <file-uploader label="GenBank File (.gb)" v-model="files.c_gb"></file-uploader>
+                            <file-uploader label="GenBank/DDBJ File" v-model="files.c_gb"></file-uploader>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
                             <file-uploader label="GFF3 File" v-model="files.c_gff"></file-uploader>
@@ -162,7 +162,7 @@
                         </div>
                         <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="blastSource" value="upload" class="text-blue-600"> Upload BLAST TSV</label>
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="blastSource" value="losat" class="text-blue-600"> Run LOSAT (WASM)</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="blastSource" value="losat" class="text-blue-600"> Run LOSAT</label>
                         </div>
                         <div v-if="blastSource === 'losat'" class="p-3 bg-slate-50 rounded-lg border border-slate-200">
                             <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Mode</div>
