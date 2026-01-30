@@ -310,13 +310,19 @@ export const exportConfig = () => {
   downloadJson(configData, 'gbdraw_config.json');
 };
 
-export const exportSession = async () => {
+export const exportSession = async (titleOverride = null) => {
   const losatEntries = serializeLosatCache();
   const losatBytes = losatEntries.reduce((sum, entry) => sum + (entry.text ? entry.text.length : 0), 0);
   const currentLegend = state.form.legend;
   const isLinear = state.mode.value === 'linear';
   const savedCircularLegend = isLinear ? state.circularLegendPosition.value : currentLegend;
   const savedLinearLegend = isLinear ? currentLegend : state.linearLegendPosition.value;
+  const resolvedTitle =
+    typeof titleOverride === 'string'
+      ? titleOverride.trim()
+      : typeof state.sessionTitle?.value === 'string'
+        ? state.sessionTitle.value.trim()
+        : '';
   const totalBytes =
     (state.files.c_gb?.size || 0) +
     (state.files.c_gff?.size || 0) +
@@ -350,6 +356,7 @@ export const exportSession = async () => {
     format: 'gbdraw-session',
     version: SESSION_VERSION,
     createdAt: new Date().toISOString(),
+    title: resolvedTitle || undefined,
     config: buildConfigData(),
     ui: {
       mode: state.mode.value,
@@ -432,6 +439,7 @@ export const importSession = async (e) => {
     }
 
     const ui = data.ui || {};
+    state.sessionTitle.value = typeof data.title === 'string' ? data.title : '';
     if (ui.mode) state.mode.value = ui.mode;
     if (ui.cInputType) state.cInputType.value = ui.cInputType;
     if (ui.lInputType) state.lInputType.value = ui.lInputType;

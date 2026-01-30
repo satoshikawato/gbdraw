@@ -6,6 +6,7 @@ const pyodideReady = ref(false);
 const processing = ref(false);
 const loadingStatus = ref('Initializing...');
 const errorLog = ref(null);
+const sessionTitle = ref('');
 
 const results = ref([]);
 const selectedResultIndex = ref(0);
@@ -454,6 +455,7 @@ export const state = {
   processing,
   loadingStatus,
   errorLog,
+  sessionTitle,
   results,
   selectedResultIndex,
   pairwiseMatchFactors,

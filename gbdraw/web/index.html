@@ -107,13 +107,20 @@
                         <i class="ph ph-arrow-square-in"></i> Load Config
                     </button>
                     <input type="file" ref="configInput" accept=".json" class="hidden" @change="importConfig">
-                    <button @click="exportSession" class="text-xs font-bold text-slate-600 hover:text-blue-700 px-2 py-1 rounded border border-blue-200 bg-blue-50 flex items-center gap-1">
+                    <button @click="saveSessionWithTitle" class="text-xs font-bold text-slate-600 hover:text-blue-700 px-2 py-1 rounded border border-blue-200 bg-blue-50 flex items-center gap-1">
                         <i class="ph ph-archive"></i> Save Session
                     </button>
                     <button @click="$refs.sessionInput.click()" class="text-xs font-bold text-slate-600 hover:text-blue-700 px-2 py-1 rounded border border-blue-200 bg-blue-50 flex items-center gap-1">
                         <i class="ph ph-archive-tray"></i> Load Session
                     </button>
                     <input type="file" ref="sessionInput" accept=".json" class="hidden" @change="importSession">
+                </div>
+                <div class="flex items-center gap-2 mr-4">
+                    <span class="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Session</span>
+                    <button @click="editSessionTitle" class="text-xs font-semibold text-slate-600 hover:text-blue-700 px-2 py-1 rounded border border-slate-200 bg-white flex items-center gap-1 max-w-[180px]">
+                        <i class="ph ph-pencil-simple"></i>
+                        <span class="truncate">{{ sessionTitleLabel }}</span>
+                    </button>
                 </div>
 
                 <div class="flex bg-slate-100 p-1 rounded-lg">

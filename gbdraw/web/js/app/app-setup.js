@@ -12,7 +12,7 @@ import { createLegendLayout } from './legend-layout.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 
-const { onMounted, onUnmounted, watch, nextTick } = window.Vue;
+const { onMounted, onUnmounted, watch, nextTick, computed } = window.Vue;
 
 export const createAppSetup = () => {
   const {
@@ -20,6 +20,7 @@ export const createAppSetup = () => {
     processing,
     loadingStatus,
     errorLog,
+    sessionTitle,
     results,
     selectedResultIndex,
     pairwiseMatchFactors,
@@ -196,11 +197,41 @@ export const createAppSetup = () => {
 
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
 
+  const normalizeSessionTitle = (value) => {
+    if (value === null || value === undefined) return '';
+    return String(value).trim();
+  };
+
+  const sessionTitleLabel = computed(() => {
+    const title = normalizeSessionTitle(sessionTitle.value);
+    return title || 'Untitled session';
+  });
+
+  const editSessionTitle = () => {
+    const current = normalizeSessionTitle(sessionTitle.value);
+    const input = prompt('Session title', current);
+    if (input === null) return;
+    sessionTitle.value = normalizeSessionTitle(input);
+  };
+
+  const saveSessionWithTitle = async () => {
+    let title = normalizeSessionTitle(sessionTitle.value);
+    if (!title) {
+      const input = prompt('Session title', '');
+      if (input === null) return;
+      title = normalizeSessionTitle(input);
+      sessionTitle.value = title;
+    }
+    await exportSession(title);
+  };
+
   return {
     pyodideReady,
     processing,
     loadingStatus,
     errorLog,
+    sessionTitle,
+    sessionTitleLabel,
     results,
     selectedResultIndex,
     svgContent,
@@ -303,7 +334,8 @@ export const createAppSetup = () => {
     downloadPNG,
     downloadPDF,
     exportConfig,
-    exportSession,
+    saveSessionWithTitle,
+    editSessionTitle,
     importConfig,
     importSession,
     manualPriorityRules,
