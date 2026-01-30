@@ -57,7 +57,12 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
         records = list(SeqIO.parse(path, fmt_map[fmt]))
         if not records:
             return json.dumps({"error": "No records found"})
-        selector = parse_record_selector(record_selector)
+        selector_raw = None
+        if record_selector is not None:
+            selector_raw = str(record_selector).strip()
+            if not selector_raw or selector_raw.lower() in {"none", "null", "jsnull", "undefined", "jsundefined", "-"}:
+                selector_raw = None
+        selector = parse_record_selector(selector_raw)
         if selector is None:
             records = [records[0]]
         else:
@@ -179,7 +184,12 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
     idx = 0
     try:
         records = list(SeqIO.parse(gb_path, "genbank"))
-        selector = parse_record_selector(record_selector)
+        selector_raw = None
+        if record_selector is not None:
+            selector_raw = str(record_selector).strip()
+            if not selector_raw or selector_raw.lower() in {"none", "null", "jsnull", "undefined", "jsundefined", "-"}:
+                selector_raw = None
+        selector = parse_record_selector(selector_raw)
         records = select_record(records, selector)
         reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
         records = reverse_records(records, reverse)

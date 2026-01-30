@@ -32,7 +32,7 @@ def parse_record_selector(text: str | None) -> RecordSelector | None:
     if text is None:
         return None
     raw = str(text).strip()
-    if not raw or raw.lower() in {"none", "null", "-"}:
+    if not raw or raw.lower() in {"none", "null", "jsnull", "undefined", "jsundefined", "-"}:
         return None
     if raw.startswith("#"):
         idx_text = raw[1:].strip()

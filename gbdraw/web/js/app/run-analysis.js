@@ -341,7 +341,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
           const path = lInputType.value === 'gb' ? `/seq_${idx}.gb` : `/seq_${idx}.fasta`;
           const fmt = lInputType.value === 'gb' ? 'genbank' : 'fasta';
           const regionSpec = regionSpecs[idx]?.file || null;
-          const recordSelector = recordSelectors[idx] || null;
+          const recordSelector = recordSelectors[idx] ?? '';
           const reverseFlag = reverseFlags[idx] ? '1' : '0';
           const res = JSON.parse(extractFirstFasta(path, fmt, regionSpec, recordSelector, reverseFlag));
           if (res.error) throw new Error(res.error);
@@ -517,7 +517,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
           let allRecordLabels = [];
           for (let i = 0; i < linearSeqs.length; i++) {
             const regionSpec = regionSpecs[i]?.file || null;
-            const recordSelector = recordSelectors[i] || null;
+            const recordSelector = recordSelectors[i] ?? '';
             const reverseFlag = reverseFlags[i] ? '1' : '0';
             const featJson = pyodide
               .globals
