@@ -6,6 +6,7 @@ const pyodideReady = ref(false);
 const processing = ref(false);
 const loadingStatus = ref('Initializing...');
 const errorLog = ref(null);
+const sessionTitle = ref('');
 
 const results = ref([]);
 const selectedResultIndex = ref(0);
@@ -128,6 +129,7 @@ const linearSeqs = reactive([
     fasta: null,
     blast: null,
     losat_gencode: 1,
+    losat_filename: '',
     definition: '',
     region_record_id: '',
     region_start: null,
@@ -205,6 +207,7 @@ const losat = reactive({
 });
 
 const losatCacheInfo = ref([]);
+const losatCache = ref(new Map());
 
 // Color & Filter State
 const paletteNames = ref(['default']);
@@ -452,6 +455,7 @@ export const state = {
   processing,
   loadingStatus,
   errorLog,
+  sessionTitle,
   results,
   selectedResultIndex,
   pairwiseMatchFactors,
@@ -474,6 +478,7 @@ export const state = {
   adv,
   losat,
   losatCacheInfo,
+  losatCache,
   paletteNames,
   selectedPalette,
   currentColors,

@@ -90,28 +90,42 @@
 
     <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-14 shrink-0">
         <div class="px-4 h-full flex items-center justify-between">
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-1 min-w-0">
                 <div class="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center font-bold text-lg shadow-md">🧬</div>
-                <h1 class="text-lg font-bold text-slate-800 tracking-tight flex items-baseline">
+                <h1 class="text-lg font-bold text-slate-800 tracking-tight flex items-center whitespace-nowrap leading-none mt-0.5">
                     gbdraw
-                    <span class="text-slate-400 text-sm font-normal ml-3">A genome diagram generator for microbes and organelles</span>
+                    <span class="text-slate-400 text-sm font-normal ml-2">A genome diagram generator for microbes and organelles</span>
                 </h1>
             </div>
             
-            <div class="flex items-center gap-3">
-                <div class="flex gap-1 mr-4">
-                    <button @click="exportConfig" class="text-xs font-bold text-slate-500 hover:text-blue-600 px-2 py-1 rounded border border-slate-200 bg-white flex items-center gap-1">
+                <div class="flex items-center gap-2 min-w-0">
+                <div class="flex gap-0.5">
+                    <button @click="exportConfig" class="text-[11px] font-bold text-slate-500 hover:text-blue-600 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5">
                         <i class="ph ph-export"></i> Save Config
                     </button>
-                    <button @click="$refs.configInput.click()" class="text-xs font-bold text-slate-500 hover:text-blue-600 px-2 py-1 rounded border border-slate-200 bg-white flex items-center gap-1">
+                    <button @click="$refs.configInput.click()" class="text-[11px] font-bold text-slate-500 hover:text-blue-600 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5">
                         <i class="ph ph-arrow-square-in"></i> Load Config
                     </button>
                     <input type="file" ref="configInput" accept=".json" class="hidden" @change="importConfig">
+                    <button @click="saveSessionWithTitle" class="text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5">
+                        <i class="ph ph-archive"></i> Save Session
+                    </button>
+                    <button @click="$refs.sessionInput.click()" class="text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5">
+                        <i class="ph ph-archive-tray"></i> Load Session
+                    </button>
+                    <input type="file" ref="sessionInput" accept=".json" class="hidden" @change="importSession">
+                </div>
+                <div class="flex items-center gap-1 min-w-0">
+                    <span class="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Session</span>
+                    <button @click="editSessionTitle" class="text-[11px] font-semibold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5 w-32 min-w-0 justify-start">
+                        <i class="ph ph-pencil-simple"></i>
+                        <span class="truncate">{{ sessionTitleLabel }}</span>
+                    </button>
                 </div>
 
                 <div class="flex bg-slate-100 p-1 rounded-lg">
-                    <button @click="mode = 'circular'" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="px-4 py-1.5 rounded-md text-sm font-bold transition-all flex items-center gap-2"><i class="ph ph-circle"></i> Circular</button>
-                    <button @click="mode = 'linear'" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="px-4 py-1.5 rounded-md text-sm font-bold transition-all flex items-center gap-2"><i class="ph ph-ruler"></i> Linear</button>
+                    <button @click="mode = 'circular'" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-circle"></i> Circular</button>
+                    <button @click="mode = 'linear'" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-ruler"></i> Linear</button>
                 </div>
             </div>
         </div>
@@ -133,7 +147,7 @@
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="cInputType" value="gff" class="text-blue-600 focus:ring-blue-500"> GFF3 + FASTA</label>
                         </div>
                         <div v-if="cInputType === 'gb'">
-                            <file-uploader label="GenBank File (.gb)" v-model="files.c_gb"></file-uploader>
+                            <file-uploader label="GenBank/DDBJ File" v-model="files.c_gb"></file-uploader>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
                             <file-uploader label="GFF3 File" v-model="files.c_gff"></file-uploader>
@@ -148,7 +162,7 @@
                         </div>
                         <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="blastSource" value="upload" class="text-blue-600"> Upload BLAST TSV</label>
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="blastSource" value="losat" class="text-blue-600"> Run LOSAT (WASM)</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="blastSource" value="losat" class="text-blue-600"> Run LOSAT</label>
                         </div>
                         <div v-if="blastSource === 'losat'" class="p-3 bg-slate-50 rounded-lg border border-slate-200">
                             <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Mode</div>
@@ -175,17 +189,12 @@
                                     <p class="text-[10px] text-slate-500">Query/DB gencode is set per entry below.</p>
                                 </div>
                             </div>
-                            <div class="mt-2 pt-2 border-t border-slate-200">
-                                <div class="flex gap-2">
-                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs w-full" :disabled="losatCacheInfo.length === 0">
-                                        <i class="ph ph-download-simple"></i> Save LOSAT TSV
-                                    </button>
+                                <div class="mt-2 pt-2 border-t border-slate-200">
                                     <button @click="clearLosatCache" class="btn btn-danger text-xs w-full" :disabled="losatCacheInfo.length === 0">
                                         <i class="ph ph-trash"></i> Clear Cache
                                     </button>
+                                    <p class="text-[10px] text-slate-500 mt-1">Cached results are reused when inputs and settings match.</p>
                                 </div>
-                                <p class="text-[10px] text-slate-500 mt-1">Cached results are reused when inputs and settings match.</p>
-                            </div>
                         </div>
                         <div v-for="(seq, idx) in linearSeqs" :key="idx" class="p-3 bg-slate-50 rounded-lg border border-slate-200 relative group text-sm transition-all hover:border-blue-300">
                             <div class="absolute top-2 right-2 text-[10px] font-bold text-white bg-slate-400 px-1.5 py-0.5 rounded-full">#{{ idx + 1 }}</div>
@@ -206,9 +215,14 @@
                                     <help-tip text="Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID."></help-tip>
                                 </div>
                                 <div class="grid grid-cols-1 gap-2">
-                                    <div>
-                                        <label class="text-[9px] block">Record ID (optional)</label>
-                                        <input type="text" v-model="seq.region_record_id" placeholder="NC_000913.3" class="form-input px-1 py-0.5 text-xs">
+                                    <div class="grid grid-cols-2 gap-2 items-end">
+                                        <div>
+                                            <label class="text-[9px] block">Record ID (optional)</label>
+                                            <input type="text" v-model="seq.region_record_id" placeholder="NC_000913.3" class="form-input px-1 py-0.5 text-xs">
+                                        </div>
+                                        <label class="flex items-center gap-2 text-[10px] text-slate-600 pb-1">
+                                            <input type="checkbox" v-model="seq.region_reverse" class="form-checkbox"> Reverse complement
+                                        </label>
                                     </div>
                                     <div class="grid grid-cols-2 gap-2">
                                         <div>
@@ -220,9 +234,6 @@
                                             <input type="number" min="1" v-model.number="seq.region_end" placeholder="1035047" class="form-input px-1 py-0.5 text-xs">
                                         </div>
                                     </div>
-                                    <label class="flex items-center gap-2 text-[10px] text-slate-600">
-                                        <input type="checkbox" v-model="seq.region_reverse" class="form-checkbox"> Reverse complement
-                                    </label>
                                 </div>
                             </div>
                             <div v-if="blastSource === 'losat' && losatProgram === 'tblastx'" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
@@ -234,11 +245,21 @@
                                 <file-uploader label="BLAST TSV" v-model="seq.blast"></file-uploader>
                             </div>
                             <div v-else-if="idx < linearSeqs.length - 1 && blastSource === 'losat'" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
-                                <div class="text-[10px] text-slate-500 font-bold flex items-center gap-1"><i class="ph ph-lightning"></i> LOSAT will run for this pair</div>
+                                <div class="text-[10px] text-slate-500 font-bold flex items-center gap-1"><i class="ph ph-lightning"></i> LOSAT (pair #{{ idx + 1 }} ↔ #{{ idx + 2 }})</div>
+                                <div class="mt-2">
+                                    <label class="text-[9px] block">Filename (optional)</label>
+                                    <input type="text" v-model="seq.losat_filename" :placeholder="getLosatPairDefaultName(idx)" class="form-input px-1 py-0.5 text-xs"
+                                           @change="setLosatPairFilename(idx, seq.losat_filename)">
+                                    <div class="text-[9px] text-slate-400 mt-1">Default: {{ getLosatPairDefaultName(idx) }}</div>
+                                </div>
+                                <button @click="downloadLosatPair(idx, seq.losat_filename)" class="btn btn-secondary text-xs w-full mt-2"
+                                        :disabled="!losatCacheInfo[idx]">
+                                    <i class="ph ph-download-simple"></i> Save LOSAT TSV
+                                </button>
                             </div>
                         </div>
                         <div class="flex gap-2">
-                            <button @click="linearSeqs.push({gb:null, gff:null, fasta:null, blast:null, losat_gencode: 1, definition: '', region_record_id: '', region_start: null, region_end: null, region_reverse: false})" class="btn btn-secondary text-xs w-full"><i class="ph ph-plus"></i> Add Seq</button>
+                            <button @click="linearSeqs.push({gb:null, gff:null, fasta:null, blast:null, losat_gencode: 1, losat_filename: '', definition: '', region_record_id: '', region_start: null, region_end: null, region_reverse: false})" class="btn btn-secondary text-xs w-full"><i class="ph ph-plus"></i> Add Seq</button>
                             <button v-if="linearSeqs.length > 1" @click="linearSeqs.pop()" class="btn btn-danger text-xs w-full"><i class="ph ph-minus"></i> Remove</button>
                         </div>
                     </div>
