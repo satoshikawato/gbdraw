@@ -54,6 +54,22 @@ const downloadJson = (data, filename) => {
   URL.revokeObjectURL(url);
 };
 
+const makeSafeFilename = (name) => {
+  const cleaned = String(name || '')
+    .replace(/[^\w.-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return cleaned || 'gbdraw_session';
+};
+
+const buildSessionFilename = (title) => {
+  const base = String(title || '').trim();
+  if (!base) return 'gbdraw_session.json';
+  const safe = makeSafeFilename(base);
+  return `${safe}.gbdraw-session.json`;
+};
+
+let lastSessionFilename = null;
+
 const buildConfigData = () => ({
   form: state.form,
   adv: state.adv,
@@ -323,6 +339,7 @@ export const exportSession = async (titleOverride = null) => {
       : typeof state.sessionTitle?.value === 'string'
         ? state.sessionTitle.value.trim()
         : '';
+  const sessionFilename = buildSessionFilename(resolvedTitle);
   const totalBytes =
     (state.files.c_gb?.size || 0) +
     (state.files.c_gff?.size || 0) +
@@ -385,7 +402,12 @@ export const exportSession = async (titleOverride = null) => {
     }
   };
 
-  downloadJson(sessionData, 'gbdraw_session.json');
+  if (lastSessionFilename && lastSessionFilename === sessionFilename) {
+    const proceed = confirm(`Download "${sessionFilename}" again? Your browser may overwrite or rename the file.`);
+    if (!proceed) return;
+  }
+  lastSessionFilename = sessionFilename;
+  downloadJson(sessionData, sessionFilename);
 };
 
 export const importConfig = async (e) => {
