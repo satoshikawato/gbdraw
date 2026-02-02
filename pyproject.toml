@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gbdraw"
-version = "0.8.3"
+version = "0.9.0b0"
 description = "A genome diagram generator for microbes and organelles"
 readme = "README.md"
 license = {text = "MIT"}
@@ -60,6 +60,8 @@ gbdraw = [
     "data/*.ttf",
     "web/index.html",
     "web/js/*.js",
+    "web/js/app/*.js",
+    "web/js/app/*/*.js",
     "web/js/services/*.js",
     "web/js/utils/*.js",
     "web/presets/*.txt",
