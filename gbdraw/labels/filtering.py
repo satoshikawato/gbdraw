@@ -2,12 +2,13 @@
 # coding: utf-8
 
 import logging
-import sys
 from typing import Optional
 
 import pandas as pd
 from pandas import DataFrame
 from Bio.SeqFeature import SeqFeature
+
+from ..exceptions import InputFileError, ParseError, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +31,15 @@ def read_qualifier_priority_file(filepath: str) -> Optional[DataFrame]:
         )
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in qualifier priority file '{filepath}': {e}")
-        sys.exit(1)
+        raise ParseError(
+            f"Malformed line in qualifier priority file '{filepath}': {e}"
+        ) from e
     except FileNotFoundError as e:
         logger.error(f"ERROR: Qualifier priority file not found: {e}")
-        sys.exit(1)
+        raise InputFileError(f"Qualifier priority file not found: {e}") from e
     except Exception as e:
         logger.error(f"ERROR: Failed to read '{filepath}': {e}")
-        sys.exit(1)
+        raise ParseError(f"Failed to read '{filepath}': {e}") from e
 
     null_rows = df[df.isnull().any(axis=1)]
     if not null_rows.empty:
@@ -46,7 +49,9 @@ def read_qualifier_priority_file(filepath: str) -> Optional[DataFrame]:
                 f"ERROR: Missing values in '{filepath}' at line {idx+1}. "
                 f"Missing columns: {missing}. Row data: {row.to_dict()}"
             )
-        sys.exit(1)
+        raise ValidationError(
+            f"Missing values in '{filepath}'. See log for details."
+        )
 
     logger.info(f"Successfully loaded qualifier priority from {filepath}")
     return df
@@ -71,13 +76,15 @@ def read_filter_list_file(filepath: str) -> Optional[DataFrame]:
         )
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in filter list file '{filepath}': {e}")
-        sys.exit(1)
+        raise ParseError(
+            f"Malformed line in filter list file '{filepath}': {e}"
+        ) from e
     except FileNotFoundError as e:
         logger.error(f"ERROR: Filter list file not found: {e}")
-        sys.exit(1)
+        raise InputFileError(f"Filter list file not found: {e}") from e
     except Exception as e:
         logger.error(f"ERROR: Failed to read '{filepath}': {e}")
-        sys.exit(1)
+        raise ParseError(f"Failed to read '{filepath}': {e}") from e
 
     null_rows = df[df.isnull().any(axis=1)]
     if not null_rows.empty:
@@ -87,7 +94,9 @@ def read_filter_list_file(filepath: str) -> Optional[DataFrame]:
                 f"ERROR: Missing values in '{filepath}' at line {idx+1}. "
                 f"Missing columns: {missing}. Row data: {row.to_dict()}"
             )
-        sys.exit(1)
+        raise ValidationError(
+            f"Missing values in '{filepath}'. See log for details."
+        )
 
     logger.info(f"Successfully loaded filter list from {filepath}")
     return df

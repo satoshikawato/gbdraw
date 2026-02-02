@@ -16,6 +16,7 @@ from .config.modify import suppress_gc_content_and_skew, modify_config_dict  # t
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .core.sequence import determine_output_file_prefix  # type: ignore[reportMissingImports]
 from .labels.filtering import read_qualifier_priority_file, read_filter_list_file  # type: ignore[reportMissingImports]
+from .exceptions import ValidationError
 
 from .cli_utils.common import (
     CAIROSVG_AVAILABLE,
@@ -303,7 +304,7 @@ def circular_main(cmd_args) -> None:
     else:
         # This case should not be reached due to arg validation
         logger.error("Invalid input file configuration.")
-        sys.exit(1)
+        raise ValidationError("Invalid input file configuration.")
 
     outer_label_x_radius_offset: Optional[float] = args.outer_label_x_radius_offset
     outer_label_y_radius_offset: Optional[float] = args.outer_label_y_radius_offset

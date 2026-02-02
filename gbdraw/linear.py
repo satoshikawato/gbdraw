@@ -18,6 +18,7 @@ from .core.sequence import create_dict_for_sequence_lengths  # type: ignore[repo
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .labels.filtering import read_qualifier_priority_file, read_filter_list_file  # type: ignore[reportMissingImports]
+from .exceptions import ValidationError
 
 
 from .cli_utils.common import (
@@ -449,7 +450,9 @@ def linear_main(cmd_args) -> None:
             logger.error(
                 "ERROR: Too many --record_id/--reverse_complement values (expected at most %s).", target_len
             )
-            sys.exit(1)
+            raise ValidationError(
+                f"Too many --record_id/--reverse_complement values (expected at most {target_len})."
+            )
         while len(items) < target_len:
             items.append(fill_value)
         return items
@@ -463,7 +466,7 @@ def linear_main(cmd_args) -> None:
         if text in {"0", "false", "no", "n", "off", "", "none", "null", "-"}:
             return False
         logger.error("ERROR: Invalid reverse_complement value: %s", value)
-        sys.exit(1)
+        raise ValidationError(f"Invalid reverse_complement value: {value}")
 
     if args.gbk:
         file_count = len(args.gbk)
@@ -493,7 +496,7 @@ def linear_main(cmd_args) -> None:
         )
     else:
         logger.error("A critical error occurred with input file arguments.")
-        sys.exit(1)
+        raise ValidationError("Invalid input file arguments.")
     record_labels = args.record_label or []
     if record_labels:
         if len(record_labels) > len(records):
@@ -515,7 +518,7 @@ def linear_main(cmd_args) -> None:
             records = apply_region_specs(records, region_specs, log=logger)
         except ValueError as exc:
             logger.error(f"ERROR: {exc}")
-            sys.exit(1)
+            raise ValidationError(str(exc)) from exc
         if blast_files:
             logger.warning(
                 "WARNING: Region cropping is enabled; ensure BLAST coordinates match the cropped regions (and reverse complements if specified)."

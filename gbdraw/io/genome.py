@@ -2,9 +2,8 @@
 # coding: utf-8
 
 import os
-import sys
 import logging
-from typing import Generator, List, Dict, Set
+from typing import List, Dict, Set
 
 from Bio import SeqIO
 from Bio.SeqFeature import SeqFeature
@@ -12,6 +11,7 @@ from Bio.SeqRecord import SeqRecord
 from BCBio import GFF
 
 from .record_select import parse_record_selector, reverse_records, select_record
+from ..exceptions import InputFileError, ParseError, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def load_gbks(
     for file_idx, gbk_file in enumerate(gbk_list):
         if not os.path.isfile(gbk_file):
             logger.error(f"ERROR: File does not exist or is not accessible: {gbk_file}")
-            sys.exit(1)
+            raise InputFileError(f"File does not exist or is not accessible: {gbk_file}")
         try:
             logger.info("INFO: Loading GenBank file {}".format(gbk_file))
             records_list = list(SeqIO.parse(gbk_file, "genbank"))
@@ -80,19 +80,25 @@ def load_gbks(
             logger.error(
                 f"ERROR: error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format. Error: {e}"
             )
-            sys.exit(1)
+            raise ParseError(
+                f"Error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format."
+            ) from e
         except Exception as e:  # A more generic catch-all for other unexpected issues
             logger.error(
                 f"ERROR: an unexpected error occurred while processing {gbk_file}: {e}"
             )
-            sys.exit(1)
+            raise ParseError(
+                f"Unexpected error while processing {gbk_file}: {e}"
+            ) from e
     logger.info("INFO:              ... finished loading GenBank file(s)")
     logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(id_list)}")
     if len(id_list) < 1:
         logger.error(
             "ERROR: No valid GenBank records were loaded. Please check your input files."
         )
-        sys.exit(1)
+        raise ValidationError(
+            "No valid GenBank records were loaded. Please check your input files."
+        )
     return record_list
 
 
@@ -111,14 +117,18 @@ def merge_gff_fasta_records(
                 logger.error(
                     f"ERROR: Failed to merge sequences for record {gff_record.id} with corresponding FASTA entry: {e}"
                 )
-                sys.exit(1)
+                raise ParseError(
+                    f"Failed to merge sequences for record {gff_record.id} with corresponding FASTA entry: {e}"
+                ) from e
             merged_records.append(gff_record)
         else:
             # If no matching FASTA record, raise error and stop the process
             logger.error(
                 f"ERROR: No matching FASTA record found for GFF record {gff_record.id}. Please ensure that all GFF records have corresponding FASTA entries."
             )
-            sys.exit(1)
+            raise ValidationError(
+                f"No matching FASTA record found for GFF record {gff_record.id}. Please ensure that all GFF records have corresponding FASTA entries."
+            )
     return merged_records
 
 
@@ -183,15 +193,15 @@ def load_gff_fasta(
 
     if len(gff_list) != len(fasta_list):
         logger.error("ERROR: Number of GFF3 files does not match number of FASTA files.")
-        sys.exit(1)
+        raise ValidationError("Number of GFF3 files does not match number of FASTA files.")
 
     for file_idx, (gff_file, fasta_file) in enumerate(zip(gff_list, fasta_list)):
         if not os.path.isfile(gff_file):
             logger.error(f"ERROR: File does not exist or is not accessible: {gff_file}")
-            sys.exit(1)
+            raise InputFileError(f"File does not exist or is not accessible: {gff_file}")
         if not os.path.isfile(fasta_file):
             logger.error(f"ERROR: File does not exist or is not accessible: {fasta_file}")
-            sys.exit(1)
+            raise InputFileError(f"File does not exist or is not accessible: {fasta_file}")
 
         try:
             logger.info("INFO: Loading GFF3 file {}".format(gff_file))
@@ -237,12 +247,16 @@ def load_gff_fasta(
             logger.error(
                 f"ERROR: error parsing GFF3/FASTA files ({gff_file}, {fasta_file}). Error: {e}"
             )
-            sys.exit(1)
+            raise ParseError(
+                f"Error parsing GFF3/FASTA files ({gff_file}, {fasta_file})."
+            ) from e
         except Exception as e:
             logger.error(
                 f"ERROR: an unexpected error occurred while processing {gff_file} or {fasta_file}: {e}"
             )
-            sys.exit(1)
+            raise ParseError(
+                f"Unexpected error while processing {gff_file} or {fasta_file}: {e}"
+            ) from e
 
     logger.info("INFO:              ... finished loading GFF3 and FASTA files")
     logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(record_list)}")
@@ -250,7 +264,9 @@ def load_gff_fasta(
         logger.error(
             "ERROR: No valid records were loaded after merging GFF3 and FASTA files. Please check your input files."
         )
-        sys.exit(1)
+        raise ValidationError(
+            "No valid records were loaded after merging GFF3 and FASTA files. Please check your input files."
+        )
     return record_list
 
 

@@ -47,7 +47,38 @@ A new file named `ecoli_k12_plot.svg` will appear in your directory. Open it in 
 ![ecoli_k12_plot.svg](../examples/ecoli_k12_plot.svg)
 
 
-### 5. Next Steps
+### 5. (Optional) Linear mode selectors
+
+If your GenBank/GFF files contain multiple records, or you want to focus on a
+specific region, linear mode supports targeted selection:
+
+- `--record_id`: Select a record by ID or `#index` (repeatable per input file).
+- `--reverse_complement`: Reverse-complement each input record (repeatable).
+- `--region`: Crop a region using `record_id:start-end[:rc]`.
+
+Example:
+```bash
+gbdraw linear \
+  --gbk NC_000913.gbk \
+  --record_id NC_000913.3 \
+  --region NC_000913.3:100000-250000 \
+  -o ecoli_linear_region \
+  -f svg
+```
+
+Multi-file example (per-file selectors must align with input order):
+```bash
+gbdraw linear \
+  --gbk Genome1.gbk Genome2.gbk \
+  --record_id Genome1_Chr1 #0 \
+  --reverse_complement false true \
+  -o Genome1_Genome2_selected \
+  -f svg
+```
+
+For details, see the [Command-Line Reference](./CLI_Reference.md).
+
+### 6. Next Steps
 
 Congratulations on creating your first plot!
 

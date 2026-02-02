@@ -105,6 +105,12 @@ gbdraw circular \
 ```
 ![WSSV_filtered.svg](../../examples/WSSV_filtered.svg)
 
+### Linear mode input selectors (quick note)
+If you switch to linear mode, you can target specific records or regions using:
+`--record_id`, `--reverse_complement`, and `--region`. See
+[Tutorial 2](./2_Comparative_Genomics.md) or the
+[CLI Reference](../CLI_Reference.md) for details.
+
 
 [< Back to Quickstart](../QUICKSTART.md)
 
