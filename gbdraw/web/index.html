@@ -40,12 +40,25 @@
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        .card { @apply bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-3 transition-all; }
-        .card-header { @apply text-lg font-bold mb-3 text-slate-700 flex items-center gap-2 border-b pb-2; }
+        .card { @apply bg-white p-3 rounded-xl shadow-sm border border-slate-200 mb-2 transition-all; }
+        .card-header { @apply text-lg font-bold mb-2 text-slate-700 flex items-center gap-2 border-b pb-2; }
         .input-group { @apply mb-3; }
-        .input-label { @apply block text-base font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1; }
-        .form-input { @apply w-full bg-slate-50 border border-slate-200 text-slate-700 text-lg rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-all; }
+        .input-label { @apply block text-base font-bold text-slate-500 uppercase tracking-wider mb-0.5 flex items-center gap-1; }
+        .form-input { @apply w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 transition-all; }
         .form-checkbox { @apply w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2; }
+        input, select, textarea, button { font-family: inherit; }
+        .help-tip { margin-left: 0.25rem; }
+        .option-label .help-tip { margin-left: 0; }
+        .input-label-sm { font-size: 10px; letter-spacing: 0.04em; }
+        .adv-section-title { font-size: 10px; letter-spacing: 0.04em; }
+        .adv-options .input-label { font-size: 10px; letter-spacing: 0.04em; }
+        .adv-options .form-input { font-size: 10px; padding: 0.25rem 0.5rem; line-height: 1.2; }
+        .adv-options .form-input.text-xs { font-size: 10px; }
+        .form-input-compact { font-size: 10px; padding: 0.2rem 0.5rem; line-height: 1.2; height: 1.5rem; }
+        .adv-options .form-input-compact { font-size: 10px; padding: 0.2rem 0.5rem; line-height: 1.2; height: 1.5rem; }
+        .basic-settings .input-label { font-size: 10px; letter-spacing: 0.04em; }
+        .basic-settings .form-input { font-size: 10px; padding: 0.25rem 0.5rem; line-height: 1.2; }
+        .basic-settings .form-input.text-xs { font-size: 10px; }
 
         .btn { @apply font-bold rounded-lg text-base px-4 py-2 shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2; }
         .btn-primary { @apply text-white bg-blue-600 hover:bg-blue-700; }
@@ -65,9 +78,9 @@
         }
         .upload-zone.ready { @apply bg-green-50 border-green-500; }
         
-        details > summary { @apply list-none cursor-pointer font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2 select-none; }
+        details > summary { @apply list-none cursor-pointer font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2 select-none text-xs; }
         details > summary::-webkit-details-marker { display: none; }
-        details[open] > summary { @apply mb-4 text-blue-600; }
+        details[open] > summary { @apply mb-2 text-blue-600; }
         details > summary::before { content: ''; @apply w-4 h-4 bg-contain bg-no-repeat transition-transform duration-200; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 18 15 12 9 6'%3E%3C/polyline%3E%3C/svg%3E"); }
         details[open] > summary::before { transform: rotate(90deg); }
     </style>
@@ -136,7 +149,7 @@
         <div class="flex flex-col h-full overflow-hidden relative shrink-0"
              :style="{ width: sidebarWidth + 'px' }">
             
-            <div class="flex-grow overflow-y-auto custom-scrollbar pr-2 pb-4 space-y-4">
+            <div class="flex-grow overflow-y-auto custom-scrollbar pr-2 pb-4 space-y-2">
                 
                 <div class="card border-l-4 border-l-blue-500">
                     <div class="card-header"><i class="ph ph-folder-open text-xl"></i> Input Genomes</div>
@@ -265,15 +278,15 @@
                     </div>
                 </div>
 
-                <div class="card">
+                <div class="card basic-settings">
                     <div class="card-header"><i class="ph ph-sliders"></i> Basic Settings</div>
-                    <div class="space-y-4">
-                        <div class="grid grid-cols-2 gap-4">
-                             <div>
+                    <div class="space-y-1.5">
+                        <div class="grid grid-cols-1 gap-1.5">
+                            <div>
                                 <label class="input-label">Output Prefix <help-tip text="Prefix for output files. Leave empty to use the record name (e.g., NC_000xxx)."></help-tip></label>
                                 <input type="text" v-model="form.prefix" class="form-input" placeholder="Optional (Default: Record ID)">
                             </div>
-                             <div>
+                            <div>
                                 <label class="input-label">Legend <help-tip text="Position of the legend. 'None' hides the legend."></help-tip></label>
                                 <select v-model="form.legend" class="form-input">
                                     <option value="right">Right</option><option value="left">Left</option>
@@ -294,7 +307,7 @@
                              <select v-model="form.scale_style" class="form-input"><option value="bar">Bar (Simple)</option><option value="ruler">Ruler (Ticks)</option></select>
                         </div>
 
-                        <div class="grid grid-cols-2 gap-y-2 gap-x-1 p-2 bg-slate-50 rounded-lg">
+                        <div class="grid grid-cols-2 gap-y-1 gap-x-1 p-1 bg-slate-50 rounded-lg">
                             <div v-if="mode === 'linear'" class="col-span-2 mb-1">
                                 <label class="input-label text-[10px] mb-1">Show Labels <help-tip text="Display feature labels on the map. 'First' shows labels only for the top track."></help-tip></label>
                                 <select v-model="form.show_labels_linear" class="form-input text-xs py-1">
@@ -303,41 +316,51 @@
                                     <option value="first">First Record Only</option>
                                 </select>
                             </div>
-                            <label v-else class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                <input type="checkbox" v-model="form.show_labels" class="form-checkbox"> Show Labels <help-tip text="Display feature labels on the map."></help-tip>
+                            <label v-else class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                <input type="checkbox" v-model="form.show_labels" class="form-checkbox">
+                                <span class="inline-flex items-center gap-1">Show Labels <help-tip text="Display feature labels on the map."></help-tip></span>
                             </label>
 
-                            <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                <input type="checkbox" v-model="form.separate_strands" class="form-checkbox"> Separate Strands <help-tip text="Display features on separate strands for better distinction."></help-tip>
+                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                <input type="checkbox" v-model="form.separate_strands" class="form-checkbox">
+                                <span class="inline-flex items-center gap-1">Separate Strands <help-tip text="Display features on separate strands for better distinction."></help-tip></span>
                             </label>
                             
                             <template v-if="mode === 'circular'">
-                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input type="checkbox" v-model="form.allow_inner_labels" class="form-checkbox"> Inner Labels <help-tip text="Enable labels inside the circle. Automatically suppresses GC content/skew to avoid overlap."></help-tip>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.allow_inner_labels" class="form-checkbox">
+                                    <span class="inline-flex items-center gap-1">Inner Labels <help-tip text="Enable labels inside the circle. Automatically suppresses GC content/skew to avoid overlap."></help-tip></span>
                                 </label>
-                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input type="checkbox" v-model="form.suppress_gc" class="form-checkbox"> Hide GC <help-tip text="Suppress the GC content track."></help-tip>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.suppress_gc" class="form-checkbox">
+                                    <span class="inline-flex items-center gap-1">Hide GC <help-tip text="Suppress the GC content track."></help-tip></span>
                                 </label>
-                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input type="checkbox" v-model="form.suppress_skew" class="form-checkbox"> Hide Skew <help-tip text="Suppress the GC skew track."></help-tip>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.suppress_skew" class="form-checkbox">
+                                    <span class="inline-flex items-center gap-1">Hide Skew <help-tip text="Suppress the GC skew track."></help-tip></span>
                                 </label>
                             </template>
                             
                             <template v-if="mode === 'linear'">
-                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox"> Resolve Overlaps <help-tip text="Shift features vertically to avoid overlap. (Experimental)"></help-tip>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox">
+                                    <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Shift features vertically to avoid overlap. (Experimental)"></help-tip></span>
                                 </label>
-                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input type="checkbox" v-model="form.align_center" class="form-checkbox"> Align Center <help-tip text="Align the linear map to the center of the page."></help-tip>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.align_center" class="form-checkbox">
+                                    <span class="inline-flex items-center gap-1">Align Center <help-tip text="Align the linear map to the center of the page."></help-tip></span>
                                 </label>
-                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input type="checkbox" v-model="form.normalize_length" class="form-checkbox"> Normalize Len <help-tip text="Normalize sequence lengths to be equal. Suppresses length bar."></help-tip>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.normalize_length" class="form-checkbox">
+                                    <span class="inline-flex items-center gap-1">Normalize Len <help-tip text="Normalize sequence lengths to be equal. Suppresses length bar."></help-tip></span>
                                 </label>
-                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input type="checkbox" v-model="form.show_gc" class="form-checkbox"> Show GC <help-tip text="Display GC content track."></help-tip>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.show_gc" class="form-checkbox">
+                                    <span class="inline-flex items-center gap-1">Show GC <help-tip text="Display GC content track."></help-tip></span>
                                 </label>
-                                <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input type="checkbox" v-model="form.show_skew" class="form-checkbox"> Show Skew <help-tip text="Display GC skew track."></help-tip>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.show_skew" class="form-checkbox">
+                                    <span class="inline-flex items-center gap-1">Show Skew <help-tip text="Display GC skew track."></help-tip></span>
                                 </label>
                             </template>
                         </div>
@@ -347,11 +370,11 @@
                 <div class="card bg-slate-50/50">
                     <details>
                         <summary><i class="ph ph-palette"></i> Colors & Filters <help-tip text="Customize colors and filter labels by keyword."></help-tip></summary>
-                        <div class="mt-4 space-y-6 pt-4 border-t border-slate-200">
+                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
 
                             <div class="bg-blue-50/60 border border-blue-200 rounded-lg p-3">
                                 <div class="flex items-center justify-between mb-2">
-                                    <h4 class="text-xs font-bold text-slate-600">PRESET SCHEMES <help-tip text="Applies both default colors (-d) and specific rules (-t)."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-600">PRESET SCHEMES <help-tip text="Applies both default colors (-d) and specific rules (-t)."></help-tip></h4>
                                     <span class="text-[9px] font-semibold text-blue-600">Affects -d &amp; -t</span>
                                 </div>
                                 <div class="flex items-center gap-2">
@@ -370,10 +393,10 @@
                             
                             <div>
                                 <div class="flex justify-between items-center mb-2">
-                                    <h4 class="text-xs font-bold text-slate-500">DEFAULT COLORS (-d) <help-tip text="Base colors for features. Acts as the -d override table."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS (-d) <help-tip text="Base colors for features. Acts as the -d override table."></help-tip></h4>
                                     <button @click="resetColors" class="text-[10px] text-blue-600 hover:underline">Reset</button>
                                 </div>
-                                <select v-model="selectedPalette" @change="updatePalette" class="form-input mb-3">
+                                <select v-model="selectedPalette" @change="updatePalette" class="form-input form-input-compact mb-2">
                                     <option v-for="p in paletteNames" :value="p">{{ p }}</option>
                                 </select>
                                 <div class="grid grid-cols-5 gap-1.5 bg-white p-2 rounded border border-slate-200">
@@ -410,7 +433,7 @@
 
                             <div>
                                 <div class="flex items-center justify-between mb-2">
-                                    <h4 class="text-xs font-bold text-slate-500">SPECIFIC RULES (-t) <help-tip text="Color features matching specific qualifier values (Regex supported)."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500">SPECIFIC RULES (-t) <help-tip text="Color features matching specific qualifier values (Regex supported)."></help-tip></h4>
                                     <button v-if="manualSpecificRules.length > 0" @click="clearAllSpecificRules" class="text-[10px] text-red-500 hover:text-red-700 hover:underline"><i class="ph ph-trash"></i> Clear All</button>
                                 </div>
 
@@ -427,17 +450,17 @@
 
                                 <div class="bg-slate-50 p-2 rounded border border-slate-200">
                                     <div class="grid grid-cols-2 gap-1 mb-1">
-                                        <select v-model="newSpecRule.feat" class="form-input text-xs p-1 h-7">
+                                        <select v-model="newSpecRule.feat" class="form-input form-input-compact">
                                             <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                         </select>
-                                        <input v-model="newSpecRule.qual" placeholder="Qualifier" class="form-input text-xs p-1 h-7">
+                                        <input v-model="newSpecRule.qual" placeholder="Qualifier" class="form-input form-input-compact">
                                     </div>
                                     <div class="flex gap-1 mb-1">
-                                        <input v-model="newSpecRule.val" placeholder="Regex (e.g. hypothetical)" class="form-input text-xs p-1 h-7 flex-grow">
-                                        <input type="color" v-model="newSpecRule.color" class="h-7 w-8 p-0 border rounded cursor-pointer shrink-0">
+                                        <input v-model="newSpecRule.val" placeholder="Regex (e.g. hypothetical)" class="form-input form-input-compact flex-grow">
+                                        <input type="color" v-model="newSpecRule.color" class="h-6 w-7 p-0 border rounded cursor-pointer shrink-0">
                                     </div>
                                     <div class="flex gap-1">
-                                        <input v-model="newSpecRule.cap" placeholder="Legend Caption (Optional)" class="form-input text-xs p-1 h-7 flex-grow">
+                                        <input v-model="newSpecRule.cap" placeholder="Legend Caption (Optional)" class="form-input form-input-compact flex-grow">
                                         <button @click="addSpecificRule" class="btn btn-secondary text-xs h-7 px-3"><i class="ph ph-plus"></i></button>
                                     </div>
                                 </div>
@@ -453,7 +476,7 @@
                             </div>
 
                             <div>
-                                <h4 class="text-xs font-bold text-slate-500 mb-2">LABEL FILTERING <help-tip text="Control which feature labels are displayed using Blacklist or Whitelist."></help-tip></h4>
+                                <h4 class="text-[11px] font-bold text-slate-500 mb-2">LABEL FILTERING <help-tip text="Control which feature labels are displayed using Blacklist or Whitelist."></help-tip></h4>
                                 <div class="flex gap-2 mb-2">
                                     <button v-for="m in ['None', 'Blacklist', 'Whitelist']" @click="filterMode = m" :class="filterMode===m ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border'" class="flex-1 py-1 rounded text-xs font-bold transition-colors">{{m}}</button>
                                 </div>
@@ -479,7 +502,7 @@
                                 </div>
                                 
                                 <div class="mt-4 pt-4 border-t border-slate-100">
-                                    <h5 class="text-[10px] font-bold text-slate-500 mb-2">QUALIFIER PRIORITY <help-tip text="Define label priority order (e.g. CDS -> product,gene,locus_tag)."></help-tip></h5>
+                                    <h5 class="text-[9px] font-bold text-slate-500 mb-2">QUALIFIER PRIORITY <help-tip text="Define label priority order (e.g. CDS -> product,gene,locus_tag)."></help-tip></h5>
                                     
                                     <div class="space-y-1 mb-3">
                                         <div v-for="(rule, i) in manualPriorityRules" :key="i" class="flex items-center gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
@@ -511,28 +534,28 @@
                     
                     <details>
                         <summary><i class="ph ph-faders"></i> Advanced Options</summary>
-                        <div class="mt-4 space-y-4 pt-4 border-t border-slate-200">
+                        <div class="adv-options mt-1.5 space-y-1.5 pt-1.5 border-t border-slate-200">
                             
-                            <div class="grid grid-cols-3 gap-2">
-                                <div><label class="input-label text-[10px]">Window <help-tip text="Window size for GC content/skew. Default: 1kb (<1Mb), 10kb (<10Mb), 100kb (>=10Mb)."></help-tip></label><input type="number" v-model.number="adv.window_size" class="form-input" placeholder="Auto"></div>
-                                <div><label class="input-label text-[10px]">Step <help-tip text="Step size for GC content/skew. Default: 100bp (<1Mb), 1kb (<10Mb), 10kb (>=10Mb)."></help-tip></label><input type="number" v-model.number="adv.step_size" class="form-input" placeholder="Auto"></div>
-                                <div><label class="input-label text-[10px]">Dinucleotide <help-tip text="Dinucleotide to use (e.g., 'GC'). Default is 'GC'."></help-tip></label><input type="text" v-model="adv.nt" class="form-input" placeholder="GC"></div>
+                            <div class="grid grid-cols-3 gap-1.5">
+                                <div><label class="input-label text-[10px]">Window <help-tip text="Window size for GC content/skew. Default: 1kb (<1Mb), 10kb (<10Mb), 100kb (>=10Mb)."></help-tip></label><input type="number" v-model.number="adv.window_size" class="form-input form-input-compact" placeholder="Auto"></div>
+                                <div><label class="input-label text-[10px]">Step <help-tip text="Step size for GC content/skew. Default: 100bp (<1Mb), 1kb (<10Mb), 10kb (>=10Mb)."></help-tip></label><input type="number" v-model.number="adv.step_size" class="form-input form-input-compact" placeholder="Auto"></div>
+                                <div><label class="input-label text-[10px]">Dinucleotide <help-tip text="Dinucleotide to use (e.g., 'GC'). Default is 'GC'."></help-tip></label><input type="text" v-model="adv.nt" class="form-input form-input-compact" placeholder="GC"></div>
                             </div>
 
                             <div>
                                 <template v-if="mode === 'circular'">
-                                    <label class="input-label">Definition & Text</label>
-                                    <div class="grid grid-cols-2 gap-2 mb-2">
-                                        <input type="text" v-model="form.species" class="form-input" placeholder="Species (e.g. <i>Escherichia coli</i>)">
-                                        <input type="text" v-model="form.strain" class="form-input" placeholder="Strain (e.g. K-12)">
+                                    <label class="input-label adv-section-title">Definition & Text</label>
+                                    <div class="grid grid-cols-2 gap-1.5 mb-1.5">
+                                        <input type="text" v-model="form.species" class="form-input form-input-compact" placeholder="Species (e.g. <i>Escherichia coli</i>)">
+                                        <input type="text" v-model="form.strain" class="form-input form-input-compact" placeholder="Strain (e.g. K-12)">
                                     </div>
                                 </template>
 
-                                <label v-if="mode === 'linear'" class="input-label">Label Settings</label>
+                                <label v-if="mode === 'linear'" class="input-label adv-section-title">Label Settings</label>
 
-                                <div class="grid grid-cols-2 gap-2">
+                                <div class="grid grid-cols-2 gap-1.5">
                                     <div>
-                                        <label class="text-[9px] text-slate-400">
+                                        <label class="input-label text-[10px] mb-0">
                                             Definition Font Size
                                             <help-tip text="Font size for the definition text (species/strain in circular, record name in linear)."></help-tip>
                                         </label>
@@ -540,44 +563,44 @@
                                             type="number"
                                             :value="adv.def_font_size ?? ''"
                                             @input="adv.def_font_size = $event.target.value === '' ? null : Number($event.target.value)"
-                                            class="form-input"
+                                            class="form-input form-input-compact"
                                             placeholder="Auto"
                                         >
                                     </div>
 
                                     <div>
-                                        <label class="text-[9px] text-slate-400">Label Font Size <help-tip text="Font size for feature labels."></help-tip></label>
-                                        <input type="number" v-model.number="adv.label_font_size" class="form-input" placeholder="Auto">
+                                        <label class="input-label text-[10px] mb-0">Label Font Size <help-tip text="Font size for feature labels."></help-tip></label>
+                                        <input type="number" v-model.number="adv.label_font_size" class="form-input form-input-compact" placeholder="Auto">
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="grid grid-cols-2 gap-2">
-                                <div><label class="input-label text-[10px]">Legend Box Size <help-tip text="Size of the color boxes in the legend."></help-tip></label><input type="number" v-model.number="adv.legend_box_size" class="form-input" placeholder="Auto"></div>
-                                <div><label class="input-label text-[10px]">Legend Font Size <help-tip text="Font size for the legend text."></help-tip></label><input type="number" v-model.number="adv.legend_font_size" class="form-input" placeholder="Auto"></div>
+                            <div class="grid grid-cols-2 gap-1.5">
+                                <div><label class="input-label text-[10px]">Legend Box Size <help-tip text="Size of the color boxes in the legend."></help-tip></label><input type="number" v-model.number="adv.legend_box_size" class="form-input form-input-compact" placeholder="Auto"></div>
+                                <div><label class="input-label text-[10px]">Legend Font Size <help-tip text="Font size for the legend text."></help-tip></label><input type="number" v-model.number="adv.legend_font_size" class="form-input form-input-compact" placeholder="Auto"></div>
                             </div>
 
                             <div>
-                                <label class="input-label">Styles (Colors & Widths)</label>
-                                <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
-                                    <div class="grid grid-cols-2 gap-2">
-                                        <div><label class="text-[9px] block">Block Stroke Color <help-tip text="Color of the outline for feature blocks."></help-tip></label><input type="color" v-model="adv.block_stroke_color" class="h-6 w-full p-0 border rounded"></div>
-                                        <div><label class="text-[9px] block">Block Stroke Width <help-tip text="Width of the outline for feature blocks."></help-tip></label><input type="number" v-model.number="adv.block_stroke_width" class="form-input py-0.5" placeholder="Auto"></div>
+                                <label class="input-label adv-section-title">Styles (Colors & Widths)</label>
+                                <div class="bg-slate-50 p-1.5 rounded border border-slate-200 space-y-1.5">
+                                    <div class="grid grid-cols-2 gap-1.5">
+                                        <div><label class="text-[9px] block">Block Stroke Color <help-tip text="Color of the outline for feature blocks."></help-tip></label><input type="color" v-model="adv.block_stroke_color" class="h-5 w-full p-0 border rounded"></div>
+                                        <div><label class="text-[9px] block">Block Stroke Width <help-tip text="Width of the outline for feature blocks."></help-tip></label><input type="number" v-model.number="adv.block_stroke_width" class="form-input form-input-compact" placeholder="Auto"></div>
                                     </div>
-                                    <div class="grid grid-cols-2 gap-2">
-                                        <div><label class="text-[9px] block">Line Stroke Color <help-tip text="Color of the lines representing introns."></help-tip></label><input type="color" v-model="adv.line_stroke_color" class="h-6 w-full p-0 border rounded"></div>
-                                        <div><label class="text-[9px] block">Line Stroke Width <help-tip text="Width of the lines representing introns."></help-tip></label><input type="number" v-model.number="adv.line_stroke_width" class="form-input py-0.5" placeholder="Auto"></div>
+                                    <div class="grid grid-cols-2 gap-1.5">
+                                        <div><label class="text-[9px] block">Line Stroke Color <help-tip text="Color of the lines representing introns."></help-tip></label><input type="color" v-model="adv.line_stroke_color" class="h-5 w-full p-0 border rounded"></div>
+                                        <div><label class="text-[9px] block">Line Stroke Width <help-tip text="Width of the lines representing introns."></help-tip></label><input type="number" v-model.number="adv.line_stroke_width" class="form-input form-input-compact" placeholder="Auto"></div>
                                     </div>
-                                    <div class="grid grid-cols-2 gap-2">
-                                        <div><label class="text-[9px] block">Axis Stroke Color <help-tip text="Color of the main axis line."></help-tip></label><input type="color" v-model="adv.axis_stroke_color" class="h-6 w-full p-0 border rounded"></div>
-                                        <div><label class="text-[9px] block">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label><input type="number" v-model.number="adv.axis_stroke_width" class="form-input py-0.5" placeholder="Auto"></div>
+                                    <div class="grid grid-cols-2 gap-1.5">
+                                        <div><label class="text-[9px] block">Axis Stroke Color <help-tip text="Color of the main axis line."></help-tip></label><input type="color" v-model="adv.axis_stroke_color" class="h-5 w-full p-0 border rounded"></div>
+                                        <div><label class="text-[9px] block">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label><input type="number" v-model.number="adv.axis_stroke_width" class="form-input form-input-compact" placeholder="Auto"></div>
                                     </div>
                                 </div>
                             </div>
 
                             <div v-if="mode === 'linear'">
-                                <label class="input-label">Linear Specific Settings</label>
-                                <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
+                                <label class="input-label adv-section-title">Linear Specific Settings</label>
+                                <div class="bg-slate-50 p-1.5 rounded border border-slate-200 space-y-1.5">
                                     <div class="grid grid-cols-3 gap-1 text-xs">
                                         <div><label class="text-[9px] block">Feature H <help-tip text="Height of the feature blocks."></help-tip></label><input type="number" v-model.number="adv.feature_height" class="form-input px-1 py-0.5"></div>
                                         <div><label class="text-[9px] block">GC H <help-tip text="Height of the GC content track."></help-tip></label><input type="number" v-model.number="adv.gc_height" class="form-input px-1 py-0.5"></div>
@@ -609,8 +632,8 @@
                             </div>
 
                             <div v-if="mode === 'circular'">
-                                <label class="input-label">Circular Label Offsets <help-tip text="Adjust radius offset factors for labels."></help-tip></label>
-                                <div class="bg-slate-50 p-2 rounded border border-slate-200 grid grid-cols-2 gap-2 text-xs">
+                                <label class="input-label adv-section-title">Circular Label Offsets <help-tip text="Adjust radius offset factors for labels."></help-tip></label>
+                                <div class="bg-slate-50 p-1.5 rounded border border-slate-200 grid grid-cols-2 gap-1.5 text-xs">
                                     <div><label class="text-[9px] block">Outer X Offset</label><input type="number" step="0.1" v-model.number="adv.outer_label_x_offset" class="form-input py-0.5"></div>
                                     <div><label class="text-[9px] block">Outer Y Offset</label><input type="number" step="0.1" v-model.number="adv.outer_label_y_offset" class="form-input py-0.5"></div>
                                     <div><label class="text-[9px] block">Inner X Offset</label><input type="number" step="0.1" v-model.number="adv.inner_label_x_offset" class="form-input py-0.5"></div>
@@ -620,8 +643,8 @@
                             </div>
 
                             <div>
-                                <label class="input-label">Include Features <help-tip text="Select which feature types to draw."></help-tip></label>
-                                <div class="flex flex-wrap gap-2 mb-2 p-2 bg-slate-50 rounded border border-slate-200 min-h-[38px]">
+                                <label class="input-label adv-section-title">Include Features <help-tip text="Select which feature types to draw."></help-tip></label>
+                                <div class="flex flex-wrap gap-1.5 mb-1.5 p-1.5 bg-slate-50 rounded border border-slate-200 min-h-[30px]">
                                     <span v-for="(f, i) in adv.features" :key="f" class="inline-flex items-center gap-1 text-[10px] bg-white text-blue-700 px-2 py-1 rounded border border-blue-200 shadow-sm">
                                         {{ f }}
                                         <button @click="adv.features.splice(i, 1)" class="text-slate-400 hover:text-red-500 flex items-center justify-center w-4 h-4 rounded-full hover:bg-red-50 transition-colors">
@@ -631,10 +654,10 @@
                                     <span v-if="adv.features.length === 0" class="text-[10px] text-slate-400 italic py-1">No features selected</span>
                                 </div>
                                 <div class="flex gap-2">
-                                    <select v-model="newFeatureToAdd" class="form-input text-xs py-1 px-2 h-8">
+                                    <select v-model="newFeatureToAdd" class="form-input text-xs py-0.5 px-2 h-7">
                                         <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                     </select>
-                                    <button @click.prevent="addFeature" class="btn btn-secondary text-xs h-8 shrink-0">
+                                    <button @click.prevent="addFeature" class="btn btn-secondary text-xs h-7 shrink-0">
                                         <i class="ph ph-plus"></i> Add
                                     </button>
                                 </div>
@@ -1223,7 +1246,7 @@
 </div>
 
 <script type="text/x-template" id="help-tip-template">
-    <div class="inline-block ml-1 align-text-bottom">
+    <div class="help-tip inline-block align-text-bottom">
         <i class="ph ph-question text-slate-400 hover:text-blue-500 cursor-help"
            @mouseenter="show" @mouseleave="hide" ref="trigger"></i>
         <Teleport to="body">
@@ -1237,10 +1260,10 @@
 <script type="text/x-template" id="file-uploader-template">
     <div class="w-full">
         <div class="flex justify-between items-end mb-1">
-            <label class="input-label mb-0">{{ label }}</label>
+            <label :class="['input-label mb-0', small ? 'input-label-sm' : '']">{{ label }}</label>
             <button v-if="modelValue" @click.stop="clearFile" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash"></i> Remove</button>
         </div>
-        <div class="upload-zone cursor-pointer" :class="{'ready': modelValue, 'py-1 min-h-[36px]': small}" @click="$refs.input.click()">
+        <div class="upload-zone cursor-pointer" :class="{'ready': modelValue, 'py-0.5 min-h-[30px]': small}" @click="$refs.input.click()">
             <input type="file" ref="input" @change="handleFile" class="hidden">
             <div v-if="!modelValue" class="flex items-center justify-center gap-2 text-slate-400 group-hover:text-blue-600 transition-colors">
                 <i class="ph ph-upload-simple" :class="small ? 'text-base' : 'text-xl'"></i>
