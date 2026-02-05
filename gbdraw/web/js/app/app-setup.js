@@ -64,6 +64,8 @@ export const createAppSetup = () => {
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
+    featurePopupRef,
+    featurePopupDrag,
     colorScopeDialog,
     resetColorDialog,
     sidebarWidth,
@@ -197,14 +199,112 @@ export const createAppSetup = () => {
 
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
 
+  const isInteractiveTarget = (target) => {
+    if (!target) return false;
+    return Boolean(target.closest('input, textarea, select, button, label, a, [data-nodrag="true"]'));
+  };
+
+  const onFeaturePopupDrag = (event) => {
+    if (!featurePopupDrag.active) return;
+    const popup = featurePopupRef.value;
+    const width = popup?.offsetWidth || 360;
+    const height = popup?.offsetHeight || 260;
+    const margin = 12;
+    const maxX = Math.max(margin, window.innerWidth - width - margin);
+    const maxY = Math.max(margin, window.innerHeight - height - margin);
+    const nextX = event.clientX - featurePopupDrag.offsetX;
+    const nextY = event.clientY - featurePopupDrag.offsetY;
+    clickedFeaturePos.x = Math.min(Math.max(nextX, margin), maxX);
+    clickedFeaturePos.y = Math.min(Math.max(nextY, margin), maxY);
+  };
+
+  const endFeaturePopupDrag = () => {
+    if (!featurePopupDrag.active) return;
+    featurePopupDrag.active = false;
+    document.removeEventListener('mousemove', onFeaturePopupDrag);
+    document.removeEventListener('mouseup', endFeaturePopupDrag);
+  };
+
+  const startFeaturePopupDrag = (event) => {
+    if (event.button !== 0) return;
+    if (!clickedFeature.value) return;
+    if (isInteractiveTarget(event.target)) return;
+    const popup = featurePopupRef.value;
+    if (!popup) return;
+    const rect = popup.getBoundingClientRect();
+    featurePopupDrag.active = true;
+    featurePopupDrag.offsetX = event.clientX - rect.left;
+    featurePopupDrag.offsetY = event.clientY - rect.top;
+    document.addEventListener('mousemove', onFeaturePopupDrag);
+    document.addEventListener('mouseup', endFeaturePopupDrag);
+    event.preventDefault();
+  };
+
   const normalizeSessionTitle = (value) => {
     if (value === null || value === undefined) return '';
     return String(value).trim();
   };
 
+  const getLastLine = (text) => {
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return '';
+    const lines = trimmed.split(/\r?\n/);
+    return lines[lines.length - 1] || '';
+  };
+
+  const normalizeErrorSections = (sections) =>
+    sections.filter((section) => section && typeof section.text === 'string' && section.text.trim() !== '');
+
+  const buildErrorDisplay = (value) => {
+    if (!value) return null;
+    if (typeof value === 'object' && value.summary) {
+      return {
+        summary: value.summary,
+        details: normalizeErrorSections(value.details || [])
+      };
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (parsed && typeof parsed === 'object' && parsed.summary) {
+            return {
+              summary: parsed.summary,
+              details: normalizeErrorSections(parsed.details || [])
+            };
+          }
+        } catch {
+          // Fall through to plain string handling.
+        }
+      }
+      const summary = getLastLine(trimmed) || 'Unknown error';
+      const details = trimmed ? normalizeErrorSections([{ label: 'Details', text: trimmed }]) : [];
+      return { summary, details };
+    }
+    return { summary: String(value), details: [] };
+  };
+
+  const errorDisplay = computed(() => buildErrorDisplay(errorLog.value));
+
   const sessionTitleLabel = computed(() => {
     const title = normalizeSessionTitle(sessionTitle.value);
     return title || 'Untitled session';
+  });
+
+  const clickedFeatureLocation = computed(() => {
+    const cf = clickedFeature.value;
+    if (!cf) return '';
+    if (cf.location) return cf.location;
+    const feat = cf.feat;
+    if (!feat) return '';
+    const startVal = Number(feat.start);
+    const endVal = Number(feat.end);
+    const startPos = Number.isFinite(startVal) ? startVal + 1 : feat.start;
+    const endPos = Number.isFinite(endVal) ? endVal : feat.end;
+    if (startPos === undefined || endPos === undefined || startPos === null || endPos === null) return '';
+    const strand = feat.strand ? ` (${feat.strand})` : '';
+    return `${startPos}..${endPos}${strand}`;
   });
 
   const editSessionTitle = () => {
@@ -230,6 +330,7 @@ export const createAppSetup = () => {
     processing,
     loadingStatus,
     errorLog,
+    errorDisplay,
     sessionTitle,
     sessionTitleLabel,
     results,
@@ -296,6 +397,9 @@ export const createAppSetup = () => {
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
+    featurePopupRef,
+    startFeaturePopupDrag,
+    clickedFeatureLocation,
     updateClickedFeatureColor,
     resetClickedFeatureFillColor,
     updateClickedFeatureStroke,

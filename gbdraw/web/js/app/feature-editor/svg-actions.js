@@ -92,11 +92,15 @@ export const createFeatureSvgActions = ({ state, getFeatureColor }) => {
 
           const currentStrokeColor = path.getAttribute('stroke') || '#000000';
           const currentStrokeWidth = parseFloat(path.getAttribute('stroke-width')) || 0.5;
+          const startPos = Number.isFinite(feat.start) ? feat.start + 1 : feat.start;
+          const endPos = Number.isFinite(feat.end) ? feat.end : feat.end;
+          const location = `${startPos}..${endPos}${feat.strand ? ` (${feat.strand})` : ''}`;
 
           clickedFeature.value = {
             id: feat.id,
             svg_id: svgId,
             label: defaultLabel,
+            location,
             color: currentColor,
             feat: feat,
             legendName: existingCaption,
@@ -105,8 +109,13 @@ export const createFeatureSvgActions = ({ state, getFeatureColor }) => {
             originalStrokeColor: currentStrokeColor,
             originalStrokeWidth: currentStrokeWidth
           };
-          clickedFeaturePos.x = Math.min(e.clientX + 10, window.innerWidth - 280);
-          clickedFeaturePos.y = Math.min(e.clientY + 10, window.innerHeight - 100);
+          const popupWidth = 360;
+          const popupHeight = 260;
+          const margin = 12;
+          const maxX = Math.max(margin, window.innerWidth - popupWidth - margin);
+          const maxY = Math.max(margin, window.innerHeight - popupHeight - margin);
+          clickedFeaturePos.x = Math.min(Math.max(e.clientX + 10, margin), maxX);
+          clickedFeaturePos.y = Math.min(Math.max(e.clientY + 10, margin), maxY);
         } else {
           console.log(`No feature found for svg_id: ${svgId}`);
         }

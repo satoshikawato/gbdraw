@@ -74,6 +74,45 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     selectedFeatureRecordIdx
   } = state;
 
+  const getLastLine = (text) => {
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return '';
+    const lines = trimmed.split(/\r?\n/);
+    return lines[lines.length - 1] || '';
+  };
+
+  const normalizeSections = (sections) =>
+    sections.filter((section) => section && typeof section.text === 'string' && section.text.trim() !== '');
+
+  const formatPythonError = (err) => {
+    if (err && typeof err === 'object') {
+      const details = normalizeSections([
+        { label: 'STDERR', text: err.stderr || '' },
+        { label: 'STDOUT', text: err.stdout || '' },
+        { label: 'Traceback', text: err.traceback || '' }
+      ]);
+      let summary =
+        (err.type === 'SystemExit' && err.stderr ? getLastLine(err.stderr) : '') ||
+        err.message ||
+        getLastLine(err.stderr || err.stdout || err.traceback) ||
+        'Unknown error';
+      if (err.type && summary && !summary.startsWith(err.type)) {
+        summary = `${err.type}: ${summary}`;
+      }
+      return { summary, details };
+    }
+
+    const text = String(err || '').trim();
+    const summary = getLastLine(text) || 'Unknown error';
+    const details = normalizeSections([{ label: 'Details', text }]);
+    return { summary, details };
+  };
+
+  const formatJsError = (err) => {
+    const message = err?.message ? String(err.message) : String(err || 'Unknown error');
+    return { summary: message, details: [] };
+  };
+
   const getSeqLabel = (seq, fallback) => {
     const definition = String(seq?.definition || '').trim();
     if (definition) return definition;
@@ -487,7 +526,10 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
         .globals
         .get('run_gbdraw_wrapper')(mode.value, pyodide.toPy(args.map(String)));
       const res = JSON.parse(jsonResult);
-      if (res.error) throw new Error(res.error);
+      if (res.error) {
+        errorLog.value = formatPythonError(res.error);
+        return;
+      }
       results.value = res;
 
       generatedLegendPosition.value = form.legend;
@@ -546,7 +588,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
         }
       }
     } catch (e) {
-      errorLog.value = e.message;
+      errorLog.value = formatJsError(e);
     } finally {
       processing.value = false;
     }

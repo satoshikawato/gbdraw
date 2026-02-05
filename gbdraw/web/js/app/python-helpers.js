@@ -7,6 +7,9 @@ import json
 import traceback
 import glob
 import os
+import io
+import contextlib
+import logging
 from gbdraw.circular import circular_main
 from gbdraw.linear import linear_main
 
@@ -25,20 +28,61 @@ def run_gbdraw_wrapper(mode, args):
             pass
 
     full_args = args + ["-f", "svg"]
+    stdout_buf = io.StringIO()
+    stderr_buf = io.StringIO()
+
+    def _collect_output():
+        stdout_text = stdout_buf.getvalue()
+        stderr_text = stderr_buf.getvalue()
+        stdout_text = stdout_text.strip() if stdout_text else ""
+        stderr_text = stderr_text.strip() if stderr_text else ""
+        return stdout_text, stderr_text
+
+    def _build_error(err_type, message, traceback_text=None, code=None):
+        stdout_text, stderr_text = _collect_output()
+        payload = {"type": err_type, "message": message}
+        if code is not None:
+            payload["code"] = code
+        if traceback_text:
+            payload["traceback"] = traceback_text
+        if stderr_text:
+            payload["stderr"] = stderr_text
+        if stdout_text:
+            payload["stdout"] = stdout_text
+        return {"error": payload}
+
+    original_streams = []
     try:
-        if mode == 'circular':
-            circular_main(full_args)
-        else:
-            linear_main(full_args)
+        for handler in logging.getLogger().handlers:
+            if isinstance(handler, logging.StreamHandler):
+                original_streams.append((handler, handler.stream))
+                handler.setStream(stdout_buf)
+        with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
+            if mode == 'circular':
+                circular_main(full_args)
+            else:
+                linear_main(full_args)
     except SystemExit as e:
-        if e.code != 0:
-            return json.dumps({"error": f"SystemExit: {e}"})
-    except Exception:
-        return json.dumps({"error": traceback.format_exc()})
+        code = getattr(e, "code", None)
+        if code != 0:
+            if isinstance(code, int):
+                message = f"Exit with status {code}"
+            elif code is None:
+                message = "SystemExit"
+            else:
+                message = str(code)
+            return json.dumps(_build_error("SystemExit", message, code=code))
+    except Exception as e:
+        err_type = e.__class__.__name__
+        message = str(e) if str(e) else "Unhandled exception"
+        return json.dumps(_build_error(err_type, message, traceback_text=traceback.format_exc()))
+    finally:
+        for handler, stream in original_streams:
+            handler.setStream(stream)
 
     files = glob.glob("*.svg")
     if not files:
-        return json.dumps({"error": "No output files generated."})
+        return json.dumps(_build_error("OutputError", "No output files generated."))
     results = []
     for fname in sorted(files):
         with open(fname, "r") as f:
