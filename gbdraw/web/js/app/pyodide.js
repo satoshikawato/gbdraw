@@ -17,6 +17,26 @@ export const createPyodideManager = ({ state }) => {
     return JSON.parse(paletteJson);
   };
 
+  const ensureWheelAvailable = async () => {
+    const wheelUrl = new URL(GBDRAW_WHEEL_NAME, window.location.href).toString();
+    const response = await fetch(wheelUrl, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(
+        `Wheel not found (${response.status}). Expected ${GBDRAW_WHEEL_NAME} at the site root. ` +
+        'Build the wheel and copy it into gbdraw/web, or update gbdraw/web/js/config.js.'
+      );
+    }
+    const buffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(buffer.slice(0, 2));
+    if (bytes.length < 2 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
+      throw new Error(
+        `Wheel file is not a valid zip: ${GBDRAW_WHEEL_NAME}. ` +
+        'Ensure the file is a .whl built from this version and is served correctly.'
+      );
+    }
+    return wheelUrl;
+  };
+
   const initPyodide = async () => {
     try {
       const pyodide = await loadPyodide();
@@ -26,7 +46,8 @@ export const createPyodideManager = ({ state }) => {
       const micropip = pyodide.pyimport('micropip');
       await micropip.install(['biopython', 'svgwrite', 'pandas', 'fonttools', 'bcbio-gff']);
       loadingStatus.value = 'Installing gbdraw...';
-      await micropip.install(GBDRAW_WHEEL_NAME);
+      const wheelUrl = await ensureWheelAvailable();
+      await micropip.install(wheelUrl);
       await pyodide.runPythonAsync(PYTHON_HELPERS);
 
       const allPalettes = loadPalettes();

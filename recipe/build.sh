@@ -8,15 +8,15 @@ echo "Building wheel for Pyodide..."
 # Build the wheel from the current directory and output it to gbdraw/web/
 $PYTHON -m pip wheel . --no-deps --no-build-isolation --wheel-dir gbdraw/web
 
-# --- 2. Dynamically retrieve the filename and update index.html ---
-# Find the generated wheel file (e.g., gbdraw-0.8.0-py3-none-any.whl)
+# --- 2. Dynamically retrieve the filename and update config.js ---
+# Find the generated wheel file (e.g., gbdraw-0.9.0b0-py3-none-any.whl)
 WHEEL_FILE=$(ls gbdraw/web/gbdraw-*.whl | head -n 1)
 WHEEL_NAME=$(basename $WHEEL_FILE)
 echo "Generated wheel name: $WHEEL_NAME"
 
-# Update index.html to use the correct wheel filename
+# Update config.js to use the correct wheel filename
 # This replaces 'const GBDRAW_WHEEL_NAME = "...";' with the actual filename
-sed -i "s/const GBDRAW_WHEEL_NAME = \".*\";/const GBDRAW_WHEEL_NAME = \"$WHEEL_NAME\";/" gbdraw/web/index.html
+sed -i "s/const GBDRAW_WHEEL_NAME = \".*\";/const GBDRAW_WHEEL_NAME = \"$WHEEL_NAME\";/" gbdraw/web/js/config.js
 
 # --- 3. Standard installation (for CLI usage) ---
 $PYTHON -m pip install . --no-deps --ignore-installed -vv

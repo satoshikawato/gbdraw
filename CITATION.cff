@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "If you use gbdraw in your research, please cite it."
+title: "gbdraw"
+version: "0.9.0b0"
+license: "MIT"
+url: "https://github.com/satoshikawato/gbdraw"
+repository-code: "https://github.com/satoshikawato/gbdraw"
+authors:
+  - family-names: "Kawato"
+    given-names: "Satoshi"
+keywords:
+  - genome visualization
+  - bioinformatics
+  - genomics
+  - SVG

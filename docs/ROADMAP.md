@@ -16,9 +16,9 @@
 ## Planned Features
 
 ### Short-term
-- Tick label configuration (e.g., per Mb)
+- Tick label configuration (custom units/formatting, e.g., per Mb)
 - `--separate_strands` by default (change in args)
-- Feature-wise SVG element grouping (for ease of manual editing)
+- Feature-wise SVG element grouping (group by feature/track for easier editing)
 
 ### Long-term
 - PAF/MAF support (pairwise matches)

@@ -163,6 +163,8 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     try {
       let args = [];
       let regionSpecs = [];
+      let recordSelectors = [];
+      let reverseFlags = [];
 
       if (form.prefix && form.prefix.trim() !== '') args.push('-o', form.prefix.trim());
       if (form.species) args.push('--species', form.species);
@@ -279,9 +281,6 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
             args.push('--record_label', label);
           });
         }
-
-        const recordSelectors = [];
-        const reverseFlags = [];
 
         const buildRegionSpec = (seq, idx) => {
           const hasStart = seq.region_start !== null && seq.region_start !== undefined && seq.region_start !== '';

@@ -13,11 +13,12 @@ else:
 from importlib import resources
 from importlib.abc import Traversable
 
+from ..exceptions import ConfigError
+
 logger = logging.getLogger(__name__)
 
 
 def load_config_toml(config_directory: str, config_file: str) -> dict:
-    config_dict = {}  # Initialize to empty dict to handle cases where loading fails.
     absolute_config_path = None  # Initialize outside of try for scope in exception block
     try:
         # Generate the path object for the 'config.toml' file
@@ -31,6 +32,15 @@ def load_config_toml(config_directory: str, config_file: str) -> dict:
             config_dict = tomllib.load(config_toml)
     except FileNotFoundError as e:
         logger.error(f"Failed to load configs from {absolute_config_path}: {e}")
+        raise ConfigError(
+            f"Configuration file missing: {absolute_config_path}. "
+            "Ensure gbdraw is installed with package data."
+        ) from e
+    except Exception as e:
+        logger.error(f"Failed to load configs from {absolute_config_path}: {e}")
+        raise ConfigError(
+            f"Failed to load configuration from {absolute_config_path}: {e}"
+        ) from e
     return config_dict
 
 

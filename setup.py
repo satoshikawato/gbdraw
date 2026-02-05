@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='gbdraw',
-    version='0.8.0',
+    version='0.9.0b0',
     packages=find_packages(),
     install_requires=[
         'pandas',
@@ -21,6 +21,8 @@ setup(
             'data/*.ttf',
             'web/index.html',
             'web/js/*.js',
+            'web/js/app/*.js',
+            'web/js/app/*/*.js',
             'web/js/services/*.js',
             'web/js/utils/*.js',
             'web/presets/*.txt',

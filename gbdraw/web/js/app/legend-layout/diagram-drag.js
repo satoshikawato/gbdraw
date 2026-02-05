@@ -29,8 +29,7 @@ export const createDiagramDragActions = ({ state }) => {
   const startDiagramDrag = (e) => {
     if (
       e.target.closest('#legend') ||
-      e.target.closest('path[data-feature-id]') ||
-      e.target.closest('rect[data-feature-id]')
+      e.target.closest('path[id^="f"], polygon[id^="f"], rect[id^="f"]')
     ) {
       return;
     }

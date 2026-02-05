@@ -66,7 +66,38 @@ gbdraw linear \
 The resulting file, `Escherichia_Shigella_pair.svg`, will show the two genomes as tracks, with ribbons connecting the regions of sequence similarity identified by BLAST.
 ![Escherichia_Shigella_pair.svg](../../examples/Escherichia_Shigella_pair.svg)
 
-### 4. Comparing Multiple Genomes
+### 4. Selecting Records and Regions (Advanced Input Control)
+
+When a GenBank or GFF3+FASTA file contains multiple records, you can target
+specific inputs for linear mode:
+
+- `--record_id`: Select a record by ID or `#index` per input file (repeatable).
+- `--reverse_complement`: Reverse-complement a record per input file.
+- `--region`: Crop a region using `record_id:start-end[:rc]`.
+
+Example (single file, select one record and crop a region):
+```bash
+gbdraw linear \
+  --gbk Escherichia_coli.gbk \
+  --record_id NC_000913.3 \
+  --region NC_000913.3:100000-250000 \
+  -o Escherichia_coli_region \
+  -f svg
+```
+
+Example (multi-file, reverse-complement the second record):
+```bash
+gbdraw linear \
+  --gbk Genome1.gbk Genome2.gbk \
+  --reverse_complement false true \
+  -o Genome1_Genome2_rc \
+  -f svg
+```
+
+If you use `--region` or `--reverse_complement` with BLAST, ensure the BLAST
+coordinates match the cropped/reversed records.
+
+### 5. Comparing Multiple Genomes
 You can compare more than two genomes by providing them in sequence. Ensure that you provide a BLAST file for each adjacent pair.
 
 **Example**: To compare `Genome1 -> Genome2 -> Genome3`, you need:

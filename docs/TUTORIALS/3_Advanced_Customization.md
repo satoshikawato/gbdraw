@@ -195,6 +195,17 @@ If labels are still slightly overlapping even after adjusting font size, you can
 
 ![outer_label_offset_comparison.png](../../examples/outer_label_offset_comparison.png)
 
+## Part 4: Linear Mode Input Selectors (Recap)
+
+If you are working in linear mode, you can target specific records or regions:
+
+- `--record_id` (select by ID or `#index`, repeatable per input file)
+- `--reverse_complement` (repeatable per input file)
+- `--region` (crop via `record_id:start-end[:rc]`)
+
+See [Tutorial 2](./2_Comparative_Genomics.md) and the
+[CLI Reference](../CLI_Reference.md) for full details.
+
 
 [< Back to the Index of Tutorials](./TUTORIALS.md)
 [< Back to Tutorial 2: Comparative Genomics with BLAST](./2_Comparative_Genomics.md)

@@ -8,7 +8,7 @@ This document provides a complete reference for all `gbdraw` command-line option
 
 ```bash
 $ gbdraw -h
-gbdraw v. 0.8.3: A diagram generator for small genomes
+gbdraw v. 0.9.0-beta: A diagram generator for small genomes
 
 Usage:
   gbdraw <subcommand> [options]

@@ -16,6 +16,8 @@ from typing import Optional
 import pandas as pd
 from pandas import DataFrame
 
+from ..exceptions import InputFileError, ParseError, ValidationError
+
 logger = logging.getLogger(__name__)
 
 _COLOR_NAME_MAP = {
@@ -172,7 +174,7 @@ _COLOR_NAME_MAP = {
 def resolve_color_to_hex(color_str: str) -> str:
     if not isinstance(color_str, str):
         logger.error(f"Invalid color value (not a string): {color_str}.")
-        sys.exit(1)
+        raise ValidationError(f"Invalid color value (not a string): {color_str}.")
 
     if color_str.startswith("#"):
         return color_str
@@ -185,7 +187,9 @@ def resolve_color_to_hex(color_str: str) -> str:
     logger.error(
         f"Unknown color name: {color_str}. Please use a valid SVG color name or hex code."
     )
-    sys.exit(1)
+    raise ValidationError(
+        f"Unknown color name: {color_str}. Please use a valid SVG color name or hex code."
+    )
 
 
 def load_default_colors(
@@ -202,7 +206,7 @@ def load_default_colors(
             palettes_dict = tomllib.load(fh)
     except Exception as exc:
         logger.error(f"ERROR: failed to read colour_palettes.toml – {exc}")
-        raise
+        raise ParseError(f"Failed to read color_palettes.toml: {exc}") from exc
 
     if palette not in palettes_dict:
         logger.warning(f"Palette '{palette}' not found; using [default]")
@@ -248,12 +252,16 @@ def load_default_colors(
             logger.error(
                 f"ERROR: override file '{user_defined_default_colors}' not found"
             )
-            sys.exit(1)
+            raise InputFileError(
+                f"Override file '{user_defined_default_colors}' not found"
+            )
         except Exception as exc:
             logger.error(
                 f"ERROR: failed to read '{user_defined_default_colors}' – {exc}"
             )
-            sys.exit(1)
+            raise ParseError(
+                f"Failed to read '{user_defined_default_colors}': {exc}"
+            ) from exc
 
     # ── 3) Return tidy DataFrame (index reset for downstream code)
     return default_colors.reset_index()
@@ -278,13 +286,13 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
         )
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in '{color_table_file}': {e}")
-        sys.exit(1)
+        raise ParseError(f"Malformed line in '{color_table_file}': {e}") from e
     except FileNotFoundError as e:
         logger.error(f"ERROR: Color table file not found: {e}")
-        sys.exit(1)
+        raise InputFileError(f"Color table file not found: {e}") from e
     except Exception as e:
         logger.error(f"ERROR: Failed to read '{color_table_file}': {e}")
-        sys.exit(1)
+        raise ParseError(f"Failed to read '{color_table_file}': {e}") from e
 
     # Check for any rows with missing values and error out if found
     null_rows = df[df.isnull().any(axis=1)]
@@ -295,7 +303,9 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
                 f"ERROR: Missing values in '{color_table_file}' at line {idx+1}. "
                 f"Missing columns: {missing}. Row data: {row.to_dict()}"
             )
-        sys.exit(1)
+        raise ValidationError(
+            f"Missing values in '{color_table_file}'. See log for details."
+        )
 
     return df
 

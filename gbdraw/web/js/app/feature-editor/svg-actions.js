@@ -54,11 +54,12 @@ export const createFeatureSvgActions = ({ state, getFeatureColor }) => {
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
-    const featurePaths = svg.querySelectorAll('path[id^="f"], polygon[id^="f"]');
+    const featurePaths = svg.querySelectorAll('path[id^="f"], polygon[id^="f"], rect[id^="f"]');
 
     const pathsByIdMap = {};
     featurePaths.forEach((path) => {
       const id = path.getAttribute('id');
+      if (!id) return;
       if (!pathsByIdMap[id]) pathsByIdMap[id] = [];
       pathsByIdMap[id].push(path);
     });
@@ -73,6 +74,7 @@ export const createFeatureSvgActions = ({ state, getFeatureColor }) => {
 
     featurePaths.forEach((path) => {
       const svgId = path.getAttribute('id');
+      if (!svgId) return;
       path.style.cursor = 'pointer';
 
       path.addEventListener('mouseenter', () => highlightFeature(svgId, true));

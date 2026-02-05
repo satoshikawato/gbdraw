@@ -20,7 +20,6 @@ import sys
 import webbrowser
 import http.server
 import socketserver
-import threading
 import socket
 from typing import NoReturn
 from importlib import resources
@@ -28,10 +27,11 @@ from functools import partial
 
 from .circular import circular_main
 from .linear import linear_main
-from .version import __version__
+from .exceptions import GbdrawError
+from .version import __version_display__
 
 def print_version() -> None:
-    print(f"gbdraw version {__version__}")
+    print(f"gbdraw version {__version_display__}")
 
 
 def find_free_port():
@@ -55,10 +55,6 @@ def start_local_server(directory: str):
         print(f"Error starting server: {e}", file=sys.stderr)
         return
 
-    thread = threading.Thread(target=httpd.serve_forever)
-    thread.daemon = True
-    thread.start()
-
     url = f"http://localhost:{port}"
     print(f"✅ Local server started at: {url}")
     print(f"📂 Serving UI from: {directory}")
@@ -67,15 +63,15 @@ def start_local_server(directory: str):
     webbrowser.open(url)
 
     try:
-        while True:
-            pass
+        httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nStopping server...")
+    finally:
         httpd.shutdown()
-        sys.exit(0)
+        httpd.server_close()
 
 def print_help_message() -> NoReturn:
-    print(f"gbdraw v. {__version__}: A diagram generator for small genomes")
+    print(f"gbdraw v. {__version_display__}: A diagram generator for small genomes")
     print("")
     print("Usage:")
     print("  gbdraw <subcommand> [options]")
@@ -83,7 +79,7 @@ def print_help_message() -> NoReturn:
     print("Subcommands:")
     print("  circular  Generate a circular genome diagram")
     print("  linear    Generate a linear genome diagram")
-    print("  gui       Launch the graphical user interface (requires Streamlit)")
+    print("  gui       Launch the local web UI in your browser")
     print("")
     print("For each subcommand, you can get additional help by running:")
     print("  gbdraw <subcommand> --help")
@@ -136,11 +132,12 @@ def main() -> None:
     command: str = sys.argv[1].lower()
     args: list[str] = sys.argv[2:]
 
-    if command == "circular":
-        circular_main(args)
-    elif command == "linear":
-        linear_main(args)
-    elif command == "gui":
+    try:
+        if command == "circular":
+            circular_main(args)
+        elif command == "linear":
+            linear_main(args)
+        elif command == "gui":
             try:
                 # Python 3.9+
                 web_dir = resources.files('gbdraw').joinpath('web')
@@ -153,13 +150,16 @@ def main() -> None:
             
             print("Launching gbdraw GUI (Local Mode)...")
             start_local_server(str(web_dir))
-    else:
-        print("Oops! It seems like you entered an invalid command.")
-        print("Please use 'circular' or 'linear' followed by the respective options.")
-        print("For example:")
-        print("  gbdraw circular --gbk input.gb")
-        print("  gbdraw linear --gbk input.gb")
-        print("  gbdraw gui")        
+        else:
+            print("Oops! It seems like you entered an invalid command.")
+            print("Please use 'circular' or 'linear' followed by the respective options.")
+            print("For example:")
+            print("  gbdraw circular --gbk input.gb")
+            print("  gbdraw linear --gbk input.gb")
+            print("  gbdraw gui")        
+            sys.exit(1)
+    except GbdrawError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
 
 

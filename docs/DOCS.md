@@ -34,6 +34,9 @@ Look here for detailed information, examples, and answers to specific questions.
 * **[Gallery](./GALLERY.md)**: A gallery of examples created with `gbdraw`.
 * **[FAQ](./FAQ.md)**: Frequently Asked Questions and solutions to known issues.
 * **[About](./ABOUT.md)**: Information on how to cite `gbdraw`.
+* **[Preprint Readiness](./PREPRINT_READINESS.md)**: Checklist for preprint preparation.
+* **[Reproducibility](./REPRODUCIBILITY.md)**: Environment and command capture for the preprint.
+* **[Library Usage](./LIBRARY_USAGE.md)**: Using gbdraw as a Python library.
 
 ---
 
