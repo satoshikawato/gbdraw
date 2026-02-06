@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import sys
 import os
 import argparse
 from io import StringIO  
@@ -42,9 +41,6 @@ def _get_args():
         type=int,
         help="end position (1-based, inclusive)",
         required=True)
-    if len(sys.argv) == 1:
-        parser.print_help(sys.stderr)
-        sys.exit(1)
     args = parser.parse_args()
     return args
 

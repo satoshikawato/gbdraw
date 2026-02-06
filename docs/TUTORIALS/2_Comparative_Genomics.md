@@ -75,6 +75,8 @@ specific inputs for linear mode:
 - `--reverse_complement`: Reverse-complement a record per input file.
 - `--region`: Crop a region using `record_id:start-end[:rc]`.
 
+See the [CLI Reference](../CLI_Reference.md) for full details.
+
 Example (single file, select one record and crop a region):
 ```bash
 gbdraw linear \
