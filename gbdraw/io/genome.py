@@ -16,6 +16,13 @@ from ..exceptions import InputFileError, ParseError, ValidationError
 logger = logging.getLogger(__name__)
 
 
+def _attach_source_annotations(record: SeqRecord, source_file: str) -> None:
+    if getattr(record, "annotations", None) is None:
+        record.annotations = {}
+    record.annotations["gbdraw_source_file"] = source_file
+    record.annotations["gbdraw_source_basename"] = os.path.basename(source_file)
+
+
 def load_gbks(
     gbk_list: List[str],
     mode: str,
@@ -53,6 +60,7 @@ def load_gbks(
                         logger.warning(
                             f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!"
                         )
+                    _attach_source_annotations(record, gbk_file)
                     record_list.append(record)
                     id_list.append(record.id)  # type: ignore
             elif mode == "circular":
@@ -74,6 +82,7 @@ def load_gbks(
                             logger.warning(
                                 f"WARNING: Topology information not available for {record.id}."
                             )
+                    _attach_source_annotations(record, gbk_file)
                     record_list.append(record)
                     id_list.append(record.id)  # type: ignore
         except ValueError as e:  # Catching common exception when parsing GenBank files
@@ -241,6 +250,7 @@ def load_gff_fasta(
                     logger.warning(
                         f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!"
                     )
+                _attach_source_annotations(record, gff_file)
                 record_list.append(record)
                 id_list.append(record.id)  # type: ignore
         except ValueError as e:

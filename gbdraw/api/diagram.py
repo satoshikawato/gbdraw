@@ -9,16 +9,22 @@ handled separately (see `gbdraw.render.export.save_figure`).
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Mapping
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 
 from gbdraw.analysis.skew import skew_df  # type: ignore[reportMissingImports]
+from gbdraw.api.config import apply_config_overrides  # type: ignore[reportMissingImports]
+from gbdraw.api.options import DiagramOptions  # type: ignore[reportMissingImports]
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.config.modify import modify_config_dict  # type: ignore[reportMissingImports]
+from gbdraw.config.toml import load_config_toml  # type: ignore[reportMissingImports]
+from gbdraw.io.colors import load_default_colors, read_color_table  # type: ignore[reportMissingImports]
 from gbdraw.configurators import (  # type: ignore[reportMissingImports]
     BlastMatchConfigurator,
     FeatureDrawingConfigurator,
@@ -29,17 +35,44 @@ from gbdraw.configurators import (  # type: ignore[reportMissingImports]
 from gbdraw.core.sequence import create_dict_for_sequence_lengths  # type: ignore[reportMissingImports]
 from gbdraw.diagrams.circular import assemble_circular_diagram  # type: ignore[reportMissingImports]
 from gbdraw.diagrams.linear import assemble_linear_diagram  # type: ignore[reportMissingImports]
+from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
 from gbdraw.tracks import TrackSpec, parse_track_specs  # type: ignore[reportMissingImports]
+
+DEFAULT_SELECTED_FEATURES = (
+    "CDS",
+    "rRNA",
+    "tRNA",
+    "tmRNA",
+    "ncRNA",
+    "misc_RNA",
+    "repeat_region",
+)
+
+logger = logging.getLogger(__name__)
+
+_SUPPORTED_CIRCULAR_TRACK_KINDS = {
+    "features",
+    "gc_content",
+    "gc_skew",
+    "ticks",
+    "axis",
+    "legend",
+    "labels",
+}
 
 
 def assemble_linear_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
-    blast_files: Optional[Sequence[str]],
-    config_dict: dict,
-    color_table: Optional[DataFrame],
-    default_colors: DataFrame,
-    selected_features_set: Sequence[str],
+    blast_files: Optional[Sequence[str]] = None,
+    config_dict: dict | None = None,
+    config_overrides: Mapping[str, object] | None = None,
+    color_table: Optional[DataFrame] = None,
+    color_table_file: str | None = None,
+    default_colors: DataFrame | None = None,
+    default_colors_palette: str = "default",
+    default_colors_file: str | None = None,
+    selected_features_set: Sequence[str] | None = None,
     output_prefix: str = "out",
     legend: str = "right",
     dinucleotide: str = "GC",
@@ -54,14 +87,36 @@ def assemble_linear_diagram_from_records(
 
     This is a convenience wrapper that builds internal configurators/canvas objects and
     returns the assembled SVG canvas.
+    If config_dict is None, it loads gbdraw.data/config.toml.
+    If config_overrides is provided, modify_config_dict is applied.
+    If default_colors is None, it loads the built-in default palette.
+    If color_table is None and color_table_file is provided, it is loaded.
+    If selected_features_set is None, it uses the CLI default feature list.
     """
     if not records:
-        raise ValueError("records is empty")
+        raise ValidationError("records is empty")
+    if color_table is None and color_table_file is not None:
+        color_table = read_color_table(color_table_file)
 
     if default_colors is None:
-        raise ValueError("default_colors is required (use gbdraw.io.colors.load_default_colors)")
+        default_colors = load_default_colors(
+            user_defined_default_colors=default_colors_file or "",
+            palette=default_colors_palette or "default",
+            load_comparison=bool(blast_files),
+        )
 
+    if config_dict is None:
+        config_dict = load_config_toml("gbdraw.data", "config.toml")
+    if config_overrides:
+        if cfg is not None:
+            raise ValueError(
+                "config_overrides cannot be used with cfg; pass cfg=None or apply overrides before."
+            )
+        config_dict = modify_config_dict(config_dict, **config_overrides)
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
+
+    if selected_features_set is None:
+        selected_features_set = DEFAULT_SELECTED_FEATURES
 
     seq_len_dict = create_dict_for_sequence_lengths(records)
     # Use raw records to avoid collapsing lengths when IDs are duplicated.
@@ -157,10 +212,14 @@ def assemble_linear_diagram_from_records(
 def assemble_circular_diagram_from_record(
     gb_record: SeqRecord,
     *,
-    config_dict: dict,
-    color_table: Optional[DataFrame],
-    default_colors: DataFrame,
-    selected_features_set: Sequence[str],
+    config_dict: dict | None = None,
+    config_overrides: Mapping[str, object] | None = None,
+    color_table: Optional[DataFrame] = None,
+    color_table_file: str | None = None,
+    default_colors: DataFrame | None = None,
+    default_colors_palette: str = "default",
+    default_colors_file: str | None = None,
+    selected_features_set: Sequence[str] | None = None,
     output_prefix: str = "out",
     legend: str = "right",
     dinucleotide: str = "GC",
@@ -171,11 +230,36 @@ def assemble_circular_diagram_from_record(
     track_specs: Sequence[str | TrackSpec] | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
-    """Builds and assembles a circular diagram for a single record."""
-    if default_colors is None:
-        raise ValueError("default_colors is required (use gbdraw.io.colors.load_default_colors)")
+    """Builds and assembles a circular diagram for a single record.
 
+    If config_dict is None, it loads gbdraw.data/config.toml.
+    If config_overrides is provided, modify_config_dict is applied.
+    If default_colors is None, it loads the built-in default palette.
+    If color_table is None and color_table_file is provided, it is loaded.
+    If selected_features_set is None, it uses the CLI default feature list.
+    """
+    if color_table is None and color_table_file is not None:
+        color_table = read_color_table(color_table_file)
+
+    if default_colors is None:
+        default_colors = load_default_colors(
+            user_defined_default_colors=default_colors_file or "",
+            palette=default_colors_palette or "default",
+            load_comparison=False,
+        )
+
+    if config_dict is None:
+        config_dict = load_config_toml("gbdraw.data", "config.toml")
+    if config_overrides:
+        if cfg is not None:
+            raise ValueError(
+                "config_overrides cannot be used with cfg; pass cfg=None or apply overrides before."
+            )
+        config_dict = modify_config_dict(config_dict, **config_overrides)
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
+
+    if selected_features_set is None:
+        selected_features_set = DEFAULT_SELECTED_FEATURES
 
     parsed_track_specs: list[TrackSpec] | None = None
     if track_specs is not None:
@@ -189,6 +273,18 @@ def assemble_circular_diagram_from_record(
         if raw:
             parsed.extend(parse_track_specs(raw, mode="circular"))
         parsed_track_specs = parsed
+
+    if parsed_track_specs:
+        for ts in parsed_track_specs:
+            if ts.mode != "circular":
+                raise ValidationError(
+                    f"TrackSpec mode '{ts.mode}' is not supported for circular diagrams."
+                )
+            if str(ts.kind) not in _SUPPORTED_CIRCULAR_TRACK_KINDS:
+                logger.warning(
+                    "TrackSpec kind '%s' is not supported for circular diagrams yet; it will be ignored.",
+                    ts.kind,
+                )
 
     ts_by_kind = {str(ts.kind): ts for ts in (parsed_track_specs or [])}
     legend_ts = ts_by_kind.get("legend")
@@ -279,9 +375,110 @@ def assemble_circular_diagram_from_record(
     )
 
 
+def build_circular_diagram(
+    gb_record: SeqRecord,
+    *,
+    options: DiagramOptions | None = None,
+) -> Drawing:
+    """Build a circular diagram using bundled DiagramOptions."""
+
+    options = options or DiagramOptions()
+    colors = options.colors
+    output = options.output
+    tracks = options.tracks
+
+    config_dict: dict | None = None
+    cfg: GbdrawConfig | None = None
+    config_overrides = options.config_overrides
+    if isinstance(options.config, GbdrawConfig):
+        if config_overrides:
+            cfg = apply_config_overrides(options.config, config_overrides)
+            config_overrides = None
+        else:
+            cfg = options.config
+    elif isinstance(options.config, dict):
+        config_dict = options.config
+
+    return assemble_circular_diagram_from_record(
+        gb_record,
+        config_dict=config_dict,
+        config_overrides=config_overrides,
+        color_table=colors.color_table if colors else None,
+        color_table_file=colors.color_table_file if colors else None,
+        default_colors=colors.default_colors if colors else None,
+        default_colors_palette=colors.default_colors_palette if colors else "default",
+        default_colors_file=colors.default_colors_file if colors else None,
+        selected_features_set=options.selected_features_set,
+        output_prefix=output.output_prefix if output else "out",
+        legend=output.legend if output else "right",
+        dinucleotide=options.dinucleotide,
+        window=options.window,
+        step=options.step,
+        species=options.species,
+        strain=options.strain,
+        track_specs=tracks.track_specs if tracks else None,
+        cfg=cfg,
+    )
+
+
+def build_linear_diagram(
+    records: Sequence[SeqRecord],
+    *,
+    options: DiagramOptions | None = None,
+) -> Drawing:
+    """Build a linear diagram using bundled DiagramOptions."""
+
+    options = options or DiagramOptions()
+    colors = options.colors
+    output = options.output
+    tracks = options.tracks
+
+    if tracks and tracks.track_specs:
+        logger.warning(
+            "Track specs are not supported for linear diagrams yet; ignoring track_specs."
+        )
+
+    config_dict: dict | None = None
+    cfg: GbdrawConfig | None = None
+    config_overrides = options.config_overrides
+    if isinstance(options.config, GbdrawConfig):
+        if config_overrides:
+            cfg = apply_config_overrides(options.config, config_overrides)
+            config_overrides = None
+        else:
+            cfg = options.config
+    elif isinstance(options.config, dict):
+        config_dict = options.config
+
+    return assemble_linear_diagram_from_records(
+        records,
+        blast_files=options.blast_files,
+        config_dict=config_dict,
+        config_overrides=config_overrides,
+        color_table=colors.color_table if colors else None,
+        color_table_file=colors.color_table_file if colors else None,
+        default_colors=colors.default_colors if colors else None,
+        default_colors_palette=colors.default_colors_palette if colors else "default",
+        default_colors_file=colors.default_colors_file if colors else None,
+        selected_features_set=options.selected_features_set,
+        output_prefix=output.output_prefix if output else "out",
+        legend=output.legend if output else "right",
+        dinucleotide=options.dinucleotide,
+        window=options.window,
+        step=options.step,
+        evalue=options.evalue,
+        bitscore=options.bitscore,
+        identity=options.identity,
+        cfg=cfg,
+    )
+
+
 __all__ = [
+    "DEFAULT_SELECTED_FEATURES",
     "assemble_circular_diagram_from_record",
     "assemble_linear_diagram_from_records",
+    "build_circular_diagram",
+    "build_linear_diagram",
 ]
 
 

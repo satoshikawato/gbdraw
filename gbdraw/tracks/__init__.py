@@ -1,8 +1,8 @@
 """Multi-track specification (foundation, internal).
 
-This package introduces *data models* for describing arbitrary track layouts for both
-linear and circular diagrams. The current renderer does not yet consume these models;
-they are a foundation for the upcoming multi-track refactor.
+These data models describe arbitrary track layouts for both linear and circular
+diagrams. They are still experimental. Currently only the circular assembler
+consumes a subset of these specs; linear support will follow in a later release.
 """
 
 from .spec import (  # type: ignore[reportMissingImports]
