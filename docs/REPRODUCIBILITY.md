@@ -13,11 +13,11 @@ with your exact environment and commands.
 
 ## Environment (fill in)
 
-- OS: TODO
-- CPU: TODO
-- RAM: TODO
-- Python: TODO
-- Environment manager: TODO (conda/mamba/venv)
+- OS: Ubuntu 24.04.3 LTS (WSL2, Linux 5.15.167.4-microsoft-standard-WSL2)
+- CPU: Intel(R) Core(TM) i9-14900HX (16C/32T)
+- RAM: 31 GiB
+- Python: 3.13.3
+- Environment manager: micromamba (conda-compatible), env: base
 
 ## Installation
 
@@ -57,8 +57,8 @@ gbdraw linear --gbk <INPUT_GB> --record_id <RECORD_ID> --reverse_complement true
 
 ## Web app reproducibility
 
-- Wheel filename: TODO (must match gbdraw/web/js/config.js)
-- Hosted URL (if used): TODO
+- Wheel filename: gbdraw-0.9.0b0-py3-none-any.whl (matches gbdraw/web/js/config.js)
+- Hosted URL (if used): https://gbdraw.app/
 - Local run:
   ```bash
   gbdraw gui
@@ -83,9 +83,9 @@ Record the test results and commit hash:
 ## Reference outputs
 
 If diagram output changes, update `tests/reference_outputs/` and record:
-- Which tests changed: TODO
-- Rationale for change: TODO
-- Regeneration command(s): TODO
+- Which tests changed: None (no reference outputs updated)
+- Rationale for change: N/A
+- Regeneration command(s): N/A
 
 ## Performance benchmarks (fill in)
 
@@ -93,7 +93,7 @@ Provide at least one typical genome size and runtime. Example template:
 
 | Task | Input size | Hardware | Runtime | Output size |
 | --- | --- | --- | --- | --- |
-| Circular diagram | TODO | TODO | TODO | TODO |
-| Linear comparison | TODO | TODO | TODO | TODO |
+| Circular diagram | 13.03 Mb (NC_010162.gb) | Intel(R) Core(TM) i9-14900HX (16C/32T), 31 GiB RAM | 5.20 s | 3.31 MiB (SVG) |
+| Linear comparison | 0.306 Mb + 0.287 Mb (MjeNMV.gb, MelaMJNV.gb) | Intel(R) Core(TM) i9-14900HX (16C/32T), 31 GiB RAM | 4.68 s | 1.52 MiB (SVG) |
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)

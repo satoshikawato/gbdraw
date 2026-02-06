@@ -250,8 +250,10 @@ const featureColorOverrides = reactive({}); // {featureKey: color}
 
 // SVG Feature Click state
 const svgContainer = ref(null);
-const clickedFeature = ref(null); // {id, svg_id, label, color, feat}
+const clickedFeature = ref(null); // {id, svg_id, label, location, color, feat}
 const clickedFeaturePos = reactive({ x: 0, y: 0 });
+const featurePopupRef = ref(null);
+const featurePopupDrag = reactive({ active: false, offsetX: 0, offsetY: 0 });
 
 // Color Change Scope Dialog state
 const colorScopeDialog = reactive({
@@ -500,6 +502,8 @@ export const state = {
   svgContainer,
   clickedFeature,
   clickedFeaturePos,
+  featurePopupRef,
+  featurePopupDrag,
   colorScopeDialog,
   resetColorDialog,
   sidebarWidth,
