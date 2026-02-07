@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 import re
+from pathlib import PurePath, PureWindowsPath
 from typing import Sequence
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
@@ -16,8 +17,8 @@ from ..crop_genbank import check_start_end_coords, crop_and_shift_features
 
 logger = logging.getLogger(__name__)
 
-_REGION_RE = re.compile(
-    r"^(?:(?P<selector>[^:]+):)?(?P<start>\d+)(?:\.\.|-)(?P<end>\d+)(?::(?P<strand>rc|rev|reverse|minus|-))?$",
+_REGION_COORD_RE = re.compile(
+    r"(?P<start>\d+)(?:\.\.|-)(?P<end>\d+)(?::(?P<strand>rc|rev|reverse|minus|-))?$",
     re.IGNORECASE,
 )
 
@@ -25,6 +26,7 @@ _REGION_RE = re.compile(
 @dataclass(frozen=True)
 class RegionSpec:
     raw: str
+    file_selector: str | None
     record_id: str | None
     record_index: int | None
     start: int
@@ -32,10 +34,15 @@ class RegionSpec:
     reverse_complement: bool
 
     def selector_label(self) -> str:
+        parts: list[str] = []
+        if self.file_selector:
+            parts.append(self.file_selector)
         if self.record_index is not None:
-            return f"#{self.record_index + 1}"
-        if self.record_id:
-            return self.record_id
+            parts.append(f"#{self.record_index + 1}")
+        elif self.record_id:
+            parts.append(self.record_id)
+        if parts:
+            return ":".join(parts)
         return "(by-order)"
 
 
@@ -54,15 +61,13 @@ def parse_region_spec(spec: str) -> RegionSpec:
     if not text:
         raise ValueError("Region spec is empty.")
 
-    match = _REGION_RE.match(text)
-    if not match:
+    match = _REGION_COORD_RE.search(text)
+    if not match or match.end() != len(text):
         raise ValueError(
-            "Invalid region spec: '{0}'. Expected format: record_id:start-end[:rc] or #index:start-end[:rc].".format(
-                text
-            )
+            "Invalid region spec: '{0}'. Expected format: record_id:start-end[:rc], "
+            "#index:start-end[:rc], or file:record_selector:start-end[:rc].".format(text)
         )
 
-    selector_raw = match.group("selector")
     start = int(match.group("start"))
     end = int(match.group("end"))
     if start < 1 or end < 1:
@@ -77,13 +82,28 @@ def parse_region_spec(spec: str) -> RegionSpec:
         reverse = True
         start, end = end, start
 
+    selector_text = text[: match.start()].rstrip(":")
+    file_selector = None
+    record_selector = None
+    if selector_text:
+        if ":" in selector_text:
+            file_part, record_part = selector_text.rsplit(":", 1)
+            file_part = file_part.strip()
+            record_part = record_part.strip()
+            if not record_part:
+                raise ValueError(
+                    f"File-scoped region spec '{text}' is missing a record selector."
+                )
+            file_selector = file_part or None
+            record_selector = record_part
+        else:
+            record_selector = selector_text.strip()
+
     record_id = None
     record_index = None
-
-    if selector_raw:
-        selector_raw = selector_raw.strip()
-        if selector_raw.startswith("#"):
-            index_str = selector_raw[1:]
+    if record_selector:
+        if record_selector.startswith("#"):
+            index_str = record_selector[1:].strip()
             if not index_str.isdigit():
                 raise ValueError(
                     f"Invalid record index in region spec '{text}'. Use #<number>:start-end."
@@ -94,10 +114,11 @@ def parse_region_spec(spec: str) -> RegionSpec:
                     f"Record index must be >= 1 in region spec '{text}'."
                 )
         else:
-            record_id = _extract_parenthetical(selector_raw) or selector_raw
+            record_id = _extract_parenthetical(record_selector) or record_selector
 
     return RegionSpec(
         raw=text,
+        file_selector=file_selector,
         record_id=record_id,
         record_index=record_index,
         start=start,
@@ -182,8 +203,12 @@ def apply_region_specs(
     log = log or logger
 
     total = len(records)
-    selectorless = [spec for spec in specs if spec.record_id is None and spec.record_index is None]
-    selectorful = [spec for spec in specs if spec.record_id is not None or spec.record_index is not None]
+    selectorless = [
+        spec
+        for spec in specs
+        if spec.record_id is None and spec.record_index is None and spec.file_selector is None
+    ]
+    selectorful = [spec for spec in specs if spec not in selectorless]
 
     assignments: dict[int, RegionSpec] = {}
 
@@ -203,25 +228,77 @@ def apply_region_specs(
             )
     else:
         id_to_indices: dict[str, list[int]] = {}
+        record_file_aliases: list[set[str]] = []
         for idx, rec in enumerate(records):
             id_to_indices.setdefault(rec.id, []).append(idx)
+            aliases: set[str] = set()
+            if getattr(rec, "annotations", None):
+                raw = rec.annotations.get("gbdraw_source_file")
+                if raw:
+                    aliases.add(str(raw))
+                raw_base = rec.annotations.get("gbdraw_source_basename")
+                if raw_base:
+                    aliases.add(str(raw_base))
+            expanded: set[str] = set()
+            for alias in aliases:
+                expanded.add(alias)
+                try:
+                    expanded.add(PurePath(alias).name)
+                except Exception:
+                    pass
+                try:
+                    expanded.add(PureWindowsPath(alias).name)
+                except Exception:
+                    pass
+            record_file_aliases.append({a for a in expanded if a})
+
+        def _find_file_indices(file_selector: str) -> list[int]:
+            matches: list[int] = []
+            for idx, aliases in enumerate(record_file_aliases):
+                if file_selector in aliases:
+                    matches.append(idx)
+            return matches
 
         for spec in selectorful:
-            if spec.record_index is not None:
-                idx = spec.record_index
-                if idx < 0 or idx >= total:
-                    raise ValueError(
-                        f"Region spec '{spec.raw}' targets record index #{idx + 1}, but only {total} record(s) were loaded."
+            file_indices: list[int] | None = None
+            if spec.file_selector:
+                file_indices = _find_file_indices(spec.file_selector)
+                if not file_indices:
+                    available = sorted(
+                        {alias for aliases in record_file_aliases for alias in aliases}
                     )
+                    raise ValueError(
+                        f"Region spec '{spec.raw}' did not match any input file. "
+                        f"Available files: {', '.join(available) if available else '(unknown)'}."
+                    )
+
+            if spec.record_index is not None:
+                if file_indices is None:
+                    idx = spec.record_index
+                    if idx < 0 or idx >= total:
+                        raise ValueError(
+                            f"Region spec '{spec.raw}' targets record index #{idx + 1}, "
+                            f"but only {total} record(s) were loaded."
+                        )
+                else:
+                    if spec.record_index < 0 or spec.record_index >= len(file_indices):
+                        raise ValueError(
+                            f"Region spec '{spec.raw}' targets record index #{spec.record_index + 1} "
+                            f"in file '{spec.file_selector}', but only {len(file_indices)} record(s) were loaded."
+                        )
+                    idx = file_indices[spec.record_index]
                 if idx in assignments:
                     raise ValueError(
-                        f"Multiple region specs target record #{idx + 1}."
+                        f"Multiple region specs target record {spec.selector_label()}."
                     )
                 assignments[idx] = spec
                 continue
 
             record_id = spec.record_id or ""
-            matches = id_to_indices.get(record_id, [])
+            if file_indices is None:
+                matches = id_to_indices.get(record_id, [])
+            else:
+                matches = [idx for idx in file_indices if records[idx].id == record_id]
             if not matches:
                 raise ValueError(
                     f"Region spec '{spec.raw}' did not match any record ID."

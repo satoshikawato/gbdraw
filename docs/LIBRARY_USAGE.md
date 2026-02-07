@@ -10,10 +10,18 @@ It is useful for pipelines and notebooks.
 A minimal flow looks like this:
 
 1. Load input data into `SeqRecord`
-2. Load config (`config.toml`)
-3. Load colors (palette / TSV)
+2. (Optional) Load config (`config.toml`) to override defaults
+3. (Optional) Load colors (palette / TSV) to override defaults
 4. Assemble the SVG via the API
 5. Save the SVG
+
+Minimum required arguments:
+- Circular: `gb_record`
+- Linear: `records` (BLAST is optional; use `blast_files=None` or omit)
+
+If `selected_features_set` is omitted, it defaults to:
+`["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]`.
+You can also import `DEFAULT_SELECTED_FEATURES` from `gbdraw.api`.
 
 ## 2. Minimal circular example
 
@@ -21,37 +29,43 @@ A minimal flow looks like this:
 from Bio import SeqIO
 
 from gbdraw.api import assemble_circular_diagram_from_record
-from gbdraw.config.toml import load_config_toml
-from gbdraw.io.colors import load_default_colors, read_color_table
-from gbdraw.render.export import save_figure
+from gbdraw.api.render import save_figure
 
 # 1) Load GenBank
 record = next(SeqIO.parse("NC_000913.gbk", "genbank"))
 
-# 2) Config and colors
-config_dict = load_config_toml("gbdraw.data", "config.toml")
-default_colors = load_default_colors(user_defined_default_colors="", palette="default")
-color_table = read_color_table("")  # empty string means no table
-
-# 3) Assemble
+# 2) Assemble (common options; defaults exist for config/colors/features)
 canvas = assemble_circular_diagram_from_record(
     record,
-    config_dict=config_dict,
-    color_table=color_table,
-    default_colors=default_colors,
     selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"],
     output_prefix="ecoli_circular",
     legend="right",
 )
 
-# 4) Save (SVG/PNG/PDF)
+# 3) Save (SVG/PNG/PDF)
 save_figure(canvas, ["svg"])
 ```
 
-### 2.1 Control tracks with `track_specs`
+### 2.1 Strict minimum (required args only)
+
+```python
+from Bio import SeqIO
+
+from gbdraw.api import assemble_circular_diagram_from_record
+from gbdraw.api.render import save_figure
+
+record = next(SeqIO.parse("NC_000913.gbk", "genbank"))
+
+canvas = assemble_circular_diagram_from_record(record)
+
+save_figure(canvas, ["svg"])
+```
+
+### 2.2 Control tracks with `track_specs`
 
 You can fine-tune visibility and placement of GC/skew/legend/etc. using
-`track_specs` (list of strings or `TrackSpec`).
+`track_specs` (list of strings or `TrackSpec`). Track specs are experimental
+and currently only applied to circular diagrams.
 
 ```python
 from gbdraw.api import parse_track_specs
@@ -67,9 +81,6 @@ track_specs = parse_track_specs(
 
 canvas = assemble_circular_diagram_from_record(
     record,
-    config_dict=config_dict,
-    color_table=color_table,
-    default_colors=default_colors,
     selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"],
     output_prefix="ecoli_circular_tracks",
     legend="right",
@@ -77,7 +88,7 @@ canvas = assemble_circular_diagram_from_record(
 )
 ```
 
-### 2.2 Control labels/ticks with `track_specs`
+### 2.3 Control labels/ticks with `track_specs`
 
 ```python
 track_specs = parse_track_specs(
@@ -91,9 +102,6 @@ track_specs = parse_track_specs(
 
 canvas = assemble_circular_diagram_from_record(
     record,
-    config_dict=config_dict,
-    color_table=color_table,
-    default_colors=default_colors,
     selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"],
     output_prefix="ecoli_circular_labels",
     legend="right",
@@ -105,22 +113,14 @@ canvas = assemble_circular_diagram_from_record(
 
 ```python
 from gbdraw.api import assemble_linear_diagram_from_records
-from gbdraw.config.toml import load_config_toml
-from gbdraw.io.colors import load_default_colors, read_color_table
-from gbdraw.io.genome import load_gbks
-from gbdraw.render.export import save_figure
+from gbdraw.api.io import load_gbks
+from gbdraw.api.render import save_figure
 
 records = load_gbks(["Genome1.gbk", "Genome2.gbk"], mode="linear", load_comparison=True)
-config_dict = load_config_toml("gbdraw.data", "config.toml")
-default_colors = load_default_colors(user_defined_default_colors="", palette="default", load_comparison=True)
-color_table = read_color_table("")
 
 canvas = assemble_linear_diagram_from_records(
     records,
     blast_files=["Genome1_Genome2.blast.out"],  # use None if you do not have BLAST
-    config_dict=config_dict,
-    color_table=color_table,
-    default_colors=default_colors,
     selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"],
     output_prefix="pairwise_linear",
     legend="right",
@@ -129,22 +129,33 @@ canvas = assemble_linear_diagram_from_records(
 save_figure(canvas, ["svg"])
 ```
 
-### 3.1 Linear without BLAST
+### 3.1 Strict minimum (required args only)
+
+```python
+from gbdraw.api import assemble_linear_diagram_from_records
+from gbdraw.api.io import load_gbks
+from gbdraw.api.render import save_figure
+
+records = load_gbks(["Genome1.gbk"], mode="linear", load_comparison=False)
+
+canvas = assemble_linear_diagram_from_records(
+    records,
+    blast_files=None,
+)
+
+save_figure(canvas, ["svg"])
+```
+
+### 3.2 Linear without BLAST
 
 If you do not want comparison ribbons, pass `blast_files=None`.
 
 ```python
 records = load_gbks(["Genome1.gbk"], mode="linear", load_comparison=False)
-config_dict = load_config_toml("gbdraw.data", "config.toml")
-default_colors = load_default_colors(user_defined_default_colors="", palette="default", load_comparison=False)
-color_table = read_color_table("")
 
 canvas = assemble_linear_diagram_from_records(
     records,
     blast_files=None,
-    config_dict=config_dict,
-    color_table=color_table,
-    default_colors=default_colors,
     selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"],
     output_prefix="linear_no_blast",
     legend="right",
@@ -153,12 +164,12 @@ canvas = assemble_linear_diagram_from_records(
 save_figure(canvas, ["svg"])
 ```
 
-### 3.2 GFF3 + FASTA input
+### 3.3 GFF3 + FASTA input
 
 Use `load_gff_fasta()` to load paired GFF3 + FASTA files.
 
 ```python
-from gbdraw.io.genome import load_gff_fasta
+from gbdraw.api.io import load_gff_fasta
 
 records = load_gff_fasta(
     gff_list=["Genome1.gff"],
@@ -171,9 +182,6 @@ records = load_gff_fasta(
 canvas = assemble_linear_diagram_from_records(
     records,
     blast_files=None,
-    config_dict=config_dict,
-    color_table=color_table,
-    default_colors=default_colors,
     selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"],
     output_prefix="linear_gff_fasta",
     legend="right",
@@ -182,13 +190,13 @@ canvas = assemble_linear_diagram_from_records(
 save_figure(canvas, ["svg"])
 ```
 
-### 3.3 Multiple records + region cropping
+### 3.4 Multiple records + region cropping
 
 If your input files contain multiple records, you can select specific records
 and crop regions.
 
 ```python
-from gbdraw.io.regions import parse_region_specs, apply_region_specs
+from gbdraw.api.io import parse_region_specs, apply_region_specs
 
 records = load_gbks(
     ["Genome1.gbk", "Genome2.gbk"],
@@ -207,9 +215,6 @@ records = apply_region_specs(records, region_specs)
 canvas = assemble_linear_diagram_from_records(
     records,
     blast_files=None,
-    config_dict=config_dict,
-    color_table=color_table,
-    default_colors=default_colors,
     selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"],
     output_prefix="linear_multi_region",
     legend="right",
@@ -224,6 +229,7 @@ If you want CLI-like behavior, use `modify_config_dict()`.
 
 ```python
 from gbdraw.config.modify import modify_config_dict
+from gbdraw.config.toml import load_config_toml
 
 config_dict = load_config_toml("gbdraw.data", "config.toml")
 config_dict = modify_config_dict(
@@ -231,6 +237,15 @@ config_dict = modify_config_dict(
     show_labels=True,
     track_type="middle",
     legend_font_size=18,
+)
+```
+
+You can also pass `config_overrides` directly to the API (kwargs to `modify_config_dict`):
+
+```python
+canvas = assemble_circular_diagram_from_record(
+    record,
+    config_overrides={"strandedness": True, "show_labels": True},
 )
 ```
 
@@ -246,7 +261,83 @@ default_colors = load_default_colors("", palette="orchid")
 color_table = read_color_table("custom_colors.tsv")
 ```
 
-## 6. Exceptions (recommended pattern)
+You can also pass palette/TSV paths directly to the API:
+
+```python
+canvas = assemble_circular_diagram_from_record(
+    record,
+    selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"],
+    default_colors_palette="orchid",
+    default_colors_file="default_colors.tsv",
+    color_table_file="custom_colors.tsv",
+)
+```
+
+The same options are available for the linear API; `load_comparison` is inferred from `blast_files`.
+
+## 6. API Reference
+
+### 6.1 `assemble_circular_diagram_from_record(...)`
+
+Required parameters:
+- `gb_record` (`SeqRecord`): input record
+
+Optional parameters:
+
+| Name | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `selected_features_set` | `Sequence[str] \| None` | CLI default list | Feature types to draw. Defaults to `["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]`. |
+| `config_dict` | `dict \| None` | `None` | If `None`, loads built-in `config.toml`. |
+| `config_overrides` | `Mapping[str, object] \| None` | `None` | Passed to `modify_config_dict`. Not compatible with `cfg`. |
+| `color_table` | `DataFrame \| None` | `None` | Preloaded color table. Takes precedence over `color_table_file`. |
+| `color_table_file` | `str \| None` | `None` | TSV color table path, loaded when `color_table` is `None`. |
+| `default_colors` | `DataFrame \| None` | `None` | Preloaded palette. Takes precedence over `default_colors_*`. |
+| `default_colors_palette` | `str` | `"default"` | Palette name in `color_palettes.toml`. |
+| `default_colors_file` | `str \| None` | `None` | TSV overrides for the default palette. |
+| `output_prefix` | `str` | `"out"` | Output name prefix (used in exported files). |
+| `legend` | `str` | `"right"` | Legend placement (e.g. `"right"`, `"none"`). |
+| `dinucleotide` | `str` | `"GC"` | GC/AT content target. |
+| `window` | `int \| None` | `None` | Sliding window size; auto if `None`. |
+| `step` | `int \| None` | `None` | Sliding step size; auto if `None`. |
+| `species` | `str \| None` | `None` | Display label. |
+| `strain` | `str \| None` | `None` | Display label. |
+| `track_specs` | `Sequence[str \| TrackSpec] \| None` | `None` | Track controls. |
+| `cfg` | `GbdrawConfig \| None` | `None` | Prebuilt config object. If provided, keep it consistent with `config_dict`. |
+
+### 6.2 `assemble_linear_diagram_from_records(...)`
+
+Required parameters:
+- `records` (`Sequence[SeqRecord]`): input records (non-empty)
+- `blast_files` (`Sequence[str] \| None`): BLAST outfmt 6/7 files, or `None`
+
+Optional parameters:
+
+| Name | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `selected_features_set` | `Sequence[str] \| None` | CLI default list | Feature types to draw. Defaults to `["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]`. |
+| `config_dict` | `dict \| None` | `None` | If `None`, loads built-in `config.toml`. |
+| `config_overrides` | `Mapping[str, object] \| None` | `None` | Passed to `modify_config_dict`. Not compatible with `cfg`. |
+| `color_table` | `DataFrame \| None` | `None` | Preloaded color table. Takes precedence over `color_table_file`. |
+| `color_table_file` | `str \| None` | `None` | TSV color table path, loaded when `color_table` is `None`. |
+| `default_colors` | `DataFrame \| None` | `None` | Preloaded palette. Takes precedence over `default_colors_*`. |
+| `default_colors_palette` | `str` | `"default"` | Palette name in `color_palettes.toml`. |
+| `default_colors_file` | `str \| None` | `None` | TSV overrides for the default palette. |
+| `output_prefix` | `str` | `"out"` | Output name prefix (used in exported files). |
+| `legend` | `str` | `"right"` | Legend placement (e.g. `"right"`, `"none"`). |
+| `dinucleotide` | `str` | `"GC"` | GC/AT content target. |
+| `window` | `int \| None` | `None` | Sliding window size; auto if `None`. |
+| `step` | `int \| None` | `None` | Sliding step size; auto if `None`. |
+| `evalue` | `float` | `1e-5` | BLAST filter. |
+| `bitscore` | `float` | `50.0` | BLAST filter. |
+| `identity` | `float` | `70.0` | BLAST filter (percent). |
+| `cfg` | `GbdrawConfig \| None` | `None` | Prebuilt config object. If provided, keep it consistent with `config_dict`. |
+
+Notes:
+- If you pass both `color_table` and `color_table_file`, `color_table` is used.
+- If you pass both `default_colors` and `default_colors_*`, `default_colors` is used.
+- For linear diagrams, palette loading uses `load_comparison=bool(blast_files)`.
+
+## 7. Exceptions (recommended pattern)
 
 The library raises exceptions instead of calling `sys.exit()`.
 
@@ -266,7 +357,7 @@ Common exceptions:
 - `ParseError`: input file parse errors
 - `ValidationError`: validation errors
 
-## 7. References
+## 8. References
 
 - CLI options: [CLI Reference](./CLI_Reference.md)
 - Color palette examples: [color_palette_examples](../examples/color_palette_examples.md)

@@ -293,7 +293,8 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '--region',
         help=(
-            'Crop a region (repeatable). Format: record_id:start-end[:rc] or #index:start-end[:rc]. '
+            'Crop a region (repeatable). Format: record_id:start-end[:rc], #index:start-end[:rc], '
+            'or file:record_selector:start-end[:rc]. '
             'Coordinates are 1-based inclusive. For multiple records without selectors, provide one spec per record in input order (file order, then record order within each file).'
         ),
         type=str,

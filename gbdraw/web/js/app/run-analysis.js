@@ -347,7 +347,8 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
               throw new Error(`Sequence #${idx + 1}: Region start/end must be >= 1.`);
             }
             const specBody = `${start}-${end}${wantsReverse ? ':rc' : ''}`;
-            const cliSpec = `#${idx + 1}:${specBody}`;
+            const fileLabel = lInputType.value === 'gb' ? `seq_${idx}.gb` : `seq_${idx}.gff`;
+            const cliSpec = recordIdRaw ? `${fileLabel}:${recordIdRaw}:${specBody}` : `#${idx + 1}:${specBody}`;
             const fileSpec = specBody;
             reverseFlag = false;
             reverseFlags.push(reverseFlag);

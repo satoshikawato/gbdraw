@@ -1,7 +1,7 @@
 """
 I/O helpers for gbdraw.
 
-This package is currently internal and may change. Prefer the CLI or (future) `gbdraw.api`
+This package is currently internal and may change. Prefer `gbdraw.api.io` or the CLI
 for stable consumption.
 """
 
