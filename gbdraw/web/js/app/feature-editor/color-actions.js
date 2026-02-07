@@ -45,6 +45,39 @@ export const createFeatureColorActions = ({
   } = ruleActions;
   const { applyInstantPreview } = featureSvgActions;
 
+  const findLegendEntryByCaption = (caption) => {
+    const normalizedCaption = String(caption || '').trim().toLowerCase();
+    if (!normalizedCaption) return null;
+
+    return (
+      legendEntries.value.find(
+        (entry) => String(entry?.caption || '').trim().toLowerCase() === normalizedCaption
+      ) || null
+    );
+  };
+
+  const findExistingCaptionColor = (feat, caption) => {
+    const existingCaption = findExistingColorForCaption(feat, caption);
+    if (existingCaption?.color) {
+      return {
+        caption: existingCaption.rule?.cap || caption,
+        color: existingCaption.color,
+        rule: existingCaption.rule || null
+      };
+    }
+
+    const legendEntry = findLegendEntryByCaption(caption);
+    if (legendEntry?.color) {
+      return {
+        caption: legendEntry.caption,
+        color: legendEntry.color,
+        rule: null
+      };
+    }
+
+    return null;
+  };
+
   const updateClickedFeatureColor = async (color) => {
     if (!clickedFeature.value) return;
     const feat = clickedFeature.value.feat;
@@ -57,7 +90,7 @@ export const createFeatureColorActions = ({
     const siblings = findFeaturesWithSameCaption(feat, legendName);
     const siblingCount = siblings.length;
 
-    const existingCaption = findExistingColorForCaption(feat, legendName);
+    const existingCaption = findExistingCaptionColor(feat, legendName);
 
     const individualLabel =
       feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`;
@@ -89,6 +122,43 @@ export const createFeatureColorActions = ({
       clickedFeature.value.color = color;
       setFeatureColor(feat, color, legendName);
     }
+  };
+
+  const handleLegendNameCommit = async () => {
+    if (!clickedFeature.value) return;
+    const feat = clickedFeature.value.feat;
+    if (!feat) return;
+
+    const requestedCaption = clickedFeature.value.legendName?.trim();
+    if (!requestedCaption) return;
+
+    const existingCaption = findExistingCaptionColor(feat, requestedCaption);
+    if (!existingCaption?.color) return;
+
+    const currentColor = String(clickedFeature.value.color || '').toLowerCase();
+    const existingColor = String(existingCaption.color).toLowerCase();
+    if (!currentColor || currentColor === existingColor) return;
+
+    const matchedCaption = existingCaption.caption || requestedCaption;
+    colorScopeDialog.show = true;
+    colorScopeDialog.feat = feat;
+    colorScopeDialog.color = clickedFeature.value.color;
+    colorScopeDialog.matchingRule = null;
+    colorScopeDialog.ruleMatchCount = 0;
+    colorScopeDialog.legendName = matchedCaption;
+    colorScopeDialog.siblingCount = 0;
+    colorScopeDialog.individualLabel = null;
+    colorScopeDialog.individualLabelSiblingCount = 0;
+    colorScopeDialog.existingCaptionRule = existingCaption.rule || null;
+    colorScopeDialog.existingCaptionColor = existingCaption.color;
+  };
+
+  const selectLegendNameOption = async (caption) => {
+    if (!clickedFeature.value) return;
+    const selectedCaption = String(caption || '').trim();
+    if (!selectedCaption) return;
+    clickedFeature.value.legendName = selectedCaption;
+    await handleLegendNameCommit();
   };
 
   const handleColorScopeChoice = async (choice) => {
@@ -169,6 +239,10 @@ export const createFeatureColorActions = ({
             color: existingCaptionColor,
             cap: legendName
           });
+        }
+        if (clickedFeature.value && clickedFeature.value.svg_id === feat.svg_id) {
+          clickedFeature.value.color = existingCaptionColor;
+          clickedFeature.value.legendName = legendName;
         }
         applyInstantPreview(feat, existingCaptionColor, legendName);
         applySpecificRulesToSvg();
@@ -602,6 +676,8 @@ export const createFeatureColorActions = ({
   return {
     applyStrokeToAllSiblings,
     handleColorScopeChoice,
+    handleLegendNameCommit,
+    selectLegendNameOption,
     handleResetColorChoice,
     resetClickedFeatureFillColor,
     resetClickedFeatureStroke,

@@ -863,8 +863,33 @@
                             <label class="text-xs font-medium text-slate-500 block mb-1">Legend name (optional)</label>
                             <input type="text"
                                    v-model="clickedFeature.legendName"
+                                   list="specific-rule-legend-name-options"
+                                   @change="handleLegendNameCommit"
+                                   @keydown.enter.prevent="handleLegendNameCommit"
                                    :placeholder="clickedFeature.label"
                                    class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                            <datalist id="specific-rule-legend-name-options">
+                                <option v-for="entry in specificRuleLegendOptions"
+                                        :key="`specific-rule-cap-${entry.caption}`"
+                                        :value="entry.caption"
+                                        :label="entry.color ? `${entry.caption} (${entry.color})` : entry.caption">
+                                </option>
+                            </datalist>
+                            <div v-if="specificRuleLegendOptions.length > 0" class="mt-1">
+                                <p class="text-[10px] text-slate-400 mb-1">Suggestions from SPECIFIC RULES (-t)</p>
+                                <select @change="selectLegendNameOption($event.target.value); $event.target.value = ''"
+                                        class="w-full text-xs border border-slate-200 rounded-md px-2 py-1 bg-slate-50 text-slate-600">
+                                    <option value="">Select legend text...</option>
+                                    <option v-for="entry in specificRuleLegendOptions"
+                                            :key="`specific-rule-select-${entry.caption}`"
+                                            :value="entry.caption">
+                                        {{ entry.caption }}{{ entry.color ? ` (${entry.color})` : '' }}
+                                    </option>
+                                </select>
+                            </div>
+                            <p v-else class="text-[10px] text-slate-400 mt-1">
+                                No SPECIFIC RULES (-t) legend text available yet
+                            </p>
                         </div>
                         <div class="mb-4">
                             <label class="text-xs font-medium text-slate-500 block mb-1">Fill Color</label>
