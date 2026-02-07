@@ -187,6 +187,8 @@ export const createAppSetup = () => {
     canEditFeatureColor,
     updateClickedFeatureColor,
     handleColorScopeChoice,
+    handleLegendNameCommit,
+    selectLegendNameOption,
     handleResetColorChoice,
     resetClickedFeatureFillColor,
     updateClickedFeatureStroke,
@@ -307,6 +309,28 @@ export const createAppSetup = () => {
     return `${startPos}..${endPos}${strand}`;
   });
 
+  const specificRuleLegendOptions = computed(() => {
+    const byCaption = new Map();
+    for (const rule of manualSpecificRules) {
+      if (!rule) continue;
+      const caption = String(rule.cap || '').trim();
+      if (!caption) continue;
+      const key = caption.toLowerCase();
+      const isHashRule = String(rule.qual || '').toLowerCase() === 'hash';
+      const existing = byCaption.get(key);
+      if (!existing || (existing.isHashRule && !isHashRule)) {
+        byCaption.set(key, {
+          caption,
+          color: String(rule.color || '').trim(),
+          isHashRule
+        });
+      }
+    }
+    return Array.from(byCaption.values())
+      .sort((a, b) => a.caption.localeCompare(b.caption))
+      .map(({ caption, color }) => ({ caption, color }));
+  });
+
   const editSessionTitle = () => {
     const current = normalizeSessionTitle(sessionTitle.value);
     const input = prompt('Session title', current);
@@ -400,7 +424,10 @@ export const createAppSetup = () => {
     featurePopupRef,
     startFeaturePopupDrag,
     clickedFeatureLocation,
+    specificRuleLegendOptions,
     updateClickedFeatureColor,
+    handleLegendNameCommit,
+    selectLegendNameOption,
     resetClickedFeatureFillColor,
     updateClickedFeatureStroke,
     resetClickedFeatureStroke,
