@@ -3,15 +3,15 @@
 # Reproducibility Guide
 
 This document captures the minimal information required to reproduce figures,
-tests, and performance measurements for the gbdraw preprint. Fill in the TODOs
-with your exact environment and commands.
+tests, and performance measurements for the gbdraw preprint.
+Update this document when environment, versions, or benchmark inputs change.
 
 ## Version
 
 - Display version: 0.9.0-beta
 - Package version (PEP 440): 0.9.0b0
 
-## Environment (fill in)
+## Environment (captured example)
 
 - OS: Ubuntu 24.04.3 LTS (WSL2, Linux 5.15.167.4-microsoft-standard-WSL2)
 - CPU: Intel(R) Core(TM) i9-14900HX (16C/32T)
@@ -36,7 +36,7 @@ python -m pip install -e ".[dev]"
 gbdraw --version
 ```
 
-## Command lines used in the paper (fill in)
+## Command lines used in the paper
 
 Provide the exact commands used to generate each figure. Example template:
 
@@ -87,7 +87,7 @@ If diagram output changes, update `tests/reference_outputs/` and record:
 - Rationale for change: N/A
 - Regeneration command(s): N/A
 
-## Performance benchmarks (fill in)
+## Performance benchmarks
 
 Provide at least one typical genome size and runtime. Example template:
 
