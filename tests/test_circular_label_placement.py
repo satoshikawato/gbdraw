@@ -1,13 +1,24 @@
 import math
+from pathlib import Path
 
+from Bio import SeqIO
+
+from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.modify import modify_config_dict
+from gbdraw.config.toml import load_config_toml
+from gbdraw.features.colors import preprocess_color_tables
+from gbdraw.features.factory import create_feature_dict
+from gbdraw.io.colors import load_default_colors
 from gbdraw.labels.circular import (
     angle_from_middle,
     improved_label_placement_fc,
     minimum_bbox_gap_px,
     place_labels_on_arc_fc,
+    prepare_label_list,
     x_overlap,
     y_overlap,
 )
+from gbdraw.labels.filtering import preprocess_label_filtering
 
 
 def _angle_of_label(label: dict) -> float:
@@ -54,6 +65,50 @@ def _target_delta_unwrapped(label: dict, total_length: int) -> float:
         angle = _angle_of_label(label)
     target = label.get("target_angle_unwrapped", 360.0 * (label["middle"] / total_length) - 90.0)
     return abs(angle - target)
+
+
+def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
+    input_path = Path(__file__).parent / "test_inputs" / "MjeNMV.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        show_labels=True,
+        strandedness=True,
+        track_type="tuckin",
+        resolve_overlaps=False,
+        allow_inner_labels=False,
+        label_blacklist="",
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    default_colors = load_default_colors("", "default")
+    color_table = None
+    color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    labels = prepare_label_list(
+        feature_dict,
+        len(record.seq),
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        config_dict,
+        cfg=cfg,
+    )
+    external_labels = [label for label in labels if not label.get("is_embedded")]
+    return external_labels, len(record.seq)
 
 
 def test_place_labels_stays_near_feature_angle_for_sparse_labels() -> None:
@@ -408,3 +463,9 @@ def test_wraparound_dense_cluster_resolves_after_target_reset_retry() -> None:
     )
 
     assert _count_overlaps_with_min_gap(improved, total_length) == 0
+
+
+def test_mjenmv_dense_labels_without_blacklist_have_no_outer_overlaps() -> None:
+    external_labels, total_length = _load_mjenmv_external_labels_without_blacklist()
+    assert len(external_labels) == 109
+    assert _count_overlaps(external_labels, total_length) == 0
