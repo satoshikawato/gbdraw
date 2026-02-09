@@ -18,7 +18,8 @@ from ..core.sequence import determine_length_parameter
 from ..layout.common import calculate_cds_ratio
 from ..layout.circular import calculate_feature_position_factors_circular
 
-MIN_BBOX_GAP_RATIO = 0.05
+# Keep dense large-font labels from being pushed excessively far from features.
+MIN_BBOX_GAP_RATIO = 0.01
 HEAVY_CLUSTER_RELAX_MAX_LABELS = 70
 FULL_SCAN_LABEL_LIMIT = 70
 MAX_EXPANDED_SHIFT_DEG = 90.0

@@ -3,6 +3,11 @@ from pathlib import Path
 
 from Bio import SeqIO
 
+import gbdraw.diagrams.circular.assemble as circular_assemble_module
+import gbdraw.labels.circular as circular_labels_module
+import gbdraw.render.groups.circular.labels as circular_labels_group_module
+import gbdraw.render.groups.circular.seq_record as circular_seq_record_group_module
+from gbdraw.api.diagram import assemble_circular_diagram_from_record
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
@@ -80,6 +85,50 @@ def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
         resolve_overlaps=False,
         allow_inner_labels=False,
         label_blacklist="",
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    default_colors = load_default_colors("", "default")
+    color_table = None
+    color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    labels = prepare_label_list(
+        feature_dict,
+        len(record.seq),
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        config_dict,
+        cfg=cfg,
+    )
+    external_labels = [label for label in labels if not label.get("is_embedded")]
+    return external_labels, len(record.seq)
+
+
+def _load_hmmtdna_external_labels(*, label_font_size: float = 22.0) -> tuple[list[dict], int]:
+    input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        show_labels=True,
+        strandedness=True,
+        track_type="tuckin",
+        resolve_overlaps=False,
+        allow_inner_labels=False,
+        label_font_size=label_font_size,
     )
     cfg = GbdrawConfig.from_dict(config_dict)
 
@@ -469,3 +518,82 @@ def test_mjenmv_dense_labels_without_blacklist_have_no_outer_overlaps() -> None:
     external_labels, total_length = _load_mjenmv_external_labels_without_blacklist()
     assert len(external_labels) == 109
     assert _count_overlaps(external_labels, total_length) == 0
+
+
+def test_hmmtdna_font22_labels_remain_close_without_overlaps() -> None:
+    y_overlap_calls = 0
+    original_y_overlap = circular_labels_module.y_overlap
+
+    def counting_y_overlap(*args, **kwargs):
+        nonlocal y_overlap_calls
+        y_overlap_calls += 1
+        return original_y_overlap(*args, **kwargs)
+
+    circular_labels_module.y_overlap = counting_y_overlap
+    try:
+        external_labels, total_length = _load_hmmtdna_external_labels(label_font_size=22.0)
+    finally:
+        circular_labels_module.y_overlap = original_y_overlap
+
+    assert len(external_labels) > 0
+    assert _count_overlaps(external_labels, total_length) == 0
+    assert _count_overlaps_with_min_gap(external_labels, total_length) == 0
+    assert y_overlap_calls < 500000
+
+    max_target_delta = max(_target_delta_unwrapped(label, total_length) for label in external_labels)
+    assert max_target_delta <= 30.0
+
+    max_leader_length = max(
+        math.hypot(label["start_x"] - label["middle_x"], label["start_y"] - label["middle_y"])
+        for label in external_labels
+    )
+    assert max_leader_length <= 220.0
+
+
+def test_circular_assembly_reuses_precalculated_labels_once() -> None:
+    input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        show_labels=True,
+        strandedness=True,
+        track_type="tuckin",
+        resolve_overlaps=False,
+        allow_inner_labels=False,
+        label_font_size=22.0,
+    )
+
+    counts = {"assemble": 0, "labels_group": 0, "seq_record_group": 0}
+    original_assemble_prepare = circular_assemble_module.prepare_label_list
+    original_labels_prepare = circular_labels_group_module.prepare_label_list
+    original_seq_prepare = circular_seq_record_group_module.prepare_label_list
+
+    def wrap_counter(counter_key: str, original_func):
+        def wrapped(*args, **kwargs):
+            counts[counter_key] += 1
+            return original_func(*args, **kwargs)
+
+        return wrapped
+
+    circular_assemble_module.prepare_label_list = wrap_counter("assemble", original_assemble_prepare)
+    circular_labels_group_module.prepare_label_list = wrap_counter("labels_group", original_labels_prepare)
+    circular_seq_record_group_module.prepare_label_list = wrap_counter("seq_record_group", original_seq_prepare)
+    try:
+        _ = assemble_circular_diagram_from_record(
+            record,
+            config_dict=config_dict,
+            selected_features_set=selected_features,
+            output_prefix="tmp",
+            legend="left",
+        )
+    finally:
+        circular_assemble_module.prepare_label_list = original_assemble_prepare
+        circular_labels_group_module.prepare_label_list = original_labels_prepare
+        circular_seq_record_group_module.prepare_label_list = original_seq_prepare
+
+    assert counts["assemble"] == 1
+    assert counts["labels_group"] == 0
+    assert counts["seq_record_group"] == 0
