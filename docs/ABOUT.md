@@ -6,9 +6,12 @@
 
 ### Citation
 
-If you use `gbdraw` in your research, we would appreciate it if you could cite the official GitHub repository:
+If you use `gbdraw` in your research, please use the citation metadata in `CITATION.cff`:
 
-**https://github.com/satoshikawato/gbdraw/**
+- `CITATION.cff` (repository root)
+- https://github.com/satoshikawato/gbdraw/
+
+If a preprint/paper DOI becomes available, it should be added to `CITATION.cff`.
 
 ---
 

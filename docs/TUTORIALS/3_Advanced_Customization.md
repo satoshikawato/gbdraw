@@ -12,7 +12,7 @@
 
 ## Part 1: Advanced Color Control
 
-While `--palette` is great for general styling, you often need to highlight specific features. `gbdraw`  two complementary mechanisms for overriding the default colours:
+While `--palette` is great for general styling, you often need to highlight specific features. `gbdraw` has two complementary mechanisms for overriding the default colours:
 
 | Method | Purpose |
 | ------ | ------- |
@@ -45,7 +45,7 @@ This method replaces the default color for an entire feature type (e.g., make al
     gbdraw circular \
       --gbk MjeNMV.gbk \
       --separate_strands \
-      --track middle \
+      --track_type middle \
       -f svg \
       --block_stroke_width 1 \
       -d modified_default_colors.tsv \
@@ -78,7 +78,7 @@ This method colors individual features that match a specific rule, such as a gen
     gbdraw circular \
       --gbk MjeNMV.gbk \
       --separate_strands \
-      --track middle \
+      --track_type middle \
       -f svg \
       --block_stroke_width 1 \
       -d modified_default_colors.tsv \
@@ -104,7 +104,7 @@ This is the most common use case: hiding uninformative labels like "hypothetical
     gbdraw circular \
       --gbk MjeNMV.gbk \
       --separate_strands \
-      --track middle \
+      --track_type middle \
       -f svg \
       --block_stroke_width 1 \
       -d modified_default_colors.tsv \

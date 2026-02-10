@@ -39,7 +39,7 @@ For detailed instructions on how to use `gbdraw`, please visit our main document
 
 ## Use without local installation
 ### Web App
-A GUI web app of `gbdraw` (latest commit on `main` branch) is available without any local installation:
+A browser-based GUI for `gbdraw` is available without any local installation:
 
 [![Static Badge](https://img.shields.io/badge/gbdraw%20webapp-8A2BE2)](https://gbdraw.app/)
 

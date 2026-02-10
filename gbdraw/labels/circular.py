@@ -18,6 +18,78 @@ from ..core.sequence import determine_length_parameter
 from ..layout.common import calculate_cds_ratio
 from ..layout.circular import calculate_feature_position_factors_circular
 
+# Keep dense large-font labels from being pushed excessively far from features.
+MIN_BBOX_GAP_RATIO = 0.01
+HEAVY_CLUSTER_RELAX_MAX_LABELS = 70
+FULL_SCAN_LABEL_LIMIT = 70
+MAX_EXPANDED_SHIFT_DEG = 90.0
+RELAX_CENTER_DELTA_CAP_DEG = 35.0
+LEGACY_PLACEMENT_LABEL_THRESHOLD = 50
+
+
+def minimum_bbox_gap_px(label1: dict, label2: dict, base_margin_px: float = 0.0) -> float:
+    """Return a minimum spacing margin in pixels derived from label bbox size."""
+    width_scale = max(float(label1.get("width_px", 0.0)), float(label2.get("width_px", 0.0)))
+    height_scale = max(float(label1.get("height_px", 0.0)), float(label2.get("height_px", 0.0)))
+    ratio_gap = MIN_BBOX_GAP_RATIO * max(width_scale, height_scale)
+    return max(float(base_margin_px), ratio_gap)
+
+
+def _count_label_overlaps(labels: list[dict], total_length: int, use_min_gap: bool) -> int:
+    """Count overlapping label pairs using the existing overlap predicates."""
+    overlap_count = 0
+    for idx in range(len(labels)):
+        for jdx in range(idx + 1, len(labels)):
+            label1 = labels[idx]
+            label2 = labels[jdx]
+            if use_min_gap:
+                margin = minimum_bbox_gap_px(label1, label2, base_margin_px=0.0)
+                y_margin = margin
+                x_margin = margin
+            else:
+                y_margin = 0.1
+                x_margin = 1.0
+            if y_overlap(label1, label2, total_length, y_margin) and x_overlap(
+                label1, label2, minimum_margin=x_margin
+            ):
+                overlap_count += 1
+    return overlap_count
+
+
+def _angle_deviation_score(labels: list[dict], total_length: int) -> tuple[float, float]:
+    """
+    Return (sum_delta, max_delta) where deltas are angular deviations from each
+    label's target feature angle.
+    """
+    sum_delta = 0.0
+    max_delta = 0.0
+    for label in labels:
+        if "angle_unwrapped" in label:
+            target_angle = float(
+                label.get(
+                    "target_angle_unwrapped",
+                    angle_from_middle_unwrapped(float(label["middle"]), total_length),
+                )
+            )
+            delta = abs(float(label["angle_unwrapped"]) - target_angle)
+        elif "start_x" in label and "start_y" in label:
+            actual_angle = math.degrees(math.atan2(float(label["start_y"]), float(label["start_x"]))) % 360.0
+            target_angle = angle_from_middle(float(label["middle"]), total_length)
+            delta = abs(angle_delta_deg(actual_angle, target_angle))
+        else:
+            delta = 0.0
+        sum_delta += delta
+        max_delta = max(max_delta, delta)
+    return sum_delta, max_delta
+
+
+def _placement_score(labels: list[dict], total_length: int) -> tuple[int, int, float, float]:
+    """Return tuple score used to compare placement candidates."""
+    overlap_plain = _count_label_overlaps(labels, total_length, use_min_gap=False)
+    overlap_min_gap = _count_label_overlaps(labels, total_length, use_min_gap=True)
+    sum_delta, max_delta = _angle_deviation_score(labels, total_length)
+    return overlap_plain, overlap_min_gap, sum_delta, max_delta
+
 
 def y_overlap(label1, label2, total_len, minimum_margin):
     # Adjusted to consider absolute values for y coordinates
@@ -176,6 +248,27 @@ def calculate_angle_for_y(center_y, y_radius, y):
         return None  # Indicates the y-coordinate is outside the ellipse's bounds
 
 
+def angle_from_middle(middle: float, total_length: int) -> float:
+    """Convert genome midpoint to circular angle (degrees)."""
+    return (360.0 * (middle / total_length) - 90.0) % 360.0
+
+
+def angle_from_middle_unwrapped(middle: float, total_length: int) -> float:
+    """Convert genome midpoint to monotonic circular angle (degrees, unwrapped)."""
+    return 360.0 * (middle / total_length) - 90.0
+
+
+def angle_delta_deg(a: float, b: float) -> float:
+    """Return the signed smallest angle delta from b to a in [-180, 180)."""
+    return ((a - b + 180.0) % 360.0) - 180.0
+
+
+def normalize_angle_near_reference(angle_deg: float, reference_unwrapped: float) -> float:
+    """Project an angle to the nearest 360-degree branch around a reference angle."""
+    normalized = angle_deg % 360.0
+    return normalized + 360.0 * round((reference_unwrapped - normalized) / 360.0)
+
+
 def place_labels_on_arc_fc(
     labels: list[dict],
     center_x: float,
@@ -186,70 +279,85 @@ def place_labels_on_arc_fc(
     end_angle: float,
     total_length: int,
 ) -> list[dict]:
-    def calculate_angle(x, y, origin_x, origin_y):
-        return math.degrees(math.atan2((y - origin_y), (x - origin_x))) % 360
-
-    def move_label(label, angle):
-        new_x = center_x + x_radius * math.cos(math.radians(angle))
-        new_y = center_y + y_radius * math.sin(math.radians(angle))
-        return new_x, new_y
-
-    def calculate_angle_of_three_points(x1, y1, x2, y2, x3, y3):
-        v1 = (x1 - x2, y1 - y2)
-        v2 = (x3 - x2, y3 - y2)
-        dot_product = v1[0] * v2[0] + v1[1] * v2[1]
-        mag1 = math.sqrt(v1[0] ** 2 + v1[1] ** 2)
-        mag2 = math.sqrt(v2[0] ** 2 + v2[1] ** 2)
-        cos_angle = dot_product / (mag1 * mag2)
-        angle = math.acos(max(-1, min(1, cos_angle)))
-        return math.degrees(angle)
-
     def check_overlap(label1, label2, total_length, margin):
-        return y_overlap(label1, label2, total_length, margin) and x_overlap(
-            label1, label2, minimum_margin=2
+        effective_margin = minimum_bbox_gap_px(label1, label2, base_margin_px=max(margin, 2.0))
+        return y_overlap(label1, label2, total_length, effective_margin) and x_overlap(
+            label1, label2, minimum_margin=effective_margin
         )
 
     if not labels:
         return []
 
-    rearranged_labels = []
+    rearranged_labels: list[dict] = []
     labels = sort_labels(labels)
-    current_angle = -75
-    increment = 0.1
+    angle_step = 0.25
+    max_shift = 25.0
+    max_steps = int(max_shift / angle_step)
+    min_order_gap = 0.05
+    prev_angle_unwrapped = -float("inf")
 
-    for i, label in enumerate(labels):
-        if i == 0:
-            label["start_x"], label["start_y"] = calculate_coordinates(
-                center_x, center_y, x_radius, y_radius, current_angle, label["middle"], total_length
-            )
-            rearranged_labels.append(label)
-        else:
-            new_angle = current_angle + increment
-            if new_angle < -75:
-                new_angle = -75
-            elif -75 <= new_angle < 85:
-                if label["middle"] > (total_length / 2) or i >= len(labels) * (2 / 3):
-                    new_angle = 85
-                else:
-                    new_agle = new_angle
-            elif 85 < new_angle < 90:
-                new_angle = 90
+    for label in labels:
+        target_angle_unwrapped = angle_from_middle_unwrapped(label["middle"], total_length)
+        label["target_angle_unwrapped"] = target_angle_unwrapped
+        label["target_angle"] = target_angle_unwrapped % 360.0
+        lower_bound = prev_angle_unwrapped + min_order_gap
+        best_x = None
+        best_y = None
+        best_overlaps = None
+        best_angle_unwrapped = None
+
+        for step in range(max_steps + 1):
+            if step == 0:
+                candidate_offsets = [0.0]
             else:
-                new_angle = new_angle
-            if new_angle > 269:
-                new_angle = 269
-            label["start_x"], label["start_y"] = calculate_coordinates(
-                center_x, center_y, x_radius, y_radius, new_angle, label["middle"], total_length
-            )
-            # if the new position overlaps with the previous label, adjust the angle
-            while rearranged_labels and check_overlap(label, rearranged_labels[-1], total_length, 0.1):
-                new_angle += 0.01
-                label["start_x"], label["start_y"] = calculate_coordinates(
-                    center_x, center_y, x_radius, y_radius, new_angle, label["middle"], total_length
-                )
+                offset = step * angle_step
+                candidate_offsets = [offset, -offset]
 
-            rearranged_labels.append(label)
-            current_angle = new_angle
+            for offset in candidate_offsets:
+                candidate_angle_unwrapped = target_angle_unwrapped + offset
+                if candidate_angle_unwrapped < lower_bound:
+                    continue
+                candidate_x, candidate_y = calculate_coordinates(
+                    center_x, center_y, x_radius, y_radius, candidate_angle_unwrapped, label["middle"], total_length
+                )
+                candidate = label.copy()
+                candidate["start_x"] = candidate_x
+                candidate["start_y"] = candidate_y
+
+                overlap_count = 0
+                for existing in rearranged_labels:
+                    if check_overlap(candidate, existing, total_length, 0.1):
+                        overlap_count += 1
+
+                if overlap_count == 0:
+                    label["start_x"] = candidate_x
+                    label["start_y"] = candidate_y
+                    best_overlaps = 0
+                    best_angle_unwrapped = candidate_angle_unwrapped
+                    break
+
+                if best_overlaps is None or overlap_count < best_overlaps:
+                    best_x = candidate_x
+                    best_y = candidate_y
+                    best_overlaps = overlap_count
+                    best_angle_unwrapped = candidate_angle_unwrapped
+
+            if best_overlaps == 0:
+                break
+
+        if best_overlaps != 0:
+            if best_angle_unwrapped is None:
+                # Fallback: preserve ordering even when local placement is crowded.
+                best_angle_unwrapped = lower_bound
+                best_x, best_y = calculate_coordinates(
+                    center_x, center_y, x_radius, y_radius, best_angle_unwrapped, label["middle"], total_length
+                )
+            label["start_x"] = best_x if best_x is not None else 0.0
+            label["start_y"] = best_y if best_y is not None else 0.0
+
+        label["angle_unwrapped"] = best_angle_unwrapped if best_angle_unwrapped is not None else lower_bound
+        prev_angle_unwrapped = label["angle_unwrapped"]
+        rearranged_labels.append(label)
 
     return rearranged_labels
 
@@ -262,48 +370,127 @@ def sort_labels(labels):
     return sorted(labels, key=lambda x: x["middle"])
 
 
-def improved_label_placement_fc(
-    labels,
-    center_x,
-    center_y,
-    x_radius,
-    y_radius,
-    feature_radius,
-    total_length,
-    start_angle,
-    end_angle,
-    y_margin=0.1,
-    max_iterations=10000,
-):
-    def calculate_angle(x, y, origin_x, origin_y):
-        return math.degrees(math.atan2((y - origin_y), (x - origin_x))) % 360
+def _legacy_place_labels_on_arc_fc(
+    labels: list[dict],
+    center_x: float,
+    center_y: float,
+    x_radius: float,
+    y_radius: float,
+    start_angle: float,
+    end_angle: float,
+    total_length: int,
+) -> list[dict]:
+    """
+    Legacy placement strategy (from pre-93dc098 implementation).
 
-    def move_label(label, angle):
+    This remains as a fallback for dense cases where the new optimizer leaves
+    unresolved overlaps.
+    """
+
+    def move_label(label: dict, angle: float) -> tuple[float, float]:
         new_x = center_x + x_radius * math.cos(math.radians(angle))
         new_y = center_y + y_radius * math.sin(math.radians(angle))
         return new_x, new_y
 
-    def calculate_angle_of_three_points(x1, y1, x2, y2, x3, y3):
+    def check_overlap(label1: dict, label2: dict, total_length: int, margin: float) -> bool:
+        return y_overlap(label1, label2, total_length, margin) and x_overlap(
+            label1, label2, minimum_margin=2
+        )
+
+    if not labels:
+        return []
+
+    rearranged_labels = []
+    labels = sort_labels(labels)
+    current_angle = -75.0
+    increment = 0.1
+
+    for idx, label in enumerate(labels):
+        if idx == 0:
+            label["start_x"], label["start_y"] = calculate_coordinates(
+                center_x, center_y, x_radius, y_radius, current_angle, label["middle"], total_length
+            )
+            rearranged_labels.append(label)
+            continue
+
+        new_angle = current_angle + increment
+        if new_angle < -75:
+            new_angle = -75.0
+        elif -75 <= new_angle < 85:
+            if label["middle"] > (total_length / 2) or idx >= len(labels) * (2 / 3):
+                new_angle = 85.0
+        elif 85 < new_angle < 90:
+            new_angle = 90.0
+        if new_angle > 269:
+            new_angle = 269.0
+
+        label["start_x"], label["start_y"] = calculate_coordinates(
+            center_x, center_y, x_radius, y_radius, new_angle, label["middle"], total_length
+        )
+        while rearranged_labels and check_overlap(label, rearranged_labels[-1], total_length, 0.1):
+            new_angle += 0.01
+            label["start_x"], label["start_y"] = calculate_coordinates(
+                center_x, center_y, x_radius, y_radius, new_angle, label["middle"], total_length
+            )
+
+        rearranged_labels.append(label)
+        current_angle = new_angle
+
+    return rearranged_labels
+
+
+def _legacy_improved_label_placement_fc(
+    labels: list[dict],
+    center_x: float,
+    center_y: float,
+    x_radius: float,
+    y_radius: float,
+    feature_radius: float,
+    total_length: int,
+    start_angle: float,
+    end_angle: float,
+    y_margin: float = 0.1,
+    max_iterations: int = 10000,
+) -> list[dict]:
+    """
+    Legacy local optimizer (from pre-93dc098 implementation).
+
+    This solver is intentionally conservative and is used as a fallback to
+    improve dense-label robustness.
+    """
+
+    def move_label(label: dict, angle: float) -> tuple[float, float]:
+        new_x = center_x + x_radius * math.cos(math.radians(angle))
+        new_y = center_y + y_radius * math.sin(math.radians(angle))
+        return new_x, new_y
+
+    def calculate_angle_of_three_points(
+        x1: float, y1: float, x2: float, y2: float, x3: float, y3: float
+    ) -> float:
         v1 = (x1 - x2, y1 - y2)
         v2 = (x3 - x2, y3 - y2)
         dot_product = v1[0] * v2[0] + v1[1] * v2[1]
         mag1 = math.sqrt(v1[0] ** 2 + v1[1] ** 2)
         mag2 = math.sqrt(v2[0] ** 2 + v2[1] ** 2)
+        if mag1 == 0 or mag2 == 0:
+            return 0.0
         cos_angle = dot_product / (mag1 * mag2)
-        angle = math.acos(max(-1, min(1, cos_angle)))
+        angle = math.acos(max(-1.0, min(1.0, cos_angle)))
         return math.degrees(angle)
 
-    def check_overlap(label1, label2, total_length):
+    def check_overlap(label1: dict, label2: dict, total_length: int) -> bool:
         return y_overlap(label1, label2, total_length, y_margin) and x_overlap(
             label1, label2, minimum_margin=1
         )
 
     labels = sort_labels(labels)
-    for iteration in range(max_iterations):
+    if len(labels) < 2:
+        return labels
+
+    for _ in range(max_iterations):
         changes_made = False
-        for i, label in enumerate(reversed(labels)):
-            reverse_i = len(labels) - 1 - i
-            normalize = False
+        for idx, label in enumerate(reversed(labels)):
+            reverse_idx = len(labels) - 1 - idx
             current_angle = calculate_angle_degrees(
                 center_x,
                 center_y,
@@ -315,67 +502,65 @@ def improved_label_placement_fc(
                 total_length,
                 x_radius,
                 y_radius,
-                normalize=normalize,
+                normalize=False,
             )
 
             current_score = calculate_angle_of_three_points(
-                label["feature_middle_x"], label["feature_middle_y"], 0, 0, label["start_x"], label["start_y"]
+                label["feature_middle_x"], label["feature_middle_y"], 0.0, 0.0, label["start_x"], label["start_y"]
             )
-            # Check overlaps with neighbors
-            if i == 0:
-                overlaps_prev = check_overlap(label, labels[reverse_i - 1], total_length)
+
+            if idx == 0:
+                overlaps_prev = check_overlap(label, labels[reverse_idx - 1], total_length)
                 overlaps_next = check_overlap(label, labels[0], total_length)
-            elif 0 < i < len(labels) - 1:
-                overlaps_prev = check_overlap(labels[reverse_i - 1], label, total_length)
-                overlaps_next = check_overlap(label, labels[reverse_i + 1], total_length)
-            elif i == len(labels) - 1:
+            elif 0 < idx < len(labels) - 1:
+                overlaps_prev = check_overlap(labels[reverse_idx - 1], label, total_length)
+                overlaps_next = check_overlap(label, labels[reverse_idx + 1], total_length)
+            else:
                 overlaps_prev = check_overlap(label, labels[-1], total_length)
-                overlaps_next = check_overlap(label, labels[reverse_i + 1], total_length)
+                overlaps_next = check_overlap(label, labels[reverse_idx + 1], total_length)
+
             if overlaps_prev and overlaps_next:
                 continue
-            # Determine movement direction
+
             if overlaps_prev:
-                direction = 1  # Move towards end angle
+                direction = 1
             elif overlaps_next:
-                direction = -1  # Move towards start angle
+                direction = -1
             else:
-                # If no overlap, determine direction based on which way reduces the score
-                test_angle_plus = current_angle + 1
+                test_angle_plus = current_angle + 1.0
                 test_x_plus, test_y_plus = move_label(label, test_angle_plus)
                 score_plus = calculate_angle_of_three_points(
-                    label["feature_middle_x"], label["feature_middle_y"], 0, 0, test_x_plus, test_y_plus
+                    label["feature_middle_x"], label["feature_middle_y"], 0.0, 0.0, test_x_plus, test_y_plus
                 )
 
-                test_angle_minus = current_angle - 1
+                test_angle_minus = current_angle - 1.0
                 test_x_minus, test_y_minus = move_label(label, test_angle_minus)
                 score_minus = calculate_angle_of_three_points(
-                    label["feature_middle_x"], label["feature_middle_y"], 0, 0, test_x_minus, test_y_minus
+                    label["feature_middle_x"], label["feature_middle_y"], 0.0, 0.0, test_x_minus, test_y_minus
                 )
                 direction = 1 if abs(score_plus) < abs(score_minus) else -1
 
-            # Move label
-            creates_new_overlap = False
             while True:
                 new_angle = current_angle + direction * 0.05
                 new_x, new_y = move_label(label, new_angle)
                 new_score = calculate_angle_of_three_points(
-                    label["feature_middle_x"], label["feature_middle_y"], 0, 0, new_x, new_y
+                    label["feature_middle_x"], label["feature_middle_y"], 0.0, 0.0, new_x, new_y
                 )
-                # Check if this move would create overlap with neighbors
+
                 label_copy = label.copy()
                 label_copy["start_x"], label_copy["start_y"] = new_x, new_y
-                if i == 0:
+                if idx == 0:
                     if overlaps_prev:
                         creates_new_overlap = check_overlap(label_copy, labels[0], total_length)
                     elif overlaps_next:
-                        creates_new_overlap = check_overlap(label_copy, labels[reverse_i - 1], total_length)
+                        creates_new_overlap = check_overlap(label_copy, labels[reverse_idx - 1], total_length)
                     else:
-                        creates_new_overlap = check_overlap(label_copy, labels[reverse_i - 1], total_length) or check_overlap(
+                        creates_new_overlap = check_overlap(label_copy, labels[reverse_idx - 1], total_length) or check_overlap(
                             label_copy, labels[0], total_length
                         )
-                elif 0 < i < len(labels) - 1:
-                    prev_label = labels[reverse_i - 1]
-                    next_label = labels[reverse_i + 1]
+                elif 0 < idx < len(labels) - 1:
+                    prev_label = labels[reverse_idx - 1]
+                    next_label = labels[reverse_idx + 1]
                     if overlaps_prev:
                         creates_new_overlap = check_overlap(label_copy, next_label, total_length)
                     elif overlaps_next:
@@ -384,25 +569,639 @@ def improved_label_placement_fc(
                         creates_new_overlap = check_overlap(label_copy, prev_label, total_length) or check_overlap(
                             label_copy, next_label, total_length
                         )
-                elif i == len(labels) - 1:
+                else:
                     if overlaps_prev:
-                        creates_new_overlap = check_overlap(label_copy, labels[reverse_i + 1], total_length)
+                        creates_new_overlap = check_overlap(label_copy, labels[reverse_idx + 1], total_length)
                     elif overlaps_next:
                         creates_new_overlap = check_overlap(label_copy, labels[-1], total_length)
                     else:
                         creates_new_overlap = check_overlap(label_copy, labels[-1], total_length) or check_overlap(
-                            label_copy, labels[reverse_i + 1], total_length
+                            label_copy, labels[reverse_idx + 1], total_length
                         )
+
                 if (abs(new_score) <= abs(current_score)) and not creates_new_overlap:
                     label["start_x"], label["start_y"] = new_x, new_y
                     current_angle = new_angle
                     current_score = new_score
                     changes_made = True
                 else:
-                    break  # Can't move further without issues or no improvement
+                    break
         if not changes_made:
-            break  # No changes were made in this iteration, so we can stop
+            break
 
+    return labels
+
+
+def improved_label_placement_fc(
+    labels,
+    center_x,
+    center_y,
+    x_radius,
+    y_radius,
+    feature_radius,
+    total_length,
+    start_angle,
+    end_angle,
+    y_margin=0.3,
+    max_angle_shift_deg=25.0,
+    max_iterations=60,
+):
+    labels = sort_labels(labels)
+    if not labels:
+        return []
+
+    # Preserve original sorted order; optimization may rotate labels to avoid
+    # placing a dense cluster across the 0/360-degree seam.
+    for idx, label in enumerate(labels):
+        label["_opt_original_idx"] = idx
+
+    if len(labels) > 2:
+        raw_targets = [angle_from_middle_unwrapped(label["middle"], total_length) for label in labels]
+        gap_values = [raw_targets[i + 1] - raw_targets[i] for i in range(len(labels) - 1)]
+        gap_values.append(raw_targets[0] + 360.0 - raw_targets[-1])
+        largest_gap_idx = max(range(len(gap_values)), key=gap_values.__getitem__)
+        if largest_gap_idx < len(labels) - 1:
+            rotate_by = largest_gap_idx + 1
+            labels = labels[rotate_by:] + labels[:rotate_by]
+
+    # Reassign targets as a monotonic unwrapped sequence in optimization order.
+    prev_target_unwrapped: float | None = None
+    for label in labels:
+        raw_target = angle_from_middle_unwrapped(label["middle"], total_length)
+        if prev_target_unwrapped is None:
+            target_angle_unwrapped = raw_target
+        else:
+            target_angle_unwrapped = normalize_angle_near_reference(raw_target, prev_target_unwrapped)
+            while target_angle_unwrapped <= prev_target_unwrapped:
+                target_angle_unwrapped += 360.0
+        label["target_angle_unwrapped"] = target_angle_unwrapped
+        label["target_angle"] = target_angle_unwrapped % 360.0
+        prev_target_unwrapped = target_angle_unwrapped
+
+    pair_margins: list[list[float]] = []
+
+    def move_label(label, angle):
+        new_x = center_x + x_radius * math.cos(math.radians(angle))
+        new_y = center_y + y_radius * math.sin(math.radians(angle))
+        return new_x, new_y
+
+    def check_overlap(label1, label2, total_length, effective_margin: float):
+        return y_overlap(label1, label2, total_length, effective_margin) and x_overlap(
+            label1, label2, minimum_margin=effective_margin
+        )
+
+    def pair_margin(idx1: int, idx2: int) -> float:
+        if idx1 < idx2:
+            return pair_margins[idx1][idx2]
+        return pair_margins[idx2][idx1]
+
+    def overlap_count(label_idx, candidate_label=None, *, full_scan: bool = False):
+        current = candidate_label if candidate_label is not None else labels[label_idx]
+        n_labels = len(labels)
+        if n_labels <= 1:
+            return 0
+        checked_indices: set[int] = set()
+        if full_scan:
+            checked_indices = set(range(n_labels))
+            checked_indices.discard(label_idx)
+        else:
+            # In angular-sorted order, most overlaps are local. Start with nearby labels.
+            neighbor_span = 6
+            for delta in range(1, neighbor_span + 1):
+                prev_idx = (label_idx - delta) % n_labels
+                next_idx = (label_idx + delta) % n_labels
+                checked_indices.add(prev_idx)
+                checked_indices.add(next_idx)
+        overlaps = 0
+        for other_idx in checked_indices:
+            if other_idx == label_idx:
+                continue
+            if check_overlap(current, labels[other_idx], total_length, pair_margin(label_idx, other_idx)):
+                overlaps += 1
+        return overlaps
+
+    def update_label_coordinates(label: dict, angle_unwrapped: float) -> None:
+        label["angle_unwrapped"] = angle_unwrapped
+        label["start_x"], label["start_y"] = move_label(label, angle_unwrapped)
+
+    def local_density_weight(label_idx: int) -> float:
+        dense_threshold_deg = 8.0
+        n_labels = len(labels)
+        target = labels[label_idx]["target_angle_unwrapped"]
+        close_neighbors = 0
+        if label_idx > 0:
+            prev_target = labels[label_idx - 1]["target_angle_unwrapped"]
+            if (target - prev_target) <= dense_threshold_deg:
+                close_neighbors += 1
+        if label_idx < n_labels - 1:
+            next_target = labels[label_idx + 1]["target_angle_unwrapped"]
+            if (next_target - target) <= dense_threshold_deg:
+                close_neighbors += 1
+        return 1.0 + close_neighbors
+
+    def is_dense_center(label_idx: int) -> bool:
+        if label_idx <= 0 or label_idx >= len(labels) - 1:
+            return False
+        dense_threshold_deg = 8.0
+        left_gap = labels[label_idx]["target_angle_unwrapped"] - labels[label_idx - 1]["target_angle_unwrapped"]
+        right_gap = labels[label_idx + 1]["target_angle_unwrapped"] - labels[label_idx]["target_angle_unwrapped"]
+        return left_gap <= dense_threshold_deg and right_gap <= dense_threshold_deg
+
+    def middle_proximity_penalty(label_idx: int, candidate_angle: float) -> float:
+        """
+        Penalize configurations where edge labels in a dense triplet are closer to
+        their features than the center label.
+        """
+        target = labels[label_idx]["target_angle_unwrapped"]
+        edge_delta = abs(candidate_angle - target)
+        penalty = 0.0
+
+        center_right = label_idx + 1
+        if center_right < len(labels) - 1 and is_dense_center(center_right):
+            center_delta = abs(
+                labels[center_right]["angle_unwrapped"] - labels[center_right]["target_angle_unwrapped"]
+            )
+            if edge_delta < center_delta:
+                penalty += center_delta - edge_delta
+
+        center_left = label_idx - 1
+        if center_left > 0 and is_dense_center(center_left):
+            center_delta = abs(labels[center_left]["angle_unwrapped"] - labels[center_left]["target_angle_unwrapped"])
+            if edge_delta < center_delta:
+                penalty += center_delta - edge_delta
+
+        return penalty
+
+    def enforce_order(min_gap: float) -> bool:
+        changed = False
+        for i in range(1, len(labels)):
+            minimum_allowed = labels[i - 1]["angle_unwrapped"] + min_gap
+            if labels[i]["angle_unwrapped"] < minimum_allowed:
+                update_label_coordinates(labels[i], minimum_allowed)
+                changed = True
+        return changed
+
+    def count_remaining_overlaps() -> int:
+        overlap_count_all = 0
+        for i in range(len(labels)):
+            for j in range(i + 1, len(labels)):
+                if check_overlap(labels[i], labels[j], total_length, pair_margin(i, j)):
+                    overlap_count_all += 1
+        return overlap_count_all
+
+    def count_overlaps_for_label_list(label_list: list[dict], overlap_cap: int | None = None) -> int:
+        overlap_count_all = 0
+        for i in range(len(label_list)):
+            for j in range(i + 1, len(label_list)):
+                if check_overlap(label_list[i], label_list[j], total_length, pair_margin(i, j)):
+                    overlap_count_all += 1
+                    if overlap_cap is not None and overlap_count_all > overlap_cap:
+                        return overlap_count_all
+        return overlap_count_all
+
+    def find_overlap_components() -> list[list[int]]:
+        n_labels = len(labels)
+        adjacency: dict[int, set[int]] = {i: set() for i in range(n_labels)}
+        for i in range(n_labels):
+            for j in range(i + 1, n_labels):
+                if check_overlap(labels[i], labels[j], total_length, pair_margin(i, j)):
+                    adjacency[i].add(j)
+                    adjacency[j].add(i)
+
+        components: list[list[int]] = []
+        visited: set[int] = set()
+        for idx in range(n_labels):
+            if idx in visited or not adjacency[idx]:
+                continue
+            stack = [idx]
+            component: list[int] = []
+            visited.add(idx)
+            while stack:
+                current = stack.pop()
+                component.append(current)
+                for neigh in adjacency[current]:
+                    if neigh not in visited:
+                        visited.add(neigh)
+                        stack.append(neigh)
+            if component:
+                components.append(sorted(component))
+        return components
+
+    def merge_close_components(components: list[list[int]], max_gap: int = 2) -> list[list[int]]:
+        if not components:
+            return []
+        sorted_components = sorted((sorted(comp) for comp in components), key=lambda comp: comp[0])
+        merged: list[list[int]] = [sorted_components[0]]
+        for comp in sorted_components[1:]:
+            if comp[0] - merged[-1][-1] <= max_gap:
+                merged[-1] = sorted(set(merged[-1] + comp))
+            else:
+                merged.append(comp)
+        return merged
+
+    def relax_overlapping_clusters(shift_limit_deg: float) -> bool:
+        """
+        When local single-label optimization stalls, nudge clusters as a group.
+        This allows neighboring labels to move together while keeping the
+        cluster center label relatively close to its feature.
+        """
+        if len(labels) > HEAVY_CLUSTER_RELAX_MAX_LABELS:
+            return False
+
+        components = merge_close_components(find_overlap_components(), max_gap=2)
+        if not components:
+            return False
+
+        cluster_step_limit = min(int(shift_limit_deg / angle_step), 40)
+        n_labels = len(labels)
+        changed = False
+
+        for component in components:
+            component_center = component[len(component) // 2]
+            cluster_padding = min(6, max(2, len(component) + 1))
+            cluster_start = max(0, component[0] - cluster_padding)
+            cluster_end = min(n_labels - 1, component[-1] + cluster_padding)
+            cluster_indices = list(range(cluster_start, cluster_end + 1))
+
+            current_score = (
+                count_remaining_overlaps(),
+                abs(labels[component_center]["angle_unwrapped"] - labels[component_center]["target_angle_unwrapped"]),
+                sum(abs(labels[idx]["angle_unwrapped"] - labels[idx]["target_angle_unwrapped"]) for idx in cluster_indices),
+            )
+            best_score = current_score
+            best_ordered: list[float] | None = None
+
+            center_candidates = [component_center]
+            if len(component) >= 2:
+                center_candidates.append(component[0])
+                center_candidates.append(component[-1])
+            center_candidates = sorted(set(center_candidates))
+            center_shift_limit_steps = min(int(shift_limit_deg / angle_step), 48)
+            center_shift_steps = range(-center_shift_limit_steps, center_shift_limit_steps + 1, 4)
+            center_delta_cap = min(float(shift_limit_deg), RELAX_CENTER_DELTA_CAP_DEG)
+
+            for center_idx in center_candidates:
+                for step in range(0, cluster_step_limit + 1):
+                    spread = step * angle_step
+                    for shift_step in center_shift_steps:
+                        center_shift = shift_step * angle_step
+                        ordered = [float(labels[i]["angle_unwrapped"]) for i in range(n_labels)]
+
+                        for idx in cluster_indices:
+                            rel = idx - center_idx
+                            distance_weight = 1.0 + 0.25 * max(0, abs(rel) - 1)
+                            target = float(labels[idx]["target_angle_unwrapped"])
+                            lower_bound = target - shift_limit_deg
+                            upper_bound = target + shift_limit_deg
+                            candidate = target + center_shift + (rel * spread * distance_weight)
+                            if candidate < lower_bound:
+                                candidate = lower_bound
+                            elif candidate > upper_bound:
+                                candidate = upper_bound
+                            ordered[idx] = candidate
+
+                        # Keep global ordering constraints valid.
+                        for i in range(1, n_labels):
+                            minimum_allowed = ordered[i - 1] + min_order_gap
+                            if ordered[i] < minimum_allowed:
+                                ordered[i] = minimum_allowed
+                        for i in range(n_labels - 2, -1, -1):
+                            maximum_allowed = ordered[i + 1] - min_order_gap
+                            if ordered[i] > maximum_allowed:
+                                ordered[i] = maximum_allowed
+
+                        # Respect per-label shift budget.
+                        violates_budget = False
+                        for idx in range(n_labels):
+                            target = float(labels[idx]["target_angle_unwrapped"])
+                            if abs(ordered[idx] - target) > shift_limit_deg + 1e-6:
+                                violates_budget = True
+                                break
+                        if violates_budget:
+                            continue
+
+                        temp_labels = [label.copy() for label in labels]
+                        for idx in range(n_labels):
+                            temp_labels[idx]["angle_unwrapped"] = ordered[idx]
+                            temp_labels[idx]["start_x"], temp_labels[idx]["start_y"] = move_label(
+                                temp_labels[idx], ordered[idx]
+                            )
+
+                        center_delta = abs(
+                            temp_labels[component_center]["angle_unwrapped"]
+                            - temp_labels[component_center]["target_angle_unwrapped"]
+                        )
+                        if center_delta > center_delta_cap:
+                            continue
+
+                        overlap_total = count_overlaps_for_label_list(
+                            temp_labels,
+                            overlap_cap=best_score[0],
+                        )
+                        if overlap_total > best_score[0]:
+                            continue
+
+                        candidate_score = (
+                            overlap_total,
+                            center_delta,
+                            sum(
+                                abs(
+                                    temp_labels[idx]["angle_unwrapped"]
+                                    - temp_labels[idx]["target_angle_unwrapped"]
+                                )
+                                for idx in cluster_indices
+                            ),
+                        )
+                        if candidate_score < best_score:
+                            best_score = candidate_score
+                            best_ordered = ordered
+                        if best_score[0] == 0:
+                            break
+                    if best_score[0] == 0:
+                        break
+                if best_score[0] == 0:
+                    break
+
+            if best_ordered is not None and best_score < current_score:
+                for idx in range(n_labels):
+                    update_label_coordinates(labels[idx], best_ordered[idx])
+                changed = True
+
+        return changed
+
+    def optimize_with_shift_limit(shift_limit_deg: float, *, full_scan_checks: bool) -> None:
+        max_steps = int(shift_limit_deg / angle_step)
+        for _ in range(max_iterations):
+            changes_made = False
+            if enforce_order(min_order_gap):
+                changes_made = True
+
+            iteration_order = sorted(range(len(labels)), key=local_density_weight)
+            for label_idx in iteration_order:
+                label = labels[label_idx]
+                current_angle = label["angle_unwrapped"]
+                target_angle = label["target_angle_unwrapped"]
+                current_overlaps = overlap_count(label_idx, full_scan=full_scan_checks)
+                current_target_delta = abs(current_angle - target_angle)
+                current_middle_penalty = middle_proximity_penalty(label_idx, current_angle)
+
+                if current_overlaps == 0 and current_middle_penalty == 0:
+                    continue
+
+                lower_bound = target_angle - shift_limit_deg
+                upper_bound = target_angle + shift_limit_deg
+                if label_idx > 0:
+                    lower_bound = max(lower_bound, labels[label_idx - 1]["angle_unwrapped"] + min_order_gap)
+                if label_idx < len(labels) - 1:
+                    upper_bound = min(upper_bound, labels[label_idx + 1]["angle_unwrapped"] - min_order_gap)
+                if lower_bound > upper_bound:
+                    lower_bound = labels[label_idx - 1]["angle_unwrapped"] + min_order_gap if label_idx > 0 else lower_bound
+                    upper_bound = labels[label_idx + 1]["angle_unwrapped"] - min_order_gap if label_idx < len(labels) - 1 else upper_bound
+                    if lower_bound > upper_bound:
+                        continue
+
+                anchor_weight = local_density_weight(label_idx)
+                best_angle = current_angle
+                best_x = label["start_x"]
+                best_y = label["start_y"]
+                best_overlaps = current_overlaps
+                best_target_delta = current_target_delta
+                best_move = 0.0
+                best_middle_penalty = current_middle_penalty
+
+                search_complete = False
+                for step in range(max_steps + 1):
+                    if step == 0:
+                        offsets = [0.0]
+                    else:
+                        offset = step * angle_step
+                        offsets = [offset, -offset]
+
+                    for offset in offsets:
+                        candidate_angle = target_angle + offset
+                        if not (lower_bound <= candidate_angle <= upper_bound):
+                            continue
+                        candidate_x, candidate_y = move_label(label, candidate_angle)
+                        label_copy = label.copy()
+                        label_copy["start_x"] = candidate_x
+                        label_copy["start_y"] = candidate_y
+
+                        candidate_overlaps = overlap_count(label_idx, label_copy, full_scan=full_scan_checks)
+                        candidate_target_delta = abs(candidate_angle - target_angle)
+                        candidate_move = abs(candidate_angle - current_angle)
+                        candidate_middle_penalty = middle_proximity_penalty(label_idx, candidate_angle)
+                        proximity_penalty_factor = 4.0
+                        current_score = (
+                            best_overlaps,
+                            anchor_weight * best_target_delta + proximity_penalty_factor * best_middle_penalty,
+                            best_move,
+                        )
+                        candidate_score = (
+                            candidate_overlaps,
+                            anchor_weight * candidate_target_delta + proximity_penalty_factor * candidate_middle_penalty,
+                            candidate_move,
+                        )
+
+                        if candidate_score < current_score:
+                            best_angle = candidate_angle
+                            best_x = candidate_x
+                            best_y = candidate_y
+                            best_overlaps = candidate_overlaps
+                            best_target_delta = candidate_target_delta
+                            best_move = candidate_move
+                            best_middle_penalty = candidate_middle_penalty
+
+                        if best_overlaps == 0 and best_target_delta == 0 and best_middle_penalty == 0:
+                            search_complete = True
+                            break
+                    if search_complete:
+                        break
+
+                improved = False
+                if best_overlaps < current_overlaps:
+                    improved = True
+                elif best_overlaps == current_overlaps and best_middle_penalty < current_middle_penalty:
+                    improved = True
+
+                if improved:
+                    label["start_x"] = best_x
+                    label["start_y"] = best_y
+                    label["angle_unwrapped"] = best_angle
+                    changes_made = True
+            if not changes_made:
+                break
+        if len(labels) <= HEAVY_CLUSTER_RELAX_MAX_LABELS and count_remaining_overlaps() > 0:
+            for _ in range(3):
+                if not relax_overlapping_clusters(shift_limit_deg):
+                    break
+                if count_remaining_overlaps() == 0:
+                    break
+
+    def separate_remaining_adjacent_overlaps(shift_limit_deg: float) -> bool:
+        changed = False
+        n_labels = len(labels)
+        if n_labels < 2:
+            return False
+
+        for _ in range(160):
+            pass_changed = False
+            for i in range(n_labels - 1):
+                if not check_overlap(labels[i], labels[i + 1], total_length, pair_margin(i, i + 1)):
+                    continue
+
+                pair_changed = False
+                for _ in range(80):
+                    can_shift_left = True
+                    for k in range(0, i + 1):
+                        target = float(labels[k]["target_angle_unwrapped"])
+                        if labels[k]["angle_unwrapped"] - angle_step < target - shift_limit_deg - 1e-6:
+                            can_shift_left = False
+                            break
+
+                    can_shift_right = True
+                    for k in range(i + 1, n_labels):
+                        target = float(labels[k]["target_angle_unwrapped"])
+                        if labels[k]["angle_unwrapped"] + angle_step > target + shift_limit_deg + 1e-6:
+                            can_shift_right = False
+                            break
+
+                    if not can_shift_left and not can_shift_right:
+                        break
+
+                    if can_shift_left:
+                        for k in range(0, i + 1):
+                            update_label_coordinates(labels[k], labels[k]["angle_unwrapped"] - angle_step)
+                    if can_shift_right:
+                        for k in range(i + 1, n_labels):
+                            update_label_coordinates(labels[k], labels[k]["angle_unwrapped"] + angle_step)
+
+                    enforce_order(min_order_gap)
+                    if not check_overlap(labels[i], labels[i + 1], total_length, pair_margin(i, i + 1)):
+                        pair_changed = True
+                        break
+
+                if pair_changed:
+                    pass_changed = True
+                    changed = True
+
+            if not pass_changed:
+                break
+
+        return changed
+
+    n_labels = len(labels)
+    pair_margins = [[0.0 for _ in range(n_labels)] for _ in range(n_labels)]
+    base_margin = max(y_margin, 1.5)
+    for i in range(n_labels):
+        for j in range(i + 1, n_labels):
+            pair_margins[i][j] = minimum_bbox_gap_px(labels[i], labels[j], base_margin_px=base_margin)
+
+    angle_step = 0.25
+    min_order_gap = 0.05
+
+    def snapshot_angles() -> list[float]:
+        return [float(label["angle_unwrapped"]) for label in labels]
+
+    def restore_angles(angle_snapshot: list[float]) -> None:
+        for idx, angle in enumerate(angle_snapshot):
+            update_label_coordinates(labels[idx], angle)
+
+    def reset_angles_to_targets() -> None:
+        for label in labels:
+            update_label_coordinates(label, float(label["target_angle_unwrapped"]))
+        enforce_order(min_order_gap)
+
+    def placement_score() -> tuple[int, float]:
+        return (
+            count_remaining_overlaps(),
+            sum(abs(float(label["angle_unwrapped"]) - float(label["target_angle_unwrapped"])) for label in labels),
+        )
+
+    for label in labels:
+        target_angle_unwrapped = float(label["target_angle_unwrapped"])
+
+        current_angle_mod = calculate_angle_degrees(
+            center_x,
+            center_y,
+            label["start_x"],
+            label["start_y"],
+            label["middle"],
+            start_angle,
+            end_angle,
+            total_length,
+            x_radius,
+            y_radius,
+            normalize=False,
+        )
+        angle_unwrapped = normalize_angle_near_reference(current_angle_mod, target_angle_unwrapped)
+        update_label_coordinates(label, angle_unwrapped)
+
+    enforce_order(min_order_gap)
+
+    base_shift_limit = min(float(max_angle_shift_deg), MAX_EXPANDED_SHIFT_DEG)
+    shift_schedule = [base_shift_limit]
+    if len(labels) <= HEAVY_CLUSTER_RELAX_MAX_LABELS:
+        for extra_shift in (35.0, 45.0, 60.0):
+            if extra_shift > shift_schedule[-1]:
+                shift_schedule.append(extra_shift)
+
+    for phase_idx, shift_limit in enumerate(shift_schedule):
+        run_full_scan = (
+            len(labels) <= FULL_SCAN_LABEL_LIMIT
+            and len(shift_schedule) > 1
+            and phase_idx == (len(shift_schedule) - 1)
+        )
+        optimize_with_shift_limit(shift_limit, full_scan_checks=run_full_scan)
+        if count_remaining_overlaps() == 0:
+            break
+
+    if count_remaining_overlaps() > 0:
+        for extra_shift in (75.0, MAX_EXPANDED_SHIFT_DEG):
+            if extra_shift <= shift_schedule[-1]:
+                continue
+            optimize_with_shift_limit(
+                extra_shift,
+                full_scan_checks=(len(labels) <= FULL_SCAN_LABEL_LIMIT),
+            )
+            shift_schedule.append(extra_shift)
+            if count_remaining_overlaps() == 0:
+                break
+
+    if len(labels) <= HEAVY_CLUSTER_RELAX_MAX_LABELS and count_remaining_overlaps() > 0:
+        separate_remaining_adjacent_overlaps(max(shift_schedule))
+
+    if count_remaining_overlaps() > 0:
+        baseline_angles = snapshot_angles()
+        baseline_score = placement_score()
+        optimize_with_shift_limit(
+            max(shift_schedule),
+            full_scan_checks=(len(labels) <= FULL_SCAN_LABEL_LIMIT),
+        )
+        if len(labels) <= HEAVY_CLUSTER_RELAX_MAX_LABELS and count_remaining_overlaps() > 0:
+            separate_remaining_adjacent_overlaps(max(shift_schedule))
+        continued_score = placement_score()
+        if continued_score > baseline_score:
+            restore_angles(baseline_angles)
+            continued_score = baseline_score
+
+    if count_remaining_overlaps() > 0:
+        baseline_angles = snapshot_angles()
+        baseline_score = placement_score()
+        reset_angles_to_targets()
+        optimize_with_shift_limit(
+            max(shift_schedule),
+            full_scan_checks=(len(labels) <= FULL_SCAN_LABEL_LIMIT),
+        )
+        if len(labels) <= HEAVY_CLUSTER_RELAX_MAX_LABELS and count_remaining_overlaps() > 0:
+            separate_remaining_adjacent_overlaps(max(shift_schedule))
+        retry_score = placement_score()
+        if retry_score > baseline_score:
+            restore_angles(baseline_angles)
+
+    enforce_order(min_order_gap)
+    labels.sort(key=lambda x: x["_opt_original_idx"])
+    for label in labels:
+        label.pop("_opt_original_idx", None)
     return labels
 
 
@@ -459,16 +1258,89 @@ def rearrange_labels_fc(
     start_angle = 0
     end_angle = 360
 
-    labels = sorted(labels, key=lambda x: x["middle"])
-    # Initial placement of labels
-    labels = place_labels_on_arc_fc(labels, center_x, center_y, x_radius, y_radius, start_angle, end_angle, total_length)
+    sorted_labels = sorted(labels, key=lambda x: x["middle"])
+    if not sorted_labels:
+        return []
 
-    # Apply improved label placement
-    labels = improved_label_placement_fc(
-        labels, center_x, center_y, x_radius, y_radius, feature_radius, total_length, start_angle, end_angle
+    # Very dense sets are better handled by the legacy strategy: it keeps labels
+    # closer to feature angles and avoids expensive combinatorial relaxation.
+    if len(sorted_labels) >= LEGACY_PLACEMENT_LABEL_THRESHOLD:
+        candidate_legacy = [label.copy() for label in sorted_labels]
+        candidate_legacy = _legacy_place_labels_on_arc_fc(
+            candidate_legacy,
+            center_x,
+            center_y,
+            x_radius,
+            y_radius,
+            start_angle,
+            end_angle,
+            total_length,
+        )
+        candidate_legacy = _legacy_improved_label_placement_fc(
+            candidate_legacy,
+            center_x,
+            center_y,
+            x_radius,
+            y_radius,
+            feature_radius,
+            total_length,
+            start_angle,
+            end_angle,
+        )
+        candidate_legacy = sort_labels(candidate_legacy)
+        legacy_plain_overlaps = _count_label_overlaps(candidate_legacy, total_length, use_min_gap=False)
+        if legacy_plain_overlaps == 0:
+            return candidate_legacy
+
+    # Candidate A: current placement pipeline.
+    candidate_current = [label.copy() for label in sorted_labels]
+    candidate_current = place_labels_on_arc_fc(
+        candidate_current, center_x, center_y, x_radius, y_radius, start_angle, end_angle, total_length
     )
+    candidate_current = improved_label_placement_fc(
+        candidate_current,
+        center_x,
+        center_y,
+        x_radius,
+        y_radius,
+        feature_radius,
+        total_length,
+        start_angle,
+        end_angle,
+    )
+    best_labels = candidate_current
+    best_score = _placement_score(candidate_current, total_length)
 
-    return labels
+    # Candidate B: legacy fallback for dense unresolved overlaps.
+    if len(sorted_labels) > FULL_SCAN_LABEL_LIMIT and best_score[0] > 0:
+        candidate_legacy = [label.copy() for label in sorted_labels]
+        candidate_legacy = _legacy_place_labels_on_arc_fc(
+            candidate_legacy,
+            center_x,
+            center_y,
+            x_radius,
+            y_radius,
+            start_angle,
+            end_angle,
+            total_length,
+        )
+        candidate_legacy = _legacy_improved_label_placement_fc(
+            candidate_legacy,
+            center_x,
+            center_y,
+            x_radius,
+            y_radius,
+            feature_radius,
+            total_length,
+            start_angle,
+            end_angle,
+        )
+        candidate_legacy = sort_labels(candidate_legacy)
+        legacy_score = _placement_score(candidate_legacy, total_length)
+        if legacy_score < best_score:
+            best_labels = candidate_legacy
+
+    return best_labels
 
 
 def prepare_label_list(
@@ -628,9 +1500,14 @@ def prepare_label_list(
 
 
 __all__ = [
+    "minimum_bbox_gap_px",
     "calculate_angle_degrees",
     "calculate_angle_for_y",
     "calculate_coordinates",
+    "angle_from_middle",
+    "angle_from_middle_unwrapped",
+    "angle_delta_deg",
+    "normalize_angle_near_reference",
     "euclidean_distance",
     "improved_label_placement_fc",
     "place_labels_on_arc_fc",

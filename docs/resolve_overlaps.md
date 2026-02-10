@@ -11,7 +11,7 @@ Related: [GitHub Issue #68](https://github.com/satoshikawato/gbdraw/issues/68)
 ## Usage
 
 ```bash
-gbdraw-circular --gbk plasmid.gb --resolve_overlaps --track_type middle
+gbdraw circular --gbk plasmid.gb --resolve_overlaps --track_type middle
 ```
 
 ### Requirements
@@ -31,16 +31,16 @@ The `--resolve_overlaps` option is **only effective** when:
 
 ```bash
 # spreadout: overlapping features pushed outward
-gbdraw-circular --gbk plasmid.gb --resolve_overlaps --track_type spreadout
+gbdraw circular --gbk plasmid.gb --resolve_overlaps --track_type spreadout
 
 # middle: overlapping features pushed outward
-gbdraw-circular --gbk plasmid.gb --resolve_overlaps --track_type middle
+gbdraw circular --gbk plasmid.gb --resolve_overlaps --track_type middle
 
 # tuckin: overlapping features pushed inward (toward center)
-gbdraw-circular --gbk plasmid.gb --resolve_overlaps --track_type tuckin
+gbdraw circular --gbk plasmid.gb --resolve_overlaps --track_type tuckin
 
 # NOT effective: separate_strands enabled (resolve_overlaps ignored)
-gbdraw-circular --gbk genome.gb --resolve_overlaps --track_type middle --separate_strands
+gbdraw circular --gbk genome.gb --resolve_overlaps --track_type middle --separate_strands
 ```
 
 ## Technical Implementation
@@ -73,9 +73,9 @@ When `resolve_overlaps` is enabled:
 | `gbdraw/features/factory.py` | Pass `genome_length` to `arrange_feature_tracks()` |
 | `gbdraw/layout/circular.py` | Added `track_id` parameter to `calculate_feature_position_factors_circular()` |
 | `gbdraw/svg/circular_features.py` | Added `track_id` to all path generation functions |
-| `gbdraw/drawers/circular/features.py` | Pass `track_id` from `FeatureObject` to path generators |
-| `gbdraw/labels/placement_circular.py` | Use `track_id` for label positioning |
-| `gbdraw/drawers/circular/labels.py` | Use `track_id` for embedded label positioning |
+| `gbdraw/render/drawers/circular/features.py` | Pass `track_id` from `FeatureObject` to path generators |
+| `gbdraw/labels/circular.py` | Use `track_id` for label positioning |
+| `gbdraw/render/drawers/circular/labels.py` | Use `track_id` for embedded label positioning |
 | `gbdraw/circular.py` | Added `--resolve_overlaps` CLI option |
 
 ## API Changes

@@ -62,7 +62,7 @@ The plot will now have a formatted title in the center.
 By default, gene labels are hidden. Use the `--show_labels` option to display them.
 As the *E.coli* genome is a little bit too large for this purpose, we will use the genome of white spot syndrome virus, a large DNA virus infecting crustaceans.
 > [!WARNING]
-> Do not use `--show_labels` for genomes with more than a few hundred genes unless you downsample labels with `--lablel_blacklist` or `--label_whitelist`.
+> Do not use `--show_labels` for genomes with more than a few hundred genes unless you downsample labels with `--label_blacklist` or `--label_whitelist`.
 
 ```bash
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027280.1&rettype=gbwithparts&retmode=text" -O AP027280.gb

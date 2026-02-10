@@ -206,6 +206,8 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--scale_interval SCALE_INTERVAL]
               [--legend_box_size LEGEND_BOX_SIZE]
               [--legend_font_size LEGEND_FONT_SIZE] [--normalize_length]
+              [--record_id RECORD_ID]
+              [--reverse_complement REVERSE_COMPLEMENT]
 
 Generate plot in PNG/PDF/SVG/PS/EPS.
 
@@ -327,6 +329,14 @@ options:
                         for genomes <= 50 kb, 16 for genomes >= 50 kb).
   --normalize_length    Normalize record length (experimental; default:
                         False).
+  --record_id RECORD_ID
+                        Select a record by ID or #index per input file
+                        (repeatable; order matches input files). Use an empty
+                        value to skip selection for a file.
+  --reverse_complement REVERSE_COMPLEMENT
+                        Reverse complement record per input file (repeatable;
+                        order matches input files). Accepted values: 1/0,
+                        true/false, yes/no.
 ```
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | [Recipes](./RECIPES.md) | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)

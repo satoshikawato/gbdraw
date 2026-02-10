@@ -72,7 +72,7 @@ gbdraw circular \
 --species "<i>Sorangium cellulosum</i>" \
 --strain "So ce56"
 ```
-##### Lable whitelist example
+##### Label whitelist example
 | feature type | target qualifier | qualifier value regex (Python) |
 | ------ | ------- | ------- |
 | CDS | old_locus_tag | sce4138 |
@@ -111,7 +111,7 @@ CDS	old_locus_tag	sce4132	#a4d8a7	Chivosazol biosynthesis
 
 <details><summary>Expand to see the script</summary>
 
-The following `qualifier_priority.tsv` designated by `--qualifier_priority` opton specifies which qualifier should be used for the label text of a given feature type. Other features remain the same as default:
+The following `qualifier_priority.tsv` designated by `--qualifier_priority` option specifies which qualifier should be used for the label text of a given feature type. Other features remain the same as default:
 
 ```modified_default_colors.tsv
 CDS gene
@@ -157,7 +157,7 @@ gbdraw circular \
 --suppress_gc \
 --suppress_skew \
 -p default \
---track tuckin \
+--track_type tuckin \
 --show_labels \
 --allow_inner_labels \
 --qualifier_priority qualifier_priority.tsv \
@@ -212,7 +212,7 @@ gbdraw circular \
 --block_stroke_width 1 \
 --axis_stroke_width 1 \
 -p fugaku \
---track middle \
+--track_type middle \
 --species "<i>Ca.</i> Sukunaarchaeum mirabile" \
 --definition_font_size 22 \
 --legend upper_right
@@ -234,7 +234,7 @@ gbdraw circular \
 -f svg \
 -o Pandoravirus_salinus_forest \
 -p forest \
---track tuckin \
+--track_type tuckin \
 --species "<i>Pandoravirus salinus</i>" \
 --definition_font_size 22 \
 --legend upper_right

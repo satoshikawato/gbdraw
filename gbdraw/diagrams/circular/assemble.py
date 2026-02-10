@@ -24,6 +24,9 @@ from ...configurators import (  # type: ignore[reportMissingImports]
 )
 from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
+from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
+from ...labels.circular import prepare_label_list  # type: ignore[reportMissingImports]
+from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
 from ...legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...tracks import TrackSpec  # type: ignore[reportMissingImports]
@@ -141,17 +144,44 @@ def add_record_on_circular_canvas(
     raw_show_labels = cfg.canvas.show_labels
     show_labels_base = (raw_show_labels != "none") if isinstance(raw_show_labels, str) else bool(raw_show_labels)
     features_ts = ts_by_kind.get("features")
-    show_external_labels = show_labels_base and (labels_ts is None or labels_ts.show) and (features_ts is None or features_ts.show)
+    show_features = features_ts is None or features_ts.show
+    show_external_labels = show_labels_base and (labels_ts is None or labels_ts.show) and show_features
+
+    outer_arena = None
+    if show_external_labels and labels_ts is not None:
+        center_px, width_px = _resolve_circular_track_center_and_width_px(labels_ts, base_radius_px=canvas_config.radius)
+        if center_px is not None and width_px is not None:
+            inner_px = center_px - (width_px / 2.0)
+            outer_px = center_px + (width_px / 2.0)
+            if outer_px < inner_px:
+                inner_px, outer_px = outer_px, inner_px
+            outer_arena = (inner_px, outer_px)
+
+    precomputed_feature_dict = None
+    precalculated_labels = None
     if show_external_labels:
-        outer_arena = None
-        if labels_ts is not None:
-            center_px, width_px = _resolve_circular_track_center_and_width_px(labels_ts, base_radius_px=canvas_config.radius)
-            if center_px is not None and width_px is not None:
-                inner_px = center_px - (width_px / 2.0)
-                outer_px = center_px + (width_px / 2.0)
-                if outer_px < inner_px:
-                    inner_px, outer_px = outer_px, inner_px
-                outer_arena = (inner_px, outer_px)
+        label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+        color_table, default_colors = preprocess_color_tables(feature_config.color_table, feature_config.default_colors)
+        precomputed_feature_dict, _ = create_feature_dict(
+            gb_record,
+            color_table,
+            feature_config.selected_features_set,
+            default_colors,
+            cfg.canvas.strandedness,
+            cfg.canvas.resolve_overlaps,
+            label_filtering,
+        )
+        precalculated_labels = prepare_label_list(
+            precomputed_feature_dict,
+            len(gb_record.seq),
+            canvas_config.radius,
+            canvas_config.track_ratio,
+            config_dict,
+            cfg=cfg,
+            outer_arena=outer_arena,
+        )
+
+    if show_external_labels:
         canvas = add_labels_group_on_canvas(
             canvas,
             gb_record,
@@ -160,12 +190,20 @@ def add_record_on_circular_canvas(
             config_dict,
             outer_arena=outer_arena,
             cfg=cfg,
+            precomputed_feature_dict=precomputed_feature_dict,
+            precalculated_labels=precalculated_labels,
         )
 
-    features_ts = ts_by_kind.get("features")
-    if features_ts is None or features_ts.show:
+    if show_features:
         canvas = add_record_group_on_canvas(
-            canvas, gb_record, canvas_config, feature_config, config_dict, cfg=cfg
+            canvas,
+            gb_record,
+            canvas_config,
+            feature_config,
+            config_dict,
+            cfg=cfg,
+            precomputed_feature_dict=precomputed_feature_dict,
+            precalculated_labels=precalculated_labels,
         )
 
     definition_ts = ts_by_kind.get("definition")

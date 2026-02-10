@@ -32,6 +32,8 @@ class SeqRecordGroup:
         feature_config: FeatureDrawingConfigurator,
         config_dict: dict,
         cfg: GbdrawConfig | None = None,
+        precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = None,
+        precalculated_labels: Optional[list[dict]] = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
@@ -57,20 +59,25 @@ class SeqRecordGroup:
         self.resolve_overlaps = cfg.canvas.resolve_overlaps
         self.track_ratio_factors = cfg.canvas.circular.track_ratio_factors[self.length_param]
         self.track_ratio = self.canvas_config.track_ratio
+        self.precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = precomputed_feature_dict
+        self.precalculated_labels: Optional[list[dict]] = precalculated_labels
         self.record_group: Group = self.setup_record_group()
 
     def draw_record(self, feature_dict: Dict[str, FeatureObject], record_length: int, group: Group) -> Group:
         label_list = []
         if self.show_labels is True:
-            # Compute labels once; this group is responsible for embedded labels only.
-            label_list = prepare_label_list(
-                feature_dict,
-                record_length,
-                self.canvas_config.radius,
-                self.track_ratio,
-                self.config_dict,
-                cfg=self._cfg,
-            )
+            # Reuse pre-calculated labels when available to avoid repeating heavy placement work.
+            if self.precalculated_labels is not None:
+                label_list = self.precalculated_labels
+            else:
+                label_list = prepare_label_list(
+                    feature_dict,
+                    record_length,
+                    self.canvas_config.radius,
+                    self.track_ratio,
+                    self.config_dict,
+                    cfg=self._cfg,
+                )
         for feature_object in feature_dict.values():
             group = FeatureDrawer(self.feature_config).draw(
                 feature_object,
@@ -84,9 +91,10 @@ class SeqRecordGroup:
                 self.length_param,
             )
         if self.show_labels:
+            label_drawer = LabelDrawer(self.config_dict, cfg=self._cfg)
             for label in label_list:
                 if label["is_embedded"]:
-                    group = LabelDrawer(self.config_dict, cfg=self._cfg).draw(
+                    group = label_drawer.draw(
                         label, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio
                     )
         return group
@@ -95,17 +103,20 @@ class SeqRecordGroup:
         selected_features_set: str = self.feature_config.selected_features_set
         color_table: Optional[DataFrame] = self.feature_config.color_table
         default_colors: Optional[DataFrame] = self.feature_config.default_colors
-        label_filtering = preprocess_label_filtering(self.label_filtering)
-        color_table, default_colors = preprocess_color_tables(color_table, default_colors)
-        feature_dict, _ = create_feature_dict(
-            self.gb_record,
-            color_table,
-            selected_features_set,
-            default_colors,
-            self.strandedness,
-            self.resolve_overlaps,
-            label_filtering,
-        )
+        if self.precomputed_feature_dict is not None:
+            feature_dict = self.precomputed_feature_dict
+        else:
+            label_filtering = preprocess_label_filtering(self.label_filtering)
+            color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+            feature_dict, _ = create_feature_dict(
+                self.gb_record,
+                color_table,
+                selected_features_set,
+                default_colors,
+                self.strandedness,
+                self.resolve_overlaps,
+                label_filtering,
+            )
         track_id: str = self.gb_record.id
         record_group = Group(id=track_id)
         record_length: int = len(self.gb_record.seq)
