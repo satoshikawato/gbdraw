@@ -23,6 +23,8 @@ MIN_BBOX_GAP_RATIO = 0.01
 HEAVY_CLUSTER_RELAX_MAX_LABELS = 70
 FULL_SCAN_LABEL_LIMIT = 70
 MAX_EXPANDED_SHIFT_DEG = 90.0
+RELAX_CENTER_DELTA_CAP_DEG = 35.0
+LEGACY_PLACEMENT_LABEL_THRESHOLD = 50
 
 
 def minimum_bbox_gap_px(label1: dict, label2: dict, base_margin_px: float = 0.0) -> float:
@@ -747,12 +749,14 @@ def improved_label_placement_fc(
                     overlap_count_all += 1
         return overlap_count_all
 
-    def count_overlaps_for_label_list(label_list: list[dict]) -> int:
+    def count_overlaps_for_label_list(label_list: list[dict], overlap_cap: int | None = None) -> int:
         overlap_count_all = 0
         for i in range(len(label_list)):
             for j in range(i + 1, len(label_list)):
                 if check_overlap(label_list[i], label_list[j], total_length, pair_margin(i, j)):
                     overlap_count_all += 1
+                    if overlap_cap is not None and overlap_count_all > overlap_cap:
+                        return overlap_count_all
         return overlap_count_all
 
     def find_overlap_components() -> list[list[int]]:
@@ -834,6 +838,7 @@ def improved_label_placement_fc(
             center_candidates = sorted(set(center_candidates))
             center_shift_limit_steps = min(int(shift_limit_deg / angle_step), 48)
             center_shift_steps = range(-center_shift_limit_steps, center_shift_limit_steps + 1, 4)
+            center_delta_cap = min(float(shift_limit_deg), RELAX_CENTER_DELTA_CAP_DEG)
 
             for center_idx in center_candidates:
                 for step in range(0, cluster_step_limit + 1):
@@ -882,12 +887,23 @@ def improved_label_placement_fc(
                                 temp_labels[idx], ordered[idx]
                             )
 
+                        center_delta = abs(
+                            temp_labels[component_center]["angle_unwrapped"]
+                            - temp_labels[component_center]["target_angle_unwrapped"]
+                        )
+                        if center_delta > center_delta_cap:
+                            continue
+
+                        overlap_total = count_overlaps_for_label_list(
+                            temp_labels,
+                            overlap_cap=best_score[0],
+                        )
+                        if overlap_total > best_score[0]:
+                            continue
+
                         candidate_score = (
-                            count_overlaps_for_label_list(temp_labels),
-                            abs(
-                                temp_labels[component_center]["angle_unwrapped"]
-                                - temp_labels[component_center]["target_angle_unwrapped"]
-                            ),
+                            overlap_total,
+                            center_delta,
                             sum(
                                 abs(
                                     temp_labels[idx]["angle_unwrapped"]
@@ -1245,6 +1261,36 @@ def rearrange_labels_fc(
     sorted_labels = sorted(labels, key=lambda x: x["middle"])
     if not sorted_labels:
         return []
+
+    # Very dense sets are better handled by the legacy strategy: it keeps labels
+    # closer to feature angles and avoids expensive combinatorial relaxation.
+    if len(sorted_labels) >= LEGACY_PLACEMENT_LABEL_THRESHOLD:
+        candidate_legacy = [label.copy() for label in sorted_labels]
+        candidate_legacy = _legacy_place_labels_on_arc_fc(
+            candidate_legacy,
+            center_x,
+            center_y,
+            x_radius,
+            y_radius,
+            start_angle,
+            end_angle,
+            total_length,
+        )
+        candidate_legacy = _legacy_improved_label_placement_fc(
+            candidate_legacy,
+            center_x,
+            center_y,
+            x_radius,
+            y_radius,
+            feature_radius,
+            total_length,
+            start_angle,
+            end_angle,
+        )
+        candidate_legacy = sort_labels(candidate_legacy)
+        legacy_plain_overlaps = _count_label_overlaps(candidate_legacy, total_length, use_min_gap=False)
+        if legacy_plain_overlaps == 0:
+            return candidate_legacy
 
     # Candidate A: current placement pipeline.
     candidate_current = [label.copy() for label in sorted_labels]
