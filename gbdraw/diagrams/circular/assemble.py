@@ -51,6 +51,7 @@ LEGEND_SHIFT_STEP_PX = 16.0
 MAX_LEGEND_SHIFT_STEPS = 60
 CANVAS_EXPAND_STEP_PX = 32.0
 MAX_CANVAS_EXPAND_STEPS = 24
+MIN_LABEL_ORDER_GAP_RAD = 1e-4
 
 
 def _sync_canvas_viewbox(canvas: Drawing, canvas_config: CircularCanvasConfigurator) -> None:
@@ -72,6 +73,23 @@ def _legend_bbox(canvas_config: CircularCanvasConfigurator, legend_config: Legen
 def _bbox_overlaps(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
     """Return True when two axis-aligned bboxes overlap."""
     return a[0] < b[2] and a[2] > b[0] and a[1] < b[3] and a[3] > b[1]
+
+
+def _unwrap_angle_near_reference(angle_rad: float, reference_rad: float) -> float:
+    """Project angle to the nearest 2*pi branch around reference."""
+    return angle_rad + (2.0 * math.pi) * round((reference_rad - angle_rad) / (2.0 * math.pi))
+
+
+def _label_target_unwrapped_angle(label: dict[str, Any], total_length: int) -> float:
+    """Target label angle derived from genomic midpoint, in unwrapped radians."""
+    return (2.0 * math.pi * (float(label["middle"]) / float(total_length))) - (0.5 * math.pi)
+
+
+def _label_unwrapped_angle(label: dict[str, Any], total_length: int) -> float:
+    """Current label angle projected near its target branch."""
+    current_angle = math.atan2(float(label["start_y"]), float(label["start_x"]))
+    target_angle = _label_target_unwrapped_angle(label, total_length)
+    return _unwrap_angle_near_reference(current_angle, target_angle)
 
 
 def _label_bbox_local(label: dict[str, Any], total_length: int, margin_px: float) -> tuple[float, float, float, float]:
@@ -178,33 +196,75 @@ def _label_overlaps_other_labels(candidate: dict[str, Any], labels: list[dict[st
     return False
 
 
-def _candidate_shift_directions(
-    label: dict[str, Any],
+def _legend_center_local(
     canvas_config: CircularCanvasConfigurator,
     legend_config: LegendDrawingConfigurator,
-) -> list[tuple[float, float]]:
-    """Return normalized shift directions to test for one colliding label."""
-    start_x = float(label["start_x"])
-    start_y = float(label["start_y"])
-    directions: list[tuple[float, float]] = []
-
-    radial_norm = math.hypot(start_x, start_y)
-    if radial_norm > 1e-6:
-        # First preference: move label inward toward the circular map.
-        directions.append((-start_x / radial_norm, -start_y / radial_norm))
-
+) -> tuple[float, float]:
+    """Return legend center in local (circle-centered) coordinates."""
     legend_min_x, legend_min_y, legend_max_x, legend_max_y = _legend_bbox(canvas_config, legend_config)
     legend_center_x = 0.5 * (legend_min_x + legend_max_x)
     legend_center_y = 0.5 * (legend_min_y + legend_max_y)
-    start_abs_x = float(canvas_config.offset_x) + start_x
-    start_abs_y = float(canvas_config.offset_y) + start_y
-    away_x = start_abs_x - legend_center_x
-    away_y = start_abs_y - legend_center_y
-    away_norm = math.hypot(away_x, away_y)
-    if away_norm > 1e-6:
-        directions.append((away_x / away_norm, away_y / away_norm))
+    return legend_center_x - float(canvas_config.offset_x), legend_center_y - float(canvas_config.offset_y)
 
-    return directions
+
+def _preferred_angular_shift_sign(
+    label: dict[str, Any],
+    canvas_config: CircularCanvasConfigurator,
+    legend_config: LegendDrawingConfigurator,
+) -> int:
+    """Return preferred angular direction (+1 ccw / -1 cw) to move away from legend."""
+    start_x = float(label["start_x"])
+    start_y = float(label["start_y"])
+    radius = math.hypot(start_x, start_y)
+    if radius <= 1e-6:
+        return 1
+    legend_local_x, legend_local_y = _legend_center_local(canvas_config, legend_config)
+    away_x = start_x - legend_local_x
+    away_y = start_y - legend_local_y
+    # Unit tangents at current point (CCW and CW).
+    ccw_tx = -start_y / radius
+    ccw_ty = start_x / radius
+    cw_tx = -ccw_tx
+    cw_ty = -ccw_ty
+    ccw_score = ccw_tx * away_x + ccw_ty * away_y
+    cw_score = cw_tx * away_x + cw_ty * away_y
+    return 1 if ccw_score >= cw_score else -1
+
+
+def _expand_shift_block_to_preserve_order(
+    labels: list[dict[str, Any]],
+    total_length: int,
+    side_indices: list[int],
+    center_pos: int,
+    delta_angle: float,
+) -> tuple[int, int]:
+    """Expand move block so angular order cannot be inverted by this shift."""
+    left = center_pos
+    right = center_pos
+    while True:
+        expanded = False
+        moved_left_idx = side_indices[left]
+        moved_right_idx = side_indices[right]
+        moved_left_angle = _label_unwrapped_angle(labels[moved_left_idx], total_length) + delta_angle
+        moved_right_angle = _label_unwrapped_angle(labels[moved_right_idx], total_length) + delta_angle
+
+        if left > 0:
+            prev_idx = side_indices[left - 1]
+            prev_angle = _label_unwrapped_angle(labels[prev_idx], total_length)
+            if moved_left_angle <= prev_angle + MIN_LABEL_ORDER_GAP_RAD:
+                left -= 1
+                expanded = True
+
+        if right < len(side_indices) - 1:
+            next_idx = side_indices[right + 1]
+            next_angle = _label_unwrapped_angle(labels[next_idx], total_length)
+            if moved_right_angle >= next_angle - MIN_LABEL_ORDER_GAP_RAD:
+                right += 1
+                expanded = True
+
+        if not expanded:
+            break
+    return left, right
 
 
 def _try_shift_labels_away_from_legend(
@@ -224,34 +284,115 @@ def _try_shift_labels_away_from_legend(
             return True
 
         changed = False
+        legend_box = _legend_bbox(canvas_config, legend_config)
         for idx in collided_indices:
             label = labels[idx]
             if label.get("is_embedded"):
                 continue
             start_x = float(label["start_x"])
             start_y = float(label["start_y"])
-            x_sign = 1 if start_x >= 0 else -1
+            radius = math.hypot(start_x, start_y)
+            if radius <= 1e-6:
+                continue
+            moving_side = 1 if start_x >= 0 else -1
+            preferred_sign = _preferred_angular_shift_sign(label, canvas_config, legend_config)
+            side_indices = [
+                side_idx
+                for side_idx, side_label in enumerate(labels)
+                if not side_label.get("is_embedded") and ((float(side_label["start_x"]) >= 0) == (moving_side > 0))
+            ]
+            side_indices.sort(key=lambda side_idx: float(labels[side_idx]["middle"]))
+            if idx not in side_indices:
+                continue
+            center_pos = side_indices.index(idx)
 
             placed = False
             shift_px = LABEL_NUDGE_STEP_PX
-            directions = _candidate_shift_directions(label, canvas_config, legend_config)
             while shift_px <= MAX_LABEL_NUDGE_PX and not placed:
-                for dir_x, dir_y in directions:
-                    candidate = label.copy()
-                    candidate["start_x"] = start_x + dir_x * shift_px
-                    candidate["start_y"] = start_y + dir_y * shift_px
-                    # Avoid anchor-side flips that can make labels jump visually.
-                    if x_sign > 0 and float(candidate["start_x"]) <= 0:
+                angle_delta = shift_px / radius
+                for direction_sign in (preferred_sign, -preferred_sign):
+                    signed_delta = direction_sign * angle_delta
+                    block_left, block_right = _expand_shift_block_to_preserve_order(
+                        labels, total_length, side_indices, center_pos, signed_delta
+                    )
+                    block_indices = side_indices[block_left : block_right + 1]
+
+                    candidate_positions: dict[int, tuple[float, float]] = {}
+                    candidate_labels: dict[int, dict[str, Any]] = {}
+                    candidate_valid = True
+
+                    for block_idx in block_indices:
+                        block_label = labels[block_idx]
+                        block_radius = math.hypot(float(block_label["start_x"]), float(block_label["start_y"]))
+                        if block_radius <= 1e-6:
+                            candidate_valid = False
+                            break
+                        block_angle = math.atan2(float(block_label["start_y"]), float(block_label["start_x"]))
+                        candidate_angle = block_angle + signed_delta
+                        candidate_x = block_radius * math.cos(candidate_angle)
+                        candidate_y = block_radius * math.sin(candidate_angle)
+
+                        block_sign = 1 if float(block_label["start_x"]) >= 0 else -1
+                        if block_sign > 0 and candidate_x <= 0:
+                            candidate_valid = False
+                            break
+                        if block_sign < 0 and candidate_x >= 0:
+                            candidate_valid = False
+                            break
+
+                        candidate = block_label.copy()
+                        candidate["start_x"] = float(candidate_x)
+                        candidate["start_y"] = float(candidate_y)
+                        candidate_positions[block_idx] = (float(candidate_x), float(candidate_y))
+                        candidate_labels[block_idx] = candidate
+
+                    if not candidate_valid:
                         continue
-                    if x_sign < 0 and float(candidate["start_x"]) >= 0:
+
+                    for candidate in candidate_labels.values():
+                        candidate_box = _label_bbox_on_canvas(
+                            candidate, total_length, canvas_config, margin_px=LEGEND_LABEL_MARGIN_PX
+                        )
+                        if _bbox_overlaps(candidate_box, legend_box):
+                            candidate_valid = False
+                            break
+                    if not candidate_valid:
                         continue
-                    candidate_box = _label_bbox_on_canvas(candidate, total_length, canvas_config, margin_px=LEGEND_LABEL_MARGIN_PX)
-                    if _bbox_overlaps(candidate_box, _legend_bbox(canvas_config, legend_config)):
+
+                    for block_idx, candidate in candidate_labels.items():
+                        for peer_idx, peer_label in enumerate(labels):
+                            if peer_idx == block_idx or peer_label.get("is_embedded"):
+                                continue
+                            peer = candidate_labels.get(peer_idx, peer_label)
+                            min_gap_px = minimum_bbox_gap_px(candidate, peer, base_margin_px=0.0)
+                            if y_overlap(candidate, peer, total_length, min_gap_px) and x_overlap(
+                                candidate, peer, minimum_margin=min_gap_px
+                            ):
+                                candidate_valid = False
+                                break
+                        if not candidate_valid:
+                            break
+                    if not candidate_valid:
                         continue
-                    if _label_overlaps_other_labels(candidate, labels, idx, total_length):
+
+                    def _unwrapped_for_order(check_idx: int) -> float:
+                        candidate = candidate_labels.get(check_idx)
+                        if candidate is not None:
+                            return _label_unwrapped_angle(candidate, total_length)
+                        return _label_unwrapped_angle(labels[check_idx], total_length)
+
+                    for order_pos in range(1, len(side_indices)):
+                        prev_idx = side_indices[order_pos - 1]
+                        curr_idx = side_indices[order_pos]
+                        if _unwrapped_for_order(curr_idx) <= _unwrapped_for_order(prev_idx) + MIN_LABEL_ORDER_GAP_RAD:
+                            candidate_valid = False
+                            break
+                    if not candidate_valid:
                         continue
-                    label["start_x"] = float(candidate["start_x"])
-                    label["start_y"] = float(candidate["start_y"])
+
+                    for block_idx, (candidate_x, candidate_y) in candidate_positions.items():
+                        labels[block_idx]["start_x"] = candidate_x
+                        labels[block_idx]["start_y"] = candidate_y
                     changed = True
                     placed = True
                     break
