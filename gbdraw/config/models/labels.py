@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
 from .common import ShortLongFloatConfig  # type: ignore[reportMissingImports]
 
@@ -88,6 +88,25 @@ class LabelsUnifiedAdjustmentConfig:
 
 
 @dataclass(frozen=True)
+class LabelsLinearConfig:
+    placement: Literal["auto", "above_feature"]
+    rotation: float
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> "LabelsLinearConfig":
+        raw = d if isinstance(d, dict) else dict(d)
+        placement_raw = str(raw.get("placement", "auto")).strip().lower()
+        placement: Literal["auto", "above_feature"] = (
+            "above_feature" if placement_raw in {"above_feature", "on_feature"} else "auto"
+        )
+        rotation = float(raw.get("rotation", 0.0))
+        return cls(
+            placement=placement,
+            rotation=rotation,
+        )
+
+
+@dataclass(frozen=True)
 class LabelsConfig:
     filtering: LabelsFilteringConfig
     length_threshold: LabelsLengthThresholdConfig
@@ -105,6 +124,7 @@ class LabelsConfig:
     inner_arc_center_x: dict[str, dict[str, float]]
     inner_arc_angle: dict[str, dict[str, float]]
     unified_adjustment: LabelsUnifiedAdjustmentConfig
+    linear: LabelsLinearConfig
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LabelsConfig":
@@ -139,6 +159,7 @@ class LabelsConfig:
             inner_arc_center_x=_factor_2level(d["inner_arc_center_x"]),
             inner_arc_angle=_factor_2level(d.get("inner_arc_angle", {})),
             unified_adjustment=LabelsUnifiedAdjustmentConfig.from_dict(d.get("unified_adjustment", {})),
+            linear=LabelsLinearConfig.from_dict(d.get("linear", {})),
         )
 
 
@@ -149,6 +170,7 @@ __all__ = [
     "LabelsFontSizeConfig",
     "LabelsStrokeColorConfig",
     "LabelsUnifiedAdjustmentConfig",
+    "LabelsLinearConfig",
 ]
 
 

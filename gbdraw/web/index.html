@@ -573,6 +573,32 @@
                                         <input type="number" v-model.number="adv.label_font_size" class="form-input form-input-compact" placeholder="Auto">
                                     </div>
                                 </div>
+
+                                <div v-if="mode === 'linear'" class="grid grid-cols-2 gap-1.5 mt-1">
+                                    <div>
+                                        <label class="input-label text-[10px] mb-0">
+                                            Label Placement
+                                            <help-tip text="Auto keeps existing behavior. Above feature draws labels above features (and below negative-strand features when Separate Strands is on)."></help-tip>
+                                        </label>
+                                        <select v-model="adv.label_placement" class="form-input form-input-compact">
+                                            <option value="auto">Auto</option>
+                                            <option value="above_feature">Above Feature</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px] mb-0">
+                                            Label Rotation
+                                            <help-tip text="Rotate linear labels in degrees (e.g., 45). In Above Feature mode, rotated labels start from each feature midpoint."></help-tip>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            :value="adv.label_rotation ?? ''"
+                                            @input="adv.label_rotation = $event.target.value === '' ? null : Number($event.target.value)"
+                                            class="form-input form-input-compact"
+                                            placeholder="0"
+                                        >
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="grid grid-cols-2 gap-1.5">

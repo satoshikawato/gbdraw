@@ -8,6 +8,7 @@ This module contains the linear track-based label placement logic that used to l
 `gbdraw.labels.placement`.
 """
 
+import math
 from collections import defaultdict
 
 from .filtering import get_label_text  # type: ignore[reportMissingImports]
@@ -42,6 +43,28 @@ def find_lowest_available_track(track_dict, label):
         track_num += 1
 
 
+def _rotated_y_bounds_from_anchor(
+    width_px: float,
+    height_px: float,
+    rotation_deg: float,
+    text_anchor: str,
+) -> tuple[float, float]:
+    """Return min/max y-offset after rotation around the text anchor point."""
+    half_height = height_px / 2.0
+    if text_anchor == "start":
+        x_values = (0.0, width_px)
+    elif text_anchor == "end":
+        x_values = (-width_px, 0.0)
+    else:
+        x_values = (-width_px / 2.0, width_px / 2.0)
+    y_values = (-half_height, half_height)
+    radians = math.radians(rotation_deg)
+    sin_theta = math.sin(radians)
+    cos_theta = math.cos(radians)
+    y_offsets = [(x * sin_theta) + (y * cos_theta) for x in x_values for y in y_values]
+    return min(y_offsets), max(y_offsets)
+
+
 def prepare_label_list_linear(
     feature_dict,
     genome_length,
@@ -66,6 +89,9 @@ def prepare_label_list_linear(
     length_param = determine_length_parameter(genome_length, length_threshold)
     font_family = cfg.objects.text.font_family
     font_size = cfg.labels.font_size.linear.for_length_param(length_param)
+    linear_label_cfg = cfg.labels.linear
+    force_above_feature = linear_label_cfg.placement == "above_feature"
+    base_rotation_deg = linear_label_cfg.rotation
     interval = cfg.canvas.dpi
     label_filtering = cfg.labels.filtering.as_dict()
     # Find the maximum feature track ID (positive tracks grow upwards, same as labels)
@@ -96,9 +122,15 @@ def prepare_label_list_linear(
         factors = calculate_feature_position_factors_linear(strand, feature_track_id, strandedness)
 
         track_y_position = cds_height * factors[1]  # Use middle factor
+        track_top_y = cds_height * factors[0]
+        track_bottom_y = cds_height * factors[2]
 
         # Store track position for this feature
-        feature_track_positions[feature_id] = track_y_position
+        feature_track_positions[feature_id] = {
+            "middle_y": track_y_position,
+            "top_y": track_top_y,
+            "bottom_y": track_bottom_y,
+        }
 
     # Second pass: Process labels
     max_bbox_height = 0
@@ -114,7 +146,6 @@ def prepare_label_list_linear(
             max_bbox_height = bbox_height_px
         # Find the longest segment and its middle point
         longest_segment_length = 0
-        label_middle = 0
         coordinate_strand = None
         factors = None
         longest_segment_start = 0
@@ -130,7 +161,6 @@ def prepare_label_list_linear(
                 longest_segment_start = start
                 longest_segment_end = end
                 longest_segment_length = segment_length
-                label_middle = (end + start) / 2
 
         # Calculate normalized positions
         normalized_start = normalize_position_to_linear_track(
@@ -140,30 +170,77 @@ def prepare_label_list_linear(
             longest_segment_end, genome_length, alignment_width, genome_size_normalization_factor
         )
         longest_segment_length_in_pixels = abs(normalized_end - normalized_start) + 1
-        normalized_middle = (normalized_start + normalized_end) / 2
-        bbox_start = normalized_middle - (bbox_width_px / 2)
-        bbox_end = normalized_middle + (bbox_width_px / 2)
+
+        if force_above_feature:
+            # Above-feature mode tilts labels in the opposite direction of the user-provided angle.
+            # In separate-strands mode, negative strand labels are mirrored and placed below features.
+            is_negative_separate = strandedness and coordinate_strand == "negative"
+            label_rotation_deg = base_rotation_deg if is_negative_separate else -base_rotation_deg
+            label_text_anchor = "start" if label_rotation_deg != 0.0 else "middle"
+        else:
+            label_rotation_deg = base_rotation_deg
+            label_text_anchor = "middle"
+
+        label_anchor_x = (normalized_start + normalized_end) / 2.0
+        bbox_start = label_anchor_x - (bbox_width_px / 2)
+        bbox_end = label_anchor_x + (bbox_width_px / 2)
 
         # Get actual feature track position
-        feature_y = feature_track_positions.get(feature_id, cds_height * factors[1])
+        feature_position = feature_track_positions.get(
+            feature_id,
+            {
+                "middle_y": cds_height * factors[1],
+                "top_y": cds_height * factors[0],
+                "bottom_y": cds_height * factors[2],
+            },
+        )
+        feature_y = feature_position["middle_y"]
+        feature_top_y = feature_position["top_y"]
+        feature_bottom_y = feature_position["bottom_y"]
 
         # Create base label entry
         label_entry = {
             "label_text": feature_label_text,
-            "middle": normalized_middle,
+            "middle": label_anchor_x,
             "start": bbox_start,
             "end": bbox_end,
-            "middle_x": normalized_middle,
+            "middle_x": label_anchor_x,
             "width_px": bbox_width_px,
             "height_px": bbox_height_px,
             "strand": coordinate_strand,
             "feature_middle_y": feature_y,  # Use actual feature position
+            "feature_top_y": feature_top_y,
+            "feature_bottom_y": feature_bottom_y,
+            "feature_start_x": normalized_start,
+            "feature_end_x": normalized_end,
             "font_size": font_size,
             "font_family": font_family,
+            "rotation_deg": label_rotation_deg,
+            "text_anchor": label_text_anchor,
         }
 
         # Determine if label should be embedded
-        if bbox_width_px < longest_segment_length_in_pixels:
+        if force_above_feature:
+            y_min_offset, y_max_offset = _rotated_y_bounds_from_anchor(
+                bbox_width_px, bbox_height_px, label_rotation_deg, label_text_anchor
+            )
+            label_vertical_gap = max(1.0, bbox_height_px * 0.05)
+            is_negative_separate = strandedness and coordinate_strand == "negative"
+            if is_negative_separate:
+                # Keep rotated label top edge below the feature bottom.
+                label_y = feature_bottom_y + label_vertical_gap - y_min_offset
+            else:
+                # Keep rotated label bottom edge above the feature top.
+                label_y = feature_top_y - label_vertical_gap - y_max_offset
+            label_entry.update(
+                {
+                    "middle_y": label_y,
+                    "is_embedded": True,
+                    "track_id": "track_0",
+                }
+            )
+            track_dict["track_0"].append(label_entry)
+        elif bbox_width_px < longest_segment_length_in_pixels:
             label_entry.update({"middle_y": feature_y, "is_embedded": True, "track_id": "track_0"})
             track_dict["track_0"].append(label_entry)
         else:

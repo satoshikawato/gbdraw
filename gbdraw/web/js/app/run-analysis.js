@@ -73,6 +73,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     featureRecordIds,
     selectedFeatureRecordIdx
   } = state;
+  let linearLabelSupportCache = null;
 
   const getLastLine = (text) => {
     const trimmed = String(text || '').trim();
@@ -149,6 +150,30 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     const raw = String(name || '').trim() || String(fallback || '');
     const withExt = raw.toLowerCase().endsWith('.tsv') ? raw : `${raw}.tsv`;
     return makeSafeFilename(withExt);
+  };
+
+  const getLinearLabelOptionSupport = () => {
+    if (linearLabelSupportCache) return linearLabelSupportCache;
+    const pyodide = getPyodide();
+    if (!pyodide) {
+      linearLabelSupportCache = { placement: false, rotation: false };
+      return linearLabelSupportCache;
+    }
+    try {
+      const raw = pyodide.runPython(`
+import inspect, json
+import gbdraw.linear as _gbdraw_linear
+_source = inspect.getsource(_gbdraw_linear._get_args)
+json.dumps({
+  "placement": "--label_placement" in _source,
+  "rotation": "--label_rotation" in _source,
+})
+      `);
+      linearLabelSupportCache = JSON.parse(String(raw));
+    } catch (_err) {
+      linearLabelSupportCache = { placement: false, rotation: false };
+    }
+    return linearLabelSupportCache;
   };
 
   const downloadLosatPair = async (pairIndex, customName) => {
@@ -301,6 +326,24 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
         if (form.show_labels_linear !== 'none') {
           args.push('--show_labels');
           if (form.show_labels_linear === 'first') args.push('first');
+        }
+        const normalizedLabelPlacement = adv.label_placement === 'on_feature' ? 'above_feature' : adv.label_placement;
+        const wantsPlacementOption = normalizedLabelPlacement && normalizedLabelPlacement !== 'auto';
+        const wantsRotationOption = adv.label_rotation !== null && adv.label_rotation !== undefined && adv.label_rotation !== '';
+        if (wantsPlacementOption || wantsRotationOption) {
+          const linearLabelSupport = getLinearLabelOptionSupport();
+          if (wantsPlacementOption && !linearLabelSupport.placement) {
+            throw new Error("Current gbdraw wheel does not support --label_placement. Rebuild and redeploy the web wheel.");
+          }
+          if (wantsRotationOption && !linearLabelSupport.rotation) {
+            throw new Error("Current gbdraw wheel does not support --label_rotation. Rebuild and redeploy the web wheel.");
+          }
+        }
+        if (normalizedLabelPlacement && normalizedLabelPlacement !== 'auto') {
+          args.push('--label_placement', normalizedLabelPlacement);
+        }
+        if (adv.label_rotation !== null && adv.label_rotation !== undefined && adv.label_rotation !== '') {
+          args.push('--label_rotation', adv.label_rotation);
         }
 
         if (adv.resolve_overlaps) args.push('--resolve_overlaps');
