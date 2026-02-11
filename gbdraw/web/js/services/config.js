@@ -87,6 +87,9 @@ const buildConfigData = () => ({
 const applyConfigData = (data) => {
   if (data.form) safeDeepMerge(state.form, data.form);
   if (data.adv) safeDeepMerge(state.adv, data.adv);
+  if (state.adv.label_placement === 'on_feature') {
+    state.adv.label_placement = 'above_feature';
+  }
   if (data.losat) safeDeepMerge(state.losat, data.losat);
   if (data.colors) {
     const normalized = {};

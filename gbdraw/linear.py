@@ -5,7 +5,6 @@
 import argparse
 import logging
 import sys
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .io.colors import load_default_colors, read_color_table
@@ -14,7 +13,6 @@ from .io.regions import apply_region_specs, parse_region_specs
 from .config.toml import load_config_toml
 from .render.export import parse_formats, save_figure
 from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[reportMissingImports]
-from .core.sequence import create_dict_for_sequence_lengths  # type: ignore[reportMissingImports]
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .labels.filtering import read_qualifier_priority_file, read_filter_list_file  # type: ignore[reportMissingImports]
@@ -33,6 +31,16 @@ from .cli_utils.common import (
 # Setup for the logging system
 logger = logging.getLogger()
 setup_logging()
+
+def _parse_linear_label_placement(value: str) -> str:
+    normalized = str(value).strip().lower()
+    if normalized == "on_feature":
+        return "above_feature"
+    if normalized in {"auto", "above_feature"}:
+        return normalized
+    raise argparse.ArgumentTypeError(
+        "label placement must be 'auto' or 'above_feature' (legacy alias: 'on_feature')"
+    )
 
 def _get_args(args) -> argparse.Namespace:
     """
@@ -195,6 +203,17 @@ def _get_args(args) -> argparse.Namespace:
         '--label_font_size',
         help='Label font size (optional; default: 24 pt for genomes <= 50 kb, 5 pt for genomes >= 50 kb)',
         type=float)
+    parser.add_argument(
+        '--label_placement',
+        help='Linear label placement mode ("auto" or "above_feature"; default: "auto"). "above_feature" draws labels above features (or below negative-strand features when --separate_strands is used).',
+        type=_parse_linear_label_placement,
+        metavar="{auto,above_feature}",
+    )
+    parser.add_argument(
+        '--label_rotation',
+        help='Linear label rotation in degrees (optional; float; default: 0). In above_feature mode, rotated labels start from the feature midpoint.',
+        type=float,
+    )
     if CAIROSVG_AVAILABLE:
         parser.add_argument(
             '-f',
@@ -410,6 +429,8 @@ def linear_main(cmd_args) -> None:
     block_stroke_width: Optional[float] = args.block_stroke_width
     definition_font_size: Optional[float] = args.definition_font_size
     label_font_size: Optional[float] = args.label_font_size
+    label_placement: Optional[str] = args.label_placement
+    label_rotation: Optional[float] = args.label_rotation
     axis_stroke_color: Optional[str] = args.axis_stroke_color
     axis_stroke_width: Optional[float] = args.axis_stroke_width
     line_stroke_color: Optional[str] = args.line_stroke_color
@@ -422,6 +443,8 @@ def linear_main(cmd_args) -> None:
         linear_axis_stroke_width=axis_stroke_width, 
         linear_definition_font_size=definition_font_size,
         label_font_size=label_font_size,
+        label_placement=label_placement,
+        label_rotation=label_rotation,
         line_stroke_color=line_stroke_color, 
         line_stroke_width=line_stroke_width, 
         show_gc=show_gc, 
@@ -524,13 +547,10 @@ def linear_main(cmd_args) -> None:
             logger.warning(
                 "WARNING: Region cropping is enabled; ensure BLAST coordinates match the cropped regions (and reverse complements if specified)."
             )
-    sequence_length_dict: dict[str, int] = create_dict_for_sequence_lengths(records)
     # Use raw records to avoid collapsing lengths when IDs are duplicated.
     longest_genome: int = max(len(record.seq) for record in records)
     cfg = GbdrawConfig.from_dict(config_dict)
     window, step = calculate_window_step(longest_genome, cfg, manual_window, manual_step)
-    # Use raw record count to avoid collapsing entries when IDs are duplicated.
-    num_of_entries: int = len(records)
 
     canvas = assemble_linear_diagram_from_records(
         records=records,

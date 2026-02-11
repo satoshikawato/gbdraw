@@ -192,7 +192,9 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--line_stroke_width LINE_STROKE_WIDTH]
               [--definition_font_size DEFINITION_FONT_SIZE]
               [--record_label RECORD_LABEL]
-              [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [-l LEGEND]
+              [--label_font_size LABEL_FONT_SIZE]
+              [--label_placement {auto,above_feature}]
+              [--label_rotation LABEL_ROTATION] [-f FORMAT] [-l LEGEND]
               [--show_labels [{all,first,none}]] [--resolve_overlaps]
               [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
@@ -275,6 +277,15 @@ options:
   --label_font_size LABEL_FONT_SIZE
                         Label font size (optional; default: 24 pt for genomes
                         <= 50 kb, 5 pt for genomes >= 50 kb)
+  --label_placement {auto,above_feature}
+                        Linear label placement mode ("auto" or
+                        "above_feature"; default: "auto"). "above_feature"
+                        draws labels above features (or below negative-strand
+                        features when --separate_strands is used).
+  --label_rotation LABEL_ROTATION
+                        Linear label rotation in degrees (optional; float;
+                        default: 0). In above_feature mode, rotated labels
+                        start from the feature midpoint.
   -f, --format FORMAT   Comma-separated list of output file formats (svg, png,
                         pdf, eps, ps; default: svg).
   -l, --legend LEGEND   Legend position (default: "right"; "right", "left",

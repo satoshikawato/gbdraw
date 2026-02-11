@@ -1,5 +1,6 @@
 import math
 from pathlib import Path
+from types import SimpleNamespace
 
 from Bio import SeqIO
 
@@ -70,6 +71,12 @@ def _target_delta_unwrapped(label: dict, total_length: int) -> float:
         angle = _angle_of_label(label)
     target = label.get("target_angle_unwrapped", 360.0 * (label["middle"] / total_length) - 90.0)
     return abs(angle - target)
+
+
+def _label_unwrapped_angle_for_order_test(label: dict, total_length: int) -> float:
+    angle = math.atan2(label["start_y"], label["start_x"])
+    target = (2.0 * math.pi * (label["middle"] / total_length)) - (0.5 * math.pi)
+    return angle + (2.0 * math.pi) * round((target - angle) / (2.0 * math.pi))
 
 
 def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
@@ -158,6 +165,88 @@ def _load_hmmtdna_external_labels(*, label_font_size: float = 22.0) -> tuple[lis
     )
     external_labels = [label for label in labels if not label.get("is_embedded")]
     return external_labels, len(record.seq)
+
+
+def _make_legend_collision_fixture() -> tuple[list[dict], int, SimpleNamespace, SimpleNamespace]:
+    total_length = 4000
+    labels = [
+        {
+            "middle": 1000,
+            "start_x": 250.0,
+            "start_y": 0.0,
+            "middle_x": 180.0,
+            "middle_y": 0.0,
+            "feature_middle_x": 120.0,
+            "feature_middle_y": 0.0,
+            "width_px": 80.0,
+            "height_px": 20.0,
+            "is_inner": False,
+            "is_embedded": False,
+        }
+    ]
+    canvas_config = SimpleNamespace(
+        legend_position="right",
+        legend_offset_x=760.0,
+        legend_offset_y=460.0,
+        total_width=1000.0,
+        total_height=1000.0,
+        offset_x=500.0,
+        offset_y=500.0,
+    )
+    legend_config = SimpleNamespace(
+        legend_width=120.0,
+        legend_height=120.0,
+        color_rect_size=20.0,
+    )
+    return labels, total_length, canvas_config, legend_config
+
+
+def _make_order_sensitive_legend_collision_fixture() -> tuple[list[dict], int, SimpleNamespace, SimpleNamespace]:
+    total_length = 4000
+    radius = 250.0
+    labels = [
+        {
+            "middle": 1000,
+            "start_x": radius * math.cos(0.0),
+            "start_y": radius * math.sin(0.0),
+            "middle_x": 180.0,
+            "middle_y": 0.0,
+            "feature_middle_x": 120.0,
+            "feature_middle_y": 0.0,
+            "width_px": 30.0,
+            "height_px": 14.0,
+            "is_inner": False,
+            "is_embedded": False,
+        },
+        {
+            "middle": 1051,
+            "start_x": radius * math.cos(0.08),
+            "start_y": radius * math.sin(0.08),
+            "middle_x": 180.0,
+            "middle_y": 0.0,
+            "feature_middle_x": 120.0,
+            "feature_middle_y": 0.0,
+            "width_px": 30.0,
+            "height_px": 14.0,
+            "is_inner": False,
+            "is_embedded": False,
+        },
+    ]
+    canvas_config = SimpleNamespace(
+        legend_position="right",
+        legend_offset_x=730.0,
+        legend_offset_y=520.0,
+        total_width=1000.0,
+        total_height=1000.0,
+        offset_x=500.0,
+        offset_y=500.0,
+    )
+    legend_config = SimpleNamespace(
+        legend_width=120.0,
+        legend_height=60.0,
+        color_rect_size=20.0,
+    )
+    return labels, total_length, canvas_config, legend_config
 
 
 def test_place_labels_stays_near_feature_angle_for_sparse_labels() -> None:
@@ -597,3 +686,58 @@ def test_circular_assembly_reuses_precalculated_labels_once() -> None:
     assert counts["assemble"] == 1
     assert counts["labels_group"] == 0
     assert counts["seq_record_group"] == 0
+
+
+def test_label_legend_collision_prefers_label_shift() -> None:
+    labels, total_length, canvas_config, legend_config = _make_legend_collision_fixture()
+    original_legend_x = canvas_config.legend_offset_x
+    original_legend_y = canvas_config.legend_offset_y
+    original_radius = math.hypot(labels[0]["start_x"], labels[0]["start_y"])
+
+    circular_assemble_module._resolve_label_legend_collisions(labels, total_length, canvas_config, legend_config)
+
+    assert not circular_assemble_module._labels_collide_with_legend(labels, total_length, canvas_config, legend_config)
+    assert canvas_config.legend_offset_x == original_legend_x
+    assert canvas_config.legend_offset_y == original_legend_y
+    shifted_radius = math.hypot(labels[0]["start_x"], labels[0]["start_y"])
+    assert math.isclose(shifted_radius, original_radius, abs_tol=0.5)
+    assert abs(labels[0]["start_y"]) > 0.1
+
+
+def test_label_legend_collision_expands_canvas_when_fallback_needed() -> None:
+    labels, total_length, canvas_config, legend_config = _make_legend_collision_fixture()
+    original_width = canvas_config.total_width
+    original_height = canvas_config.total_height
+
+    original_shift = circular_assemble_module._try_shift_labels_away_from_legend
+    original_move = circular_assemble_module._try_move_legend_away_from_labels
+    circular_assemble_module._try_shift_labels_away_from_legend = lambda *args, **kwargs: False
+    circular_assemble_module._try_move_legend_away_from_labels = lambda *args, **kwargs: False
+    try:
+        circular_assemble_module._resolve_label_legend_collisions(labels, total_length, canvas_config, legend_config)
+    finally:
+        circular_assemble_module._try_shift_labels_away_from_legend = original_shift
+        circular_assemble_module._try_move_legend_away_from_labels = original_move
+
+    assert canvas_config.total_width > original_width or canvas_config.total_height > original_height
+    assert not circular_assemble_module._labels_collide_with_legend(labels, total_length, canvas_config, legend_config)
+
+
+def test_label_legend_collision_keeps_feature_order_by_moving_neighbor_block() -> None:
+    labels, total_length, canvas_config, legend_config = _make_order_sensitive_legend_collision_fixture()
+    initial_low_y = labels[0]["start_y"]
+    initial_high_y = labels[1]["start_y"]
+
+    assert circular_assemble_module._legend_collision_indices(labels, total_length, canvas_config, legend_config) == [1]
+
+    circular_assemble_module._resolve_label_legend_collisions(labels, total_length, canvas_config, legend_config)
+
+    assert not circular_assemble_module._labels_collide_with_legend(labels, total_length, canvas_config, legend_config)
+
+    low_unwrapped = _label_unwrapped_angle_for_order_test(labels[0], total_length)
+    high_unwrapped = _label_unwrapped_angle_for_order_test(labels[1], total_length)
+    assert low_unwrapped < high_unwrapped
+
+    # Neighbor label should move together to preserve order during legend avoidance.
+    assert abs(labels[0]["start_y"] - initial_low_y) > 0.1
+    assert abs(labels[1]["start_y"] - initial_high_y) > 0.1

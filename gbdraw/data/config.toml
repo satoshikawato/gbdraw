@@ -167,6 +167,9 @@ feature = ["note"]
 [labels.font_size.linear]
   short = 24
   long = 5
+[labels.linear]
+  placement = "auto"
+  rotation = 0.0
 [labels.stroke_width]
   short = 1.5
   long = 0.5

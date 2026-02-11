@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from svgwrite.container import Group
-
 from ....svg.text_path import generate_text_path
 
 
@@ -14,6 +12,7 @@ class LabelDrawer:
         feature_label_text = label_entry["label_text"]
         middle_x = label_entry["middle_x"]
         middle_y = label_entry["middle_y"]
+        rotation_deg = float(label_entry.get("rotation_deg", 0.0))
         label_path = generate_text_path(
             text=feature_label_text,
             title_x=middle_x,
@@ -23,8 +22,10 @@ class LabelDrawer:
             font_weight="normal",
             font=label_entry["font_family"],
             dominant_baseline="central",
-            text_anchor="middle",
+            text_anchor=label_entry.get("text_anchor", "middle"),
         )
+        if rotation_deg != 0.0:
+            label_path.rotate(rotation_deg, center=(middle_x, middle_y))
         group.add(label_path)
         return group
 
