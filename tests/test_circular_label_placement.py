@@ -1,5 +1,6 @@
 import math
 from pathlib import Path
+from types import SimpleNamespace
 
 from Bio import SeqIO
 
@@ -158,6 +159,40 @@ def _load_hmmtdna_external_labels(*, label_font_size: float = 22.0) -> tuple[lis
     )
     external_labels = [label for label in labels if not label.get("is_embedded")]
     return external_labels, len(record.seq)
+
+
+def _make_legend_collision_fixture() -> tuple[list[dict], int, SimpleNamespace, SimpleNamespace]:
+    total_length = 4000
+    labels = [
+        {
+            "middle": 1000,
+            "start_x": 250.0,
+            "start_y": 0.0,
+            "middle_x": 180.0,
+            "middle_y": 0.0,
+            "feature_middle_x": 120.0,
+            "feature_middle_y": 0.0,
+            "width_px": 80.0,
+            "height_px": 20.0,
+            "is_inner": False,
+            "is_embedded": False,
+        }
+    ]
+    canvas_config = SimpleNamespace(
+        legend_position="right",
+        legend_offset_x=760.0,
+        legend_offset_y=460.0,
+        total_width=1000.0,
+        total_height=1000.0,
+        offset_x=500.0,
+        offset_y=500.0,
+    )
+    legend_config = SimpleNamespace(
+        legend_width=120.0,
+        legend_height=120.0,
+        color_rect_size=20.0,
+    )
+    return labels, total_length, canvas_config, legend_config
 
 
 def test_place_labels_stays_near_feature_angle_for_sparse_labels() -> None:
@@ -597,3 +632,36 @@ def test_circular_assembly_reuses_precalculated_labels_once() -> None:
     assert counts["assemble"] == 1
     assert counts["labels_group"] == 0
     assert counts["seq_record_group"] == 0
+
+
+def test_label_legend_collision_prefers_label_shift() -> None:
+    labels, total_length, canvas_config, legend_config = _make_legend_collision_fixture()
+    original_legend_x = canvas_config.legend_offset_x
+    original_legend_y = canvas_config.legend_offset_y
+    original_start_x = labels[0]["start_x"]
+
+    circular_assemble_module._resolve_label_legend_collisions(labels, total_length, canvas_config, legend_config)
+
+    assert not circular_assemble_module._labels_collide_with_legend(labels, total_length, canvas_config, legend_config)
+    assert canvas_config.legend_offset_x == original_legend_x
+    assert canvas_config.legend_offset_y == original_legend_y
+    assert labels[0]["start_x"] < original_start_x
+
+
+def test_label_legend_collision_expands_canvas_when_fallback_needed() -> None:
+    labels, total_length, canvas_config, legend_config = _make_legend_collision_fixture()
+    original_width = canvas_config.total_width
+    original_height = canvas_config.total_height
+
+    original_shift = circular_assemble_module._try_shift_labels_away_from_legend
+    original_move = circular_assemble_module._try_move_legend_away_from_labels
+    circular_assemble_module._try_shift_labels_away_from_legend = lambda *args, **kwargs: False
+    circular_assemble_module._try_move_legend_away_from_labels = lambda *args, **kwargs: False
+    try:
+        circular_assemble_module._resolve_label_legend_collisions(labels, total_length, canvas_config, legend_config)
+    finally:
+        circular_assemble_module._try_shift_labels_away_from_legend = original_shift
+        circular_assemble_module._try_move_legend_away_from_labels = original_move
+
+    assert canvas_config.total_width > original_width or canvas_config.total_height > original_height
+    assert not circular_assemble_module._labels_collide_with_legend(labels, total_length, canvas_config, legend_config)
