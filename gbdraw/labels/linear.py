@@ -65,6 +65,18 @@ def _rotated_y_bounds_from_anchor(
     return min(y_offsets), max(y_offsets)
 
 
+def calculate_label_y_bounds(label: dict) -> tuple[float, float]:
+    """Return absolute top/bottom y coordinates for a label after rotation."""
+    y_min_offset, y_max_offset = _rotated_y_bounds_from_anchor(
+        float(label["width_px"]),
+        float(label["height_px"]),
+        float(label.get("rotation_deg", 0.0)),
+        str(label.get("text_anchor", "middle")),
+    )
+    middle_y = float(label["middle_y"])
+    return middle_y + y_min_offset, middle_y + y_max_offset
+
+
 def prepare_label_list_linear(
     feature_dict,
     genome_length,
@@ -178,7 +190,8 @@ def prepare_label_list_linear(
             label_rotation_deg = base_rotation_deg if is_negative_separate else -base_rotation_deg
             label_text_anchor = "start" if label_rotation_deg != 0.0 else "middle"
         else:
-            label_rotation_deg = base_rotation_deg
+            # Keep auto mode horizontal regardless of configured rotation.
+            label_rotation_deg = 0.0
             label_text_anchor = "middle"
 
         label_anchor_x = (normalized_start + normalized_end) / 2.0
@@ -274,6 +287,7 @@ def prepare_label_list_linear(
 
 
 __all__ = [
+    "calculate_label_y_bounds",
     "check_label_overlap",
     "find_lowest_available_track",
     "prepare_label_list_linear",

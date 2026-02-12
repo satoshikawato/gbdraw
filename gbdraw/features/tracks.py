@@ -30,33 +30,25 @@ def get_feature_ends(feature, genome_length: Optional[int] = None) -> Tuple[int,
     if not parts:
         return 1, 1, strand
     
-    # Check for origin-spanning feature
-    # Origin-spanning features have parts that wrap around (e.g., join(9000..10000,1..500))
+    starts = [max(1, int(part.start)) for part in parts]
+    ends = [max(1, int(part.end)) for part in parts]
+
+    # Origin-spanning features touch both the left and right genome boundaries.
+    # Avoid using part ordering for detection because negative-strand multipart features
+    # can be listed in descending genomic order without crossing the origin.
     if len(parts) > 1 and genome_length:
-        # Get the first and last part positions
-        first_part = parts[0]
-        last_part = parts[-1]
-        
-        # For positive strand: if last part ends before first part starts, it spans origin
-        # For negative strand: if first part starts after last part ends, it spans origin
-        if strand == "positive":
-            if last_part.end < first_part.start:
-                # Origin-spanning: return (first_start, last_end) where start > end
-                start = max(1, first_part.start)
-                end = max(1, last_part.end)
-                return start, end, strand
-        elif strand == "negative":
-            if first_part.start > last_part.end:
-                # Origin-spanning for negative strand
-                start = max(1, first_part.start)
-                end = max(1, last_part.end)
-                return start, end, strand
-    
+        genome_end = int(genome_length)
+        touches_left_boundary = min(starts) <= 1
+        touches_right_boundary = max(ends) >= genome_end
+        if touches_left_boundary and touches_right_boundary:
+            # Represent origin-spanning features as start > end.
+            start = max(starts)
+            end = min(ends)
+            return start, end, strand
+
     # Normal case: use min/max
-    starts = [part.start for part in parts]
-    ends = [part.end for part in parts]
-    start = max(1, min(starts))
-    end = max(1, max(ends))
+    start = min(starts)
+    end = max(ends)
     
     return start, end, strand
 
