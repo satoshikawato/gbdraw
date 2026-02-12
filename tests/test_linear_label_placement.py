@@ -11,6 +11,8 @@ from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
+from gbdraw.configurators import FeatureDrawingConfigurator
+from gbdraw.diagrams.linear.precalc import _precalculate_label_dimensions
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
 from gbdraw.io.colors import load_default_colors
@@ -115,6 +117,17 @@ def test_linear_above_feature_placement_embeds_all_labels() -> None:
 
 
 @pytest.mark.linear
+def test_linear_auto_ignores_label_rotation() -> None:
+    labels = _prepare_linear_labels(
+        label_placement="auto",
+        label_rotation=45.0,
+    )
+    assert labels
+    assert all(label["rotation_deg"] == pytest.approx(0.0) for label in labels)
+    assert all(label["text_anchor"] == "middle" for label in labels)
+
+
+@pytest.mark.linear
 def test_linear_above_feature_anchor_is_feature_midpoint() -> None:
     labels = _prepare_linear_labels(
         label_placement="above_feature",
@@ -188,3 +201,48 @@ def test_linear_label_drawer_applies_rotation_transform() -> None:
     assert "rotate(45" in negative_transform
     assert positive_anchor == "start"
     assert negative_anchor == "start"
+
+
+@pytest.mark.linear
+def test_linear_precalc_includes_above_feature_rotated_embedded_labels() -> None:
+    input_path = Path(__file__).parent / "test_inputs" / "MjeNMV.gb"
+    record = SeqIO.read(str(input_path), "genbank")
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        show_labels="all",
+        strandedness=False,
+        label_blacklist="",
+        label_font_size=14.0,
+        label_placement="above_feature",
+        label_rotation=45.0,
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_cfg = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=len(record.seq),
+        config_dict=config_dict,
+        legend="none",
+        cfg=cfg,
+    )
+    feature_cfg = FeatureDrawingConfigurator(
+        color_table=None,
+        default_colors=load_default_colors("", "default"),
+        selected_features_set=cfg.objects.features.features_drawn,
+        config_dict=config_dict,
+        canvas_config=canvas_cfg,
+        cfg=cfg,
+    )
+
+    required_label_height, _, record_label_heights = _precalculate_label_dimensions(
+        [record],
+        feature_cfg,
+        canvas_cfg,
+        config_dict,
+        cfg=cfg,
+    )
+
+    assert required_label_height > 0
+    assert required_label_height > canvas_cfg.original_vertical_offset
+    assert record_label_heights[record.id] == pytest.approx(required_label_height)

@@ -18,7 +18,7 @@ from ...features.colors import preprocess_color_tables  # type: ignore[reportMis
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
 from ...render.groups.linear import DefinitionGroup  # type: ignore[reportMissingImports]
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
-from ...labels.placement import prepare_label_list_linear  # type: ignore[reportMissingImports]
+from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear  # type: ignore[reportMissingImports]
 
 
 def _precalculate_definition_widths(
@@ -99,12 +99,17 @@ def _precalculate_label_dimensions(
         )
         all_labels_by_record[record.id] = label_list
 
-        min_y_coord_record = 0
+        min_y_coord_record = 0.0
         for label in label_list:
-            if not label["is_embedded"]:
-                label_bottom_y = label["middle_y"] - (label["height_px"] / 2)
-                if label_bottom_y < min_y_coord_record:
-                    min_y_coord_record = label_bottom_y
+            label_top_y, _ = calculate_label_y_bounds(label)
+            is_above_feature_embedded = (
+                bool(label.get("is_embedded"))
+                and label_top_y < float(label.get("feature_top_y", 0.0))
+            )
+            if bool(label.get("is_embedded")) and not is_above_feature_embedded:
+                continue
+            if label_top_y < min_y_coord_record:
+                min_y_coord_record = label_top_y
 
         record_height = abs(min_y_coord_record)
         record_label_heights[record.id] = record_height
