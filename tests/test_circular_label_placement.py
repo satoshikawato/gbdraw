@@ -21,6 +21,7 @@ from gbdraw.labels.circular import (
     minimum_bbox_gap_px,
     place_labels_on_arc_fc,
     prepare_label_list,
+    rearrange_labels_fc,
     x_overlap,
     y_overlap,
 )
@@ -63,6 +64,28 @@ def _count_overlaps_with_min_gap(labels: list[dict], total_length: int) -> int:
             if y_overlap(labels[i], labels[j], total_length, min_gap_px) and x_overlap(labels[i], labels[j], min_gap_px):
                 overlaps += 1
     return overlaps
+
+
+def _count_half_plane_mismatches(labels: list[dict], total_length: int, axis_neutral_deg: float = 8.0) -> int:
+    mismatch_count = 0
+    for label in labels:
+        feature_middle_x = float(label.get("feature_middle_x", 0.0))
+        if abs(feature_middle_x) > 1e-6:
+            preferred_half = 1 if feature_middle_x > 0 else -1
+        else:
+            target_angle = (360.0 * (label["middle"] / total_length) - 90.0) % 360.0
+            vertical_axis_distance = min(_angle_diff(target_angle, 90.0), _angle_diff(target_angle, 270.0))
+            if vertical_axis_distance <= axis_neutral_deg:
+                continue
+            preferred_half = 1 if math.cos(math.radians(target_angle)) >= 0 else -1
+
+        start_x = float(label["start_x"])
+        if abs(start_x) <= 1.0:
+            continue
+        actual_half = 1 if start_x > 0 else -1
+        if actual_half != preferred_half:
+            mismatch_count += 1
+    return mismatch_count
 
 
 def _target_delta_unwrapped(label: dict, total_length: int) -> float:
@@ -387,6 +410,89 @@ def test_improved_label_placement_preserves_feature_order() -> None:
 
     unwrapped_angles = [label["angle_unwrapped"] for label in improved]
     assert all(unwrapped_angles[i] < unwrapped_angles[i + 1] for i in range(len(unwrapped_angles) - 1))
+
+
+def test_improved_label_placement_prefers_same_half_plane_when_overlap_tied() -> None:
+    total_length = 20000
+    label_radius = 430.0
+    feature_radius = 390.0
+    n = 12
+    width_px = 120.0
+    height_px = 24.0
+    center = 18402
+    spread = 60
+    middles = [(center + int((idx - (n // 2)) * spread / n)) % total_length for idx in range(n)]
+    labels = [_make_label(middle, width_px=width_px, height_px=height_px) for middle in middles]
+
+    for label in labels:
+        angle = angle_from_middle(label["middle"], total_length)
+        label["feature_middle_x"] = feature_radius * math.cos(math.radians(angle))
+        label["feature_middle_y"] = feature_radius * math.sin(math.radians(angle))
+
+    placed = place_labels_on_arc_fc(
+        labels,
+        center_x=0.0,
+        center_y=0.0,
+        x_radius=label_radius,
+        y_radius=label_radius,
+        start_angle=0.0,
+        end_angle=360.0,
+        total_length=total_length,
+    )
+    improved = improved_label_placement_fc(
+        placed,
+        center_x=0.0,
+        center_y=0.0,
+        x_radius=label_radius,
+        y_radius=label_radius,
+        feature_radius=feature_radius,
+        total_length=total_length,
+        start_angle=0.0,
+        end_angle=360.0,
+    )
+
+    assert _count_overlaps(improved, total_length) == 0
+    assert _count_half_plane_mismatches(improved, total_length) <= 2
+
+
+def test_rearrange_labels_legacy_prefers_same_half_plane_when_overlap_tied() -> None:
+    total_length = 200000
+    feature_radius = 390.0
+    n = 80
+    width_px = 220.0
+    height_px = 22.0
+    center = 100000
+    spread = 6000
+    middles = [(center + int((idx - (n // 2)) * spread / n)) % total_length for idx in range(n)]
+    labels: list[dict] = []
+    for middle in middles:
+        angle = angle_from_middle(middle, total_length)
+        labels.append(
+            {
+                "middle": middle,
+                "width_px": width_px,
+                "height_px": height_px,
+                "is_inner": False,
+                "feature_middle_x": feature_radius * math.cos(math.radians(angle)),
+                "feature_middle_y": feature_radius * math.sin(math.radians(angle)),
+            }
+        )
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    cfg = GbdrawConfig.from_dict(config_dict)
+    rearranged = rearrange_labels_fc(
+        labels,
+        feature_radius,
+        total_length,
+        "long",
+        config_dict,
+        strands="separate",
+        is_outer=True,
+        cfg=cfg,
+    )
+
+    assert _count_overlaps(rearranged, total_length) == 0
+    assert _count_half_plane_mismatches(rearranged, total_length) <= 1
 
 
 def test_dense_triplet_keeps_center_label_closest_to_feature() -> None:
