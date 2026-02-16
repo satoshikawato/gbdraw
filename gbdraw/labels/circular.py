@@ -611,18 +611,37 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
         return labels
 
     labels = sort_labels(labels)
+    if len(labels) > 2:
+        # Move the optimization seam into the sparsest angular gap so labels that
+        # are adjacent around 0/360 are optimized as neighbors.
+        raw_targets = [angle_from_middle_unwrapped(float(label["middle"]), total_length) for label in labels]
+        gap_values = [raw_targets[idx + 1] - raw_targets[idx] for idx in range(len(raw_targets) - 1)]
+        gap_values.append(raw_targets[0] + 360.0 - raw_targets[-1])
+        largest_gap_idx = max(range(len(gap_values)), key=gap_values.__getitem__)
+        if largest_gap_idx < len(labels) - 1:
+            rotate_by = largest_gap_idx + 1
+            labels = labels[rotate_by:] + labels[:rotate_by]
+
     min_order_gap_deg = 0.05
     max_pair_steps = max(1, int(max_angle_shift_deg / max(step_deg, 1e-6)))
 
+    prev_target_angle: float | None = None
     for label in labels:
         current_x = float(label.get("start_x", 0.0))
         current_y = float(label.get("start_y", 0.0))
-        target_angle = angle_from_middle_unwrapped(float(label["middle"]), total_length)
+        raw_target_angle = angle_from_middle_unwrapped(float(label["middle"]), total_length)
+        if prev_target_angle is None:
+            target_angle = raw_target_angle
+        else:
+            target_angle = normalize_angle_near_reference(raw_target_angle, prev_target_angle)
+            while target_angle <= prev_target_angle:
+                target_angle += 360.0
         current_angle = math.degrees(math.atan2(current_y, current_x))
         current_unwrapped = normalize_angle_near_reference(current_angle, target_angle)
         label["_fixed_radius_px"] = math.hypot(current_x, current_y)
         label["_target_angle_unwrapped_fixed"] = target_angle
         label["_angle_unwrapped_fixed"] = current_unwrapped
+        prev_target_angle = target_angle
 
     prev_angle: float | None = None
     for label in labels:
@@ -703,7 +722,7 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
         label.pop("_target_angle_unwrapped_fixed", None)
         label.pop("_angle_unwrapped_fixed", None)
 
-    return labels
+    return sort_labels(labels)
 
 
 def _angle_deviation_score(labels: list[dict], total_length: int) -> tuple[float, float]:
@@ -2701,6 +2720,11 @@ def prepare_label_list(
             feature_outer_radius_intervals,
         )
         outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
+        # Final radial enforcement can reintroduce tight angular collisions.
+        outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
+            outer_labels_rearranged,
+            total_length,
+        )
     outer_labels_rearranged = assign_leader_start_points(outer_labels_rearranged, total_length)
 
     inner_labels_rearranged = []

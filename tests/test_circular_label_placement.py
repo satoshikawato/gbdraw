@@ -123,7 +123,13 @@ def _label_unwrapped_angle_for_order_test(label: dict, total_length: int) -> flo
     return angle + (2.0 * math.pi) * round((target - angle) / (2.0 * math.pi))
 
 
-def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
+def _load_mjenmv_external_labels_with_config(
+    *,
+    strandedness: bool = True,
+    resolve_overlaps: bool = False,
+    track_type: str = "tuckin",
+    label_blacklist: str = "",
+) -> tuple[list[dict], int, GbdrawConfig]:
     input_path = Path(__file__).parent / "test_inputs" / "MjeNMV.gbk"
     record = SeqIO.read(str(input_path), "genbank")
 
@@ -131,11 +137,11 @@ def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
     config_dict = modify_config_dict(
         config_dict,
         show_labels=True,
-        strandedness=True,
-        track_type="tuckin",
-        resolve_overlaps=False,
+        strandedness=strandedness,
+        track_type=track_type,
+        resolve_overlaps=resolve_overlaps,
         allow_inner_labels=False,
-        label_blacklist="",
+        label_blacklist=label_blacklist,
     )
     cfg = GbdrawConfig.from_dict(config_dict)
 
@@ -164,7 +170,17 @@ def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
         cfg=cfg,
     )
     external_labels = [label for label in labels if not label.get("is_embedded")]
-    return external_labels, len(record.seq)
+    return external_labels, len(record.seq), cfg
+
+
+def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
+    external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
+        strandedness=True,
+        resolve_overlaps=False,
+        track_type="tuckin",
+        label_blacklist="",
+    )
+    return external_labels, total_length
 
 
 def _load_hmmtdna_external_labels(*, label_font_size: float = 22.0) -> tuple[list[dict], int]:
@@ -797,6 +813,19 @@ def test_mjenmv_dense_labels_without_blacklist_have_no_outer_overlaps() -> None:
     external_labels, total_length = _load_mjenmv_external_labels_without_blacklist()
     assert len(external_labels) == 109
     assert _count_overlaps(external_labels, total_length) == 0
+
+
+def test_mjenmv_resolve_overlaps_middle_has_no_outer_overlaps() -> None:
+    external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+        label_blacklist="",
+    )
+
+    assert len(external_labels) == 109
+    assert _count_overlaps(external_labels, total_length) == 0
+    assert _count_overlaps_with_min_gap(external_labels, total_length) == 0
 
 
 def test_hmmtdna_font22_labels_remain_close_without_overlaps() -> None:
