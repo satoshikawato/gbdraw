@@ -31,6 +31,8 @@ HEMISPHERE_REFINE_MAX_SHIFT_DEG = 90.0
 HEMISPHERE_REFINE_STEP_DEG = 0.25
 DENSE_DISTANCE_COMPACTION_MIN_LABELS = 30
 DENSE_DISTANCE_COMPACTION_MIN_GAP_RELAX = 1
+LEADER_START_PROXIMITY_EPS_PX = 0.75
+LEADER_START_ORDER_GAP_CANDIDATES = (1.0, 0.75, 0.5, 0.25, 0.0)
 
 
 def minimum_bbox_gap_px(label1: dict, label2: dict, base_margin_px: float = 0.0) -> float:
@@ -153,18 +155,25 @@ def _leader_anchor_candidates(label: dict, total_length: int) -> list[tuple[floa
     ]
 
 
-def _leader_start_point(label: dict, total_length: int | None = None) -> tuple[float, float]:
-    """Choose a visually stable leader anchor on the label bbox perimeter."""
+def _leader_start_meta(label: dict, total_length: int | None) -> tuple[str, float, float, float, float] | None:
+    """
+    Return leader anchor metadata as (side, fixed_coord, lower, upper, preferred).
+
+    - side: one of "left", "right", "bottom", "top"
+    - fixed_coord: x for left/right, y for bottom/top
+    - lower/upper: movable coordinate bounds on the chosen edge
+    - preferred: preferred movable coordinate before clamping
+    """
+    if total_length is None:
+        return None
+    if "middle_x" not in label or "middle_y" not in label:
+        return None
     start_x = float(label.get("start_x", 0.0))
     start_y = float(label.get("start_y", 0.0))
-    if total_length is None:
-        return start_x, start_y
-    if "middle_x" not in label or "middle_y" not in label:
-        return start_x, start_y
     min_x, max_x = _label_x_bounds(label, minimum_margin=0.0)
     min_y, max_y = _label_y_bounds(label, total_length, minimum_margin=0.0)
     if (max_x - min_x) <= 1e-9 or (max_y - min_y) <= 1e-9:
-        return start_x, start_y
+        return None
 
     middle_x = float(label["middle_x"])
     middle_y = float(label["middle_y"])
@@ -177,14 +186,18 @@ def _leader_start_point(label: dict, total_length: int | None = None) -> tuple[f
     x_max_usable = max_x - corner_inset if (max_x - min_x) > (2.0 * corner_inset) else max_x
 
     # Horizontal labels look cleaner when leaders attach on the feature-facing side.
+    # Keep the attachment coordinate biased toward text anchor (`start_x/start_y`)
+    # so each leader visually maps back to its own label row.
+    anchor_x = float(label.get("start_x", start_x))
+    anchor_y = float(label.get("start_y", start_y))
     if middle_x >= max_x:
-        return max_x, min(max(middle_y, y_min_usable), y_max_usable)
+        return "right", max_x, y_min_usable, y_max_usable, anchor_y
     if middle_x <= min_x:
-        return min_x, min(max(middle_y, y_min_usable), y_max_usable)
+        return "left", min_x, y_min_usable, y_max_usable, anchor_y
     if middle_y >= max_y:
-        return min(max(middle_x, x_min_usable), x_max_usable), max_y
+        return "top", max_y, x_min_usable, x_max_usable, anchor_x
     if middle_y <= min_y:
-        return min(max(middle_x, x_min_usable), x_max_usable), min_y
+        return "bottom", min_y, x_min_usable, x_max_usable, anchor_x
 
     # Fallback (point inside bbox): attach to nearest edge.
     left_d = abs(middle_x - min_x)
@@ -193,12 +206,159 @@ def _leader_start_point(label: dict, total_length: int | None = None) -> tuple[f
     top_d = abs(max_y - middle_y)
     best = min((left_d, "left"), (right_d, "right"), (bottom_d, "bottom"), (top_d, "top"))[1]
     if best == "left":
-        return min_x, min(max(middle_y, y_min_usable), y_max_usable)
+        return "left", min_x, y_min_usable, y_max_usable, middle_y
     if best == "right":
-        return max_x, min(max(middle_y, y_min_usable), y_max_usable)
+        return "right", max_x, y_min_usable, y_max_usable, middle_y
     if best == "bottom":
-        return min(max(middle_x, x_min_usable), x_max_usable), min_y
-    return min(max(middle_x, x_min_usable), x_max_usable), max_y
+        return "bottom", min_y, x_min_usable, x_max_usable, middle_x
+    return "top", max_y, x_min_usable, x_max_usable, middle_x
+
+
+def _leader_start_point(label: dict, total_length: int | None = None) -> tuple[float, float]:
+    """Choose a visually stable leader anchor on the label bbox perimeter."""
+    start_x = float(label.get("start_x", 0.0))
+    start_y = float(label.get("start_y", 0.0))
+    meta = _leader_start_meta(label, total_length)
+    if meta is None:
+        return start_x, start_y
+    side, fixed_coord, lower, upper, preferred = meta
+    movable = min(max(float(preferred), float(lower)), float(upper))
+    if side in ("left", "right"):
+        return fixed_coord, movable
+    return movable, fixed_coord
+
+
+def _leader_start_group_score(group: list[dict], coords: list[float], side: str) -> tuple[int, int, float, float]:
+    """Score leader-start coordinates for one edge group."""
+    inversion_count = 0
+    for idx in range(len(coords)):
+        for jdx in range(idx + 1, len(coords)):
+            if coords[idx] > (coords[jdx] + 1e-9):
+                inversion_count += 1
+
+    close_pairs = 0
+    for idx in range(len(coords) - 1):
+        if (coords[idx + 1] - coords[idx]) < LEADER_START_PROXIMITY_EPS_PX:
+            close_pairs += 1
+
+    leader_sum = 0.0
+    preference_deviation = 0.0
+    for item, coord in zip(group, coords):
+        label = item["label"]
+        if side in ("left", "right"):
+            x = float(item["fixed"])
+            y = float(coord)
+        else:
+            x = float(coord)
+            y = float(item["fixed"])
+        leader_sum += math.hypot(x - float(label["middle_x"]), y - float(label["middle_y"]))
+        preference_deviation += abs(float(coord) - float(item["preferred"]))
+
+    return inversion_count, close_pairs, leader_sum, preference_deviation
+
+
+def _fit_monotonic_leader_coords(group: list[dict], min_gap: float) -> list[float] | None:
+    """Fit edge coordinates under bounds while enforcing monotonic order."""
+    if not group:
+        return []
+
+    coords = [min(max(float(item["preferred"]), float(item["lower"])), float(item["upper"])) for item in group]
+
+    for _ in range(max(3, len(coords) * 2)):
+        changed = False
+        for idx in range(1, len(coords)):
+            lower_bound = max(float(group[idx]["lower"]), coords[idx - 1] + min_gap)
+            if coords[idx] < lower_bound:
+                coords[idx] = lower_bound
+                changed = True
+            if coords[idx] > (float(group[idx]["upper"]) + 1e-9):
+                return None
+
+        for idx in range(len(coords) - 2, -1, -1):
+            upper_bound = min(float(group[idx]["upper"]), coords[idx + 1] - min_gap)
+            if coords[idx] > upper_bound:
+                coords[idx] = upper_bound
+                changed = True
+            if coords[idx] < (float(group[idx]["lower"]) - 1e-9):
+                return None
+
+        if not changed:
+            break
+
+    for idx, coord in enumerate(coords):
+        if coord < (float(group[idx]["lower"]) - 1e-9) or coord > (float(group[idx]["upper"]) + 1e-9):
+            return None
+        if idx > 0 and coord < (coords[idx - 1] + min_gap - 1e-9):
+            return None
+    return coords
+
+
+def _refine_leader_start_points(labels: list[dict], total_length: int) -> list[dict]:
+    """
+    Improve readability by reducing leader-end inversions and excessive crowding.
+
+    The optimization runs per bbox edge and keeps each anchor on the same edge.
+    """
+    if len(labels) < 2:
+        return labels
+
+    edge_groups: dict[str, list[dict]] = {"left": [], "right": [], "bottom": [], "top": []}
+    for label in labels:
+        meta = _leader_start_meta(label, total_length)
+        if meta is None:
+            continue
+        side, fixed, lower, upper, preferred = meta
+        if side not in edge_groups:
+            continue
+        if side in ("left", "right"):
+            current_coord = float(label.get("leader_start_y", label.get("start_y", 0.0)))
+            order_coord = float(label.get("middle_y", 0.0))
+        else:
+            current_coord = float(label.get("leader_start_x", label.get("start_x", 0.0)))
+            order_coord = float(label.get("middle_x", 0.0))
+
+        edge_groups[side].append(
+            {
+                "label": label,
+                "fixed": fixed,
+                "lower": lower,
+                "upper": upper,
+                "preferred": preferred,
+                "current": current_coord,
+                "order": order_coord,
+            }
+        )
+
+    for side, group in edge_groups.items():
+        if len(group) < 2:
+            continue
+        group.sort(key=lambda item: float(item["order"]))
+        current_coords = [float(item["current"]) for item in group]
+        current_score = _leader_start_group_score(group, current_coords, side)
+        best_coords = current_coords
+        best_score = current_score
+
+        for min_gap in LEADER_START_ORDER_GAP_CANDIDATES:
+            candidate_coords = _fit_monotonic_leader_coords(group, float(min_gap))
+            if candidate_coords is None:
+                continue
+            candidate_score = _leader_start_group_score(group, candidate_coords, side)
+            if candidate_score < best_score:
+                best_coords = candidate_coords
+                best_score = candidate_score
+
+        if best_score >= current_score:
+            continue
+
+        for item, coord in zip(group, best_coords):
+            label = item["label"]
+            if side in ("left", "right"):
+                label["leader_start_x"] = float(item["fixed"])
+                label["leader_start_y"] = float(coord)
+            else:
+                label["leader_start_x"] = float(coord)
+                label["leader_start_y"] = float(item["fixed"])
+    return labels
 
 
 def _assign_leader_start_points(labels: list[dict], total_length: int) -> list[dict]:
@@ -207,7 +367,7 @@ def _assign_leader_start_points(labels: list[dict], total_length: int) -> list[d
         leader_x, leader_y = _leader_start_point(label, total_length)
         label["leader_start_x"] = leader_x
         label["leader_start_y"] = leader_y
-    return labels
+    return _refine_leader_start_points(labels, total_length)
 
 
 def _leader_length_px(label: dict, total_length: int | None = None) -> float:

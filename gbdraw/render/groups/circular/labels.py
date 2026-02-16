@@ -107,6 +107,7 @@ class LabelsGroup:
                 end=(leader_start_x, leader_start_y),
                 stroke=self.label_stroke_color,
                 stroke_width=self.label_stroke_width,
+                stroke_linecap="round",
             )
             group.add(line_path)
             line_path2 = Line(
@@ -114,6 +115,7 @@ class LabelsGroup:
                 end=(label["feature_middle_x"], label["feature_middle_y"]),
                 stroke=self.label_stroke_color,
                 stroke_width=self.label_stroke_width,
+                stroke_linecap="round",
             )
             group.add(line_path2)
             # Label text after lines (so it appears on top)
