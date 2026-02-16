@@ -62,23 +62,170 @@ def _count_label_overlaps(labels: list[dict], total_length: int, use_min_gap: bo
     return overlap_count
 
 
-def _leader_length_px(label: dict) -> float:
-    """Return leader length from label anchor to text anchor in pixels."""
+def _label_y_bounds(label: dict, total_len: int, minimum_margin: float) -> tuple[float, float]:
+    """Return (min_y, max_y) for label bbox using the same baseline model as rendering."""
+    label_start_y = float(label["start_y"])
+    label_angle = (360.0 * (float(label["middle"]) / total_len)) % 360.0
+    label_height = float(label["height_px"])
+    margin_half = 0.5 * float(minimum_margin)
+
+    if label.get("is_inner", False) is False:
+        if 0 <= label_angle < 10:  # baseline = text-after-edge
+            max_y = label_start_y
+            min_y = label_start_y - 1.0 * label_height - margin_half
+        elif 10 <= label_angle < 170:  # baseline = middle
+            max_y = label_start_y + 0.5 * label_height + margin_half
+            min_y = label_start_y - 0.5 * label_height - margin_half
+        elif 170 <= label_angle < 190:  # baseline = hanging
+            max_y = label_start_y + 1.0 * label_height + margin_half
+            min_y = label_start_y - margin_half
+        elif 190 <= label_angle < 350:  # baseline = middle
+            max_y = label_start_y + 0.5 * label_height + margin_half
+            min_y = label_start_y - 0.5 * label_height - margin_half
+        else:  # baseline = text-after-edge
+            max_y = label_start_y
+            min_y = label_start_y - 1.0 * label_height - margin_half
+    else:
+        if 0 <= label_angle < 10:  # baseline = hanging
+            max_y = label_start_y + 1.0 * label_height + margin_half
+            min_y = label_start_y
+        elif 10 <= label_angle < 170:  # baseline = middle
+            max_y = label_start_y + 0.5 * label_height + margin_half
+            min_y = label_start_y - 0.5 * label_height - margin_half
+        elif 170 <= label_angle < 190:  # baseline = middle
+            max_y = label_start_y + 0.5 * label_height + margin_half
+            min_y = label_start_y - 0.5 * label_height - margin_half
+        elif 190 <= label_angle < 350:  # baseline = middle
+            max_y = label_start_y + 0.5 * label_height + margin_half
+            min_y = label_start_y - 0.5 * label_height - margin_half
+        else:  # baseline = hanging
+            max_y = label_start_y + 1.0 * label_height + margin_half
+            min_y = label_start_y
+    return min_y, max_y
+
+
+def _label_x_bounds(label: dict, minimum_margin: float) -> tuple[float, float]:
+    """Return (min_x, max_x) for label bbox using current text-anchor semantics."""
+    label_start_x = float(label["start_x"])
+    label_width = float(label["width_px"])
+    margin_half = 0.5 * float(minimum_margin)
+
+    if label.get("is_inner", False) is False:
+        if label_start_x > 0:
+            max_x = label_start_x + label_width + margin_half
+            min_x = label_start_x - margin_half
+        else:
+            max_x = label_start_x + margin_half
+            min_x = label_start_x - label_width - margin_half
+    else:
+        if label_start_x > 0:
+            max_x = label_start_x + margin_half
+            min_x = label_start_x - label_width - margin_half
+        else:
+            max_x = label_start_x + label_width + margin_half
+            min_x = label_start_x - margin_half
+    return min_x, max_x
+
+
+def _leader_anchor_candidates(label: dict, total_length: int) -> list[tuple[float, float]]:
+    """
+    Return discrete candidate anchor points on the label bbox perimeter:
+    4 corners + 4 edge midpoints.
+    """
     if "start_x" not in label or "start_y" not in label:
-        return 0.0
+        return []
+    if "width_px" not in label or "height_px" not in label:
+        return []
+
+    min_x, max_x = _label_x_bounds(label, minimum_margin=0.0)
+    min_y, max_y = _label_y_bounds(label, total_length, minimum_margin=0.0)
+    mid_x = 0.5 * (min_x + max_x)
+    mid_y = 0.5 * (min_y + max_y)
+    return [
+        (min_x, min_y),
+        (min_x, max_y),
+        (max_x, min_y),
+        (max_x, max_y),
+        (mid_x, min_y),
+        (mid_x, max_y),
+        (min_x, mid_y),
+        (max_x, mid_y),
+    ]
+
+
+def _leader_start_point(label: dict, total_length: int | None = None) -> tuple[float, float]:
+    """Choose a visually stable leader anchor on the label bbox perimeter."""
+    start_x = float(label.get("start_x", 0.0))
+    start_y = float(label.get("start_y", 0.0))
+    if total_length is None:
+        return start_x, start_y
+    if "middle_x" not in label or "middle_y" not in label:
+        return start_x, start_y
+    min_x, max_x = _label_x_bounds(label, minimum_margin=0.0)
+    min_y, max_y = _label_y_bounds(label, total_length, minimum_margin=0.0)
+    if (max_x - min_x) <= 1e-9 or (max_y - min_y) <= 1e-9:
+        return start_x, start_y
+
+    middle_x = float(label["middle_x"])
+    middle_y = float(label["middle_y"])
+
+    # Avoid snapping exactly to corners; corner hits look noisy for dense labels.
+    corner_inset = 0.75
+    y_min_usable = min_y + corner_inset if (max_y - min_y) > (2.0 * corner_inset) else min_y
+    y_max_usable = max_y - corner_inset if (max_y - min_y) > (2.0 * corner_inset) else max_y
+    x_min_usable = min_x + corner_inset if (max_x - min_x) > (2.0 * corner_inset) else min_x
+    x_max_usable = max_x - corner_inset if (max_x - min_x) > (2.0 * corner_inset) else max_x
+
+    # Horizontal labels look cleaner when leaders attach on the feature-facing side.
+    if middle_x >= max_x:
+        return max_x, min(max(middle_y, y_min_usable), y_max_usable)
+    if middle_x <= min_x:
+        return min_x, min(max(middle_y, y_min_usable), y_max_usable)
+    if middle_y >= max_y:
+        return min(max(middle_x, x_min_usable), x_max_usable), max_y
+    if middle_y <= min_y:
+        return min(max(middle_x, x_min_usable), x_max_usable), min_y
+
+    # Fallback (point inside bbox): attach to nearest edge.
+    left_d = abs(middle_x - min_x)
+    right_d = abs(max_x - middle_x)
+    bottom_d = abs(middle_y - min_y)
+    top_d = abs(max_y - middle_y)
+    best = min((left_d, "left"), (right_d, "right"), (bottom_d, "bottom"), (top_d, "top"))[1]
+    if best == "left":
+        return min_x, min(max(middle_y, y_min_usable), y_max_usable)
+    if best == "right":
+        return max_x, min(max(middle_y, y_min_usable), y_max_usable)
+    if best == "bottom":
+        return min(max(middle_x, x_min_usable), x_max_usable), min_y
+    return min(max(middle_x, x_min_usable), x_max_usable), max_y
+
+
+def _assign_leader_start_points(labels: list[dict], total_length: int) -> list[dict]:
+    """Populate `leader_start_x/y` used for drawing the first leader segment."""
+    for label in labels:
+        leader_x, leader_y = _leader_start_point(label, total_length)
+        label["leader_start_x"] = leader_x
+        label["leader_start_y"] = leader_y
+    return labels
+
+
+def _leader_length_px(label: dict, total_length: int | None = None) -> float:
+    """Return leader length from label middle anchor to chosen label-side leader anchor."""
     if "middle_x" not in label or "middle_y" not in label:
         return 0.0
+    leader_start_x, leader_start_y = _leader_start_point(label, total_length)
     return math.hypot(
-        float(label["start_x"]) - float(label["middle_x"]),
-        float(label["start_y"]) - float(label["middle_y"]),
+        leader_start_x - float(label["middle_x"]),
+        leader_start_y - float(label["middle_y"]),
     )
 
 
-def _leader_distance_score(labels: list[dict]) -> tuple[float, float]:
+def _leader_distance_score(labels: list[dict], total_length: int | None = None) -> tuple[float, float]:
     """Return (sum_length, max_length) for leader segments."""
     if not labels:
         return 0.0, 0.0
-    leader_lengths = [_leader_length_px(label) for label in labels]
+    leader_lengths = [_leader_length_px(label, total_length) for label in labels]
     return sum(leader_lengths), max(leader_lengths)
 
 
@@ -114,7 +261,7 @@ def _placement_score(labels: list[dict], total_length: int) -> tuple[int, int, i
     overlap_plain = _count_label_overlaps(labels, total_length, use_min_gap=False)
     overlap_min_gap = _count_label_overlaps(labels, total_length, use_min_gap=True)
     hemisphere_mismatch_count, hemisphere_mismatch_weight = _hemisphere_mismatch_metrics(labels, total_length)
-    leader_sum, leader_max = _leader_distance_score(labels)
+    leader_sum, leader_max = _leader_distance_score(labels, total_length)
     sum_delta, max_delta = _angle_deviation_score(labels, total_length)
     return (
         overlap_plain,
@@ -129,75 +276,8 @@ def _placement_score(labels: list[dict], total_length: int) -> tuple[int, int, i
 
 
 def y_overlap(label1, label2, total_len, minimum_margin):
-    # Adjusted to consider absolute values for y coordinates
-    label1_start_y = label1["start_y"]
-    label2_start_y = label2["start_y"]
-    label1_angle = (360.0 * (label1["middle"] / total_len)) % 360
-    label2_angle = (360.0 * (label2["middle"] / total_len)) % 360
-    if label1["is_inner"] is False:
-        if 0 <= label1_angle < 10:  # baseline_value = "text-after-edge"
-            max_y1 = label1_start_y
-            min_y1 = label1_start_y - 1.0 * label1["height_px"] - 0.5 * minimum_margin
-        elif 10 <= label1_angle < 170:  # baseline_value = "middle"
-            max_y1 = label1_start_y + 0.5 * label1["height_px"] + 0.5 * minimum_margin
-            min_y1 = label1_start_y - 0.5 * label1["height_px"] - 0.5 * minimum_margin
-        elif 170 <= label1_angle < 190:  # baseline_value = "hanging"
-            max_y1 = label1_start_y + 1.0 * label1["height_px"] + 0.5 * minimum_margin
-            min_y1 = label1_start_y - 0.5 * minimum_margin
-        elif 190 <= label1_angle < 350:  # baseline_value = "middle"
-            max_y1 = label1_start_y + 0.5 * label1["height_px"] + 0.5 * minimum_margin
-            min_y1 = label1_start_y - 0.5 * label1["height_px"] - 0.5 * minimum_margin
-        else:  # baseline_value = "text-after-edge"
-            max_y1 = label1_start_y
-            min_y1 = label1_start_y - 1.0 * label1["height_px"] - 0.5 * minimum_margin
-    else:
-        if 0 <= label1_angle < 10:  # baseline_value = "hanging"
-            max_y1 = label1_start_y + 1.0 * label1["height_px"] + 0.5 * minimum_margin
-            min_y1 = label1_start_y
-        elif 10 <= label1_angle < 170:  # baseline_value = "middle"
-            max_y1 = label1_start_y + 0.5 * label1["height_px"] + 0.5 * minimum_margin
-            min_y1 = label1_start_y - 0.5 * label1["height_px"] - 0.5 * minimum_margin
-        elif 170 <= label1_angle < 190:  # baseline_value = "middle"
-            max_y1 = label1_start_y + 0.5 * label1["height_px"] + 0.5 * minimum_margin
-            min_y1 = label1_start_y - 0.5 * label1["height_px"] - 0.5 * minimum_margin
-        elif 190 <= label1_angle < 350:  # baseline_value = "middle"
-            max_y1 = label1_start_y + 0.5 * label1["height_px"] + 0.5 * minimum_margin
-            min_y1 = label1_start_y - 0.5 * label1["height_px"] - 0.5 * minimum_margin
-        else:  # baseline_value = "hanging"
-            max_y1 = label1_start_y
-            min_y1 = label1_start_y - 1.0 * label1["height_px"] - 0.5 * minimum_margin
-    if label2["is_inner"] is False:
-        if 0 <= label2_angle < 10:  # baseline_value = "text-after-edge"
-            max_y2 = label2_start_y
-            min_y2 = label2_start_y - 1.0 * label2["height_px"] - 0.5 * minimum_margin
-        elif 10 <= label2_angle < 170:  # baseline_value = "middle"
-            max_y2 = label2_start_y + 0.5 * label2["height_px"] + 0.5 * minimum_margin
-            min_y2 = label2_start_y - 0.5 * label2["height_px"] - 0.5 * minimum_margin
-        elif 170 <= label2_angle < 190:  # baseline_value = "hanging"
-            max_y2 = label2_start_y + 1.0 * label2["height_px"] + 0.5 * minimum_margin
-            min_y2 = label2_start_y - 0.5 * minimum_margin
-        elif 190 <= label2_angle < 350:  # baseline_value = "middle"
-            max_y2 = label2_start_y + 0.5 * label2["height_px"] + 0.5 * minimum_margin
-            min_y2 = label2_start_y - 0.5 * label2["height_px"] - 0.5 * minimum_margin
-        else:  # baseline_value = "text-after-edge"
-            max_y2 = label2_start_y
-            min_y2 = label2_start_y - 1.0 * label2["height_px"] - 0.5 * minimum_margin
-    else:
-        if 0 <= label2_angle < 10:  # baseline_value = "hanging"
-            max_y2 = label2_start_y + 1.0 * label2["height_px"] + 0.5 * minimum_margin
-            min_y2 = label2_start_y
-        elif 10 <= label2_angle < 170:  # baseline_value = "middle"
-            max_y2 = label2_start_y + 0.5 * label2["height_px"] + 0.5 * minimum_margin
-            min_y2 = label2_start_y - 0.5 * label2["height_px"] - 0.5 * minimum_margin
-        elif 170 <= label2_angle < 190:  # baseline_value = "middle"
-            max_y2 = label2_start_y + 0.5 * label2["height_px"] + 0.5 * minimum_margin
-            min_y2 = label2_start_y - 0.5 * label2["height_px"] - 0.5 * minimum_margin
-        elif 190 <= label2_angle < 350:  # baseline_value = "middle"
-            max_y2 = label2_start_y + 0.5 * label2["height_px"] + 0.5 * minimum_margin
-            min_y2 = label2_start_y - 0.5 * label2["height_px"] - 0.5 * minimum_margin
-        else:  # baseline_value = "hanging"
-            max_y2 = label2_start_y + 1.0 * label2["height_px"] + 0.5 * minimum_margin
-            min_y2 = label2_start_y
+    min_y1, max_y1 = _label_y_bounds(label1, total_len, minimum_margin)
+    min_y2, max_y2 = _label_y_bounds(label2, total_len, minimum_margin)
     if min_y1 < min_y2:
         return max_y1 >= min_y2
     else:
@@ -205,52 +285,12 @@ def y_overlap(label1, label2, total_len, minimum_margin):
 
 
 def x_overlap(label1, label2, minimum_margin=1.0):
-    # Adjusted to directly return the evaluated condition
-
-    if label1["is_inner"] is False:
-        if label1["start_x"] > 0:
-            max_x1 = label1["start_x"] + label1["width_px"] + 0.5 * minimum_margin
-            min_x1 = label1["start_x"] - 0.5 * minimum_margin
-        else:
-            max_x1 = label1["start_x"] + 0.5 * minimum_margin
-            min_x1 = label1["start_x"] - label1["width_px"] - 0.5 * minimum_margin
-    else:
-        if label1["start_x"] > 0:
-            max_x1 = label1["start_x"] + 0.5 * minimum_margin
-            min_x1 = label1["start_x"] - label1["width_px"] - 0.5 * minimum_margin
-        else:
-            max_x1 = label1["start_x"] + label1["width_px"] + 0.5 * minimum_margin
-            min_x1 = label1["start_x"] - 0.5 * minimum_margin
-    if label2["is_inner"] is False:
-        if label2["start_x"] > 0:
-            max_x2 = label2["start_x"] + label2["width_px"] + 0.5 * minimum_margin
-            min_x2 = label2["start_x"] - 0.5 * minimum_margin
-        else:
-            max_x2 = label2["start_x"] + 0.5 * minimum_margin
-            min_x2 = label2["start_x"] - label2["width_px"] - 0.5 * minimum_margin
-    else:
-        if label2["start_x"] > 0:
-            max_x2 = label2["start_x"] + 0.5 * minimum_margin
-            min_x2 = label2["start_x"] - label2["width_px"] - 0.5 * minimum_margin
-        else:
-            max_x2 = label2["start_x"] + label2["width_px"] + 0.5 * minimum_margin
-            min_x2 = label2["start_x"] - 0.5 * minimum_margin
+    min_x1, max_x1 = _label_x_bounds(label1, minimum_margin)
+    min_x2, max_x2 = _label_x_bounds(label2, minimum_margin)
     if min_x1 < min_x2:
-        if max_x1 >= min_x2:
-            return True
-        # when nested also true
-        elif max_x1 >= max_x2:
-            return True
-        else:
-            return False
+        return max_x1 >= min_x2
     else:
-        if max_x2 >= min_x1:
-            return True
-        # when nested also true
-        elif max_x2 >= max_x1:
-            return True
-        else:
-            return False
+        return max_x2 >= min_x1
 
 
 def calculate_angle_degrees(
@@ -1052,7 +1092,7 @@ def improved_label_placement_fc(
                 current_overlaps = overlap_count(label_idx, full_scan=full_scan_checks)
                 current_target_delta = abs(current_angle - target_angle)
                 current_middle_penalty = middle_proximity_penalty(label_idx, current_angle)
-                current_leader_length = _leader_length_px(label)
+                current_leader_length = _leader_length_px(label, total_length)
 
                 if current_overlaps == 0 and current_middle_penalty == 0 and current_target_delta == 0:
                     continue
@@ -1108,7 +1148,7 @@ def improved_label_placement_fc(
                         candidate_target_delta = abs(candidate_angle - target_angle)
                         candidate_move = abs(candidate_angle - current_angle)
                         candidate_middle_penalty = middle_proximity_penalty(label_idx, candidate_angle)
-                        candidate_leader_length = _leader_length_px(label_copy)
+                        candidate_leader_length = _leader_length_px(label_copy, total_length)
                         candidate_score = (
                             candidate_overlaps,
                             anchor_weight * candidate_target_delta + proximity_penalty_factor * candidate_middle_penalty,
@@ -1679,7 +1719,7 @@ def _polish_total_leader_distance(
         DENSE_DISTANCE_COMPACTION_MIN_GAP_RELAX if allow_min_gap_relaxation else 0
     )
     hemisphere_mismatch_count, _ = _hemisphere_mismatch_metrics(labels, total_length)
-    leader_sum, _ = _leader_distance_score(labels)
+    leader_sum, _ = _leader_distance_score(labels, total_length)
     target_delta_sum = _total_target_delta()
     best_score = (
         plain_overlaps,
@@ -1693,7 +1733,7 @@ def _polish_total_leader_distance(
         pass_changed = False
         label_order = sorted(
             range(len(labels)),
-            key=lambda label_idx: _leader_length_px(labels[label_idx]),
+            key=lambda label_idx: _leader_length_px(labels[label_idx], total_length),
             reverse=True,
         )
 
@@ -1725,7 +1765,7 @@ def _polish_total_leader_distance(
 
             current_plain_for_label = _label_overlap_count(label_idx, label, use_min_gap=False)
             current_min_gap_for_label = _label_overlap_count(label_idx, label, use_min_gap=True)
-            current_leader = _leader_length_px(label)
+            current_leader = _leader_length_px(label, total_length)
             current_target_delta = abs(current_angle - target_angle)
             original_start_x = float(label["start_x"])
             original_start_y = float(label["start_y"])
@@ -1759,7 +1799,7 @@ def _polish_total_leader_distance(
                 if candidate_min_gap_total > max_allowed_min_gap_overlaps:
                     continue
 
-                candidate_leader = _leader_length_px(candidate_label)
+                candidate_leader = _leader_length_px(candidate_label, total_length)
                 candidate_leader_sum = leader_sum - current_leader + candidate_leader
                 candidate_target_delta = abs(candidate_angle - target_angle)
                 candidate_target_delta_sum = target_delta_sum - current_target_delta + candidate_target_delta
@@ -1918,7 +1958,7 @@ def rearrange_labels_fc(
         )
         legacy_score = _placement_score(candidate_legacy, total_length)
         if legacy_score[0] == 0 and legacy_score[2] == 0:
-            return candidate_legacy
+            return _assign_leader_start_points(candidate_legacy, total_length)
 
     # Candidate A: current placement pipeline.
     candidate_current = [label.copy() for label in sorted_labels]
@@ -1984,7 +2024,7 @@ def rearrange_labels_fc(
         if legacy_score < best_score:
             best_labels = candidate_legacy
 
-    return best_labels
+    return _assign_leader_start_points(best_labels, total_length)
 
 
 def prepare_label_list(

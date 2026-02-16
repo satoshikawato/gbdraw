@@ -68,7 +68,10 @@ def _count_overlaps_with_min_gap(labels: list[dict], total_length: int) -> int:
 
 def _sum_leader_length(labels: list[dict]) -> float:
     return sum(
-        math.hypot(label["start_x"] - label["middle_x"], label["start_y"] - label["middle_y"])
+        math.hypot(
+            float(label.get("leader_start_x", label["start_x"])) - float(label["middle_x"]),
+            float(label.get("leader_start_y", label["start_y"])) - float(label["middle_y"]),
+        )
         for label in labels
     )
 
@@ -793,19 +796,46 @@ def test_hmmtdna_font22_labels_remain_close_without_overlaps() -> None:
     assert max_target_delta <= 30.0
 
     max_leader_length = max(
-        math.hypot(label["start_x"] - label["middle_x"], label["start_y"] - label["middle_y"])
+        math.hypot(
+            float(label.get("leader_start_x", label["start_x"])) - float(label["middle_x"]),
+            float(label.get("leader_start_y", label["start_y"])) - float(label["middle_y"]),
+        )
         for label in external_labels
     )
     assert max_leader_length <= 220.0
     assert _sum_leader_length(external_labels) <= 1764.0
 
     trna_lys_lengths = [
-        math.hypot(label["start_x"] - label["middle_x"], label["start_y"] - label["middle_y"])
+        math.hypot(
+            float(label.get("leader_start_x", label["start_x"])) - float(label["middle_x"]),
+            float(label.get("leader_start_y", label["start_y"])) - float(label["middle_y"]),
+        )
         for label in external_labels
         if label.get("label_text") == "tRNA-Lys"
     ]
     assert trna_lys_lengths
     assert min(trna_lys_lengths) <= 145.0
+
+
+def test_leader_start_lies_on_bbox_perimeter_without_corner_snap() -> None:
+    external_labels, total_length = _load_hmmtdna_external_labels(label_font_size=22.0)
+    assert external_labels
+
+    for label in external_labels:
+        assert "leader_start_x" in label
+        assert "leader_start_y" in label
+
+        leader_x = float(label["leader_start_x"])
+        leader_y = float(label["leader_start_y"])
+        min_x, max_x = circular_labels_module._label_x_bounds(label, minimum_margin=0.0)
+        min_y, max_y = circular_labels_module._label_y_bounds(label, total_length, minimum_margin=0.0)
+
+        assert min_x - 1e-9 <= leader_x <= max_x + 1e-9
+        assert min_y - 1e-9 <= leader_y <= max_y + 1e-9
+
+        on_vertical_edge = math.isclose(leader_x, min_x, abs_tol=1.0) or math.isclose(leader_x, max_x, abs_tol=1.0)
+        on_horizontal_edge = math.isclose(leader_y, min_y, abs_tol=1.0) or math.isclose(leader_y, max_y, abs_tol=1.0)
+        assert on_vertical_edge or on_horizontal_edge
 
 
 def test_circular_assembly_reuses_precalculated_labels_once() -> None:
