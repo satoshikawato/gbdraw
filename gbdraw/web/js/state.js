@@ -181,8 +181,10 @@ const adv = reactive({
   legend_box_size: null,
   legend_font_size: null,
 
-  // Linear Specific
+  // Shared / overlap handling
   resolve_overlaps: false,
+
+  // Linear Specific
   feature_height: null,
   gc_height: null,
   comparison_height: null,

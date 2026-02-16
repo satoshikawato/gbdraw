@@ -332,6 +332,10 @@
                                     <span class="inline-flex items-center gap-1">Inner Labels <help-tip text="Enable labels inside the circle. Automatically suppresses GC content/skew to avoid overlap."></help-tip></span>
                                 </label>
                                 <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox">
+                                    <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Circular mode: effective only when Separate Strands is OFF. If Separate Strands is ON, this option is ignored. Track Layout still applies: Tuckin shifts overlap tracks inward, Middle/Spreadout shift them outward."></help-tip></span>
+                                </label>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                     <input type="checkbox" v-model="form.suppress_gc" class="form-checkbox">
                                     <span class="inline-flex items-center gap-1">Hide GC <help-tip text="Suppress the GC content track."></help-tip></span>
                                 </label>
@@ -339,6 +343,9 @@
                                     <input type="checkbox" v-model="form.suppress_skew" class="form-checkbox">
                                     <span class="inline-flex items-center gap-1">Hide Skew <help-tip text="Suppress the GC skew track."></help-tip></span>
                                 </label>
+                                <div v-if="adv.resolve_overlaps && form.separate_strands" class="col-span-2 text-[10px] text-amber-700 leading-tight">
+                                    Resolve Overlaps is ignored when Separate Strands is enabled.
+                                </div>
                             </template>
                             
                             <template v-if="mode === 'linear'">

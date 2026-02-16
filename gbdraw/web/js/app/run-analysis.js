@@ -252,6 +252,7 @@ json.dumps({
 
       if (adv.legend_box_size) args.push('--legend_box_size', adv.legend_box_size);
       if (adv.legend_font_size) args.push('--legend_font_size', adv.legend_font_size);
+      if (adv.resolve_overlaps) args.push('--resolve_overlaps');
 
       let dContent = '';
       for (const [k, v] of Object.entries(currentColors.value)) dContent += `${k}\t${v}\n`;
@@ -346,7 +347,6 @@ json.dumps({
           args.push('--label_rotation', adv.label_rotation);
         }
 
-        if (adv.resolve_overlaps) args.push('--resolve_overlaps');
         if (adv.feature_height) args.push('--feature_height', adv.feature_height);
         if (adv.gc_height) args.push('--gc_height', adv.gc_height);
         if (adv.comparison_height) args.push('--comparison_height', adv.comparison_height);
