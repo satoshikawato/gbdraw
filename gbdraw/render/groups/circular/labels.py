@@ -99,19 +99,26 @@ class LabelsGroup:
         for label in label_list:
             if label.get("is_embedded"):
                 continue
+            leader_start_x = label.get("leader_start_x", label["start_x"])
+            leader_start_y = label.get("leader_start_y", label["start_y"])
             # Leader lines first (so they appear behind features)
             line_path = Line(
                 start=(label["middle_x"], label["middle_y"]),
-                end=(label["start_x"], label["start_y"]),
+                end=(leader_start_x, leader_start_y),
                 stroke=self.label_stroke_color,
                 stroke_width=self.label_stroke_width,
+                stroke_linecap="round",
             )
             group.add(line_path)
             line_path2 = Line(
                 start=(label["middle_x"], label["middle_y"]),
-                end=(label["feature_middle_x"], label["feature_middle_y"]),
+                end=(
+                    label.get("feature_anchor_x", label["feature_middle_x"]),
+                    label.get("feature_anchor_y", label["feature_middle_y"]),
+                ),
                 stroke=self.label_stroke_color,
                 stroke_width=self.label_stroke_width,
+                stroke_linecap="round",
             )
             group.add(line_path2)
             # Label text after lines (so it appears on top)

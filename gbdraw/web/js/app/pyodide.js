@@ -1,4 +1,4 @@
-import { GBDRAW_WHEEL_NAME } from '../config.js';
+import { GBDRAW_WHEEL_NAME, GBDRAW_WHEEL_CACHE_BUST } from '../config.js';
 import { PYTHON_HELPERS } from './python-helpers.js';
 
 export const createPyodideManager = ({ state }) => {
@@ -18,7 +18,11 @@ export const createPyodideManager = ({ state }) => {
   };
 
   const ensureWheelAvailable = async () => {
-    const wheelUrl = new URL(GBDRAW_WHEEL_NAME, window.location.href).toString();
+    const wheelBaseUrl = new URL(GBDRAW_WHEEL_NAME, window.location.href);
+    if (GBDRAW_WHEEL_CACHE_BUST) {
+      wheelBaseUrl.searchParams.set('v', GBDRAW_WHEEL_CACHE_BUST);
+    }
+    const wheelUrl = wheelBaseUrl.toString();
     const response = await fetch(wheelUrl, { cache: 'no-store' });
     if (!response.ok) {
       throw new Error(

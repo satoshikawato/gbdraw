@@ -26,7 +26,13 @@ from ...configurators import (  # type: ignore[reportMissingImports]
 from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
-from ...labels.circular import minimum_bbox_gap_px, prepare_label_list, x_overlap, y_overlap  # type: ignore[reportMissingImports]
+from ...labels.circular import (  # type: ignore[reportMissingImports]
+    assign_leader_start_points,
+    minimum_bbox_gap_px,
+    prepare_label_list,
+    x_overlap,
+    y_overlap,
+)
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
 from ...legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
@@ -52,6 +58,7 @@ MAX_LEGEND_SHIFT_STEPS = 60
 CANVAS_EXPAND_STEP_PX = 32.0
 MAX_CANVAS_EXPAND_STEPS = 24
 MIN_LABEL_ORDER_GAP_RAD = 1e-4
+LABEL_CANVAS_PADDING_PX = 8.0
 
 
 def _sync_canvas_viewbox(canvas: Drawing, canvas_config: CircularCanvasConfigurator) -> None:
@@ -154,6 +161,74 @@ def _label_bbox_on_canvas(
         max_x + float(canvas_config.offset_x),
         max_y + float(canvas_config.offset_y),
     )
+
+
+def _external_label_bounds_on_canvas(
+    labels: list[dict[str, Any]],
+    total_length: int,
+    canvas_config: CircularCanvasConfigurator,
+    *,
+    margin_px: float = LEGEND_LABEL_MARGIN_PX,
+) -> tuple[float, float, float, float] | None:
+    """Return bounds of all non-embedded labels in canvas coordinates."""
+    min_x: float | None = None
+    min_y: float | None = None
+    max_x: float | None = None
+    max_y: float | None = None
+
+    for label in labels:
+        if label.get("is_embedded"):
+            continue
+        box_min_x, box_min_y, box_max_x, box_max_y = _label_bbox_on_canvas(
+            label,
+            total_length,
+            canvas_config,
+            margin_px=margin_px,
+        )
+        min_x = box_min_x if min_x is None else min(min_x, box_min_x)
+        min_y = box_min_y if min_y is None else min(min_y, box_min_y)
+        max_x = box_max_x if max_x is None else max(max_x, box_max_x)
+        max_y = box_max_y if max_y is None else max(max_y, box_max_y)
+
+    if min_x is None or min_y is None or max_x is None or max_y is None:
+        return None
+    return min_x, min_y, max_x, max_y
+
+
+def _expand_canvas_to_fit_external_labels(
+    labels: list[dict[str, Any]],
+    total_length: int,
+    canvas_config: CircularCanvasConfigurator,
+    *,
+    padding_px: float = LABEL_CANVAS_PADDING_PX,
+) -> bool:
+    """Expand canvas so all non-embedded labels are inside with padding."""
+    bounds = _external_label_bounds_on_canvas(labels, total_length, canvas_config)
+    if bounds is None:
+        return False
+
+    total_width = float(canvas_config.total_width)
+    total_height = float(canvas_config.total_height)
+
+    grow_left = max(0.0, float(padding_px) - float(bounds[0]))
+    grow_top = max(0.0, float(padding_px) - float(bounds[1]))
+    grow_right = max(0.0, float(bounds[2]) - (total_width - float(padding_px)))
+    grow_bottom = max(0.0, float(bounds[3]) - (total_height - float(padding_px)))
+
+    if grow_left <= 1e-6 and grow_top <= 1e-6 and grow_right <= 1e-6 and grow_bottom <= 1e-6:
+        return False
+
+    canvas_config.total_width = total_width + grow_left + grow_right
+    canvas_config.total_height = total_height + grow_top + grow_bottom
+    canvas_config.offset_x = float(canvas_config.offset_x) + grow_left
+    canvas_config.offset_y = float(canvas_config.offset_y) + grow_top
+
+    if hasattr(canvas_config, "legend_offset_x"):
+        canvas_config.legend_offset_x = float(canvas_config.legend_offset_x) + grow_left
+    if hasattr(canvas_config, "legend_offset_y"):
+        canvas_config.legend_offset_y = float(canvas_config.legend_offset_y) + grow_top
+
+    return True
 
 
 def _legend_collision_indices(
@@ -673,6 +748,15 @@ def add_record_on_circular_canvas(
             len(gb_record.seq),
             canvas_config,
             legend_config,
+        )
+        assign_leader_start_points(
+            [label for label in precalculated_labels if not label.get("is_embedded")],
+            len(gb_record.seq),
+        )
+        _expand_canvas_to_fit_external_labels(
+            precalculated_labels,
+            len(gb_record.seq),
+            canvas_config,
         )
         _sync_canvas_viewbox(canvas, canvas_config)
 

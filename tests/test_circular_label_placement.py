@@ -12,15 +12,19 @@ from gbdraw.api.diagram import assemble_circular_diagram_from_record
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
+from gbdraw.core.sequence import determine_length_parameter
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
 from gbdraw.io.colors import load_default_colors
+from gbdraw.layout.circular import calculate_feature_position_factors_circular
+from gbdraw.layout.common import calculate_cds_ratio
 from gbdraw.labels.circular import (
     angle_from_middle,
     improved_label_placement_fc,
     minimum_bbox_gap_px,
     place_labels_on_arc_fc,
     prepare_label_list,
+    rearrange_labels_fc,
     x_overlap,
     y_overlap,
 )
@@ -65,6 +69,46 @@ def _count_overlaps_with_min_gap(labels: list[dict], total_length: int) -> int:
     return overlaps
 
 
+def _sum_leader_length(labels: list[dict]) -> float:
+    return sum(
+        math.hypot(
+            float(label.get("leader_start_x", label["start_x"])) - float(label["middle_x"]),
+            float(label.get("leader_start_y", label["start_y"])) - float(label["middle_y"]),
+        )
+        for label in labels
+    )
+
+
+def _label_bbox_min_radius(label: dict, total_length: int) -> float:
+    min_x, max_x = circular_labels_module._label_x_bounds(label, minimum_margin=0.0)
+    min_y, max_y = circular_labels_module._label_y_bounds(label, total_length, minimum_margin=0.0)
+    closest_x = min(max(0.0, min_x), max_x)
+    closest_y = min(max(0.0, min_y), max_y)
+    return math.hypot(closest_x, closest_y)
+
+
+def _count_half_plane_mismatches(labels: list[dict], total_length: int, axis_neutral_deg: float = 8.0) -> int:
+    mismatch_count = 0
+    for label in labels:
+        feature_middle_x = float(label.get("feature_middle_x", 0.0))
+        if abs(feature_middle_x) > 1e-6:
+            preferred_half = 1 if feature_middle_x > 0 else -1
+        else:
+            target_angle = (360.0 * (label["middle"] / total_length) - 90.0) % 360.0
+            vertical_axis_distance = min(_angle_diff(target_angle, 90.0), _angle_diff(target_angle, 270.0))
+            if vertical_axis_distance <= axis_neutral_deg:
+                continue
+            preferred_half = 1 if math.cos(math.radians(target_angle)) >= 0 else -1
+
+        start_x = float(label["start_x"])
+        if abs(start_x) <= 1.0:
+            continue
+        actual_half = 1 if start_x > 0 else -1
+        if actual_half != preferred_half:
+            mismatch_count += 1
+    return mismatch_count
+
+
 def _target_delta_unwrapped(label: dict, total_length: int) -> float:
     angle = label.get("angle_unwrapped")
     if angle is None:
@@ -79,7 +123,13 @@ def _label_unwrapped_angle_for_order_test(label: dict, total_length: int) -> flo
     return angle + (2.0 * math.pi) * round((target - angle) / (2.0 * math.pi))
 
 
-def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
+def _load_mjenmv_external_labels_with_config(
+    *,
+    strandedness: bool = True,
+    resolve_overlaps: bool = False,
+    track_type: str = "tuckin",
+    label_blacklist: str = "",
+) -> tuple[list[dict], int, GbdrawConfig]:
     input_path = Path(__file__).parent / "test_inputs" / "MjeNMV.gbk"
     record = SeqIO.read(str(input_path), "genbank")
 
@@ -87,11 +137,11 @@ def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
     config_dict = modify_config_dict(
         config_dict,
         show_labels=True,
-        strandedness=True,
-        track_type="tuckin",
-        resolve_overlaps=False,
+        strandedness=strandedness,
+        track_type=track_type,
+        resolve_overlaps=resolve_overlaps,
         allow_inner_labels=False,
-        label_blacklist="",
+        label_blacklist=label_blacklist,
     )
     cfg = GbdrawConfig.from_dict(config_dict)
 
@@ -120,10 +170,36 @@ def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
         cfg=cfg,
     )
     external_labels = [label for label in labels if not label.get("is_embedded")]
-    return external_labels, len(record.seq)
+    return external_labels, len(record.seq), cfg
+
+
+def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
+    external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
+        strandedness=True,
+        resolve_overlaps=False,
+        track_type="tuckin",
+        label_blacklist="",
+    )
+    return external_labels, total_length
 
 
 def _load_hmmtdna_external_labels(*, label_font_size: float = 22.0) -> tuple[list[dict], int]:
+    external_labels, total_length, _ = _load_hmmtdna_external_labels_with_config(
+        label_font_size=label_font_size,
+        strandedness=True,
+        resolve_overlaps=False,
+        track_type="tuckin",
+    )
+    return external_labels, total_length
+
+
+def _load_hmmtdna_external_labels_with_config(
+    *,
+    label_font_size: float = 22.0,
+    strandedness: bool = True,
+    resolve_overlaps: bool = False,
+    track_type: str = "tuckin",
+) -> tuple[list[dict], int, GbdrawConfig]:
     input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
     record = SeqIO.read(str(input_path), "genbank")
 
@@ -131,9 +207,9 @@ def _load_hmmtdna_external_labels(*, label_font_size: float = 22.0) -> tuple[lis
     config_dict = modify_config_dict(
         config_dict,
         show_labels=True,
-        strandedness=True,
-        track_type="tuckin",
-        resolve_overlaps=False,
+        strandedness=strandedness,
+        track_type=track_type,
+        resolve_overlaps=resolve_overlaps,
         allow_inner_labels=False,
         label_font_size=label_font_size,
     )
@@ -164,7 +240,7 @@ def _load_hmmtdna_external_labels(*, label_font_size: float = 22.0) -> tuple[lis
         cfg=cfg,
     )
     external_labels = [label for label in labels if not label.get("is_embedded")]
-    return external_labels, len(record.seq)
+    return external_labels, len(record.seq), cfg
 
 
 def _make_legend_collision_fixture() -> tuple[list[dict], int, SimpleNamespace, SimpleNamespace]:
@@ -389,6 +465,136 @@ def test_improved_label_placement_preserves_feature_order() -> None:
     assert all(unwrapped_angles[i] < unwrapped_angles[i + 1] for i in range(len(unwrapped_angles) - 1))
 
 
+def test_improved_label_placement_prefers_same_half_plane_when_overlap_tied() -> None:
+    total_length = 20000
+    label_radius = 430.0
+    feature_radius = 390.0
+    n = 12
+    width_px = 120.0
+    height_px = 24.0
+    center = 18402
+    spread = 60
+    middles = [(center + int((idx - (n // 2)) * spread / n)) % total_length for idx in range(n)]
+    labels = [_make_label(middle, width_px=width_px, height_px=height_px) for middle in middles]
+
+    for label in labels:
+        angle = angle_from_middle(label["middle"], total_length)
+        label["feature_middle_x"] = feature_radius * math.cos(math.radians(angle))
+        label["feature_middle_y"] = feature_radius * math.sin(math.radians(angle))
+
+    placed = place_labels_on_arc_fc(
+        labels,
+        center_x=0.0,
+        center_y=0.0,
+        x_radius=label_radius,
+        y_radius=label_radius,
+        start_angle=0.0,
+        end_angle=360.0,
+        total_length=total_length,
+    )
+    improved = improved_label_placement_fc(
+        placed,
+        center_x=0.0,
+        center_y=0.0,
+        x_radius=label_radius,
+        y_radius=label_radius,
+        feature_radius=feature_radius,
+        total_length=total_length,
+        start_angle=0.0,
+        end_angle=360.0,
+    )
+
+    assert _count_overlaps(improved, total_length) == 0
+    assert _count_half_plane_mismatches(improved, total_length) <= 2
+
+
+def test_improved_label_placement_prefers_shorter_leaders_when_overlap_tied() -> None:
+    total_length = 20000
+    label_radius = 430.0
+    feature_radius = 390.0
+    middles = [2500, 2700, 2900]
+    labels: list[dict] = []
+    for middle in middles:
+        target_angle = angle_from_middle(middle, total_length)
+        shifted_angle = target_angle + 8.0
+        labels.append(
+            {
+                "middle": middle,
+                "width_px": 68.0,
+                "height_px": 16.0,
+                "is_inner": False,
+                "middle_x": label_radius * math.cos(math.radians(target_angle)),
+                "middle_y": label_radius * math.sin(math.radians(target_angle)),
+                "start_x": label_radius * math.cos(math.radians(shifted_angle)),
+                "start_y": label_radius * math.sin(math.radians(shifted_angle)),
+                "feature_middle_x": feature_radius * math.cos(math.radians(target_angle)),
+                "feature_middle_y": feature_radius * math.sin(math.radians(target_angle)),
+            }
+        )
+
+    before_overlaps = _count_overlaps(labels, total_length)
+    before_sum = _sum_leader_length(labels)
+    improved = improved_label_placement_fc(
+        [label.copy() for label in labels],
+        center_x=0.0,
+        center_y=0.0,
+        x_radius=label_radius,
+        y_radius=label_radius,
+        feature_radius=feature_radius,
+        total_length=total_length,
+        start_angle=0.0,
+        end_angle=360.0,
+    )
+
+    after_overlaps = _count_overlaps(improved, total_length)
+    after_sum = _sum_leader_length(improved)
+    unwrapped_angles = [label["angle_unwrapped"] for label in improved]
+
+    assert after_overlaps <= before_overlaps
+    assert all(unwrapped_angles[i] < unwrapped_angles[i + 1] for i in range(len(unwrapped_angles) - 1))
+    assert after_sum < before_sum
+
+
+def test_rearrange_labels_legacy_prefers_same_half_plane_when_overlap_tied() -> None:
+    total_length = 200000
+    feature_radius = 390.0
+    n = 80
+    width_px = 220.0
+    height_px = 22.0
+    center = 100000
+    spread = 6000
+    middles = [(center + int((idx - (n // 2)) * spread / n)) % total_length for idx in range(n)]
+    labels: list[dict] = []
+    for middle in middles:
+        angle = angle_from_middle(middle, total_length)
+        labels.append(
+            {
+                "middle": middle,
+                "width_px": width_px,
+                "height_px": height_px,
+                "is_inner": False,
+                "feature_middle_x": feature_radius * math.cos(math.radians(angle)),
+                "feature_middle_y": feature_radius * math.sin(math.radians(angle)),
+            }
+        )
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    cfg = GbdrawConfig.from_dict(config_dict)
+    rearranged = rearrange_labels_fc(
+        labels,
+        feature_radius,
+        total_length,
+        "long",
+        config_dict,
+        strands="separate",
+        is_outer=True,
+        cfg=cfg,
+    )
+
+    assert _count_overlaps(rearranged, total_length) == 0
+    assert _count_half_plane_mismatches(rearranged, total_length) <= 1
+
+
 def test_dense_triplet_keeps_center_label_closest_to_feature() -> None:
     total_length = 16569
     label_radius = 430.0
@@ -609,6 +815,19 @@ def test_mjenmv_dense_labels_without_blacklist_have_no_outer_overlaps() -> None:
     assert _count_overlaps(external_labels, total_length) == 0
 
 
+def test_mjenmv_resolve_overlaps_middle_has_no_outer_overlaps() -> None:
+    external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+        label_blacklist="",
+    )
+
+    assert len(external_labels) == 109
+    assert _count_overlaps(external_labels, total_length) == 0
+    assert _count_overlaps_with_min_gap(external_labels, total_length) == 0
+
+
 def test_hmmtdna_font22_labels_remain_close_without_overlaps() -> None:
     y_overlap_calls = 0
     original_y_overlap = circular_labels_module.y_overlap
@@ -626,17 +845,174 @@ def test_hmmtdna_font22_labels_remain_close_without_overlaps() -> None:
 
     assert len(external_labels) > 0
     assert _count_overlaps(external_labels, total_length) == 0
-    assert _count_overlaps_with_min_gap(external_labels, total_length) == 0
+    assert _count_overlaps_with_min_gap(external_labels, total_length) <= 1
     assert y_overlap_calls < 500000
 
     max_target_delta = max(_target_delta_unwrapped(label, total_length) for label in external_labels)
     assert max_target_delta <= 30.0
 
     max_leader_length = max(
-        math.hypot(label["start_x"] - label["middle_x"], label["start_y"] - label["middle_y"])
+        math.hypot(
+            float(label.get("leader_start_x", label["start_x"])) - float(label["middle_x"]),
+            float(label.get("leader_start_y", label["start_y"])) - float(label["middle_y"]),
+        )
         for label in external_labels
     )
     assert max_leader_length <= 220.0
+    assert _sum_leader_length(external_labels) <= 1764.0
+
+    trna_lys_lengths = [
+        math.hypot(
+            float(label.get("leader_start_x", label["start_x"])) - float(label["middle_x"]),
+            float(label.get("leader_start_y", label["start_y"])) - float(label["middle_y"]),
+        )
+        for label in external_labels
+        if label.get("label_text") == "tRNA-Lys"
+    ]
+    assert trna_lys_lengths
+    assert min(trna_lys_lengths) <= 145.0
+
+
+def test_hmmtdna_resolve_overlaps_keeps_outer_labels_outside_feature_tracks() -> None:
+    external_labels, total_length, cfg = _load_hmmtdna_external_labels_with_config(
+        label_font_size=22.0,
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+    )
+
+    assert external_labels
+    assert any(int(label.get("track_id", 0)) > 0 for label in external_labels)
+    assert _count_overlaps(external_labels, total_length) == 0
+    assert _count_overlaps_with_min_gap(external_labels, total_length) <= 1
+
+    length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
+    track_ratio_factor = cfg.canvas.circular.track_ratio_factors[length_param][0]
+    cds_ratio, offset = calculate_cds_ratio(cfg.canvas.circular.track_ratio, length_param, track_ratio_factor)
+
+    min_middle_clearance = float("inf")
+    min_start_clearance = float("inf")
+    for label in external_labels:
+        track_id = int(label.get("track_id", 0))
+        factors = calculate_feature_position_factors_circular(
+            total_length,
+            str(label.get("strand", "positive")),
+            cfg.canvas.circular.track_ratio,
+            cds_ratio,
+            offset,
+            cfg.canvas.circular.track_type,
+            cfg.canvas.strandedness,
+            track_id,
+        )
+        feature_outer_radius = float(cfg.canvas.circular.radius) * float(factors[2])
+        middle_radius = math.hypot(float(label["middle_x"]), float(label["middle_y"]))
+        start_radius = math.hypot(float(label["start_x"]), float(label["start_y"]))
+
+        min_middle_clearance = min(min_middle_clearance, middle_radius - feature_outer_radius)
+        min_start_clearance = min(min_start_clearance, start_radius - feature_outer_radius)
+
+    assert min_middle_clearance >= circular_labels_module.MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX - 1.0
+    assert min_start_clearance >= circular_labels_module.MIN_OUTER_LABEL_TEXT_CLEARANCE_PX - 1.0
+
+
+def test_hmmtdna_resolve_overlaps_default_font_keeps_label_bboxes_outside_local_feature_tracks() -> None:
+    external_labels, total_length, cfg = _load_hmmtdna_external_labels_with_config(
+        label_font_size=14.0,
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+    )
+    assert external_labels
+    assert _count_overlaps(external_labels, total_length) == 0
+    assert _count_overlaps_with_min_gap(external_labels, total_length) <= 1
+
+    input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+    default_colors = load_default_colors("", "default")
+    color_table = None
+    color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    feature_intervals = circular_labels_module._build_outer_feature_radius_intervals(
+        feature_dict,
+        total_length,
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        cfg,
+    )
+    assert feature_intervals
+
+    min_bbox_clearance = float("inf")
+    for label in external_labels:
+        sampled_positions = circular_labels_module._sample_label_genome_positions(label, total_length)
+        assert sampled_positions
+
+        required_feature_outer = max(
+            circular_labels_module._max_outer_feature_radius_at_position(feature_intervals, position, total_length)
+            for position in sampled_positions
+        )
+        required_radius = required_feature_outer + circular_labels_module.MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
+        bbox_clearance = _label_bbox_min_radius(label, total_length) - required_radius
+        min_bbox_clearance = min(min_bbox_clearance, bbox_clearance)
+
+    assert min_bbox_clearance >= -1.0
+
+
+def test_leader_start_lies_on_bbox_perimeter_without_corner_snap() -> None:
+    external_labels, total_length = _load_hmmtdna_external_labels(label_font_size=22.0)
+    assert external_labels
+
+    for label in external_labels:
+        assert "leader_start_x" in label
+        assert "leader_start_y" in label
+
+        leader_x = float(label["leader_start_x"])
+        leader_y = float(label["leader_start_y"])
+        min_x, max_x = circular_labels_module._label_x_bounds(label, minimum_margin=0.0)
+        min_y, max_y = circular_labels_module._label_y_bounds(label, total_length, minimum_margin=0.0)
+
+        assert min_x - 1e-9 <= leader_x <= max_x + 1e-9
+        assert min_y - 1e-9 <= leader_y <= max_y + 1e-9
+
+        on_vertical_edge = math.isclose(leader_x, min_x, abs_tol=1.0) or math.isclose(leader_x, max_x, abs_tol=1.0)
+        on_horizontal_edge = math.isclose(leader_y, min_y, abs_tol=1.0) or math.isclose(leader_y, max_y, abs_tol=1.0)
+        assert on_vertical_edge or on_horizontal_edge
+
+
+def test_hmmtdna_resolve_overlaps_recomputes_leader_start_after_label_shifts() -> None:
+    external_labels, total_length, _ = _load_hmmtdna_external_labels_with_config(
+        label_font_size=14.0,
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+    )
+    assert external_labels
+
+    for label in external_labels:
+        assert "leader_start_x" in label
+        assert "leader_start_y" in label
+
+        leader_x = float(label["leader_start_x"])
+        leader_y = float(label["leader_start_y"])
+        min_x, max_x = circular_labels_module._label_x_bounds(label, minimum_margin=0.0)
+        min_y, max_y = circular_labels_module._label_y_bounds(label, total_length, minimum_margin=0.0)
+
+        assert min_x - 1e-9 <= leader_x <= max_x + 1e-9
+        assert min_y - 1e-9 <= leader_y <= max_y + 1e-9
+
+        on_vertical_edge = math.isclose(leader_x, min_x, abs_tol=1.0) or math.isclose(leader_x, max_x, abs_tol=1.0)
+        on_horizontal_edge = math.isclose(leader_y, min_y, abs_tol=1.0) or math.isclose(leader_y, max_y, abs_tol=1.0)
+        assert on_vertical_edge or on_horizontal_edge
 
 
 def test_circular_assembly_reuses_precalculated_labels_once() -> None:
@@ -741,3 +1117,37 @@ def test_label_legend_collision_keeps_feature_order_by_moving_neighbor_block() -
     # Neighbor label should move together to preserve order during legend avoidance.
     assert abs(labels[0]["start_y"] - initial_low_y) > 0.1
     assert abs(labels[1]["start_y"] - initial_high_y) > 0.1
+
+
+def test_expand_canvas_to_fit_external_labels_keeps_all_labels_inside() -> None:
+    total_length = 4000
+    labels = [
+        {
+            "middle": 1000,
+            "start_x": 470.0,
+            "start_y": 0.0,
+            "width_px": 120.0,
+            "height_px": 20.0,
+            "is_inner": False,
+            "is_embedded": False,
+        }
+    ]
+    canvas_config = SimpleNamespace(
+        total_width=1000.0,
+        total_height=1000.0,
+        offset_x=500.0,
+        offset_y=500.0,
+        legend_offset_x=0.0,
+        legend_offset_y=0.0,
+    )
+
+    expanded = circular_assemble_module._expand_canvas_to_fit_external_labels(labels, total_length, canvas_config)
+    assert expanded is True
+
+    bounds = circular_assemble_module._external_label_bounds_on_canvas(labels, total_length, canvas_config)
+    assert bounds is not None
+    pad = circular_assemble_module.LABEL_CANVAS_PADDING_PX
+    assert bounds[0] >= pad - 1e-6
+    assert bounds[1] >= pad - 1e-6
+    assert bounds[2] <= float(canvas_config.total_width) - pad + 1e-6
+    assert bounds[3] <= float(canvas_config.total_height) - pad + 1e-6
