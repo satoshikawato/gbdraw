@@ -112,7 +112,10 @@ class LabelsGroup:
             group.add(line_path)
             line_path2 = Line(
                 start=(label["middle_x"], label["middle_y"]),
-                end=(label["feature_middle_x"], label["feature_middle_y"]),
+                end=(
+                    label.get("feature_anchor_x", label["feature_middle_x"]),
+                    label.get("feature_anchor_y", label["feature_middle_y"]),
+                ),
                 stroke=self.label_stroke_color,
                 stroke_width=self.label_stroke_width,
                 stroke_linecap="round",

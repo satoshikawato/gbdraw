@@ -20,6 +20,7 @@ from ..layout.circular import calculate_feature_position_factors_circular
 
 # Keep dense large-font labels from being pushed excessively far from features.
 MIN_BBOX_GAP_RATIO = 0.01
+MIN_BBOX_GAP_FLOOR_PX = 1.2
 HEAVY_CLUSTER_RELAX_MAX_LABELS = 70
 FULL_SCAN_LABEL_LIMIT = 70
 MAX_EXPANDED_SHIFT_DEG = 90.0
@@ -33,6 +34,12 @@ DENSE_DISTANCE_COMPACTION_MIN_LABELS = 30
 DENSE_DISTANCE_COMPACTION_MIN_GAP_RELAX = 1
 LEADER_START_PROXIMITY_EPS_PX = 0.75
 LEADER_START_ORDER_GAP_CANDIDATES = (1.0, 0.75, 0.5, 0.25, 0.0)
+MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX = 6.0
+MIN_OUTER_LABEL_TEXT_CLEARANCE_PX = 13.0
+OUTER_LABEL_FEATURE_CLEARANCE_SAMPLE_CAP_DEG = 18.0
+PLACE_LABELS_BASE_MARGIN_PX = 2.0
+IMPROVED_LABELS_BASE_MARGIN_PX = 1.5
+RESOLVE_OVERLAP_MARGIN_EXTRA_PX = 4.2
 
 
 def minimum_bbox_gap_px(label1: dict, label2: dict, base_margin_px: float = 0.0) -> float:
@@ -40,7 +47,10 @@ def minimum_bbox_gap_px(label1: dict, label2: dict, base_margin_px: float = 0.0)
     width_scale = max(float(label1.get("width_px", 0.0)), float(label2.get("width_px", 0.0)))
     height_scale = max(float(label1.get("height_px", 0.0)), float(label2.get("height_px", 0.0)))
     ratio_gap = MIN_BBOX_GAP_RATIO * max(width_scale, height_scale)
-    return max(float(base_margin_px), ratio_gap)
+    resolve_extra = 0.0
+    if ("min_outer_start_radius_px" in label1) or ("min_outer_start_radius_px" in label2):
+        resolve_extra = RESOLVE_OVERLAP_MARGIN_EXTRA_PX
+    return max(float(base_margin_px) + resolve_extra, MIN_BBOX_GAP_FLOOR_PX, ratio_gap)
 
 
 def _count_label_overlaps(labels: list[dict], total_length: int, use_min_gap: bool) -> int:
@@ -370,6 +380,11 @@ def _assign_leader_start_points(labels: list[dict], total_length: int) -> list[d
     return _refine_leader_start_points(labels, total_length)
 
 
+def assign_leader_start_points(labels: list[dict], total_length: int) -> list[dict]:
+    """Public wrapper to (re)compute leader start anchors after label motion."""
+    return _assign_leader_start_points(labels, total_length)
+
+
 def _leader_length_px(label: dict, total_length: int | None = None) -> float:
     """Return leader length from label middle anchor to chosen label-side leader anchor."""
     if "middle_x" not in label or "middle_y" not in label:
@@ -387,6 +402,308 @@ def _leader_distance_score(labels: list[dict], total_length: int | None = None) 
         return 0.0, 0.0
     leader_lengths = [_leader_length_px(label, total_length) for label in labels]
     return sum(leader_lengths), max(leader_lengths)
+
+
+def _label_bbox_min_radius(label: dict, total_length: int, minimum_margin: float = 0.0) -> float:
+    """Return minimum distance from origin to the label bbox."""
+    min_x, max_x = _label_x_bounds(label, minimum_margin=minimum_margin)
+    min_y, max_y = _label_y_bounds(label, total_length, minimum_margin=minimum_margin)
+    closest_x = min(max(0.0, min_x), max_x)
+    closest_y = min(max(0.0, min_y), max_y)
+    return math.hypot(closest_x, closest_y)
+
+
+def _build_outer_feature_radius_intervals(
+    feature_dict: dict,
+    total_length: int,
+    radius: float,
+    track_ratio: float,
+    cfg: GbdrawConfig,
+) -> list[tuple[float, float, float]]:
+    """Build local genome intervals as (start, end, outer_radius_px)."""
+    if total_length <= 0:
+        return []
+
+    length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
+    track_ratio_factor = cfg.canvas.circular.track_ratio_factors[length_param][0]
+    cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
+    track_type = cfg.canvas.circular.track_type
+    strandedness = cfg.canvas.strandedness
+
+    intervals: list[tuple[float, float, float]] = []
+    total_length_float = float(total_length)
+
+    for feature_object in feature_dict.values():
+        track_id = int(getattr(feature_object, "feature_track_id", 0))
+        feature_location_list = getattr(feature_object, "location", [])
+        list_of_coordinates = getattr(feature_object, "coordinates", [])
+
+        for coordinate_idx, coordinate in enumerate(list_of_coordinates):
+            if (
+                coordinate_idx < len(feature_location_list)
+                and getattr(feature_location_list[coordinate_idx], "kind", None) == "line"
+            ):
+                continue
+
+            coordinate_start_raw = int(coordinate.start)
+            coordinate_end_raw = int(coordinate.end)
+            if coordinate_start_raw == coordinate_end_raw:
+                continue
+
+            coordinate_start = float(coordinate_start_raw % total_length)
+            coordinate_end = float(coordinate_end_raw % total_length)
+            if coordinate_end_raw > coordinate_start_raw and coordinate_end_raw <= total_length:
+                coordinate_end = float(coordinate_end_raw)
+
+            coordinate_strand = get_strand(coordinate.strand)
+            factors = calculate_feature_position_factors_circular(
+                total_length,
+                coordinate_strand,
+                track_ratio,
+                cds_ratio,
+                offset,
+                track_type,
+                strandedness,
+                track_id,
+            )
+            feature_outer_radius = float(radius) * float(factors[2])
+
+            if coordinate_start < coordinate_end:
+                intervals.append((coordinate_start, coordinate_end, feature_outer_radius))
+            else:
+                intervals.append((coordinate_start, total_length_float, feature_outer_radius))
+                intervals.append((0.0, coordinate_end, feature_outer_radius))
+
+    return intervals
+
+
+def _max_outer_feature_radius_at_position(
+    intervals: list[tuple[float, float, float]],
+    position: float,
+    total_length: int,
+) -> float:
+    """Return the max feature outer radius that covers a genome position."""
+    if not intervals or total_length <= 0:
+        return 0.0
+    position_wrapped = float(position % float(total_length))
+    max_outer_radius = 0.0
+    for start_pos, end_pos, outer_radius in intervals:
+        if start_pos <= position_wrapped < end_pos:
+            if outer_radius > max_outer_radius:
+                max_outer_radius = outer_radius
+    return max_outer_radius
+
+
+def _sample_label_genome_positions(label: dict, total_length: int) -> list[float]:
+    """Sample genome positions covered by a label for local feature clearance checks."""
+    if total_length <= 0:
+        return []
+
+    start_x = float(label.get("start_x", 0.0))
+    start_y = float(label.get("start_y", 0.0))
+    radius = math.hypot(start_x, start_y)
+    if radius <= 1e-9:
+        middle = float(label.get("middle", 0.0))
+        return [middle % float(total_length)]
+
+    base_angle_deg = math.degrees(math.atan2(start_y, start_x))
+    width_px = max(0.0, float(label.get("width_px", 0.0)))
+    half_span_deg = 0.5 * math.degrees(width_px / radius) if width_px > 0.0 else 0.0
+    half_span_deg = min(OUTER_LABEL_FEATURE_CLEARANCE_SAMPLE_CAP_DEG, half_span_deg)
+
+    sampled_angles = [base_angle_deg]
+    if half_span_deg >= 0.2:
+        sampled_angles.extend([base_angle_deg - half_span_deg, base_angle_deg + half_span_deg])
+    if half_span_deg >= 4.0:
+        sampled_angles.extend(
+            [
+                base_angle_deg - (0.5 * half_span_deg),
+                base_angle_deg + (0.5 * half_span_deg),
+            ]
+        )
+
+    sampled_positions: list[float] = []
+    for sampled_angle in sampled_angles:
+        angle_mod = (sampled_angle + 90.0) % 360.0
+        sampled_positions.append((angle_mod / 360.0) * float(total_length))
+    return sampled_positions
+
+
+def _update_outer_label_minimum_radii_against_features(
+    labels: list[dict],
+    total_length: int,
+    feature_radius_intervals: list[tuple[float, float, float]],
+) -> list[dict]:
+    """Raise minimum outer-label radii so text clears local feature tracks."""
+    if not labels or not feature_radius_intervals:
+        return labels
+
+    for label in labels:
+        sampled_positions = _sample_label_genome_positions(label, total_length)
+        if not sampled_positions:
+            continue
+
+        local_outer_radius = 0.0
+        for sampled_pos in sampled_positions:
+            local_outer_radius = max(
+                local_outer_radius,
+                _max_outer_feature_radius_at_position(feature_radius_intervals, sampled_pos, total_length),
+            )
+        if local_outer_radius <= 0.0:
+            continue
+
+        required_radius = local_outer_radius + MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
+        current_min_radius = float(label.get("min_outer_start_radius_px", 0.0))
+        if required_radius > current_min_radius:
+            label["min_outer_start_radius_px"] = required_radius
+
+    return labels
+
+
+def _enforce_outer_label_minimum_radius(labels: list[dict], total_length: int) -> list[dict]:
+    """Push outer labels outward until their text bboxes clear required radii."""
+    for label in labels:
+        required_outer_radius = float(label.get("min_outer_start_radius_px", 0.0))
+        if required_outer_radius <= 0.0:
+            continue
+
+        start_x = float(label.get("start_x", 0.0))
+        start_y = float(label.get("start_y", 0.0))
+        current_radius = math.hypot(start_x, start_y)
+        if _label_bbox_min_radius(label, total_length, minimum_margin=0.0) >= (required_outer_radius - 1e-6):
+            continue
+
+        if current_radius > 1e-9:
+            angle_rad = math.atan2(start_y, start_x)
+        else:
+            angle_rad = math.radians(angle_from_middle(float(label["middle"]), total_length))
+        current_half = _current_half_from_x(start_x, axis_eps_px=HEMISPHERE_AXIS_EPS_PX)
+        candidate_radius = max(current_radius, required_outer_radius)
+
+        for _ in range(8):
+            new_x = candidate_radius * math.cos(angle_rad)
+            new_y = candidate_radius * math.sin(angle_rad)
+            if current_half > 0 and new_x < 0:
+                new_x = abs(new_x)
+            elif current_half < 0 and new_x > 0:
+                new_x = -abs(new_x)
+            label["start_x"] = float(new_x)
+            label["start_y"] = float(new_y)
+
+            bbox_min_radius = _label_bbox_min_radius(label, total_length, minimum_margin=0.0)
+            deficit = required_outer_radius - bbox_min_radius
+            if deficit <= 1e-3:
+                break
+            candidate_radius += deficit + 0.5
+
+    return labels
+
+
+def _resolve_outer_label_overlaps_with_fixed_radii(
+    labels: list[dict],
+    total_length: int,
+    *,
+    max_angle_shift_deg: float = 40.0,
+    step_deg: float = 0.2,
+) -> list[dict]:
+    """Resolve overlaps by shifting label angles while keeping each label radius fixed."""
+    if len(labels) < 2:
+        return labels
+
+    labels = sort_labels(labels)
+    min_order_gap_deg = 0.05
+    max_pair_steps = max(1, int(max_angle_shift_deg / max(step_deg, 1e-6)))
+
+    for label in labels:
+        current_x = float(label.get("start_x", 0.0))
+        current_y = float(label.get("start_y", 0.0))
+        target_angle = angle_from_middle_unwrapped(float(label["middle"]), total_length)
+        current_angle = math.degrees(math.atan2(current_y, current_x))
+        current_unwrapped = normalize_angle_near_reference(current_angle, target_angle)
+        label["_fixed_radius_px"] = math.hypot(current_x, current_y)
+        label["_target_angle_unwrapped_fixed"] = target_angle
+        label["_angle_unwrapped_fixed"] = current_unwrapped
+
+    prev_angle: float | None = None
+    for label in labels:
+        target_angle = float(label["_target_angle_unwrapped_fixed"])
+        low_bound = target_angle - max_angle_shift_deg
+        high_bound = target_angle + max_angle_shift_deg
+        candidate = float(label["_angle_unwrapped_fixed"])
+        if prev_angle is not None:
+            candidate = max(candidate, prev_angle + min_order_gap_deg)
+        candidate = min(max(candidate, low_bound), high_bound)
+        if prev_angle is not None and candidate <= prev_angle + min_order_gap_deg:
+            candidate = prev_angle + min_order_gap_deg
+        label["_angle_unwrapped_fixed"] = candidate
+        prev_angle = candidate
+
+    def _apply_angle(label: dict) -> None:
+        radius = float(label["_fixed_radius_px"])
+        angle_unwrapped = float(label["_angle_unwrapped_fixed"])
+        label["start_x"] = radius * math.cos(math.radians(angle_unwrapped))
+        label["start_y"] = radius * math.sin(math.radians(angle_unwrapped))
+
+    def _pair_overlaps(left: dict, right: dict) -> bool:
+        min_gap_px = minimum_bbox_gap_px(left, right, base_margin_px=0.0)
+        return y_overlap(left, right, total_length, min_gap_px) and x_overlap(
+            left,
+            right,
+            minimum_margin=min_gap_px,
+        )
+
+    for label in labels:
+        _apply_angle(label)
+
+    for _ in range(120):
+        changed = False
+        for idx in range(len(labels) - 1):
+            left = labels[idx]
+            right = labels[idx + 1]
+            if not _pair_overlaps(left, right):
+                continue
+
+            for _ in range(max_pair_steps):
+                left_target = float(left["_target_angle_unwrapped_fixed"])
+                right_target = float(right["_target_angle_unwrapped_fixed"])
+                left_low = left_target - max_angle_shift_deg
+                right_high = right_target + max_angle_shift_deg
+
+                new_left = max(left_low, float(left["_angle_unwrapped_fixed"]) - (0.5 * step_deg))
+                new_right = min(right_high, float(right["_angle_unwrapped_fixed"]) + (0.5 * step_deg))
+
+                if idx > 0:
+                    new_left = max(new_left, float(labels[idx - 1]["_angle_unwrapped_fixed"]) + min_order_gap_deg)
+                if idx + 2 < len(labels):
+                    new_right = min(new_right, float(labels[idx + 2]["_angle_unwrapped_fixed"]) - min_order_gap_deg)
+
+                if new_right <= new_left + min_order_gap_deg:
+                    break
+
+                if (
+                    abs(new_left - float(left["_angle_unwrapped_fixed"])) <= 1e-9
+                    and abs(new_right - float(right["_angle_unwrapped_fixed"])) <= 1e-9
+                ):
+                    break
+
+                left["_angle_unwrapped_fixed"] = new_left
+                right["_angle_unwrapped_fixed"] = new_right
+                _apply_angle(left)
+                _apply_angle(right)
+                changed = True
+
+                if not _pair_overlaps(left, right):
+                    break
+
+        if not changed:
+            break
+
+    for label in labels:
+        label.pop("_fixed_radius_px", None)
+        label.pop("_target_angle_unwrapped_fixed", None)
+        label.pop("_angle_unwrapped_fixed", None)
+
+    return labels
 
 
 def _angle_deviation_score(labels: list[dict], total_length: int) -> tuple[float, float]:
@@ -588,7 +905,7 @@ def place_labels_on_arc_fc(
     total_length: int,
 ) -> list[dict]:
     def check_overlap(label1, label2, total_length, margin):
-        effective_margin = minimum_bbox_gap_px(label1, label2, base_margin_px=max(margin, 2.0))
+        effective_margin = minimum_bbox_gap_px(label1, label2, base_margin_px=max(margin, PLACE_LABELS_BASE_MARGIN_PX))
         return y_overlap(label1, label2, total_length, effective_margin) and x_overlap(
             label1, label2, minimum_margin=effective_margin
         )
@@ -1406,7 +1723,7 @@ def improved_label_placement_fc(
 
     n_labels = len(labels)
     pair_margins = [[0.0 for _ in range(n_labels)] for _ in range(n_labels)]
-    base_margin = max(y_margin, 1.5)
+    base_margin = max(y_margin, IMPROVED_LABELS_BASE_MARGIN_PX)
     for i in range(n_labels):
         for j in range(i + 1, n_labels):
             pair_margins[i][j] = minimum_bbox_gap_px(labels[i], labels[j], base_margin_px=base_margin)
@@ -2218,6 +2535,8 @@ def prepare_label_list(
     interval = cfg.canvas.dpi
 
     track_ratio_factor = cfg.canvas.circular.track_ratio_factors[length_param][0]
+    cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
+
     for feature_object in feature_dict.values():
         feature_label_text = get_label_text(feature_object, label_filtering)
         if feature_label_text == "":
@@ -2250,7 +2569,6 @@ def prepare_label_list(
                         longeset_segment_middle = interval_middle
                         longest_segment_length = interval_length
 
-            cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
             # Get track_id for overlap resolution
             track_id = getattr(feature_object, 'feature_track_id', 0)
             factors: list[float] = calculate_feature_position_factors_circular(
@@ -2265,16 +2583,36 @@ def prepare_label_list(
             label_end = label_middle + (label_as_feature_length / 2)
             feature_middle_x: float = (radius * factors[1]) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
             feature_middle_y: float = (radius * factors[1]) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
+            feature_anchor_x: float = feature_middle_x
+            feature_anchor_y: float = feature_middle_y
             is_outer_label = (feature_object.strand == "positive") or (allow_inner_labels is False)
+            feature_outer_radius = radius * float(factors[2])
             if is_outer_label:
+                if cfg.canvas.resolve_overlaps and not strandedness:
+                    # Raised feature tracks look disconnected when leaders target the track center.
+                    # Anchor to the outer edge so feature-to-label distance reads more naturally.
+                    feature_anchor_x = feature_outer_radius * math.cos(
+                        math.radians(360.0 * (label_middle / total_length) - 90)
+                    )
+                    feature_anchor_y = feature_outer_radius * math.sin(
+                        math.radians(360.0 * (label_middle / total_length) - 90)
+                    )
                 if outer_arena is not None:
                     # Use the inner edge of the arena as the "anchor" radius for leader lines.
                     anchor_radius = float(outer_arena[0])
-                    middle_x = anchor_radius * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
-                    middle_y = anchor_radius * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
+                    middle_radius = anchor_radius
                 else:
-                    middle_x = (radius_factor * radius) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
-                    middle_y = (radius_factor * radius) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
+                    middle_radius = radius_factor * radius
+                    if cfg.canvas.resolve_overlaps and not strandedness:
+                        middle_radius = max(
+                            float(middle_radius),
+                            float(feature_outer_radius + MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX),
+                        )
+                        label_entry["min_outer_start_radius_px"] = float(
+                            feature_outer_radius + MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
+                        )
+                middle_x = middle_radius * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
+                middle_y = middle_radius * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
             else:
                 middle_x = (inner_radius_factor * radius) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
                 middle_y = (inner_radius_factor * radius) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
@@ -2290,6 +2628,8 @@ def prepare_label_list(
             label_entry["middle_y"] = middle_y
             label_entry["feature_middle_x"] = feature_middle_x
             label_entry["feature_middle_y"] = feature_middle_y
+            label_entry["feature_anchor_x"] = feature_anchor_x
+            label_entry["feature_anchor_y"] = feature_anchor_y
             label_entry["width_px"] = bbox_width_px
             label_entry["height_px"] = bbox_height_px
             label_entry["strand"] = coordinate_strand
@@ -2326,6 +2666,43 @@ def prepare_label_list(
         arena_outer_radius=(float(outer_arena[1]) if outer_arena is not None else None),
         cfg=cfg,
     )
+    if cfg.canvas.resolve_overlaps and not strandedness:
+        feature_outer_radius_intervals = _build_outer_feature_radius_intervals(
+            feature_dict,
+            total_length,
+            radius,
+            track_ratio,
+            cfg,
+        )
+        outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
+            outer_labels_rearranged,
+            total_length,
+            feature_outer_radius_intervals,
+        )
+        outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
+        for _ in range(2):
+            outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
+                outer_labels_rearranged,
+                total_length,
+            )
+            outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
+                outer_labels_rearranged,
+                total_length,
+                feature_outer_radius_intervals,
+            )
+            outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
+        outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
+            outer_labels_rearranged,
+            total_length,
+        )
+        outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
+            outer_labels_rearranged,
+            total_length,
+            feature_outer_radius_intervals,
+        )
+        outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
+    outer_labels_rearranged = assign_leader_start_points(outer_labels_rearranged, total_length)
+
     inner_labels_rearranged = []
     if allow_inner_labels:
         inner_labels_rearranged = rearrange_labels_fc(
@@ -2355,6 +2732,7 @@ __all__ = [
     "euclidean_distance",
     "improved_label_placement_fc",
     "place_labels_on_arc_fc",
+    "assign_leader_start_points",
     "prepare_label_list",
     "rearrange_labels_fc",
     "sort_labels",
