@@ -29,6 +29,8 @@ HEMISPHERE_AXIS_NEUTRAL_DEG = 8.0
 HEMISPHERE_AXIS_EPS_PX = 1.0
 HEMISPHERE_REFINE_MAX_SHIFT_DEG = 90.0
 HEMISPHERE_REFINE_STEP_DEG = 0.25
+DENSE_DISTANCE_COMPACTION_MIN_LABELS = 30
+DENSE_DISTANCE_COMPACTION_MIN_GAP_RELAX = 1
 
 
 def minimum_bbox_gap_px(label1: dict, label2: dict, base_margin_px: float = 0.0) -> float:
@@ -60,6 +62,26 @@ def _count_label_overlaps(labels: list[dict], total_length: int, use_min_gap: bo
     return overlap_count
 
 
+def _leader_length_px(label: dict) -> float:
+    """Return leader length from label anchor to text anchor in pixels."""
+    if "start_x" not in label or "start_y" not in label:
+        return 0.0
+    if "middle_x" not in label or "middle_y" not in label:
+        return 0.0
+    return math.hypot(
+        float(label["start_x"]) - float(label["middle_x"]),
+        float(label["start_y"]) - float(label["middle_y"]),
+    )
+
+
+def _leader_distance_score(labels: list[dict]) -> tuple[float, float]:
+    """Return (sum_length, max_length) for leader segments."""
+    if not labels:
+        return 0.0, 0.0
+    leader_lengths = [_leader_length_px(label) for label in labels]
+    return sum(leader_lengths), max(leader_lengths)
+
+
 def _angle_deviation_score(labels: list[dict], total_length: int) -> tuple[float, float]:
     """
     Return (sum_delta, max_delta) where deltas are angular deviations from each
@@ -87,17 +109,20 @@ def _angle_deviation_score(labels: list[dict], total_length: int) -> tuple[float
     return sum_delta, max_delta
 
 
-def _placement_score(labels: list[dict], total_length: int) -> tuple[int, int, int, float, float, float]:
+def _placement_score(labels: list[dict], total_length: int) -> tuple[int, int, int, float, float, float, float, float]:
     """Return tuple score used to compare placement candidates."""
     overlap_plain = _count_label_overlaps(labels, total_length, use_min_gap=False)
     overlap_min_gap = _count_label_overlaps(labels, total_length, use_min_gap=True)
     hemisphere_mismatch_count, hemisphere_mismatch_weight = _hemisphere_mismatch_metrics(labels, total_length)
+    leader_sum, leader_max = _leader_distance_score(labels)
     sum_delta, max_delta = _angle_deviation_score(labels, total_length)
     return (
         overlap_plain,
         overlap_min_gap,
         hemisphere_mismatch_count,
         hemisphere_mismatch_weight,
+        leader_sum,
+        leader_max,
         sum_delta,
         max_delta,
     )
@@ -1027,8 +1052,9 @@ def improved_label_placement_fc(
                 current_overlaps = overlap_count(label_idx, full_scan=full_scan_checks)
                 current_target_delta = abs(current_angle - target_angle)
                 current_middle_penalty = middle_proximity_penalty(label_idx, current_angle)
+                current_leader_length = _leader_length_px(label)
 
-                if current_overlaps == 0 and current_middle_penalty == 0:
+                if current_overlaps == 0 and current_middle_penalty == 0 and current_target_delta == 0:
                     continue
 
                 lower_bound = target_angle - shift_limit_deg
@@ -1051,6 +1077,15 @@ def improved_label_placement_fc(
                 best_target_delta = current_target_delta
                 best_move = 0.0
                 best_middle_penalty = current_middle_penalty
+                best_leader_length = current_leader_length
+                proximity_penalty_factor = 4.0
+                initial_score = (
+                    current_overlaps,
+                    anchor_weight * current_target_delta + proximity_penalty_factor * current_middle_penalty,
+                    current_leader_length,
+                    0.0,
+                )
+                best_score = initial_score
 
                 search_complete = False
                 for step in range(max_steps + 1):
@@ -1073,19 +1108,15 @@ def improved_label_placement_fc(
                         candidate_target_delta = abs(candidate_angle - target_angle)
                         candidate_move = abs(candidate_angle - current_angle)
                         candidate_middle_penalty = middle_proximity_penalty(label_idx, candidate_angle)
-                        proximity_penalty_factor = 4.0
-                        current_score = (
-                            best_overlaps,
-                            anchor_weight * best_target_delta + proximity_penalty_factor * best_middle_penalty,
-                            best_move,
-                        )
+                        candidate_leader_length = _leader_length_px(label_copy)
                         candidate_score = (
                             candidate_overlaps,
                             anchor_weight * candidate_target_delta + proximity_penalty_factor * candidate_middle_penalty,
+                            candidate_leader_length,
                             candidate_move,
                         )
 
-                        if candidate_score < current_score:
+                        if candidate_score < best_score:
                             best_angle = candidate_angle
                             best_x = candidate_x
                             best_y = candidate_y
@@ -1093,20 +1124,21 @@ def improved_label_placement_fc(
                             best_target_delta = candidate_target_delta
                             best_move = candidate_move
                             best_middle_penalty = candidate_middle_penalty
+                            best_leader_length = candidate_leader_length
+                            best_score = candidate_score
 
-                        if best_overlaps == 0 and best_target_delta == 0 and best_middle_penalty == 0:
+                        if (
+                            best_overlaps == 0
+                            and best_target_delta == 0
+                            and best_middle_penalty == 0
+                            and best_leader_length == 0
+                        ):
                             search_complete = True
                             break
                     if search_complete:
                         break
 
-                improved = False
-                if best_overlaps < current_overlaps:
-                    improved = True
-                elif best_overlaps == current_overlaps and best_middle_penalty < current_middle_penalty:
-                    improved = True
-
-                if improved:
+                if best_score < initial_score:
                     label["start_x"] = best_x
                     label["start_y"] = best_y
                     label["angle_unwrapped"] = best_angle
@@ -1291,6 +1323,17 @@ def improved_label_placement_fc(
         center_y,
         x_radius,
         y_radius,
+    )
+    labels = _polish_total_leader_distance(
+        labels,
+        total_length,
+        center_x,
+        center_y,
+        x_radius,
+        y_radius,
+        min_order_gap=min_order_gap,
+        angle_step_deg=angle_step,
+        max_passes=8,
     )
     labels.sort(key=lambda x: x["_opt_original_idx"])
     for label in labels:
@@ -1548,6 +1591,236 @@ def _refine_labels_to_preferred_hemisphere(
                 label["angle_unwrapped"] = chosen_angle_unwrapped
             current_unwrapped_angles[label_idx] = chosen_angle_unwrapped
             base_plain_overlaps = chosen_plain_total
+
+    return labels
+
+
+def _polish_total_leader_distance(
+    labels: list[dict],
+    total_length: int,
+    center_x: float,
+    center_y: float,
+    x_radius: float,
+    y_radius: float,
+    *,
+    min_order_gap: float = 0.05,
+    angle_step_deg: float = 0.25,
+    max_passes: int = 8,
+) -> list[dict]:
+    """
+    Reduce total leader length while preserving overlap/order/hemisphere quality.
+
+    This is a conservative final pass that only accepts strictly better global
+    scores and never regresses plain/min-gap overlaps or hemisphere mismatches.
+    """
+    if not labels:
+        return labels
+
+    def _target_angle_unwrapped(label: dict) -> float:
+        return float(
+            label.get(
+                "target_angle_unwrapped",
+                angle_from_middle_unwrapped(float(label["middle"]), total_length),
+            )
+        )
+
+    def _update_label_coordinates(label: dict, angle_unwrapped: float) -> None:
+        label["angle_unwrapped"] = angle_unwrapped
+        label["start_x"], label["start_y"] = calculate_coordinates(
+            center_x,
+            center_y,
+            x_radius,
+            y_radius,
+            angle_unwrapped,
+            label["middle"],
+            total_length,
+        )
+
+    def _total_target_delta() -> float:
+        delta_sum = 0.0
+        for label in labels:
+            target = _target_angle_unwrapped(label)
+            current = float(label.get("angle_unwrapped", target))
+            delta_sum += abs(current - target)
+        return delta_sum
+
+    def _labels_overlap(label_a: dict, label_b: dict, *, use_min_gap: bool) -> bool:
+        if use_min_gap:
+            margin = minimum_bbox_gap_px(label_a, label_b, base_margin_px=0.0)
+            y_margin = margin
+            x_margin = margin
+        else:
+            y_margin = 0.1
+            x_margin = 1.0
+        return y_overlap(label_a, label_b, total_length, y_margin) and x_overlap(
+            label_a,
+            label_b,
+            minimum_margin=x_margin,
+        )
+
+    def _label_overlap_count(label_idx: int, candidate_label: dict, *, use_min_gap: bool) -> int:
+        overlap_count = 0
+        for other_idx, other in enumerate(labels):
+            if other_idx == label_idx:
+                continue
+            if _labels_overlap(candidate_label, other, use_min_gap=use_min_gap):
+                overlap_count += 1
+        return overlap_count
+
+    unwrapped = _derive_monotonic_unwrapped_angles(labels, total_length)
+    for idx, angle_unwrapped in enumerate(unwrapped):
+        labels[idx]["angle_unwrapped"] = angle_unwrapped
+
+    plain_overlaps = _count_label_overlaps(labels, total_length, use_min_gap=False)
+    min_gap_overlaps = _count_label_overlaps(labels, total_length, use_min_gap=True)
+    baseline_min_gap_overlaps = min_gap_overlaps
+    allow_min_gap_relaxation = len(labels) >= DENSE_DISTANCE_COMPACTION_MIN_LABELS
+    max_allowed_min_gap_overlaps = baseline_min_gap_overlaps + (
+        DENSE_DISTANCE_COMPACTION_MIN_GAP_RELAX if allow_min_gap_relaxation else 0
+    )
+    hemisphere_mismatch_count, _ = _hemisphere_mismatch_metrics(labels, total_length)
+    leader_sum, _ = _leader_distance_score(labels)
+    target_delta_sum = _total_target_delta()
+    best_score = (
+        plain_overlaps,
+        min_gap_overlaps,
+        hemisphere_mismatch_count,
+        leader_sum,
+        target_delta_sum,
+    )
+
+    for _ in range(max_passes):
+        pass_changed = False
+        label_order = sorted(
+            range(len(labels)),
+            key=lambda label_idx: _leader_length_px(labels[label_idx]),
+            reverse=True,
+        )
+
+        for label_idx in label_order:
+            label = labels[label_idx]
+            current_angle = float(label["angle_unwrapped"])
+            target_angle = _target_angle_unwrapped(label)
+            if math.isclose(current_angle, target_angle, abs_tol=1e-9):
+                continue
+
+            lower_bound = (
+                float(labels[label_idx - 1]["angle_unwrapped"]) + min_order_gap
+                if label_idx > 0
+                else -float("inf")
+            )
+            upper_bound = (
+                float(labels[label_idx + 1]["angle_unwrapped"]) - min_order_gap
+                if label_idx < (len(labels) - 1)
+                else float("inf")
+            )
+            if lower_bound >= upper_bound:
+                continue
+
+            direction = 1.0 if target_angle > current_angle else -1.0
+            max_steps = int(abs(target_angle - current_angle) / angle_step_deg)
+            candidate_angles = [current_angle + direction * angle_step_deg * step for step in range(1, max_steps + 1)]
+            if not candidate_angles or not math.isclose(candidate_angles[-1], target_angle, abs_tol=1e-9):
+                candidate_angles.append(target_angle)
+
+            current_plain_for_label = _label_overlap_count(label_idx, label, use_min_gap=False)
+            current_min_gap_for_label = _label_overlap_count(label_idx, label, use_min_gap=True)
+            current_leader = _leader_length_px(label)
+            current_target_delta = abs(current_angle - target_angle)
+            original_start_x = float(label["start_x"])
+            original_start_y = float(label["start_y"])
+            original_angle = current_angle
+
+            best_strict: tuple[float, tuple[int, int, int, float, float]] | None = None
+            best_relaxed: tuple[float, tuple[int, int, int, float, float], tuple[float, float, int]] | None = None
+            for candidate_angle in candidate_angles:
+                if candidate_angle <= lower_bound + 1e-9 or candidate_angle >= upper_bound - 1e-9:
+                    continue
+
+                candidate_label = label.copy()
+                candidate_label["angle_unwrapped"] = candidate_angle
+                candidate_label["start_x"], candidate_label["start_y"] = calculate_coordinates(
+                    center_x,
+                    center_y,
+                    x_radius,
+                    y_radius,
+                    candidate_angle,
+                    label["middle"],
+                    total_length,
+                )
+
+                candidate_plain_for_label = _label_overlap_count(label_idx, candidate_label, use_min_gap=False)
+                candidate_plain_total = plain_overlaps - current_plain_for_label + candidate_plain_for_label
+                if candidate_plain_total > plain_overlaps:
+                    continue
+
+                candidate_min_gap_for_label = _label_overlap_count(label_idx, candidate_label, use_min_gap=True)
+                candidate_min_gap_total = min_gap_overlaps - current_min_gap_for_label + candidate_min_gap_for_label
+                if candidate_min_gap_total > max_allowed_min_gap_overlaps:
+                    continue
+
+                candidate_leader = _leader_length_px(candidate_label)
+                candidate_leader_sum = leader_sum - current_leader + candidate_leader
+                candidate_target_delta = abs(candidate_angle - target_angle)
+                candidate_target_delta_sum = target_delta_sum - current_target_delta + candidate_target_delta
+
+                label["start_x"] = candidate_label["start_x"]
+                label["start_y"] = candidate_label["start_y"]
+                label["angle_unwrapped"] = candidate_angle
+                candidate_mismatch_count, _ = _hemisphere_mismatch_metrics(labels, total_length)
+                label["start_x"] = original_start_x
+                label["start_y"] = original_start_y
+                label["angle_unwrapped"] = original_angle
+                if candidate_mismatch_count > hemisphere_mismatch_count:
+                    continue
+
+                candidate_score = (
+                    candidate_plain_total,
+                    candidate_min_gap_total,
+                    candidate_mismatch_count,
+                    candidate_leader_sum,
+                    candidate_target_delta_sum,
+                )
+                if candidate_min_gap_total <= min_gap_overlaps and candidate_score < best_score:
+                    if best_strict is None or candidate_score < best_strict[1]:
+                        best_strict = (candidate_angle, candidate_score)
+                    continue
+                if (
+                    allow_min_gap_relaxation
+                    and candidate_plain_total == plain_overlaps
+                    and candidate_mismatch_count <= hemisphere_mismatch_count
+                    and candidate_min_gap_total > min_gap_overlaps
+                ):
+                    relaxed_cmp = (
+                        candidate_leader_sum,
+                        candidate_target_delta_sum,
+                        candidate_min_gap_total,
+                    )
+                    if best_relaxed is None or relaxed_cmp < best_relaxed[2]:
+                        best_relaxed = (candidate_angle, candidate_score, relaxed_cmp)
+
+            accepted = best_strict
+            if accepted is None and best_relaxed is not None:
+                relaxed_angle, relaxed_score, _ = best_relaxed
+                current_cmp = (leader_sum, target_delta_sum, min_gap_overlaps)
+                if (relaxed_score[3], relaxed_score[4], relaxed_score[1]) < current_cmp:
+                    accepted = (relaxed_angle, relaxed_score)
+
+            if accepted is None:
+                continue
+
+            accepted_angle, accepted_score = accepted
+            _update_label_coordinates(label, accepted_angle)
+            plain_overlaps = accepted_score[0]
+            min_gap_overlaps = accepted_score[1]
+            hemisphere_mismatch_count = accepted_score[2]
+            leader_sum = accepted_score[3]
+            target_delta_sum = accepted_score[4]
+            best_score = accepted_score
+            pass_changed = True
+
+        if not pass_changed:
+            break
 
     return labels
 

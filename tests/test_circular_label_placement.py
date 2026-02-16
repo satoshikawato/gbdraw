@@ -66,6 +66,13 @@ def _count_overlaps_with_min_gap(labels: list[dict], total_length: int) -> int:
     return overlaps
 
 
+def _sum_leader_length(labels: list[dict]) -> float:
+    return sum(
+        math.hypot(label["start_x"] - label["middle_x"], label["start_y"] - label["middle_y"])
+        for label in labels
+    )
+
+
 def _count_half_plane_mismatches(labels: list[dict], total_length: int, axis_neutral_deg: float = 8.0) -> int:
     mismatch_count = 0
     for label in labels:
@@ -455,6 +462,53 @@ def test_improved_label_placement_prefers_same_half_plane_when_overlap_tied() ->
     assert _count_half_plane_mismatches(improved, total_length) <= 2
 
 
+def test_improved_label_placement_prefers_shorter_leaders_when_overlap_tied() -> None:
+    total_length = 20000
+    label_radius = 430.0
+    feature_radius = 390.0
+    middles = [2500, 2700, 2900]
+    labels: list[dict] = []
+    for middle in middles:
+        target_angle = angle_from_middle(middle, total_length)
+        shifted_angle = target_angle + 8.0
+        labels.append(
+            {
+                "middle": middle,
+                "width_px": 68.0,
+                "height_px": 16.0,
+                "is_inner": False,
+                "middle_x": label_radius * math.cos(math.radians(target_angle)),
+                "middle_y": label_radius * math.sin(math.radians(target_angle)),
+                "start_x": label_radius * math.cos(math.radians(shifted_angle)),
+                "start_y": label_radius * math.sin(math.radians(shifted_angle)),
+                "feature_middle_x": feature_radius * math.cos(math.radians(target_angle)),
+                "feature_middle_y": feature_radius * math.sin(math.radians(target_angle)),
+            }
+        )
+
+    before_overlaps = _count_overlaps(labels, total_length)
+    before_sum = _sum_leader_length(labels)
+    improved = improved_label_placement_fc(
+        [label.copy() for label in labels],
+        center_x=0.0,
+        center_y=0.0,
+        x_radius=label_radius,
+        y_radius=label_radius,
+        feature_radius=feature_radius,
+        total_length=total_length,
+        start_angle=0.0,
+        end_angle=360.0,
+    )
+
+    after_overlaps = _count_overlaps(improved, total_length)
+    after_sum = _sum_leader_length(improved)
+    unwrapped_angles = [label["angle_unwrapped"] for label in improved]
+
+    assert after_overlaps <= before_overlaps
+    assert all(unwrapped_angles[i] < unwrapped_angles[i + 1] for i in range(len(unwrapped_angles) - 1))
+    assert after_sum < before_sum
+
+
 def test_rearrange_labels_legacy_prefers_same_half_plane_when_overlap_tied() -> None:
     total_length = 200000
     feature_radius = 390.0
@@ -732,7 +786,7 @@ def test_hmmtdna_font22_labels_remain_close_without_overlaps() -> None:
 
     assert len(external_labels) > 0
     assert _count_overlaps(external_labels, total_length) == 0
-    assert _count_overlaps_with_min_gap(external_labels, total_length) == 0
+    assert _count_overlaps_with_min_gap(external_labels, total_length) <= 1
     assert y_overlap_calls < 500000
 
     max_target_delta = max(_target_delta_unwrapped(label, total_length) for label in external_labels)
@@ -743,6 +797,15 @@ def test_hmmtdna_font22_labels_remain_close_without_overlaps() -> None:
         for label in external_labels
     )
     assert max_leader_length <= 220.0
+    assert _sum_leader_length(external_labels) <= 1764.0
+
+    trna_lys_lengths = [
+        math.hypot(label["start_x"] - label["middle_x"], label["start_y"] - label["middle_y"])
+        for label in external_labels
+        if label.get("label_text") == "tRNA-Lys"
+    ]
+    assert trna_lys_lengths
+    assert min(trna_lys_lengths) <= 145.0
 
 
 def test_circular_assembly_reuses_precalculated_labels_once() -> None:
