@@ -8,6 +8,7 @@ from Bio import SeqIO
 import gbdraw.diagrams.circular.assemble as circular_assemble_module
 import gbdraw.render.groups.circular.seq_record as circular_seq_record_group_module
 import gbdraw.circular as circular_cli_module
+import gbdraw.labels.circular as circular_labels_module
 from gbdraw.api.diagram import assemble_circular_diagram_from_record
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
@@ -16,6 +17,7 @@ from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
 from gbdraw.io.colors import load_default_colors
 from gbdraw.labels.filtering import preprocess_label_filtering
+from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
 from gbdraw.tracks import parse_track_specs
 from svgwrite import Drawing
 
@@ -38,6 +40,66 @@ def _make_config_dict(*, show_labels: bool) -> dict:
         strandedness=True,
         track_type="tuckin",
     )
+
+
+def _label_genome_intervals_for_clearance(label: dict, total_length: int) -> list[tuple[float, float]]:
+    if total_length <= 0:
+        return []
+    total_length_f = float(total_length)
+    start_x = float(label.get("start_x", 0.0))
+    start_y = float(label.get("start_y", 0.0))
+    radius = math.hypot(start_x, start_y)
+    if radius <= 1e-9:
+        middle = float(label.get("middle", 0.0)) % total_length_f
+        return [(middle, middle)]
+    width_px = max(0.0, float(label.get("width_px", 0.0)))
+    if width_px <= 1e-9:
+        anchor_angle = (math.degrees(math.atan2(start_y, start_x)) + 90.0) % 360.0
+        anchor_position = (anchor_angle / 360.0) * total_length_f
+        return [(anchor_position, anchor_position)]
+    span_bp = total_length_f * (width_px / (2.0 * math.pi * radius))
+    if span_bp >= total_length_f:
+        return [(0.0, total_length_f)]
+    anchor_angle = (math.degrees(math.atan2(start_y, start_x)) + 90.0) % 360.0
+    center_position = (anchor_angle / 360.0) * total_length_f
+    half_span = 0.5 * span_bp
+    start_pos = center_position - half_span
+    end_pos = center_position + half_span
+    if start_pos < 0.0:
+        return [(start_pos + total_length_f, total_length_f), (0.0, end_pos)]
+    if end_pos > total_length_f:
+        return [(start_pos, total_length_f), (0.0, end_pos - total_length_f)]
+    return [(start_pos, end_pos)]
+
+
+def _max_outer_feature_radius_for_label(
+    intervals: list[tuple[float, float, float]],
+    label: dict,
+    total_length: int,
+) -> float:
+    label_intervals = _label_genome_intervals_for_clearance(label, total_length)
+    max_outer = 0.0
+    for label_start, label_end in label_intervals:
+        if label_end <= label_start + 1e-9:
+            max_outer = max(
+                max_outer,
+                circular_labels_module._max_outer_feature_radius_at_position(intervals, label_start, total_length),
+            )
+            continue
+        for feature_start, feature_end, feature_outer in intervals:
+            if float(feature_start) < float(label_end) and float(feature_end) > float(label_start):
+                max_outer = max(max_outer, float(feature_outer))
+    return max_outer
+
+
+def _annulus_overlaps_band(
+    annulus: tuple[float, float],
+    band: tuple[float, float],
+    tol: float = 1e-6,
+) -> bool:
+    annulus_inner, annulus_outer = sorted((float(annulus[0]), float(annulus[1])))
+    band_inner, band_outer = sorted((float(band[0]), float(band[1])))
+    return annulus_inner < (band_outer - tol) and annulus_outer > (band_inner + tol)
 
 
 def test_feature_width_override_reaches_feature_drawer(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -423,6 +485,184 @@ def test_feature_width_expand_canvas_when_labels_hidden_with_resolve_overlaps() 
 
     rendered_height = float(str(canvas.attribs["height"]).rstrip("px"))
     assert rendered_height > expected_base_height
+
+
+def test_feature_width_75_keeps_outer_labels_outside_local_feature_tracks() -> None:
+    record = _load_record()
+    config_dict = _make_config_dict(show_labels=True)
+    config_dict = modify_config_dict(
+        config_dict,
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    color_table, default_colors = preprocess_color_tables(None, load_default_colors("", "default"))
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        SELECTED_FEATURES,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    base_radius = float(cfg.canvas.circular.radius)
+    base_track_ratio = float(cfg.canvas.circular.track_ratio)
+    feature_ratio_override = 75.0 / (base_radius * base_track_ratio)
+    canvas_stub = type(
+        "_CanvasStub",
+        (),
+        {
+            "radius": base_radius,
+            "track_ratio": base_track_ratio,
+            "length_param": "short",
+        },
+    )()
+    radius_mapper, _, _ = circular_assemble_module._build_feature_radius_mapper(
+        feature_dict,
+        len(record.seq),
+        canvas_config=canvas_stub,
+        cfg=cfg,
+        feature_track_ratio_factor_override=feature_ratio_override,
+    )
+    assert radius_mapper is not None
+
+    default_anchor, default_arc_outer = circular_assemble_module._default_outer_label_arena(
+        canvas_config=canvas_stub,
+        cfg=cfg,
+    )
+    outer_arena = (float(radius_mapper(default_anchor)), float(radius_mapper(default_arc_outer)))
+
+    labels = circular_labels_module.prepare_label_list(
+        feature_dict,
+        len(record.seq),
+        base_radius,
+        base_track_ratio,
+        config_dict,
+        cfg=cfg,
+        outer_arena=outer_arena,
+        feature_track_ratio_factor_override=feature_ratio_override,
+    )
+    outer_labels = [label for label in labels if not label.get("is_embedded")]
+    assert outer_labels
+
+    feature_intervals = circular_labels_module._build_outer_feature_radius_intervals(
+        feature_dict,
+        len(record.seq),
+        base_radius,
+        base_track_ratio,
+        cfg,
+        feature_track_ratio_factor_override=feature_ratio_override,
+    )
+    assert feature_intervals
+
+    for label in outer_labels:
+        local_outer = _max_outer_feature_radius_for_label(feature_intervals, label, len(record.seq))
+        required_radius = local_outer + circular_labels_module.MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
+        label_bbox_min_radius = circular_labels_module._label_bbox_min_radius(
+            label,
+            len(record.seq),
+            minimum_margin=0.0,
+        )
+        assert label_bbox_min_radius >= required_radius - 1e-3
+
+
+def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overlapping(monkeypatch: pytest.MonkeyPatch) -> None:
+    record = _load_record()
+    config_dict = _make_config_dict(show_labels=False)
+    config_dict = modify_config_dict(
+        config_dict,
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    base_radius = float(cfg.canvas.circular.radius)
+    base_track_ratio = float(cfg.canvas.circular.track_ratio)
+    feature_ratio_override = 75.0 / (base_radius * base_track_ratio)
+    default_ratio_factor = float(cfg.canvas.circular.track_ratio_factors["short"][0])
+
+    color_table, default_colors = preprocess_color_tables(None, load_default_colors("", "default"))
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        SELECTED_FEATURES,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+    default_band = circular_assemble_module._compute_feature_band_bounds_px(
+        feature_dict,
+        len(record.seq),
+        base_radius_px=base_radius,
+        track_ratio=base_track_ratio,
+        length_param="short",
+        track_ratio_factor=default_ratio_factor,
+        cfg=cfg,
+        track_id_whitelist={0},
+    )
+    widened_band = circular_assemble_module._compute_feature_band_bounds_px(
+        feature_dict,
+        len(record.seq),
+        base_radius_px=base_radius,
+        track_ratio=base_track_ratio,
+        length_param="short",
+        track_ratio_factor=feature_ratio_override,
+        cfg=cfg,
+        track_id_whitelist={0},
+    )
+    assert default_band is not None
+    assert widened_band is not None
+
+    captured: dict[str, Any] = {}
+
+    def fake_add_axis_group_on_canvas(canvas, canvas_config, config_dict, *, radius_override=None, cfg=None):
+        captured["axis"] = radius_override
+        return canvas
+
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None):
+        captured["ticks"] = radius_override
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", fake_add_axis_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "add_record_definition_group_on_canvas",
+        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None: canvas,
+    )
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "add_legend_group_on_canvas",
+        lambda canvas, canvas_config, legend_config, legend_table: canvas,
+    )
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        track_specs=["features@w=75px"],
+    )
+
+    ticks_center = float(captured.get("ticks") if captured.get("ticks") is not None else base_radius)
+    tick_min_ratio, tick_max_ratio = get_circular_tick_path_ratio_bounds(
+        len(record.seq),
+        str(cfg.canvas.circular.track_type),
+        bool(cfg.canvas.strandedness),
+    )
+    tick_annulus = (ticks_center * tick_min_ratio, ticks_center * tick_max_ratio)
+    assert not _annulus_overlaps_band(tick_annulus, widened_band)
 
 
 def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> None:

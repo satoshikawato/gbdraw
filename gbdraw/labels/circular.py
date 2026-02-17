@@ -535,6 +535,71 @@ def _sample_label_genome_positions(label: dict, total_length: int) -> list[float
     return sampled_positions
 
 
+def _label_genome_intervals_for_clearance(label: dict, total_length: int) -> list[tuple[float, float]]:
+    """Return genome intervals covered by the current label width estimate."""
+    if total_length <= 0:
+        return []
+
+    total_length_f = float(total_length)
+    start_x = float(label.get("start_x", 0.0))
+    start_y = float(label.get("start_y", 0.0))
+    label_radius = math.hypot(start_x, start_y)
+
+    if label_radius <= 1e-9:
+        middle = float(label.get("middle", 0.0)) % total_length_f
+        return [(middle, middle)]
+
+    width_px = max(0.0, float(label.get("width_px", 0.0)))
+    if width_px <= 1e-9:
+        anchor_angle = (math.degrees(math.atan2(start_y, start_x)) + 90.0) % 360.0
+        anchor_position = (anchor_angle / 360.0) * total_length_f
+        return [(anchor_position, anchor_position)]
+
+    span_bp = total_length_f * (width_px / (2.0 * math.pi * label_radius))
+    if span_bp >= total_length_f:
+        return [(0.0, total_length_f)]
+
+    anchor_angle = (math.degrees(math.atan2(start_y, start_x)) + 90.0) % 360.0
+    center_position = (anchor_angle / 360.0) * total_length_f
+    half_span = 0.5 * span_bp
+    interval_start = center_position - half_span
+    interval_end = center_position + half_span
+
+    if interval_start < 0.0:
+        return [(interval_start + total_length_f, total_length_f), (0.0, interval_end)]
+    if interval_end > total_length_f:
+        return [(interval_start, total_length_f), (0.0, interval_end - total_length_f)]
+    return [(interval_start, interval_end)]
+
+
+def _max_outer_feature_radius_for_intervals(
+    feature_radius_intervals: list[tuple[float, float, float]],
+    label_intervals: list[tuple[float, float]],
+    total_length: int,
+) -> float:
+    """Return max feature outer radius intersecting any label genome interval."""
+    if total_length <= 0 or not feature_radius_intervals or not label_intervals:
+        return 0.0
+
+    max_outer_radius = 0.0
+    for label_start, label_end in label_intervals:
+        label_start_f = float(label_start)
+        label_end_f = float(label_end)
+
+        # Degenerate interval: treat as a point lookup.
+        if label_end_f <= label_start_f + 1e-9:
+            max_outer_radius = max(
+                max_outer_radius,
+                _max_outer_feature_radius_at_position(feature_radius_intervals, label_start_f, total_length),
+            )
+            continue
+
+        for feature_start, feature_end, feature_outer in feature_radius_intervals:
+            if float(feature_start) < label_end_f and float(feature_end) > label_start_f:
+                max_outer_radius = max(max_outer_radius, float(feature_outer))
+    return max_outer_radius
+
+
 def _update_outer_label_minimum_radii_against_features(
     labels: list[dict],
     total_length: int,
@@ -545,16 +610,15 @@ def _update_outer_label_minimum_radii_against_features(
         return labels
 
     for label in labels:
-        sampled_positions = _sample_label_genome_positions(label, total_length)
-        if not sampled_positions:
+        label_intervals = _label_genome_intervals_for_clearance(label, total_length)
+        if not label_intervals:
             continue
 
-        local_outer_radius = 0.0
-        for sampled_pos in sampled_positions:
-            local_outer_radius = max(
-                local_outer_radius,
-                _max_outer_feature_radius_at_position(feature_radius_intervals, sampled_pos, total_length),
-            )
+        local_outer_radius = _max_outer_feature_radius_for_intervals(
+            feature_radius_intervals,
+            label_intervals,
+            total_length,
+        )
         if local_outer_radius <= 0.0:
             continue
 
@@ -2732,11 +2796,17 @@ def prepare_label_list(
             feature_outer_radius_intervals,
         )
         outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
-        # Final radial enforcement can reintroduce tight angular collisions.
+        # Final overlap pass, then enforce outer clearances as the final priority.
         outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
             outer_labels_rearranged,
             total_length,
         )
+        outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
+            outer_labels_rearranged,
+            total_length,
+            feature_outer_radius_intervals,
+        )
+        outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
     outer_labels_rearranged = assign_leader_start_points(outer_labels_rearranged, total_length)
 
     inner_labels_rearranged = []

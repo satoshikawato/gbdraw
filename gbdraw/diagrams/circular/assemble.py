@@ -40,6 +40,7 @@ from ...layout.circular import calculate_feature_position_factors_circular  # ty
 from ...layout.common import calculate_cds_ratio  # type: ignore[reportMissingImports]
 from ...legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
+from ...svg.circular_ticks import get_circular_tick_path_ratio_bounds  # type: ignore[reportMissingImports]
 from ...tracks import TrackSpec  # type: ignore[reportMissingImports]
 
 from .builders import (
@@ -981,6 +982,74 @@ def _arena_from_center_and_width(center_px: float | None, width_px: float | None
     return inner_px, outer_px
 
 
+def _tick_annulus_for_center(
+    center_radius_px: float,
+    tick_ratio_bounds: tuple[float, float],
+) -> tuple[float, float]:
+    """Return tick annulus (inner, outer) for a center radius."""
+    min_ratio, max_ratio = sorted((float(tick_ratio_bounds[0]), float(tick_ratio_bounds[1])))
+    inner_radius = float(center_radius_px) * min_ratio
+    outer_radius = float(center_radius_px) * max_ratio
+    if outer_radius < inner_radius:
+        inner_radius, outer_radius = outer_radius, inner_radius
+    return inner_radius, outer_radius
+
+
+def _tick_annulus_overlaps_feature_band(
+    center_radius_px: float,
+    tick_ratio_bounds: tuple[float, float],
+    feature_band_px: tuple[float, float],
+) -> bool:
+    """Whether the tick annulus intersects the feature band."""
+    tick_inner, tick_outer = _tick_annulus_for_center(center_radius_px, tick_ratio_bounds)
+    feature_inner, feature_outer = sorted((float(feature_band_px[0]), float(feature_band_px[1])))
+    return (
+        tick_inner < (feature_outer - FEATURE_BAND_EPSILON)
+        and tick_outer > (feature_inner + FEATURE_BAND_EPSILON)
+    )
+
+
+def _resolve_ticks_center_radius_avoiding_feature_band(
+    *,
+    current_ticks_radius_px: float,
+    default_ticks_radius_px: float,
+    feature_band_px: tuple[float, float],
+    default_feature_band_px: tuple[float, float],
+    tick_ratio_bounds: tuple[float, float],
+) -> float | None:
+    """Resolve a non-overlapping tick center while preserving default band gaps when possible."""
+    tick_min_ratio, tick_max_ratio = sorted((float(tick_ratio_bounds[0]), float(tick_ratio_bounds[1])))
+    if tick_min_ratio <= 0.0 or tick_max_ratio <= 0.0:
+        return None
+
+    feature_inner, feature_outer = sorted((float(feature_band_px[0]), float(feature_band_px[1])))
+    default_feature_inner, default_feature_outer = sorted(
+        (float(default_feature_band_px[0]), float(default_feature_band_px[1]))
+    )
+
+    default_tick_inner, default_tick_outer = _tick_annulus_for_center(default_ticks_radius_px, tick_ratio_bounds)
+    base_inside_gap = default_feature_inner - default_tick_outer
+    base_outside_gap = default_tick_inner - default_feature_outer
+    inside_gap = max(0.0, base_inside_gap)
+    outside_gap = max(0.0, base_outside_gap)
+
+    candidates: list[float] = []
+
+    inside_center = (feature_inner - inside_gap - FEATURE_BAND_EPSILON) / tick_max_ratio
+    if inside_center > FEATURE_BAND_EPSILON:
+        if not _tick_annulus_overlaps_feature_band(inside_center, tick_ratio_bounds, feature_band_px):
+            candidates.append(float(inside_center))
+
+    outside_center = (feature_outer + outside_gap + FEATURE_BAND_EPSILON) / tick_min_ratio
+    if outside_center > FEATURE_BAND_EPSILON:
+        if not _tick_annulus_overlaps_feature_band(outside_center, tick_ratio_bounds, feature_band_px):
+            candidates.append(float(outside_center))
+
+    if not candidates:
+        return None
+    return min(candidates, key=lambda candidate: abs(float(candidate) - float(current_ticks_radius_px)))
+
+
 def add_record_on_circular_canvas(
     canvas: Drawing,
     gb_record: SeqRecord,
@@ -1054,13 +1123,15 @@ def add_record_on_circular_canvas(
         )
 
     feature_radius_mapper: Callable[[float], float] | None = None
+    default_primary_feature_band: tuple[float, float] | None = None
+    overridden_primary_feature_band: tuple[float, float] | None = None
     auto_relayout_active = False
     if (
         show_features
         and feature_track_ratio_factor_override is not None
         and precomputed_feature_dict is not None
     ):
-        feature_radius_mapper, _, _ = _build_feature_radius_mapper(
+        feature_radius_mapper, default_primary_feature_band, overridden_primary_feature_band = _build_feature_radius_mapper(
             precomputed_feature_dict,
             len(gb_record.seq),
             canvas_config=canvas_config,
@@ -1213,6 +1284,37 @@ def add_record_on_circular_canvas(
     ticks_ts = ts_by_kind.get("ticks")
     if ticks_ts is None or ticks_ts.show:
         ticks_radius_px, _ = _resolve_track_center_and_width_with_autorelayout("ticks", ticks_ts)
+        ticks_has_explicit_center = _track_spec_has_explicit_center(ticks_ts)
+        if (
+            auto_relayout_active
+            and show_features
+            and (feature_track_ratio_factor_override is not None)
+            and (default_primary_feature_band is not None)
+            and (overridden_primary_feature_band is not None)
+            and (not ticks_has_explicit_center)
+        ):
+            tick_ratio_bounds = get_circular_tick_path_ratio_bounds(
+                len(gb_record.seq),
+                str(cfg.canvas.circular.track_type),
+                bool(cfg.canvas.strandedness),
+            )
+            effective_ticks_radius = (
+                float(ticks_radius_px) if ticks_radius_px is not None else float(canvas_config.radius)
+            )
+            if _tick_annulus_overlaps_feature_band(
+                effective_ticks_radius,
+                tick_ratio_bounds,
+                overridden_primary_feature_band,
+            ):
+                adjusted_ticks_radius = _resolve_ticks_center_radius_avoiding_feature_band(
+                    current_ticks_radius_px=effective_ticks_radius,
+                    default_ticks_radius_px=float(canvas_config.radius),
+                    feature_band_px=overridden_primary_feature_band,
+                    default_feature_band_px=default_primary_feature_band,
+                    tick_ratio_bounds=tick_ratio_bounds,
+                )
+                if adjusted_ticks_radius is not None:
+                    ticks_radius_px = float(adjusted_ticks_radius)
         canvas = add_tick_group_on_canvas(
             canvas, gb_record, canvas_config, config_dict, radius_override=ticks_radius_px, cfg=cfg
         )
