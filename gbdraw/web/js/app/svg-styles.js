@@ -150,6 +150,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     const featureLegendGroups = getAllFeatureLegendGroups(svg);
     const keyToColorKey = {
       CDS: 'CDS',
+      'D-loop': 'D-loop',
       repeat_region: 'repeat_region',
       tmRNA: 'tmRNA',
       tRNA: 'tRNA',

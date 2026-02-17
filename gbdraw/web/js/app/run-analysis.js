@@ -579,10 +579,11 @@ json.dumps({
       generatedLegendPosition.value = form.legend;
 
       extractedFeatures.value = [];
+      const selectedFeatureTypes = adv.features.join(',');
 
       if (mode.value === 'circular' && cInputType.value === 'gb') {
         try {
-          const featJson = pyodide.globals.get('extract_features_from_genbank')('/input.gb');
+          const featJson = pyodide.globals.get('extract_features_from_genbank')('/input.gb', null, null, null, selectedFeatureTypes);
           const featData = JSON.parse(featJson);
           if (!featData.error && featData.features) {
             extractedFeatures.value = featData.features;
@@ -606,7 +607,13 @@ json.dumps({
             const reverseFlag = reverseFlags[i] ? '1' : '0';
             const featJson = pyodide
               .globals
-              .get('extract_features_from_genbank')(`/seq_${i}.gb`, regionSpec, recordSelector, reverseFlag);
+              .get('extract_features_from_genbank')(
+                `/seq_${i}.gb`,
+                regionSpec,
+                recordSelector,
+                reverseFlag,
+                selectedFeatureTypes
+              );
             const featData = JSON.parse(featJson);
             if (!featData.error && featData.features) {
               featData.features.forEach((f) => {
