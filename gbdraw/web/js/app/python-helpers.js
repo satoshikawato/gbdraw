@@ -218,7 +218,7 @@ def regenerate_definition_svg(gb_path, species=None, strain=None, font_size=18):
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 
-def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None):
+def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None):
     """Extract feature info from GenBank file for UI display"""
     from Bio import SeqIO
     from gbdraw.features.colors import compute_feature_hash
@@ -237,6 +237,24 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
         records = select_record(records, selector)
         reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
         records = reverse_records(records, reverse)
+        selected_feature_set = None
+        if selected_features is not None:
+            parsed_features = []
+            if isinstance(selected_features, (list, tuple, set)):
+                parsed_features = [str(v).strip() for v in selected_features if str(v).strip()]
+            else:
+                selected_raw = str(selected_features).strip()
+                if selected_raw and selected_raw.lower() not in {"none", "null", "jsnull", "undefined", "jsundefined", "-"}:
+                    if selected_raw.startswith("["):
+                        try:
+                            loaded = json.loads(selected_raw)
+                        except Exception:
+                            loaded = None
+                        if isinstance(loaded, list):
+                            parsed_features = [str(v).strip() for v in loaded if str(v).strip()]
+                    if not parsed_features:
+                        parsed_features = [part.strip() for part in selected_raw.split(",") if part.strip()]
+            selected_feature_set = set(parsed_features)
         if region_spec:
             from gbdraw.io.regions import apply_region_specs, parse_region_specs
             records = apply_region_specs(records, parse_region_specs([region_spec]))
@@ -245,57 +263,57 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
             hash_record_id = record.id
             record_ids.append(record_id)
             for feat in record.features:
-                if feat.type in ['CDS', 'tRNA', 'rRNA', 'ncRNA', 'misc_RNA', 'tmRNA',
-                                 'repeat_region', 'misc_feature', 'mobile_element',
-                                 'regulatory', 'gene', 'mRNA', 'exon', 'intron']:
-                    # Overall coordinates for display
-                    start = int(feat.location.start)
-                    end = int(feat.location.end)
-                    strand_raw = feat.location.strand
+                if selected_feature_set is not None and feat.type not in selected_feature_set:
+                    continue
 
+                # Overall coordinates for display
+                start = int(feat.location.start)
+                end = int(feat.location.end)
+                strand_raw = feat.location.strand
+
+                try:
+                    svg_id = compute_feature_hash(feat, record_id=hash_record_id)
+                except Exception:
+                    svg_id = None
+                if not svg_id:
+                    # Fallback to raw location if coordinate conversion fails
+                    if hasattr(feat.location, 'parts') and feat.location.parts:
+                        first_part = feat.location.parts[0]
+                        hash_start = int(first_part.start)
+                        hash_end = int(first_part.end)
+                        hash_strand = first_part.strand
+                    else:
+                        hash_start = start
+                        hash_end = end
+                        hash_strand = strand_raw
+                    import hashlib
+                    key = f"{feat.type}:{hash_start}:{hash_end}:{hash_strand}"
+                    svg_id = "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+                qualifiers = {}
+                for q_key, q_vals in feat.qualifiers.items():
+                    if not q_vals:
+                        continue
                     try:
-                        svg_id = compute_feature_hash(feat, record_id=hash_record_id)
+                        q_list = [str(v) for v in q_vals]
                     except Exception:
-                        svg_id = None
-                    if not svg_id:
-                        # Fallback to raw location if coordinate conversion fails
-                        if hasattr(feat.location, 'parts') and feat.location.parts:
-                            first_part = feat.location.parts[0]
-                            hash_start = int(first_part.start)
-                            hash_end = int(first_part.end)
-                            hash_strand = first_part.strand
-                        else:
-                            hash_start = start
-                            hash_end = end
-                            hash_strand = strand_raw
-                        import hashlib
-                        key = f"{feat.type}:{hash_start}:{hash_end}:{hash_strand}"
-                        svg_id = "f" + hashlib.md5(key.encode()).hexdigest()[:8]
-                    qualifiers = {}
-                    for q_key, q_vals in feat.qualifiers.items():
-                        if not q_vals:
-                            continue
-                        try:
-                            q_list = [str(v) for v in q_vals]
-                        except Exception:
-                            q_list = [str(q_vals)]
-                        qualifiers[q_key.lower()] = q_list
-                    features.append({
-                        "id": f"f{idx}",  # Unique internal ID for UI tracking
-                        "svg_id": svg_id,  # Matches SVG path id attribute
-                        "record_id": record_id,  # For multi-record filtering
-                        "record_idx": rec_idx,
-                        "type": feat.type,
-                        "start": start,
-                        "end": end,
-                        "strand": "+" if strand_raw == 1 else "-",
-                        "locus_tag": feat.qualifiers.get("locus_tag", [""])[0],
-                        "gene": feat.qualifiers.get("gene", [""])[0],
-                        "product": feat.qualifiers.get("product", [""])[0],
-                        "note": feat.qualifiers.get("note", [""])[0][:50] if feat.qualifiers.get("note") else "",
-                        "qualifiers": qualifiers,
-                    })
-                    idx += 1
+                        q_list = [str(q_vals)]
+                    qualifiers[q_key.lower()] = q_list
+                features.append({
+                    "id": f"f{idx}",  # Unique internal ID for UI tracking
+                    "svg_id": svg_id,  # Matches SVG path id attribute
+                    "record_id": record_id,  # For multi-record filtering
+                    "record_idx": rec_idx,
+                    "type": feat.type,
+                    "start": start,
+                    "end": end,
+                    "strand": "+" if strand_raw == 1 else "-",
+                    "locus_tag": feat.qualifiers.get("locus_tag", [""])[0],
+                    "gene": feat.qualifiers.get("gene", [""])[0],
+                    "product": feat.qualifiers.get("product", [""])[0],
+                    "note": feat.qualifiers.get("note", [""])[0][:50] if feat.qualifiers.get("note") else "",
+                    "qualifiers": qualifiers,
+                })
+                idx += 1
     except Exception as e:
         return json.dumps({"error": str(e)})
     return json.dumps({"features": features, "record_ids": record_ids})
