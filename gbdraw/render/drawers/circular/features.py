@@ -193,6 +193,44 @@ class FeaturePathGenerator:
             / (1 + math.exp(-PARAM_A * (math.log10(self.total_length) - PARAM_B)))
         )
 
+    def _coalesce_origin_spanning_block(self, feature_object: FeatureObject) -> Optional[Dict[str, Union[str, int]]]:
+        """
+        Collapse non-directional, two-block origin-spanning features into one block.
+
+        This avoids visual splitting at the start/end boundary in circular mode
+        (e.g. D-loop represented as join(end..genome,1..start)).
+        """
+        if feature_object.is_directional:
+            return None
+
+        block_coords = [coord for coord in feature_object.location if coord.kind == "block"]
+        if len(block_coords) != 2:
+            return None
+
+        starts = [int(coord.start) for coord in block_coords]
+        ends = [int(coord.end) for coord in block_coords]
+
+        if min(starts) > 1 or max(ends) < self.total_length:
+            return None
+
+        left_blocks = [coord for coord in block_coords if int(coord.start) <= 1]
+        right_blocks = [coord for coord in block_coords if int(coord.end) >= self.total_length]
+
+        if len(left_blocks) != 1 or len(right_blocks) != 1 or left_blocks[0] is right_blocks[0]:
+            return None
+
+        merged_start = max(starts)
+        merged_end = min(ends)
+        if merged_start <= merged_end:
+            return None
+
+        return {
+            "coord_type": "block",
+            "coord_strand": block_coords[0].strand,
+            "coord_start": merged_start,
+            "coord_end": merged_end,
+        }
+
     def generate_circular_gene_path(self, feature_object: FeatureObject):
         """
         Generate SVG path data for a feature.
@@ -203,6 +241,21 @@ class FeaturePathGenerator:
         Returns:
             List of [path_type, path_data] pairs
         """
+        merged_coord = self._coalesce_origin_spanning_block(feature_object)
+        if merged_coord is not None:
+            merged_path = generate_circular_rectangle_path(
+                self.radius,
+                merged_coord,
+                self.total_length,
+                self.track_ratio,
+                self.cds_ratio,
+                self.offset,
+                self.track_type,
+                self.strandedness,
+                self.track_id,
+            )
+            return [merged_path]
+
         coords = feature_object.location
         coordinates_paths: List[List[str]] = []
         for coord in coords:
