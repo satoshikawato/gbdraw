@@ -37,6 +37,7 @@ class LabelsGroup:
         cfg: GbdrawConfig | None = None,
         precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = None,
         precalculated_labels: Optional[list[dict]] = None,
+        feature_track_ratio_factor_override: float | None = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
@@ -45,6 +46,7 @@ class LabelsGroup:
         self.outer_arena = outer_arena
         self.precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = precomputed_feature_dict
         self.precalculated_labels: Optional[list[dict]] = precalculated_labels
+        self.feature_track_ratio_factor_override = feature_track_ratio_factor_override
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
 
@@ -93,6 +95,7 @@ class LabelsGroup:
                 self.config_dict,
                 cfg=self._cfg,
                 outer_arena=self.outer_arena,
+                feature_track_ratio_factor_override=self.feature_track_ratio_factor_override,
             )
 
         drawer = LabelDrawer(self.config_dict, cfg=self._cfg)

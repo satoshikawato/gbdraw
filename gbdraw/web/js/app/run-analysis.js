@@ -303,6 +303,14 @@ json.dumps({
         if (adv.outer_label_y_offset) args.push('--outer_label_y_radius_offset', adv.outer_label_y_offset);
         if (adv.inner_label_x_offset) args.push('--inner_label_x_radius_offset', adv.inner_label_x_offset);
         if (adv.inner_label_y_offset) args.push('--inner_label_y_radius_offset', adv.inner_label_y_offset);
+        if (
+          adv.feature_width_circular !== null &&
+          adv.feature_width_circular !== undefined &&
+          adv.feature_width_circular !== '' &&
+          Number(adv.feature_width_circular) > 0
+        ) {
+          args.push('--feature_width', adv.feature_width_circular);
+        }
         if (adv.scale_interval) args.push('--scale_interval', adv.scale_interval);
 
         if (cInputType.value === 'gb') {

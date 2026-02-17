@@ -62,9 +62,21 @@ class LabelDrawer:
 
         return anchor_value, baseline_value
 
-    def embed_label(self, group, label, radius, record_length, track_ratio):
+    def embed_label(
+        self,
+        group,
+        label,
+        radius,
+        record_length,
+        track_ratio,
+        feature_track_ratio_factor_override: float | None = None,
+    ):
         length_param = determine_length_parameter(record_length, self._cfg.labels.length_threshold.circular)
-        track_ratio_factor = self._cfg.canvas.circular.track_ratio_factors[length_param][0]
+        track_ratio_factor = (
+            float(feature_track_ratio_factor_override)
+            if feature_track_ratio_factor_override is not None
+            else float(self._cfg.canvas.circular.track_ratio_factors[length_param][0])
+        )
         cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
         # Get track_id from label for overlap resolution
         track_id = label.get("track_id", 0)
@@ -168,7 +180,15 @@ class LabelDrawer:
         group.add(label_path)
         return group
 
-    def draw(self, label, group, record_length, radius, track_ratio):
+    def draw(
+        self,
+        label,
+        group,
+        record_length,
+        radius,
+        track_ratio,
+        feature_track_ratio_factor_override: float | None = None,
+    ):
         cfg = self._cfg
         length_threshold = cfg.labels.length_threshold.circular
         length_param = determine_length_parameter(record_length, length_threshold)
@@ -177,7 +197,14 @@ class LabelDrawer:
         self.track_type = cfg.canvas.circular.track_type
         self.strandedness = cfg.canvas.strandedness
         if label["is_embedded"] is True:
-            group = self.embed_label(group, label, radius, record_length, track_ratio)
+            group = self.embed_label(
+                group,
+                label,
+                radius,
+                record_length,
+                track_ratio,
+                feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+            )
         else:
             group = self.add_label_on_the_rim(group, label, radius, record_length)
         return group

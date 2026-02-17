@@ -241,6 +241,10 @@ def _get_args(args) -> argparse.Namespace:
         help='Manual scale interval for circular mode (in bp). Overrides automatic calculation.',
         type=int)
     parser.add_argument(
+        '--feature_width',
+        help='Feature track width for circular mode (in px; must be > 0).',
+        type=float)
+    parser.add_argument(
         '--legend_box_size',
         help='Legend box size (optional; float; default: 24 (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes >= 50 kb).',
         type=float)
@@ -252,6 +256,8 @@ def _get_args(args) -> argparse.Namespace:
     args = parser.parse_args(args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
+    if args.feature_width is not None and args.feature_width <= 0:
+        parser.error("--feature_width must be > 0")
     return args
 
 
@@ -297,6 +303,7 @@ def circular_main(cmd_args) -> None:
     scale_interval: Optional[int] = args.scale_interval
     legend_box_size = args.legend_box_size
     legend_font_size = args.legend_font_size
+    feature_width: Optional[float] = args.feature_width
     if args.gbk:
         gb_records = load_gbks(args.gbk, "circular")
     elif args.gff and args.fasta:
@@ -393,6 +400,7 @@ def circular_main(cmd_args) -> None:
 
 
     cfg = GbdrawConfig.from_dict(config_dict)
+    track_specs = [f"features@w={float(feature_width):g}px"] if feature_width is not None else None
 
     for gb_record in gb_records:
         record_count += 1
@@ -415,6 +423,7 @@ def circular_main(cmd_args) -> None:
             species=species,
             strain=strain,
             cfg=cfg,
+            track_specs=track_specs,
         )
         save_figure(canvas, out_formats)
 

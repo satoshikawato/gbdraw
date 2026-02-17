@@ -419,13 +419,19 @@ def _build_outer_feature_radius_intervals(
     radius: float,
     track_ratio: float,
     cfg: GbdrawConfig,
+    *,
+    feature_track_ratio_factor_override: float | None = None,
 ) -> list[tuple[float, float, float]]:
     """Build local genome intervals as (start, end, outer_radius_px)."""
     if total_length <= 0:
         return []
 
     length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
-    track_ratio_factor = cfg.canvas.circular.track_ratio_factors[length_param][0]
+    track_ratio_factor = (
+        float(feature_track_ratio_factor_override)
+        if feature_track_ratio_factor_override is not None
+        else float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+    )
     cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
     track_type = cfg.canvas.circular.track_type
     strandedness = cfg.canvas.strandedness
@@ -2532,6 +2538,7 @@ def prepare_label_list(
     cfg: GbdrawConfig | None = None,
     *,
     outer_arena: tuple[float, float] | None = None,
+    feature_track_ratio_factor_override: float | None = None,
 ):
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
     embedded_labels = []
@@ -2553,7 +2560,11 @@ def prepare_label_list(
     font_size: float = cfg.labels.font_size.for_length_param(length_param)
     interval = cfg.canvas.dpi
 
-    track_ratio_factor = cfg.canvas.circular.track_ratio_factors[length_param][0]
+    track_ratio_factor = (
+        float(feature_track_ratio_factor_override)
+        if feature_track_ratio_factor_override is not None
+        else float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+    )
     cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
 
     for feature_object in feature_dict.values():
@@ -2692,6 +2703,7 @@ def prepare_label_list(
             radius,
             track_ratio,
             cfg,
+            feature_track_ratio_factor_override=feature_track_ratio_factor_override,
         )
         outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
             outer_labels_rearranged,

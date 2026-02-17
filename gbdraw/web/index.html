@@ -667,6 +667,13 @@
                             <div v-if="mode === 'circular'">
                                 <label class="input-label adv-section-title">Circular Label Offsets <help-tip text="Adjust radius offset factors for labels."></help-tip></label>
                                 <div class="bg-slate-50 p-1.5 rounded border border-slate-200 grid grid-cols-2 gap-1.5 text-xs">
+                                    <div>
+                                        <label class="text-[9px] block">
+                                            Feature Width
+                                            <help-tip text="Feature band width in px. When set, circular tracks and label arena auto-relayout around the new feature thickness."></help-tip>
+                                        </label>
+                                        <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" class="form-input py-0.5" placeholder="Auto">
+                                    </div>
                                     <div><label class="text-[9px] block">Outer X Offset</label><input type="number" step="0.1" v-model.number="adv.outer_label_x_offset" class="form-input py-0.5"></div>
                                     <div><label class="text-[9px] block">Outer Y Offset</label><input type="number" step="0.1" v-model.number="adv.outer_label_y_offset" class="form-input py-0.5"></div>
                                     <div><label class="text-[9px] block">Inner X Offset</label><input type="number" step="0.1" v-model.number="adv.inner_label_x_offset" class="form-input py-0.5"></div>
