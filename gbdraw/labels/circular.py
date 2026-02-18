@@ -17,6 +17,7 @@ from ..core.text import calculate_bbox_dimensions
 from ..core.sequence import determine_length_parameter
 from ..layout.common import calculate_cds_ratio
 from ..layout.circular import calculate_feature_position_factors_circular
+from ..svg.arrows import calculate_circular_arrow_length
 
 # Keep dense large-font labels from being pushed excessively far from features.
 MIN_BBOX_GAP_RATIO = 0.01
@@ -2630,6 +2631,7 @@ def prepare_label_list(
         else float(cfg.canvas.circular.track_ratio_factors[length_param][0])
     )
     cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
+    circular_arrow_length_bp = calculate_circular_arrow_length(total_length)
 
     for feature_object in feature_dict.values():
         feature_label_text = get_label_text(feature_object, label_filtering)
@@ -2638,6 +2640,9 @@ def prepare_label_list(
         else:
             label_entry = dict()
             longest_segment_length = 0
+            longest_segment_start = 0
+            longest_segment_end = 0
+            longeset_segment_middle = 0
             is_embedded = False
             label_middle = 0
             coordinate_strand: str = "undefined"
@@ -2681,8 +2686,13 @@ def prepare_label_list(
             feature_anchor_y: float = feature_middle_y
             is_outer_label = (feature_object.strand == "positive") or (allow_inner_labels is False)
             feature_outer_radius = radius * float(factors[2])
+            longest_segment_bp = abs(int(longest_segment_end - longest_segment_start))
+            is_short_directional_feature = (
+                bool(getattr(feature_object, "is_directional", False))
+                and longest_segment_bp < circular_arrow_length_bp
+            )
             if is_outer_label:
-                if cfg.canvas.resolve_overlaps and not strandedness:
+                if cfg.canvas.resolve_overlaps and not strandedness and not is_short_directional_feature:
                     # Raised feature tracks look disconnected when leaders target the track center.
                     # Anchor to the outer edge so feature-to-label distance reads more naturally.
                     feature_anchor_x = feature_outer_radius * math.cos(
@@ -2695,6 +2705,14 @@ def prepare_label_list(
                     # Use the inner edge of the arena as the "anchor" radius for leader lines.
                     anchor_radius = float(outer_arena[0])
                     middle_radius = anchor_radius
+                    if cfg.canvas.resolve_overlaps and not strandedness:
+                        middle_radius = max(
+                            float(middle_radius),
+                            float(feature_outer_radius + MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX),
+                        )
+                        label_entry["min_outer_start_radius_px"] = float(
+                            feature_outer_radius + MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
+                        )
                 else:
                     middle_radius = radius_factor * radius
                     if cfg.canvas.resolve_overlaps and not strandedness:

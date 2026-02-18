@@ -16,6 +16,7 @@ from ....svg.circular_features import (
     generate_circular_intron_path,
     generate_circular_rectangle_path,
 )
+from ....svg.arrows import calculate_circular_arrow_length
 
 
 class FeatureDrawer:
@@ -182,16 +183,7 @@ class FeaturePathGenerator:
         self.set_arrow_length()
 
     def set_arrow_length(self) -> None:
-        MIN_ARROW_LENGTH = 30
-        MAX_ARROW_LENGTH = 700
-        PARAM_A = 3
-        PARAM_B = 5
-        self.arrow_length: float = (
-            MIN_ARROW_LENGTH
-            + (MAX_ARROW_LENGTH - MIN_ARROW_LENGTH)
-            * 1
-            / (1 + math.exp(-PARAM_A * (math.log10(self.total_length) - PARAM_B)))
-        )
+        self.arrow_length = calculate_circular_arrow_length(self.total_length)
 
     def _coalesce_origin_spanning_block(self, feature_object: FeatureObject) -> Optional[Dict[str, Union[str, int]]]:
         """
