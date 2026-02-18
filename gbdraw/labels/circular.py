@@ -49,6 +49,23 @@ LEADER_LABEL_MAX_PASSES = 6
 LEADER_LABEL_MIN_ORDER_GAP_DEG = 0.05
 
 
+def _effective_outer_middle_anchor_clearance_px(
+    *,
+    resolve_overlaps: bool,
+    strandedness: bool,
+    track_type: str,
+    feature_band_width_px: float,
+) -> float:
+    """Return the middle-anchor clearance used for outer label elbows."""
+    base_clearance = float(MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX)
+    if (not resolve_overlaps) or strandedness or str(track_type) != "middle":
+        return base_clearance
+
+    feature_band_width_px = max(0.0, float(feature_band_width_px))
+    adaptive_extra = 2.0 + min(2.0, 0.1 * feature_band_width_px)
+    return base_clearance + adaptive_extra
+
+
 def minimum_bbox_gap_px(label1: dict, label2: dict, base_margin_px: float = 0.0) -> float:
     """Return a minimum spacing margin in pixels derived from label bbox size."""
     width_scale = max(float(label1.get("width_px", 0.0)), float(label2.get("width_px", 0.0)))
@@ -1025,6 +1042,8 @@ def _update_outer_label_minimum_middle_radii_against_features(
     labels: list[dict],
     total_length: int,
     feature_radius_intervals: list[tuple[float, float, float]],
+    *,
+    anchor_clearance_px: float,
 ) -> list[dict]:
     """Raise leader middle-point radii so elbows stay outside local feature tracks."""
     if not labels or not feature_radius_intervals:
@@ -1045,7 +1064,7 @@ def _update_outer_label_minimum_middle_radii_against_features(
 
         required_radius = (
             local_outer_radius
-            + MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX
+            + float(anchor_clearance_px)
             + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
         )
         current_min_radius = float(label.get("min_outer_middle_radius_px", 0.0))
@@ -3139,6 +3158,13 @@ def prepare_label_list(
         else float(cfg.canvas.circular.track_ratio_factors[length_param][0])
     )
     cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
+    feature_band_width_px = float(radius) * float(cds_ratio)
+    effective_anchor_clearance_px = _effective_outer_middle_anchor_clearance_px(
+        resolve_overlaps=bool(cfg.canvas.resolve_overlaps),
+        strandedness=bool(strandedness),
+        track_type=str(track_type),
+        feature_band_width_px=feature_band_width_px,
+    )
     circular_arrow_length_bp = calculate_circular_arrow_length(total_length)
 
     for feature_object in feature_dict.values():
@@ -3218,7 +3244,7 @@ def prepare_label_list(
                             float(middle_radius),
                             float(
                                 feature_outer_radius
-                                + MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX
+                                + effective_anchor_clearance_px
                                 + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
                             ),
                         )
@@ -3234,7 +3260,7 @@ def prepare_label_list(
                             float(middle_radius),
                             float(
                                 feature_outer_radius
-                                + MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX
+                                + effective_anchor_clearance_px
                                 + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
                             ),
                         )
@@ -3350,6 +3376,7 @@ def prepare_label_list(
             outer_labels_rearranged,
             total_length,
             feature_outer_radius_intervals,
+            anchor_clearance_px=effective_anchor_clearance_px,
         )
         outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
             outer_labels_rearranged,
@@ -3370,6 +3397,7 @@ def prepare_label_list(
             outer_labels_rearranged,
             total_length,
             feature_outer_radius_intervals,
+            anchor_clearance_px=effective_anchor_clearance_px,
         )
         outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
             outer_labels_rearranged,
@@ -3413,6 +3441,7 @@ def prepare_label_list(
                 outer_labels_rearranged,
                 total_length,
                 feature_outer_radius_intervals,
+                anchor_clearance_px=effective_anchor_clearance_px,
             )
             outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
                 outer_labels_rearranged,
@@ -3432,6 +3461,7 @@ def prepare_label_list(
                 outer_labels_rearranged,
                 total_length,
                 feature_outer_radius_intervals,
+                anchor_clearance_px=effective_anchor_clearance_px,
             )
             outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
                 outer_labels_rearranged,

@@ -973,6 +973,58 @@ def test_mjenmv_dense_labels_without_blacklist_have_no_outer_overlaps() -> None:
     assert _count_overlaps(external_labels, total_length) == 0
 
 
+def test_effective_outer_middle_anchor_clearance_scales_with_feature_width_and_caps() -> None:
+    base_clearance = float(circular_labels_module.MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX)
+
+    zero_width_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=0.0,
+    )
+    assert math.isclose(zero_width_clearance, base_clearance + 2.0, rel_tol=1e-9, abs_tol=1e-9)
+
+    small_width_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=10.0,
+    )
+    assert math.isclose(small_width_clearance, base_clearance + 3.0, rel_tol=1e-9, abs_tol=1e-9)
+
+    capped_width_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(capped_width_clearance, base_clearance + 4.0, rel_tol=1e-9, abs_tol=1e-9)
+
+    non_middle_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="tuckin",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(non_middle_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
+
+    stranded_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
+        resolve_overlaps=True,
+        strandedness=True,
+        track_type="middle",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(stranded_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
+
+    no_resolve_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
+        resolve_overlaps=False,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(no_resolve_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
+
+
 def test_mjenmv_resolve_overlaps_middle_has_no_outer_overlaps() -> None:
     external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
         strandedness=False,
@@ -984,6 +1036,42 @@ def test_mjenmv_resolve_overlaps_middle_has_no_outer_overlaps() -> None:
     assert len(external_labels) == 109
     assert _count_overlaps(external_labels, total_length) == 0
     assert _count_overlaps_with_min_gap(external_labels, total_length) == 0
+
+
+def test_mjenmv_resolve_overlaps_middle_keeps_wsv134_anchor_outside_wsv133_feature() -> None:
+    external_labels, total_length, cfg = _load_mjenmv_external_labels_with_config(
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+        label_blacklist="",
+    )
+    assert external_labels
+
+    wsv134_label = next((label for label in external_labels if label.get("label_text") == "wsv134-like protein"), None)
+    wsv133_label = next((label for label in external_labels if label.get("label_text") == "wsv133-like protein"), None)
+    assert wsv134_label is not None
+    assert wsv133_label is not None
+
+    length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
+    track_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+    cds_ratio, _ = calculate_cds_ratio(cfg.canvas.circular.track_ratio, length_param, track_ratio_factor)
+    feature_band_width_px = float(cfg.canvas.circular.radius) * float(cds_ratio)
+    expected_anchor_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
+        resolve_overlaps=bool(cfg.canvas.resolve_overlaps),
+        strandedness=bool(cfg.canvas.strandedness),
+        track_type=str(cfg.canvas.circular.track_type),
+        feature_band_width_px=feature_band_width_px,
+    )
+
+    wsv134_middle_radius = math.hypot(float(wsv134_label["middle_x"]), float(wsv134_label["middle_y"]))
+    wsv133_outer_radius = math.hypot(
+        float(wsv133_label.get("feature_anchor_x", wsv133_label["feature_middle_x"])),
+        float(wsv133_label.get("feature_anchor_y", wsv133_label["feature_middle_y"])),
+    )
+    radial_gap = wsv134_middle_radius - wsv133_outer_radius
+    required_gap = expected_anchor_clearance + float(circular_labels_module.OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX)
+
+    assert radial_gap >= required_gap - 1.0
 
 
 def test_mjenmv_resolve_overlaps_middle_top_bottom_leader_anchor_selection() -> None:
