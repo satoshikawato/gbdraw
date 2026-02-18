@@ -71,6 +71,7 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--inner_label_x_radius_offset INNER_LABEL_X_RADIUS_OFFSET]
               [--inner_label_y_radius_offset INNER_LABEL_Y_RADIUS_OFFSET]
               [--scale_interval SCALE_INTERVAL]
+              [--feature_width FEATURE_WIDTH]
               [--legend_box_size LEGEND_BOX_SIZE]
               [--legend_font_size LEGEND_FONT_SIZE]
 
@@ -165,6 +166,9 @@ options:
   --scale_interval SCALE_INTERVAL
                         Manual scale interval for circular mode (in bp).
                         Overrides automatic calculation.
+  --feature_width FEATURE_WIDTH
+                        Feature track width for circular mode (in px; must be
+                        > 0).
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
                         96 dpi) for genomes <= 50 kb, 20 for genomes >= 50

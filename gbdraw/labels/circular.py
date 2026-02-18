@@ -17,6 +17,7 @@ from ..core.text import calculate_bbox_dimensions
 from ..core.sequence import determine_length_parameter
 from ..layout.common import calculate_cds_ratio
 from ..layout.circular import calculate_feature_position_factors_circular
+from ..svg.arrows import calculate_circular_arrow_length
 
 # Keep dense large-font labels from being pushed excessively far from features.
 MIN_BBOX_GAP_RATIO = 0.01
@@ -419,13 +420,19 @@ def _build_outer_feature_radius_intervals(
     radius: float,
     track_ratio: float,
     cfg: GbdrawConfig,
+    *,
+    feature_track_ratio_factor_override: float | None = None,
 ) -> list[tuple[float, float, float]]:
     """Build local genome intervals as (start, end, outer_radius_px)."""
     if total_length <= 0:
         return []
 
     length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
-    track_ratio_factor = cfg.canvas.circular.track_ratio_factors[length_param][0]
+    track_ratio_factor = (
+        float(feature_track_ratio_factor_override)
+        if feature_track_ratio_factor_override is not None
+        else float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+    )
     cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
     track_type = cfg.canvas.circular.track_type
     strandedness = cfg.canvas.strandedness
@@ -529,6 +536,71 @@ def _sample_label_genome_positions(label: dict, total_length: int) -> list[float
     return sampled_positions
 
 
+def _label_genome_intervals_for_clearance(label: dict, total_length: int) -> list[tuple[float, float]]:
+    """Return genome intervals covered by the current label width estimate."""
+    if total_length <= 0:
+        return []
+
+    total_length_f = float(total_length)
+    start_x = float(label.get("start_x", 0.0))
+    start_y = float(label.get("start_y", 0.0))
+    label_radius = math.hypot(start_x, start_y)
+
+    if label_radius <= 1e-9:
+        middle = float(label.get("middle", 0.0)) % total_length_f
+        return [(middle, middle)]
+
+    width_px = max(0.0, float(label.get("width_px", 0.0)))
+    if width_px <= 1e-9:
+        anchor_angle = (math.degrees(math.atan2(start_y, start_x)) + 90.0) % 360.0
+        anchor_position = (anchor_angle / 360.0) * total_length_f
+        return [(anchor_position, anchor_position)]
+
+    span_bp = total_length_f * (width_px / (2.0 * math.pi * label_radius))
+    if span_bp >= total_length_f:
+        return [(0.0, total_length_f)]
+
+    anchor_angle = (math.degrees(math.atan2(start_y, start_x)) + 90.0) % 360.0
+    center_position = (anchor_angle / 360.0) * total_length_f
+    half_span = 0.5 * span_bp
+    interval_start = center_position - half_span
+    interval_end = center_position + half_span
+
+    if interval_start < 0.0:
+        return [(interval_start + total_length_f, total_length_f), (0.0, interval_end)]
+    if interval_end > total_length_f:
+        return [(interval_start, total_length_f), (0.0, interval_end - total_length_f)]
+    return [(interval_start, interval_end)]
+
+
+def _max_outer_feature_radius_for_intervals(
+    feature_radius_intervals: list[tuple[float, float, float]],
+    label_intervals: list[tuple[float, float]],
+    total_length: int,
+) -> float:
+    """Return max feature outer radius intersecting any label genome interval."""
+    if total_length <= 0 or not feature_radius_intervals or not label_intervals:
+        return 0.0
+
+    max_outer_radius = 0.0
+    for label_start, label_end in label_intervals:
+        label_start_f = float(label_start)
+        label_end_f = float(label_end)
+
+        # Degenerate interval: treat as a point lookup.
+        if label_end_f <= label_start_f + 1e-9:
+            max_outer_radius = max(
+                max_outer_radius,
+                _max_outer_feature_radius_at_position(feature_radius_intervals, label_start_f, total_length),
+            )
+            continue
+
+        for feature_start, feature_end, feature_outer in feature_radius_intervals:
+            if float(feature_start) < label_end_f and float(feature_end) > label_start_f:
+                max_outer_radius = max(max_outer_radius, float(feature_outer))
+    return max_outer_radius
+
+
 def _update_outer_label_minimum_radii_against_features(
     labels: list[dict],
     total_length: int,
@@ -539,16 +611,15 @@ def _update_outer_label_minimum_radii_against_features(
         return labels
 
     for label in labels:
-        sampled_positions = _sample_label_genome_positions(label, total_length)
-        if not sampled_positions:
+        label_intervals = _label_genome_intervals_for_clearance(label, total_length)
+        if not label_intervals:
             continue
 
-        local_outer_radius = 0.0
-        for sampled_pos in sampled_positions:
-            local_outer_radius = max(
-                local_outer_radius,
-                _max_outer_feature_radius_at_position(feature_radius_intervals, sampled_pos, total_length),
-            )
+        local_outer_radius = _max_outer_feature_radius_for_intervals(
+            feature_radius_intervals,
+            label_intervals,
+            total_length,
+        )
         if local_outer_radius <= 0.0:
             continue
 
@@ -556,6 +627,36 @@ def _update_outer_label_minimum_radii_against_features(
         current_min_radius = float(label.get("min_outer_start_radius_px", 0.0))
         if required_radius > current_min_radius:
             label["min_outer_start_radius_px"] = required_radius
+
+    return labels
+
+
+def _update_outer_label_minimum_middle_radii_against_features(
+    labels: list[dict],
+    total_length: int,
+    feature_radius_intervals: list[tuple[float, float, float]],
+) -> list[dict]:
+    """Raise leader middle-point radii so elbows stay outside local feature tracks."""
+    if not labels or not feature_radius_intervals:
+        return labels
+
+    for label in labels:
+        label_intervals = _label_genome_intervals_for_clearance(label, total_length)
+        if not label_intervals:
+            continue
+
+        local_outer_radius = _max_outer_feature_radius_for_intervals(
+            feature_radius_intervals,
+            label_intervals,
+            total_length,
+        )
+        if local_outer_radius <= 0.0:
+            continue
+
+        required_radius = local_outer_radius + MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX
+        current_min_radius = float(label.get("min_outer_middle_radius_px", 0.0))
+        if required_radius > current_min_radius:
+            label["min_outer_middle_radius_px"] = required_radius
 
     return labels
 
@@ -595,6 +696,30 @@ def _enforce_outer_label_minimum_radius(labels: list[dict], total_length: int) -
             if deficit <= 1e-3:
                 break
             candidate_radius += deficit + 0.5
+
+    return labels
+
+
+def _enforce_outer_label_minimum_middle_radius(labels: list[dict], total_length: int) -> list[dict]:
+    """Push leader middle points outward until they clear required radii."""
+    for label in labels:
+        required_middle_radius = float(label.get("min_outer_middle_radius_px", 0.0))
+        if required_middle_radius <= 0.0:
+            continue
+
+        middle_x = float(label.get("middle_x", 0.0))
+        middle_y = float(label.get("middle_y", 0.0))
+        current_middle_radius = math.hypot(middle_x, middle_y)
+        if current_middle_radius >= (required_middle_radius - 1e-6):
+            continue
+
+        if current_middle_radius > 1e-9:
+            middle_angle_rad = math.atan2(middle_y, middle_x)
+        else:
+            middle_angle_rad = math.radians(angle_from_middle(float(label["middle"]), total_length))
+
+        label["middle_x"] = required_middle_radius * math.cos(middle_angle_rad)
+        label["middle_y"] = required_middle_radius * math.sin(middle_angle_rad)
 
     return labels
 
@@ -671,6 +796,58 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
             minimum_margin=min_gap_px,
         )
 
+    def _pair_angle_bounds(label_idx: int) -> tuple[float, float]:
+        target_angle = float(labels[label_idx]["_target_angle_unwrapped_fixed"])
+        low_bound = target_angle - max_angle_shift_deg
+        high_bound = target_angle + max_angle_shift_deg
+        if label_idx > 0:
+            low_bound = max(low_bound, float(labels[label_idx - 1]["_angle_unwrapped_fixed"]) + min_order_gap_deg)
+        if label_idx + 1 < len(labels):
+            high_bound = min(high_bound, float(labels[label_idx + 1]["_angle_unwrapped_fixed"]) - min_order_gap_deg)
+        return low_bound, high_bound
+
+    def _separate_pair(idx: int, jdx: int) -> bool:
+        left = labels[idx]
+        right = labels[jdx]
+        pair_changed = False
+
+        for _ in range(max_pair_steps):
+            if not _pair_overlaps(left, right):
+                break
+
+            left_low, left_high = _pair_angle_bounds(idx)
+            right_low, right_high = _pair_angle_bounds(jdx)
+            new_left = max(left_low, float(left["_angle_unwrapped_fixed"]) - (0.5 * step_deg))
+            new_right = min(right_high, float(right["_angle_unwrapped_fixed"]) + (0.5 * step_deg))
+
+            # Preserve strict ordering with labels between idx and jdx.
+            if idx + 1 < jdx:
+                new_left = min(new_left, float(labels[idx + 1]["_angle_unwrapped_fixed"]) - min_order_gap_deg)
+                new_right = max(new_right, float(labels[jdx - 1]["_angle_unwrapped_fixed"]) + min_order_gap_deg)
+
+            if (
+                new_left < (left_low - 1e-9)
+                or new_left > (left_high + 1e-9)
+                or new_right < (right_low - 1e-9)
+                or new_right > (right_high + 1e-9)
+            ):
+                break
+            if new_right <= new_left + min_order_gap_deg:
+                break
+            if (
+                abs(new_left - float(left["_angle_unwrapped_fixed"])) <= 1e-9
+                and abs(new_right - float(right["_angle_unwrapped_fixed"])) <= 1e-9
+            ):
+                break
+
+            left["_angle_unwrapped_fixed"] = new_left
+            right["_angle_unwrapped_fixed"] = new_right
+            _apply_angle(left)
+            _apply_angle(right)
+            pair_changed = True
+
+        return pair_changed
+
     for label in labels:
         _apply_angle(label)
 
@@ -713,6 +890,14 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
 
                 if not _pair_overlaps(left, right):
                     break
+
+        # Adjacent passes can still miss sparse non-adjacent bbox collisions.
+        for idx in range(len(labels) - 2):
+            for jdx in range(idx + 2, len(labels)):
+                if not _pair_overlaps(labels[idx], labels[jdx]):
+                    continue
+                if _separate_pair(idx, jdx):
+                    changed = True
 
         if not changed:
             break
@@ -2532,6 +2717,7 @@ def prepare_label_list(
     cfg: GbdrawConfig | None = None,
     *,
     outer_arena: tuple[float, float] | None = None,
+    feature_track_ratio_factor_override: float | None = None,
 ):
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
     embedded_labels = []
@@ -2553,8 +2739,13 @@ def prepare_label_list(
     font_size: float = cfg.labels.font_size.for_length_param(length_param)
     interval = cfg.canvas.dpi
 
-    track_ratio_factor = cfg.canvas.circular.track_ratio_factors[length_param][0]
+    track_ratio_factor = (
+        float(feature_track_ratio_factor_override)
+        if feature_track_ratio_factor_override is not None
+        else float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+    )
     cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
+    circular_arrow_length_bp = calculate_circular_arrow_length(total_length)
 
     for feature_object in feature_dict.values():
         feature_label_text = get_label_text(feature_object, label_filtering)
@@ -2563,6 +2754,9 @@ def prepare_label_list(
         else:
             label_entry = dict()
             longest_segment_length = 0
+            longest_segment_start = 0
+            longest_segment_end = 0
+            longeset_segment_middle = 0
             is_embedded = False
             label_middle = 0
             coordinate_strand: str = "undefined"
@@ -2606,8 +2800,13 @@ def prepare_label_list(
             feature_anchor_y: float = feature_middle_y
             is_outer_label = (feature_object.strand == "positive") or (allow_inner_labels is False)
             feature_outer_radius = radius * float(factors[2])
+            longest_segment_bp = abs(int(longest_segment_end - longest_segment_start))
+            is_short_directional_feature = (
+                bool(getattr(feature_object, "is_directional", False))
+                and longest_segment_bp < circular_arrow_length_bp
+            )
             if is_outer_label:
-                if cfg.canvas.resolve_overlaps and not strandedness:
+                if cfg.canvas.resolve_overlaps and not strandedness and not is_short_directional_feature:
                     # Raised feature tracks look disconnected when leaders target the track center.
                     # Anchor to the outer edge so feature-to-label distance reads more naturally.
                     feature_anchor_x = feature_outer_radius * math.cos(
@@ -2620,6 +2819,14 @@ def prepare_label_list(
                     # Use the inner edge of the arena as the "anchor" radius for leader lines.
                     anchor_radius = float(outer_arena[0])
                     middle_radius = anchor_radius
+                    if cfg.canvas.resolve_overlaps and not strandedness:
+                        middle_radius = max(
+                            float(middle_radius),
+                            float(feature_outer_radius + MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX),
+                        )
+                        label_entry["min_outer_start_radius_px"] = float(
+                            feature_outer_radius + MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
+                        )
                 else:
                     middle_radius = radius_factor * radius
                     if cfg.canvas.resolve_overlaps and not strandedness:
@@ -2692,6 +2899,7 @@ def prepare_label_list(
             radius,
             track_ratio,
             cfg,
+            feature_track_ratio_factor_override=feature_track_ratio_factor_override,
         )
         outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
             outer_labels_rearranged,
@@ -2720,8 +2928,23 @@ def prepare_label_list(
             feature_outer_radius_intervals,
         )
         outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
-        # Final radial enforcement can reintroduce tight angular collisions.
+        # Final overlap pass, then enforce outer clearances as the final priority.
         outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
+            outer_labels_rearranged,
+            total_length,
+        )
+        outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
+            outer_labels_rearranged,
+            total_length,
+            feature_outer_radius_intervals,
+        )
+        outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
+        outer_labels_rearranged = _update_outer_label_minimum_middle_radii_against_features(
+            outer_labels_rearranged,
+            total_length,
+            feature_outer_radius_intervals,
+        )
+        outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
             outer_labels_rearranged,
             total_length,
         )

@@ -10,6 +10,50 @@ from svgwrite.text import Text, TextPath
 from ..core.text import calculate_bbox_dimensions
 
 
+def _tick_path_ratio_table(track_channel: str, track_type: str, strandedness: bool) -> dict[str, tuple[float, float]]:
+    """Return radial ratios for tick line paths (small/large)."""
+    if strandedness:
+        if track_channel == "long":
+            if track_type == "middle":
+                return {"small": (0.915, 0.93), "large": (0.91, 0.93)}
+            if track_type == "spreadout":
+                return {"small": (0.985, 1.0), "large": (0.98, 1.0)}
+            if track_type == "tuckin":
+                return {"small": (0.845, 0.86), "large": (0.84, 0.86)}
+            return {"small": (1.06, 1.08), "large": (0.98, 1.0)}
+        if track_type == "middle":
+            return {"small": (0.885, 0.90), "large": (0.88, 0.90)}
+        if track_type == "spreadout":
+            return {"small": (0.985, 1.0), "large": (0.98, 1.0)}
+        if track_type == "tuckin":
+            return {"small": (0.985, 1.0), "large": (0.98, 1.0)}
+        return {"small": (1.06, 1.08), "large": (0.98, 1.0)}
+
+    if track_channel == "long":
+        if track_type == "middle":
+            return {"small": (0.945, 0.96), "large": (0.94, 0.96)}
+        if track_type == "spreadout":
+            return {"small": (0.985, 1.0), "large": (0.98, 1.0)}
+        if track_type == "tuckin":
+            return {"small": (0.885, 0.90), "large": (0.88, 0.90)}
+        return {"small": (1.06, 1.08), "large": (0.98, 1.0)}
+    if track_type == "middle":
+        return {"small": (0.925, 0.94), "large": (0.92, 0.94)}
+    if track_type == "spreadout":
+        return {"small": (0.985, 1.0), "large": (0.98, 1.0)}
+    if track_type == "tuckin":
+        return {"small": (0.985, 1.0), "large": (0.98, 1.0)}
+    return {"small": (1.06, 1.08), "large": (0.98, 1.0)}
+
+
+def get_circular_tick_path_ratio_bounds(total_len: int, track_type: str, strandedness: bool) -> tuple[float, float]:
+    """Return (min_ratio, max_ratio) across small/large tick path ratios."""
+    track_channel = "short" if total_len < 50000 else "long"
+    ratio_table = _tick_path_ratio_table(track_channel, track_type, strandedness)
+    ratio_values = [ratio for pair in ratio_table.values() for ratio in pair]
+    return min(ratio_values), max(ratio_values)
+
+
 def generate_circular_tick_paths(
     radius: float,
     total_len: int,
@@ -23,49 +67,8 @@ def generate_circular_tick_paths(
     Generates SVG path descriptions for tick marks on a circular canvas.
     """
     tick_paths_list: list[Path] = []
-    if total_len < 50000:
-        track_channel = "short"
-    else:
-        track_channel = "long"
-
-    if strandedness is True:
-        if track_channel == "long":
-            if track_type == "middle":
-                ratio = {"small": [0.915, 0.93], "large": [0.91, 0.93]}
-            elif track_type == "spreadout":
-                ratio = {"small": [0.985, 1.0], "large": [0.98, 1.0]}
-            elif track_type == "tuckin":
-                ratio = {"small": [0.845, 0.86], "large": [0.84, 0.86]}
-            else:
-                ratio = {"small": [1.06, 1.08], "large": [0.98, 1.0]}
-        else:
-            if track_type == "middle":
-                ratio = {"small": [0.885, 0.90], "large": [0.88, 0.90]}
-            elif track_type == "spreadout":
-                ratio = {"small": [0.985, 1.0], "large": [0.98, 1.0]}
-            elif track_type == "tuckin":
-                ratio = {"small": [0.985, 1.0], "large": [0.98, 1.0]}
-            else:
-                ratio = {"small": [1.06, 1.08], "large": [0.98, 1.0]}
-    else:
-        if track_channel == "long":
-            if track_type == "middle":
-                ratio = {"small": [0.945, 0.96], "large": [0.94, 0.96]}
-            elif track_type == "spreadout":
-                ratio = {"small": [0.985, 1.0], "large": [0.98, 1.0]}
-            elif track_type == "tuckin":
-                ratio = {"small": [0.885, 0.90], "large": [0.88, 0.90]}
-            else:
-                ratio = {"small": [1.06, 1.08], "large": [0.98, 1.0]}
-        else:
-            if track_type == "middle":
-                ratio = {"small": [0.925, 0.94], "large": [0.92, 0.94]}
-            elif track_type == "spreadout":
-                ratio = {"small": [0.985, 1.0], "large": [0.98, 1.0]}
-            elif track_type == "tuckin":
-                ratio = {"small": [0.985, 1.0], "large": [0.98, 1.0]}
-            else:
-                ratio = {"small": [1.06, 1.08], "large": [0.98, 1.0]}
+    track_channel = "short" if total_len < 50000 else "long"
+    ratio = _tick_path_ratio_table(track_channel, track_type, strandedness)
 
     prox, dist = ratio[size]
     for tick in ticks:
@@ -248,6 +251,7 @@ def generate_circular_tick_labels(
 
 
 __all__ = [
+    "get_circular_tick_path_ratio_bounds",
     "generate_circular_tick_labels",
     "generate_circular_tick_paths",
     "set_tick_label_anchor_value",

@@ -74,7 +74,7 @@ track_specs = parse_track_specs(
     [
         "gc_skew@show=false",
         "legend@show=false",
-        "features@r=0.82,w=0.12",
+        "features@w=0.12",
     ],
     mode="circular",
 )
@@ -87,6 +87,10 @@ canvas = assemble_circular_diagram_from_record(
     track_specs=track_specs,
 )
 ```
+
+`features@w=...` accepts both factor and px units:
+- `features@w=0.12` uses a factor of the circular radius.
+- `features@w=48px` uses an absolute width in pixels.
 
 ### 2.3 Control labels/ticks with `track_specs`
 

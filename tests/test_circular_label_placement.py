@@ -9,6 +9,7 @@ import gbdraw.labels.circular as circular_labels_module
 import gbdraw.render.groups.circular.labels as circular_labels_group_module
 import gbdraw.render.groups.circular.seq_record as circular_seq_record_group_module
 from gbdraw.api.diagram import assemble_circular_diagram_from_record
+from gbdraw.canvas.circular import CircularCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
@@ -28,7 +29,8 @@ from gbdraw.labels.circular import (
     x_overlap,
     y_overlap,
 )
-from gbdraw.labels.filtering import preprocess_label_filtering
+from gbdraw.labels.filtering import get_label_text, preprocess_label_filtering
+from gbdraw.svg.arrows import calculate_circular_arrow_length
 
 
 def _angle_of_label(label: dict) -> float:
@@ -241,6 +243,88 @@ def _load_hmmtdna_external_labels_with_config(
     )
     external_labels = [label for label in labels if not label.get("is_embedded")]
     return external_labels, len(record.seq), cfg
+
+
+def _load_hmmtdna_external_labels_with_feature_width(
+    *,
+    feature_width: float,
+    label_font_size: float = 14.0,
+    strandedness: bool = False,
+    resolve_overlaps: bool = True,
+    track_type: str = "middle",
+) -> tuple[list[dict], int, GbdrawConfig, float]:
+    input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        show_labels=True,
+        strandedness=strandedness,
+        track_type=track_type,
+        resolve_overlaps=resolve_overlaps,
+        allow_inner_labels=False,
+        label_font_size=label_font_size,
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    default_colors = load_default_colors("", "default")
+    color_table = None
+    color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    canvas_config = CircularCanvasConfigurator(
+        output_prefix="tmp",
+        config_dict=config_dict,
+        legend="left",
+        gb_record=record,
+        cfg=cfg,
+    )
+
+    feature_track_ratio_factor_override = float(feature_width) / (
+        float(canvas_config.radius) * float(canvas_config.track_ratio)
+    )
+    feature_radius_mapper, _, _ = circular_assemble_module._build_feature_radius_mapper(
+        feature_dict,
+        len(record.seq),
+        canvas_config=canvas_config,
+        cfg=cfg,
+        feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+    )
+    default_anchor_px, default_arc_outer_px = circular_assemble_module._default_outer_label_arena(
+        canvas_config=canvas_config,
+        cfg=cfg,
+    )
+    if feature_radius_mapper is not None:
+        default_anchor_px = float(feature_radius_mapper(default_anchor_px))
+        default_arc_outer_px = float(feature_radius_mapper(default_arc_outer_px))
+    if default_arc_outer_px < default_anchor_px:
+        default_anchor_px, default_arc_outer_px = default_arc_outer_px, default_anchor_px
+    outer_arena = (default_anchor_px, default_arc_outer_px)
+
+    labels = prepare_label_list(
+        feature_dict,
+        len(record.seq),
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        config_dict,
+        cfg=cfg,
+        outer_arena=outer_arena,
+        feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+    )
+    external_labels = [label for label in labels if not label.get("is_embedded")]
+    return external_labels, len(record.seq), cfg, feature_track_ratio_factor_override
 
 
 def _make_legend_collision_fixture() -> tuple[list[dict], int, SimpleNamespace, SimpleNamespace]:
@@ -913,6 +997,207 @@ def test_hmmtdna_resolve_overlaps_keeps_outer_labels_outside_feature_tracks() ->
 
     assert min_middle_clearance >= circular_labels_module.MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX - 1.0
     assert min_start_clearance >= circular_labels_module.MIN_OUTER_LABEL_TEXT_CLEARANCE_PX - 1.0
+
+
+def test_hmmtdna_resolve_overlaps_feature_width_keeps_middle_anchor_outside_feature_tracks() -> None:
+    external_labels, total_length, cfg, feature_track_ratio_factor_override = (
+        _load_hmmtdna_external_labels_with_feature_width(feature_width=75.0)
+    )
+    assert external_labels
+    assert any(int(label.get("track_id", 0)) > 0 for label in external_labels)
+    assert _count_overlaps(external_labels, total_length) == 0
+    assert _count_overlaps_with_min_gap(external_labels, total_length) == 0
+
+    length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
+    cds_ratio, offset = calculate_cds_ratio(
+        cfg.canvas.circular.track_ratio,
+        length_param,
+        feature_track_ratio_factor_override,
+    )
+
+    min_middle_clearance = float("inf")
+    for label in external_labels:
+        track_id = int(label.get("track_id", 0))
+        factors = calculate_feature_position_factors_circular(
+            total_length,
+            str(label.get("strand", "positive")),
+            cfg.canvas.circular.track_ratio,
+            cds_ratio,
+            offset,
+            cfg.canvas.circular.track_type,
+            cfg.canvas.strandedness,
+            track_id,
+        )
+        feature_outer_radius = float(cfg.canvas.circular.radius) * float(factors[2])
+        middle_radius = math.hypot(float(label["middle_x"]), float(label["middle_y"]))
+        min_middle_clearance = min(min_middle_clearance, middle_radius - feature_outer_radius)
+
+    assert min_middle_clearance >= circular_labels_module.MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX - 1.0
+
+
+def test_hmmtdna_resolve_overlaps_feature_width_keeps_middle_anchor_outside_local_feature_tracks() -> None:
+    external_labels, total_length, cfg, feature_track_ratio_factor_override = (
+        _load_hmmtdna_external_labels_with_feature_width(feature_width=75.0)
+    )
+    assert external_labels
+
+    input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+    default_colors = load_default_colors("", "default")
+    color_table = None
+    color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    feature_intervals = circular_labels_module._build_outer_feature_radius_intervals(
+        feature_dict,
+        total_length,
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        cfg,
+        feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+    )
+    assert feature_intervals
+
+    min_middle_clearance = float("inf")
+    for label in external_labels:
+        label_intervals = circular_labels_module._label_genome_intervals_for_clearance(label, total_length)
+        assert label_intervals
+
+        local_outer = circular_labels_module._max_outer_feature_radius_for_intervals(
+            feature_intervals,
+            label_intervals,
+            total_length,
+        )
+        required_middle_radius = local_outer + circular_labels_module.MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX
+        middle_radius = math.hypot(float(label["middle_x"]), float(label["middle_y"]))
+        min_middle_clearance = min(min_middle_clearance, middle_radius - required_middle_radius)
+
+    assert min_middle_clearance >= -1.0
+
+
+def test_hmmtdna_resolve_overlaps_short_directional_features_use_center_anchor() -> None:
+    external_labels, total_length, cfg = _load_hmmtdna_external_labels_with_config(
+        label_font_size=14.0,
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+    )
+    assert external_labels
+
+    input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+    default_colors = load_default_colors("", "default")
+    color_table = None
+    color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
+    track_ratio_factor = cfg.canvas.circular.track_ratio_factors[length_param][0]
+    cds_ratio, offset = calculate_cds_ratio(cfg.canvas.circular.track_ratio, length_param, track_ratio_factor)
+    circular_arrow_length_bp = calculate_circular_arrow_length(total_length)
+
+    short_directional_feature_keys: set[tuple[float, float, float]] = set()
+    non_short_feature_keys: set[tuple[float, float, float]] = set()
+    for feature_object in feature_dict.values():
+        if get_label_text(feature_object, label_filtering) == "":
+            continue
+
+        longest_segment_length = 0
+        longest_segment_start = 0
+        longest_segment_end = 0
+        longest_segment_middle = 0.0
+        coordinate_strand = "undefined"
+
+        feature_location_count = 0
+        for coordinate in feature_object.coordinates:
+            if feature_object.location[feature_location_count].kind == "line":
+                feature_location_count += 1
+                continue
+
+            coordinate_start = int(coordinate.start)
+            coordinate_end = int(coordinate.end)
+            coordinate_strand = str(feature_object.location[feature_location_count].strand)
+            interval_length = abs(int(coordinate_end - coordinate_start) + 1)
+            interval_middle = float(coordinate_end + coordinate_start) / 2.0
+            feature_location_count += 1
+            if interval_length > longest_segment_length:
+                longest_segment_start = coordinate_start
+                longest_segment_end = coordinate_end
+                longest_segment_middle = interval_middle
+                longest_segment_length = interval_length
+
+        track_id = int(getattr(feature_object, "feature_track_id", 0))
+        factors = calculate_feature_position_factors_circular(
+            total_length,
+            coordinate_strand,
+            cfg.canvas.circular.track_ratio,
+            cds_ratio,
+            offset,
+            cfg.canvas.circular.track_type,
+            cfg.canvas.strandedness,
+            track_id,
+        )
+        feature_middle_x = (float(cfg.canvas.circular.radius) * float(factors[1])) * math.cos(
+            math.radians(360.0 * (longest_segment_middle / total_length) - 90)
+        )
+        feature_middle_y = (float(cfg.canvas.circular.radius) * float(factors[1])) * math.sin(
+            math.radians(360.0 * (longest_segment_middle / total_length) - 90)
+        )
+        key = (round(feature_middle_x, 6), round(feature_middle_y, 6), round(longest_segment_middle, 6))
+        longest_segment_bp = abs(int(longest_segment_end - longest_segment_start))
+        is_short_directional = bool(getattr(feature_object, "is_directional", False)) and (
+            longest_segment_bp < circular_arrow_length_bp
+        )
+        if is_short_directional:
+            short_directional_feature_keys.add(key)
+        else:
+            non_short_feature_keys.add(key)
+
+    assert short_directional_feature_keys
+
+    short_anchors_checked = 0
+    shifted_non_short_anchors = 0
+    for label in external_labels:
+        key = (
+            round(float(label["feature_middle_x"]), 6),
+            round(float(label["feature_middle_y"]), 6),
+            round(float(label["middle"]), 6),
+        )
+        anchor_x = float(label.get("feature_anchor_x", label["feature_middle_x"]))
+        anchor_y = float(label.get("feature_anchor_y", label["feature_middle_y"]))
+        middle_x = float(label["feature_middle_x"])
+        middle_y = float(label["feature_middle_y"])
+
+        if key in short_directional_feature_keys:
+            short_anchors_checked += 1
+            assert math.isclose(anchor_x, middle_x, abs_tol=1e-6)
+            assert math.isclose(anchor_y, middle_y, abs_tol=1e-6)
+        elif key in non_short_feature_keys:
+            if math.hypot(anchor_x - middle_x, anchor_y - middle_y) > 0.5:
+                shifted_non_short_anchors += 1
+
+    assert short_anchors_checked > 0
+    assert shifted_non_short_anchors > 0
 
 
 def test_hmmtdna_resolve_overlaps_default_font_keeps_label_bboxes_outside_local_feature_tracks() -> None:

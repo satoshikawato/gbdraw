@@ -34,6 +34,7 @@ class SeqRecordGroup:
         cfg: GbdrawConfig | None = None,
         precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = None,
         precalculated_labels: Optional[list[dict]] = None,
+        feature_track_ratio_factor_override: float | None = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
@@ -61,6 +62,7 @@ class SeqRecordGroup:
         self.track_ratio = self.canvas_config.track_ratio
         self.precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = precomputed_feature_dict
         self.precalculated_labels: Optional[list[dict]] = precalculated_labels
+        self.feature_track_ratio_factor_override = feature_track_ratio_factor_override
         self.record_group: Group = self.setup_record_group()
 
     def draw_record(self, feature_dict: Dict[str, FeatureObject], record_length: int, group: Group) -> Group:
@@ -77,7 +79,13 @@ class SeqRecordGroup:
                     self.track_ratio,
                     self.config_dict,
                     cfg=self._cfg,
+                    feature_track_ratio_factor_override=self.feature_track_ratio_factor_override,
                 )
+        feature_track_ratio_factor = (
+            float(self.feature_track_ratio_factor_override)
+            if self.feature_track_ratio_factor_override is not None
+            else float(self.track_ratio_factors[0])
+        )
         for feature_object in feature_dict.values():
             group = FeatureDrawer(self.feature_config).draw(
                 feature_object,
@@ -85,7 +93,7 @@ class SeqRecordGroup:
                 record_length,
                 self.canvas_config.radius,
                 self.canvas_config.track_ratio,
-                self.track_ratio_factors[0],
+                feature_track_ratio_factor,
                 self.track_type,
                 self.strandedness,
                 self.length_param,
@@ -95,7 +103,12 @@ class SeqRecordGroup:
             for label in label_list:
                 if label["is_embedded"]:
                     group = label_drawer.draw(
-                        label, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio
+                        label,
+                        group,
+                        record_length,
+                        self.canvas_config.radius,
+                        self.canvas_config.track_ratio,
+                        feature_track_ratio_factor_override=self.feature_track_ratio_factor_override,
                     )
         return group
 

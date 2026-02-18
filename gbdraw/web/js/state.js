@@ -197,6 +197,7 @@ const adv = reactive({
   scale_stroke_color: null,
 
   // Circular Specific
+  feature_width_circular: null,
   outer_label_x_offset: null,
   outer_label_y_offset: null,
   inner_label_x_offset: null,
