@@ -37,6 +37,7 @@ LEADER_START_PROXIMITY_EPS_PX = 0.75
 LEADER_START_ORDER_GAP_CANDIDATES = (1.0, 0.75, 0.5, 0.25, 0.0)
 MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX = 6.0
 MIN_OUTER_LABEL_TEXT_CLEARANCE_PX = 13.0
+OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX = 3.0
 OUTER_LABEL_FEATURE_CLEARANCE_SAMPLE_CAP_DEG = 18.0
 PLACE_LABELS_BASE_MARGIN_PX = 2.0
 IMPROVED_LABELS_BASE_MARGIN_PX = 1.5
@@ -932,7 +933,11 @@ def _update_outer_label_minimum_radii_against_features(
         if local_outer_radius <= 0.0:
             continue
 
-        required_radius = local_outer_radius + MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
+        required_radius = (
+            local_outer_radius
+            + MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
+            + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
+        )
         current_min_radius = float(label.get("min_outer_start_radius_px", 0.0))
         if required_radius > current_min_radius:
             label["min_outer_start_radius_px"] = required_radius
@@ -962,7 +967,11 @@ def _update_outer_label_minimum_middle_radii_against_features(
         if local_outer_radius <= 0.0:
             continue
 
-        required_radius = local_outer_radius + MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX
+        required_radius = (
+            local_outer_radius
+            + MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX
+            + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
+        )
         current_min_radius = float(label.get("min_outer_middle_radius_px", 0.0))
         if required_radius > current_min_radius:
             label["min_outer_middle_radius_px"] = required_radius
@@ -3131,20 +3140,32 @@ def prepare_label_list(
                     if cfg.canvas.resolve_overlaps and not strandedness:
                         middle_radius = max(
                             float(middle_radius),
-                            float(feature_outer_radius + MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX),
+                            float(
+                                feature_outer_radius
+                                + MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX
+                                + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
+                            ),
                         )
                         label_entry["min_outer_start_radius_px"] = float(
-                            feature_outer_radius + MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
+                            feature_outer_radius
+                            + MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
+                            + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
                         )
                 else:
                     middle_radius = radius_factor * radius
                     if cfg.canvas.resolve_overlaps and not strandedness:
                         middle_radius = max(
                             float(middle_radius),
-                            float(feature_outer_radius + MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX),
+                            float(
+                                feature_outer_radius
+                                + MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX
+                                + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
+                            ),
                         )
                         label_entry["min_outer_start_radius_px"] = float(
-                            feature_outer_radius + MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
+                            feature_outer_radius
+                            + MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
+                            + OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
                         )
                 middle_x = middle_radius * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
                 middle_y = middle_radius * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
@@ -3258,6 +3279,26 @@ def prepare_label_list(
             outer_labels_rearranged,
             total_length,
         )
+        # Reconcile angular overlaps once more after stricter radial clearances.
+        outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
+            outer_labels_rearranged,
+            total_length,
+        )
+        outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
+            outer_labels_rearranged,
+            total_length,
+            feature_outer_radius_intervals,
+        )
+        outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
+        outer_labels_rearranged = _update_outer_label_minimum_middle_radii_against_features(
+            outer_labels_rearranged,
+            total_length,
+            feature_outer_radius_intervals,
+        )
+        outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
+            outer_labels_rearranged,
+            total_length,
+        )
     inner_labels_rearranged = []
     if allow_inner_labels:
         inner_labels_rearranged = rearrange_labels_fc(
@@ -3286,6 +3327,25 @@ def prepare_label_list(
             min_order_gap_deg=LEADER_LABEL_MIN_ORDER_GAP_DEG,
         )
         if feature_outer_radius_intervals is not None and outer_labels_rearranged:
+            outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
+                outer_labels_rearranged,
+                total_length,
+                feature_outer_radius_intervals,
+            )
+            outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
+            outer_labels_rearranged = _update_outer_label_minimum_middle_radii_against_features(
+                outer_labels_rearranged,
+                total_length,
+                feature_outer_radius_intervals,
+            )
+            outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
+                outer_labels_rearranged,
+                total_length,
+            )
+            outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
+                outer_labels_rearranged,
+                total_length,
+            )
             outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
                 outer_labels_rearranged,
                 total_length,

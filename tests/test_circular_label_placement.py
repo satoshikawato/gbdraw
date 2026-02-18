@@ -89,6 +89,40 @@ def _label_bbox_min_radius(label: dict, total_length: int) -> float:
     return math.hypot(closest_x, closest_y)
 
 
+def _label_bbox_boundary_min_clearance_against_features(
+    label: dict,
+    total_length: int,
+    feature_intervals: list[tuple[float, float, float]],
+    *,
+    samples_per_edge: int = 25,
+) -> float:
+    min_x, max_x = circular_labels_module._label_x_bounds(label, minimum_margin=0.0)
+    min_y, max_y = circular_labels_module._label_y_bounds(label, total_length, minimum_margin=0.0)
+    if max_x <= min_x + 1e-9 or max_y <= min_y + 1e-9:
+        return float("inf")
+
+    min_clearance = float("inf")
+    sample_count = max(3, int(samples_per_edge))
+    for idx in range(sample_count):
+        t = float(idx) / float(sample_count - 1)
+        x = min_x + ((max_x - min_x) * t)
+        y = min_y + ((max_y - min_y) * t)
+        boundary_points = ((x, min_y), (x, max_y), (min_x, y), (max_x, y))
+
+        for point_x, point_y in boundary_points:
+            point_radius = math.hypot(point_x, point_y)
+            point_position = ((math.degrees(math.atan2(point_y, point_x)) + 90.0) % 360.0) / 360.0 * float(total_length)
+            required_feature_outer = circular_labels_module._max_outer_feature_radius_at_position(
+                feature_intervals,
+                point_position,
+                total_length,
+            )
+            required_radius = required_feature_outer + circular_labels_module.MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
+            min_clearance = min(min_clearance, point_radius - required_radius)
+
+    return min_clearance
+
+
 def _count_half_plane_mismatches(labels: list[dict], total_length: int, axis_neutral_deg: float = 8.0) -> int:
     mismatch_count = 0
     for label in labels:
@@ -1123,6 +1157,51 @@ def test_hmmtdna_resolve_overlaps_feature_width_keeps_middle_anchor_outside_loca
         min_middle_clearance = min(min_middle_clearance, middle_radius - required_middle_radius)
 
     assert min_middle_clearance >= -1.0
+
+
+def test_hmmtdna_resolve_overlaps_feature_width_font22_keeps_bbox_margin_from_local_feature_tracks() -> None:
+    external_labels, total_length, cfg, feature_track_ratio_factor_override = (
+        _load_hmmtdna_external_labels_with_feature_width(feature_width=75.0, label_font_size=22.0)
+    )
+    assert external_labels
+
+    input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+    default_colors = load_default_colors("", "default")
+    color_table = None
+    color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    feature_intervals = circular_labels_module._build_outer_feature_radius_intervals(
+        feature_dict,
+        total_length,
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        cfg,
+        feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+    )
+    assert feature_intervals
+
+    min_bbox_clearance = float("inf")
+    for label in external_labels:
+        bbox_clearance = _label_bbox_boundary_min_clearance_against_features(
+            label,
+            total_length,
+            feature_intervals,
+        )
+        min_bbox_clearance = min(min_bbox_clearance, bbox_clearance)
+
+    assert min_bbox_clearance >= circular_labels_module.OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX - 1.5
 
 
 def test_hmmtdna_resolve_overlaps_short_directional_features_use_center_anchor() -> None:
