@@ -1005,6 +1005,8 @@ def test_hmmtdna_resolve_overlaps_feature_width_keeps_middle_anchor_outside_feat
     )
     assert external_labels
     assert any(int(label.get("track_id", 0)) > 0 for label in external_labels)
+    assert _count_overlaps(external_labels, total_length) == 0
+    assert _count_overlaps_with_min_gap(external_labels, total_length) == 0
 
     length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
     cds_ratio, offset = calculate_cds_ratio(
@@ -1031,6 +1033,56 @@ def test_hmmtdna_resolve_overlaps_feature_width_keeps_middle_anchor_outside_feat
         min_middle_clearance = min(min_middle_clearance, middle_radius - feature_outer_radius)
 
     assert min_middle_clearance >= circular_labels_module.MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX - 1.0
+
+
+def test_hmmtdna_resolve_overlaps_feature_width_keeps_middle_anchor_outside_local_feature_tracks() -> None:
+    external_labels, total_length, cfg, feature_track_ratio_factor_override = (
+        _load_hmmtdna_external_labels_with_feature_width(feature_width=75.0)
+    )
+    assert external_labels
+
+    input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+    default_colors = load_default_colors("", "default")
+    color_table = None
+    color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    feature_intervals = circular_labels_module._build_outer_feature_radius_intervals(
+        feature_dict,
+        total_length,
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        cfg,
+        feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+    )
+    assert feature_intervals
+
+    min_middle_clearance = float("inf")
+    for label in external_labels:
+        label_intervals = circular_labels_module._label_genome_intervals_for_clearance(label, total_length)
+        assert label_intervals
+
+        local_outer = circular_labels_module._max_outer_feature_radius_for_intervals(
+            feature_intervals,
+            label_intervals,
+            total_length,
+        )
+        required_middle_radius = local_outer + circular_labels_module.MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX
+        middle_radius = math.hypot(float(label["middle_x"]), float(label["middle_y"]))
+        min_middle_clearance = min(min_middle_clearance, middle_radius - required_middle_radius)
+
+    assert min_middle_clearance >= -1.0
 
 
 def test_hmmtdna_resolve_overlaps_short_directional_features_use_center_anchor() -> None:

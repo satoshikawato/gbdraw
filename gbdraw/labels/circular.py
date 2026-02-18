@@ -631,6 +631,36 @@ def _update_outer_label_minimum_radii_against_features(
     return labels
 
 
+def _update_outer_label_minimum_middle_radii_against_features(
+    labels: list[dict],
+    total_length: int,
+    feature_radius_intervals: list[tuple[float, float, float]],
+) -> list[dict]:
+    """Raise leader middle-point radii so elbows stay outside local feature tracks."""
+    if not labels or not feature_radius_intervals:
+        return labels
+
+    for label in labels:
+        label_intervals = _label_genome_intervals_for_clearance(label, total_length)
+        if not label_intervals:
+            continue
+
+        local_outer_radius = _max_outer_feature_radius_for_intervals(
+            feature_radius_intervals,
+            label_intervals,
+            total_length,
+        )
+        if local_outer_radius <= 0.0:
+            continue
+
+        required_radius = local_outer_radius + MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX
+        current_min_radius = float(label.get("min_outer_middle_radius_px", 0.0))
+        if required_radius > current_min_radius:
+            label["min_outer_middle_radius_px"] = required_radius
+
+    return labels
+
+
 def _enforce_outer_label_minimum_radius(labels: list[dict], total_length: int) -> list[dict]:
     """Push outer labels outward until their text bboxes clear required radii."""
     for label in labels:
@@ -666,6 +696,30 @@ def _enforce_outer_label_minimum_radius(labels: list[dict], total_length: int) -
             if deficit <= 1e-3:
                 break
             candidate_radius += deficit + 0.5
+
+    return labels
+
+
+def _enforce_outer_label_minimum_middle_radius(labels: list[dict], total_length: int) -> list[dict]:
+    """Push leader middle points outward until they clear required radii."""
+    for label in labels:
+        required_middle_radius = float(label.get("min_outer_middle_radius_px", 0.0))
+        if required_middle_radius <= 0.0:
+            continue
+
+        middle_x = float(label.get("middle_x", 0.0))
+        middle_y = float(label.get("middle_y", 0.0))
+        current_middle_radius = math.hypot(middle_x, middle_y)
+        if current_middle_radius >= (required_middle_radius - 1e-6):
+            continue
+
+        if current_middle_radius > 1e-9:
+            middle_angle_rad = math.atan2(middle_y, middle_x)
+        else:
+            middle_angle_rad = math.radians(angle_from_middle(float(label["middle"]), total_length))
+
+        label["middle_x"] = required_middle_radius * math.cos(middle_angle_rad)
+        label["middle_y"] = required_middle_radius * math.sin(middle_angle_rad)
 
     return labels
 
@@ -742,6 +796,58 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
             minimum_margin=min_gap_px,
         )
 
+    def _pair_angle_bounds(label_idx: int) -> tuple[float, float]:
+        target_angle = float(labels[label_idx]["_target_angle_unwrapped_fixed"])
+        low_bound = target_angle - max_angle_shift_deg
+        high_bound = target_angle + max_angle_shift_deg
+        if label_idx > 0:
+            low_bound = max(low_bound, float(labels[label_idx - 1]["_angle_unwrapped_fixed"]) + min_order_gap_deg)
+        if label_idx + 1 < len(labels):
+            high_bound = min(high_bound, float(labels[label_idx + 1]["_angle_unwrapped_fixed"]) - min_order_gap_deg)
+        return low_bound, high_bound
+
+    def _separate_pair(idx: int, jdx: int) -> bool:
+        left = labels[idx]
+        right = labels[jdx]
+        pair_changed = False
+
+        for _ in range(max_pair_steps):
+            if not _pair_overlaps(left, right):
+                break
+
+            left_low, left_high = _pair_angle_bounds(idx)
+            right_low, right_high = _pair_angle_bounds(jdx)
+            new_left = max(left_low, float(left["_angle_unwrapped_fixed"]) - (0.5 * step_deg))
+            new_right = min(right_high, float(right["_angle_unwrapped_fixed"]) + (0.5 * step_deg))
+
+            # Preserve strict ordering with labels between idx and jdx.
+            if idx + 1 < jdx:
+                new_left = min(new_left, float(labels[idx + 1]["_angle_unwrapped_fixed"]) - min_order_gap_deg)
+                new_right = max(new_right, float(labels[jdx - 1]["_angle_unwrapped_fixed"]) + min_order_gap_deg)
+
+            if (
+                new_left < (left_low - 1e-9)
+                or new_left > (left_high + 1e-9)
+                or new_right < (right_low - 1e-9)
+                or new_right > (right_high + 1e-9)
+            ):
+                break
+            if new_right <= new_left + min_order_gap_deg:
+                break
+            if (
+                abs(new_left - float(left["_angle_unwrapped_fixed"])) <= 1e-9
+                and abs(new_right - float(right["_angle_unwrapped_fixed"])) <= 1e-9
+            ):
+                break
+
+            left["_angle_unwrapped_fixed"] = new_left
+            right["_angle_unwrapped_fixed"] = new_right
+            _apply_angle(left)
+            _apply_angle(right)
+            pair_changed = True
+
+        return pair_changed
+
     for label in labels:
         _apply_angle(label)
 
@@ -784,6 +890,14 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
 
                 if not _pair_overlaps(left, right):
                     break
+
+        # Adjacent passes can still miss sparse non-adjacent bbox collisions.
+        for idx in range(len(labels) - 2):
+            for jdx in range(idx + 2, len(labels)):
+                if not _pair_overlaps(labels[idx], labels[jdx]):
+                    continue
+                if _separate_pair(idx, jdx):
+                    changed = True
 
         if not changed:
             break
@@ -2825,6 +2939,15 @@ def prepare_label_list(
             feature_outer_radius_intervals,
         )
         outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
+        outer_labels_rearranged = _update_outer_label_minimum_middle_radii_against_features(
+            outer_labels_rearranged,
+            total_length,
+            feature_outer_radius_intervals,
+        )
+        outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
+            outer_labels_rearranged,
+            total_length,
+        )
     outer_labels_rearranged = assign_leader_start_points(outer_labels_rearranged, total_length)
 
     inner_labels_rearranged = []
