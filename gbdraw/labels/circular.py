@@ -185,7 +185,6 @@ def _leader_start_meta(label: dict, total_length: int | None) -> tuple[str, floa
         return None
     if "middle_x" not in label or "middle_y" not in label:
         return None
-    start_x = float(label.get("start_x", 0.0))
     start_y = float(label.get("start_y", 0.0))
     min_x, max_x = _label_x_bounds(label, minimum_margin=0.0)
     min_y, max_y = _label_y_bounds(label, total_length, minimum_margin=0.0)
@@ -205,16 +204,15 @@ def _leader_start_meta(label: dict, total_length: int | None) -> tuple[str, floa
     # Horizontal labels look cleaner when leaders attach on the feature-facing side.
     # Keep the attachment coordinate biased toward text anchor (`start_x/start_y`)
     # so each leader visually maps back to its own label row.
-    anchor_x = float(label.get("start_x", start_x))
     anchor_y = float(label.get("start_y", start_y))
     if middle_x >= max_x:
         return "right", max_x, y_min_usable, y_max_usable, anchor_y
     if middle_x <= min_x:
         return "left", min_x, y_min_usable, y_max_usable, anchor_y
     if middle_y >= max_y:
-        return "top", max_y, x_min_usable, x_max_usable, anchor_x
+        return "top", max_y, x_min_usable, x_max_usable, middle_x
     if middle_y <= min_y:
-        return "bottom", min_y, x_min_usable, x_max_usable, anchor_x
+        return "bottom", min_y, x_min_usable, x_max_usable, middle_x
 
     # Fallback (point inside bbox): attach to nearest edge.
     left_d = abs(middle_x - min_x)
@@ -378,13 +376,91 @@ def _refine_leader_start_points(labels: list[dict], total_length: int) -> list[d
     return labels
 
 
+def _optimize_top_bottom_leader_start_points(labels: list[dict], total_length: int) -> list[dict]:
+    """
+    Prefer long-edge midpoint anchors for top/bottom labels when safe.
+
+    Candidate order is:
+    1) long-edge midpoint
+    2) middle_x projection on the edge (feature-facing)
+    3) current anchor (fallback)
+
+    Scoring priority:
+    1) local label-leader collisions (minimum)
+    2) distance to long-edge midpoint (minimum)
+    3) leader length from text middle anchor (minimum)
+    """
+    if not labels:
+        return labels
+
+    for idx, label in enumerate(labels):
+        meta = _leader_start_meta(label, total_length)
+        if meta is None:
+            continue
+
+        side, fixed_coord, lower, upper, _ = meta
+        if side not in ("top", "bottom"):
+            continue
+
+        lower_bound = float(lower)
+        upper_bound = float(upper)
+        if upper_bound < lower_bound:
+            lower_bound, upper_bound = upper_bound, lower_bound
+
+        midpoint_coord = 0.5 * (lower_bound + upper_bound)
+        feature_projection = min(
+            max(float(label.get("middle_x", midpoint_coord)), lower_bound),
+            upper_bound,
+        )
+        current_coord = min(
+            max(float(label.get("leader_start_x", label.get("start_x", midpoint_coord))), lower_bound),
+            upper_bound,
+        )
+
+        fixed = float(fixed_coord)
+        candidate_coords = [midpoint_coord, feature_projection, current_coord]
+        unique_coords: list[float] = []
+        for coord in candidate_coords:
+            if not any(math.isclose(coord, seen, abs_tol=1e-9) for seen in unique_coords):
+                unique_coords.append(coord)
+
+        best_score: tuple[int, float, float] | None = None
+        best_coord = current_coord
+        for coord in unique_coords:
+            candidate_label = label.copy()
+            candidate_label["leader_start_x"] = float(coord)
+            candidate_label["leader_start_y"] = fixed
+            local_collision_count = _count_local_leader_line_collisions(
+                labels,
+                total_length,
+                idx,
+                margin_px=LEADER_LABEL_COLLISION_MARGIN_PX,
+                candidate=candidate_label,
+            )
+            midpoint_distance = abs(float(coord) - midpoint_coord)
+            leader_length = math.hypot(
+                float(coord) - float(label.get("middle_x", 0.0)),
+                fixed - float(label.get("middle_y", 0.0)),
+            )
+            score = (local_collision_count, midpoint_distance, leader_length)
+            if best_score is None or score < best_score:
+                best_score = score
+                best_coord = float(coord)
+
+        label["leader_start_x"] = float(best_coord)
+        label["leader_start_y"] = fixed
+
+    return labels
+
+
 def _assign_leader_start_points(labels: list[dict], total_length: int) -> list[dict]:
     """Populate `leader_start_x/y` used for drawing the first leader segment."""
     for label in labels:
         leader_x, leader_y = _leader_start_point(label, total_length)
         label["leader_start_x"] = leader_x
         label["leader_start_y"] = leader_y
-    return _refine_leader_start_points(labels, total_length)
+    labels = _refine_leader_start_points(labels, total_length)
+    return _optimize_top_bottom_leader_start_points(labels, total_length)
 
 
 def assign_leader_start_points(labels: list[dict], total_length: int) -> list[dict]:

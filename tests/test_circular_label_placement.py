@@ -986,6 +986,84 @@ def test_mjenmv_resolve_overlaps_middle_has_no_outer_overlaps() -> None:
     assert _count_overlaps_with_min_gap(external_labels, total_length) == 0
 
 
+def test_mjenmv_resolve_overlaps_middle_top_bottom_leader_anchor_selection() -> None:
+    external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+        label_blacklist="",
+    )
+    labels = sorted((label.copy() for label in external_labels), key=lambda label: float(label["middle"]))
+    assert labels
+
+    global_collisions = circular_labels_module._count_label_leader_line_collisions(
+        labels,
+        total_length,
+        margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
+    )
+    assert global_collisions == 0
+
+    top_bottom_count = 0
+    midpoint_preferred_count = 0
+    fallback_count = 0
+
+    for idx, label in enumerate(labels):
+        meta = circular_labels_module._leader_start_meta(label, total_length)
+        if meta is None:
+            continue
+        side, fixed_coord, lower, upper, _ = meta
+        if side not in ("top", "bottom"):
+            continue
+
+        top_bottom_count += 1
+        lower_bound = min(float(lower), float(upper))
+        upper_bound = max(float(lower), float(upper))
+        edge_y = float(fixed_coord)
+        midpoint_x = 0.5 * (lower_bound + upper_bound)
+        projected_x = min(
+            max(float(label.get("middle_x", midpoint_x)), lower_bound),
+            upper_bound,
+        )
+        chosen_x = min(
+            max(float(label.get("leader_start_x", label["start_x"])), lower_bound),
+            upper_bound,
+        )
+        chosen_y = float(label.get("leader_start_y", label["start_y"]))
+        assert math.isclose(chosen_y, edge_y, abs_tol=1e-9)
+
+        def local_collision(candidate_x: float) -> int:
+            candidate = label.copy()
+            candidate["leader_start_x"] = float(candidate_x)
+            candidate["leader_start_y"] = edge_y
+            return circular_labels_module._count_local_leader_line_collisions(
+                labels,
+                total_length,
+                idx,
+                margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
+                candidate=candidate,
+            )
+
+        midpoint_collisions = local_collision(midpoint_x)
+        projected_collisions = local_collision(projected_x)
+        chosen_collisions = local_collision(chosen_x)
+        best_collision = min(midpoint_collisions, projected_collisions, chosen_collisions)
+
+        if midpoint_collisions == best_collision and midpoint_collisions <= projected_collisions:
+            assert math.isclose(chosen_x, midpoint_x, abs_tol=1e-9)
+            midpoint_preferred_count += 1
+
+        if midpoint_collisions > min(projected_collisions, chosen_collisions):
+            assert not math.isclose(chosen_x, midpoint_x, abs_tol=1e-9)
+            assert chosen_collisions <= midpoint_collisions
+            assert not math.isclose(chosen_x, lower_bound, abs_tol=1e-9)
+            assert not math.isclose(chosen_x, upper_bound, abs_tol=1e-9)
+            fallback_count += 1
+
+    assert top_bottom_count > 0
+    assert midpoint_preferred_count > 0
+    assert fallback_count > 0
+
+
 def test_hmmtdna_font22_labels_remain_close_without_overlaps() -> None:
     y_overlap_calls = 0
     original_y_overlap = circular_labels_module.y_overlap
