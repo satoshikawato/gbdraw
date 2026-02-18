@@ -409,6 +409,46 @@ def _make_order_sensitive_legend_collision_fixture() -> tuple[list[dict], int, S
     return labels, total_length, canvas_config, legend_config
 
 
+def _make_label_leader_collision_fixture() -> tuple[list[dict], int]:
+    """Return a minimal pair with a reproducible label-vs-leader collision."""
+    total_length = 16569
+    labels = [
+        {
+            "label_text": "tRNA-Gly",
+            "middle": 10024.0,
+            "start_x": -283.0202696366569,
+            "start_y": 377.70662320104606,
+            "middle_x": -281.28144819583736,
+            "middle_y": 362.69543300936743,
+            "feature_middle_x": -266.2517031780199,
+            "feature_middle_y": 343.3154848747775,
+            "feature_anchor_x": -266.2517031780199,
+            "feature_anchor_y": 343.3154848747775,
+            "width_px": 67.2,
+            "height_px": 14.0,
+            "is_inner": False,
+            "is_embedded": False,
+        },
+        {
+            "label_text": "NADH dehydrogenase subunit 3",
+            "middle": 10231.0,
+            "start_x": -355.20979826148726,
+            "start_y": 374.414669818108,
+            "middle_x": -338.77430088295495,
+            "middle_y": 372.40950724473345,
+            "feature_middle_x": -262.435772218122,
+            "feature_middle_y": 288.4917077842585,
+            "feature_anchor_x": -274.9014713984828,
+            "feature_anchor_y": 302.1950639040108,
+            "width_px": 235.2,
+            "height_px": 14.0,
+            "is_inner": False,
+            "is_embedded": False,
+        },
+    ]
+    return labels, total_length
+
+
 def test_place_labels_stays_near_feature_angle_for_sparse_labels() -> None:
     total_length = 16569
     labels = [
@@ -1251,6 +1291,60 @@ def test_hmmtdna_resolve_overlaps_default_font_keeps_label_bboxes_outside_local_
         min_bbox_clearance = min(min_bbox_clearance, bbox_clearance)
 
     assert min_bbox_clearance >= -1.0
+
+
+def test_hmmtdna_resolve_overlaps_middle_has_no_label_leader_line_collisions() -> None:
+    external_labels, total_length, _ = _load_hmmtdna_external_labels_with_config(
+        label_font_size=14.0,
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+    )
+    assert external_labels
+
+    collision_count = circular_labels_module._count_label_leader_line_collisions(
+        external_labels,
+        total_length,
+        margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
+    )
+    assert collision_count == 0
+
+
+def test_resolve_label_leader_line_collisions_reduces_fixture_collisions() -> None:
+    labels, total_length = _make_label_leader_collision_fixture()
+    labels = [label.copy() for label in labels]
+    labels = circular_labels_module.assign_leader_start_points(labels, total_length)
+
+    before_collisions = circular_labels_module._count_label_leader_line_collisions(
+        labels,
+        total_length,
+        margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
+    )
+    before_overlaps = _count_overlaps_with_min_gap(labels, total_length)
+    assert before_collisions > 0
+
+    optimized = circular_labels_module._resolve_label_leader_line_collisions(
+        labels,
+        total_length,
+        margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
+        step_deg=circular_labels_module.LEADER_LABEL_SHIFT_STEP_DEG,
+        max_shift_deg=circular_labels_module.LEADER_LABEL_MAX_SHIFT_DEG,
+        max_passes=circular_labels_module.LEADER_LABEL_MAX_PASSES,
+        min_order_gap_deg=circular_labels_module.LEADER_LABEL_MIN_ORDER_GAP_DEG,
+    )
+
+    after_collisions = circular_labels_module._count_label_leader_line_collisions(
+        optimized,
+        total_length,
+        margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
+    )
+    after_overlaps = _count_overlaps_with_min_gap(optimized, total_length)
+    unwrapped_angles = circular_labels_module._derive_monotonic_unwrapped_angles(optimized, total_length)
+
+    assert after_collisions < before_collisions
+    assert after_collisions == 0
+    assert after_overlaps <= before_overlaps
+    assert all(unwrapped_angles[i] < unwrapped_angles[i + 1] for i in range(len(unwrapped_angles) - 1))
 
 
 def test_leader_start_lies_on_bbox_perimeter_without_corner_snap() -> None:
