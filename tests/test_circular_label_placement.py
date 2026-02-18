@@ -1025,6 +1025,58 @@ def test_effective_outer_middle_anchor_clearance_scales_with_feature_width_and_c
     assert math.isclose(no_resolve_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
 
 
+def test_effective_outer_text_clearance_scales_with_feature_width_and_caps() -> None:
+    base_clearance = float(circular_labels_module.MIN_OUTER_LABEL_TEXT_CLEARANCE_PX)
+
+    zero_width_clearance = circular_labels_module._effective_outer_text_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=0.0,
+    )
+    assert math.isclose(zero_width_clearance, base_clearance + 1.0, rel_tol=1e-9, abs_tol=1e-9)
+
+    small_width_clearance = circular_labels_module._effective_outer_text_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=10.0,
+    )
+    assert math.isclose(small_width_clearance, base_clearance + 1.5, rel_tol=1e-9, abs_tol=1e-9)
+
+    capped_width_clearance = circular_labels_module._effective_outer_text_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(capped_width_clearance, base_clearance + 2.0, rel_tol=1e-9, abs_tol=1e-9)
+
+    non_middle_clearance = circular_labels_module._effective_outer_text_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="tuckin",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(non_middle_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
+
+    stranded_clearance = circular_labels_module._effective_outer_text_clearance_px(
+        resolve_overlaps=True,
+        strandedness=True,
+        track_type="middle",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(stranded_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
+
+    no_resolve_clearance = circular_labels_module._effective_outer_text_clearance_px(
+        resolve_overlaps=False,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(no_resolve_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
+
+
 def test_mjenmv_resolve_overlaps_middle_has_no_outer_overlaps() -> None:
     external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
         strandedness=False,
@@ -1150,6 +1202,76 @@ def test_mjenmv_resolve_overlaps_middle_top_bottom_leader_anchor_selection() -> 
     assert top_bottom_count > 0
     assert midpoint_preferred_count > 0
     assert fallback_count > 0
+
+
+def test_hmmtdna_resolve_overlaps_middle_keeps_trna_lys_text_outside_feature_tracks() -> None:
+    external_labels, total_length, cfg = _load_hmmtdna_external_labels_with_config(
+        label_font_size=14.0,
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+    )
+    assert external_labels
+
+    trna_lys = next((label for label in external_labels if label.get("label_text") == "tRNA-Lys"), None)
+    assert trna_lys is not None
+
+    input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+    default_colors = load_default_colors("", "default")
+    color_table = None
+    color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    feature_intervals = circular_labels_module._build_outer_feature_radius_intervals(
+        feature_dict,
+        total_length,
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        cfg,
+    )
+    assert feature_intervals
+
+    label_intervals = circular_labels_module._label_genome_intervals_for_clearance(trna_lys, total_length)
+    assert label_intervals
+    local_outer_radius = circular_labels_module._max_outer_feature_radius_for_intervals(
+        feature_intervals,
+        label_intervals,
+        total_length,
+    )
+
+    length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
+    track_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+    cds_ratio, _ = calculate_cds_ratio(cfg.canvas.circular.track_ratio, length_param, track_ratio_factor)
+    feature_band_width_px = float(cfg.canvas.circular.radius) * float(cds_ratio)
+    text_clearance_px = circular_labels_module._effective_outer_text_clearance_px(
+        resolve_overlaps=bool(cfg.canvas.resolve_overlaps),
+        strandedness=bool(cfg.canvas.strandedness),
+        track_type=str(cfg.canvas.circular.track_type),
+        feature_band_width_px=feature_band_width_px,
+    )
+
+    bbox_min_radius = circular_labels_module._label_bbox_min_radius(
+        trna_lys,
+        total_length,
+        minimum_margin=0.0,
+    )
+    required_radius = (
+        local_outer_radius
+        + text_clearance_px
+        + float(circular_labels_module.OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX)
+    )
+    assert bbox_min_radius >= required_radius - 1.0
 
 
 def test_hmmtdna_font22_labels_remain_close_without_overlaps() -> None:
