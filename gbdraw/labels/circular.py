@@ -1396,6 +1396,40 @@ def _placement_score(labels: list[dict], total_length: int) -> tuple[int, int, i
     )
 
 
+def _dense_inner_candidate_score(
+    placement_score: tuple[int, int, int, float, float, float, float, float],
+    leader_collision_count: int,
+) -> tuple[int, int, int, int, float, float, float, float, float]:
+    """
+    Return comparison score for dense inner candidates.
+
+    Dense inner clusters are readability-sensitive around the lower axis, so we
+    prioritize hemisphere consistency and leader-line collisions ahead of
+    minimum-gap strictness.
+    """
+    (
+        overlap_plain,
+        overlap_min_gap,
+        hemisphere_mismatch_count,
+        hemisphere_mismatch_weight,
+        leader_sum,
+        leader_max,
+        sum_delta,
+        max_delta,
+    ) = placement_score
+    return (
+        overlap_plain,
+        hemisphere_mismatch_count,
+        int(leader_collision_count),
+        overlap_min_gap,
+        hemisphere_mismatch_weight,
+        leader_sum,
+        leader_max,
+        sum_delta,
+        max_delta,
+    )
+
+
 def y_overlap(label1, label2, total_len, minimum_margin):
     min_y1, max_y1 = _label_y_bounds(label1, total_len, minimum_margin)
     min_y2, max_y2 = _label_y_bounds(label2, total_len, minimum_margin)
@@ -3093,6 +3127,8 @@ def rearrange_labels_fc(
 
     candidate_legacy = None
     legacy_score = None
+    legacy_with_leaders: list[dict] | None = None
+    legacy_leader_collisions: int | None = None
     allow_inner_labels = bool(cfg.canvas.circular.allow_inner_labels)
     is_dense = len(sorted_labels) >= LEGACY_PLACEMENT_LABEL_THRESHOLD
 
@@ -3148,8 +3184,35 @@ def rearrange_labels_fc(
 
     # Always compare dense candidates when both are available.
     if candidate_legacy is not None and legacy_score is not None:
-        if legacy_score < best_score:
+        if is_dense and (not is_outer) and legacy_score[0] == 0 and best_score[0] == 0:
+            if legacy_with_leaders is None:
+                legacy_with_leaders = _assign_leader_start_points(
+                    [label.copy() for label in candidate_legacy],
+                    total_length,
+                )
+            if legacy_leader_collisions is None:
+                legacy_leader_collisions = _count_label_leader_line_collisions(
+                    legacy_with_leaders,
+                    total_length,
+                    margin_px=LEADER_LABEL_COLLISION_MARGIN_PX,
+                )
+            current_with_leaders = _assign_leader_start_points(
+                [label.copy() for label in candidate_current],
+                total_length,
+            )
+            current_leader_collisions = _count_label_leader_line_collisions(
+                current_with_leaders,
+                total_length,
+                margin_px=LEADER_LABEL_COLLISION_MARGIN_PX,
+            )
+            legacy_dense_score = _dense_inner_candidate_score(legacy_score, legacy_leader_collisions)
+            current_dense_score = _dense_inner_candidate_score(best_score, current_leader_collisions)
+            if legacy_dense_score < current_dense_score:
+                best_labels = candidate_legacy
+                best_score = legacy_score
+        elif legacy_score < best_score:
             best_labels = candidate_legacy
+            best_score = legacy_score
 
     return _assign_leader_start_points(best_labels, total_length)
 

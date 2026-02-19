@@ -1319,6 +1319,26 @@ def test_nc001879_inner_dense_prefers_legacy_when_it_avoids_leader_collisions() 
     )
 
 
+def test_nc001879_inner_dense_bottom_cluster_spreads_across_both_halves() -> None:
+    external_labels, _total_length, _ = _load_nc001879_external_labels_with_priority_and_color_table(
+        allow_inner_labels=True,
+    )
+    inner_labels = [label for label in external_labels if label.get("is_inner")]
+    assert len(inner_labels) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
+
+    # Regression guard: avoid one-sided drift near the lower inner cluster.
+    bottom_cluster = [label for label in inner_labels if float(label["start_y"]) > 220.0]
+    assert len(bottom_cluster) >= 12
+
+    left_count = sum(1 for label in bottom_cluster if float(label["start_x"]) < 0.0)
+    right_count = sum(1 for label in bottom_cluster if float(label["start_x"]) > 0.0)
+    mean_x = sum(float(label["start_x"]) for label in bottom_cluster) / float(len(bottom_cluster))
+
+    assert left_count >= 8
+    assert right_count >= 8
+    assert abs(mean_x) <= 25.0
+
+
 def test_inner_labels_on_left_half_use_left_bbox_edge_for_leader_start() -> None:
     total_length = 20000
     label = {
