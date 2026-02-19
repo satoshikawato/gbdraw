@@ -89,6 +89,40 @@ def _label_bbox_min_radius(label: dict, total_length: int) -> float:
     return math.hypot(closest_x, closest_y)
 
 
+def _label_bbox_boundary_min_clearance_against_features(
+    label: dict,
+    total_length: int,
+    feature_intervals: list[tuple[float, float, float]],
+    *,
+    samples_per_edge: int = 25,
+) -> float:
+    min_x, max_x = circular_labels_module._label_x_bounds(label, minimum_margin=0.0)
+    min_y, max_y = circular_labels_module._label_y_bounds(label, total_length, minimum_margin=0.0)
+    if max_x <= min_x + 1e-9 or max_y <= min_y + 1e-9:
+        return float("inf")
+
+    min_clearance = float("inf")
+    sample_count = max(3, int(samples_per_edge))
+    for idx in range(sample_count):
+        t = float(idx) / float(sample_count - 1)
+        x = min_x + ((max_x - min_x) * t)
+        y = min_y + ((max_y - min_y) * t)
+        boundary_points = ((x, min_y), (x, max_y), (min_x, y), (max_x, y))
+
+        for point_x, point_y in boundary_points:
+            point_radius = math.hypot(point_x, point_y)
+            point_position = ((math.degrees(math.atan2(point_y, point_x)) + 90.0) % 360.0) / 360.0 * float(total_length)
+            required_feature_outer = circular_labels_module._max_outer_feature_radius_at_position(
+                feature_intervals,
+                point_position,
+                total_length,
+            )
+            required_radius = required_feature_outer + circular_labels_module.MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
+            min_clearance = min(min_clearance, point_radius - required_radius)
+
+    return min_clearance
+
+
 def _count_half_plane_mismatches(labels: list[dict], total_length: int, axis_neutral_deg: float = 8.0) -> int:
     mismatch_count = 0
     for label in labels:
@@ -407,6 +441,46 @@ def _make_order_sensitive_legend_collision_fixture() -> tuple[list[dict], int, S
         color_rect_size=20.0,
     )
     return labels, total_length, canvas_config, legend_config
+
+
+def _make_label_leader_collision_fixture() -> tuple[list[dict], int]:
+    """Return a minimal pair with a reproducible label-vs-leader collision."""
+    total_length = 16569
+    labels = [
+        {
+            "label_text": "tRNA-Gly",
+            "middle": 10024.0,
+            "start_x": -283.0202696366569,
+            "start_y": 377.70662320104606,
+            "middle_x": -281.28144819583736,
+            "middle_y": 362.69543300936743,
+            "feature_middle_x": -266.2517031780199,
+            "feature_middle_y": 343.3154848747775,
+            "feature_anchor_x": -266.2517031780199,
+            "feature_anchor_y": 343.3154848747775,
+            "width_px": 67.2,
+            "height_px": 14.0,
+            "is_inner": False,
+            "is_embedded": False,
+        },
+        {
+            "label_text": "NADH dehydrogenase subunit 3",
+            "middle": 10231.0,
+            "start_x": -355.20979826148726,
+            "start_y": 374.414669818108,
+            "middle_x": -338.77430088295495,
+            "middle_y": 372.40950724473345,
+            "feature_middle_x": -262.435772218122,
+            "feature_middle_y": 288.4917077842585,
+            "feature_anchor_x": -274.9014713984828,
+            "feature_anchor_y": 302.1950639040108,
+            "width_px": 235.2,
+            "height_px": 14.0,
+            "is_inner": False,
+            "is_embedded": False,
+        },
+    ]
+    return labels, total_length
 
 
 def test_place_labels_stays_near_feature_angle_for_sparse_labels() -> None:
@@ -899,6 +973,110 @@ def test_mjenmv_dense_labels_without_blacklist_have_no_outer_overlaps() -> None:
     assert _count_overlaps(external_labels, total_length) == 0
 
 
+def test_effective_outer_middle_anchor_clearance_scales_with_feature_width_and_caps() -> None:
+    base_clearance = float(circular_labels_module.MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX)
+
+    zero_width_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=0.0,
+    )
+    assert math.isclose(zero_width_clearance, base_clearance + 2.0, rel_tol=1e-9, abs_tol=1e-9)
+
+    small_width_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=10.0,
+    )
+    assert math.isclose(small_width_clearance, base_clearance + 3.0, rel_tol=1e-9, abs_tol=1e-9)
+
+    capped_width_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(capped_width_clearance, base_clearance + 4.0, rel_tol=1e-9, abs_tol=1e-9)
+
+    non_middle_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="tuckin",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(non_middle_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
+
+    stranded_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
+        resolve_overlaps=True,
+        strandedness=True,
+        track_type="middle",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(stranded_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
+
+    no_resolve_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
+        resolve_overlaps=False,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(no_resolve_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
+
+
+def test_effective_outer_text_clearance_scales_with_feature_width_and_caps() -> None:
+    base_clearance = float(circular_labels_module.MIN_OUTER_LABEL_TEXT_CLEARANCE_PX)
+
+    zero_width_clearance = circular_labels_module._effective_outer_text_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=0.0,
+    )
+    assert math.isclose(zero_width_clearance, base_clearance + 1.0, rel_tol=1e-9, abs_tol=1e-9)
+
+    small_width_clearance = circular_labels_module._effective_outer_text_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=10.0,
+    )
+    assert math.isclose(small_width_clearance, base_clearance + 1.5, rel_tol=1e-9, abs_tol=1e-9)
+
+    capped_width_clearance = circular_labels_module._effective_outer_text_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(capped_width_clearance, base_clearance + 2.0, rel_tol=1e-9, abs_tol=1e-9)
+
+    non_middle_clearance = circular_labels_module._effective_outer_text_clearance_px(
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="tuckin",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(non_middle_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
+
+    stranded_clearance = circular_labels_module._effective_outer_text_clearance_px(
+        resolve_overlaps=True,
+        strandedness=True,
+        track_type="middle",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(stranded_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
+
+    no_resolve_clearance = circular_labels_module._effective_outer_text_clearance_px(
+        resolve_overlaps=False,
+        strandedness=False,
+        track_type="middle",
+        feature_band_width_px=80.0,
+    )
+    assert math.isclose(no_resolve_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
+
+
 def test_mjenmv_resolve_overlaps_middle_has_no_outer_overlaps() -> None:
     external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
         strandedness=False,
@@ -910,6 +1088,190 @@ def test_mjenmv_resolve_overlaps_middle_has_no_outer_overlaps() -> None:
     assert len(external_labels) == 109
     assert _count_overlaps(external_labels, total_length) == 0
     assert _count_overlaps_with_min_gap(external_labels, total_length) == 0
+
+
+def test_mjenmv_resolve_overlaps_middle_keeps_wsv134_anchor_outside_wsv133_feature() -> None:
+    external_labels, total_length, cfg = _load_mjenmv_external_labels_with_config(
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+        label_blacklist="",
+    )
+    assert external_labels
+
+    wsv134_label = next((label for label in external_labels if label.get("label_text") == "wsv134-like protein"), None)
+    wsv133_label = next((label for label in external_labels if label.get("label_text") == "wsv133-like protein"), None)
+    assert wsv134_label is not None
+    assert wsv133_label is not None
+
+    length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
+    track_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+    cds_ratio, _ = calculate_cds_ratio(cfg.canvas.circular.track_ratio, length_param, track_ratio_factor)
+    feature_band_width_px = float(cfg.canvas.circular.radius) * float(cds_ratio)
+    expected_anchor_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
+        resolve_overlaps=bool(cfg.canvas.resolve_overlaps),
+        strandedness=bool(cfg.canvas.strandedness),
+        track_type=str(cfg.canvas.circular.track_type),
+        feature_band_width_px=feature_band_width_px,
+    )
+
+    wsv134_middle_radius = math.hypot(float(wsv134_label["middle_x"]), float(wsv134_label["middle_y"]))
+    wsv133_outer_radius = math.hypot(
+        float(wsv133_label.get("feature_anchor_x", wsv133_label["feature_middle_x"])),
+        float(wsv133_label.get("feature_anchor_y", wsv133_label["feature_middle_y"])),
+    )
+    radial_gap = wsv134_middle_radius - wsv133_outer_radius
+    required_gap = expected_anchor_clearance + float(circular_labels_module.OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX)
+
+    assert radial_gap >= required_gap - 1.0
+
+
+def test_mjenmv_resolve_overlaps_middle_top_bottom_leader_anchor_selection() -> None:
+    external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+        label_blacklist="",
+    )
+    labels = sorted((label.copy() for label in external_labels), key=lambda label: float(label["middle"]))
+    assert labels
+
+    global_collisions = circular_labels_module._count_label_leader_line_collisions(
+        labels,
+        total_length,
+        margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
+    )
+    assert global_collisions == 0
+
+    top_bottom_count = 0
+    midpoint_preferred_count = 0
+    fallback_count = 0
+
+    for idx, label in enumerate(labels):
+        meta = circular_labels_module._leader_start_meta(label, total_length)
+        if meta is None:
+            continue
+        side, fixed_coord, lower, upper, _ = meta
+        if side not in ("top", "bottom"):
+            continue
+
+        top_bottom_count += 1
+        lower_bound = min(float(lower), float(upper))
+        upper_bound = max(float(lower), float(upper))
+        edge_y = float(fixed_coord)
+        midpoint_x = 0.5 * (lower_bound + upper_bound)
+        projected_x = min(
+            max(float(label.get("middle_x", midpoint_x)), lower_bound),
+            upper_bound,
+        )
+        chosen_x = min(
+            max(float(label.get("leader_start_x", label["start_x"])), lower_bound),
+            upper_bound,
+        )
+        chosen_y = float(label.get("leader_start_y", label["start_y"]))
+        assert math.isclose(chosen_y, edge_y, abs_tol=1e-9)
+
+        def local_collision(candidate_x: float) -> int:
+            candidate = label.copy()
+            candidate["leader_start_x"] = float(candidate_x)
+            candidate["leader_start_y"] = edge_y
+            return circular_labels_module._count_local_leader_line_collisions(
+                labels,
+                total_length,
+                idx,
+                margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
+                candidate=candidate,
+            )
+
+        midpoint_collisions = local_collision(midpoint_x)
+        projected_collisions = local_collision(projected_x)
+        chosen_collisions = local_collision(chosen_x)
+        best_collision = min(midpoint_collisions, projected_collisions, chosen_collisions)
+
+        if midpoint_collisions == best_collision and midpoint_collisions <= projected_collisions:
+            assert math.isclose(chosen_x, midpoint_x, abs_tol=1e-9)
+            midpoint_preferred_count += 1
+
+        if midpoint_collisions > min(projected_collisions, chosen_collisions):
+            assert not math.isclose(chosen_x, midpoint_x, abs_tol=1e-9)
+            assert chosen_collisions <= midpoint_collisions
+            assert not math.isclose(chosen_x, lower_bound, abs_tol=1e-9)
+            assert not math.isclose(chosen_x, upper_bound, abs_tol=1e-9)
+            fallback_count += 1
+
+    assert top_bottom_count > 0
+    assert midpoint_preferred_count > 0
+    assert fallback_count > 0
+
+
+def test_hmmtdna_resolve_overlaps_middle_keeps_trna_lys_text_outside_feature_tracks() -> None:
+    external_labels, total_length, cfg = _load_hmmtdna_external_labels_with_config(
+        label_font_size=14.0,
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+    )
+    assert external_labels
+
+    trna_lys = next((label for label in external_labels if label.get("label_text") == "tRNA-Lys"), None)
+    assert trna_lys is not None
+
+    input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+    default_colors = load_default_colors("", "default")
+    color_table = None
+    color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    feature_intervals = circular_labels_module._build_outer_feature_radius_intervals(
+        feature_dict,
+        total_length,
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        cfg,
+    )
+    assert feature_intervals
+
+    label_intervals = circular_labels_module._label_genome_intervals_for_clearance(trna_lys, total_length)
+    assert label_intervals
+    local_outer_radius = circular_labels_module._max_outer_feature_radius_for_intervals(
+        feature_intervals,
+        label_intervals,
+        total_length,
+    )
+
+    length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
+    track_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+    cds_ratio, _ = calculate_cds_ratio(cfg.canvas.circular.track_ratio, length_param, track_ratio_factor)
+    feature_band_width_px = float(cfg.canvas.circular.radius) * float(cds_ratio)
+    text_clearance_px = circular_labels_module._effective_outer_text_clearance_px(
+        resolve_overlaps=bool(cfg.canvas.resolve_overlaps),
+        strandedness=bool(cfg.canvas.strandedness),
+        track_type=str(cfg.canvas.circular.track_type),
+        feature_band_width_px=feature_band_width_px,
+    )
+
+    bbox_min_radius = circular_labels_module._label_bbox_min_radius(
+        trna_lys,
+        total_length,
+        minimum_margin=0.0,
+    )
+    required_radius = (
+        local_outer_radius
+        + text_clearance_px
+        + float(circular_labels_module.OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX)
+    )
+    assert bbox_min_radius >= required_radius - 1.0
 
 
 def test_hmmtdna_font22_labels_remain_close_without_overlaps() -> None:
@@ -1085,6 +1447,51 @@ def test_hmmtdna_resolve_overlaps_feature_width_keeps_middle_anchor_outside_loca
     assert min_middle_clearance >= -1.0
 
 
+def test_hmmtdna_resolve_overlaps_feature_width_font22_keeps_bbox_margin_from_local_feature_tracks() -> None:
+    external_labels, total_length, cfg, feature_track_ratio_factor_override = (
+        _load_hmmtdna_external_labels_with_feature_width(feature_width=75.0, label_font_size=22.0)
+    )
+    assert external_labels
+
+    input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+    default_colors = load_default_colors("", "default")
+    color_table = None
+    color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    feature_intervals = circular_labels_module._build_outer_feature_radius_intervals(
+        feature_dict,
+        total_length,
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        cfg,
+        feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+    )
+    assert feature_intervals
+
+    min_bbox_clearance = float("inf")
+    for label in external_labels:
+        bbox_clearance = _label_bbox_boundary_min_clearance_against_features(
+            label,
+            total_length,
+            feature_intervals,
+        )
+        min_bbox_clearance = min(min_bbox_clearance, bbox_clearance)
+
+    assert min_bbox_clearance >= circular_labels_module.OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX - 1.5
+
+
 def test_hmmtdna_resolve_overlaps_short_directional_features_use_center_anchor() -> None:
     external_labels, total_length, cfg = _load_hmmtdna_external_labels_with_config(
         label_font_size=14.0,
@@ -1251,6 +1658,60 @@ def test_hmmtdna_resolve_overlaps_default_font_keeps_label_bboxes_outside_local_
         min_bbox_clearance = min(min_bbox_clearance, bbox_clearance)
 
     assert min_bbox_clearance >= -1.0
+
+
+def test_hmmtdna_resolve_overlaps_middle_has_no_label_leader_line_collisions() -> None:
+    external_labels, total_length, _ = _load_hmmtdna_external_labels_with_config(
+        label_font_size=14.0,
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+    )
+    assert external_labels
+
+    collision_count = circular_labels_module._count_label_leader_line_collisions(
+        external_labels,
+        total_length,
+        margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
+    )
+    assert collision_count == 0
+
+
+def test_resolve_label_leader_line_collisions_reduces_fixture_collisions() -> None:
+    labels, total_length = _make_label_leader_collision_fixture()
+    labels = [label.copy() for label in labels]
+    labels = circular_labels_module.assign_leader_start_points(labels, total_length)
+
+    before_collisions = circular_labels_module._count_label_leader_line_collisions(
+        labels,
+        total_length,
+        margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
+    )
+    before_overlaps = _count_overlaps_with_min_gap(labels, total_length)
+    assert before_collisions > 0
+
+    optimized = circular_labels_module._resolve_label_leader_line_collisions(
+        labels,
+        total_length,
+        margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
+        step_deg=circular_labels_module.LEADER_LABEL_SHIFT_STEP_DEG,
+        max_shift_deg=circular_labels_module.LEADER_LABEL_MAX_SHIFT_DEG,
+        max_passes=circular_labels_module.LEADER_LABEL_MAX_PASSES,
+        min_order_gap_deg=circular_labels_module.LEADER_LABEL_MIN_ORDER_GAP_DEG,
+    )
+
+    after_collisions = circular_labels_module._count_label_leader_line_collisions(
+        optimized,
+        total_length,
+        margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
+    )
+    after_overlaps = _count_overlaps_with_min_gap(optimized, total_length)
+    unwrapped_angles = circular_labels_module._derive_monotonic_unwrapped_angles(optimized, total_length)
+
+    assert after_collisions < before_collisions
+    assert after_collisions == 0
+    assert after_overlaps <= before_overlaps
+    assert all(unwrapped_angles[i] < unwrapped_angles[i + 1] for i in range(len(unwrapped_angles) - 1))
 
 
 def test_leader_start_lies_on_bbox_perimeter_without_corner_snap() -> None:
