@@ -2,6 +2,7 @@ import math
 from pathlib import Path
 from types import SimpleNamespace
 
+import pandas as pd
 from Bio import SeqIO
 
 import gbdraw.diagrams.circular.assemble as circular_assemble_module
@@ -16,7 +17,7 @@ from gbdraw.config.toml import load_config_toml
 from gbdraw.core.sequence import determine_length_parameter
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
-from gbdraw.io.colors import load_default_colors
+from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.layout.circular import calculate_feature_position_factors_circular
 from gbdraw.layout.common import calculate_cds_ratio
 from gbdraw.labels.circular import (
@@ -359,6 +360,85 @@ def _load_hmmtdna_external_labels_with_feature_width(
     )
     external_labels = [label for label in labels if not label.get("is_embedded")]
     return external_labels, len(record.seq), cfg, feature_track_ratio_factor_override
+
+
+def _load_nc001879_external_labels_with_priority_and_color_table(
+    *,
+    allow_inner_labels: bool = False,
+    strandedness: bool = True,
+    resolve_overlaps: bool = False,
+    track_type: str = "tuckin",
+) -> tuple[list[dict], int, GbdrawConfig]:
+    input_path = Path(__file__).parent / "test_inputs" / "NC_001879.gbk"
+    color_table_path = Path(__file__).parent / "test_inputs" / "2025-09-19_chloroplast.tsv"
+    record = SeqIO.read(str(input_path), "genbank")
+
+    qualifier_priority_df = pd.DataFrame(
+        [
+            {"feature_type": "CDS", "priorities": "gene,product,locus_tag,protein_id,old_locus_tag,note"},
+            {"feature_type": "rRNA", "priorities": "gene,product,locus_tag,note"},
+            {"feature_type": "tRNA", "priorities": "gene,product,locus_tag,note"},
+            {"feature_type": "tmRNA", "priorities": "gene,product,locus_tag,note"},
+            {"feature_type": "ncRNA", "priorities": "gene,product,locus_tag,note"},
+        ],
+        columns=["feature_type", "priorities"],
+    )
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        show_labels=True,
+        strandedness=strandedness,
+        track_type=track_type,
+        resolve_overlaps=resolve_overlaps,
+        allow_inner_labels=allow_inner_labels,
+    )
+    config_dict["labels"]["filtering"]["qualifier_priority_df"] = qualifier_priority_df
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    default_colors = load_default_colors("", "default")
+    color_table_df = read_color_table(str(color_table_path))
+    color_table, default_colors = preprocess_color_tables(color_table_df, default_colors)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    labels = prepare_label_list(
+        feature_dict,
+        len(record.seq),
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        config_dict,
+        cfg=cfg,
+    )
+    external_labels = [label for label in labels if not label.get("is_embedded")]
+    return external_labels, len(record.seq), cfg
+
+
+def _load_nc001879_outer_labels_with_priority_and_color_table(
+    *,
+    allow_inner_labels: bool = False,
+    strandedness: bool = True,
+    resolve_overlaps: bool = False,
+    track_type: str = "tuckin",
+) -> tuple[list[dict], int, GbdrawConfig]:
+    external_labels, total_length, cfg = _load_nc001879_external_labels_with_priority_and_color_table(
+        allow_inner_labels=allow_inner_labels,
+        strandedness=strandedness,
+        resolve_overlaps=resolve_overlaps,
+        track_type=track_type,
+    )
+    outer_labels = [label for label in external_labels if not label.get("is_inner")]
+    return outer_labels, total_length, cfg
 
 
 def _make_legend_collision_fixture() -> tuple[list[dict], int, SimpleNamespace, SimpleNamespace]:
@@ -971,6 +1051,315 @@ def test_mjenmv_dense_labels_without_blacklist_have_no_outer_overlaps() -> None:
     external_labels, total_length = _load_mjenmv_external_labels_without_blacklist()
     assert len(external_labels) == 109
     assert _count_overlaps(external_labels, total_length) == 0
+
+
+def test_nc001879_outer_only_dense_skips_improved_solver_and_keeps_plain_overlaps_zero() -> None:
+    improved_calls = 0
+    original_improved = circular_labels_module.improved_label_placement_fc
+
+    def counting_improved(*args, **kwargs):
+        nonlocal improved_calls
+        improved_calls += 1
+        return original_improved(*args, **kwargs)
+
+    circular_labels_module.improved_label_placement_fc = counting_improved
+    try:
+        outer_labels, total_length, _ = _load_nc001879_outer_labels_with_priority_and_color_table(
+            allow_inner_labels=False,
+        )
+    finally:
+        circular_labels_module.improved_label_placement_fc = original_improved
+
+    assert len(outer_labels) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
+    assert improved_calls == 0
+    assert _count_overlaps(outer_labels, total_length) == 0
+
+
+def test_rearrange_dense_labels_50_to_70_always_compares_legacy_and_current_candidates() -> None:
+    total_length = 200000
+    feature_radius = 390.0
+    labels = [_make_label(50000 + idx * 500, width_px=140.0, height_px=20.0) for idx in range(60)]
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(config_dict, allow_inner_labels=True)
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    scores_seen: list[str] = []
+    legacy_improved_calls = 0
+
+    original_legacy_place = circular_labels_module._legacy_place_labels_on_arc_fc
+    original_legacy_improved = circular_labels_module._legacy_improved_label_placement_fc
+    original_place = circular_labels_module.place_labels_on_arc_fc
+    original_improved = circular_labels_module.improved_label_placement_fc
+    original_refine = circular_labels_module._refine_labels_to_preferred_hemisphere
+    original_assign = circular_labels_module._assign_leader_start_points
+    original_score = circular_labels_module._placement_score
+
+    def _tag_source(label_list: list[dict], source: str) -> list[dict]:
+        for label in label_list:
+            label["_candidate_source"] = source
+            label.setdefault("start_x", 0.0)
+            label.setdefault("start_y", 0.0)
+        return label_list
+
+    def fake_legacy_place(label_list, *_args, **_kwargs):
+        return _tag_source(label_list, "legacy")
+
+    def fake_legacy_improved(label_list, *_args, **_kwargs):
+        nonlocal legacy_improved_calls
+        legacy_improved_calls += 1
+        return _tag_source(label_list, "legacy")
+
+    def fake_place(label_list, *_args, **_kwargs):
+        return _tag_source(label_list, "current")
+
+    def fake_improved(label_list, *_args, **_kwargs):
+        return _tag_source(label_list, "current")
+
+    def fake_score(label_list: list[dict], _total_length: int):
+        source = str(label_list[0].get("_candidate_source", "unknown"))
+        scores_seen.append(source)
+        if source == "legacy":
+            return (0, 1, 1, 0.0, 120.0, 30.0, 120.0, 30.0)
+        if source == "current":
+            return (1, 1, 0, 0.0, 20.0, 10.0, 20.0, 10.0)
+        return (9, 9, 9, 9.0, 9.0, 9.0, 9.0, 9.0)
+
+    circular_labels_module._legacy_place_labels_on_arc_fc = fake_legacy_place
+    circular_labels_module._legacy_improved_label_placement_fc = fake_legacy_improved
+    circular_labels_module.place_labels_on_arc_fc = fake_place
+    circular_labels_module.improved_label_placement_fc = fake_improved
+    circular_labels_module._refine_labels_to_preferred_hemisphere = lambda label_list, *_args, **_kwargs: label_list
+    circular_labels_module._assign_leader_start_points = lambda label_list, _total_length: label_list
+    circular_labels_module._placement_score = fake_score
+    try:
+        rearranged = rearrange_labels_fc(
+            labels,
+            feature_radius,
+            total_length,
+            "long",
+            config_dict,
+            strands="separate",
+            is_outer=True,
+            cfg=cfg,
+        )
+    finally:
+        circular_labels_module._legacy_place_labels_on_arc_fc = original_legacy_place
+        circular_labels_module._legacy_improved_label_placement_fc = original_legacy_improved
+        circular_labels_module.place_labels_on_arc_fc = original_place
+        circular_labels_module.improved_label_placement_fc = original_improved
+        circular_labels_module._refine_labels_to_preferred_hemisphere = original_refine
+        circular_labels_module._assign_leader_start_points = original_assign
+        circular_labels_module._placement_score = original_score
+
+    assert legacy_improved_calls == 1
+    assert scores_seen.count("legacy") == 1
+    assert scores_seen.count("current") == 1
+    assert rearranged
+    assert all(label.get("_candidate_source") == "legacy" for label in rearranged)
+
+
+def test_rearrange_dense_labels_over_70_reuses_single_legacy_candidate() -> None:
+    total_length = 200000
+    feature_radius = 390.0
+    labels = [_make_label(50000 + idx * 300, width_px=160.0, height_px=20.0) for idx in range(80)]
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(config_dict, allow_inner_labels=True)
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    scores_seen: list[str] = []
+    legacy_improved_calls = 0
+
+    original_legacy_place = circular_labels_module._legacy_place_labels_on_arc_fc
+    original_legacy_improved = circular_labels_module._legacy_improved_label_placement_fc
+    original_place = circular_labels_module.place_labels_on_arc_fc
+    original_improved = circular_labels_module.improved_label_placement_fc
+    original_refine = circular_labels_module._refine_labels_to_preferred_hemisphere
+    original_assign = circular_labels_module._assign_leader_start_points
+    original_score = circular_labels_module._placement_score
+
+    def _tag_source(label_list: list[dict], source: str) -> list[dict]:
+        for label in label_list:
+            label["_candidate_source"] = source
+            label.setdefault("start_x", 0.0)
+            label.setdefault("start_y", 0.0)
+        return label_list
+
+    def fake_legacy_place(label_list, *_args, **_kwargs):
+        return _tag_source(label_list, "legacy")
+
+    def fake_legacy_improved(label_list, *_args, **_kwargs):
+        nonlocal legacy_improved_calls
+        legacy_improved_calls += 1
+        return _tag_source(label_list, "legacy")
+
+    def fake_place(label_list, *_args, **_kwargs):
+        return _tag_source(label_list, "current")
+
+    def fake_improved(label_list, *_args, **_kwargs):
+        return _tag_source(label_list, "current")
+
+    def fake_score(label_list: list[dict], _total_length: int):
+        source = str(label_list[0].get("_candidate_source", "unknown"))
+        scores_seen.append(source)
+        if source == "legacy":
+            return (0, 1, 1, 0.0, 120.0, 30.0, 120.0, 30.0)
+        if source == "current":
+            return (1, 1, 0, 0.0, 20.0, 10.0, 20.0, 10.0)
+        return (9, 9, 9, 9.0, 9.0, 9.0, 9.0, 9.0)
+
+    circular_labels_module._legacy_place_labels_on_arc_fc = fake_legacy_place
+    circular_labels_module._legacy_improved_label_placement_fc = fake_legacy_improved
+    circular_labels_module.place_labels_on_arc_fc = fake_place
+    circular_labels_module.improved_label_placement_fc = fake_improved
+    circular_labels_module._refine_labels_to_preferred_hemisphere = lambda label_list, *_args, **_kwargs: label_list
+    circular_labels_module._assign_leader_start_points = lambda label_list, _total_length: label_list
+    circular_labels_module._placement_score = fake_score
+    try:
+        rearranged = rearrange_labels_fc(
+            labels,
+            feature_radius,
+            total_length,
+            "long",
+            config_dict,
+            strands="separate",
+            is_outer=True,
+            cfg=cfg,
+        )
+    finally:
+        circular_labels_module._legacy_place_labels_on_arc_fc = original_legacy_place
+        circular_labels_module._legacy_improved_label_placement_fc = original_legacy_improved
+        circular_labels_module.place_labels_on_arc_fc = original_place
+        circular_labels_module.improved_label_placement_fc = original_improved
+        circular_labels_module._refine_labels_to_preferred_hemisphere = original_refine
+        circular_labels_module._assign_leader_start_points = original_assign
+        circular_labels_module._placement_score = original_score
+
+    assert legacy_improved_calls == 1
+    assert scores_seen.count("legacy") == 1
+    assert scores_seen.count("current") == 1
+    assert rearranged
+    assert all(label.get("_candidate_source") == "legacy" for label in rearranged)
+
+
+def test_nc001879_outer_only_dense_keeps_y_overlap_calls_under_regression_cap() -> None:
+    y_overlap_calls = 0
+    original_y_overlap = circular_labels_module.y_overlap
+
+    def counting_y_overlap(*args, **kwargs):
+        nonlocal y_overlap_calls
+        y_overlap_calls += 1
+        return original_y_overlap(*args, **kwargs)
+
+    circular_labels_module.y_overlap = counting_y_overlap
+    try:
+        outer_labels, total_length, _ = _load_nc001879_outer_labels_with_priority_and_color_table(
+            allow_inner_labels=False,
+        )
+    finally:
+        circular_labels_module.y_overlap = original_y_overlap
+
+    assert len(outer_labels) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
+    assert _count_overlaps(outer_labels, total_length) == 0
+    assert y_overlap_calls < 1000000
+
+
+def test_nc001879_inner_dense_keeps_y_overlap_calls_under_regression_cap() -> None:
+    y_overlap_calls = 0
+    original_y_overlap = circular_labels_module.y_overlap
+
+    def counting_y_overlap(*args, **kwargs):
+        nonlocal y_overlap_calls
+        y_overlap_calls += 1
+        return original_y_overlap(*args, **kwargs)
+
+    circular_labels_module.y_overlap = counting_y_overlap
+    try:
+        external_labels, total_length, _ = _load_nc001879_external_labels_with_priority_and_color_table(
+            allow_inner_labels=True,
+        )
+    finally:
+        circular_labels_module.y_overlap = original_y_overlap
+
+    inner_labels = [label for label in external_labels if label.get("is_inner")]
+    assert len(inner_labels) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
+    assert _count_overlaps(inner_labels, total_length) == 0
+    assert y_overlap_calls < 1500000
+
+
+def test_nc001879_inner_dense_prefers_legacy_when_it_avoids_leader_collisions() -> None:
+    improved_calls = 0
+    original_improved = circular_labels_module.improved_label_placement_fc
+
+    def counting_improved(*args, **kwargs):
+        nonlocal improved_calls
+        improved_calls += 1
+        return original_improved(*args, **kwargs)
+
+    circular_labels_module.improved_label_placement_fc = counting_improved
+    try:
+        external_labels, total_length, _ = _load_nc001879_external_labels_with_priority_and_color_table(
+            allow_inner_labels=True,
+        )
+    finally:
+        circular_labels_module.improved_label_placement_fc = original_improved
+
+    inner_labels = [label for label in external_labels if label.get("is_inner")]
+    assert len(inner_labels) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
+    assert improved_calls == 1
+    assert _count_overlaps(inner_labels, total_length) == 0
+    assert (
+        circular_labels_module._count_label_leader_line_collisions(
+            inner_labels,
+            total_length,
+            margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
+        )
+        == 0
+    )
+
+
+def test_nc001879_inner_dense_bottom_cluster_spreads_across_both_halves() -> None:
+    external_labels, _total_length, _ = _load_nc001879_external_labels_with_priority_and_color_table(
+        allow_inner_labels=True,
+    )
+    inner_labels = [label for label in external_labels if label.get("is_inner")]
+    assert len(inner_labels) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
+
+    # Regression guard: avoid one-sided drift near the lower inner cluster.
+    bottom_cluster = [label for label in inner_labels if float(label["start_y"]) > 220.0]
+    assert len(bottom_cluster) >= 12
+
+    left_count = sum(1 for label in bottom_cluster if float(label["start_x"]) < 0.0)
+    right_count = sum(1 for label in bottom_cluster if float(label["start_x"]) > 0.0)
+    mean_x = sum(float(label["start_x"]) for label in bottom_cluster) / float(len(bottom_cluster))
+
+    assert left_count >= 8
+    assert right_count >= 8
+    assert abs(mean_x) <= 25.0
+
+
+def test_inner_labels_on_left_half_use_left_bbox_edge_for_leader_start() -> None:
+    total_length = 20000
+    label = {
+        "middle": 12000,
+        "start_x": -220.0,
+        "start_y": 120.0,
+        "middle_x": -170.0,
+        "middle_y": 120.0,
+        "width_px": 90.0,
+        "height_px": 16.0,
+        "is_inner": True,
+    }
+
+    meta = circular_labels_module._leader_start_meta(label, total_length)
+    assert meta is not None
+    side, _, _, _, _ = meta
+    assert side == "left"
+
+    leader_x, _ = circular_labels_module._leader_start_point(label, total_length)
+    min_x, _ = circular_labels_module._label_x_bounds(label, minimum_margin=0.0)
+    assert math.isclose(leader_x, min_x, abs_tol=1e-9)
 
 
 def test_effective_outer_middle_anchor_clearance_scales_with_feature_width_and_caps() -> None:
