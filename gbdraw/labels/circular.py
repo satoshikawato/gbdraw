@@ -219,6 +219,7 @@ def _leader_start_meta(label: dict, total_length: int | None) -> tuple[str, floa
         return None
     if "middle_x" not in label or "middle_y" not in label:
         return None
+    start_x = float(label.get("start_x", 0.0))
     start_y = float(label.get("start_y", 0.0))
     min_x, max_x = _label_x_bounds(label, minimum_margin=0.0)
     min_y, max_y = _label_y_bounds(label, total_length, minimum_margin=0.0)
@@ -239,6 +240,13 @@ def _leader_start_meta(label: dict, total_length: int | None) -> tuple[str, floa
     # Keep the attachment coordinate biased toward text anchor (`start_x/start_y`)
     # so each leader visually maps back to its own label row.
     anchor_y = float(label.get("start_y", start_y))
+    if bool(label.get("is_inner", False)) and abs(start_x) > HEMISPHERE_AXIS_EPS_PX:
+        # For inner labels, keep elbow anchors on the radial outer edge of the text bbox.
+        # This avoids leaders exiting from the center-facing edge on lower-left / lower-right arcs.
+        if start_x < 0:
+            return "left", min_x, y_min_usable, y_max_usable, anchor_y
+        return "right", max_x, y_min_usable, y_max_usable, anchor_y
+
     if middle_x >= max_x:
         return "right", max_x, y_min_usable, y_max_usable, anchor_y
     if middle_x <= min_x:
@@ -2075,6 +2083,14 @@ def improved_label_placement_fc(
 
         cluster_step_limit = min(int(shift_limit_deg / angle_step), 40)
         n_labels = len(labels)
+        dense_inner_relax = (
+            n_labels >= LEGACY_PLACEMENT_LABEL_THRESHOLD
+            and all(bool(label.get("is_inner", False)) for label in labels)
+        )
+        if dense_inner_relax:
+            # Inner dense sets are the primary hot path; a coarser search grid keeps
+            # near-identical placements while avoiding runaway overlap evaluations.
+            cluster_step_limit = min(cluster_step_limit, 16)
         changed = False
 
         for component in components:
@@ -2098,7 +2114,14 @@ def improved_label_placement_fc(
                 center_candidates.append(component[-1])
             center_candidates = sorted(set(center_candidates))
             center_shift_limit_steps = min(int(shift_limit_deg / angle_step), 48)
-            center_shift_steps = range(-center_shift_limit_steps, center_shift_limit_steps + 1, 4)
+            center_shift_step = 8 if dense_inner_relax else 4
+            if dense_inner_relax:
+                center_shift_limit_steps = min(center_shift_limit_steps, 24)
+            center_shift_steps = range(
+                -center_shift_limit_steps,
+                center_shift_limit_steps + 1,
+                center_shift_step,
+            )
             center_delta_cap = min(float(shift_limit_deg), RELAX_CENTER_DELTA_CAP_DEG)
 
             for center_idx in center_candidates:
@@ -3035,9 +3058,7 @@ def rearrange_labels_fc(
     if not sorted_labels:
         return []
 
-    # Very dense sets are better handled by the legacy strategy: it keeps labels
-    # closer to feature angles and avoids expensive combinatorial relaxation.
-    if len(sorted_labels) >= LEGACY_PLACEMENT_LABEL_THRESHOLD:
+    def _build_legacy_candidate() -> list[dict]:
         candidate_legacy = [label.copy() for label in sorted_labels]
         candidate_legacy = _legacy_place_labels_on_arc_fc(
             candidate_legacy,
@@ -3061,7 +3082,7 @@ def rearrange_labels_fc(
             end_angle,
         )
         candidate_legacy = sort_labels(candidate_legacy)
-        candidate_legacy = _refine_labels_to_preferred_hemisphere(
+        return _refine_labels_to_preferred_hemisphere(
             candidate_legacy,
             total_length,
             center_x,
@@ -3069,8 +3090,33 @@ def rearrange_labels_fc(
             x_radius,
             y_radius,
         )
+
+    candidate_legacy = None
+    legacy_score = None
+    allow_inner_labels = bool(cfg.canvas.circular.allow_inner_labels)
+    is_dense = len(sorted_labels) >= LEGACY_PLACEMENT_LABEL_THRESHOLD
+
+    # Very dense sets are better handled by the legacy strategy: it keeps labels
+    # closer to feature angles and avoids expensive combinatorial relaxation.
+    if is_dense:
+        candidate_legacy = _build_legacy_candidate()
         legacy_score = _placement_score(candidate_legacy, total_length)
-        if legacy_score[0] == 0 and legacy_score[2] == 0:
+        if (not is_outer) and legacy_score[0] == 0:
+            # Dense inner labels prioritize leader-collision-free readability and runtime over min-gap polishing.
+            legacy_with_leaders = _assign_leader_start_points(
+                [label.copy() for label in candidate_legacy],
+                total_length,
+            )
+            legacy_leader_collisions = _count_label_leader_line_collisions(
+                legacy_with_leaders,
+                total_length,
+                margin_px=LEADER_LABEL_COLLISION_MARGIN_PX,
+            )
+            if legacy_leader_collisions == 0:
+                return legacy_with_leaders
+        if is_outer and (not allow_inner_labels) and legacy_score[0] == 0:
+            return _assign_leader_start_points(candidate_legacy, total_length)
+        if is_outer and legacy_score[0] == 0 and legacy_score[2] == 0:
             return _assign_leader_start_points(candidate_legacy, total_length)
 
     # Candidate A: current placement pipeline.
@@ -3100,40 +3146,8 @@ def rearrange_labels_fc(
     best_labels = candidate_current
     best_score = _placement_score(candidate_current, total_length)
 
-    # Candidate B: legacy fallback for dense unresolved overlaps.
-    if len(sorted_labels) > FULL_SCAN_LABEL_LIMIT and (best_score[0] > 0 or best_score[2] > 0):
-        candidate_legacy = [label.copy() for label in sorted_labels]
-        candidate_legacy = _legacy_place_labels_on_arc_fc(
-            candidate_legacy,
-            center_x,
-            center_y,
-            x_radius,
-            y_radius,
-            start_angle,
-            end_angle,
-            total_length,
-        )
-        candidate_legacy = _legacy_improved_label_placement_fc(
-            candidate_legacy,
-            center_x,
-            center_y,
-            x_radius,
-            y_radius,
-            feature_radius,
-            total_length,
-            start_angle,
-            end_angle,
-        )
-        candidate_legacy = sort_labels(candidate_legacy)
-        candidate_legacy = _refine_labels_to_preferred_hemisphere(
-            candidate_legacy,
-            total_length,
-            center_x,
-            center_y,
-            x_radius,
-            y_radius,
-        )
-        legacy_score = _placement_score(candidate_legacy, total_length)
+    # Always compare dense candidates when both are available.
+    if candidate_legacy is not None and legacy_score is not None:
         if legacy_score < best_score:
             best_labels = candidate_legacy
 
