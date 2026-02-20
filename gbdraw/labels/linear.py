@@ -84,6 +84,8 @@ def prepare_label_list_linear(
     genome_size_normalization_factor,
     cds_height,
     strandedness,
+    track_layout,
+    track_axis_gap,
     config_dict,
     cfg: GbdrawConfig | None = None,
 ):
@@ -94,6 +96,12 @@ def prepare_label_list_linear(
     external_labels = []
     track_dict = defaultdict(list)
     feature_track_positions = {}  # Store feature track positions
+    track_layout_normalized = str(track_layout).strip().lower()
+    axis_gap_factor = (
+        (float(track_axis_gap) / float(cds_height))
+        if (track_axis_gap is not None and float(cds_height) > 0.0)
+        else None
+    )
 
     # Get configuration values
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
@@ -106,20 +114,6 @@ def prepare_label_list_linear(
     base_rotation_deg = linear_label_cfg.rotation
     interval = cfg.canvas.dpi
     label_filtering = cfg.labels.filtering.as_dict()
-    # Find the maximum feature track ID (positive tracks grow upwards, same as labels)
-    max_feature_track = 0
-    for feature_object in feature_dict.values():
-        # Only consider positive (upward) tracks
-        if feature_object.feature_track_id > max_feature_track:
-            max_feature_track = feature_object.feature_track_id
-
-    # Get the y-coordinate of the top of the highest feature track
-    top_factors = calculate_feature_position_factors_linear(
-        strand="positive", track_id=max_feature_track, separate_strands=strandedness
-    )
-    # top_factors[0] is the 'top' y-factor. This will be a negative number (i.e., high on the canvas).
-    top_feature_y_limit = cds_height * top_factors[0]
-
     # First pass: Calculate feature track positions
     for feature_id, feature_object in feature_dict.items():
         if len(feature_object.coordinates) == 0:
@@ -131,7 +125,13 @@ def prepare_label_list_linear(
         feature_track_id = feature_object.feature_track_id
 
         # Calculate track position using the same logic as for features
-        factors = calculate_feature_position_factors_linear(strand, feature_track_id, strandedness)
+        factors = calculate_feature_position_factors_linear(
+            strand,
+            feature_track_id,
+            strandedness,
+            track_layout=track_layout,
+            axis_gap_factor=axis_gap_factor,
+        )
 
         track_y_position = cds_height * factors[1]  # Use middle factor
         track_top_y = cds_height * factors[0]
@@ -143,6 +143,13 @@ def prepare_label_list_linear(
             "top_y": track_top_y,
             "bottom_y": track_bottom_y,
         }
+
+    if feature_track_positions:
+        top_feature_y_limit = min(pos["top_y"] for pos in feature_track_positions.values())
+        bottom_feature_y_limit = max(pos["bottom_y"] for pos in feature_track_positions.values())
+    else:
+        top_feature_y_limit = 0.0
+        bottom_feature_y_limit = 0.0
 
     # Second pass: Process labels
     max_bbox_height = 0
@@ -165,7 +172,13 @@ def prepare_label_list_linear(
 
         for coordinate in feature_object.coordinates:
             coordinate_strand = get_strand(coordinate.strand)
-            factors = calculate_feature_position_factors_linear(coordinate_strand, feature_track_id, strandedness)
+            factors = calculate_feature_position_factors_linear(
+                coordinate_strand,
+                feature_track_id,
+                strandedness,
+                track_layout=track_layout,
+                axis_gap_factor=axis_gap_factor,
+            )
             start = int(coordinate.start)
             end = int(coordinate.end)
             segment_length = abs(end - start + 1)
@@ -280,7 +293,10 @@ def prepare_label_list_linear(
 
         for label in track_labels:
             # Compact vertical positioning for external labels
-            label["middle_y"] = top_feature_y_limit - (track_height * track_num)
+            if track_layout_normalized in {"below", "tuckin"}:
+                label["middle_y"] = bottom_feature_y_limit + (track_height * track_num)
+            else:
+                label["middle_y"] = top_feature_y_limit - (track_height * track_num)
             external_labels.append(label)
 
     return embedded_labels + external_labels

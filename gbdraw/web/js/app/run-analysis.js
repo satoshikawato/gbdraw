@@ -156,7 +156,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     if (linearLabelSupportCache) return linearLabelSupportCache;
     const pyodide = getPyodide();
     if (!pyodide) {
-      linearLabelSupportCache = { placement: false, rotation: false };
+      linearLabelSupportCache = { placement: false, rotation: false, track_layout: false, track_axis_gap: false };
       return linearLabelSupportCache;
     }
     try {
@@ -167,11 +167,13 @@ _source = inspect.getsource(_gbdraw_linear._get_args)
 json.dumps({
   "placement": "--label_placement" in _source,
   "rotation": "--label_rotation" in _source,
+  "track_layout": "--track_layout" in _source,
+  "track_axis_gap": "--track_axis_gap" in _source,
 })
       `);
       linearLabelSupportCache = JSON.parse(String(raw));
     } catch (_err) {
-      linearLabelSupportCache = { placement: false, rotation: false };
+      linearLabelSupportCache = { placement: false, rotation: false, track_layout: false, track_axis_gap: false };
     }
     return linearLabelSupportCache;
   };
@@ -325,6 +327,12 @@ json.dumps({
         }
       } else {
         args.push('--scale_style', form.scale_style);
+        const normalizedTrackLayout =
+          form.linear_track_layout === 'spreadout'
+            ? 'above'
+            : form.linear_track_layout === 'tuckin'
+              ? 'below'
+              : (form.linear_track_layout || 'middle');
         if (form.align_center) args.push('--align_center');
         if (form.show_gc) args.push('--show_gc');
         if (form.show_skew) args.push('--show_skew');
@@ -339,7 +347,10 @@ json.dumps({
         const normalizedLabelPlacement = adv.label_placement === 'on_feature' ? 'above_feature' : adv.label_placement;
         const wantsPlacementOption = normalizedLabelPlacement && normalizedLabelPlacement !== 'auto';
         const wantsRotationOption = adv.label_rotation !== null && adv.label_rotation !== undefined && adv.label_rotation !== '';
-        if (wantsPlacementOption || wantsRotationOption) {
+        const wantsTrackLayoutOption = normalizedTrackLayout !== 'middle';
+        const wantsTrackAxisGapOption =
+          adv.track_axis_gap !== null && adv.track_axis_gap !== undefined && adv.track_axis_gap !== '';
+        if (wantsPlacementOption || wantsRotationOption || wantsTrackLayoutOption || wantsTrackAxisGapOption) {
           const linearLabelSupport = getLinearLabelOptionSupport();
           if (wantsPlacementOption && !linearLabelSupport.placement) {
             throw new Error("Current gbdraw wheel does not support --label_placement. Rebuild and redeploy the web wheel.");
@@ -347,12 +358,24 @@ json.dumps({
           if (wantsRotationOption && !linearLabelSupport.rotation) {
             throw new Error("Current gbdraw wheel does not support --label_rotation. Rebuild and redeploy the web wheel.");
           }
+          if (wantsTrackLayoutOption && !linearLabelSupport.track_layout) {
+            throw new Error("Current gbdraw wheel does not support --track_layout. Rebuild and redeploy the web wheel.");
+          }
+          if (wantsTrackAxisGapOption && !linearLabelSupport.track_axis_gap) {
+            throw new Error("Current gbdraw wheel does not support --track_axis_gap. Rebuild and redeploy the web wheel.");
+          }
         }
         if (normalizedLabelPlacement && normalizedLabelPlacement !== 'auto') {
           args.push('--label_placement', normalizedLabelPlacement);
         }
         if (adv.label_rotation !== null && adv.label_rotation !== undefined && adv.label_rotation !== '') {
           args.push('--label_rotation', adv.label_rotation);
+        }
+        if (normalizedTrackLayout !== 'middle') {
+          args.push('--track_layout', normalizedTrackLayout);
+        }
+        if (adv.track_axis_gap !== null && adv.track_axis_gap !== undefined && adv.track_axis_gap !== '') {
+          args.push('--track_axis_gap', adv.track_axis_gap);
         }
 
         if (adv.feature_height) args.push('--feature_height', adv.feature_height);

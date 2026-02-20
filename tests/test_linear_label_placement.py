@@ -27,6 +27,7 @@ def _prepare_linear_labels(
     label_rotation: float = 0.0,
     label_font_size: float = 14.0,
     separate_strands: bool = False,
+    track_layout: str = "middle",
     input_filename: str = "MjeNMV.gb",
 ) -> list[dict]:
     input_path = Path(__file__).parent / "test_inputs" / input_filename
@@ -41,6 +42,7 @@ def _prepare_linear_labels(
         label_font_size=label_font_size,
         label_placement=label_placement,
         label_rotation=label_rotation,
+        linear_track_layout=track_layout,
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     canvas_cfg = LinearCanvasConfigurator(
@@ -72,6 +74,8 @@ def _prepare_linear_labels(
         1.0,
         canvas_cfg.cds_height,
         canvas_cfg.strandedness,
+        canvas_cfg.track_layout,
+        canvas_cfg.track_axis_gap,
         config_dict,
         cfg=cfg,
     )
@@ -246,3 +250,16 @@ def test_linear_precalc_includes_above_feature_rotated_embedded_labels() -> None
     assert required_label_height > 0
     assert required_label_height > canvas_cfg.original_vertical_offset
     assert record_label_heights[record.id] == pytest.approx(required_label_height)
+
+
+@pytest.mark.linear
+def test_linear_auto_labels_in_below_layout_are_placed_below_features() -> None:
+    labels = _prepare_linear_labels(
+        label_placement="auto",
+        track_layout="below",
+    )
+    assert labels
+    external_labels = [label for label in labels if not label["is_embedded"]]
+    assert external_labels
+    for label in external_labels:
+        assert float(label["middle_y"]) > float(label["feature_bottom_y"])

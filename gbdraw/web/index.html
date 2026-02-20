@@ -299,7 +299,16 @@
                        
                         <div v-if="mode === 'circular'">
                             <label class="input-label">Track Layout <help-tip text="Choose how features are displayed. 'Tuckin' is default and compact. 'Middle' aligns to center, 'Spreadout' separates them."></help-tip></label>
-                            <select v-model="form.track_type" class="form-input"><option value="tuckin">Tuckin (Compact)</option><option value="middle">Middle</option><option value="spreadout">Spreadout</option></select>
+                            <select v-model="form.track_type" class="form-input"><option value="tuckin">Tuckin</option><option value="middle">Middle</option><option value="spreadout">Spreadout</option></select>
+                        </div>
+
+                        <div v-if="mode === 'linear'">
+                             <label class="input-label">Track Layout <help-tip text="Set linear feature placement: Above keeps tracks above the axis, Middle keeps legacy placement, Below places tracks below the axis."></help-tip></label>
+                             <select v-model="form.linear_track_layout" class="form-input">
+                                 <option value="above">Above</option>
+                                 <option value="middle">Middle</option>
+                                 <option value="below">Below</option>
+                             </select>
                         </div>
 
                         <div v-if="mode === 'linear'">
@@ -351,7 +360,7 @@
                             <template v-if="mode === 'linear'">
                                 <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                     <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox">
-                                    <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Shift features vertically to avoid overlap. (Experimental)"></help-tip></span>
+                                    <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Shift features vertically to avoid overlap. Overlap direction follows Track Layout (Above: upward, Below: downward). (Experimental)"></help-tip></span>
                                 </label>
                                 <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                     <input type="checkbox" v-model="form.align_center" class="form-checkbox">
@@ -585,7 +594,7 @@
                                     <div>
                                         <label class="input-label text-[10px] mb-0">
                                             Label Placement
-                                            <help-tip text="Auto keeps existing behavior. Above feature draws labels above features (and below negative-strand features when Separate Strands is on)."></help-tip>
+                                            <help-tip text="Auto follows track direction (Above/Middle: labels above; Below: labels below). Above feature draws labels above features (and below negative-strand features when Separate Strands is on)."></help-tip>
                                         </label>
                                         <select v-model="adv.label_placement" class="form-input form-input-compact">
                                             <option value="auto">Auto</option>
@@ -634,8 +643,19 @@
                             <div v-if="mode === 'linear'">
                                 <label class="input-label adv-section-title">Linear Specific Settings</label>
                                 <div class="bg-slate-50 p-1.5 rounded border border-slate-200 space-y-1.5">
-                                    <div class="grid grid-cols-3 gap-1 text-xs">
+                                    <div class="grid grid-cols-4 gap-1 text-xs">
                                         <div><label class="text-[9px] block">Feature H <help-tip text="Height of the feature blocks."></help-tip></label><input type="number" v-model.number="adv.feature_height" class="form-input px-1 py-0.5"></div>
+                                        <div>
+                                            <label class="text-[9px] block">Axis Gap <help-tip text="Gap between axis and nearest feature edge for Above/Below track layouts. Auto derives from feature height."></help-tip></label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                :value="adv.track_axis_gap ?? ''"
+                                                @input="adv.track_axis_gap = $event.target.value === '' ? null : Number($event.target.value)"
+                                                class="form-input px-1 py-0.5"
+                                                placeholder="Auto"
+                                            >
+                                        </div>
                                         <div><label class="text-[9px] block">GC H <help-tip text="Height of the GC content track."></help-tip></label><input type="number" v-model.number="adv.gc_height" class="form-input px-1 py-0.5"></div>
                                         <div><label class="text-[9px] block">Comp H <help-tip text="Height of the comparison blocks."></help-tip></label><input type="number" v-model.number="adv.comparison_height" class="form-input px-1 py-0.5"></div>
                                     </div>

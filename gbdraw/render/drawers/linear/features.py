@@ -76,7 +76,20 @@ class FeatureDrawer:
             path.attribs['id'] = feature_data_id
         group.add(path)
 
-    def draw(self, feature_object, group: Group, genome_length: int, cds_height: float, alignment_width: float, normalization_factor: float, feature_strand: str, separate_strands: bool, arrow_length: float) -> Group:
+    def draw(
+        self,
+        feature_object,
+        group: Group,
+        genome_length: int,
+        cds_height: float,
+        alignment_width: float,
+        normalization_factor: float,
+        feature_strand: str,
+        separate_strands: bool,
+        arrow_length: float,
+        track_layout: str = "middle",
+        track_axis_gap: float | None = None,
+    ) -> Group:
         path_generator = FeaturePathGenerator(
             genome_length=genome_length,
             alignment_width=alignment_width,
@@ -85,6 +98,8 @@ class FeatureDrawer:
             feature_strand=feature_strand,
             separate_strands=separate_strands,
             arrow_length=arrow_length,
+            track_layout=track_layout,
+            track_axis_gap=track_axis_gap,
         )
 
         gene_paths = path_generator.generate_linear_gene_path(feature_object)
@@ -121,6 +136,8 @@ class FeaturePathGenerator:
         feature_strand: str,
         separate_strands: bool,
         arrow_length: float,
+        track_layout: str = "middle",
+        track_axis_gap: float | None = None,
     ) -> None:
         self.genome_length = genome_length
         self.alignment_width = alignment_width
@@ -129,6 +146,8 @@ class FeaturePathGenerator:
         self.feature_strand = feature_strand
         self.separate_strands = separate_strands
         self.arrow_length = arrow_length
+        self.track_layout = track_layout
+        self.track_axis_gap = track_axis_gap
 
     def generate_linear_gene_path(self, gene_object):
         feature_track_id = gene_object.feature_track_id
@@ -154,6 +173,8 @@ class FeaturePathGenerator:
                     feature_strand=self.feature_strand,
                     separate_strands=self.separate_strands,
                     feature_track_id=feature_track_id,
+                    track_layout=self.track_layout,
+                    track_axis_gap=self.track_axis_gap,
                 )
             elif feat_type == "block":
                 if coord.is_last and gene_object.is_directional:
@@ -167,6 +188,8 @@ class FeaturePathGenerator:
                         genome_size_normalization_factor=self.genome_size_normalization_factor,
                         separate_strands=self.separate_strands,
                         feature_track_id=feature_track_id,
+                        track_layout=self.track_layout,
+                        track_axis_gap=self.track_axis_gap,
                     )
                 else:
                     coord_path = create_rectangle_path_linear(
@@ -178,6 +201,8 @@ class FeaturePathGenerator:
                         feature_strand=self.feature_strand,
                         separate_strands=self.separate_strands,
                         feature_track_id=feature_track_id,
+                        track_layout=self.track_layout,
+                        track_axis_gap=self.track_axis_gap,
                     )
             else:
                 continue

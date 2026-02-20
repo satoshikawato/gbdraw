@@ -198,7 +198,9 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--record_label RECORD_LABEL]
               [--label_font_size LABEL_FONT_SIZE]
               [--label_placement {auto,above_feature}]
-              [--label_rotation LABEL_ROTATION] [-f FORMAT] [-l LEGEND]
+              [--label_rotation LABEL_ROTATION]
+              [--track_layout {above,middle,below}]
+              [--track_axis_gap AUTO|PX] [-f FORMAT] [-l LEGEND]
               [--show_labels [{all,first,none}]] [--resolve_overlaps]
               [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
@@ -290,6 +292,14 @@ options:
                         Linear label rotation in degrees (optional; float;
                         default: 0). In above_feature mode, rotated labels
                         start from the feature midpoint.
+  --track_layout {above,middle,below}
+                        Linear track layout mode ("above", "middle", or
+                        "below"; default: "middle"). Aliases: "spreadout" ->
+                        "above", "tuckin" -> "below".
+  --track_axis_gap AUTO|PX
+                        Gap between axis and nearest feature edge in pixels
+                        for above/below layouts. Use "auto" to derive it from
+                        feature height.
   -f, --format FORMAT   Comma-separated list of output file formats (svg, png,
                         pdf, eps, ps; default: svg).
   -l, --legend LEGEND   Legend position (default: "right"; "right", "left",
