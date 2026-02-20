@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import math
 import re
+from types import SimpleNamespace
 
 import pytest
+from svgwrite.container import Group
 
 from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.layout.circular import calculate_feature_position_factors_circular
+from gbdraw.render.drawers.circular.features import FeatureDrawer
 from gbdraw.render.drawers.circular.features import FeaturePathGenerator
 from gbdraw.svg.circular_features import generate_circular_intron_path
 
@@ -177,3 +180,43 @@ def test_short_introns_remain_single_arc_and_track_aligned() -> None:
     assert math.isclose(ry, expected_radius, rel_tol=1e-9, abs_tol=1e-9)
     assert large_arc == 0
     assert sweep == 1
+
+
+def test_feature_drawer_draws_lines_before_blocks_within_same_feature() -> None:
+    feature = _make_feature(
+        [
+            FeatureLocationPart("block", "001", "positive", 100, 140, False),
+            FeatureLocationPart("line", "001", "positive", 141, 199, False),
+            FeatureLocationPart("block", "002", "positive", 200, 240, True),
+        ],
+        is_directional=False,
+    )
+    feature.color = "#4aa3df"
+    cfg = SimpleNamespace(
+        block_fill_color="#d3d3d3",
+        block_stroke_color="#000000",
+        block_stroke_width=1.0,
+        line_stroke_color="#8f8f8f",
+        line_stroke_width=1.0,
+    )
+    drawer = FeatureDrawer(cfg)
+    group = Group(id="test")
+
+    group = drawer.draw(
+        feature,
+        group,
+        total_length=1000,
+        radius=TEST_RADIUS,
+        track_ratio=TEST_TRACK_RATIO,
+        track_ratio_factor=1.0,
+        track_type=TEST_TRACK_TYPE,
+        strandedness=TEST_STRANDEDNESS,
+        length_param="short",
+    )
+
+    paths = [element for element in group.elements if element.elementname == "path"]
+    assert len(paths) == 3
+    fills = [str(path.attribs.get("fill", "")) for path in paths]
+    assert fills[0] == "none"
+    assert fills[1] == feature.color
+    assert fills[2] == feature.color
