@@ -144,6 +144,7 @@ const form = reactive({
   species: '',
   strain: '',
   track_type: 'tuckin',
+  linear_track_layout: 'middle',
   legend: 'left',
   scale_style: 'bar',
   show_labels: false,

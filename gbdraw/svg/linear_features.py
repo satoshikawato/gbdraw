@@ -19,6 +19,7 @@ def create_intron_path_linear(
     feature_strand: str,
     separate_strands: bool,
     feature_track_id: int,
+    track_layout: str = "middle",
 ) -> list[str]:
     """
     Creates a linear SVG path for an intron feature.
@@ -27,7 +28,10 @@ def create_intron_path_linear(
     feat_end = coord_dict["feat_end"]
 
     factors = calculate_feature_position_factors_linear(
-        strand=feature_strand, track_id=feature_track_id, separate_strands=separate_strands
+        strand=feature_strand,
+        track_id=feature_track_id,
+        separate_strands=separate_strands,
+        track_layout=track_layout,
     )
 
     normalized_start = normalize_position_to_linear_track(
@@ -51,13 +55,17 @@ def create_rectangle_path_linear(
     feature_strand: str,
     separate_strands: bool,
     feature_track_id: int,
+    track_layout: str = "middle",
 ) -> list[str]:
     """Creates a linear SVG path for a rectangular feature."""
     feat_start = coord_dict["feat_start"]
     feat_end = coord_dict["feat_end"]
 
     factors = calculate_feature_position_factors_linear(
-        strand=feature_strand, track_id=feature_track_id, separate_strands=separate_strands
+        strand=feature_strand,
+        track_id=feature_track_id,
+        separate_strands=separate_strands,
+        track_layout=track_layout,
     )
 
     normalized_start = normalize_position_to_linear_track(
@@ -146,6 +154,7 @@ def create_arrowhead_path_linear(
     genome_size_normalization_factor: float,
     separate_strands: bool,
     feature_track_id: int = 0,
+    track_layout: str = "middle",
 ) -> list[str]:
     """Creates a linear SVG path for an arrowhead feature."""
     normalized_start, normalized_end = normalize_feature_positions(
@@ -161,7 +170,10 @@ def create_arrowhead_path_linear(
     shoulder = set_arrow_shoulder(coord_dict["feat_strand"], arrow_end, normalized_arrow_length)
 
     factors = calculate_feature_position_factors_linear(
-        strand=feature_strand, track_id=feature_track_id, separate_strands=separate_strands
+        strand=feature_strand,
+        track_id=feature_track_id,
+        separate_strands=separate_strands,
+        track_layout=track_layout,
     )
 
     return construct_arrowhead_path(

@@ -42,6 +42,20 @@ def _parse_linear_label_placement(value: str) -> str:
         "label placement must be 'auto' or 'above_feature' (legacy alias: 'on_feature')"
     )
 
+
+def _parse_linear_track_layout(value: str) -> str:
+    normalized = str(value).strip().lower()
+    if normalized in {"above", "spreadout"}:
+        return "above"
+    if normalized in {"below", "tuckin"}:
+        return "below"
+    if normalized == "middle":
+        return "middle"
+    raise argparse.ArgumentTypeError(
+        "track layout must be 'above', 'middle', or 'below' "
+        "(legacy aliases: 'spreadout' -> 'above', 'tuckin' -> 'below')"
+    )
+
 def _get_args(args) -> argparse.Namespace:
     """
     Parses command-line arguments for generating linear genome diagrams.
@@ -213,6 +227,16 @@ def _get_args(args) -> argparse.Namespace:
         '--label_rotation',
         help='Linear label rotation in degrees (optional; float; default: 0). In above_feature mode, rotated labels start from the feature midpoint.',
         type=float,
+    )
+    parser.add_argument(
+        '--track_layout',
+        help=(
+            'Linear track layout mode ("above", "middle", or "below"; default: "middle"). '
+            'Aliases: "spreadout" -> "above", "tuckin" -> "below".'
+        ),
+        type=_parse_linear_track_layout,
+        metavar="{above,middle,below}",
+        default="middle",
     )
     if CAIROSVG_AVAILABLE:
         parser.add_argument(
@@ -431,6 +455,7 @@ def linear_main(cmd_args) -> None:
     label_font_size: Optional[float] = args.label_font_size
     label_placement: Optional[str] = args.label_placement
     label_rotation: Optional[float] = args.label_rotation
+    track_layout: str = args.track_layout
     axis_stroke_color: Optional[str] = args.axis_stroke_color
     axis_stroke_width: Optional[float] = args.axis_stroke_width
     line_stroke_color: Optional[str] = args.line_stroke_color
@@ -451,6 +476,7 @@ def linear_main(cmd_args) -> None:
         show_skew=show_skew, 
         show_labels=show_labels,
         resolve_overlaps=resolve_overlaps,
+        linear_track_layout=track_layout,
         align_center=align_center, 
         strandedness=strandedness,
         label_blacklist=label_blacklist,

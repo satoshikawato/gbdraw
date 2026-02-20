@@ -121,6 +121,7 @@ class SeqRecordGroup:
                 feature_strand=feature_strand,
                 separate_strands=separate_strands,
                 arrow_length=arrow_length,
+                track_layout=self.canvas_config.track_layout,
             )
 
         # Add labels
@@ -181,6 +182,7 @@ class SeqRecordGroup:
                 genome_size_normalization_factor,
                 cds_height,
                 separate_strands,
+                self.canvas_config.track_layout,
                 self.config_dict,
                 cfg=self._cfg,
             )

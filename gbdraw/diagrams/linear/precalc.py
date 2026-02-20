@@ -94,6 +94,7 @@ def _precalculate_label_dimensions(
             genome_size_normalization_factor,
             canvas_config.cds_height,
             canvas_config.strandedness,
+            canvas_config.track_layout,
             config_dict,
             cfg=cfg,
         )

@@ -90,6 +90,13 @@ const applyConfigData = (data) => {
   if (state.adv.label_placement === 'on_feature') {
     state.adv.label_placement = 'above_feature';
   }
+  if (state.form.linear_track_layout === 'spreadout') {
+    state.form.linear_track_layout = 'above';
+  } else if (state.form.linear_track_layout === 'tuckin') {
+    state.form.linear_track_layout = 'below';
+  } else if (!['above', 'middle', 'below'].includes(state.form.linear_track_layout)) {
+    state.form.linear_track_layout = 'middle';
+  }
   if (data.losat) safeDeepMerge(state.losat, data.losat);
   if (data.colors) {
     const normalized = {};

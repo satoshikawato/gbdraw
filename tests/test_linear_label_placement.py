@@ -72,6 +72,7 @@ def _prepare_linear_labels(
         1.0,
         canvas_cfg.cds_height,
         canvas_cfg.strandedness,
+        canvas_cfg.track_layout,
         config_dict,
         cfg=cfg,
     )

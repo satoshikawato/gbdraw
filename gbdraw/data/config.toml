@@ -36,6 +36,7 @@ vertical_padding = 8
 comparison_height = 60
 canvas_padding = 50
 default_gc_height = 20
+track_layout = "middle"
 align_center = false
 normalize_length = false
 [canvas.linear.default_cds_height]

@@ -303,6 +303,15 @@
                         </div>
 
                         <div v-if="mode === 'linear'">
+                             <label class="input-label">Track Layout <help-tip text="Set linear feature placement: Above keeps tracks above the axis, Middle keeps legacy placement, Below places tracks below the axis."></help-tip></label>
+                             <select v-model="form.linear_track_layout" class="form-input">
+                                 <option value="above">Above</option>
+                                 <option value="middle">Middle (Legacy)</option>
+                                 <option value="below">Below</option>
+                             </select>
+                        </div>
+
+                        <div v-if="mode === 'linear'">
                              <label class="input-label">Scale Style <help-tip text="'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels."></help-tip></label>
                              <select v-model="form.scale_style" class="form-input"><option value="bar">Bar (Simple)</option><option value="ruler">Ruler (Ticks)</option></select>
                         </div>
@@ -351,7 +360,7 @@
                             <template v-if="mode === 'linear'">
                                 <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                     <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox">
-                                    <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Shift features vertically to avoid overlap. (Experimental)"></help-tip></span>
+                                    <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Shift features vertically to avoid overlap. Overlap direction follows Track Layout (Above: upward, Below: downward). (Experimental)"></help-tip></span>
                                 </label>
                                 <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                     <input type="checkbox" v-model="form.align_center" class="form-checkbox">

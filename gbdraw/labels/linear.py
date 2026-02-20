@@ -84,6 +84,7 @@ def prepare_label_list_linear(
     genome_size_normalization_factor,
     cds_height,
     strandedness,
+    track_layout,
     config_dict,
     cfg: GbdrawConfig | None = None,
 ):
@@ -115,7 +116,10 @@ def prepare_label_list_linear(
 
     # Get the y-coordinate of the top of the highest feature track
     top_factors = calculate_feature_position_factors_linear(
-        strand="positive", track_id=max_feature_track, separate_strands=strandedness
+        strand="positive",
+        track_id=max_feature_track,
+        separate_strands=strandedness,
+        track_layout=track_layout,
     )
     # top_factors[0] is the 'top' y-factor. This will be a negative number (i.e., high on the canvas).
     top_feature_y_limit = cds_height * top_factors[0]
@@ -131,7 +135,12 @@ def prepare_label_list_linear(
         feature_track_id = feature_object.feature_track_id
 
         # Calculate track position using the same logic as for features
-        factors = calculate_feature_position_factors_linear(strand, feature_track_id, strandedness)
+        factors = calculate_feature_position_factors_linear(
+            strand,
+            feature_track_id,
+            strandedness,
+            track_layout=track_layout,
+        )
 
         track_y_position = cds_height * factors[1]  # Use middle factor
         track_top_y = cds_height * factors[0]
@@ -165,7 +174,12 @@ def prepare_label_list_linear(
 
         for coordinate in feature_object.coordinates:
             coordinate_strand = get_strand(coordinate.strand)
-            factors = calculate_feature_position_factors_linear(coordinate_strand, feature_track_id, strandedness)
+            factors = calculate_feature_position_factors_linear(
+                coordinate_strand,
+                feature_track_id,
+                strandedness,
+                track_layout=track_layout,
+            )
             start = int(coordinate.start)
             end = int(coordinate.end)
             segment_length = abs(end - start + 1)

@@ -80,6 +80,7 @@ class LinearCanvasConfig:
     comparison_height: float
     canvas_padding: float
     default_gc_height: float
+    track_layout: Literal["above", "middle", "below"]
     align_center: bool
     normalize_length: bool
     default_cds_height: LinearCanvasDefaultCdsHeightConfig
@@ -87,6 +88,13 @@ class LinearCanvasConfig:
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LinearCanvasConfig":
+        track_layout_raw = str(d.get("track_layout", "middle")).strip().lower()
+        if track_layout_raw in {"above", "spreadout"}:
+            track_layout: Literal["above", "middle", "below"] = "above"
+        elif track_layout_raw in {"below", "tuckin"}:
+            track_layout = "below"
+        else:
+            track_layout = "middle"
         return cls(
             width=int(d["width"]),
             vertical_offset=float(d["vertical_offset"]),
@@ -95,6 +103,7 @@ class LinearCanvasConfig:
             comparison_height=float(d["comparison_height"]),
             canvas_padding=float(d["canvas_padding"]),
             default_gc_height=float(d["default_gc_height"]),
+            track_layout=track_layout,
             align_center=bool(d["align_center"]),
             normalize_length=bool(d["normalize_length"]),
             default_cds_height=LinearCanvasDefaultCdsHeightConfig.from_dict(d["default_cds_height"]),
