@@ -1179,15 +1179,9 @@ def add_record_on_circular_canvas(
         return center_px, width_px
 
     axis_ts = ts_by_kind.get("axis")
+    axis_radius_px: float | None = None
     if axis_ts is None or axis_ts.show:
         axis_radius_px, _ = _resolve_track_center_and_width_with_autorelayout("axis", axis_ts)
-        canvas = add_axis_group_on_canvas(
-            canvas,
-            canvas_config,
-            config_dict,
-            radius_override=axis_radius_px,
-            cfg=cfg,
-        )
 
     # External labels: separate group (label arena). Embedded labels remain in the record group.
     # Add labels BEFORE features so leader lines appear behind features.
@@ -1247,6 +1241,15 @@ def add_record_on_circular_canvas(
             canvas_config,
         )
         _sync_canvas_viewbox(canvas, canvas_config)
+
+    if axis_ts is None or axis_ts.show:
+        canvas = add_axis_group_on_canvas(
+            canvas,
+            canvas_config,
+            config_dict,
+            radius_override=axis_radius_px,
+            cfg=cfg,
+        )
 
     if show_external_labels:
         canvas = add_labels_group_on_canvas(

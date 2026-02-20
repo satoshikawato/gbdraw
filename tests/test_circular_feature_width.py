@@ -1,4 +1,5 @@
 import math
+import re
 from pathlib import Path
 from typing import Any
 
@@ -100,6 +101,17 @@ def _annulus_overlaps_band(
     annulus_inner, annulus_outer = sorted((float(annulus[0]), float(annulus[1])))
     band_inner, band_outer = sorted((float(band[0]), float(band[1])))
     return annulus_inner < (band_outer - tol) and annulus_outer > (band_inner + tol)
+
+
+def _extract_group_translate(svg_text: str, group_id: str) -> tuple[float, float] | None:
+    pattern = (
+        rf'<g id="{re.escape(group_id)}"[^>]*\btransform="translate\(\s*'
+        r'([-+0-9.eE]+)\s*,\s*([-+0-9.eE]+)\s*\)"'
+    )
+    match = re.search(pattern, svg_text)
+    if match is None:
+        return None
+    return float(match.group(1)), float(match.group(2))
 
 
 def test_feature_width_override_reaches_feature_drawer(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -781,3 +793,35 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
     assert math.isclose(float(off["ticks"]), float(on["ticks"]), rel_tol=1e-9, abs_tol=1e-9)
     assert math.isclose(float(off["gc_norm"]), float(on["gc_norm"]), rel_tol=1e-9, abs_tol=1e-9)
     assert math.isclose(float(off["skew_norm"]), float(on["skew_norm"]), rel_tol=1e-9, abs_tol=1e-9)
+
+
+@pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
+def test_feature_width_keeps_axis_concentric_with_rendered_tracks(track_type: str) -> None:
+    record = _load_record()
+    config_dict = _make_config_dict(show_labels=True)
+    config_dict = modify_config_dict(
+        config_dict,
+        resolve_overlaps=False,
+        strandedness=True,
+        track_type=track_type,
+    )
+
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        selected_features_set=SELECTED_FEATURES,
+        legend="left",
+        track_specs=["features@w=75px"],
+    )
+    svg_text = canvas.tostring()
+
+    axis_transform = _extract_group_translate(svg_text, "Axis")
+    record_transform = _extract_group_translate(svg_text, record.id)
+    assert axis_transform is not None
+    assert record_transform is not None
+    assert axis_transform == pytest.approx(record_transform, abs=1e-6)
+
+    for group_id in ["tick", "gc_content", "skew", "labels"]:
+        group_transform = _extract_group_translate(svg_text, group_id)
+        if group_transform is not None:
+            assert group_transform == pytest.approx(axis_transform, abs=1e-6)
