@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from gbdraw.layout.linear import calculate_feature_position_factors_linear
-from gbdraw.linear import _parse_linear_track_layout
+from gbdraw.linear import _parse_linear_track_axis_gap, _parse_linear_track_layout
 
 
 INPUT_GBK = Path(__file__).parent / "test_inputs" / "MjeNMV.gb"
@@ -46,6 +46,17 @@ def test_parse_linear_track_layout_aliases() -> None:
 
 
 @pytest.mark.linear
+def test_parse_linear_track_axis_gap() -> None:
+    assert _parse_linear_track_axis_gap("auto") is None
+    assert _parse_linear_track_axis_gap("0") == pytest.approx(0.0)
+    assert _parse_linear_track_axis_gap("12.5") == pytest.approx(12.5)
+    with pytest.raises(argparse.ArgumentTypeError):
+        _parse_linear_track_axis_gap("-1")
+    with pytest.raises(argparse.ArgumentTypeError):
+        _parse_linear_track_axis_gap("invalid")
+
+
+@pytest.mark.linear
 def test_linear_layout_factors_non_stranded_above_below() -> None:
     above_track0 = calculate_feature_position_factors_linear("positive", 0, False, track_layout="above")
     above_track1 = calculate_feature_position_factors_linear("positive", 1, False, track_layout="above")
@@ -58,6 +69,42 @@ def test_linear_layout_factors_non_stranded_above_below() -> None:
     below_track2 = calculate_feature_position_factors_linear("positive", 2, False, track_layout="below")
     assert all(v > 0 for v in below_track0)
     assert below_track2[1] > below_track1[1] > below_track0[1]
+
+
+@pytest.mark.linear
+def test_linear_middle_layout_separate_strands_is_axis_symmetric() -> None:
+    pos0 = calculate_feature_position_factors_linear("positive", 0, True, track_layout="middle")
+    neg1 = calculate_feature_position_factors_linear("negative", -1, True, track_layout="middle")
+    assert abs(pos0[1]) == pytest.approx(abs(neg1[1]))
+    assert abs(pos0[2]) == pytest.approx(abs(neg1[0]))
+
+    pos1 = calculate_feature_position_factors_linear("positive", 1, True, track_layout="middle")
+    neg2 = calculate_feature_position_factors_linear("negative", -2, True, track_layout="middle")
+    assert abs(pos1[1]) == pytest.approx(abs(neg2[1]))
+    assert abs(pos1[2]) == pytest.approx(abs(neg2[0]))
+
+
+@pytest.mark.linear
+def test_linear_layout_axis_gap_factor_increases_distance_from_axis() -> None:
+    auto_above = calculate_feature_position_factors_linear("positive", 0, False, track_layout="above")
+    explicit_above = calculate_feature_position_factors_linear(
+        "positive",
+        0,
+        False,
+        track_layout="above",
+        axis_gap_factor=0.8,
+    )
+    assert explicit_above[2] < auto_above[2]
+
+    auto_below = calculate_feature_position_factors_linear("positive", 0, False, track_layout="below")
+    explicit_below = calculate_feature_position_factors_linear(
+        "positive",
+        0,
+        False,
+        track_layout="below",
+        axis_gap_factor=0.8,
+    )
+    assert explicit_below[0] > auto_below[0]
 
 
 @pytest.mark.linear
@@ -104,3 +151,12 @@ def test_linear_track_layout_with_separate_and_resolve_overlaps(tmp_path: Path, 
     assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
     assert output_svg.exists()
 
+
+@pytest.mark.linear
+def test_linear_track_axis_gap_cli_generates_svg(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear(
+        tmp_path,
+        ["--track_layout", "below", "--track_axis_gap", "12"],
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    assert output_svg.exists()

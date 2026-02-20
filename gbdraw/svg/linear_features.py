@@ -20,18 +20,25 @@ def create_intron_path_linear(
     separate_strands: bool,
     feature_track_id: int,
     track_layout: str = "middle",
+    track_axis_gap: float | None = None,
 ) -> list[str]:
     """
     Creates a linear SVG path for an intron feature.
     """
     feat_start = coord_dict["feat_start"]
     feat_end = coord_dict["feat_end"]
+    axis_gap_factor = (
+        (float(track_axis_gap) / float(cds_height))
+        if (track_axis_gap is not None and float(cds_height) > 0.0)
+        else None
+    )
 
     factors = calculate_feature_position_factors_linear(
         strand=feature_strand,
         track_id=feature_track_id,
         separate_strands=separate_strands,
         track_layout=track_layout,
+        axis_gap_factor=axis_gap_factor,
     )
 
     normalized_start = normalize_position_to_linear_track(
@@ -56,16 +63,23 @@ def create_rectangle_path_linear(
     separate_strands: bool,
     feature_track_id: int,
     track_layout: str = "middle",
+    track_axis_gap: float | None = None,
 ) -> list[str]:
     """Creates a linear SVG path for a rectangular feature."""
     feat_start = coord_dict["feat_start"]
     feat_end = coord_dict["feat_end"]
+    axis_gap_factor = (
+        (float(track_axis_gap) / float(cds_height))
+        if (track_axis_gap is not None and float(cds_height) > 0.0)
+        else None
+    )
 
     factors = calculate_feature_position_factors_linear(
         strand=feature_strand,
         track_id=feature_track_id,
         separate_strands=separate_strands,
         track_layout=track_layout,
+        axis_gap_factor=axis_gap_factor,
     )
 
     normalized_start = normalize_position_to_linear_track(
@@ -155,6 +169,7 @@ def create_arrowhead_path_linear(
     separate_strands: bool,
     feature_track_id: int = 0,
     track_layout: str = "middle",
+    track_axis_gap: float | None = None,
 ) -> list[str]:
     """Creates a linear SVG path for an arrowhead feature."""
     normalized_start, normalized_end = normalize_feature_positions(
@@ -168,12 +183,18 @@ def create_arrowhead_path_linear(
 
     arrow_start, arrow_end = get_arrow_strand_positions(normalized_start, normalized_end)[coord_dict["feat_strand"]]
     shoulder = set_arrow_shoulder(coord_dict["feat_strand"], arrow_end, normalized_arrow_length)
+    axis_gap_factor = (
+        (float(track_axis_gap) / float(cds_height))
+        if (track_axis_gap is not None and float(cds_height) > 0.0)
+        else None
+    )
 
     factors = calculate_feature_position_factors_linear(
         strand=feature_strand,
         track_id=feature_track_id,
         separate_strands=separate_strands,
         track_layout=track_layout,
+        axis_gap_factor=axis_gap_factor,
     )
 
     return construct_arrowhead_path(

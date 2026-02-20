@@ -56,6 +56,22 @@ def _parse_linear_track_layout(value: str) -> str:
         "(legacy aliases: 'spreadout' -> 'above', 'tuckin' -> 'below')"
     )
 
+
+def _parse_linear_track_axis_gap(value: str) -> float | None:
+    normalized = str(value).strip().lower()
+    if normalized in {"", "auto"}:
+        return None
+    try:
+        axis_gap = float(normalized)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "track axis gap must be a non-negative number or 'auto'"
+        ) from exc
+    if axis_gap < 0:
+        raise argparse.ArgumentTypeError("track axis gap must be >= 0")
+    return axis_gap
+
+
 def _get_args(args) -> argparse.Namespace:
     """
     Parses command-line arguments for generating linear genome diagrams.
@@ -237,6 +253,16 @@ def _get_args(args) -> argparse.Namespace:
         type=_parse_linear_track_layout,
         metavar="{above,middle,below}",
         default="middle",
+    )
+    parser.add_argument(
+        '--track_axis_gap',
+        help=(
+            "Gap between axis and nearest feature edge in pixels for above/below layouts. "
+            "Use 'auto' to derive it from feature height."
+        ),
+        type=_parse_linear_track_axis_gap,
+        default=None,
+        metavar="AUTO|PX",
     )
     if CAIROSVG_AVAILABLE:
         parser.add_argument(
@@ -456,6 +482,7 @@ def linear_main(cmd_args) -> None:
     label_placement: Optional[str] = args.label_placement
     label_rotation: Optional[float] = args.label_rotation
     track_layout: str = args.track_layout
+    track_axis_gap: Optional[float] = args.track_axis_gap
     axis_stroke_color: Optional[str] = args.axis_stroke_color
     axis_stroke_width: Optional[float] = args.axis_stroke_width
     line_stroke_color: Optional[str] = args.line_stroke_color
@@ -477,6 +504,7 @@ def linear_main(cmd_args) -> None:
         show_labels=show_labels,
         resolve_overlaps=resolve_overlaps,
         linear_track_layout=track_layout,
+        linear_track_axis_gap=track_axis_gap,
         align_center=align_center, 
         strandedness=strandedness,
         label_blacklist=label_blacklist,

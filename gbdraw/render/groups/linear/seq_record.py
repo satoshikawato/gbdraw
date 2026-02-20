@@ -100,9 +100,18 @@ class SeqRecordGroup:
         if self.show_labels:
             for label in label_list:
                 if not label["is_embedded"]:
+                    label_middle_y = float(label["middle_y"])
+                    feature_middle_y = float(label["feature_middle_y"])
+                    label_height = float(label["height_px"])
+                    if label_middle_y >= feature_middle_y:
+                        # Label is below the feature track, so connect to its upper edge.
+                        label_edge_y = label_middle_y - (0.45 * label_height)
+                    else:
+                        # Label is above the feature track, so connect to its lower edge.
+                        label_edge_y = label_middle_y + (0.45 * label_height)
                     line_path = Line(
                         start=(label["middle"], label["feature_middle_y"]),
-                        end=(label["middle"], label["middle_y"] + 0.45 * label["height_px"]),
+                        end=(label["middle"], label_edge_y),
                         stroke=self.label_stroke_color,
                         stroke_width=self.label_stroke_width,
                     )
@@ -122,6 +131,7 @@ class SeqRecordGroup:
                 separate_strands=separate_strands,
                 arrow_length=arrow_length,
                 track_layout=self.canvas_config.track_layout,
+                track_axis_gap=self.canvas_config.track_axis_gap,
             )
 
         # Add labels
@@ -183,6 +193,7 @@ class SeqRecordGroup:
                 cds_height,
                 separate_strands,
                 self.canvas_config.track_layout,
+                self.canvas_config.track_axis_gap,
                 self.config_dict,
                 cfg=self._cfg,
             )

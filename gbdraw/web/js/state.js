@@ -187,6 +187,7 @@ const adv = reactive({
 
   // Linear Specific
   feature_height: null,
+  track_axis_gap: null,
   gc_height: null,
   comparison_height: null,
   min_bitscore: 50,

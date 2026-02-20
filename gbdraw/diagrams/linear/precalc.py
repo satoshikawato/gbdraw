@@ -95,6 +95,7 @@ def _precalculate_label_dimensions(
             canvas_config.cds_height,
             canvas_config.strandedness,
             canvas_config.track_layout,
+            canvas_config.track_axis_gap,
             config_dict,
             cfg=cfg,
         )

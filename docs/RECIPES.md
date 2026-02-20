@@ -77,6 +77,11 @@ gbdraw linear --gbk genome.gb -o output -f svg --track_layout above
 gbdraw linear --gbk genome.gb -o output -f svg --track_layout below
 ```
 
+### Linear Plot with Custom Axis Gap (Above/Below)
+```bash
+gbdraw linear --gbk genome.gb -o output -f svg --track_layout below --track_axis_gap 12
+```
+
 ### Linear Plot with GC Content
 ```bash
 gbdraw linear --gbk genome.gb -o output -f svg --show_gc

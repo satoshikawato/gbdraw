@@ -27,6 +27,7 @@ from ...io.comparisons import load_comparisons
 from ...legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...layout.linear import calculate_feature_position_factors_linear  # type: ignore[reportMissingImports]
+from ...labels.linear import calculate_label_y_bounds  # type: ignore[reportMissingImports]
 
 from .builders import (
     add_comparison_on_linear_canvas,
@@ -60,6 +61,11 @@ def _precalculate_feature_track_heights(
     record_heights_below: dict[str, float] = {}
     record_heights_above: dict[str, float] = {}
     track_layout = str(canvas_config.track_layout).strip().lower()
+    axis_gap_factor = (
+        (float(canvas_config.track_axis_gap) / float(canvas_config.cds_height))
+        if (canvas_config.track_axis_gap is not None and float(canvas_config.cds_height) > 0.0)
+        else None
+    )
     
     color_table, default_colors = preprocess_color_tables(
         feature_config.color_table, feature_config.default_colors
@@ -114,6 +120,7 @@ def _precalculate_feature_track_heights(
                     track_id=track_id,
                     separate_strands=canvas_config.strandedness,
                     track_layout=track_layout,
+                    axis_gap_factor=axis_gap_factor,
                 )
                 top_y = canvas_config.cds_height * float(factors[0])
                 bottom_y = canvas_config.cds_height * float(factors[2])
@@ -128,6 +135,24 @@ def _precalculate_feature_track_heights(
         record_heights_below[record.id] = height_below
     
     return record_heights_below, record_heights_above
+
+
+def _precalculate_label_heights_below(all_labels_by_record: dict[str, list[dict]]) -> dict[str, float]:
+    """Return per-record label extents below the axis for spacing in below layout."""
+    record_label_heights_below: dict[str, float] = {}
+    for record_id, labels in all_labels_by_record.items():
+        max_bottom_y = 0.0
+        for label in labels:
+            _, label_bottom_y = calculate_label_y_bounds(label)
+            if bool(label.get("is_embedded")):
+                feature_bottom_y = float(label.get("feature_bottom_y", 0.0))
+                # Ignore labels that do not protrude outside their feature track.
+                if label_bottom_y <= feature_bottom_y:
+                    continue
+            if label_bottom_y > max_bottom_y:
+                max_bottom_y = label_bottom_y
+        record_label_heights_below[record_id] = max_bottom_y
+    return record_label_heights_below
 
 
 def assemble_linear_diagram(
@@ -150,8 +175,13 @@ def assemble_linear_diagram(
     track_layout = str(canvas_config.track_layout).strip().lower()
     non_middle_layout = track_layout in {"above", "below"}
 
-    required_label_height, all_labels, record_label_heights = _precalculate_label_dimensions(
+    required_label_height, all_labels, record_label_heights_above = _precalculate_label_dimensions(
         records, feature_config, canvas_config, config_dict, cfg=cfg
+    )
+    record_label_heights_below = (
+        _precalculate_label_heights_below(all_labels)
+        if track_layout == "below"
+        else {}
     )
     
     # Pre-calculate feature track heights for each record (needed for resolve_overlaps)
@@ -229,10 +259,13 @@ def assemble_linear_diagram(
             height_below_axis = current_feature_height_below + canvas_config.gc_padding + canvas_config.skew_padding
             
             # Get the height above axis for the next record (labels or feature tracks)
-            next_label_height = record_label_heights.get(next_record_id, 0)
+            next_label_height = record_label_heights_above.get(next_record_id, 0)
             next_feature_height_above = record_heights_above.get(next_record_id, canvas_config.cds_padding)
             # For above-axis height, we need to consider both labels and the upper part of features
             height_above_next_axis = max(next_label_height, next_feature_height_above)
+            if track_layout == "below":
+                current_label_height_below = record_label_heights_below.get(current_record_id, 0.0)
+                height_below_axis += current_label_height_below
             
             # For BLAST comparisons, use comparison_height as minimum space between records
             if has_blast:
@@ -260,10 +293,16 @@ def assemble_linear_diagram(
         if non_middle_layout
         else canvas_config.cds_padding
     )
+    final_label_height_below = (
+        record_label_heights_below.get(final_record_id, 0.0)
+        if track_layout == "below"
+        else 0.0
+    )
 
     final_height = (
         current_y
         + final_feature_height_below
+        + final_label_height_below
         + canvas_config.gc_padding
         + canvas_config.skew_padding
         + length_bar_group.scale_group_height
@@ -273,6 +312,7 @@ def assemble_linear_diagram(
     canvas_config.height_below_final_record = (
         current_y
         + final_feature_height_below
+        + final_label_height_below
         + canvas_config.gc_padding
         + canvas_config.skew_padding
         + 4 * canvas_config.vertical_padding
@@ -322,12 +362,14 @@ def assemble_linear_diagram(
             if non_middle_layout:
                 current_feature_height_below = record_heights_below.get(current_record_id, canvas_config.cds_padding)
                 height_below_axis = current_feature_height_below + canvas_config.gc_padding + canvas_config.skew_padding
+                if track_layout == "below":
+                    height_below_axis += record_label_heights_below.get(current_record_id, 0.0)
             else:
                 height_below_axis = canvas_config.cds_padding + canvas_config.gc_padding + canvas_config.skew_padding
             ribbon_start_y = record_offsets[i] + height_below_axis
             comparison_offsets.append(ribbon_start_y)
             next_record_id = records[i + 1].id
-            next_label_height = record_label_heights.get(next_record_id, 0)
+            next_label_height = record_label_heights_above.get(next_record_id, 0)
             if non_middle_layout:
                 next_feature_height_above = record_heights_above.get(next_record_id, canvas_config.cds_padding)
                 ribbon_end_y = record_offsets[i + 1] - max(next_label_height, next_feature_height_above)
@@ -397,6 +439,8 @@ def assemble_linear_diagram(
         if non_middle_layout:
             current_feature_height_below = record_heights_below.get(record.id, canvas_config.cds_padding)
             gc_offset_y = offset_y + (current_feature_height_below - canvas_config.cds_padding)
+            if track_layout == "below":
+                gc_offset_y += record_label_heights_below.get(record.id, 0.0)
 
         if canvas_config.show_gc:
             add_gc_content_group(

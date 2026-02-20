@@ -81,6 +81,7 @@ class LinearCanvasConfig:
     canvas_padding: float
     default_gc_height: float
     track_layout: Literal["above", "middle", "below"]
+    track_axis_gap: float | None
     align_center: bool
     normalize_length: bool
     default_cds_height: LinearCanvasDefaultCdsHeightConfig
@@ -95,6 +96,26 @@ class LinearCanvasConfig:
             track_layout = "below"
         else:
             track_layout = "middle"
+        track_axis_gap_raw = d.get("track_axis_gap", "auto")
+        track_axis_gap: float | None
+        if track_axis_gap_raw is None:
+            track_axis_gap = None
+        elif isinstance(track_axis_gap_raw, str):
+            normalized_gap = track_axis_gap_raw.strip().lower()
+            if normalized_gap in {"", "auto"}:
+                track_axis_gap = None
+            else:
+                try:
+                    parsed_gap = float(normalized_gap)
+                except ValueError:
+                    parsed_gap = -1.0
+                track_axis_gap = parsed_gap if parsed_gap >= 0.0 else None
+        else:
+            try:
+                parsed_gap = float(track_axis_gap_raw)
+            except (TypeError, ValueError):
+                parsed_gap = -1.0
+            track_axis_gap = parsed_gap if parsed_gap >= 0.0 else None
         return cls(
             width=int(d["width"]),
             vertical_offset=float(d["vertical_offset"]),
@@ -104,6 +125,7 @@ class LinearCanvasConfig:
             canvas_padding=float(d["canvas_padding"]),
             default_gc_height=float(d["default_gc_height"]),
             track_layout=track_layout,
+            track_axis_gap=track_axis_gap,
             align_center=bool(d["align_center"]),
             normalize_length=bool(d["normalize_length"]),
             default_cds_height=LinearCanvasDefaultCdsHeightConfig.from_dict(d["default_cds_height"]),

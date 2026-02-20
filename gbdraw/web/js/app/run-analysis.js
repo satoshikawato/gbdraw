@@ -156,7 +156,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     if (linearLabelSupportCache) return linearLabelSupportCache;
     const pyodide = getPyodide();
     if (!pyodide) {
-      linearLabelSupportCache = { placement: false, rotation: false, track_layout: false };
+      linearLabelSupportCache = { placement: false, rotation: false, track_layout: false, track_axis_gap: false };
       return linearLabelSupportCache;
     }
     try {
@@ -168,11 +168,12 @@ json.dumps({
   "placement": "--label_placement" in _source,
   "rotation": "--label_rotation" in _source,
   "track_layout": "--track_layout" in _source,
+  "track_axis_gap": "--track_axis_gap" in _source,
 })
       `);
       linearLabelSupportCache = JSON.parse(String(raw));
     } catch (_err) {
-      linearLabelSupportCache = { placement: false, rotation: false, track_layout: false };
+      linearLabelSupportCache = { placement: false, rotation: false, track_layout: false, track_axis_gap: false };
     }
     return linearLabelSupportCache;
   };
@@ -347,7 +348,9 @@ json.dumps({
         const wantsPlacementOption = normalizedLabelPlacement && normalizedLabelPlacement !== 'auto';
         const wantsRotationOption = adv.label_rotation !== null && adv.label_rotation !== undefined && adv.label_rotation !== '';
         const wantsTrackLayoutOption = normalizedTrackLayout !== 'middle';
-        if (wantsPlacementOption || wantsRotationOption || wantsTrackLayoutOption) {
+        const wantsTrackAxisGapOption =
+          adv.track_axis_gap !== null && adv.track_axis_gap !== undefined && adv.track_axis_gap !== '';
+        if (wantsPlacementOption || wantsRotationOption || wantsTrackLayoutOption || wantsTrackAxisGapOption) {
           const linearLabelSupport = getLinearLabelOptionSupport();
           if (wantsPlacementOption && !linearLabelSupport.placement) {
             throw new Error("Current gbdraw wheel does not support --label_placement. Rebuild and redeploy the web wheel.");
@@ -358,6 +361,9 @@ json.dumps({
           if (wantsTrackLayoutOption && !linearLabelSupport.track_layout) {
             throw new Error("Current gbdraw wheel does not support --track_layout. Rebuild and redeploy the web wheel.");
           }
+          if (wantsTrackAxisGapOption && !linearLabelSupport.track_axis_gap) {
+            throw new Error("Current gbdraw wheel does not support --track_axis_gap. Rebuild and redeploy the web wheel.");
+          }
         }
         if (normalizedLabelPlacement && normalizedLabelPlacement !== 'auto') {
           args.push('--label_placement', normalizedLabelPlacement);
@@ -367,6 +373,9 @@ json.dumps({
         }
         if (normalizedTrackLayout !== 'middle') {
           args.push('--track_layout', normalizedTrackLayout);
+        }
+        if (adv.track_axis_gap !== null && adv.track_axis_gap !== undefined && adv.track_axis_gap !== '') {
+          args.push('--track_axis_gap', adv.track_axis_gap);
         }
 
         if (adv.feature_height) args.push('--feature_height', adv.feature_height);

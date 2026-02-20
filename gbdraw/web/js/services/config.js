@@ -90,6 +90,20 @@ const applyConfigData = (data) => {
   if (state.adv.label_placement === 'on_feature') {
     state.adv.label_placement = 'above_feature';
   }
+  const rawTrackAxisGap = state.adv.track_axis_gap;
+  if (
+    rawTrackAxisGap === null ||
+    rawTrackAxisGap === undefined ||
+    rawTrackAxisGap === '' ||
+    String(rawTrackAxisGap).trim().toLowerCase() === 'auto'
+  ) {
+    state.adv.track_axis_gap = null;
+  } else {
+    const numericTrackAxisGap = Number(rawTrackAxisGap);
+    state.adv.track_axis_gap = Number.isFinite(numericTrackAxisGap) && numericTrackAxisGap >= 0
+      ? numericTrackAxisGap
+      : null;
+  }
   if (state.form.linear_track_layout === 'spreadout') {
     state.form.linear_track_layout = 'above';
   } else if (state.form.linear_track_layout === 'tuckin') {

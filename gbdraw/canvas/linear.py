@@ -90,6 +90,7 @@ class LinearCanvasConfigurator:
         self.strandedness: bool = cfg.canvas.strandedness
         self.resolve_overlaps: bool = cfg.canvas.resolve_overlaps
         self.track_layout: str = cfg.canvas.linear.track_layout
+        self.track_axis_gap: float | None = cfg.canvas.linear.track_axis_gap
         self.align_center: bool = cfg.canvas.linear.align_center
         self.normalize_length: bool = cfg.canvas.linear.normalize_length
         _label_setting = cfg.canvas.show_labels

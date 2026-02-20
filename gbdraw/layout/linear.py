@@ -23,10 +23,9 @@ def _legacy_middle_factors(strand: str, track_id: int, separate_strands: bool) -
             )
         return track_num * -3 * initial_offset
 
-    base_pos = calculate_base_position(track_id)
-    track_offset = calculate_track_offset(track_id)
-
     if not separate_strands:
+        base_pos = calculate_base_position(track_id)
+        track_offset = calculate_track_offset(track_id)
         track = track_id
         return [
             -track - feature_height + track_offset,
@@ -34,11 +33,32 @@ def _legacy_middle_factors(strand: str, track_id: int, separate_strands: bool) -
             -track + feature_height + track_offset,
         ]
 
-    return [
-        base_pos - feature_height + track_offset,
-        base_pos - feature_offset + track_offset,
-        base_pos + track_offset,
-    ]
+    # Keep middle layout vertically symmetric around axis in separated-strand mode.
+    # Positive track 0 and negative track -1 should be mirrored with equal axis gaps.
+    half_height = feature_height / 2.0
+    track_step = 0.65
+    axis_to_center = 0.35
+    if strand == "negative":
+        negative_index = max(0, abs(int(track_id)) - 1)
+        middle = axis_to_center + (track_step * negative_index)
+    else:
+        positive_index = max(0, int(track_id))
+        middle = -(axis_to_center + (track_step * positive_index))
+    return [middle - half_height, middle, middle + half_height]
+
+
+def _resolve_axis_gap_factor(
+    *,
+    separate_strands: bool,
+    axis_gap_factor: float | None,
+) -> float:
+    """Resolve axis-to-feature edge gap in factor units (scaled by cds_height)."""
+    if axis_gap_factor is not None:
+        return max(0.0, float(axis_gap_factor))
+    # Auto defaults tuned for above/below layouts to keep labels and features legible.
+    if separate_strands:
+        return 0.25
+    return 0.30
 
 
 def calculate_feature_position_factors_linear(
@@ -46,6 +66,7 @@ def calculate_feature_position_factors_linear(
     track_id: int,
     separate_strands: bool,
     track_layout: str = "middle",
+    axis_gap_factor: float | None = None,
 ) -> list[float]:
     """
     Calculates feature position factors for linear track layouts.
@@ -64,12 +85,16 @@ def calculate_feature_position_factors_linear(
     if layout == "middle":
         return _legacy_middle_factors(strand, track_id, separate_strands)
 
+    resolved_axis_gap = _resolve_axis_gap_factor(
+        separate_strands=separate_strands,
+        axis_gap_factor=axis_gap_factor,
+    )
+
     if not separate_strands:
         track_index = max(0, abs(int(track_id)))
         track_spacing = 1.3
         half_height = 0.5
-        axis_gap = 0.1
-        middle = axis_gap + half_height + (track_spacing * track_index)
+        middle = resolved_axis_gap + half_height + (track_spacing * track_index)
         if layout == "above":
             middle = -middle
         return [middle - half_height, middle, middle + half_height]
@@ -78,21 +103,20 @@ def calculate_feature_position_factors_linear(
     # while shifting both bands to the selected side of the axis.
     track_spacing = 0.65
     half_height = 0.25
-    axis_gap = 0.1
     strand_band_gap = 0.6
     positive_index = max(0, int(track_id))
     negative_index = max(0, abs(int(track_id)) - 1)
 
     if layout == "above":
         if strand == "negative":
-            middle = -(axis_gap + half_height + (track_spacing * negative_index))
+            middle = -(resolved_axis_gap + half_height + (track_spacing * negative_index))
         else:
-            middle = -(axis_gap + half_height + strand_band_gap + (track_spacing * positive_index))
+            middle = -(resolved_axis_gap + half_height + strand_band_gap + (track_spacing * positive_index))
     else:  # below
         if strand == "negative":
-            middle = axis_gap + half_height + strand_band_gap + (track_spacing * negative_index)
+            middle = resolved_axis_gap + half_height + strand_band_gap + (track_spacing * negative_index)
         else:
-            middle = axis_gap + half_height + (track_spacing * positive_index)
+            middle = resolved_axis_gap + half_height + (track_spacing * positive_index)
 
     return [middle - half_height, middle, middle + half_height]
 
