@@ -37,48 +37,60 @@ def generate_circular_intron_path(
         List with ["line", path_data]
     """
     coord_strand: str = str(coord_dict["coord_strand"])
-
-    coord_start: int = int(coord_dict["coord_start"])
-    coord_end: int = int(coord_dict["coord_end"])
-    intron_strand_dict: dict[str, Tuple[str, str]] = {
-        "positive": (" 0 0 1 ", " 0 0 0 "),
-        "negative": (" 0 0 0 ", " 0 0 1 "),
-    }
-    params = intron_strand_dict[coord_strand]
-    if coord_start > coord_end:
-        param = params[1]
-    else:
-        param = params[0]
+    arc_start: int = int(coord_dict["coord_start"]) % total_length
+    arc_end: int = int(coord_dict["coord_end"]) % total_length
+    coord_len_bp = (arc_end - arc_start) % total_length
+    # Keep intron arcs aligned with axis direction (clockwise in this coordinate system).
+    sweep_flag = 1
 
     factors: list[float] = calculate_feature_position_factors_circular(
         total_length, coord_strand, track_ratio, cds_ratio, offset, track_type, strandedness, track_id
     )
-    start_x_1: float = (radius * factors[1]) * math.cos(
-        math.radians(360.0 * ((coord_start) / total_length) - 90)
+    intron_radius: float = radius * factors[1]
+    start_x_1: float = intron_radius * math.cos(
+        math.radians(360.0 * (arc_start / total_length) - 90)
     )
-    start_y_1: float = (radius * factors[1]) * math.sin(
-        math.radians(360.0 * ((coord_start) / total_length) - 90)
+    start_y_1: float = intron_radius * math.sin(
+        math.radians(360.0 * (arc_start / total_length) - 90)
     )
-    end_x_1: float = (radius * factors[1]) * math.cos(
-        math.radians(360.0 * ((coord_end) / total_length) - 90)
+    end_x_1: float = intron_radius * math.cos(
+        math.radians(360.0 * (arc_end / total_length) - 90)
     )
-    end_y_1: float = (radius * factors[1]) * math.sin(
-        math.radians(360.0 * ((coord_end) / total_length) - 90)
+    end_y_1: float = intron_radius * math.sin(
+        math.radians(360.0 * (arc_end / total_length) - 90)
     )
-    feature_path: str = (
-        "M "
-        + str(start_x_1)
-        + ","
-        + str(start_y_1)
-        + "A"
-        + str(radius)
-        + ","
-        + str(radius)
-        + param
-        + str(end_x_1)
-        + ","
-        + str(end_y_1)
-    )
+
+    angle_deg = 360.0 * coord_len_bp / total_length
+    segment_param = f" 0 0 {sweep_flag} "
+
+    if angle_deg > 20.0:
+        mid_pos = (arc_start + coord_len_bp / 2.0) % total_length
+        mid_x_1 = intron_radius * math.cos(
+            math.radians(360.0 * (mid_pos / total_length) - 90)
+        )
+        mid_y_1 = intron_radius * math.sin(
+            math.radians(360.0 * (mid_pos / total_length) - 90)
+        )
+        feature_path = (
+            f"M {start_x_1},{start_y_1} "
+            f"A{intron_radius},{intron_radius}{segment_param}{mid_x_1},{mid_y_1} "
+            f"A{intron_radius},{intron_radius}{segment_param}{end_x_1},{end_y_1}"
+        )
+    else:
+        feature_path = (
+            "M "
+            + str(start_x_1)
+            + ","
+            + str(start_y_1)
+            + "A"
+            + str(intron_radius)
+            + ","
+            + str(intron_radius)
+            + segment_param
+            + str(end_x_1)
+            + ","
+            + str(end_y_1)
+        )
     return ["line", feature_path]
 
 

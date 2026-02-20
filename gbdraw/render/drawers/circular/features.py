@@ -122,24 +122,29 @@ class FeatureDrawer:
         # Get feature identifier for instant preview support
         feature_data_id = self.get_feature_data_id(feature_object)
 
-        for gene_path in gene_paths:
-            if not gene_path or not gene_path[0]:
-                continue
-            path_type: str = gene_path[0]
-            path_data = gene_path[1]
-            if path_type == "block":
-                self.draw_path(path_data, group, fill_color=feature_object.color, feature_data_id=feature_data_id)
-            elif path_type == "line":
-                self.draw_path(
-                    path_data,
-                    group,
-                    fill_color="none",
-                    stroke_color_specified=self.intron_stroke_color,
-                    stroke_width_specified=self.intron_stroke_width,
-                )
-            elif path_type == "label":
-                for element in path_data:
-                    group.add(element)
+        # Keep intron lines behind blocks for the same feature by drawing lines first.
+        ordered_types: tuple[str, ...] = ("line", "block", "label")
+        for expected_type in ordered_types:
+            for gene_path in gene_paths:
+                if not gene_path or not gene_path[0]:
+                    continue
+                path_type: str = gene_path[0]
+                if path_type != expected_type:
+                    continue
+                path_data = gene_path[1]
+                if path_type == "block":
+                    self.draw_path(path_data, group, fill_color=feature_object.color, feature_data_id=feature_data_id)
+                elif path_type == "line":
+                    self.draw_path(
+                        path_data,
+                        group,
+                        fill_color="none",
+                        stroke_color_specified=self.intron_stroke_color,
+                        stroke_width_specified=self.intron_stroke_width,
+                    )
+                elif path_type == "label":
+                    for element in path_data:
+                        group.add(element)
         return group
 
 
