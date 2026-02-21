@@ -10,6 +10,33 @@ from svgwrite.text import Text, TextPath
 from ..core.text import calculate_bbox_dimensions
 
 
+def get_circular_tick_intervals(total_len: int, manual_interval: int | None = None) -> tuple[int, int]:
+    """Return (large, small) tick intervals for circular scales."""
+    if manual_interval is not None and manual_interval > 0:
+        tick_large = int(manual_interval)
+        tick_small = int(manual_interval) // 10
+        return tick_large, tick_small
+
+    if total_len <= 30000:
+        return 1000, 100
+    if 30000 < total_len <= 50000:
+        return 5000, 1000
+    if 50000 < total_len <= 150000:
+        return 10000, 1000
+    if 150000 < total_len <= 1000000:
+        return 50000, 10000
+    if 1000000 < total_len <= 10000000:
+        return 500000, 100000
+    return 1000000, 200000
+
+
+def _format_tick_label_text(tick: int, total_len: int) -> str:
+    """Format circular tick label text with existing kbp/Mbp rules."""
+    if total_len < 1000000:
+        return f"{int(tick / 1000)} kbp"
+    return f"{tick / 1000000} Mbp"
+
+
 def _tick_path_ratio_table(track_channel: str, track_type: str, strandedness: bool) -> dict[str, tuple[float, float]]:
     """Return radial ratios for tick line paths (small/large)."""
     if strandedness:
@@ -52,6 +79,89 @@ def get_circular_tick_path_ratio_bounds(total_len: int, track_type: str, strande
     ratio_table = _tick_path_ratio_table(track_channel, track_type, strandedness)
     ratio_values = [ratio for pair in ratio_table.values() for ratio in pair]
     return min(ratio_values), max(ratio_values)
+
+
+def _tick_label_ratio_table(track_channel: str, track_type: str, strandedness: bool) -> dict[str, tuple[float, float]]:
+    """Return radial ratios for circular tick labels (small/large)."""
+    if strandedness is True:
+        if track_channel == "long":
+            if track_type == "middle":
+                return {"small": (0.88, 1.10), "large": (0.88, 1.13)}
+            if track_type == "spreadout":
+                return {"small": (0.94, 1.21), "large": (0.94, 1.24)}
+            if track_type == "tuckin":
+                return {"small": (0.882, 1.10), "large": (0.82, 1.13)}
+            return {"small": (0.98, 1.0), "large": (0.98, 1.0)}
+        if track_type == "middle":
+            return {"small": (0.85, 1.09), "large": (0.85, 1.12)}
+        if track_type == "spreadout":
+            return {"small": (0.95, 1.21), "large": (0.95, 1.24)}
+        if track_type == "tuckin":
+            return {"small": (1.03, 1.21), "large": (1.03, 1.24)}
+        return {"small": (0.98, 1.0), "large": (0.98, 1.0)}
+
+    if track_channel == "long":
+        if track_type == "middle":
+            return {"small": (0.90, 1.12), "large": (0.90, 1.15)}
+        if track_type == "spreadout":
+            return {"small": (0.95, 1.21), "large": (0.95, 1.24)}
+        if track_type == "tuckin":
+            return {"small": (0.84, 1.14), "large": (0.84, 1.17)}
+        return {"small": (0.98, 1.0), "large": (0.98, 1.0)}
+    if track_type == "middle":
+        return {"small": (0.89, 1.10), "large": (0.89, 1.13)}
+    if track_type == "spreadout":
+        return {"small": (0.96, 1.21), "large": (0.96, 1.24)}
+    if track_type == "tuckin":
+        return {"small": (1.03, 1.21), "large": (1.03, 1.24)}
+    return {"small": (0.98, 1.0), "large": (0.98, 1.0)}
+
+
+def get_circular_tick_label_radius_bounds(
+    center_radius_px: float,
+    total_len: int,
+    track_type: str,
+    strandedness: bool,
+    font_size: float,
+    font_family: str,
+    dpi: int,
+    manual_interval: int | None = None,
+) -> tuple[float, float] | None:
+    """Return (inner, outer) radial bounds used by large circular tick labels."""
+    tick_large, _ = get_circular_tick_intervals(total_len, manual_interval=manual_interval)
+    if tick_large <= 0:
+        return None
+
+    ticks_large_nonzero = [tick for tick in range(0, total_len, tick_large) if tick != 0]
+    if not ticks_large_nonzero:
+        return None
+
+    track_channel = "short" if total_len < 50000 else "long"
+    ratio_table = _tick_label_ratio_table(track_channel, track_type, strandedness)
+    prox, _ = ratio_table["large"]
+
+    min_radius = float("inf")
+    max_radius = float("-inf")
+    for tick in ticks_large_nonzero:
+        angle = 360.0 * (tick / total_len)
+        label_text = _format_tick_label_text(tick, total_len)
+        _, bbox_height_px = calculate_bbox_dimensions(label_text, font_family, font_size, dpi)
+        center_offset = bbox_height_px / 4
+
+        label_radius = center_radius_px * prox
+        if 90 <= angle < 270:
+            label_radius += center_offset
+        else:
+            label_radius -= center_offset
+
+        min_radius = min(min_radius, label_radius)
+        max_radius = max(max_radius, label_radius)
+
+    if not math.isfinite(min_radius) or not math.isfinite(max_radius):
+        return None
+    if max_radius < min_radius:
+        min_radius, max_radius = max_radius, min_radius
+    return max(0.0, min_radius), max(0.0, max_radius)
 
 
 def generate_circular_tick_paths(
@@ -117,57 +227,12 @@ def generate_circular_tick_labels(
     dpi: int,
 ) -> list[Text]:
     tick_label_paths_list: list[Text] = []
-    if total_len < 50000:
-        track_channel = "short"
-    else:
-        track_channel = "long"
-    if strandedness is True:
-        if track_channel == "long":
-            if track_type == "middle":
-                ratio = {"small": [0.88, 1.10], "large": [0.88, 1.13]}
-            elif track_type == "spreadout":
-                ratio = {"small": [0.94, 1.21], "large": [0.94, 1.24]}
-            elif track_type == "tuckin":
-                ratio = {"small": [0.882, 1.10], "large": [0.82, 1.13]}
-            else:
-                ratio = {"small": [0.98, 1.0], "large": [0.98, 1.0]}
-        else:
-            if track_type == "middle":
-                ratio = {"small": [0.85, 1.09], "large": [0.85, 1.12]}
-            elif track_type == "spreadout":
-                ratio = {"small": [0.95, 1.21], "large": [0.95, 1.24]}
-            elif track_type == "tuckin":
-                ratio = {"small": [1.03, 1.21], "large": [1.03, 1.24]}
-            else:
-                ratio = {"small": [0.98, 1.0], "large": [0.98, 1.0]}
-    else:
-        if track_channel == "long":
-            if track_type == "middle":
-                ratio = {"small": [0.90, 1.12], "large": [0.90, 1.15]}
-            elif track_type == "spreadout":
-                ratio = {"small": [0.95, 1.21], "large": [0.95, 1.24]}
-            elif track_type == "tuckin":
-                ratio = {"small": [0.84, 1.14], "large": [0.84, 1.17]}
-            else:
-                ratio = {"small": [0.98, 1.0], "large": [0.98, 1.0]}
-        else:
-            if track_type == "middle":
-                ratio = {"small": [0.89, 1.10], "large": [0.89, 1.13]}
-            elif track_type == "spreadout":
-                ratio = {"small": [0.96, 1.21], "large": [0.96, 1.24]}
-            elif track_type == "tuckin":
-                ratio = {"small": [1.03, 1.21], "large": [1.03, 1.24]}
-            else:
-                ratio = {"small": [0.98, 1.0], "large": [0.98, 1.0]}
-    prox, dist = ratio[size]
+    track_channel = "short" if total_len < 50000 else "long"
+    ratio = _tick_label_ratio_table(track_channel, track_type, strandedness)
+    prox, _ = ratio[size]
     for tick in ticks:
-        anchor_value, baseline_value = set_tick_label_anchor_value(total_len, tick)
-
         angle = 360.0 * (tick / total_len)
-        if total_len < 1000000:
-            label_text: str = str(int(tick / 1000)) + " kbp"
-        else:
-            label_text = str((tick / 1000000)) + " Mbp"
+        label_text = _format_tick_label_text(tick, total_len)
 
         bbox_width_px, bbox_height_px = calculate_bbox_dimensions(label_text, font_family, font_size, dpi)
         center_offset = bbox_height_px / 4
@@ -251,6 +316,8 @@ def generate_circular_tick_labels(
 
 
 __all__ = [
+    "get_circular_tick_intervals",
+    "get_circular_tick_label_radius_bounds",
     "get_circular_tick_path_ratio_bounds",
     "generate_circular_tick_labels",
     "generate_circular_tick_paths",

@@ -29,7 +29,7 @@ def calculate_feature_position_factors_circular(
         strandedness: Whether to separate strands
         track_id: Track number for overlap resolution. Only effective when strandedness=False.
                   - spreadout: displaced outward
-                  - middle: displaced outward
+                  - middle: positive/undefined displaced outward, negative displaced inward
                   - tuckin: displaced inward
     
     Returns:
@@ -72,9 +72,13 @@ def calculate_feature_position_factors_circular(
         # No strand separation: resolve_overlaps is supported
         if track_type == "middle":
             base_factors = [BASE - cds_ratio * 0.5, BASE, BASE + cds_ratio * 0.5]
-            # resolve_overlaps: push overlapping features OUTWARD
             if track_id != 0:
-                base_factors = [x + track_offset for x in base_factors]
+                # In middle layout, negative strand overlaps are displaced inward while
+                # positive/undefined are displaced outward.
+                if strand == "negative":
+                    base_factors = [x - track_offset for x in base_factors]
+                else:
+                    base_factors = [x + track_offset for x in base_factors]
         elif track_type == "spreadout":
             base_factors = [BASE + cds_ratio * 0.4, BASE + cds_ratio * 0.9, BASE + cds_ratio * 1.4]
             # resolve_overlaps: push overlapping features OUTWARD
