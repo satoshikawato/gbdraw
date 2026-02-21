@@ -441,6 +441,56 @@ def _load_nc001879_outer_labels_with_priority_and_color_table(
     return outer_labels, total_length, cfg
 
 
+def _load_nc001454_external_labels_with_inner_resolve(
+    *,
+    label_font_size: float = 14.0,
+    strandedness: bool = False,
+    resolve_overlaps: bool = True,
+    track_type: str = "tuckin",
+) -> tuple[list[dict], int, GbdrawConfig, dict]:
+    input_path = Path(__file__).parent / "test_inputs" / "NC_001454.1.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        show_labels=True,
+        strandedness=strandedness,
+        track_type=track_type,
+        resolve_overlaps=resolve_overlaps,
+        allow_inner_labels=True,
+        label_font_size=label_font_size,
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    default_colors = load_default_colors("", "default")
+    color_table = None
+    color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    labels = prepare_label_list(
+        feature_dict,
+        len(record.seq),
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        config_dict,
+        cfg=cfg,
+    )
+    external_labels = [label for label in labels if not label.get("is_embedded")]
+    return external_labels, len(record.seq), cfg, feature_dict
+
+
 def _make_legend_collision_fixture() -> tuple[list[dict], int, SimpleNamespace, SimpleNamespace]:
     total_length = 4000
     labels = [
@@ -2148,6 +2198,231 @@ def test_hmmtdna_resolve_overlaps_recomputes_leader_start_after_label_shifts() -
         on_vertical_edge = math.isclose(leader_x, min_x, abs_tol=1.0) or math.isclose(leader_x, max_x, abs_tol=1.0)
         on_horizontal_edge = math.isclose(leader_y, min_y, abs_tol=1.0) or math.isclose(leader_y, max_y, abs_tol=1.0)
         assert on_vertical_edge or on_horizontal_edge
+
+
+def test_nc001454_tuckin_resolve_overlaps_inner_labels_keep_bbox_inside_local_feature_tracks() -> None:
+    external_labels, total_length, cfg, feature_dict = _load_nc001454_external_labels_with_inner_resolve(
+        label_font_size=14.0,
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="tuckin",
+    )
+    inner_labels = [label for label in external_labels if label.get("is_inner")]
+    assert inner_labels
+
+    feature_inner_intervals = circular_labels_module._build_inner_feature_radius_intervals(
+        feature_dict,
+        total_length,
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        cfg,
+    )
+    assert feature_inner_intervals
+
+    min_bbox_clearance = float("inf")
+    for label in inner_labels:
+        label_intervals = circular_labels_module._label_genome_intervals_for_clearance(label, total_length)
+        assert label_intervals
+
+        local_inner_radius = circular_labels_module._min_inner_feature_radius_for_intervals(
+            feature_inner_intervals,
+            label_intervals,
+            total_length,
+        )
+        if local_inner_radius <= 0.0:
+            continue
+
+        required_max_radius = (
+            local_inner_radius
+            - circular_labels_module.MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
+            - circular_labels_module.OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX
+        )
+        bbox_max_radius = circular_labels_module._label_bbox_max_radius(
+            label,
+            total_length,
+            minimum_margin=0.0,
+        )
+        min_bbox_clearance = min(min_bbox_clearance, required_max_radius - bbox_max_radius)
+
+    assert math.isfinite(min_bbox_clearance)
+    assert min_bbox_clearance >= -1.5
+
+
+def test_nc001454_tuckin_resolve_overlaps_inner_middle_to_label_segments_avoid_feature_annulus() -> None:
+    external_labels, total_length, cfg, feature_dict = _load_nc001454_external_labels_with_inner_resolve(
+        label_font_size=14.0,
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="tuckin",
+    )
+    inner_labels = [label for label in external_labels if label.get("is_inner")]
+    assert inner_labels
+
+    feature_inner_intervals = circular_labels_module._build_inner_feature_radius_intervals(
+        feature_dict,
+        total_length,
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        cfg,
+    )
+    feature_outer_intervals = circular_labels_module._build_outer_feature_radius_intervals(
+        feature_dict,
+        total_length,
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        cfg,
+    )
+    assert feature_inner_intervals
+    assert feature_outer_intervals
+
+    def segment_crosses_feature_annulus(
+        p1: tuple[float, float],
+        p2: tuple[float, float],
+        *,
+        samples: int = 96,
+    ) -> bool:
+        x1, y1 = p1
+        x2, y2 = p2
+        for sample_idx in range(1, samples):
+            t = float(sample_idx) / float(samples)
+            point_x = x1 + (x2 - x1) * t
+            point_y = y1 + (y2 - y1) * t
+            point_radius = math.hypot(point_x, point_y)
+            point_position = (
+                ((math.degrees(math.atan2(point_y, point_x)) + 90.0) % 360.0) / 360.0
+            ) * float(total_length)
+            local_inner_radius = circular_labels_module._min_inner_feature_radius_at_position(
+                feature_inner_intervals,
+                point_position,
+                total_length,
+            )
+            local_outer_radius = circular_labels_module._max_outer_feature_radius_at_position(
+                feature_outer_intervals,
+                point_position,
+                total_length,
+            )
+            if local_inner_radius <= 0.0 or local_outer_radius <= 0.0:
+                continue
+            if (local_inner_radius + 0.5) < point_radius < (local_outer_radius - 0.5):
+                return True
+        return False
+
+    for label in inner_labels:
+        middle_point = (float(label["middle_x"]), float(label["middle_y"]))
+        leader_start = (
+            float(label.get("leader_start_x", label["start_x"])),
+            float(label.get("leader_start_y", label["start_y"])),
+        )
+        assert not segment_crosses_feature_annulus(middle_point, leader_start)
+
+
+def test_nc001454_tuckin_resolve_overlaps_inner_non_short_directional_labels_use_inward_feature_anchor() -> None:
+    external_labels, total_length, cfg, feature_dict = _load_nc001454_external_labels_with_inner_resolve(
+        label_font_size=14.0,
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="tuckin",
+    )
+    inner_labels = [label for label in external_labels if label.get("is_inner")]
+    assert inner_labels
+
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
+    track_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+    cds_ratio, offset = calculate_cds_ratio(cfg.canvas.circular.track_ratio, length_param, track_ratio_factor)
+    circular_arrow_length_bp = calculate_circular_arrow_length(total_length)
+
+    short_directional_feature_keys: set[tuple[float, float, float]] = set()
+    non_short_feature_inner_radius_by_key: dict[tuple[float, float, float], float] = {}
+    for feature_object in feature_dict.values():
+        if get_label_text(feature_object, label_filtering) == "":
+            continue
+        if str(getattr(feature_object, "strand", "")) != "negative":
+            continue
+
+        longest_segment_length = 0
+        longest_segment_start = 0
+        longest_segment_end = 0
+        longest_segment_middle = 0.0
+        coordinate_strand = "undefined"
+        feature_location_count = 0
+        for coordinate in feature_object.coordinates:
+            if feature_object.location[feature_location_count].kind == "line":
+                feature_location_count += 1
+                continue
+            coordinate_start = int(coordinate.start)
+            coordinate_end = int(coordinate.end)
+            coordinate_strand = str(feature_object.location[feature_location_count].strand)
+            interval_length = abs(int(coordinate_end - coordinate_start) + 1)
+            interval_middle = float(coordinate_end + coordinate_start) / 2.0
+            feature_location_count += 1
+            if interval_length > longest_segment_length:
+                longest_segment_start = coordinate_start
+                longest_segment_end = coordinate_end
+                longest_segment_middle = interval_middle
+                longest_segment_length = interval_length
+
+        track_id = int(getattr(feature_object, "feature_track_id", 0))
+        factors = calculate_feature_position_factors_circular(
+            total_length,
+            coordinate_strand,
+            cfg.canvas.circular.track_ratio,
+            cds_ratio,
+            offset,
+            cfg.canvas.circular.track_type,
+            cfg.canvas.strandedness,
+            track_id,
+        )
+        feature_middle_x = (float(cfg.canvas.circular.radius) * float(factors[1])) * math.cos(
+            math.radians(360.0 * (longest_segment_middle / total_length) - 90)
+        )
+        feature_middle_y = (float(cfg.canvas.circular.radius) * float(factors[1])) * math.sin(
+            math.radians(360.0 * (longest_segment_middle / total_length) - 90)
+        )
+        feature_inner_radius = float(cfg.canvas.circular.radius) * min(float(factors[0]), float(factors[2]))
+        key = (
+            round(feature_middle_x, 6),
+            round(feature_middle_y, 6),
+            round(longest_segment_middle, 6),
+        )
+        longest_segment_bp = abs(int(longest_segment_end - longest_segment_start))
+        is_short_directional = bool(getattr(feature_object, "is_directional", False)) and (
+            longest_segment_bp < circular_arrow_length_bp
+        )
+        if is_short_directional:
+            short_directional_feature_keys.add(key)
+        else:
+            non_short_feature_inner_radius_by_key[key] = feature_inner_radius
+
+    shifted_non_short_anchor_count = 0
+    checked_short_anchor_count = 0
+    for label in inner_labels:
+        key = (
+            round(float(label["feature_middle_x"]), 6),
+            round(float(label["feature_middle_y"]), 6),
+            round(float(label["middle"]), 6),
+        )
+        anchor_radius = math.hypot(
+            float(label.get("feature_anchor_x", label["feature_middle_x"])),
+            float(label.get("feature_anchor_y", label["feature_middle_y"])),
+        )
+        middle_radius = math.hypot(float(label["feature_middle_x"]), float(label["feature_middle_y"]))
+
+        if key in short_directional_feature_keys:
+            checked_short_anchor_count += 1
+            assert math.isclose(anchor_radius, middle_radius, abs_tol=1e-6)
+        elif key in non_short_feature_inner_radius_by_key:
+            shifted_non_short_anchor_count += 1
+            assert anchor_radius <= middle_radius - 0.5
+            assert math.isclose(
+                anchor_radius,
+                float(non_short_feature_inner_radius_by_key[key]),
+                abs_tol=1.5,
+            )
+
+    assert shifted_non_short_anchor_count > 0
+    if short_directional_feature_keys:
+        assert checked_short_anchor_count > 0
 
 
 def test_circular_assembly_reuses_precalculated_labels_once() -> None:
