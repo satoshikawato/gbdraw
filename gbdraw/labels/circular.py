@@ -728,6 +728,16 @@ def _resolve_label_leader_line_collisions(
                 if label_idx < len(labels) - 1
                 else float("inf")
             )
+            if label_idx == 0:
+                lower_bound = max(
+                    lower_bound,
+                    float(unwrapped_angles[-1]) - 360.0 + min_order_gap_deg,
+                )
+            elif label_idx == len(labels) - 1:
+                upper_bound = min(
+                    upper_bound,
+                    float(unwrapped_angles[0]) + 360.0 - min_order_gap_deg,
+                )
             if lower_bound >= upper_bound:
                 continue
 

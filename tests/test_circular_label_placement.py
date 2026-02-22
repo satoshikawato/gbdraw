@@ -508,6 +508,57 @@ def _load_nc001454_external_labels_with_inner_resolve(
     return external_labels, total_length, cfg, feature_dict
 
 
+def _load_nc001454_outer_labels_without_inner_resolve(
+    *,
+    label_font_size: float = 14.0,
+    strandedness: bool = True,
+    resolve_overlaps: bool = False,
+    track_type: str = "tuckin",
+) -> tuple[list[dict], int, GbdrawConfig]:
+    input_path = Path(__file__).parent / "test_inputs" / "NC_001454.1.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        show_labels=True,
+        strandedness=strandedness,
+        track_type=track_type,
+        resolve_overlaps=resolve_overlaps,
+        allow_inner_labels=False,
+        label_font_size=label_font_size,
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    default_colors = load_default_colors("", "default")
+    color_table = None
+    color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    labels = prepare_label_list(
+        feature_dict,
+        len(record.seq),
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        config_dict,
+        cfg=cfg,
+    )
+    external_labels = [label for label in labels if not label.get("is_embedded")]
+    outer_labels = [label for label in external_labels if not label.get("is_inner")]
+    return outer_labels, len(record.seq), cfg
+
+
 def _make_legend_collision_fixture() -> tuple[list[dict], int, SimpleNamespace, SimpleNamespace]:
     total_length = 4000
     labels = [
@@ -2247,6 +2298,39 @@ def test_nc001454_longest_coordinate_segment_drives_label_middle_and_embedding()
     ) % 360.0
     feature_middle_from_xy = (feature_middle_angle_deg / 360.0) * float(total_length)
     assert math.isclose(feature_middle_from_xy, 4313.0, abs_tol=0.5)
+
+
+def test_nc001454_tuckin_wraparound_guard_prevents_first_label_overtake() -> None:
+    outer_labels, total_length, _cfg = _load_nc001454_outer_labels_without_inner_resolve(
+        label_font_size=14.0,
+        strandedness=True,
+        resolve_overlaps=False,
+        track_type="tuckin",
+    )
+    assert outer_labels
+
+    labels = sorted((label.copy() for label in outer_labels), key=lambda label: float(label["middle"]))
+    unwrapped_angles = circular_labels_module._derive_monotonic_unwrapped_angles(labels, total_length)
+    assert all(unwrapped_angles[idx] < unwrapped_angles[idx + 1] for idx in range(len(unwrapped_angles) - 1))
+
+    max_allowed_span = 360.0 - circular_labels_module.LEADER_LABEL_MIN_ORDER_GAP_DEG
+    span = unwrapped_angles[-1] - unwrapped_angles[0]
+    assert span <= max_allowed_span + 1e-6
+
+    e1a_idx = next(
+        (idx for idx, label in enumerate(labels) if label.get("label_text") == "control protein E1A"),
+        None,
+    )
+    e4orf2_idx = next(
+        (idx for idx, label in enumerate(labels) if label.get("label_text") == "control protein E4orf2"),
+        None,
+    )
+    assert e1a_idx is not None
+    assert e4orf2_idx is not None
+
+    e1a_unwrapped = float(unwrapped_angles[e1a_idx])
+    e4orf2_unwrapped = float(unwrapped_angles[e4orf2_idx])
+    assert e4orf2_unwrapped <= e1a_unwrapped + max_allowed_span + 1e-6
 
 
 def test_nc001454_tuckin_resolve_overlaps_inner_labels_keep_bbox_inside_local_feature_tracks() -> None:
