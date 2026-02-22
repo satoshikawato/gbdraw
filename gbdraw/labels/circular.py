@@ -728,6 +728,16 @@ def _resolve_label_leader_line_collisions(
                 if label_idx < len(labels) - 1
                 else float("inf")
             )
+            if label_idx == 0:
+                lower_bound = max(
+                    lower_bound,
+                    float(unwrapped_angles[-1]) - 360.0 + min_order_gap_deg,
+                )
+            elif label_idx == len(labels) - 1:
+                upper_bound = min(
+                    upper_bound,
+                    float(unwrapped_angles[0]) + 360.0 - min_order_gap_deg,
+                )
             if lower_bound >= upper_bound:
                 continue
 
@@ -3596,27 +3606,19 @@ def prepare_label_list(
             is_embedded = False
             label_middle = 0
             coordinate_strand: str = "undefined"
-            feature_location_list = feature_object.location
             list_of_coordinates = feature_object.coordinates
             # `FeatureObject.strand` is derived at creation time; keep placement pure.
-
-            feature_location_count = 0
             for coordinate in list_of_coordinates:
-                if feature_location_list[feature_location_count].kind == "line":
-                    feature_location_count += 1
-                    continue
-                else:
-                    coordinate_start = int(coordinate.start)
-                    coordinate_end = int(coordinate.end)
-                    coordinate_strand = get_strand(coordinate.strand)
-                    interval_length = abs(int(coordinate_end - coordinate_start) + 1)
-                    interval_middle = int(coordinate_end + coordinate_start) / 2
-                    feature_location_count += 1
-                    if interval_length > longest_segment_length:
-                        longest_segment_start = coordinate_start
-                        longest_segment_end = coordinate_end
-                        longeset_segment_middle = interval_middle
-                        longest_segment_length = interval_length
+                coordinate_start = int(coordinate.start)
+                coordinate_end = int(coordinate.end)
+                coordinate_strand = get_strand(coordinate.strand)
+                interval_length = abs(int(coordinate_end - coordinate_start) + 1)
+                interval_middle = int(coordinate_end + coordinate_start) / 2
+                if interval_length > longest_segment_length:
+                    longest_segment_start = coordinate_start
+                    longest_segment_end = coordinate_end
+                    longeset_segment_middle = interval_middle
+                    longest_segment_length = interval_length
 
             # Get track_id for overlap resolution
             track_id = getattr(feature_object, 'feature_track_id', 0)

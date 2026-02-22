@@ -1,11 +1,15 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Mapping, Optional
 
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.features.shapes import (
+    normalize_feature_shape_overrides,
+    resolve_directional_feature_types,
+)
 
 
 class FeatureDrawingConfigurator:
@@ -28,6 +32,7 @@ class FeatureDrawingConfigurator:
         selected_features_set: List[str],
         config_dict: Dict,
         canvas_config,
+        feature_shapes: Mapping[str, str] | None = None,
         cfg: GbdrawConfig | None = None,
     ) -> None:
         """
@@ -42,6 +47,10 @@ class FeatureDrawingConfigurator:
         self.color_table: Optional[DataFrame] = color_table
         self.default_colors: DataFrame = default_colors
         self.selected_features_set: List[str] = selected_features_set
+        self.feature_shapes = normalize_feature_shape_overrides(feature_shapes)
+        self.directional_feature_types: set[str] = resolve_directional_feature_types(
+            self.feature_shapes
+        )
         self.canvas_config = canvas_config
         self.length_param = self.canvas_config.length_param
         cfg = cfg or GbdrawConfig.from_dict(config_dict)

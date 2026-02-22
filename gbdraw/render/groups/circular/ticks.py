@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import Optional, Literal
-
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
 from svgwrite.path import Path  # type: ignore[reportMissingImports]
@@ -11,6 +9,7 @@ from svgwrite.text import Text  # type: ignore[reportMissingImports]
 from ....canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ....svg.circular_ticks import (  # type: ignore[reportMissingImports]
+    get_circular_tick_intervals,
     generate_circular_tick_paths,
     generate_circular_tick_labels,
 )
@@ -51,24 +50,12 @@ class TickGroup:
         self.add_elements_to_group()
 
     def set_tick_size(self) -> None:
-        if self.manual_interval is not None and self.manual_interval > 0:
-            self.tick_large = self.manual_interval
-            self.tick_small = self.manual_interval // 10
-        else:
-            if self.total_len <= 30000:
-                tick_large, tick_small = 1000, 100
-            elif 30000 < self.total_len <= 50000:
-                tick_large, tick_small = 5000, 1000
-            elif 50000 < self.total_len <= 150000:
-                tick_large, tick_small = 10000, 1000
-            elif 150000 < self.total_len <= 1000000:
-                tick_large, tick_small = 50000, 10000
-            elif 1000000 < self.total_len <= 10000000:
-                tick_large, tick_small = 500000, 100000
-            else:
-                tick_large, tick_small = 1000000, 200000
-            self.tick_large: Literal[10000, 50000, 200000, 1000000] = tick_large
-            self.tick_small: Literal[1000, 10000, 50000, 200000] = tick_small
+        tick_large, tick_small = get_circular_tick_intervals(
+            self.total_len,
+            manual_interval=self.manual_interval,
+        )
+        self.tick_large: int = tick_large
+        self.tick_small: int = tick_small
 
     def add_elements_to_group(self) -> Group:
         ticks_large = list(range(0, self.total_len, self.tick_large))

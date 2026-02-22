@@ -18,7 +18,10 @@ from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
 from gbdraw.io.colors import load_default_colors
 from gbdraw.labels.filtering import preprocess_label_filtering
-from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
+from gbdraw.svg.circular_ticks import (
+    get_circular_tick_label_radius_bounds,
+    get_circular_tick_path_ratio_bounds,
+)
 from gbdraw.tracks import parse_track_specs
 from svgwrite import Drawing
 
@@ -28,6 +31,11 @@ SELECTED_FEATURES = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repea
 
 def _load_record():
     input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    return SeqIO.read(str(input_path), "genbank")
+
+
+def _load_nc001454_record():
+    input_path = Path(__file__).parent / "test_inputs" / "NC_001454.1.gbk"
     return SeqIO.read(str(input_path), "genbank")
 
 
@@ -407,6 +415,22 @@ def test_cli_feature_width_must_be_positive() -> None:
         circular_cli_module._get_args(["--gbk", "dummy.gb", "--feature_width", "-10"])
 
 
+@pytest.mark.parametrize(
+    "option",
+    [
+        "--gc_content_width",
+        "--gc_content_radius",
+        "--gc_skew_width",
+        "--gc_skew_radius",
+    ],
+)
+def test_cli_gc_track_width_radius_must_be_positive(option: str) -> None:
+    with pytest.raises(SystemExit):
+        circular_cli_module._get_args(["--gbk", "dummy.gb", option, "0"])
+    with pytest.raises(SystemExit):
+        circular_cli_module._get_args(["--gbk", "dummy.gb", option, "-10"])
+
+
 def test_cli_feature_width_forwards_internal_feature_track_spec(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     record = _load_record()
     captured: dict[str, Any] = {}
@@ -427,6 +451,95 @@ def test_cli_feature_width_forwards_internal_feature_track_spec(monkeypatch: pyt
     )
 
     assert captured["track_specs"] == ["features@w=42px"]
+
+
+def test_cli_gc_track_width_radius_forwards_internal_track_specs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    record = _load_record()
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, mode: [record])
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
+
+    def fake_assemble(*args, **kwargs):
+        captured["track_specs"] = kwargs.get("track_specs")
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+
+    circular_cli_module.circular_main(
+        [
+            "--gbk",
+            "dummy.gb",
+            "--gc_content_radius",
+            "0.74",
+            "--gc_content_width",
+            "22",
+            "--gc_skew_radius",
+            "0.68",
+            "--gc_skew_width",
+            "18",
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert captured["track_specs"] == [
+        "gc_content@r=0.74,w=22px",
+        "gc_skew@r=0.68,w=18px",
+    ]
+
+
+def test_cli_gc_track_width_radius_respects_suppress_flags(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    record = _load_record()
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, mode: [record])
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
+
+    def fake_assemble(*args, **kwargs):
+        captured["track_specs"] = kwargs.get("track_specs")
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+
+    with caplog.at_level("WARNING"):
+        circular_cli_module.circular_main(
+            [
+                "--gbk",
+                "dummy.gb",
+                "--suppress_gc",
+                "--suppress_skew",
+                "--gc_content_radius",
+                "0.74",
+                "--gc_content_width",
+                "22",
+                "--gc_skew_radius",
+                "0.68",
+                "--gc_skew_width",
+                "18",
+                "--format",
+                "svg",
+                "-o",
+                str(tmp_path / "out"),
+            ]
+        )
+
+    assert captured["track_specs"] is None
+    assert any("Ignoring --gc_content_width/--gc_content_radius" in msg for msg in caplog.messages)
+    assert any("Ignoring --gc_skew_width/--gc_skew_radius" in msg for msg in caplog.messages)
 
 
 def test_radius_mapper_uses_primary_feature_track_for_auto_relayout_with_resolve_overlaps() -> None:
@@ -675,6 +788,545 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
     )
     tick_annulus = (ticks_center * tick_min_ratio, ticks_center * tick_max_ratio)
     assert not _annulus_overlaps_band(tick_annulus, widened_band)
+
+
+@pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
+def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
+    track_type: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = _load_record()
+    config_dict = _make_config_dict(show_labels=False)
+    config_dict = modify_config_dict(
+        config_dict,
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type=track_type,
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    base_radius = float(cfg.canvas.circular.radius)
+    base_track_ratio = float(cfg.canvas.circular.track_ratio)
+    length_param = "short" if len(record.seq) < 50000 else "long"
+    default_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+
+    color_table, default_colors = preprocess_color_tables(None, load_default_colors("", "default"))
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        SELECTED_FEATURES,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+    all_feature_band = circular_assemble_module._compute_feature_band_bounds_px(
+        feature_dict,
+        len(record.seq),
+        base_radius_px=base_radius,
+        track_ratio=base_track_ratio,
+        length_param=length_param,
+        track_ratio_factor=default_ratio_factor,
+        cfg=cfg,
+    )
+    assert all_feature_band is not None
+
+    captured: dict[str, Any] = {}
+
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None):
+        captured["ticks"] = radius_override
+        return canvas
+
+    def fake_add_gc_content_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        gc_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        cfg=None,
+    ):
+        captured["gc_norm"] = norm_factor_override
+        captured["gc_width"] = track_width_override
+        return canvas
+
+    def fake_add_gc_skew_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        skew_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        cfg=None,
+    ):
+        captured["skew_norm"] = norm_factor_override
+        captured["skew_width"] = track_width_override
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "add_record_definition_group_on_canvas",
+        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None: canvas,
+    )
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "add_legend_group_on_canvas",
+        lambda canvas, canvas_config, legend_config, legend_table: canvas,
+    )
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+    )
+
+    tick_min_ratio, tick_max_ratio = get_circular_tick_path_ratio_bounds(
+        len(record.seq),
+        str(cfg.canvas.circular.track_type),
+        bool(cfg.canvas.strandedness),
+    )
+    ticks_center = float(captured.get("ticks") if captured.get("ticks") is not None else base_radius)
+    tick_annulus = (ticks_center * tick_min_ratio, ticks_center * tick_max_ratio)
+    assert not _annulus_overlaps_band(tick_annulus, all_feature_band)
+
+    tick_label_annulus = get_circular_tick_label_radius_bounds(
+        center_radius_px=ticks_center,
+        total_len=len(record.seq),
+        track_type=str(cfg.canvas.circular.track_type),
+        strandedness=bool(cfg.canvas.strandedness),
+        font_size=float(cfg.objects.ticks.tick_labels.font_size),
+        font_family=str(cfg.objects.text.font_family),
+        dpi=int(cfg.canvas.dpi),
+        manual_interval=cfg.objects.scale.interval,
+    )
+    if tick_label_annulus is not None:
+        assert not _annulus_overlaps_band(tick_label_annulus, all_feature_band)
+
+    default_gc_center = base_radius * float(cfg.canvas.circular.track_dict[length_param][track_type]["2"])
+    default_gc_width = base_radius * base_track_ratio * float(cfg.canvas.circular.track_ratio_factors[length_param][1])
+    gc_center = (
+        base_radius * float(captured["gc_norm"])
+        if captured.get("gc_norm") is not None
+        else default_gc_center
+    )
+    gc_width = float(captured["gc_width"]) if captured.get("gc_width") is not None else default_gc_width
+    gc_annulus = (gc_center - 0.5 * gc_width, gc_center + 0.5 * gc_width)
+    default_gc_annulus = (
+        default_gc_center - 0.5 * default_gc_width,
+        default_gc_center + 0.5 * default_gc_width,
+    )
+    assert not _annulus_overlaps_band(gc_annulus, all_feature_band)
+    assert not _annulus_overlaps_band(gc_annulus, tick_annulus)
+    if tick_label_annulus is not None:
+        assert not _annulus_overlaps_band(gc_annulus, tick_label_annulus)
+    if _annulus_overlaps_band(default_gc_annulus, all_feature_band):
+        assert gc_center < default_gc_center
+
+    default_skew_center = base_radius * float(cfg.canvas.circular.track_dict[length_param][track_type]["3"])
+    default_skew_width = base_radius * base_track_ratio * float(cfg.canvas.circular.track_ratio_factors[length_param][2])
+    skew_center = (
+        base_radius * float(captured["skew_norm"])
+        if captured.get("skew_norm") is not None
+        else default_skew_center
+    )
+    skew_width = float(captured["skew_width"]) if captured.get("skew_width") is not None else default_skew_width
+    skew_annulus = (skew_center - 0.5 * skew_width, skew_center + 0.5 * skew_width)
+    default_skew_annulus = (
+        default_skew_center - 0.5 * default_skew_width,
+        default_skew_center + 0.5 * default_skew_width,
+    )
+    assert not _annulus_overlaps_band(skew_annulus, all_feature_band)
+    assert not _annulus_overlaps_band(skew_annulus, tick_annulus)
+    assert not _annulus_overlaps_band(skew_annulus, gc_annulus)
+    if tick_label_annulus is not None:
+        assert not _annulus_overlaps_band(skew_annulus, tick_label_annulus)
+    if _annulus_overlaps_band(default_skew_annulus, gc_annulus):
+        assert skew_center < default_skew_center
+
+
+def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_annulus_on_nc001454(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = _load_nc001454_record()
+    config_dict = _make_config_dict(show_labels=True)
+    config_dict = modify_config_dict(
+        config_dict,
+        allow_inner_labels=False,
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    base_radius = float(cfg.canvas.circular.radius)
+    base_track_ratio = float(cfg.canvas.circular.track_ratio)
+
+    captured: dict[str, Any] = {}
+
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None):
+        captured["ticks"] = radius_override
+        return canvas
+
+    def fake_add_gc_content_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        gc_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        cfg=None,
+    ):
+        captured["gc_norm"] = norm_factor_override
+        captured["gc_width"] = track_width_override
+        return canvas
+
+    def fake_add_gc_skew_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        skew_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        cfg=None,
+    ):
+        captured["skew_norm"] = norm_factor_override
+        captured["skew_width"] = track_width_override
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "add_record_definition_group_on_canvas",
+        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None: canvas,
+    )
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "add_legend_group_on_canvas",
+        lambda canvas, canvas_config, legend_config, legend_table: canvas,
+    )
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+    )
+
+    tick_center = float(captured.get("ticks") if captured.get("ticks") is not None else base_radius)
+    tick_label_annulus = get_circular_tick_label_radius_bounds(
+        center_radius_px=tick_center,
+        total_len=len(record.seq),
+        track_type=str(cfg.canvas.circular.track_type),
+        strandedness=bool(cfg.canvas.strandedness),
+        font_size=float(cfg.objects.ticks.tick_labels.font_size),
+        font_family=str(cfg.objects.text.font_family),
+        dpi=int(cfg.canvas.dpi),
+        manual_interval=cfg.objects.scale.interval,
+    )
+    assert tick_label_annulus is not None
+
+    length_param = "short" if len(record.seq) < 50000 else "long"
+
+    default_gc_center = base_radius * float(cfg.canvas.circular.track_dict[length_param]["middle"]["2"])
+    default_gc_width = base_radius * base_track_ratio * float(cfg.canvas.circular.track_ratio_factors[length_param][1])
+    default_gc_annulus = (
+        default_gc_center - 0.5 * default_gc_width,
+        default_gc_center + 0.5 * default_gc_width,
+    )
+    gc_center = (
+        base_radius * float(captured["gc_norm"])
+        if captured.get("gc_norm") is not None
+        else default_gc_center
+    )
+    gc_width = float(captured["gc_width"]) if captured.get("gc_width") is not None else default_gc_width
+    gc_annulus = (gc_center - 0.5 * gc_width, gc_center + 0.5 * gc_width)
+
+    assert _annulus_overlaps_band(default_gc_annulus, tick_label_annulus)
+    assert not _annulus_overlaps_band(gc_annulus, tick_label_annulus)
+
+    default_skew_center = base_radius * float(cfg.canvas.circular.track_dict[length_param]["middle"]["3"])
+    default_skew_width = base_radius * base_track_ratio * float(cfg.canvas.circular.track_ratio_factors[length_param][2])
+    skew_center = (
+        base_radius * float(captured["skew_norm"])
+        if captured.get("skew_norm") is not None
+        else default_skew_center
+    )
+    skew_width = float(captured["skew_width"]) if captured.get("skew_width") is not None else default_skew_width
+    skew_annulus = (skew_center - 0.5 * skew_width, skew_center + 0.5 * skew_width)
+
+    assert not _annulus_overlaps_band(skew_annulus, tick_label_annulus)
+
+
+def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_on_nc001454(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = _load_nc001454_record()
+    config_dict = _make_config_dict(show_labels=True)
+    config_dict = modify_config_dict(
+        config_dict,
+        allow_inner_labels=False,
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="tuckin",
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    base_radius = float(cfg.canvas.circular.radius)
+    base_track_ratio = float(cfg.canvas.circular.track_ratio)
+    length_param = "short" if len(record.seq) < 50000 else "long"
+    default_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+
+    color_table, default_colors = preprocess_color_tables(None, load_default_colors("", "default"))
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        SELECTED_FEATURES,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+    all_feature_band = circular_assemble_module._compute_feature_band_bounds_px(
+        feature_dict,
+        len(record.seq),
+        base_radius_px=base_radius,
+        track_ratio=base_track_ratio,
+        length_param=length_param,
+        track_ratio_factor=default_ratio_factor,
+        cfg=cfg,
+    )
+    assert all_feature_band is not None
+
+    captured: dict[str, Any] = {}
+
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None):
+        captured["ticks"] = radius_override
+        return canvas
+
+    def fake_add_gc_content_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        gc_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        cfg=None,
+    ):
+        captured["gc_norm"] = norm_factor_override
+        captured["gc_width"] = track_width_override
+        return canvas
+
+    def fake_add_gc_skew_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        skew_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        cfg=None,
+    ):
+        captured["skew_norm"] = norm_factor_override
+        captured["skew_width"] = track_width_override
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "add_record_definition_group_on_canvas",
+        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None: canvas,
+    )
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "add_legend_group_on_canvas",
+        lambda canvas, canvas_config, legend_config, legend_table: canvas,
+    )
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+    )
+
+    tick_min_ratio, tick_max_ratio = get_circular_tick_path_ratio_bounds(
+        len(record.seq),
+        str(cfg.canvas.circular.track_type),
+        bool(cfg.canvas.strandedness),
+    )
+    ticks_center = float(captured.get("ticks") if captured.get("ticks") is not None else base_radius)
+    tick_annulus = (ticks_center * tick_min_ratio, ticks_center * tick_max_ratio)
+    assert not _annulus_overlaps_band(tick_annulus, all_feature_band)
+
+    tick_label_annulus = get_circular_tick_label_radius_bounds(
+        center_radius_px=ticks_center,
+        total_len=len(record.seq),
+        track_type=str(cfg.canvas.circular.track_type),
+        strandedness=bool(cfg.canvas.strandedness),
+        font_size=float(cfg.objects.ticks.tick_labels.font_size),
+        font_family=str(cfg.objects.text.font_family),
+        dpi=int(cfg.canvas.dpi),
+        manual_interval=cfg.objects.scale.interval,
+    )
+    if tick_label_annulus is not None:
+        assert not _annulus_overlaps_band(tick_label_annulus, all_feature_band)
+
+    default_gc_center = base_radius * float(cfg.canvas.circular.track_dict[length_param]["tuckin"]["2"])
+    default_gc_width = base_radius * base_track_ratio * float(cfg.canvas.circular.track_ratio_factors[length_param][1])
+    default_gc_annulus = (
+        default_gc_center - 0.5 * default_gc_width,
+        default_gc_center + 0.5 * default_gc_width,
+    )
+    gc_center = (
+        base_radius * float(captured["gc_norm"])
+        if captured.get("gc_norm") is not None
+        else default_gc_center
+    )
+    gc_width = float(captured["gc_width"]) if captured.get("gc_width") is not None else default_gc_width
+    gc_annulus = (gc_center - 0.5 * gc_width, gc_center + 0.5 * gc_width)
+
+    assert _annulus_overlaps_band(default_gc_annulus, all_feature_band)
+    assert not _annulus_overlaps_band(gc_annulus, all_feature_band)
+    assert not _annulus_overlaps_band(gc_annulus, tick_annulus)
+    if tick_label_annulus is not None:
+        assert not _annulus_overlaps_band(gc_annulus, tick_label_annulus)
+
+    default_skew_center = base_radius * float(cfg.canvas.circular.track_dict[length_param]["tuckin"]["3"])
+    default_skew_width = base_radius * base_track_ratio * float(cfg.canvas.circular.track_ratio_factors[length_param][2])
+    skew_center = (
+        base_radius * float(captured["skew_norm"])
+        if captured.get("skew_norm") is not None
+        else default_skew_center
+    )
+    skew_width = float(captured["skew_width"]) if captured.get("skew_width") is not None else default_skew_width
+    skew_annulus = (skew_center - 0.5 * skew_width, skew_center + 0.5 * skew_width)
+
+    assert not _annulus_overlaps_band(skew_annulus, all_feature_band)
+    assert not _annulus_overlaps_band(skew_annulus, tick_annulus)
+    assert not _annulus_overlaps_band(skew_annulus, gc_annulus)
+    if tick_label_annulus is not None:
+        assert not _annulus_overlaps_band(skew_annulus, tick_label_annulus)
+
+
+def test_resolve_overlaps_keeps_explicit_core_track_specs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = _load_nc001454_record()
+    config_dict = _make_config_dict(show_labels=True)
+    config_dict = modify_config_dict(
+        config_dict,
+        resolve_overlaps=True,
+        strandedness=False,
+        track_type="middle",
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    base_radius = float(cfg.canvas.circular.radius)
+
+    captured: dict[str, Any] = {}
+
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None):
+        captured["ticks"] = radius_override
+        return canvas
+
+    def fake_add_gc_content_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        gc_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        cfg=None,
+    ):
+        captured["gc_norm"] = norm_factor_override
+        captured["gc_width"] = track_width_override
+        return canvas
+
+    def fake_add_gc_skew_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        skew_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        cfg=None,
+    ):
+        captured["skew_norm"] = norm_factor_override
+        captured["skew_width"] = track_width_override
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "add_record_definition_group_on_canvas",
+        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None: canvas,
+    )
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "add_legend_group_on_canvas",
+        lambda canvas, canvas_config, legend_config, legend_table: canvas,
+    )
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        track_specs=[
+            "ticks@r=0.94",
+            "gc_content@r=0.74,w=22px",
+            "gc_skew@r=0.68,w=18px",
+        ],
+    )
+
+    assert math.isclose(float(captured["ticks"]), 0.94 * base_radius, rel_tol=1e-6, abs_tol=1e-6)
+    assert math.isclose(float(captured["gc_norm"]), 0.74, rel_tol=1e-6, abs_tol=1e-6)
+    assert math.isclose(float(captured["gc_width"]), 22.0, rel_tol=1e-6, abs_tol=1e-6)
+    assert math.isclose(float(captured["skew_norm"]), 0.68, rel_tol=1e-6, abs_tol=1e-6)
+    assert math.isclose(float(captured["skew_width"]), 18.0, rel_tol=1e-6, abs_tol=1e-6)
 
 
 def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> None:

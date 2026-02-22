@@ -53,6 +53,7 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--fasta [FASTA_FILE ...]] [-o OUTPUT] [-p PALETTE] [-t TABLE]
               [-d DEFAULT_COLORS] [-n NT] [-w WINDOW] [-s STEP]
               [--species SPECIES] [--strain STRAIN] [-k FEATURES]
+              [--feature_shape TYPE=SHAPE]
               [--block_stroke_color BLOCK_STROKE_COLOR]
               [--block_stroke_width BLOCK_STROKE_WIDTH]
               [--axis_stroke_color AXIS_STROKE_COLOR]
@@ -72,6 +73,10 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--inner_label_y_radius_offset INNER_LABEL_Y_RADIUS_OFFSET]
               [--scale_interval SCALE_INTERVAL]
               [--feature_width FEATURE_WIDTH]
+              [--gc_content_width GC_CONTENT_WIDTH]
+              [--gc_content_radius GC_CONTENT_RADIUS]
+              [--gc_skew_width GC_SKEW_WIDTH]
+              [--gc_skew_radius GC_SKEW_RADIUS]
               [--legend_box_size LEGEND_BOX_SIZE]
               [--legend_font_size LEGEND_FONT_SIZE]
 
@@ -103,6 +108,9 @@ options:
   -k, --features FEATURES
                         Comma-separated list of feature keys to draw (default:
                         CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)
+  --feature_shape TYPE=SHAPE
+                        Feature shape override (repeatable): TYPE=SHAPE where
+                        SHAPE is arrow or rectangle.
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
@@ -169,6 +177,18 @@ options:
   --feature_width FEATURE_WIDTH
                         Feature track width for circular mode (in px; must be
                         > 0).
+  --gc_content_width GC_CONTENT_WIDTH
+                        GC content track width for circular mode (in px; must
+                        be > 0).
+  --gc_content_radius GC_CONTENT_RADIUS
+                        GC content track center radius for circular mode (as a
+                        ratio of base radius; must be > 0).
+  --gc_skew_width GC_SKEW_WIDTH
+                        GC skew track width for circular mode (in px; must be
+                        > 0).
+  --gc_skew_radius GC_SKEW_RADIUS
+                        GC skew track center radius for circular mode (as a
+                        ratio of base radius; must be > 0).
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
                         96 dpi) for genomes <= 50 kb, 20 for genomes >= 50
@@ -188,6 +208,7 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [-s STEP] [--separate_strands] [--show_gc] [--show_skew]
               [--align_center] [--evalue EVALUE] [--bitscore BITSCORE]
               [--identity IDENTITY] [-k FEATURES]
+              [--feature_shape TYPE=SHAPE]
               [--block_stroke_color BLOCK_STROKE_COLOR]
               [--block_stroke_width BLOCK_STROKE_WIDTH]
               [--axis_stroke_color AXIS_STROKE_COLOR]
@@ -258,6 +279,9 @@ options:
   -k, --features FEATURES
                         Comma-separated list of feature keys to draw (default:
                         CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)
+  --feature_shape TYPE=SHAPE
+                        Feature shape override (repeatable): TYPE=SHAPE where
+                        SHAPE is arrow or rectangle.
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH

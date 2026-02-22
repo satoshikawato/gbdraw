@@ -74,3 +74,54 @@ def test_arrange_feature_tracks_avoids_false_displacement_for_negative_multipart
     assert arranged["a"].feature_track_id == -1
     assert arranged["b"].feature_track_id == -1
     assert arranged["c"].feature_track_id == -1
+
+
+def test_arrange_feature_tracks_non_stranded_resolve_keeps_legacy_indices_when_split_disabled() -> None:
+    feature_dict = {
+        "a": _make_feature("a", "positive", [(100, 300)]),
+        "b": _make_feature("b", "negative", [(120, 280)]),
+        "c": _make_feature("c", "negative", [(130, 260)]),
+        "d": _make_feature("d", "positive", [(140, 240)]),
+        "e": _make_feature("e", "negative", [(700, 730)]),
+    }
+
+    arranged = arrange_feature_tracks(
+        feature_dict=feature_dict,
+        separate_strands=False,
+        resolve_overlaps=True,
+        split_overlaps_by_strand=False,
+        genome_length=1000,
+    )
+
+    assert arranged["a"].feature_track_id == 0
+    assert arranged["b"].feature_track_id == 1
+    assert arranged["c"].feature_track_id == 2
+    assert arranged["d"].feature_track_id == 3
+    assert arranged["e"].feature_track_id == 0
+
+
+def test_arrange_feature_tracks_non_stranded_resolve_splits_inner_outer_indices() -> None:
+    feature_dict = {
+        "a": _make_feature("a", "positive", [(100, 300)]),
+        "b": _make_feature("b", "negative", [(120, 280)]),
+        "c": _make_feature("c", "negative", [(130, 260)]),
+        "d": _make_feature("d", "positive", [(140, 240)]),
+        "e": _make_feature("e", "negative", [(700, 730)]),
+    }
+
+    arranged = arrange_feature_tracks(
+        feature_dict=feature_dict,
+        separate_strands=False,
+        resolve_overlaps=True,
+        split_overlaps_by_strand=True,
+        genome_length=1000,
+    )
+
+    # Center track remains shared across strands.
+    assert arranged["a"].feature_track_id == 0
+    assert arranged["e"].feature_track_id == 0
+
+    # Inner/outer displacement tracks are resolved independently.
+    assert arranged["b"].feature_track_id == -1
+    assert arranged["c"].feature_track_id == -2
+    assert arranged["d"].feature_track_id == 1

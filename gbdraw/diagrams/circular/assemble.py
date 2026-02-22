@@ -40,7 +40,10 @@ from ...layout.circular import calculate_feature_position_factors_circular  # ty
 from ...layout.common import calculate_cds_ratio  # type: ignore[reportMissingImports]
 from ...legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
-from ...svg.circular_ticks import get_circular_tick_path_ratio_bounds  # type: ignore[reportMissingImports]
+from ...svg.circular_ticks import (  # type: ignore[reportMissingImports]
+    get_circular_tick_label_radius_bounds,
+    get_circular_tick_path_ratio_bounds,
+)
 from ...tracks import TrackSpec  # type: ignore[reportMissingImports]
 
 from .builders import (
@@ -722,6 +725,17 @@ def _track_spec_has_explicit_center(ts: TrackSpec | None) -> bool:
     return (radius_spec is not None) or (inner_spec is not None and outer_spec is not None)
 
 
+def _track_spec_has_explicit_width(ts: TrackSpec | None) -> bool:
+    """Whether TrackSpec placement explicitly sets track width."""
+    if ts is None or ts.placement is None:
+        return False
+    placement = ts.placement
+    if not hasattr(placement, "radius"):
+        return False
+    width_spec = getattr(placement, "width", None)
+    return width_spec is not None
+
+
 def _resolve_feature_track_ratio_factor_override(
     ts: TrackSpec | None,
     *,
@@ -982,6 +996,174 @@ def _arena_from_center_and_width(center_px: float | None, width_px: float | None
     return inner_px, outer_px
 
 
+def _annulus_from_center_and_width(center_px: float, width_px: float) -> tuple[float, float]:
+    """Return annulus bounds from center radius and width."""
+    half_width = max(0.0, 0.5 * float(width_px))
+    inner = float(center_px) - half_width
+    outer = float(center_px) + half_width
+    if outer < inner:
+        inner, outer = outer, inner
+    return inner, outer
+
+
+def _annulus_overlaps_band(
+    annulus: tuple[float, float],
+    band: tuple[float, float],
+) -> bool:
+    """Whether annulus intersects a forbidden band."""
+    annulus_inner, annulus_outer = sorted((float(annulus[0]), float(annulus[1])))
+    band_inner, band_outer = sorted((float(band[0]), float(band[1])))
+    return (
+        annulus_inner < (band_outer - FEATURE_BAND_EPSILON)
+        and annulus_outer > (band_inner + FEATURE_BAND_EPSILON)
+    )
+
+
+def _annulus_overlaps_any_band(
+    annulus: tuple[float, float],
+    forbidden_bands: list[tuple[float, float]],
+) -> bool:
+    """Whether annulus intersects any forbidden band."""
+    return any(_annulus_overlaps_band(annulus, band) for band in forbidden_bands)
+
+
+def _resolve_ratio_annulus_center_avoiding_forbidden_bands(
+    *,
+    current_center_px: float,
+    ratio_bounds: tuple[float, float],
+    forbidden_bands: list[tuple[float, float]],
+    prefer_inside: bool = True,
+) -> float | None:
+    """Resolve center for ratio-scaled annulus (ticks), prioritizing inward moves."""
+    ratio_min, ratio_max = sorted((float(ratio_bounds[0]), float(ratio_bounds[1])))
+    if ratio_min <= 0.0 or ratio_max <= 0.0:
+        return None
+
+    if not forbidden_bands:
+        return float(current_center_px)
+
+    def annulus_for_center(center_px: float) -> tuple[float, float]:
+        return _tick_annulus_for_center(center_px, (ratio_min, ratio_max))
+
+    current = float(current_center_px)
+    if current > FEATURE_BAND_EPSILON and not _annulus_overlaps_any_band(
+        annulus_for_center(current), forbidden_bands
+    ):
+        return current
+
+    inside_candidates: list[float] = []
+    outside_candidates: list[float] = []
+    for band_inner, band_outer in forbidden_bands:
+        low, high = sorted((float(band_inner), float(band_outer)))
+        inside_center = (low - FEATURE_BAND_EPSILON) / ratio_max
+        outside_center = (high + FEATURE_BAND_EPSILON) / ratio_min
+        if inside_center > FEATURE_BAND_EPSILON:
+            inside_candidates.append(float(inside_center))
+        if outside_center > FEATURE_BAND_EPSILON:
+            outside_candidates.append(float(outside_center))
+
+    def pick_valid(candidates: list[float]) -> float | None:
+        for candidate in sorted(candidates, key=lambda value: (abs(value - current), value)):
+            if _annulus_overlaps_any_band(annulus_for_center(candidate), forbidden_bands):
+                continue
+            return float(candidate)
+        return None
+
+    if prefer_inside:
+        resolved = pick_valid(inside_candidates)
+        if resolved is not None:
+            return resolved
+        return pick_valid(outside_candidates)
+
+    combined_candidates = inside_candidates + outside_candidates
+    return pick_valid(combined_candidates)
+
+
+def _resolve_fixed_width_annulus_center_avoiding_forbidden_bands(
+    *,
+    current_center_px: float,
+    width_px: float,
+    forbidden_bands: list[tuple[float, float]],
+    prefer_inside: bool = True,
+) -> float | None:
+    """Resolve center for fixed-width annulus (GC tracks), prioritizing inward moves."""
+    if width_px < 0:
+        return None
+    if not forbidden_bands:
+        return float(current_center_px)
+
+    current = float(current_center_px)
+    annulus = _annulus_from_center_and_width(current, float(width_px))
+    if current > FEATURE_BAND_EPSILON and not _annulus_overlaps_any_band(annulus, forbidden_bands):
+        return current
+
+    half_width = max(0.0, 0.5 * float(width_px))
+    inside_candidates: list[float] = []
+    outside_candidates: list[float] = []
+    for band_inner, band_outer in forbidden_bands:
+        low, high = sorted((float(band_inner), float(band_outer)))
+        inside_center = low - half_width - FEATURE_BAND_EPSILON
+        outside_center = high + half_width + FEATURE_BAND_EPSILON
+        if inside_center > FEATURE_BAND_EPSILON:
+            inside_candidates.append(float(inside_center))
+        if outside_center > FEATURE_BAND_EPSILON:
+            outside_candidates.append(float(outside_center))
+
+    def pick_valid(candidates: list[float]) -> float | None:
+        for candidate in sorted(candidates, key=lambda value: (abs(value - current), value)):
+            candidate_annulus = _annulus_from_center_and_width(candidate, float(width_px))
+            if _annulus_overlaps_any_band(candidate_annulus, forbidden_bands):
+                continue
+            return float(candidate)
+        return None
+
+    if prefer_inside:
+        resolved = pick_valid(inside_candidates)
+        if resolved is not None:
+            return resolved
+        return pick_valid(outside_candidates)
+
+    return pick_valid(inside_candidates + outside_candidates)
+
+
+def _shrink_fixed_width_annulus_to_avoid_forbidden_bands(
+    *,
+    center_px: float,
+    current_width_px: float,
+    forbidden_bands: list[tuple[float, float]],
+) -> float | None:
+    """Shrink fixed-width annulus around center so it avoids all forbidden bands."""
+    if current_width_px < 0:
+        return None
+    if not forbidden_bands:
+        return float(current_width_px)
+
+    center = float(center_px)
+    if center <= FEATURE_BAND_EPSILON:
+        return None
+
+    max_half_width = float("inf")
+    for band_inner, band_outer in forbidden_bands:
+        low, high = sorted((float(band_inner), float(band_outer)))
+        if center <= low:
+            max_half_width = min(max_half_width, low - FEATURE_BAND_EPSILON - center)
+        elif center >= high:
+            max_half_width = min(max_half_width, center - (high + FEATURE_BAND_EPSILON))
+        else:
+            # Center inside forbidden band: shrinking alone cannot resolve overlap.
+            return None
+
+    if not math.isfinite(max_half_width):
+        return float(current_width_px)
+    if max_half_width < 0.0:
+        return None
+
+    shrunk_width = min(float(current_width_px), 2.0 * max_half_width)
+    if shrunk_width < 0.0:
+        return None
+    return float(shrunk_width)
+
+
 def _tick_annulus_for_center(
     center_radius_px: float,
     tick_ratio_bounds: tuple[float, float],
@@ -1094,6 +1276,16 @@ def add_record_on_circular_canvas(
 
     show_features = features_ts is None or features_ts.show
     show_external_labels = show_labels_base and (labels_ts is None or labels_ts.show) and show_features
+    core_track_overlap_relayout_enabled = (
+        show_features
+        and bool(cfg.canvas.resolve_overlaps)
+        and (not bool(cfg.canvas.strandedness))
+    )
+    split_overlaps_by_strand = (
+        bool(cfg.canvas.resolve_overlaps)
+        and (not bool(cfg.canvas.strandedness))
+        and str(cfg.canvas.circular.track_type).strip().lower() == "middle"
+    )
 
     feature_track_ratio_factor_override: float | None = None
     if show_features:
@@ -1105,7 +1297,9 @@ def add_record_on_circular_canvas(
 
     precomputed_feature_dict: dict | None = None
     should_precompute_feature_dict = show_features and (
-        show_external_labels or feature_track_ratio_factor_override is not None
+        show_external_labels
+        or feature_track_ratio_factor_override is not None
+        or core_track_overlap_relayout_enabled
     )
     if should_precompute_feature_dict:
         label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
@@ -1120,6 +1314,25 @@ def add_record_on_circular_canvas(
             cfg.canvas.strandedness,
             cfg.canvas.resolve_overlaps,
             label_filtering,
+            split_overlaps_by_strand=split_overlaps_by_strand,
+            directional_feature_types=feature_config.directional_feature_types,
+        )
+
+    rendered_feature_band_all_tracks: tuple[float, float] | None = None
+    if core_track_overlap_relayout_enabled and precomputed_feature_dict is not None:
+        rendered_feature_track_ratio_factor = (
+            float(feature_track_ratio_factor_override)
+            if feature_track_ratio_factor_override is not None
+            else float(cfg.canvas.circular.track_ratio_factors[str(canvas_config.length_param)][0])
+        )
+        rendered_feature_band_all_tracks = _compute_feature_band_bounds_px(
+            precomputed_feature_dict,
+            len(gb_record.seq),
+            base_radius_px=float(canvas_config.radius),
+            track_ratio=float(canvas_config.track_ratio),
+            length_param=str(canvas_config.length_param),
+            track_ratio_factor=rendered_feature_track_ratio_factor,
+            cfg=cfg,
         )
 
     feature_radius_mapper: Callable[[float], float] | None = None
@@ -1284,11 +1497,42 @@ def add_record_on_circular_canvas(
             canvas, gb_record, canvas_config, species, strain, config_dict, cfg=cfg
         )
 
+    resolved_outer_core_track_annuli: list[tuple[float, float]] = []
+
     ticks_ts = ts_by_kind.get("ticks")
     if ticks_ts is None or ticks_ts.show:
         ticks_radius_px, _ = _resolve_track_center_and_width_with_autorelayout("ticks", ticks_ts)
         ticks_has_explicit_center = _track_spec_has_explicit_center(ticks_ts)
+        tick_ratio_bounds = get_circular_tick_path_ratio_bounds(
+            len(gb_record.seq),
+            str(cfg.canvas.circular.track_type),
+            bool(cfg.canvas.strandedness),
+        )
+        default_ticks_radius_px = float(canvas_config.radius)
+        effective_ticks_radius = (
+            float(ticks_radius_px) if ticks_radius_px is not None else default_ticks_radius_px
+        )
         if (
+            core_track_overlap_relayout_enabled
+            and (rendered_feature_band_all_tracks is not None)
+            and (not ticks_has_explicit_center)
+        ):
+            adjusted_ticks_radius = _resolve_ratio_annulus_center_avoiding_forbidden_bands(
+                current_center_px=effective_ticks_radius,
+                ratio_bounds=tick_ratio_bounds,
+                forbidden_bands=[rendered_feature_band_all_tracks],
+                prefer_inside=True,
+            )
+            if adjusted_ticks_radius is not None:
+                effective_ticks_radius = float(adjusted_ticks_radius)
+                if ticks_radius_px is not None or not math.isclose(
+                    effective_ticks_radius,
+                    default_ticks_radius_px,
+                    rel_tol=1e-9,
+                    abs_tol=1e-9,
+                ):
+                    ticks_radius_px = effective_ticks_radius
+        elif (
             auto_relayout_active
             and show_features
             and (feature_track_ratio_factor_override is not None)
@@ -1296,14 +1540,6 @@ def add_record_on_circular_canvas(
             and (overridden_primary_feature_band is not None)
             and (not ticks_has_explicit_center)
         ):
-            tick_ratio_bounds = get_circular_tick_path_ratio_bounds(
-                len(gb_record.seq),
-                str(cfg.canvas.circular.track_type),
-                bool(cfg.canvas.strandedness),
-            )
-            effective_ticks_radius = (
-                float(ticks_radius_px) if ticks_radius_px is not None else float(canvas_config.radius)
-            )
             if _tick_annulus_overlaps_feature_band(
                 effective_ticks_radius,
                 tick_ratio_bounds,
@@ -1318,6 +1554,26 @@ def add_record_on_circular_canvas(
                 )
                 if adjusted_ticks_radius is not None:
                     ticks_radius_px = float(adjusted_ticks_radius)
+
+        final_ticks_center = (
+            float(ticks_radius_px) if ticks_radius_px is not None else default_ticks_radius_px
+        )
+        if core_track_overlap_relayout_enabled:
+            resolved_outer_core_track_annuli.append(
+                _tick_annulus_for_center(final_ticks_center, tick_ratio_bounds)
+            )
+            tick_label_annulus = get_circular_tick_label_radius_bounds(
+                center_radius_px=final_ticks_center,
+                total_len=len(gb_record.seq),
+                track_type=str(cfg.canvas.circular.track_type),
+                strandedness=bool(cfg.canvas.strandedness),
+                font_size=float(cfg.objects.ticks.tick_labels.font_size),
+                font_family=str(cfg.objects.text.font_family),
+                dpi=int(canvas_config.dpi),
+                manual_interval=cfg.objects.scale.interval,
+            )
+            if tick_label_annulus is not None:
+                resolved_outer_core_track_annuli.append(tick_label_annulus)
         canvas = add_tick_group_on_canvas(
             canvas, gb_record, canvas_config, config_dict, radius_override=ticks_radius_px, cfg=cfg
         )
@@ -1330,6 +1586,74 @@ def add_record_on_circular_canvas(
     gc_ts = ts_by_kind.get("gc_content")
     if canvas_config.show_gc and (gc_ts is None or gc_ts.show):
         gc_center_px, gc_width_px = _resolve_track_center_and_width_with_autorelayout("gc_content", gc_ts)
+        gc_has_explicit_center = _track_spec_has_explicit_center(gc_ts)
+        gc_has_explicit_width = _track_spec_has_explicit_width(gc_ts)
+        default_gc_center = _default_track_center_radius_px(
+            "gc_content",
+            canvas_config=canvas_config,
+            cfg=cfg,
+        )
+        default_gc_width = (
+            float(canvas_config.radius)
+            * float(canvas_config.track_ratio)
+            * float(canvas_config.track_ratio_factors[1])
+        )
+        effective_gc_center = (
+            float(gc_center_px)
+            if gc_center_px is not None
+            else (float(default_gc_center) if default_gc_center is not None else None)
+        )
+        effective_gc_width = float(gc_width_px) if gc_width_px is not None else float(default_gc_width)
+
+        if (
+            core_track_overlap_relayout_enabled
+            and (rendered_feature_band_all_tracks is not None)
+            and (effective_gc_center is not None)
+        ):
+            forbidden_bands = [rendered_feature_band_all_tracks, *resolved_outer_core_track_annuli]
+            gc_annulus = _annulus_from_center_and_width(effective_gc_center, effective_gc_width)
+            if _annulus_overlaps_any_band(gc_annulus, forbidden_bands):
+                if not gc_has_explicit_center:
+                    adjusted_gc_center = _resolve_fixed_width_annulus_center_avoiding_forbidden_bands(
+                        current_center_px=effective_gc_center,
+                        width_px=effective_gc_width,
+                        forbidden_bands=forbidden_bands,
+                        prefer_inside=True,
+                    )
+                    if adjusted_gc_center is not None:
+                        effective_gc_center = float(adjusted_gc_center)
+                gc_annulus = _annulus_from_center_and_width(effective_gc_center, effective_gc_width)
+                if _annulus_overlaps_any_band(gc_annulus, forbidden_bands) and not gc_has_explicit_width:
+                    shrunk_gc_width = _shrink_fixed_width_annulus_to_avoid_forbidden_bands(
+                        center_px=effective_gc_center,
+                        current_width_px=effective_gc_width,
+                        forbidden_bands=forbidden_bands,
+                    )
+                    if shrunk_gc_width is not None:
+                        effective_gc_width = float(shrunk_gc_width)
+
+            final_gc_annulus = _annulus_from_center_and_width(effective_gc_center, effective_gc_width)
+            if not _annulus_overlaps_any_band(final_gc_annulus, forbidden_bands):
+                if default_gc_center is None:
+                    if gc_center_px is not None:
+                        gc_center_px = float(effective_gc_center)
+                elif gc_center_px is not None or not math.isclose(
+                    float(effective_gc_center),
+                    float(default_gc_center),
+                    rel_tol=1e-9,
+                    abs_tol=1e-9,
+                ):
+                    gc_center_px = float(effective_gc_center)
+
+                if gc_width_px is not None or not math.isclose(
+                    float(effective_gc_width),
+                    float(default_gc_width),
+                    rel_tol=1e-9,
+                    abs_tol=1e-9,
+                ):
+                    gc_width_px = float(effective_gc_width)
+                resolved_outer_core_track_annuli.append(final_gc_annulus)
+
         norm_factor_override = (gc_center_px / canvas_config.radius) if gc_center_px is not None else None
         canvas = add_gc_content_group_on_canvas(
             canvas,
@@ -1346,6 +1670,74 @@ def add_record_on_circular_canvas(
     skew_ts = ts_by_kind.get("gc_skew")
     if canvas_config.show_skew and (skew_ts is None or skew_ts.show):
         skew_center_px, skew_width_px = _resolve_track_center_and_width_with_autorelayout("gc_skew", skew_ts)
+        skew_has_explicit_center = _track_spec_has_explicit_center(skew_ts)
+        skew_has_explicit_width = _track_spec_has_explicit_width(skew_ts)
+        default_skew_center = _default_track_center_radius_px(
+            "gc_skew",
+            canvas_config=canvas_config,
+            cfg=cfg,
+        )
+        default_skew_width = (
+            float(canvas_config.radius)
+            * float(canvas_config.track_ratio)
+            * float(canvas_config.track_ratio_factors[2])
+        )
+        effective_skew_center = (
+            float(skew_center_px)
+            if skew_center_px is not None
+            else (float(default_skew_center) if default_skew_center is not None else None)
+        )
+        effective_skew_width = float(skew_width_px) if skew_width_px is not None else float(default_skew_width)
+
+        if (
+            core_track_overlap_relayout_enabled
+            and (rendered_feature_band_all_tracks is not None)
+            and (effective_skew_center is not None)
+        ):
+            forbidden_bands = [rendered_feature_band_all_tracks, *resolved_outer_core_track_annuli]
+            skew_annulus = _annulus_from_center_and_width(effective_skew_center, effective_skew_width)
+            if _annulus_overlaps_any_band(skew_annulus, forbidden_bands):
+                if not skew_has_explicit_center:
+                    adjusted_skew_center = _resolve_fixed_width_annulus_center_avoiding_forbidden_bands(
+                        current_center_px=effective_skew_center,
+                        width_px=effective_skew_width,
+                        forbidden_bands=forbidden_bands,
+                        prefer_inside=True,
+                    )
+                    if adjusted_skew_center is not None:
+                        effective_skew_center = float(adjusted_skew_center)
+                skew_annulus = _annulus_from_center_and_width(effective_skew_center, effective_skew_width)
+                if _annulus_overlaps_any_band(skew_annulus, forbidden_bands) and not skew_has_explicit_width:
+                    shrunk_skew_width = _shrink_fixed_width_annulus_to_avoid_forbidden_bands(
+                        center_px=effective_skew_center,
+                        current_width_px=effective_skew_width,
+                        forbidden_bands=forbidden_bands,
+                    )
+                    if shrunk_skew_width is not None:
+                        effective_skew_width = float(shrunk_skew_width)
+
+            final_skew_annulus = _annulus_from_center_and_width(effective_skew_center, effective_skew_width)
+            if not _annulus_overlaps_any_band(final_skew_annulus, forbidden_bands):
+                if default_skew_center is None:
+                    if skew_center_px is not None:
+                        skew_center_px = float(effective_skew_center)
+                elif skew_center_px is not None or not math.isclose(
+                    float(effective_skew_center),
+                    float(default_skew_center),
+                    rel_tol=1e-9,
+                    abs_tol=1e-9,
+                ):
+                    skew_center_px = float(effective_skew_center)
+
+                if skew_width_px is not None or not math.isclose(
+                    float(effective_skew_width),
+                    float(default_skew_width),
+                    rel_tol=1e-9,
+                    abs_tol=1e-9,
+                ):
+                    skew_width_px = float(effective_skew_width)
+                resolved_outer_core_track_annuli.append(final_skew_annulus)
+
         norm_factor_override = (skew_center_px / canvas_config.radius) if skew_center_px is not None else None
         canvas = add_gc_skew_group_on_canvas(
             canvas,

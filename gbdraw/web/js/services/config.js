@@ -68,6 +68,21 @@ const buildSessionFilename = (title) => {
   return `${safe}.gbdraw-session.json`;
 };
 
+const normalizeFeatureShape = (value) => (String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle');
+
+const normalizeFeatureShapes = (featureShapes) => {
+  const normalized = {};
+  if (!featureShapes || typeof featureShapes !== 'object' || Array.isArray(featureShapes)) {
+    return normalized;
+  }
+  Object.entries(featureShapes).forEach(([featureTypeRaw, shape]) => {
+    const featureType = String(featureTypeRaw || '').trim();
+    if (!featureType) return;
+    normalized[featureType] = normalizeFeatureShape(shape);
+  });
+  return normalized;
+};
+
 let lastSessionFilename = null;
 
 const buildConfigData = () => ({
@@ -111,6 +126,7 @@ const applyConfigData = (data) => {
   } else if (!['above', 'middle', 'below'].includes(state.form.linear_track_layout)) {
     state.form.linear_track_layout = 'middle';
   }
+  state.adv.feature_shapes = normalizeFeatureShapes(state.adv.feature_shapes);
   if (data.losat) safeDeepMerge(state.losat, data.losat);
   if (data.colors) {
     const normalized = {};

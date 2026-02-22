@@ -54,6 +54,11 @@ class LabelsGroup:
         self.show_labels = (raw_show_labels != "none") if isinstance(raw_show_labels, str) else bool(raw_show_labels)
 
         self.resolve_overlaps = cfg.canvas.resolve_overlaps
+        self.split_overlaps_by_strand = (
+            bool(self.resolve_overlaps)
+            and (not bool(self.canvas_config.strandedness))
+            and str(cfg.canvas.circular.track_type).strip().lower() == "middle"
+        )
         self.label_stroke_width = cfg.labels.stroke_width.for_length_param(self.canvas_config.length_param)
         self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
         self.label_filtering = cfg.labels.filtering.as_dict()
@@ -81,6 +86,8 @@ class LabelsGroup:
                 self.canvas_config.strandedness,
                 self.resolve_overlaps,
                 label_filtering,
+                split_overlaps_by_strand=self.split_overlaps_by_strand,
+                directional_feature_types=self.feature_config.directional_feature_types,
             )
 
         record_length: int = len(self.gb_record.seq)

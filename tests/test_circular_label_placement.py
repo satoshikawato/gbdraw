@@ -15,6 +15,7 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.core.sequence import determine_length_parameter
+from gbdraw.features.coordinates import get_strand
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
 from gbdraw.io.colors import load_default_colors, read_color_table
@@ -441,7 +442,7 @@ def _load_nc001879_outer_labels_with_priority_and_color_table(
     return outer_labels, total_length, cfg
 
 
-def _load_nc001454_external_labels_with_inner_resolve(
+def _load_nc001454_labels_with_inner_resolve(
     *,
     label_font_size: float = 14.0,
     strandedness: bool = False,
@@ -487,8 +488,75 @@ def _load_nc001454_external_labels_with_inner_resolve(
         config_dict,
         cfg=cfg,
     )
+    return labels, len(record.seq), cfg, feature_dict
+
+
+def _load_nc001454_external_labels_with_inner_resolve(
+    *,
+    label_font_size: float = 14.0,
+    strandedness: bool = False,
+    resolve_overlaps: bool = True,
+    track_type: str = "tuckin",
+) -> tuple[list[dict], int, GbdrawConfig, dict]:
+    labels, total_length, cfg, feature_dict = _load_nc001454_labels_with_inner_resolve(
+        label_font_size=label_font_size,
+        strandedness=strandedness,
+        resolve_overlaps=resolve_overlaps,
+        track_type=track_type,
+    )
     external_labels = [label for label in labels if not label.get("is_embedded")]
-    return external_labels, len(record.seq), cfg, feature_dict
+    return external_labels, total_length, cfg, feature_dict
+
+
+def _load_nc001454_outer_labels_without_inner_resolve(
+    *,
+    label_font_size: float = 14.0,
+    strandedness: bool = True,
+    resolve_overlaps: bool = False,
+    track_type: str = "tuckin",
+) -> tuple[list[dict], int, GbdrawConfig]:
+    input_path = Path(__file__).parent / "test_inputs" / "NC_001454.1.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        show_labels=True,
+        strandedness=strandedness,
+        track_type=track_type,
+        resolve_overlaps=resolve_overlaps,
+        allow_inner_labels=False,
+        label_font_size=label_font_size,
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    default_colors = load_default_colors("", "default")
+    color_table = None
+    color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    labels = prepare_label_list(
+        feature_dict,
+        len(record.seq),
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        config_dict,
+        cfg=cfg,
+    )
+    external_labels = [label for label in labels if not label.get("is_embedded")]
+    outer_labels = [label for label in external_labels if not label.get("is_inner")]
+    return outer_labels, len(record.seq), cfg
 
 
 def _make_legend_collision_fixture() -> tuple[list[dict], int, SimpleNamespace, SimpleNamespace]:
@@ -1769,7 +1837,9 @@ def test_hmmtdna_resolve_overlaps_keeps_outer_labels_outside_feature_tracks() ->
     assert external_labels
     assert any(int(label.get("track_id", 0)) > 0 for label in external_labels)
     assert _count_overlaps(external_labels, total_length) == 0
-    assert _count_overlaps_with_min_gap(external_labels, total_length) <= 1
+    # Longest-segment label anchoring for multipart features can shift dense clusters
+    # while still preserving zero plain overlaps and feature-track clearances.
+    assert _count_overlaps_with_min_gap(external_labels, total_length) <= 3
 
     length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
     track_ratio_factor = cfg.canvas.circular.track_ratio_factors[length_param][0]
@@ -1973,19 +2043,12 @@ def test_hmmtdna_resolve_overlaps_short_directional_features_use_center_anchor()
         longest_segment_end = 0
         longest_segment_middle = 0.0
         coordinate_strand = "undefined"
-
-        feature_location_count = 0
         for coordinate in feature_object.coordinates:
-            if feature_object.location[feature_location_count].kind == "line":
-                feature_location_count += 1
-                continue
-
             coordinate_start = int(coordinate.start)
             coordinate_end = int(coordinate.end)
-            coordinate_strand = str(feature_object.location[feature_location_count].strand)
+            coordinate_strand = get_strand(coordinate.strand)
             interval_length = abs(int(coordinate_end - coordinate_start) + 1)
             interval_middle = float(coordinate_end + coordinate_start) / 2.0
-            feature_location_count += 1
             if interval_length > longest_segment_length:
                 longest_segment_start = coordinate_start
                 longest_segment_end = coordinate_end
@@ -2200,6 +2263,76 @@ def test_hmmtdna_resolve_overlaps_recomputes_leader_start_after_label_shifts() -
         assert on_vertical_edge or on_horizontal_edge
 
 
+def test_nc001454_longest_coordinate_segment_drives_label_middle_and_embedding() -> None:
+    labels, total_length, _cfg, _feature_dict = _load_nc001454_labels_with_inner_resolve(
+        label_font_size=14.0,
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+    )
+
+    dna_polymerase_label = next(
+        (label for label in labels if label.get("label_text") == "DNA polymerase"),
+        None,
+    )
+    assert dna_polymerase_label is not None
+    assert math.isclose(float(dna_polymerase_label["middle"]), 6528.0, abs_tol=1e-6)
+    assert bool(dna_polymerase_label["is_embedded"])
+
+    iva2_label = next(
+        (label for label in labels if label.get("label_text") == "encapsidation protein IVa2"),
+        None,
+    )
+    assert iva2_label is not None
+    assert math.isclose(float(iva2_label["middle"]), 4313.0, abs_tol=1e-6)
+    assert not bool(iva2_label["is_embedded"])
+
+    feature_middle_angle_deg = (
+        math.degrees(
+            math.atan2(
+                float(iva2_label["feature_middle_y"]),
+                float(iva2_label["feature_middle_x"]),
+            )
+        )
+        + 90.0
+    ) % 360.0
+    feature_middle_from_xy = (feature_middle_angle_deg / 360.0) * float(total_length)
+    assert math.isclose(feature_middle_from_xy, 4313.0, abs_tol=0.5)
+
+
+def test_nc001454_tuckin_wraparound_guard_prevents_first_label_overtake() -> None:
+    outer_labels, total_length, _cfg = _load_nc001454_outer_labels_without_inner_resolve(
+        label_font_size=14.0,
+        strandedness=True,
+        resolve_overlaps=False,
+        track_type="tuckin",
+    )
+    assert outer_labels
+
+    labels = sorted((label.copy() for label in outer_labels), key=lambda label: float(label["middle"]))
+    unwrapped_angles = circular_labels_module._derive_monotonic_unwrapped_angles(labels, total_length)
+    assert all(unwrapped_angles[idx] < unwrapped_angles[idx + 1] for idx in range(len(unwrapped_angles) - 1))
+
+    max_allowed_span = 360.0 - circular_labels_module.LEADER_LABEL_MIN_ORDER_GAP_DEG
+    span = unwrapped_angles[-1] - unwrapped_angles[0]
+    assert span <= max_allowed_span + 1e-6
+
+    e1a_idx = next(
+        (idx for idx, label in enumerate(labels) if label.get("label_text") == "control protein E1A"),
+        None,
+    )
+    e4orf2_idx = next(
+        (idx for idx, label in enumerate(labels) if label.get("label_text") == "control protein E4orf2"),
+        None,
+    )
+    assert e1a_idx is not None
+    assert e4orf2_idx is not None
+
+    e1a_unwrapped = float(unwrapped_angles[e1a_idx])
+    e4orf2_unwrapped = float(unwrapped_angles[e4orf2_idx])
+    assert e4orf2_unwrapped <= e1a_unwrapped + max_allowed_span + 1e-6
+
+
 def test_nc001454_tuckin_resolve_overlaps_inner_labels_keep_bbox_inside_local_feature_tracks() -> None:
     external_labels, total_length, cfg, feature_dict = _load_nc001454_external_labels_with_inner_resolve(
         label_font_size=14.0,
@@ -2345,17 +2478,12 @@ def test_nc001454_tuckin_resolve_overlaps_inner_non_short_directional_labels_use
         longest_segment_end = 0
         longest_segment_middle = 0.0
         coordinate_strand = "undefined"
-        feature_location_count = 0
         for coordinate in feature_object.coordinates:
-            if feature_object.location[feature_location_count].kind == "line":
-                feature_location_count += 1
-                continue
             coordinate_start = int(coordinate.start)
             coordinate_end = int(coordinate.end)
-            coordinate_strand = str(feature_object.location[feature_location_count].strand)
+            coordinate_strand = get_strand(coordinate.strand)
             interval_length = abs(int(coordinate_end - coordinate_start) + 1)
             interval_middle = float(coordinate_end + coordinate_start) / 2.0
-            feature_location_count += 1
             if interval_length > longest_segment_length:
                 longest_segment_start = coordinate_start
                 longest_segment_end = coordinate_end

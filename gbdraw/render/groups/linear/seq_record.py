@@ -182,6 +182,7 @@ class SeqRecordGroup:
             separate_strands,
             resolve_overlaps,
             label_filtering,
+            directional_feature_types=self.feature_config.directional_feature_types,
         )
         label_list = []
         if self.show_labels:

@@ -16,6 +16,7 @@ from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[re
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .labels.filtering import read_qualifier_priority_file, read_filter_list_file  # type: ignore[reportMissingImports]
+from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
 from .exceptions import ValidationError
 
 
@@ -70,6 +71,14 @@ def _parse_linear_track_axis_gap(value: str) -> float | None:
     if axis_gap < 0:
         raise argparse.ArgumentTypeError("track axis gap must be >= 0")
     return axis_gap
+
+
+def _parse_feature_shape_assignment_arg(value: str) -> str:
+    try:
+        parse_feature_shape_assignment(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return value
 
 
 def _get_args(args) -> argparse.Namespace:
@@ -194,6 +203,14 @@ def _get_args(args) -> argparse.Namespace:
         help='Comma-separated list of feature keys to draw (default: CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)',
         type=str,
         default="CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region")
+    parser.add_argument(
+        '--feature_shape',
+        help='Feature shape override (repeatable): TYPE=SHAPE where SHAPE is arrow or rectangle.',
+        type=_parse_feature_shape_assignment_arg,
+        action='append',
+        default=[],
+        metavar='TYPE=SHAPE',
+    )
     parser.add_argument(
         '--block_stroke_color',
         help='Block stroke color (str; default: "gray")',
@@ -441,6 +458,7 @@ def linear_main(cmd_args) -> None:
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
     selected_features_set: str = args.features.split(',')
+    feature_shapes = parse_feature_shape_overrides(args.feature_shape)
     feature_height: Optional[float] = args.feature_height
     comparison_height: Optional[float] = args.comparison_height
 
@@ -613,6 +631,7 @@ def linear_main(cmd_args) -> None:
         color_table=color_table,
         default_colors=default_colors,
         selected_features_set=selected_features_set,
+        feature_shapes=feature_shapes or None,
         output_prefix=out_file_prefix,
         legend=legend,
         dinucleotide=dinucleotide,

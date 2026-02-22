@@ -123,6 +123,44 @@ def _expected_intron_radius(strand: str, total_length: int = 1000) -> float:
     return TEST_RADIUS * factors[1]
 
 
+def test_middle_resolve_overlaps_displaces_negative_tracks_inward_symmetrically() -> None:
+    positive = calculate_feature_position_factors_circular(
+        total_length=1000,
+        strand="positive",
+        track_ratio=TEST_TRACK_RATIO,
+        cds_ratio=TEST_CDS_RATIO,
+        offset=TEST_OFFSET,
+        track_type="middle",
+        strandedness=False,
+        track_id=2,
+    )
+    negative = calculate_feature_position_factors_circular(
+        total_length=1000,
+        strand="negative",
+        track_ratio=TEST_TRACK_RATIO,
+        cds_ratio=TEST_CDS_RATIO,
+        offset=TEST_OFFSET,
+        track_type="middle",
+        strandedness=False,
+        track_id=2,
+    )
+    undefined = calculate_feature_position_factors_circular(
+        total_length=1000,
+        strand="undefined",
+        track_ratio=TEST_TRACK_RATIO,
+        cds_ratio=TEST_CDS_RATIO,
+        offset=TEST_OFFSET,
+        track_type="middle",
+        strandedness=False,
+        track_id=2,
+    )
+
+    assert positive[1] > 1.0
+    assert negative[1] < 1.0
+    assert undefined[1] > 1.0
+    assert math.isclose(positive[1] - 1.0, 1.0 - negative[1], rel_tol=1e-9, abs_tol=1e-9)
+
+
 @pytest.mark.parametrize(
     ("strand", "coord_start", "coord_end", "expected_sweep"),
     [
