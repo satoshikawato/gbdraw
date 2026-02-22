@@ -58,6 +58,11 @@ class SeqRecordGroup:
         self.track_type = cfg.canvas.circular.track_type
         self.strandedness = cfg.canvas.strandedness
         self.resolve_overlaps = cfg.canvas.resolve_overlaps
+        self.split_overlaps_by_strand = (
+            bool(self.resolve_overlaps)
+            and (not bool(self.strandedness))
+            and str(self.track_type).strip().lower() == "middle"
+        )
         self.track_ratio_factors = cfg.canvas.circular.track_ratio_factors[self.length_param]
         self.track_ratio = self.canvas_config.track_ratio
         self.precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = precomputed_feature_dict
@@ -129,6 +134,7 @@ class SeqRecordGroup:
                 self.strandedness,
                 self.resolve_overlaps,
                 label_filtering,
+                split_overlaps_by_strand=self.split_overlaps_by_strand,
             )
         track_id: str = self.gb_record.id
         record_group = Group(id=track_id)

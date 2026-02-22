@@ -137,6 +137,7 @@ def create_feature_dict(
     separate_strands: bool,
     resolve_overlaps: bool,
     label_filtering,
+    split_overlaps_by_strand: bool = False,
 ) -> Tuple[Dict[str, FeatureObject], Set[Tuple[str, str]]]:
     """
     Creates a dictionary mapping feature IDs to FeatureObjects from a GenBank record.
@@ -205,7 +206,11 @@ def create_feature_dict(
             feature_dict[feature_id] = feature_object
 
     feature_dict = arrange_feature_tracks(
-        feature_dict, separate_strands, resolve_overlaps, genome_length
+        feature_dict,
+        separate_strands,
+        resolve_overlaps,
+        split_overlaps_by_strand=split_overlaps_by_strand,
+        genome_length=genome_length,
     )
     return feature_dict, used_color_rules
 

@@ -1276,11 +1276,15 @@ def add_record_on_circular_canvas(
 
     show_features = features_ts is None or features_ts.show
     show_external_labels = show_labels_base and (labels_ts is None or labels_ts.show) and show_features
-    core_track_inner_relayout_enabled = (
+    core_track_overlap_relayout_enabled = (
         show_features
         and bool(cfg.canvas.resolve_overlaps)
         and (not bool(cfg.canvas.strandedness))
-        and str(cfg.canvas.circular.track_type) == "middle"
+    )
+    split_overlaps_by_strand = (
+        bool(cfg.canvas.resolve_overlaps)
+        and (not bool(cfg.canvas.strandedness))
+        and str(cfg.canvas.circular.track_type).strip().lower() == "middle"
     )
 
     feature_track_ratio_factor_override: float | None = None
@@ -1295,7 +1299,7 @@ def add_record_on_circular_canvas(
     should_precompute_feature_dict = show_features and (
         show_external_labels
         or feature_track_ratio_factor_override is not None
-        or core_track_inner_relayout_enabled
+        or core_track_overlap_relayout_enabled
     )
     if should_precompute_feature_dict:
         label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
@@ -1310,10 +1314,11 @@ def add_record_on_circular_canvas(
             cfg.canvas.strandedness,
             cfg.canvas.resolve_overlaps,
             label_filtering,
+            split_overlaps_by_strand=split_overlaps_by_strand,
         )
 
     rendered_feature_band_all_tracks: tuple[float, float] | None = None
-    if core_track_inner_relayout_enabled and precomputed_feature_dict is not None:
+    if core_track_overlap_relayout_enabled and precomputed_feature_dict is not None:
         rendered_feature_track_ratio_factor = (
             float(feature_track_ratio_factor_override)
             if feature_track_ratio_factor_override is not None
@@ -1507,7 +1512,7 @@ def add_record_on_circular_canvas(
             float(ticks_radius_px) if ticks_radius_px is not None else default_ticks_radius_px
         )
         if (
-            core_track_inner_relayout_enabled
+            core_track_overlap_relayout_enabled
             and (rendered_feature_band_all_tracks is not None)
             and (not ticks_has_explicit_center)
         ):
@@ -1552,7 +1557,7 @@ def add_record_on_circular_canvas(
         final_ticks_center = (
             float(ticks_radius_px) if ticks_radius_px is not None else default_ticks_radius_px
         )
-        if core_track_inner_relayout_enabled:
+        if core_track_overlap_relayout_enabled:
             resolved_outer_core_track_annuli.append(
                 _tick_annulus_for_center(final_ticks_center, tick_ratio_bounds)
             )
@@ -1600,7 +1605,7 @@ def add_record_on_circular_canvas(
         effective_gc_width = float(gc_width_px) if gc_width_px is not None else float(default_gc_width)
 
         if (
-            core_track_inner_relayout_enabled
+            core_track_overlap_relayout_enabled
             and (rendered_feature_band_all_tracks is not None)
             and (effective_gc_center is not None)
         ):
@@ -1684,7 +1689,7 @@ def add_record_on_circular_canvas(
         effective_skew_width = float(skew_width_px) if skew_width_px is not None else float(default_skew_width)
 
         if (
-            core_track_inner_relayout_enabled
+            core_track_overlap_relayout_enabled
             and (rendered_feature_band_all_tracks is not None)
             and (effective_skew_center is not None)
         ):

@@ -195,10 +195,55 @@ def find_best_track(
     return track_nums[0]
 
 
+def _find_best_track_split_overlaps_by_strand(
+    feature: dict,
+    center_track: List[dict],
+    outer_tracks: Dict[str, List[dict]],
+    inner_tracks: Dict[str, List[dict]],
+    genome_length: Optional[int] = None,
+    max_track: int = 100,
+) -> int:
+    """
+    Find best track when non-stranded overlap resolution uses split inner/outer pools.
+
+    This mode is intended for circular middle layout with resolve_overlaps enabled:
+    - track 0 is shared across all strands
+    - positive/undefined displacement tracks are assigned from +1, +2, ...
+    - negative displacement tracks are assigned from -1, -2, ...
+    """
+    # Keep center track shared to preserve existing visual anchoring as much as possible.
+    has_center_overlap = False
+    for existing in center_track:
+        if check_feature_overlap(feature, existing, False, genome_length):
+            has_center_overlap = True
+            break
+    if not has_center_overlap:
+        return 0
+
+    is_negative = feature["strand"] == "negative"
+    track_dict = inner_tracks if is_negative else outer_tracks
+    sign = -1 if is_negative else 1
+
+    for track_index in range(1, max_track):
+        key = f"track_{track_index}"
+        if key not in track_dict or not track_dict[key]:
+            return sign * track_index
+        has_overlap = False
+        for existing in track_dict[key]:
+            if check_feature_overlap(feature, existing, False, genome_length):
+                has_overlap = True
+                break
+        if not has_overlap:
+            return sign * track_index
+
+    return sign * (max_track - 1)
+
+
 def arrange_feature_tracks(
     feature_dict: Dict[str, FeatureObject],
     separate_strands: bool,
     resolve_overlaps: bool,
+    split_overlaps_by_strand: bool = False,
     genome_length: Optional[int] = None,
 ) -> Dict[str, FeatureObject]:
     """
@@ -208,6 +253,9 @@ def arrange_feature_tracks(
         feature_dict: Dict of feature_id -> FeatureObject
         separate_strands: Whether to separate positive/negative strands
         resolve_overlaps: Whether to resolve overlapping features by assigning to different tracks
+        split_overlaps_by_strand: When True (and only when separate_strands is False),
+            uses shared center track 0 plus strand-specific displacement pools.
+            Intended for circular middle resolve_overlaps behavior.
         genome_length: Total genome length (for origin-spanning feature detection)
     
     Returns:
@@ -246,23 +294,53 @@ def arrange_feature_tracks(
 
     sorted_features = sorted(feature_metrics.items(), key=sort_key)
 
+    split_non_stranded_overlaps = (
+        bool(split_overlaps_by_strand)
+        and (not separate_strands)
+        and bool(resolve_overlaps)
+    )
+
     pos_tracks: Dict[str, List[dict]] = {}
     neg_tracks: Dict[str, List[dict]] | None = {} if separate_strands else None
+    center_track: List[dict] = []
+    outer_tracks: Dict[str, List[dict]] = {}
+    inner_tracks: Dict[str, List[dict]] = {}
 
     for feat_id, feat_metrics in sorted_features:
-        if separate_strands:
-            track_dict = neg_tracks if feat_metrics["strand"] == "negative" else pos_tracks  # type: ignore[assignment]
+        if split_non_stranded_overlaps:
+            track_num = _find_best_track_split_overlaps_by_strand(
+                feat_metrics,
+                center_track,
+                outer_tracks,
+                inner_tracks,
+                genome_length=genome_length,
+            )
+            if track_num == 0:
+                center_track.append(feat_metrics)
+            elif track_num < 0:
+                track_id = f"track_{abs(track_num)}"
+                if track_id not in inner_tracks:
+                    inner_tracks[track_id] = []
+                inner_tracks[track_id].append(feat_metrics)
+            else:
+                track_id = f"track_{track_num}"
+                if track_id not in outer_tracks:
+                    outer_tracks[track_id] = []
+                outer_tracks[track_id].append(feat_metrics)
         else:
-            track_dict = pos_tracks
+            if separate_strands:
+                track_dict = neg_tracks if feat_metrics["strand"] == "negative" else pos_tracks  # type: ignore[assignment]
+            else:
+                track_dict = pos_tracks
 
-        track_num = find_best_track(
-            feat_metrics, track_dict, separate_strands, resolve_overlaps, genome_length
-        )
-        track_id = f"track_{abs(track_num)}"
+            track_num = find_best_track(
+                feat_metrics, track_dict, separate_strands, resolve_overlaps, genome_length
+            )
+            track_id = f"track_{abs(track_num)}"
 
-        if track_id not in track_dict:
-            track_dict[track_id] = []
-        track_dict[track_id].append(feat_metrics)
+            if track_id not in track_dict:
+                track_dict[track_id] = []
+            track_dict[track_id].append(feat_metrics)
 
         feature_dict[feat_id].feature_track_id = track_num
 
