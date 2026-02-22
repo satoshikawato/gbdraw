@@ -81,6 +81,7 @@ def _precalculate_feature_track_heights(
             canvas_config.strandedness,
             canvas_config.resolve_overlaps,
             label_filtering,
+            directional_feature_types=feature_config.directional_feature_types,
         )
         
         if track_layout == "middle":

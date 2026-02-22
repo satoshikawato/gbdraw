@@ -74,6 +74,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     selectedFeatureRecordIdx
   } = state;
   let linearLabelSupportCache = null;
+  let featureShapeSupportCache = null;
 
   const getLastLine = (text) => {
     const trimmed = String(text || '').trim();
@@ -176,6 +177,34 @@ json.dumps({
       linearLabelSupportCache = { placement: false, rotation: false, track_layout: false, track_axis_gap: false };
     }
     return linearLabelSupportCache;
+  };
+
+  const normalizeFeatureShape = (value) => (String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle');
+
+  const getFeatureShapeOptionSupport = () => {
+    if (featureShapeSupportCache) return featureShapeSupportCache;
+    const pyodide = getPyodide();
+    if (!pyodide) {
+      featureShapeSupportCache = { circular: false, linear: false };
+      return featureShapeSupportCache;
+    }
+    try {
+      const raw = pyodide.runPython(`
+import inspect, json
+import gbdraw.circular as _gbdraw_circular
+import gbdraw.linear as _gbdraw_linear
+_circular_source = inspect.getsource(_gbdraw_circular._get_args)
+_linear_source = inspect.getsource(_gbdraw_linear._get_args)
+json.dumps({
+  "circular": "--feature_shape" in _circular_source,
+  "linear": "--feature_shape" in _linear_source,
+})
+      `);
+      featureShapeSupportCache = JSON.parse(String(raw));
+    } catch (_err) {
+      featureShapeSupportCache = { circular: false, linear: false };
+    }
+    return featureShapeSupportCache;
   };
 
   const downloadLosatPair = async (pairIndex, customName) => {
@@ -294,7 +323,29 @@ json.dumps({
         args.push('--qualifier_priority', '/priority.tsv');
       }
 
+      const selectedFeatureShapes = Array.isArray(adv.features)
+        ? adv.features
+            .map((featureTypeRaw) => {
+              const featureType = String(featureTypeRaw || '').trim();
+              if (!featureType) return null;
+              const shape = normalizeFeatureShape(adv.feature_shapes?.[featureType]);
+              return `${featureType}=${shape}`;
+            })
+            .filter((assignment) => typeof assignment === 'string' && assignment.length > 0)
+        : [];
+
       if (mode.value === 'circular') {
+        if (selectedFeatureShapes.length > 0) {
+          const shapeOptionSupport = getFeatureShapeOptionSupport();
+          if (!shapeOptionSupport.circular) {
+            throw new Error(
+              'Current gbdraw wheel does not support --feature_shape. Rebuild and redeploy the web wheel.'
+            );
+          }
+          selectedFeatureShapes.forEach((assignment) => {
+            args.push('--feature_shape', assignment);
+          });
+        }
         args.push('--track_type', form.track_type, '-l', form.legend);
         if (form.show_labels) args.push('--show_labels');
         if (form.allow_inner_labels) args.push('--allow_inner_labels');
@@ -362,6 +413,17 @@ json.dumps({
           args.push('--gff', '/input.gff', '--fasta', '/input.fasta');
         }
       } else {
+        if (selectedFeatureShapes.length > 0) {
+          const shapeOptionSupport = getFeatureShapeOptionSupport();
+          if (!shapeOptionSupport.linear) {
+            throw new Error(
+              'Current gbdraw wheel does not support --feature_shape. Rebuild and redeploy the web wheel.'
+            );
+          }
+          selectedFeatureShapes.forEach((assignment) => {
+            args.push('--feature_shape', assignment);
+          });
+        }
         args.push('--scale_style', form.scale_style);
         const normalizedTrackLayout =
           form.linear_track_layout === 'spreadout'

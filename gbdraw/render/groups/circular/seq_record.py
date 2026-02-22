@@ -135,6 +135,7 @@ class SeqRecordGroup:
                 self.resolve_overlaps,
                 label_filtering,
                 split_overlaps_by_strand=self.split_overlaps_by_strand,
+                directional_feature_types=self.feature_config.directional_feature_types,
             )
         track_id: str = self.gb_record.id
         record_group = Group(id=track_id)

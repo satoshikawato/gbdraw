@@ -51,6 +51,7 @@ class DiagramOptions:
     tracks: TrackOptions | None = None
     output: OutputOptions | None = None
     selected_features_set: Sequence[str] | None = None
+    feature_shapes: Mapping[str, str] | None = None
     dinucleotide: str = "GC"
     window: int | None = None
     step: int | None = None

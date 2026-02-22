@@ -16,6 +16,7 @@ from .config.modify import suppress_gc_content_and_skew, modify_config_dict  # t
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .core.sequence import determine_output_file_prefix  # type: ignore[reportMissingImports]
 from .labels.filtering import read_qualifier_priority_file, read_filter_list_file  # type: ignore[reportMissingImports]
+from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
 from .exceptions import ValidationError
 
 from .cli_utils.common import (
@@ -30,6 +31,14 @@ from .cli_utils.common import (
 # Setup for the logging system
 logger = logging.getLogger()
 setup_logging()
+
+
+def _parse_feature_shape_assignment_arg(value: str) -> str:
+    try:
+        parse_feature_shape_assignment(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return value
 
 
 def _get_args(args) -> argparse.Namespace:
@@ -121,6 +130,14 @@ def _get_args(args) -> argparse.Namespace:
         help='Comma-separated list of feature keys to draw (default: CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)',
         type=str,
         default="CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region")
+    parser.add_argument(
+        '--feature_shape',
+        help='Feature shape override (repeatable): TYPE=SHAPE where SHAPE is arrow or rectangle.',
+        type=_parse_feature_shape_assignment_arg,
+        action='append',
+        default=[],
+        metavar='TYPE=SHAPE',
+    )
     parser.add_argument(
         '--block_stroke_color',
         help='Block stroke color (str; default: "gray")',
@@ -311,6 +328,7 @@ def circular_main(cmd_args) -> None:
     manual_step: int = args.step
     color_table_path: str = args.table
     selected_features_set: str = args.features.split(',')
+    feature_shapes = parse_feature_shape_overrides(args.feature_shape)
     species: str = args.species
     strain: str = args.strain
     legend: str = args.legend
@@ -477,6 +495,7 @@ def circular_main(cmd_args) -> None:
             color_table=color_table,
             default_colors=default_colors,
             selected_features_set=selected_features_set,
+            feature_shapes=feature_shapes or None,
             output_prefix=outfile_prefix,
             legend=legend,
             dinucleotide=dinucleotide,

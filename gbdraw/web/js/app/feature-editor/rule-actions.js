@@ -24,6 +24,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   } = state;
 
   const { addLegendEntry, removeLegendEntry, extractLegendEntries } = legendActions;
+  const normalizeFeatureShape = (value) => (String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle');
 
   const addCustomColor = () => {
     if (!newColorFeat.value) return;
@@ -160,7 +161,37 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   const addFeature = () => {
     if (newFeatureToAdd.value && !adv.features.includes(newFeatureToAdd.value)) {
       adv.features.push(newFeatureToAdd.value);
+      if (!adv.feature_shapes || typeof adv.feature_shapes !== 'object') {
+        adv.feature_shapes = {};
+      }
+      if (!Object.prototype.hasOwnProperty.call(adv.feature_shapes, newFeatureToAdd.value)) {
+        adv.feature_shapes[newFeatureToAdd.value] = 'rectangle';
+      }
     }
+  };
+
+  const removeFeature = (featureType) => {
+    const idx = adv.features.indexOf(featureType);
+    if (idx >= 0) {
+      adv.features.splice(idx, 1);
+    }
+    if (adv.feature_shapes && typeof adv.feature_shapes === 'object') {
+      delete adv.feature_shapes[featureType];
+    }
+  };
+
+  const getFeatureShape = (featureType) => {
+    if (!adv.feature_shapes || typeof adv.feature_shapes !== 'object') {
+      return 'rectangle';
+    }
+    return normalizeFeatureShape(adv.feature_shapes[featureType]);
+  };
+
+  const setFeatureShape = (featureType, shape) => {
+    if (!adv.feature_shapes || typeof adv.feature_shapes !== 'object') {
+      adv.feature_shapes = {};
+    }
+    adv.feature_shapes[featureType] = normalizeFeatureShape(shape);
   };
 
   const getFeatureColor = (feat) => {
@@ -244,6 +275,9 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   return {
     addCustomColor,
     addFeature,
+    removeFeature,
+    getFeatureShape,
+    setFeatureShape,
     addPriorityRule,
     addSpecificRule,
     applySpecificRulePreset,

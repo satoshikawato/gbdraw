@@ -79,6 +79,7 @@ def _precalculate_label_dimensions(
             canvas_config.strandedness,
             canvas_config.resolve_overlaps,
             label_filtering,
+            directional_feature_types=feature_config.directional_feature_types,
         )
 
         record_length = len(record.seq)

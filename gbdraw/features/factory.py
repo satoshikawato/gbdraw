@@ -11,6 +11,7 @@ from .objects import GeneObject, RepeatObject, FeatureObject
 from ..labels.filtering import get_label_text
 from .colors import get_color, get_color_with_info
 from .coordinates import get_exon_and_intron_coordinates
+from .shapes import DEFAULT_DIRECTIONAL_FEATURE_TYPES
 from .tracks import arrange_feature_tracks
 
 
@@ -21,13 +22,13 @@ def create_repeat_object(
     default_colors,
     genome_length: int,
     label_filtering,
+    is_directional: bool,
     record_id: Optional[str] = None,
 ) -> RepeatObject:
     """
     Creates a RepeatObject representing a repeat region in a genome.
     """
     coordinates = feature.location.parts
-    is_directional: bool = False
     rpt_family: str = feature.qualifiers.get("rpt_family", ["undefined"])[0]
     rpt_type: str = feature.qualifiers.get("rpt_type", ["undefined"])[0]
     note: str = feature.qualifiers.get("note", [""])[0]
@@ -60,13 +61,13 @@ def create_feature_object(
     default_colors,
     genome_length: int,
     label_filtering,
+    is_directional: bool,
     record_id: Optional[str] = None,
 ) -> FeatureObject:
     """
     Creates a FeatureObject representing a generic genomic feature.
     """
     coordinates = feature.location.parts
-    is_directional: bool = False
     note: str = feature.qualifiers.get("note", [""])[0]
     location = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id)
@@ -95,12 +96,12 @@ def create_gene_object(
     default_colors,
     genome_length: int,
     label_filtering,
+    is_directional: bool,
     record_id: Optional[str] = None,
 ) -> GeneObject:
     """
     Creates a GeneObject representing a gene in a genome.
     """
-    is_directional: bool = True
     coordinates: List[SimpleLocation] = feature.location.parts
     note: str = feature.qualifiers.get("note", [""])[0]
     product: str = feature.qualifiers.get("product", [""])[0]
@@ -138,6 +139,7 @@ def create_feature_dict(
     resolve_overlaps: bool,
     label_filtering,
     split_overlaps_by_strand: bool = False,
+    directional_feature_types: Optional[Set[str]] = None,
 ) -> Tuple[Dict[str, FeatureObject], Set[Tuple[str, str]]]:
     """
     Creates a dictionary mapping feature IDs to FeatureObjects from a GenBank record.
@@ -155,6 +157,11 @@ def create_feature_dict(
     repeat_count: int = 0
     feature_count: int = 0
     genome_length: int = len(gb_record.seq)
+    directional_types = (
+        {str(feature_type) for feature_type in directional_feature_types}
+        if directional_feature_types is not None
+        else set(DEFAULT_DIRECTIONAL_FEATURE_TYPES)
+    )
 
     for feature in gb_record.features:
         if feature.type not in selected_features_set:
@@ -164,6 +171,7 @@ def create_feature_dict(
         color, caption = get_color_with_info(feature, color_table, default_colors, record_id=gb_record.id)
         if caption:
             used_color_rules.add((caption, color))
+        is_directional = feature.type in directional_types
 
         if feature.type in {"CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA"}:
             locus_count += 1
@@ -175,6 +183,7 @@ def create_feature_dict(
                 default_colors,
                 genome_length,
                 label_filtering,
+                is_directional,
                 record_id=gb_record.id,
             )
             feature_dict[locus_id] = gene_object
@@ -188,6 +197,7 @@ def create_feature_dict(
                 default_colors,
                 genome_length,
                 label_filtering,
+                is_directional,
                 record_id=gb_record.id,
             )
             feature_dict[repeat_id] = repeat_object
@@ -201,6 +211,7 @@ def create_feature_dict(
                 default_colors,
                 genome_length,
                 label_filtering,
+                is_directional,
                 record_id=gb_record.id,
             )
             feature_dict[feature_id] = feature_object

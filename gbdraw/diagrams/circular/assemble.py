@@ -1315,6 +1315,7 @@ def add_record_on_circular_canvas(
             cfg.canvas.resolve_overlaps,
             label_filtering,
             split_overlaps_by_strand=split_overlaps_by_strand,
+            directional_feature_types=feature_config.directional_feature_types,
         )
 
     rendered_feature_band_all_tracks: tuple[float, float] | None = None

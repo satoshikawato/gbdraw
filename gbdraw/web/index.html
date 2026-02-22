@@ -733,9 +733,18 @@
                             <div>
                                 <label class="input-label adv-section-title">Include Features <help-tip text="Select which feature types to draw."></help-tip></label>
                                 <div class="flex flex-wrap gap-1.5 mb-1.5 p-1.5 bg-slate-50 rounded border border-slate-200 min-h-[30px]">
-                                    <span v-for="(f, i) in adv.features" :key="f" class="inline-flex items-center gap-1 text-[10px] bg-white text-blue-700 px-2 py-1 rounded border border-blue-200 shadow-sm">
-                                        {{ f }}
-                                        <button @click="adv.features.splice(i, 1)" class="text-slate-400 hover:text-red-500 flex items-center justify-center w-4 h-4 rounded-full hover:bg-red-50 transition-colors">
+                                    <span v-for="f in adv.features" :key="f" class="inline-flex items-center gap-1 text-[10px] bg-white text-blue-700 px-2 py-1 rounded border border-blue-200 shadow-sm">
+                                        <span class="font-medium">{{ f }}</span>
+                                        <select
+                                            :value="getFeatureShape(f)"
+                                            @change="setFeatureShape(f, $event.target.value)"
+                                            class="border border-blue-200 rounded px-1 py-0 text-[9px] bg-white text-slate-700"
+                                            title="Feature shape"
+                                        >
+                                            <option value="arrow">Arrow</option>
+                                            <option value="rectangle">Rectangle</option>
+                                        </select>
+                                        <button @click="removeFeature(f)" class="text-slate-400 hover:text-red-500 flex items-center justify-center w-4 h-4 rounded-full hover:bg-red-50 transition-colors">
                                             <i class="ph ph-x"></i>
                                         </button>
                                     </span>

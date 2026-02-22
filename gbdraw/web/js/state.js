@@ -138,6 +138,9 @@ const linearSeqs = reactive([
   }
 ]);
 
+const defaultDirectionalFeatureTypes = ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA'];
+const defaultFeatureShapes = Object.fromEntries(defaultDirectionalFeatureTypes.map((featureType) => [featureType, 'arrow']));
+
 // Configuration Forms
 const form = reactive({
   prefix: '',
@@ -162,6 +165,7 @@ const form = reactive({
 // Extended Advanced Config
 const adv = reactive({
   features: ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'repeat_region'],
+  feature_shapes: { ...defaultFeatureShapes },
   window_size: null,
   step_size: null,
   nt: 'GC',

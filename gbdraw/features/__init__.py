@@ -20,6 +20,14 @@ from .coordinates import (
     get_intron_coordinate,
     get_strand,
 )
+from .shapes import (
+    DEFAULT_DIRECTIONAL_FEATURE_TYPES,
+    normalize_feature_shape,
+    normalize_feature_shape_overrides,
+    parse_feature_shape_assignment,
+    parse_feature_shape_overrides,
+    resolve_directional_feature_types,
+)
 
 __all__ = [
     # colors
@@ -41,6 +49,13 @@ __all__ = [
     "get_exon_coordinate",
     "get_intron_coordinate",
     "get_strand",
+    # shapes
+    "DEFAULT_DIRECTIONAL_FEATURE_TYPES",
+    "normalize_feature_shape",
+    "normalize_feature_shape_overrides",
+    "parse_feature_shape_assignment",
+    "parse_feature_shape_overrides",
+    "resolve_directional_feature_types",
 ]
 
 

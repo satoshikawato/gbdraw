@@ -53,6 +53,7 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--fasta [FASTA_FILE ...]] [-o OUTPUT] [-p PALETTE] [-t TABLE]
               [-d DEFAULT_COLORS] [-n NT] [-w WINDOW] [-s STEP]
               [--species SPECIES] [--strain STRAIN] [-k FEATURES]
+              [--feature_shape TYPE=SHAPE]
               [--block_stroke_color BLOCK_STROKE_COLOR]
               [--block_stroke_width BLOCK_STROKE_WIDTH]
               [--axis_stroke_color AXIS_STROKE_COLOR]
@@ -107,6 +108,9 @@ options:
   -k, --features FEATURES
                         Comma-separated list of feature keys to draw (default:
                         CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)
+  --feature_shape TYPE=SHAPE
+                        Feature shape override (repeatable): TYPE=SHAPE where
+                        SHAPE is arrow or rectangle.
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
@@ -204,6 +208,7 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [-s STEP] [--separate_strands] [--show_gc] [--show_skew]
               [--align_center] [--evalue EVALUE] [--bitscore BITSCORE]
               [--identity IDENTITY] [-k FEATURES]
+              [--feature_shape TYPE=SHAPE]
               [--block_stroke_color BLOCK_STROKE_COLOR]
               [--block_stroke_width BLOCK_STROKE_WIDTH]
               [--axis_stroke_color AXIS_STROKE_COLOR]
@@ -274,6 +279,9 @@ options:
   -k, --features FEATURES
                         Comma-separated list of feature keys to draw (default:
                         CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)
+  --feature_shape TYPE=SHAPE
+                        Feature shape override (repeatable): TYPE=SHAPE where
+                        SHAPE is arrow or rectangle.
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH

@@ -87,6 +87,7 @@ class LabelsGroup:
                 self.resolve_overlaps,
                 label_filtering,
                 split_overlaps_by_strand=self.split_overlaps_by_strand,
+                directional_feature_types=self.feature_config.directional_feature_types,
             )
 
         record_length: int = len(self.gb_record.seq)
