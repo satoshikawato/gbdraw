@@ -415,6 +415,22 @@ def test_cli_feature_width_must_be_positive() -> None:
         circular_cli_module._get_args(["--gbk", "dummy.gb", "--feature_width", "-10"])
 
 
+@pytest.mark.parametrize(
+    "option",
+    [
+        "--gc_content_width",
+        "--gc_content_radius",
+        "--gc_skew_width",
+        "--gc_skew_radius",
+    ],
+)
+def test_cli_gc_track_width_radius_must_be_positive(option: str) -> None:
+    with pytest.raises(SystemExit):
+        circular_cli_module._get_args(["--gbk", "dummy.gb", option, "0"])
+    with pytest.raises(SystemExit):
+        circular_cli_module._get_args(["--gbk", "dummy.gb", option, "-10"])
+
+
 def test_cli_feature_width_forwards_internal_feature_track_spec(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     record = _load_record()
     captured: dict[str, Any] = {}
@@ -435,6 +451,95 @@ def test_cli_feature_width_forwards_internal_feature_track_spec(monkeypatch: pyt
     )
 
     assert captured["track_specs"] == ["features@w=42px"]
+
+
+def test_cli_gc_track_width_radius_forwards_internal_track_specs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    record = _load_record()
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, mode: [record])
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
+
+    def fake_assemble(*args, **kwargs):
+        captured["track_specs"] = kwargs.get("track_specs")
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+
+    circular_cli_module.circular_main(
+        [
+            "--gbk",
+            "dummy.gb",
+            "--gc_content_radius",
+            "0.74",
+            "--gc_content_width",
+            "22",
+            "--gc_skew_radius",
+            "0.68",
+            "--gc_skew_width",
+            "18",
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert captured["track_specs"] == [
+        "gc_content@r=0.74,w=22px",
+        "gc_skew@r=0.68,w=18px",
+    ]
+
+
+def test_cli_gc_track_width_radius_respects_suppress_flags(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    record = _load_record()
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, mode: [record])
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
+
+    def fake_assemble(*args, **kwargs):
+        captured["track_specs"] = kwargs.get("track_specs")
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+
+    with caplog.at_level("WARNING"):
+        circular_cli_module.circular_main(
+            [
+                "--gbk",
+                "dummy.gb",
+                "--suppress_gc",
+                "--suppress_skew",
+                "--gc_content_radius",
+                "0.74",
+                "--gc_content_width",
+                "22",
+                "--gc_skew_radius",
+                "0.68",
+                "--gc_skew_width",
+                "18",
+                "--format",
+                "svg",
+                "-o",
+                str(tmp_path / "out"),
+            ]
+        )
+
+    assert captured["track_specs"] is None
+    assert any("Ignoring --gc_content_width/--gc_content_radius" in msg for msg in caplog.messages)
+    assert any("Ignoring --gc_skew_width/--gc_skew_radius" in msg for msg in caplog.messages)
 
 
 def test_radius_mapper_uses_primary_feature_track_for_auto_relayout_with_resolve_overlaps() -> None:

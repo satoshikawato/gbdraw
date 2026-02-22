@@ -72,6 +72,10 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--inner_label_y_radius_offset INNER_LABEL_Y_RADIUS_OFFSET]
               [--scale_interval SCALE_INTERVAL]
               [--feature_width FEATURE_WIDTH]
+              [--gc_content_width GC_CONTENT_WIDTH]
+              [--gc_content_radius GC_CONTENT_RADIUS]
+              [--gc_skew_width GC_SKEW_WIDTH]
+              [--gc_skew_radius GC_SKEW_RADIUS]
               [--legend_box_size LEGEND_BOX_SIZE]
               [--legend_font_size LEGEND_FONT_SIZE]
 
@@ -169,6 +173,18 @@ options:
   --feature_width FEATURE_WIDTH
                         Feature track width for circular mode (in px; must be
                         > 0).
+  --gc_content_width GC_CONTENT_WIDTH
+                        GC content track width for circular mode (in px; must
+                        be > 0).
+  --gc_content_radius GC_CONTENT_RADIUS
+                        GC content track center radius for circular mode (as a
+                        ratio of base radius; must be > 0).
+  --gc_skew_width GC_SKEW_WIDTH
+                        GC skew track width for circular mode (in px; must be
+                        > 0).
+  --gc_skew_radius GC_SKEW_RADIUS
+                        GC skew track center radius for circular mode (as a
+                        ratio of base radius; must be > 0).
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
                         96 dpi) for genomes <= 50 kb, 20 for genomes >= 50

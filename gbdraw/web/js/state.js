@@ -200,6 +200,10 @@ const adv = reactive({
 
   // Circular Specific
   feature_width_circular: null,
+  gc_content_width_circular: null,
+  gc_content_radius_circular: null,
+  gc_skew_width_circular: null,
+  gc_skew_radius_circular: null,
   outer_label_x_offset: null,
   outer_label_y_offset: null,
   inner_label_x_offset: null,

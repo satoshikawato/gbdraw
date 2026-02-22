@@ -313,6 +313,42 @@ json.dumps({
         ) {
           args.push('--feature_width', adv.feature_width_circular);
         }
+        if (!form.suppress_gc) {
+          if (
+            adv.gc_content_width_circular !== null &&
+            adv.gc_content_width_circular !== undefined &&
+            adv.gc_content_width_circular !== '' &&
+            Number(adv.gc_content_width_circular) > 0
+          ) {
+            args.push('--gc_content_width', adv.gc_content_width_circular);
+          }
+          if (
+            adv.gc_content_radius_circular !== null &&
+            adv.gc_content_radius_circular !== undefined &&
+            adv.gc_content_radius_circular !== '' &&
+            Number(adv.gc_content_radius_circular) > 0
+          ) {
+            args.push('--gc_content_radius', adv.gc_content_radius_circular);
+          }
+        }
+        if (!form.suppress_skew) {
+          if (
+            adv.gc_skew_width_circular !== null &&
+            adv.gc_skew_width_circular !== undefined &&
+            adv.gc_skew_width_circular !== '' &&
+            Number(adv.gc_skew_width_circular) > 0
+          ) {
+            args.push('--gc_skew_width', adv.gc_skew_width_circular);
+          }
+          if (
+            adv.gc_skew_radius_circular !== null &&
+            adv.gc_skew_radius_circular !== undefined &&
+            adv.gc_skew_radius_circular !== '' &&
+            Number(adv.gc_skew_radius_circular) > 0
+          ) {
+            args.push('--gc_skew_radius', adv.gc_skew_radius_circular);
+          }
+        }
         if (adv.scale_interval) args.push('--scale_interval', adv.scale_interval);
 
         if (cInputType.value === 'gb') {

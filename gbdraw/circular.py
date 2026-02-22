@@ -245,6 +245,22 @@ def _get_args(args) -> argparse.Namespace:
         help='Feature track width for circular mode (in px; must be > 0).',
         type=float)
     parser.add_argument(
+        '--gc_content_width',
+        help='GC content track width for circular mode (in px; must be > 0).',
+        type=float)
+    parser.add_argument(
+        '--gc_content_radius',
+        help='GC content track center radius for circular mode (as a ratio of base radius; must be > 0).',
+        type=float)
+    parser.add_argument(
+        '--gc_skew_width',
+        help='GC skew track width for circular mode (in px; must be > 0).',
+        type=float)
+    parser.add_argument(
+        '--gc_skew_radius',
+        help='GC skew track center radius for circular mode (as a ratio of base radius; must be > 0).',
+        type=float)
+    parser.add_argument(
         '--legend_box_size',
         help='Legend box size (optional; float; default: 24 (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes >= 50 kb).',
         type=float)
@@ -258,6 +274,14 @@ def _get_args(args) -> argparse.Namespace:
     validate_label_args(parser, args)
     if args.feature_width is not None and args.feature_width <= 0:
         parser.error("--feature_width must be > 0")
+    if args.gc_content_width is not None and args.gc_content_width <= 0:
+        parser.error("--gc_content_width must be > 0")
+    if args.gc_content_radius is not None and args.gc_content_radius <= 0:
+        parser.error("--gc_content_radius must be > 0")
+    if args.gc_skew_width is not None and args.gc_skew_width <= 0:
+        parser.error("--gc_skew_width must be > 0")
+    if args.gc_skew_radius is not None and args.gc_skew_radius <= 0:
+        parser.error("--gc_skew_radius must be > 0")
     return args
 
 
@@ -304,6 +328,10 @@ def circular_main(cmd_args) -> None:
     legend_box_size = args.legend_box_size
     legend_font_size = args.legend_font_size
     feature_width: Optional[float] = args.feature_width
+    gc_content_width: Optional[float] = args.gc_content_width
+    gc_content_radius: Optional[float] = args.gc_content_radius
+    gc_skew_width: Optional[float] = args.gc_skew_width
+    gc_skew_radius: Optional[float] = args.gc_skew_radius
     if args.gbk:
         gb_records = load_gbks(args.gbk, "circular")
     elif args.gff and args.fasta:
@@ -400,7 +428,41 @@ def circular_main(cmd_args) -> None:
 
 
     cfg = GbdrawConfig.from_dict(config_dict)
-    track_specs = [f"features@w={float(feature_width):g}px"] if feature_width is not None else None
+    track_specs: list[str] = []
+    if feature_width is not None:
+        track_specs.append(f"features@w={float(feature_width):g}px")
+
+    gc_content_spec_requested = (gc_content_width is not None) or (gc_content_radius is not None)
+    if gc_content_spec_requested:
+        if not show_gc:
+            logger.warning(
+                "WARNING: GC content track is suppressed. Ignoring --gc_content_width/--gc_content_radius."
+            )
+        else:
+            gc_content_opts: list[str] = []
+            if gc_content_radius is not None:
+                gc_content_opts.append(f"r={float(gc_content_radius):g}")
+            if gc_content_width is not None:
+                gc_content_opts.append(f"w={float(gc_content_width):g}px")
+            if gc_content_opts:
+                track_specs.append(f"gc_content@{','.join(gc_content_opts)}")
+
+    gc_skew_spec_requested = (gc_skew_width is not None) or (gc_skew_radius is not None)
+    if gc_skew_spec_requested:
+        if not show_skew:
+            logger.warning(
+                "WARNING: GC skew track is suppressed. Ignoring --gc_skew_width/--gc_skew_radius."
+            )
+        else:
+            gc_skew_opts: list[str] = []
+            if gc_skew_radius is not None:
+                gc_skew_opts.append(f"r={float(gc_skew_radius):g}")
+            if gc_skew_width is not None:
+                gc_skew_opts.append(f"w={float(gc_skew_width):g}px")
+            if gc_skew_opts:
+                track_specs.append(f"gc_skew@{','.join(gc_skew_opts)}")
+
+    track_specs_or_none = track_specs or None
 
     for gb_record in gb_records:
         record_count += 1
@@ -423,7 +485,7 @@ def circular_main(cmd_args) -> None:
             species=species,
             strain=strain,
             cfg=cfg,
-            track_specs=track_specs,
+            track_specs=track_specs_or_none,
         )
         save_figure(canvas, out_formats)
 
