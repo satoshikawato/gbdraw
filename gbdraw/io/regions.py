@@ -22,6 +22,31 @@ _REGION_COORD_RE = re.compile(
     re.IGNORECASE,
 )
 
+_COORD_BASE_KEY = "gbdraw_coord_base"
+_COORD_STEP_KEY = "gbdraw_coord_step"
+
+
+def _read_coord_map(record: SeqRecord) -> tuple[int, int]:
+    annotations = getattr(record, "annotations", None) or {}
+    try:
+        base = int(annotations.get(_COORD_BASE_KEY, 1))
+    except (TypeError, ValueError):
+        base = 1
+    try:
+        step = int(annotations.get(_COORD_STEP_KEY, 1))
+    except (TypeError, ValueError):
+        step = 1
+    if step == 0:
+        step = 1
+    return base, (1 if step > 0 else -1)
+
+
+def _write_coord_map(record: SeqRecord, *, base: int, step: int) -> None:
+    if getattr(record, "annotations", None) is None:
+        record.annotations = {}
+    record.annotations[_COORD_BASE_KEY] = int(base)
+    record.annotations[_COORD_STEP_KEY] = 1 if int(step) >= 0 else -1
+
 
 @dataclass(frozen=True)
 class RegionSpec:
@@ -145,6 +170,7 @@ def _crop_record_to_region(
     log: logging.Logger,
 ) -> SeqRecord:
     start_0, end_0 = check_start_end_coords(record, spec.start, spec.end)
+    coord_base, coord_step = _read_coord_map(record)
 
     if start_0 != spec.start - 1 or end_0 != spec.end:
         log.warning(
@@ -177,6 +203,9 @@ def _crop_record_to_region(
             new_record.letter_annotations = sliced
 
     new_record.features = crop_and_shift_features(record.features, start_0, end_0)
+    cropped_base = coord_base + (coord_step * start_0)
+    cropped_step = coord_step
+    _write_coord_map(new_record, base=cropped_base, step=cropped_step)
 
     if spec.reverse_complement:
         new_record = new_record.reverse_complement(
@@ -188,6 +217,10 @@ def _crop_record_to_region(
             letter_annotations=True,
             dbxrefs=True,
         )
+        cropped_length = len(new_record.seq)
+        rc_base = cropped_base + (cropped_step * max(0, cropped_length - 1))
+        rc_step = -cropped_step
+        _write_coord_map(new_record, base=rc_base, step=rc_step)
 
     return new_record
 

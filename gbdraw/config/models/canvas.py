@@ -82,6 +82,7 @@ class LinearCanvasConfig:
     default_gc_height: float
     track_layout: Literal["above", "middle", "below"]
     track_axis_gap: float | None
+    ruler_on_axis: bool
     align_center: bool
     normalize_length: bool
     default_cds_height: LinearCanvasDefaultCdsHeightConfig
@@ -126,6 +127,7 @@ class LinearCanvasConfig:
             default_gc_height=float(d["default_gc_height"]),
             track_layout=track_layout,
             track_axis_gap=track_axis_gap,
+            ruler_on_axis=bool(d.get("ruler_on_axis", False)),
             align_center=bool(d["align_center"]),
             normalize_length=bool(d["normalize_length"]),
             default_cds_height=LinearCanvasDefaultCdsHeightConfig.from_dict(d["default_cds_height"]),

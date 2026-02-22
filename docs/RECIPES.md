@@ -97,6 +97,26 @@ gbdraw linear --gbk genome.gb -o output -f svg --show_gc --show_skew
 gbdraw linear --gbk genome.gb -o output -f svg --scale_style ruler
 ```
 
+### Linear Axis Ruler (Above/Below Tracks)
+```bash
+gbdraw linear --gbk genome.gb -o output -f svg \
+  --track_layout above --scale_style ruler --ruler_on_axis
+```
+
+### Linear Region with Absolute Axis Coordinates
+```bash
+gbdraw linear --gbk genome.gb -o output -f svg \
+  --track_layout below --scale_style ruler --ruler_on_axis \
+  --region RecA:101-300
+```
+
+### Linear Region Reverse-Complement Coordinates (Descending Left→Right)
+```bash
+gbdraw linear --gbk genome.gb -o output -f svg \
+  --track_layout below --scale_style ruler --ruler_on_axis \
+  --region RecA:101-300:rc
+```
+
 ---
 
 ## Comparative Genomics

@@ -21,6 +21,13 @@ def _attach_source_annotations(record: SeqRecord, source_file: str) -> None:
         record.annotations = {}
     record.annotations["gbdraw_source_file"] = source_file
     record.annotations["gbdraw_source_basename"] = os.path.basename(source_file)
+    # Coordinate mapping from current left-to-right index (0-based) to absolute
+    # genomic coordinate: coord = base + step * index.
+    # Defaults for untouched records: 1..len (step=+1).
+    if "gbdraw_coord_base" not in record.annotations:
+        record.annotations["gbdraw_coord_base"] = 1
+    if "gbdraw_coord_step" not in record.annotations:
+        record.annotations["gbdraw_coord_step"] = 1
 
 
 def load_gbks(

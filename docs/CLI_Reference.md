@@ -221,7 +221,8 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--label_placement {auto,above_feature}]
               [--label_rotation LABEL_ROTATION]
               [--track_layout {above,middle,below}]
-              [--track_axis_gap AUTO|PX] [-f FORMAT] [-l LEGEND]
+              [--track_axis_gap AUTO|PX] [--ruler_on_axis] [-f FORMAT]
+              [-l LEGEND]
               [--show_labels [{all,first,none}]] [--resolve_overlaps]
               [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
@@ -232,6 +233,8 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--scale_stroke_color SCALE_STROKE_COLOR]
               [--scale_stroke_width SCALE_STROKE_WIDTH]
               [--scale_font_size SCALE_FONT_SIZE]
+              [--ruler_label_font_size RULER_LABEL_FONT_SIZE]
+              [--ruler_label_color RULER_LABEL_COLOR]
               [--scale_interval SCALE_INTERVAL]
               [--legend_box_size LEGEND_BOX_SIZE]
               [--legend_font_size LEGEND_FONT_SIZE] [--normalize_length]
@@ -324,6 +327,13 @@ options:
                         Gap between axis and nearest feature edge in pixels
                         for above/below layouts. Use "auto" to derive it from
                         feature height.
+  --ruler_on_axis       Use each record axis as the ruler in linear mode.
+                        Effective only with --scale_style ruler and
+                        --track_layout above|below. When --region is used,
+                        labels show absolute source coordinates (e.g.
+                        start..end, or end..start with :rc). Label units are
+                        chosen from the displayed span (bp/kbp/Mbp), not from
+                        absolute coordinate magnitude.
   -f, --format FORMAT   Comma-separated list of output file formats (svg, png,
                         pdf, eps, ps; default: svg).
   -l, --legend LEGEND   Legend position (default: "right"; "right", "left",
@@ -358,7 +368,8 @@ options:
                         "ruler")
   --scale_stroke_color SCALE_STROKE_COLOR
                         Scale bar/ruler stroke color (optional; str; default:
-                        "black")
+                        "black"; defaults to axis color when
+                        --ruler_on_axis is active)
   --scale_stroke_width SCALE_STROKE_WIDTH
                         Scale bar/ruler stroke width (optional; float;
                         default: 3 (pt))
@@ -366,6 +377,13 @@ options:
                         Scale bar/ruler font size (optional; float; default:
                         24 (pt) for genomes <= 50 kb, 16 for genomes >= 50
                         kb).
+  --ruler_label_font_size RULER_LABEL_FONT_SIZE
+                        Ruler label font size (optional; float). Overrides
+                        --scale_font_size when both are set.
+  --ruler_label_color RULER_LABEL_COLOR
+                        Ruler label color (optional; str; default follows
+                        axis color when --ruler_on_axis is active, otherwise
+                        black).
   --scale_interval SCALE_INTERVAL
                         Manual tick interval for "ruler" scale style (in bp).
                         Overrides automatic calculation; optional

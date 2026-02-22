@@ -13,6 +13,31 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 
 logger = logging.getLogger(__name__)
 
+_COORD_BASE_KEY = "gbdraw_coord_base"
+_COORD_STEP_KEY = "gbdraw_coord_step"
+
+
+def _read_coord_map(record: SeqRecord) -> tuple[int, int]:
+    annotations = getattr(record, "annotations", None) or {}
+    try:
+        base = int(annotations.get(_COORD_BASE_KEY, 1))
+    except (TypeError, ValueError):
+        base = 1
+    try:
+        step = int(annotations.get(_COORD_STEP_KEY, 1))
+    except (TypeError, ValueError):
+        step = 1
+    if step == 0:
+        step = 1
+    return base, (1 if step > 0 else -1)
+
+
+def _write_coord_map(record: SeqRecord, *, base: int, step: int) -> None:
+    if getattr(record, "annotations", None) is None:
+        record.annotations = {}
+    record.annotations[_COORD_BASE_KEY] = int(base)
+    record.annotations[_COORD_STEP_KEY] = 1 if int(step) >= 0 else -1
+
 
 @dataclass(frozen=True)
 class RecordSelector:
@@ -96,17 +121,21 @@ def reverse_records(
     log = log or logger
     reversed_records: list[SeqRecord] = []
     for rec in records:
-        reversed_records.append(
-            rec.reverse_complement(
-                id=True,
-                name=True,
-                description=True,
-                features=True,
-                annotations=True,
-                letter_annotations=True,
-                dbxrefs=True,
-            )
+        base, step = _read_coord_map(rec)
+        record_length = len(rec.seq)
+        rc_base = base + (step * max(0, record_length - 1))
+        rc_step = -step
+        reversed_record = rec.reverse_complement(
+            id=True,
+            name=True,
+            description=True,
+            features=True,
+            annotations=True,
+            letter_annotations=True,
+            dbxrefs=True,
         )
+        _write_coord_map(reversed_record, base=rc_base, step=rc_step)
+        reversed_records.append(reversed_record)
     if reverse_flag and reversed_records:
         log.info("INFO: Reverse complemented %d record(s).", len(reversed_records))
     return reversed_records

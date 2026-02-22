@@ -157,7 +157,16 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     if (linearLabelSupportCache) return linearLabelSupportCache;
     const pyodide = getPyodide();
     if (!pyodide) {
-      linearLabelSupportCache = { placement: false, rotation: false, track_layout: false, track_axis_gap: false };
+      linearLabelSupportCache = {
+        placement: false,
+        rotation: false,
+        track_layout: false,
+        track_axis_gap: false,
+        ruler_on_axis: false,
+        scale_font_size: true,
+        ruler_label_font_size: false,
+        ruler_label_color: false
+      };
       return linearLabelSupportCache;
     }
     try {
@@ -170,11 +179,24 @@ json.dumps({
   "rotation": "--label_rotation" in _source,
   "track_layout": "--track_layout" in _source,
   "track_axis_gap": "--track_axis_gap" in _source,
+  "ruler_on_axis": "--ruler_on_axis" in _source,
+  "scale_font_size": "--scale_font_size" in _source,
+  "ruler_label_font_size": "--ruler_label_font_size" in _source,
+  "ruler_label_color": "--ruler_label_color" in _source,
 })
       `);
       linearLabelSupportCache = JSON.parse(String(raw));
     } catch (_err) {
-      linearLabelSupportCache = { placement: false, rotation: false, track_layout: false, track_axis_gap: false };
+      linearLabelSupportCache = {
+        placement: false,
+        rotation: false,
+        track_layout: false,
+        track_axis_gap: false,
+        ruler_on_axis: false,
+        scale_font_size: true,
+        ruler_label_font_size: false,
+        ruler_label_color: false
+      };
     }
     return linearLabelSupportCache;
   };
@@ -448,8 +470,25 @@ json.dumps({
         const wantsTrackLayoutOption = normalizedTrackLayout !== 'middle';
         const wantsTrackAxisGapOption =
           adv.track_axis_gap !== null && adv.track_axis_gap !== undefined && adv.track_axis_gap !== '';
-        if (wantsPlacementOption || wantsRotationOption || wantsTrackLayoutOption || wantsTrackAxisGapOption) {
-          const linearLabelSupport = getLinearLabelOptionSupport();
+        const wantsRulerLabelFontOption =
+          adv.scale_font_size !== null && adv.scale_font_size !== undefined && adv.scale_font_size !== '';
+        const wantsRulerLabelColorOption =
+          adv.ruler_label_color !== null &&
+          adv.ruler_label_color !== undefined &&
+          String(adv.ruler_label_color).trim() !== '';
+        const wantsRulerOnAxisOption =
+          Boolean(form.linear_ruler_on_axis) &&
+          form.scale_style === 'ruler' &&
+          (normalizedTrackLayout === 'above' || normalizedTrackLayout === 'below');
+        const linearLabelSupport = getLinearLabelOptionSupport();
+        if (
+          wantsPlacementOption ||
+          wantsRotationOption ||
+          wantsTrackLayoutOption ||
+          wantsTrackAxisGapOption ||
+          wantsRulerOnAxisOption ||
+          wantsRulerLabelColorOption
+        ) {
           if (wantsPlacementOption && !linearLabelSupport.placement) {
             throw new Error("Current gbdraw wheel does not support --label_placement. Rebuild and redeploy the web wheel.");
           }
@@ -461,6 +500,12 @@ json.dumps({
           }
           if (wantsTrackAxisGapOption && !linearLabelSupport.track_axis_gap) {
             throw new Error("Current gbdraw wheel does not support --track_axis_gap. Rebuild and redeploy the web wheel.");
+          }
+          if (wantsRulerOnAxisOption && !linearLabelSupport.ruler_on_axis) {
+            throw new Error("Current gbdraw wheel does not support --ruler_on_axis. Rebuild and redeploy the web wheel.");
+          }
+          if (wantsRulerLabelColorOption && !linearLabelSupport.ruler_label_color) {
+            throw new Error("Current gbdraw wheel does not support --ruler_label_color. Rebuild and redeploy the web wheel.");
           }
         }
         if (normalizedLabelPlacement && normalizedLabelPlacement !== 'auto') {
@@ -475,13 +520,29 @@ json.dumps({
         if (adv.track_axis_gap !== null && adv.track_axis_gap !== undefined && adv.track_axis_gap !== '') {
           args.push('--track_axis_gap', adv.track_axis_gap);
         }
+        if (
+          Boolean(form.linear_ruler_on_axis) &&
+          form.scale_style === 'ruler' &&
+          (normalizedTrackLayout === 'above' || normalizedTrackLayout === 'below')
+        ) {
+          args.push('--ruler_on_axis');
+        }
 
         if (adv.feature_height) args.push('--feature_height', adv.feature_height);
         if (adv.gc_height) args.push('--gc_height', adv.gc_height);
         if (adv.comparison_height) args.push('--comparison_height', adv.comparison_height);
 
         if (adv.scale_interval) args.push('--scale_interval', adv.scale_interval);
-        if (adv.scale_font_size) args.push('--scale_font_size', adv.scale_font_size);
+        if (wantsRulerLabelFontOption) {
+          if (linearLabelSupport.ruler_label_font_size) {
+            args.push('--ruler_label_font_size', adv.scale_font_size);
+          } else if (linearLabelSupport.scale_font_size) {
+            args.push('--scale_font_size', adv.scale_font_size);
+          } else {
+            throw new Error("Current gbdraw wheel does not support ruler label font options. Rebuild and redeploy the web wheel.");
+          }
+        }
+        if (wantsRulerLabelColorOption) args.push('--ruler_label_color', adv.ruler_label_color);
         if (adv.scale_stroke_width) args.push('--scale_stroke_width', adv.scale_stroke_width);
         if (adv.scale_stroke_color) args.push('--scale_stroke_color', adv.scale_stroke_color);
 

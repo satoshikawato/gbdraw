@@ -21,8 +21,13 @@ from ...configurators import (  # type: ignore[reportMissingImports]
     GcContentConfigurator,
     LegendDrawingConfigurator,
 )
+from ...core.text import calculate_bbox_dimensions
 from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
 from ...render.groups.linear import LengthBarGroup, LegendGroup  # type: ignore[reportMissingImports]
+from ...render.groups.linear.length_bar import (
+    RULER_LABEL_OFFSET,
+    RULER_TICK_LENGTH,
+)
 from ...io.comparisons import load_comparisons
 from ...legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
@@ -42,6 +47,43 @@ from .precalc import _precalculate_definition_widths, _precalculate_label_dimens
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
+
+
+def _is_axis_ruler_enabled(canvas_config: LinearCanvasConfigurator, cfg: GbdrawConfig) -> bool:
+    track_layout = str(canvas_config.track_layout).strip().lower()
+    scale_style = str(cfg.objects.scale.style).strip().lower()
+    return (
+        bool(canvas_config.ruler_on_axis)
+        and scale_style == "ruler"
+        and track_layout in {"above", "below"}
+    )
+
+
+def _axis_ruler_extents(canvas_config: LinearCanvasConfigurator, cfg: GbdrawConfig) -> tuple[float, float]:
+    """
+    Return (height_above_axis, height_below_axis) required by axis-based ruler labels.
+    """
+    if not _is_axis_ruler_enabled(canvas_config, cfg):
+        return 0.0, 0.0
+
+    font_size = cfg.objects.scale.font_size.for_length_param(canvas_config.length_param)
+    label_height = calculate_bbox_dimensions(
+        "0",
+        cfg.objects.text.font_family,
+        font_size,
+        cfg.canvas.dpi,
+    )[1]
+    protrusion = max(
+        0.5 * float(cfg.objects.scale.stroke_width),
+        float(RULER_TICK_LENGTH),
+        float(RULER_LABEL_OFFSET) + float(label_height),
+    )
+    track_layout = str(canvas_config.track_layout).strip().lower()
+    if track_layout == "above":
+        return 0.0, protrusion
+    if track_layout == "below":
+        return protrusion, 0.0
+    return 0.0, 0.0
 
 
 def _precalculate_feature_track_heights(
@@ -66,6 +108,7 @@ def _precalculate_feature_track_heights(
         if (canvas_config.track_axis_gap is not None and float(canvas_config.cds_height) > 0.0)
         else None
     )
+    axis_ruler_above, axis_ruler_below = _axis_ruler_extents(canvas_config, cfg)
     
     color_table, default_colors = preprocess_color_tables(
         feature_config.color_table, feature_config.default_colors
@@ -131,6 +174,11 @@ def _precalculate_feature_track_heights(
                     max_bottom_y = bottom_y
             height_above = max(0.0, -min_top_y)
             height_below = max(0.0, max_bottom_y)
+
+        if axis_ruler_above > 0.0:
+            height_above = max(height_above, axis_ruler_above)
+        if axis_ruler_below > 0.0:
+            height_below = max(height_below, axis_ruler_below)
         
         record_heights_above[record.id] = height_above
         record_heights_below[record.id] = height_below
@@ -175,6 +223,7 @@ def assemble_linear_diagram(
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
     track_layout = str(canvas_config.track_layout).strip().lower()
     non_middle_layout = track_layout in {"above", "below"}
+    axis_ruler_enabled = _is_axis_ruler_enabled(canvas_config, cfg)
 
     required_label_height, all_labels, record_label_heights_above = _precalculate_label_dimensions(
         records, feature_config, canvas_config, config_dict, cfg=cfg
@@ -279,13 +328,20 @@ def assemble_linear_diagram(
             inter_record_space = height_below_axis + min_gap + height_above_next_axis
             current_y += inter_record_space
 
-    length_bar_group: Group = LengthBarGroup(
-        canvas_config.fig_width,
-        canvas_config.alignment_width,
-        canvas_config.longest_genome,
-        config_dict,
-        canvas_config,
-        cfg=cfg,
+    length_bar_group: LengthBarGroup | None = None
+    if not canvas_config.normalize_length and not axis_ruler_enabled:
+        length_bar_group = LengthBarGroup(
+            canvas_config.fig_width,
+            canvas_config.alignment_width,
+            canvas_config.longest_genome,
+            config_dict,
+            canvas_config,
+            cfg=cfg,
+        )
+    length_bar_height = (
+        float(length_bar_group.scale_group_height)
+        if length_bar_group is not None
+        else 0.0
     )
 
     final_record_id = record_ids[-1] if record_ids else ""
@@ -306,7 +362,7 @@ def assemble_linear_diagram(
         + final_label_height_below
         + canvas_config.gc_padding
         + canvas_config.skew_padding
-        + length_bar_group.scale_group_height
+        + length_bar_height
         + 4 * canvas_config.vertical_padding
         + canvas_config.original_vertical_offset
     )
@@ -351,7 +407,7 @@ def assemble_linear_diagram(
 
     if canvas_config.legend_position != "none":
         canvas = add_legends_on_linear_canvas(canvas, config_dict, canvas_config, legend_group, legend_table)
-    if not canvas_config.normalize_length:
+    if length_bar_group is not None:
         canvas = add_length_bar_on_linear_canvas(canvas, canvas_config, config_dict, length_bar_group, legend_group)
 
     if blast_files:
