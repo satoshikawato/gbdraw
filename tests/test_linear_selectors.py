@@ -146,8 +146,9 @@ def test_linear_region_ruler_on_axis_uses_absolute_coordinates(
     assert returncode == 0, f"gbdraw failed: {output}"
     svg_content = svg_path.read_text(encoding="utf-8")
     assert 'id="length_bar"' not in svg_content
-    assert "101 bp" in svg_content
-    assert "300 bp" in svg_content
+    assert "101 bp" not in svg_content
+    assert "300 bp" not in svg_content
+    assert "200 bp" in svg_content
 
 
 @pytest.mark.linear
@@ -173,7 +174,7 @@ def test_linear_region_ruler_on_axis_rc_labels_descend_left_to_right(
             "ruler",
             "--ruler_on_axis",
             "--scale_interval",
-            "100",
+            "50",
             "--legend",
             "none",
         ],
@@ -182,9 +183,12 @@ def test_linear_region_ruler_on_axis_rc_labels_descend_left_to_right(
     assert returncode == 0, f"gbdraw failed: {output}"
     svg_content = svg_path.read_text(encoding="utf-8")
     assert 'id="length_bar"' not in svg_content
-    assert "300 bp" in svg_content
-    assert "101 bp" in svg_content
-    assert svg_content.index("300 bp") < svg_content.index("101 bp")
+    assert "300 bp" not in svg_content
+    assert "101 bp" not in svg_content
+    assert "250 bp" in svg_content
+    assert "200 bp" in svg_content
+    assert "150 bp" in svg_content
+    assert svg_content.index("250 bp") < svg_content.index("200 bp") < svg_content.index("150 bp")
 
 
 @pytest.mark.linear

@@ -235,10 +235,10 @@ def test_linear_ruler_on_axis_uses_shared_auto_interval_across_records(tmp_path:
     assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
     svg_content = output_svg.read_text(encoding="utf-8")
     group_matches = re.findall(r'<g id="NC_000913\.3"[^>]*>(.*?)</g>', svg_content)
-    axis_groups = [g for g in group_matches if re.search(r'y1="-1\.5"[^>]*y2="10\.0"', g) is not None]
+    axis_groups = [g for g in group_matches if re.search(r'<line[^>]*y2="10\.0"', g) is not None]
     assert len(axis_groups) == 3
-    tick_counts = [len(re.findall(r'<line[^>]*y1="-1\.5"[^>]*y2="10\.0"', g)) for g in axis_groups]
-    assert tick_counts[2] <= 3
+    tick_counts = [len(re.findall(r'<line[^>]*y2="10\.0"', g)) for g in axis_groups]
+    assert tick_counts[2] <= 1
     assert tick_counts[0] > tick_counts[2]
 
 
@@ -251,15 +251,19 @@ def test_linear_ruler_on_axis_defaults_tick_and_label_colors_to_axis(tmp_path: P
     assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
     svg_content = output_svg.read_text(encoding="utf-8")
     axis_match = re.search(
-        r'<line fill="none" stroke="([^"]+)"[^>]*x1="0"[^>]*x2="2000\.0"[^>]*y1="0"[^>]*y2="0"',
+        r'<line fill="none" stroke="([^"]+)" stroke-width="([^"]+)"[^>]*x1="0"[^>]*x2="2000\.0"[^>]*y1="0"[^>]*y2="0"',
         svg_content,
     )
-    tick_match = re.search(r'<line stroke="([^"]+)"[^>]*y1="-1\.5"[^>]*y2="10\.0"', svg_content)
+    tick_match = re.search(
+        r'<line[^>]*stroke="([^"]+)"[^>]*stroke-width="([^"]+)"[^>]*y2="10\.0"',
+        svg_content,
+    )
     label_match = re.search(r'<text[^>]*fill="([^"]+)"[^>]*>[^<]*(?:bp|kbp|Mbp)</text>', svg_content)
     assert axis_match is not None
     assert tick_match is not None
     assert label_match is not None
     assert tick_match.group(1) == axis_match.group(1)
+    assert float(tick_match.group(2)) == pytest.approx(float(axis_match.group(2)))
     assert label_match.group(1) == axis_match.group(1)
 
 

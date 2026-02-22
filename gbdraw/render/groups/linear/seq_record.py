@@ -68,6 +68,7 @@ class SeqRecordGroup:
         self.scale_interval = scale_cfg.interval
         self.auto_scale_interval = auto_linear_tick_interval(max(1, int(self.canvas_config.longest_genome)))
         self.scale_label_context_length = max(1, int(self.canvas_config.longest_genome))
+        self.axis_stroke_width = self._cfg.objects.axis.linear.stroke_width.for_length_param(self.length_param)
         self.track_layout = str(self.canvas_config.track_layout).strip().lower()
         self.ruler_on_axis = bool(cfg.canvas.linear.ruler_on_axis)
         self.axis_ruler_enabled = (
@@ -90,7 +91,6 @@ class SeqRecordGroup:
         """
         bar_length: float = alignment_width * genome_size_normalization_factor
         linear_axis_stroke_color: str = self._cfg.objects.axis.linear.stroke_color
-        linear_axis_stroke_width: float = self._cfg.objects.axis.linear.stroke_width.for_length_param(self.length_param)
         start_x: float = 0
         start_y: float = 0
         end_x: float = bar_length
@@ -99,7 +99,7 @@ class SeqRecordGroup:
             start=(start_x, start_y),
             end=(end_x, end_y),
             stroke=linear_axis_stroke_color,
-            stroke_width=linear_axis_stroke_width,
+            stroke_width=self.axis_stroke_width,
             fill="none",
         )
         return axis_path
@@ -121,15 +121,19 @@ class SeqRecordGroup:
         return start_coord, end_coord
 
     def _axis_tick_coordinates(self, start_coord: int, end_coord: int, tick_interval: int) -> list[int]:
-        coordinates: set[int] = {int(start_coord), int(end_coord)}
-        if tick_interval > 0:
-            min_coord = min(start_coord, end_coord)
-            max_coord = max(start_coord, end_coord)
-            first_tick = ((min_coord + tick_interval - 1) // tick_interval) * tick_interval
-            tick = first_tick
-            while tick <= max_coord:
-                coordinates.add(int(tick))
-                tick += tick_interval
+        if tick_interval <= 0:
+            return []
+        min_coord = min(start_coord, end_coord)
+        max_coord = max(start_coord, end_coord)
+        first_tick = (min_coord // tick_interval) * tick_interval
+        if first_tick < min_coord:
+            first_tick += tick_interval
+        coordinates: list[int] = []
+        tick = first_tick
+        while tick < max_coord:
+            if tick > min_coord:
+                coordinates.append(int(tick))
+            tick += tick_interval
         return sorted(coordinates, reverse=(start_coord > end_coord))
 
     def _draw_axis_ruler(self, group: Group, *, bar_length: float, record_length: int) -> None:
@@ -151,12 +155,12 @@ class SeqRecordGroup:
             return
 
         label_y = RULER_LABEL_OFFSET
-        tick_start_y = 0 - (0.5 * self.scale_stroke_width)
+        tick_start_y = 0 - (0.5 * self.axis_stroke_width)
         tick_end_y = RULER_TICK_LENGTH
         dominant_baseline = "hanging"
         if self.track_layout == "below":
             label_y = -RULER_LABEL_OFFSET
-            tick_start_y = 0 + (0.5 * self.scale_stroke_width)
+            tick_start_y = 0 + (0.5 * self.axis_stroke_width)
             tick_end_y = -RULER_TICK_LENGTH
             dominant_baseline = "text-after-edge"
 
@@ -174,7 +178,7 @@ class SeqRecordGroup:
                 start=(x_pos, tick_start_y),
                 end=(x_pos, tick_end_y),
                 stroke=self.scale_stroke_color,
-                stroke_width=self.scale_stroke_width,
+                stroke_width=self.axis_stroke_width,
             )
             group.add(tick_line)
 
