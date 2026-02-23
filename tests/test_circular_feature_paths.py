@@ -207,6 +207,30 @@ def test_intron_uses_clockwise_short_arc_when_start_exceeds_end(
     assert all(command[2] == 0 for command in arc_commands)
 
 
+@pytest.mark.parametrize(
+    ("strand", "coord_start", "coord_end"),
+    [
+        ("positive", 501, 500),
+        ("negative", 501, 500),
+    ],
+)
+def test_intron_one_bp_gap_is_not_rendered_as_near_full_circle(
+    strand: str,
+    coord_start: int,
+    coord_end: int,
+) -> None:
+    path_data = _make_intron_path(strand, coord_start=coord_start, coord_end=coord_end)
+    arc_commands = _extract_arc_commands(path_data)
+
+    assert len(arc_commands) == 1
+    rx, ry, large_arc, sweep = arc_commands[0]
+    expected_radius = _expected_intron_radius(strand)
+    assert math.isclose(rx, expected_radius, rel_tol=1e-9, abs_tol=1e-9)
+    assert math.isclose(ry, expected_radius, rel_tol=1e-9, abs_tol=1e-9)
+    assert large_arc == 0
+    assert sweep == 1
+
+
 def test_short_introns_remain_single_arc_and_track_aligned() -> None:
     path_data = _make_intron_path("positive", coord_start=100, coord_end=110)
     arc_commands = _extract_arc_commands(path_data)
