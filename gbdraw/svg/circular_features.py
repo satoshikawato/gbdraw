@@ -134,17 +134,22 @@ def generate_circular_arrowhead_path(
     factors: list[float] = calculate_feature_position_factors_circular(
         total_length, coord_strand, track_ratio, cds_ratio, offset, track_type, strandedness, track_id
     )
-    coord_start = int(coord_dict["coord_start"])
-    coord_end = int(coord_dict["coord_end"])
-    coord_len: float = abs(int(int(coord_dict["coord_end"]) - int(coord_dict["coord_start"])))
-    coord_strand = str(coord_dict["coord_strand"])
+    coord_start = int(coord_dict["coord_start"]) % total_length
+    coord_end = int(coord_dict["coord_end"]) % total_length
     arrow_strand_dict: Dict[str, Tuple[int, int, str, str]] = {
         "positive": (coord_start, coord_end, " 0 0 1 ", " 0 0 0 "),
         "negative": (coord_end, coord_start, " 0 0 0 ", " 0 0 1 "),
     }
     arrow_start, arrow_end, param_1, param_2 = arrow_strand_dict[coord_strand]
+    arrow_start %= total_length
+    arrow_end %= total_length
 
-    if abs(coord_len) < cds_arrow_length:
+    if coord_strand == "positive":
+        coord_len_bp = (arrow_end - arrow_start) % total_length
+    else:
+        coord_len_bp = (arrow_start - arrow_end) % total_length
+
+    if coord_len_bp < cds_arrow_length:
         point_x: float = (radius * factors[1]) * math.cos(
             math.radians(360.0 * (arrow_end / total_length) - 90)
         )
@@ -198,7 +203,7 @@ def generate_circular_arrowhead_path(
             math.radians(360.0 * (arrow_start / total_length) - 90)
         )
 
-        shoulder: float = set_arrow_shoulder(coord_strand, arrow_end, cds_arrow_length)
+        shoulder: float = set_arrow_shoulder(coord_strand, arrow_end, cds_arrow_length) % total_length
 
         end_x_1: float = (radius * factors[0]) * math.cos(
             math.radians(360.0 * ((shoulder) / total_length) - 90)
@@ -213,14 +218,14 @@ def generate_circular_arrowhead_path(
             math.radians(360.0 * ((shoulder) / total_length) - 90)
         )
 
-        arc_len_bp = abs(coord_len) - cds_arrow_length
+        arc_len_bp = coord_len_bp - cds_arrow_length
         angle_deg = 360.0 * arc_len_bp / total_length
 
         if angle_deg > 20:
             if coord_strand == "positive":
-                mid_pos = arrow_start + (shoulder - arrow_start) / 2
+                mid_pos = (arrow_start + arc_len_bp / 2.0) % total_length
             else:
-                mid_pos = shoulder + (arrow_start - shoulder) / 2
+                mid_pos = (arrow_start - arc_len_bp / 2.0) % total_length
 
             mid_x_1 = (radius * factors[0]) * math.cos(
                 math.radians(360.0 * (mid_pos / total_length) - 90)

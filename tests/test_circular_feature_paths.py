@@ -11,6 +11,7 @@ from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.layout.circular import calculate_feature_position_factors_circular
 from gbdraw.render.drawers.circular.features import FeatureDrawer
 from gbdraw.render.drawers.circular.features import FeaturePathGenerator
+from gbdraw.svg.circular_features import generate_circular_arrowhead_path
 from gbdraw.svg.circular_features import generate_circular_intron_path
 
 
@@ -69,6 +70,38 @@ def test_origin_spanning_non_directional_two_blocks_are_drawn_as_single_block() 
     assert paths[0][0] == "block"
 
 
+def test_origin_spanning_directional_two_blocks_are_drawn_as_single_block() -> None:
+    feature = _make_feature(
+        [
+            FeatureLocationPart("block", "001", "negative", 16023, 16569, False),
+            FeatureLocationPart("line", "001", "negative", 577, 16022, False),
+            FeatureLocationPart("block", "002", "negative", 0, 576, True),
+        ],
+        is_directional=True,
+    )
+
+    paths = _make_generator(total_length=16569).generate_circular_gene_path(feature)
+
+    assert len(paths) == 1
+    assert [path[0] for path in paths] == ["block"]
+
+
+def test_origin_spanning_directional_with_undefined_strand_falls_back_to_rectangle() -> None:
+    feature = _make_feature(
+        [
+            FeatureLocationPart("block", "001", "undefined", 16023, 16569, False),
+            FeatureLocationPart("line", "001", "undefined", 577, 16022, False),
+            FeatureLocationPart("block", "002", "undefined", 0, 576, True),
+        ],
+        is_directional=True,
+    )
+
+    paths = _make_generator(total_length=16569).generate_circular_gene_path(feature)
+
+    assert len(paths) == 1
+    assert paths[0][0] == "block"
+
+
 def test_non_origin_spanning_multipart_keeps_line_segment() -> None:
     feature = _make_feature(
         [
@@ -107,6 +140,22 @@ def _extract_arc_commands(path_data: str) -> list[tuple[float, float, int, int]]
     for rx, ry, _rotation, large_arc, sweep, _x, _y in ARC_COMMAND_RE.findall(path_data):
         arc_commands.append((float(rx), float(ry), int(large_arc), int(sweep)))
     return arc_commands
+
+
+def _extract_arc_commands_with_endpoints(
+    path_data: str,
+) -> list[tuple[float, float, int, int, float, float]]:
+    arc_commands: list[tuple[float, float, int, int, float, float]] = []
+    for rx, ry, _rotation, large_arc, sweep, x_end, y_end in ARC_COMMAND_RE.findall(path_data):
+        arc_commands.append(
+            (float(rx), float(ry), int(large_arc), int(sweep), float(x_end), float(y_end))
+        )
+    return arc_commands
+
+
+def _position_from_xy(x: float, y: float, total_length: int) -> float:
+    angle_deg = (math.degrees(math.atan2(y, x)) + 90.0) % 360.0
+    return total_length * (angle_deg / 360.0)
 
 
 def _expected_intron_radius(strand: str, total_length: int = 1000) -> float:
@@ -205,6 +254,43 @@ def test_intron_uses_clockwise_short_arc_when_start_exceeds_end(
     assert len(arc_commands) == 2
     assert all(command[3] == expected_sweep for command in arc_commands)
     assert all(command[2] == 0 for command in arc_commands)
+
+
+def test_origin_spanning_negative_arrow_midpoint_wraps_short_way() -> None:
+    total_length = 16569
+    arrow_length = 40.0
+    _kind, path_data = generate_circular_arrowhead_path(
+        radius=TEST_RADIUS,
+        coord_dict={
+            "coord_strand": "negative",
+            "coord_start": 16023,
+            "coord_end": 576,
+        },
+        total_length=total_length,
+        cds_arrow_length=arrow_length,
+        track_ratio=TEST_TRACK_RATIO,
+        cds_ratio=TEST_CDS_RATIO,
+        offset=TEST_OFFSET,
+        track_type=TEST_TRACK_TYPE,
+        strandedness=TEST_STRANDEDNESS,
+        track_id=TEST_TRACK_ID,
+    )
+
+    arc_commands = _extract_arc_commands_with_endpoints(path_data)
+    assert len(arc_commands) >= 2
+
+    first_outer_arc = arc_commands[0]
+    assert first_outer_arc[2] == 0
+    assert first_outer_arc[3] == 0
+
+    midpoint_pos = _position_from_xy(first_outer_arc[4], first_outer_arc[5], total_length)
+    arrow_start = 576.0
+    arrow_end = 16023.0
+    feature_len_bp = (arrow_start - arrow_end) % total_length
+    shaft_len_bp = feature_len_bp - arrow_length
+    expected_midpoint = (arrow_start - shaft_len_bp / 2.0) % total_length
+
+    assert math.isclose(midpoint_pos, expected_midpoint, rel_tol=0.0, abs_tol=2.0)
 
 
 @pytest.mark.parametrize(
