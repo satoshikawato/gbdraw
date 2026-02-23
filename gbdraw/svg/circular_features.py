@@ -37,9 +37,15 @@ def generate_circular_intron_path(
         List with ["line", path_data]
     """
     coord_strand: str = str(coord_dict["coord_strand"])
-    arc_start: int = int(coord_dict["coord_start"]) % total_length
-    arc_end: int = int(coord_dict["coord_end"]) % total_length
+    raw_start = int(coord_dict["coord_start"])
+    raw_end = int(coord_dict["coord_end"])
+    arc_start: int = raw_start % total_length
+    arc_end: int = raw_end % total_length
     coord_len_bp = (arc_end - arc_start) % total_length
+    # Handle BioPython/internal boundary case where an effective 1 bp intron is encoded as start=end+1.
+    if raw_start == raw_end + 1:
+        arc_end = (arc_start + 1) % total_length
+        coord_len_bp = 1
     # Keep intron arcs aligned with axis direction (clockwise in this coordinate system).
     sweep_flag = 1
 
