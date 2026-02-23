@@ -371,6 +371,10 @@
                                     <span class="inline-flex items-center gap-1">Normalize Len <help-tip text="Normalize sequence lengths to be equal. Suppresses length bar."></help-tip></span>
                                 </label>
                                 <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.linear_ruler_on_axis" class="form-checkbox">
+                                    <span class="inline-flex items-center gap-1">Ruler on Axis <help-tip text="Use each record axis as the ruler and hide the bottom ruler. Effective when Track Layout is Above/Below and Scale Style is Ruler."></help-tip></span>
+                                </label>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                     <input type="checkbox" v-model="form.show_gc" class="form-checkbox">
                                     <span class="inline-flex items-center gap-1">Show GC <help-tip text="Display GC content track."></help-tip></span>
                                 </label>
@@ -661,15 +665,17 @@
                                     </div>
                                     
                                     <div class="pt-1 border-t border-slate-200">
-                                        <label class="text-[9px] font-bold block mb-1">SCALE BAR</label>
+                                        <label class="text-[9px] font-bold block mb-1">SCALE / RULER</label>
                                         <div class="grid grid-cols-3 gap-1">
                                             <input type="number" v-model.number="adv.scale_interval" placeholder="Interval" class="form-input px-1 py-0.5 text-xs" title="Manual tick interval">
-                                            <input type="number" v-model.number="adv.scale_font_size" placeholder="Font" class="form-input px-1 py-0.5 text-xs" title="Scale font size">
+                                            <input type="number" v-model.number="adv.scale_font_size" placeholder="Ruler Label Font" class="form-input px-1 py-0.5 text-xs" title="Ruler label font size">
                                             <input type="number" v-model.number="adv.scale_stroke_width" placeholder="Width" class="form-input px-1 py-0.5 text-xs" title="Scale bar width">
                                         </div>
                                         <div class="mt-1 flex items-center gap-2">
-                                            <label class="text-[9px]">Color:</label>
-                                            <input type="color" v-model="adv.scale_stroke_color" class="h-5 w-8 p-0 border rounded" title="Scale bar color">
+                                            <label class="text-[9px]">Scale Line:</label>
+                                            <input type="color" v-model="adv.scale_stroke_color" class="h-5 w-8 p-0 border rounded" title="Scale bar/ruler line color">
+                                            <label class="text-[9px]">Ruler Label:</label>
+                                            <input type="color" v-model="adv.ruler_label_color" class="h-5 w-8 p-0 border rounded" title="Ruler label color">
                                         </div>
                                     </div>
 

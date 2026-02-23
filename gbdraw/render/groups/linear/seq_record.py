@@ -7,6 +7,7 @@ from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
 from svgwrite.container import Group
 from svgwrite.shapes import Line
+from svgwrite.text import Text
 
 from ....canvas import LinearCanvasConfigurator
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
@@ -17,6 +18,12 @@ from ....features.factory import create_feature_dict
 from ....features.colors import preprocess_color_tables
 from ....labels.filtering import preprocess_label_filtering
 from ....configurators import FeatureDrawingConfigurator
+from .length_bar import (
+    RULER_LABEL_OFFSET,
+    RULER_TICK_LENGTH,
+    auto_linear_tick_interval,
+    format_linear_tick_label,
+)
 
 
 class SeqRecordGroup:
@@ -50,6 +57,26 @@ class SeqRecordGroup:
         self.separate_strands = self.canvas_config.strandedness
         self.resolve_overlaps = self.canvas_config.resolve_overlaps
         self.normalize_length = cfg.canvas.linear.normalize_length
+        scale_cfg = cfg.objects.scale
+        self.scale_style = str(scale_cfg.style).strip().lower()
+        self.scale_stroke_color = scale_cfg.stroke_color
+        self.scale_label_color = scale_cfg.label_color
+        self.scale_stroke_width = scale_cfg.stroke_width
+        self.scale_font_size = scale_cfg.font_size.for_length_param(self.length_param)
+        self.ruler_label_font_size = scale_cfg.ruler_label_font_size.for_length_param(self.length_param)
+        self.scale_font_weight = scale_cfg.font_weight
+        self.scale_font_family = cfg.objects.text.font_family
+        self.scale_interval = scale_cfg.interval
+        self.auto_scale_interval = auto_linear_tick_interval(max(1, int(self.canvas_config.longest_genome)))
+        self.scale_label_context_length = max(1, int(self.canvas_config.longest_genome))
+        self.axis_stroke_width = self._cfg.objects.axis.linear.stroke_width.for_length_param(self.length_param)
+        self.track_layout = str(self.canvas_config.track_layout).strip().lower()
+        self.ruler_on_axis = bool(cfg.canvas.linear.ruler_on_axis)
+        self.axis_ruler_enabled = (
+            self.ruler_on_axis
+            and self.scale_style == "ruler"
+            and self.track_layout in {"above", "below"}
+        )
         self.record_group: Group = self.setup_record_group()
 
     def draw_linear_axis(self, alignment_width: float, genome_size_normalization_factor: float) -> Line:
@@ -65,7 +92,6 @@ class SeqRecordGroup:
         """
         bar_length: float = alignment_width * genome_size_normalization_factor
         linear_axis_stroke_color: str = self._cfg.objects.axis.linear.stroke_color
-        linear_axis_stroke_width: float = self._cfg.objects.axis.linear.stroke_width.for_length_param(self.length_param)
         start_x: float = 0
         start_y: float = 0
         end_x: float = bar_length
@@ -74,10 +100,106 @@ class SeqRecordGroup:
             start=(start_x, start_y),
             end=(end_x, end_y),
             stroke=linear_axis_stroke_color,
-            stroke_width=linear_axis_stroke_width,
+            stroke_width=self.axis_stroke_width,
             fill="none",
         )
         return axis_path
+
+    def _resolve_record_coordinate_span(self, record_length: int) -> tuple[int, int]:
+        annotations = getattr(self.gb_record, "annotations", None) or {}
+        try:
+            start_coord = int(annotations.get("gbdraw_coord_base", 1))
+        except (TypeError, ValueError):
+            start_coord = 1
+        try:
+            step = int(annotations.get("gbdraw_coord_step", 1))
+        except (TypeError, ValueError):
+            step = 1
+        if step == 0:
+            step = 1
+        step = 1 if step > 0 else -1
+        end_coord = start_coord + (step * max(0, record_length - 1))
+        return start_coord, end_coord
+
+    def _axis_tick_coordinates(self, start_coord: int, end_coord: int, tick_interval: int) -> list[int]:
+        if tick_interval <= 0:
+            return []
+        min_coord = min(start_coord, end_coord)
+        max_coord = max(start_coord, end_coord)
+        first_tick = (min_coord // tick_interval) * tick_interval
+        if first_tick < min_coord:
+            first_tick += tick_interval
+        coordinates: list[int] = []
+        tick = first_tick
+        while tick < max_coord:
+            if tick > min_coord:
+                coordinates.append(int(tick))
+            tick += tick_interval
+        return sorted(coordinates, reverse=(start_coord > end_coord))
+
+    def _draw_axis_ruler(self, group: Group, *, bar_length: float, record_length: int) -> None:
+        if not self.axis_ruler_enabled or bar_length <= 0 or record_length <= 0:
+            return
+
+        start_coord, end_coord = self._resolve_record_coordinate_span(record_length)
+        coord_span = abs(end_coord - start_coord)
+        interval = (
+            int(self.scale_interval)
+            if (self.scale_interval is not None and int(self.scale_interval) > 0)
+            else int(self.auto_scale_interval)
+        )
+        if interval <= 0:
+            return
+
+        tick_coords = self._axis_tick_coordinates(start_coord, end_coord, interval)
+        if not tick_coords:
+            return
+
+        label_y = RULER_LABEL_OFFSET
+        tick_start_y = 0 - (0.5 * self.axis_stroke_width)
+        tick_end_y = RULER_TICK_LENGTH
+        dominant_baseline = "hanging"
+        if self.track_layout == "below":
+            label_y = -RULER_LABEL_OFFSET
+            tick_start_y = 0 + (0.5 * self.axis_stroke_width)
+            tick_end_y = -RULER_TICK_LENGTH
+            dominant_baseline = "text-after-edge"
+
+        for coord in tick_coords:
+            if coord_span <= 0:
+                x_pos = 0.0
+            else:
+                x_pos = bar_length * (abs(coord - start_coord) / float(coord_span))
+            if x_pos < 0.0:
+                x_pos = 0.0
+            elif x_pos > bar_length:
+                x_pos = bar_length
+
+            tick_line = Line(
+                start=(x_pos, tick_start_y),
+                end=(x_pos, tick_end_y),
+                stroke=self.scale_stroke_color,
+                stroke_width=self.axis_stroke_width,
+            )
+            group.add(tick_line)
+
+            label_text = format_linear_tick_label(
+                int(coord),
+                context_length=self.scale_label_context_length,
+                tick_interval=interval,
+            )
+            text_element = Text(
+                label_text,
+                insert=(x_pos, label_y),
+                stroke="none",
+                fill=self.scale_label_color,
+                font_size=self.ruler_label_font_size,
+                font_weight=self.scale_font_weight,
+                font_family=self.scale_font_family,
+                text_anchor="middle",
+                dominant_baseline=dominant_baseline,
+            )
+            group.add(text_element)
 
     def draw_record(
         self,
@@ -92,9 +214,11 @@ class SeqRecordGroup:
         label_list: list,
     ) -> Group:
         """Draws the genomic features onto the provided SVG group."""
+        bar_length: float = alignment_width * genome_size_normalization_factor
         # Draw the axis
         axis_path = self.draw_linear_axis(alignment_width, genome_size_normalization_factor)
         group.add(axis_path)
+        self._draw_axis_ruler(group, bar_length=bar_length, record_length=record_length)
 
         # Process labels if enabled
         if self.show_labels:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,8 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
+
+INPUT_MG1655 = Path(__file__).parent / "test_inputs" / "MG1655.gbk"
 
 
 def _write_multi_record_gbk(path: Path) -> dict[str, int]:
@@ -109,3 +112,109 @@ def test_linear_reverse_complement_flag(temp_output_dir: Path, gbdraw_runner) ->
     assert returncode == 0, f"gbdraw failed: {output}"
     assert "Reverse complemented 1 record(s)." in output
     assert svg_path.exists()
+
+
+@pytest.mark.linear
+def test_linear_region_ruler_on_axis_uses_absolute_coordinates(
+    temp_output_dir: Path,
+    gbdraw_runner,
+) -> None:
+    gbk_path = temp_output_dir / "multi_records_region_axis.gbk"
+    _write_multi_record_gbk(gbk_path)
+
+    returncode, output, svg_path = gbdraw_runner.run_linear(
+        [gbk_path],
+        "linear_region_axis_coords",
+        temp_output_dir,
+        extra_args=[
+            "--record_id",
+            "RecA",
+            "--region",
+            "RecA:101-300",
+            "--track_layout",
+            "above",
+            "--scale_style",
+            "ruler",
+            "--ruler_on_axis",
+            "--scale_interval",
+            "100",
+            "--legend",
+            "none",
+        ],
+    )
+
+    assert returncode == 0, f"gbdraw failed: {output}"
+    svg_content = svg_path.read_text(encoding="utf-8")
+    assert 'id="length_bar"' not in svg_content
+    assert "101 bp" not in svg_content
+    assert "300 bp" not in svg_content
+    assert "200 bp" in svg_content
+
+
+@pytest.mark.linear
+def test_linear_region_ruler_on_axis_rc_labels_descend_left_to_right(
+    temp_output_dir: Path,
+    gbdraw_runner,
+) -> None:
+    gbk_path = temp_output_dir / "multi_records_region_axis_rc.gbk"
+    _write_multi_record_gbk(gbk_path)
+
+    returncode, output, svg_path = gbdraw_runner.run_linear(
+        [gbk_path],
+        "linear_region_axis_coords_rc",
+        temp_output_dir,
+        extra_args=[
+            "--record_id",
+            "RecA",
+            "--region",
+            "RecA:101-300:rc",
+            "--track_layout",
+            "above",
+            "--scale_style",
+            "ruler",
+            "--ruler_on_axis",
+            "--scale_interval",
+            "50",
+            "--legend",
+            "none",
+        ],
+    )
+
+    assert returncode == 0, f"gbdraw failed: {output}"
+    svg_content = svg_path.read_text(encoding="utf-8")
+    assert 'id="length_bar"' not in svg_content
+    assert "300 bp" not in svg_content
+    assert "101 bp" not in svg_content
+    assert "250 bp" in svg_content
+    assert "200 bp" in svg_content
+    assert "150 bp" in svg_content
+    assert svg_content.index("250 bp") < svg_content.index("200 bp") < svg_content.index("150 bp")
+
+
+@pytest.mark.linear
+def test_linear_region_ruler_on_axis_uses_span_based_units_for_high_coordinates(
+    temp_output_dir: Path,
+    gbdraw_runner,
+) -> None:
+    returncode, output, svg_path = gbdraw_runner.run_linear(
+        [INPUT_MG1655],
+        "linear_region_axis_high_coords",
+        temp_output_dir,
+        extra_args=[
+            "--region",
+            "NC_000913.3:1028779-1035047",
+            "--track_layout",
+            "above",
+            "--scale_style",
+            "ruler",
+            "--ruler_on_axis",
+            "--legend",
+            "none",
+        ],
+    )
+
+    assert returncode == 0, f"gbdraw failed: {output}"
+    svg_content = svg_path.read_text(encoding="utf-8")
+    assert 'id="length_bar"' not in svg_content
+    assert re.search(r">\d+(?:\.\d+)? kbp<", svg_content) is not None
+    assert "Mbp" not in svg_content

@@ -221,9 +221,9 @@ def _get_args(args) -> argparse.Namespace:
         type=float)
     parser.add_argument(
         '--axis_stroke_color',
-        help='Axis stroke color (str; default: "lightgray")',
+        help='Axis stroke color (str; default: auto: "lightgray", or "dimgray" with --ruler_on_axis)',
         type=str,
-        default="lightgray")
+        default=None)
     parser.add_argument(
         '--axis_stroke_width',
         help='Axis stroke width (optional; float; default: 5 pt for genomes <= 50 kb, 2 pt for genomes >= 50 kb)',
@@ -280,6 +280,14 @@ def _get_args(args) -> argparse.Namespace:
         type=_parse_linear_track_axis_gap,
         default=None,
         metavar="AUTO|PX",
+    )
+    parser.add_argument(
+        '--ruler_on_axis',
+        help=(
+            'Use each record axis as the ruler in linear mode. '
+            'Effective only with --scale_style ruler and --track_layout above|below.'
+        ),
+        action='store_true',
     )
     if CAIROSVG_AVAILABLE:
         parser.add_argument(
@@ -360,6 +368,14 @@ def _get_args(args) -> argparse.Namespace:
         '--scale_font_size',
         help='Scale bar/ruler font size (optional; float; default: 24 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb).',
         type=float)
+    parser.add_argument(
+        '--ruler_label_font_size',
+        help='Ruler label font size (optional; float). Overrides --scale_font_size when both are set.',
+        type=float)
+    parser.add_argument(
+        '--ruler_label_color',
+        help='Ruler label color (optional; str; default follows axis color when --ruler_on_axis is active, otherwise black).',
+        type=str)
     parser.add_argument(
         '--scale_interval',
         help='Manual tick interval for "ruler" scale style (in bp). Overrides automatic calculation; optional',
@@ -469,6 +485,11 @@ def linear_main(cmd_args) -> None:
     scale_stroke_color: Optional[str] = args.scale_stroke_color
     scale_stroke_width: Optional[float] = args.scale_stroke_width
     scale_font_size: Optional[float] = args.scale_font_size
+    ruler_label_font_size: Optional[float] = args.ruler_label_font_size
+    effective_ruler_label_font_size: Optional[float] = (
+        ruler_label_font_size if ruler_label_font_size is not None else scale_font_size
+    )
+    scale_label_color: Optional[str] = args.ruler_label_color
     scale_interval: Optional[int] = args.scale_interval
     legend_box_size: Optional[float] = args.legend_box_size
     legend_font_size: Optional[float] = args.legend_font_size
@@ -501,7 +522,21 @@ def linear_main(cmd_args) -> None:
     label_rotation: Optional[float] = args.label_rotation
     track_layout: str = args.track_layout
     track_axis_gap: Optional[float] = args.track_axis_gap
-    axis_stroke_color: Optional[str] = args.axis_stroke_color
+    ruler_on_axis: bool = bool(args.ruler_on_axis)
+    if ruler_on_axis and not (scale_style == "ruler" and track_layout in {"above", "below"}):
+        logger.warning(
+            "WARNING: --ruler_on_axis is ignored unless --scale_style ruler and --track_layout above|below are set."
+        )
+        ruler_on_axis = False
+    axis_stroke_color: str = (
+        args.axis_stroke_color
+        if args.axis_stroke_color is not None
+        else ("dimgray" if ruler_on_axis else "lightgray")
+    )
+    if ruler_on_axis and scale_stroke_color is None:
+        scale_stroke_color = axis_stroke_color
+    if ruler_on_axis and scale_label_color is None:
+        scale_label_color = axis_stroke_color
     axis_stroke_width: Optional[float] = args.axis_stroke_width
     line_stroke_color: Optional[str] = args.line_stroke_color
     line_stroke_width: Optional[float] = args.line_stroke_width       
@@ -523,6 +558,7 @@ def linear_main(cmd_args) -> None:
         resolve_overlaps=resolve_overlaps,
         linear_track_layout=track_layout,
         linear_track_axis_gap=track_axis_gap,
+        linear_ruler_on_axis=ruler_on_axis,
         align_center=align_center, 
         strandedness=strandedness,
         label_blacklist=label_blacklist,
@@ -532,8 +568,10 @@ def linear_main(cmd_args) -> None:
         gc_height=gc_height,
         scale_style=scale_style,
         scale_stroke_color=scale_stroke_color,
+        scale_label_color=scale_label_color,
         scale_stroke_width=scale_stroke_width,
         scale_font_size=scale_font_size,
+        ruler_label_font_size=effective_ruler_label_font_size,
         scale_interval=scale_interval,
         legend_box_size=legend_box_size,
         legend_font_size=legend_font_size,

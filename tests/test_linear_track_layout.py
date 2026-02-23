@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -9,20 +10,29 @@ import pytest
 
 from gbdraw.layout.linear import calculate_feature_position_factors_linear
 from gbdraw.linear import _parse_linear_track_axis_gap, _parse_linear_track_layout
+from gbdraw.render.groups.linear.length_bar import RULER_TICK_LENGTH
 
 
 INPUT_GBK = Path(__file__).parent / "test_inputs" / "MjeNMV.gb"
+INPUT_MELA_GBK = Path(__file__).parent / "test_inputs" / "MelaMJNV.gb"
+INPUT_MG1655 = Path(__file__).parent / "test_inputs" / "MG1655.gbk"
+INPUT_MJE_MELA_BLAST = Path(__file__).parent / "test_inputs" / "MjeNMV.MelaMJNV.tblastx.out"
 
 
-def _run_linear(tmp_path: Path, extra_args: list[str]) -> tuple[int, str, str, Path]:
-    output_name = "linear_track_layout_test"
+def _run_linear_with_gbks(
+    tmp_path: Path,
+    gbk_paths: list[Path],
+    extra_args: list[str],
+    *,
+    output_name: str = "linear_track_layout_test",
+) -> tuple[int, str, str, Path]:
     cmd = [
         sys.executable,
         "-m",
         "gbdraw.cli",
         "linear",
         "--gbk",
-        str(INPUT_GBK),
+        *(str(path) for path in gbk_paths),
         "-o",
         output_name,
         "-f",
@@ -32,6 +42,49 @@ def _run_linear(tmp_path: Path, extra_args: list[str]) -> tuple[int, str, str, P
     ] + list(extra_args)
     result = subprocess.run(cmd, cwd=str(tmp_path), capture_output=True, text=True, timeout=240)
     return result.returncode, result.stdout, result.stderr, (tmp_path / f"{output_name}.svg")
+
+
+def _run_linear(tmp_path: Path, extra_args: list[str]) -> tuple[int, str, str, Path]:
+    return _run_linear_with_gbks(tmp_path, [INPUT_GBK], extra_args)
+
+
+def _extract_axis_group_y(svg_content: str, record_id: str) -> float:
+    match = re.search(
+        rf'<g id="{re.escape(record_id)}" transform="translate\([^,]+,([0-9.]+)\)"><line[^>]*y1="0" y2="0"',
+        svg_content,
+    )
+    assert match is not None
+    return float(match.group(1))
+
+
+def _extract_comparison_group_y(svg_content: str) -> float:
+    match = re.search(r'<g id="comparison1" transform="translate\([^,]+,([0-9.]+)\)">', svg_content)
+    assert match is not None
+    return float(match.group(1))
+
+
+def _extract_first_comparison_path_ys(svg_content: str) -> tuple[float, float, float, float]:
+    match = re.search(r'<g id="comparison1"[^>]*><path d="([^"]+)"', svg_content)
+    assert match is not None
+    coords = [float(value) for value in re.findall(r"-?\d+(?:\.\d+)?", match.group(1))]
+    assert len(coords) >= 8
+    return coords[1], coords[3], coords[5], coords[7]
+
+
+def _is_ruler_tick_y2(y2: float) -> bool:
+    return abs(abs(y2) - float(RULER_TICK_LENGTH)) < 1e-6
+
+
+def _count_ruler_ticks(svg_fragment: str) -> int:
+    count = 0
+    for match in re.finditer(r'<line[^>]*y2="(-?\d+(?:\.\d+)?)"', svg_fragment):
+        if _is_ruler_tick_y2(float(match.group(1))):
+            count += 1
+    return count
+
+
+def _extract_ruler_text_tags(svg_fragment: str) -> list[str]:
+    return re.findall(r'<text[^>]*>[^<]*(?:bp|kbp|Mbp)</text>', svg_fragment)
 
 
 @pytest.mark.linear
@@ -143,6 +196,31 @@ def test_linear_track_layout_cli_generates_svg(tmp_path: Path, layout: str) -> N
 
 @pytest.mark.linear
 @pytest.mark.parametrize("layout", ["above", "below"])
+def test_linear_pairwise_hits_span_between_axes_for_non_middle_layouts(tmp_path: Path, layout: str) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_GBK, INPUT_MELA_GBK],
+        ["--track_layout", layout, "-b", str(INPUT_MJE_MELA_BLAST)],
+        output_name=f"linear_pairwise_axis_{layout}",
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+
+    first_axis_y = _extract_axis_group_y(svg_content, "LC738868.1")
+    second_axis_y = _extract_axis_group_y(svg_content, "LC738874.1")
+    comparison_group_y = _extract_comparison_group_y(svg_content)
+    path_y1, path_y2, path_y3, path_y4 = _extract_first_comparison_path_ys(svg_content)
+    axis_delta = second_axis_y - first_axis_y
+
+    assert comparison_group_y == pytest.approx(first_axis_y)
+    assert path_y1 == pytest.approx(0.0)
+    assert path_y2 == pytest.approx(0.0)
+    assert path_y3 == pytest.approx(axis_delta)
+    assert path_y4 == pytest.approx(axis_delta)
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("layout", ["above", "below"])
 def test_linear_track_layout_with_separate_and_resolve_overlaps(tmp_path: Path, layout: str) -> None:
     returncode, stdout, stderr, output_svg = _run_linear(
         tmp_path,
@@ -160,3 +238,215 @@ def test_linear_track_axis_gap_cli_generates_svg(tmp_path: Path) -> None:
     )
     assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
     assert output_svg.exists()
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("layout", ["above", "below"])
+def test_linear_ruler_on_axis_hides_bottom_length_bar(tmp_path: Path, layout: str) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear(
+        tmp_path,
+        ["--track_layout", layout, "--scale_style", "ruler", "--ruler_on_axis", "--scale_interval", "50000"],
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    assert 'id="length_bar"' not in svg_content
+    assert "kbp" in svg_content
+
+
+@pytest.mark.linear
+def test_linear_default_axis_color_stays_legacy_without_ruler_on_axis(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear(
+        tmp_path,
+        ["--track_layout", "above", "--scale_style", "ruler", "--scale_interval", "50000"],
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    axis_match = re.search(
+        r'<line fill="none" stroke="([^"]+)" stroke-width="([^"]+)"[^>]*x1="0"[^>]*x2="2000\.0"[^>]*y1="0"[^>]*y2="0"',
+        svg_content,
+    )
+    assert axis_match is not None
+    assert axis_match.group(1) == "lightgray"
+
+
+@pytest.mark.linear
+def test_linear_ruler_tick_length_is_two_thirds_of_legacy_default() -> None:
+    assert float(RULER_TICK_LENGTH) == pytest.approx(10.0 * (2.0 / 3.0))
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    ("extra_args", "expect_warning"),
+    [
+        (["--track_layout", "middle", "--scale_style", "ruler", "--ruler_on_axis"], True),
+        (["--track_layout", "above", "--scale_style", "bar", "--ruler_on_axis"], True),
+        (["--track_layout", "above", "--scale_style", "ruler"], False),
+    ],
+)
+def test_linear_ruler_on_axis_invalid_conditions_keep_legacy_length_bar(
+    tmp_path: Path,
+    extra_args: list[str],
+    expect_warning: bool,
+) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear(tmp_path, extra_args)
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    assert 'id="length_bar"' in svg_content
+    merged_output = f"{stdout}\n{stderr}"
+    warning_text = "--ruler_on_axis is ignored unless --scale_style ruler and --track_layout above|below are set."
+    if expect_warning:
+        assert warning_text in merged_output
+    else:
+        assert warning_text not in merged_output
+
+
+@pytest.mark.linear
+def test_linear_ruler_on_axis_uses_shared_auto_interval_across_records(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_MG1655, INPUT_MG1655, INPUT_MG1655],
+        [
+            "--track_layout",
+            "above",
+            "--scale_style",
+            "ruler",
+            "--ruler_on_axis",
+            "--region",
+            "#1:1028779-1035047",
+            "--region",
+            "#2:1028779-1035047",
+            "--region",
+            "#3:1028779-1029277",
+        ],
+        output_name="linear_track_layout_shared_interval",
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    group_matches = re.findall(r'<g id="NC_000913\.3"[^>]*>(.*?)</g>', svg_content)
+    axis_groups = [g for g in group_matches if _count_ruler_ticks(g) > 0]
+    assert len(axis_groups) == 3
+    tick_counts = [_count_ruler_ticks(g) for g in axis_groups]
+    assert tick_counts[2] <= 1
+    assert tick_counts[0] > tick_counts[2]
+
+
+@pytest.mark.linear
+def test_linear_ruler_on_axis_defaults_tick_and_label_colors_to_axis(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear(
+        tmp_path,
+        ["--track_layout", "above", "--scale_style", "ruler", "--ruler_on_axis", "--scale_interval", "50000"],
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    axis_match = re.search(
+        r'<line fill="none" stroke="([^"]+)" stroke-width="([^"]+)"[^>]*x1="0"[^>]*x2="2000\.0"[^>]*y1="0"[^>]*y2="0"',
+        svg_content,
+    )
+    tick_matches = re.finditer(
+        r'<line[^>]*stroke="([^"]+)"[^>]*stroke-width="([^"]+)"[^>]*y2="(-?\d+(?:\.\d+)?)"',
+        svg_content,
+    )
+    tick_match = next((match for match in tick_matches if _is_ruler_tick_y2(float(match.group(3)))), None)
+    label_match = re.search(r'<text[^>]*fill="([^"]+)"[^>]*>[^<]*(?:bp|kbp|Mbp)</text>', svg_content)
+    assert axis_match is not None
+    assert tick_match is not None
+    assert label_match is not None
+    assert axis_match.group(1) == "dimgray"
+    assert tick_match.group(1) == axis_match.group(1)
+    assert float(tick_match.group(2)) == pytest.approx(float(axis_match.group(2)))
+    assert label_match.group(1) == axis_match.group(1)
+
+
+@pytest.mark.linear
+def test_linear_ruler_on_axis_defaults_label_font_size_to_long_ruler_value(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear(
+        tmp_path,
+        ["--track_layout", "above", "--scale_style", "ruler", "--ruler_on_axis", "--scale_interval", "50000"],
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    ruler_text_tags = _extract_ruler_text_tags(svg_content)
+    assert any('font-size="12.0"' in tag for tag in ruler_text_tags)
+
+
+@pytest.mark.linear
+def test_linear_ruler_bottom_defaults_label_font_size_to_long_ruler_value(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear(
+        tmp_path,
+        ["--scale_style", "ruler", "--scale_interval", "50000"],
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    length_bar_match = re.search(r'<g id="length_bar"[^>]*>(.*?)</g>', svg_content)
+    assert length_bar_match is not None
+    ruler_text_tags = _extract_ruler_text_tags(length_bar_match.group(1))
+    assert any('font-size="12.0"' in tag for tag in ruler_text_tags)
+
+
+@pytest.mark.linear
+def test_linear_ruler_uses_scale_font_size_when_ruler_size_unset(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear(
+        tmp_path,
+        [
+            "--track_layout",
+            "above",
+            "--scale_style",
+            "ruler",
+            "--ruler_on_axis",
+            "--scale_interval",
+            "50000",
+            "--scale_font_size",
+            "19",
+        ],
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    ruler_text_tags = _extract_ruler_text_tags(svg_content)
+    assert any('font-size="19.0"' in tag for tag in ruler_text_tags)
+
+
+@pytest.mark.linear
+def test_linear_ruler_label_options_apply_to_axis_ruler(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear(
+        tmp_path,
+        [
+            "--track_layout",
+            "above",
+            "--scale_style",
+            "ruler",
+            "--ruler_on_axis",
+            "--scale_interval",
+            "50000",
+            "--ruler_label_font_size",
+            "22",
+            "--ruler_label_color",
+            "tomato",
+        ],
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    ruler_text_tags = _extract_ruler_text_tags(svg_content)
+    assert any('fill="tomato"' in tag and 'font-size="22.0"' in tag for tag in ruler_text_tags)
+
+
+@pytest.mark.linear
+def test_linear_ruler_label_options_apply_to_bottom_ruler(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear(
+        tmp_path,
+        [
+            "--scale_style",
+            "ruler",
+            "--scale_interval",
+            "50000",
+            "--ruler_label_font_size",
+            "21",
+            "--ruler_label_color",
+            "teal",
+        ],
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    length_bar_match = re.search(r'<g id="length_bar"[^>]*>(.*?)</g>', svg_content)
+    assert length_bar_match is not None
+    ruler_text_tags = _extract_ruler_text_tags(length_bar_match.group(1))
+    assert any('fill="teal"' in tag and 'font-size="21.0"' in tag for tag in ruler_text_tags)

@@ -41,6 +41,7 @@ def modify_config_dict(
     align_center=None,
     linear_track_layout=None,
     linear_track_axis_gap=None,
+    linear_ruler_on_axis=None,
     cicular_width_with_labels=None,
     track_type=None,
     strandedness=None,
@@ -60,8 +61,10 @@ def modify_config_dict(
     gc_height=None,
     scale_style=None,
     scale_stroke_color=None,
+    scale_label_color=None,
     scale_stroke_width=None,
     scale_font_size=None,
+    ruler_label_font_size=None,
     scale_interval=None,
     blast_color_min=None,
     blast_color_max=None,
@@ -125,6 +128,13 @@ def modify_config_dict(
         scale_font_size_short = cfg.objects.scale.font_size.short
         scale_font_size_long = cfg.objects.scale.font_size.long
 
+    if ruler_label_font_size is not None:
+        ruler_label_font_size_short = ruler_label_font_size
+        ruler_label_font_size_long = ruler_label_font_size
+    else:
+        ruler_label_font_size_short = cfg.objects.scale.ruler_label_font_size.short
+        ruler_label_font_size_long = cfg.objects.scale.ruler_label_font_size.long
+
     if linear_axis_stroke_width is not None:
         linear_axis_stroke_width_short = linear_axis_stroke_width
         linear_axis_stroke_width_long = linear_axis_stroke_width
@@ -173,6 +183,7 @@ def modify_config_dict(
         "align_center": "canvas.linear.align_center",
         "linear_track_layout": "canvas.linear.track_layout",
         "linear_track_axis_gap": "canvas.linear.track_axis_gap",
+        "linear_ruler_on_axis": "canvas.linear.ruler_on_axis",
         "cicular_width_with_labels": "canvas.circular.width.with_labels",
         "track_type": "canvas.circular.track_type",
         "strandedness": "canvas.strandedness",
@@ -193,9 +204,12 @@ def modify_config_dict(
         "gc_height": "canvas.linear.default_gc_height",
         "scale_style": "objects.scale.style",
         "scale_stroke_color": "objects.scale.stroke_color",
+        "scale_label_color": "objects.scale.label_color",
         "scale_stroke_width": "objects.scale.stroke_width",
         "scale_font_size_short": "objects.scale.font_size.short",
         "scale_font_size_long": "objects.scale.font_size.long",
+        "ruler_label_font_size_short": "objects.scale.ruler_label_font_size.short",
+        "ruler_label_font_size_long": "objects.scale.ruler_label_font_size.long",
         "scale_interval": "objects.scale.interval",
         "blast_color_min": "objects.blast_match.min_color",
         "blast_color_max": "objects.blast_match.max_color",

@@ -38,6 +38,7 @@ canvas_padding = 50
 default_gc_height = 20
 track_layout = "middle"
 track_axis_gap = "auto"
+ruler_on_axis = false
 align_center = false
 normalize_length = false
 [canvas.linear.default_cds_height]
@@ -51,11 +52,15 @@ normalize_length = false
 [objects.scale]
 style = "bar"
 stroke_color = 'black'
+label_color = 'black'
 stroke_width = 3
 font_weight = 'normal'
 [objects.scale.font_size]
 long = 16
 short = 24
+[objects.scale.ruler_label_font_size]
+long = 12
+short = 20
 
 
 [objects.blast_match]

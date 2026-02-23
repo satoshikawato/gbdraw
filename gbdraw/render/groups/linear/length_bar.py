@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import math
 from typing import Optional
 
 from svgwrite.container import Group
@@ -9,6 +10,69 @@ from svgwrite.text import Text
 
 from ....core.text import calculate_bbox_dimensions
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+
+RULER_TICK_LENGTH = 10.0 * (2.0 / 3.0)
+RULER_LABEL_OFFSET = 15.0
+
+_AUTO_LINEAR_TICK_THRESHOLDS: list[tuple[float, int]] = [
+    (2000, 100),
+    (20000, 1000),
+    (50000, 5000),
+    (150000, 10000),
+    (250000, 50000),
+    (1000000, 100000),
+    (2000000, 200000),
+    (5000000, 500000),
+    (float("inf"), 1000000),
+]
+
+
+def auto_linear_tick_interval(total_length: int) -> int:
+    """Return a sensible linear tick interval for a given length."""
+    for threshold, tick_val in _AUTO_LINEAR_TICK_THRESHOLDS:
+        if total_length < threshold:
+            return tick_val
+    return 1000000
+
+
+def format_linear_tick_label(
+    position: int,
+    *,
+    context_length: int,
+    tick_interval: int | None = None,
+    for_bar_style: bool = False,
+) -> str:
+    """Format linear tick labels using span-based units (bp/kbp/Mbp)."""
+    if position == 0:
+        return "0"
+
+    _ = for_bar_style  # Reserved for future mode-specific formatting.
+
+    span = max(1, abs(int(context_length)))
+    if span >= 1_000_000:
+        unit = "Mbp"
+        divisor = 1_000_000
+    elif span >= 1_000:
+        unit = "kbp"
+        divisor = 1_000
+    else:
+        unit = "bp"
+        divisor = 1
+
+    if divisor == 1:
+        return f"{position:,} bp"
+
+    decimals = 0
+    if tick_interval is not None:
+        interval = abs(int(tick_interval))
+        if interval > 0 and interval < divisor:
+            decimals = min(6, int(math.ceil(math.log10(divisor / float(interval)))))
+
+    value = float(position) / float(divisor)
+    value_text = f"{value:.{decimals}f}" if decimals > 0 else f"{value:.0f}"
+    if decimals > 0:
+        value_text = value_text.rstrip("0").rstrip(".")
+    return f"{value_text} {unit}"
 
 
 class LengthBarGroup:
@@ -38,8 +102,10 @@ class LengthBarGroup:
         self.canvas_config = canvas_config
         self.length_param = self.canvas_config.length_param
         self.stroke_color = scale_config.stroke_color
+        self.label_color = scale_config.label_color
         self.stroke_width = scale_config.stroke_width
         self.font_size = scale_config.font_size.for_length_param(self.length_param)
+        self.ruler_label_font_size = scale_config.ruler_label_font_size.for_length_param(self.length_param)
         self.font_weight = scale_config.font_weight
         self.font_family = cfg.objects.text.font_family
         self.style = scale_config.style
@@ -68,7 +134,12 @@ class LengthBarGroup:
         if self.manual_interval is not None and self.manual_interval > 0:
             # Use the user-provided interval for the bar length
             self.tick = self.manual_interval
-            self.label_text = self._format_tick_label(self.manual_interval, for_bar_style=True)
+            self.label_text = format_linear_tick_label(
+                self.manual_interval,
+                context_length=self.longest_genome,
+                tick_interval=self.manual_interval,
+                for_bar_style=True,
+            )
         else:
             # Automatically determine the best interval and label
             self.define_ticks_by_length_for_bar()
@@ -113,20 +184,24 @@ class LengthBarGroup:
             # Draw tick line
             tick_line = Line(
                 start=(x_pos, 0 - (0.5 * self.stroke_width)),
-                end=(x_pos, 10),
+                end=(x_pos, RULER_TICK_LENGTH),
                 stroke=self.stroke_color,
                 stroke_width=self.stroke_width,
             )
             self.scale_group.add(tick_line)
 
             # Draw label
-            label_text = self._format_tick_label(position)
+            label_text = format_linear_tick_label(
+                position,
+                context_length=self.longest_genome,
+                tick_interval=tick_interval,
+            )
             text_element = Text(
                 label_text,
-                insert=(x_pos, 15),
+                insert=(x_pos, RULER_LABEL_OFFSET),
                 stroke="none",
-                fill="black",
-                font_size=self.font_size,
+                fill=self.label_color,
+                font_size=self.ruler_label_font_size,
                 font_weight=self.font_weight,
                 font_family=self.font_family,
                 text_anchor="middle",
@@ -134,7 +209,7 @@ class LengthBarGroup:
             )
             self.scale_group.add(text_element)
             bbox_width, bbox_height = calculate_bbox_dimensions(
-                label_text, self.font_family, self.font_size, self.dpi
+                label_text, self.font_family, self.ruler_label_font_size, self.dpi
             )
             max_tick_bbox_height = max(max_tick_bbox_height, bbox_height)
             if first_tick_bbox_width == 0:
@@ -144,7 +219,7 @@ class LengthBarGroup:
                 self.scale_group_width = (
                     (0.5 * first_tick_bbox_width) + scale_ruler_length + (0.5 * last_tick_bbox_width)
                 )
-                self.scale_group_height: float = (0.5 * self.stroke_width) + 15 + max_tick_bbox_height
+                self.scale_group_height = (0.5 * self.stroke_width) + RULER_LABEL_OFFSET + max_tick_bbox_height
                 break  # Exit after drawing the last tick
 
             position += tick_interval
@@ -152,50 +227,18 @@ class LengthBarGroup:
             if position > self.longest_genome:
                 position = self.longest_genome
 
-    def _format_tick_label(self, position: int, for_bar_style: bool = False) -> str:
-        """
-        Formats a position number into a readable label (e.g., "0.5M", "10kbp").
-        """
-        if position == 0:
-            return "0"
-
-        unit = "bp"
-
-        if position >= 1_000_000:
-            label = f"{position / 1_000_000:.1f} " + ("M" + unit)
-        elif not for_bar_style and position >= 100_000:  # For ruler style, use M for values like 500k
-            if self.longest_genome >= 1_000_000:
-                label = f"{position / 1_000_000:.1f} " + "Mbp"
-            else:
-                label = f"{position // 1_000} k" + (unit)
-        elif position >= 1_000:
-            label = f"{position // 1_000} k" + (unit)
-        else:
-            label = f"{position} {unit}".strip()
-
-        return label
-
     def define_ticks_by_length_for_bar(self) -> None:
         """
         Automatically determines a sensible tick interval for the 'bar' style
         or as a fallback for the 'ruler' style.
         """
-        thresholds = [
-            (2000, 100),
-            (20000, 1000),
-            (50000, 5000),
-            (150000, 10000),
-            (250000, 50000),
-            (1000000, 100000),
-            (2000000, 200000),
-            (5000000, 500000),
-            (float("inf"), 1000000),
-        ]
-        for threshold, tick_val in thresholds:
-            if self.longest_genome < threshold:
-                self.tick = tick_val
-                self.label_text = self._format_tick_label(tick_val, for_bar_style=True)
-                return
+        self.tick = auto_linear_tick_interval(self.longest_genome)
+        self.label_text = format_linear_tick_label(
+            self.tick,
+            context_length=self.longest_genome,
+            tick_interval=self.tick,
+            for_bar_style=True,
+        )
 
     def config_bar_geometry(self) -> None:
         """Configures the geometry (length and position) for the 'bar' style."""
@@ -229,7 +272,7 @@ class LengthBarGroup:
             self.label_text,
             insert=(self.start_x - 10, self.start_y),
             stroke="none",
-            fill="black",
+            fill=self.label_color,
             font_size=self.font_size,
             font_weight=self.font_weight,
             font_family=self.font_family,
@@ -250,6 +293,12 @@ class LengthBarGroup:
         return self.scale_group
 
 
-__all__ = ["LengthBarGroup"]
+__all__ = [
+    "LengthBarGroup",
+    "RULER_LABEL_OFFSET",
+    "RULER_TICK_LENGTH",
+    "auto_linear_tick_interval",
+    "format_linear_tick_label",
+]
 
 

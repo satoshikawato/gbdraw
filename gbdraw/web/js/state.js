@@ -150,6 +150,7 @@ const form = reactive({
   linear_track_layout: 'middle',
   legend: 'left',
   scale_style: 'bar',
+  linear_ruler_on_axis: false,
   show_labels: false,
   show_labels_linear: 'none',
   separate_strands: true,
@@ -201,6 +202,7 @@ const adv = reactive({
   scale_font_size: null,
   scale_stroke_width: null,
   scale_stroke_color: null,
+  ruler_label_color: null,
 
   // Circular Specific
   feature_width_circular: null,
