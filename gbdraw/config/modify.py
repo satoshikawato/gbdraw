@@ -64,6 +64,7 @@ def modify_config_dict(
     scale_label_color=None,
     scale_stroke_width=None,
     scale_font_size=None,
+    ruler_label_font_size=None,
     scale_interval=None,
     blast_color_min=None,
     blast_color_max=None,
@@ -126,6 +127,13 @@ def modify_config_dict(
     else:
         scale_font_size_short = cfg.objects.scale.font_size.short
         scale_font_size_long = cfg.objects.scale.font_size.long
+
+    if ruler_label_font_size is not None:
+        ruler_label_font_size_short = ruler_label_font_size
+        ruler_label_font_size_long = ruler_label_font_size
+    else:
+        ruler_label_font_size_short = cfg.objects.scale.ruler_label_font_size.short
+        ruler_label_font_size_long = cfg.objects.scale.ruler_label_font_size.long
 
     if linear_axis_stroke_width is not None:
         linear_axis_stroke_width_short = linear_axis_stroke_width
@@ -200,6 +208,8 @@ def modify_config_dict(
         "scale_stroke_width": "objects.scale.stroke_width",
         "scale_font_size_short": "objects.scale.font_size.short",
         "scale_font_size_long": "objects.scale.font_size.long",
+        "ruler_label_font_size_short": "objects.scale.ruler_label_font_size.short",
+        "ruler_label_font_size_long": "objects.scale.ruler_label_font_size.long",
         "scale_interval": "objects.scale.interval",
         "blast_color_min": "objects.blast_match.min_color",
         "blast_color_max": "objects.blast_match.max_color",

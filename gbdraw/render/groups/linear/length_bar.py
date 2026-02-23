@@ -11,7 +11,7 @@ from svgwrite.text import Text
 from ....core.text import calculate_bbox_dimensions
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 
-RULER_TICK_LENGTH = 10.0
+RULER_TICK_LENGTH = 10.0 * (2.0 / 3.0)
 RULER_LABEL_OFFSET = 15.0
 
 _AUTO_LINEAR_TICK_THRESHOLDS: list[tuple[float, int]] = [
@@ -105,6 +105,7 @@ class LengthBarGroup:
         self.label_color = scale_config.label_color
         self.stroke_width = scale_config.stroke_width
         self.font_size = scale_config.font_size.for_length_param(self.length_param)
+        self.ruler_label_font_size = scale_config.ruler_label_font_size.for_length_param(self.length_param)
         self.font_weight = scale_config.font_weight
         self.font_family = cfg.objects.text.font_family
         self.style = scale_config.style
@@ -200,7 +201,7 @@ class LengthBarGroup:
                 insert=(x_pos, RULER_LABEL_OFFSET),
                 stroke="none",
                 fill=self.label_color,
-                font_size=self.font_size,
+                font_size=self.ruler_label_font_size,
                 font_weight=self.font_weight,
                 font_family=self.font_family,
                 text_anchor="middle",
@@ -208,7 +209,7 @@ class LengthBarGroup:
             )
             self.scale_group.add(text_element)
             bbox_width, bbox_height = calculate_bbox_dimensions(
-                label_text, self.font_family, self.font_size, self.dpi
+                label_text, self.font_family, self.ruler_label_font_size, self.dpi
             )
             max_tick_bbox_height = max(max_tick_bbox_height, bbox_height)
             if first_tick_bbox_width == 0:

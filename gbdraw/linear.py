@@ -221,9 +221,9 @@ def _get_args(args) -> argparse.Namespace:
         type=float)
     parser.add_argument(
         '--axis_stroke_color',
-        help='Axis stroke color (str; default: "lightgray")',
+        help='Axis stroke color (str; default: auto: "lightgray", or "dimgray" with --ruler_on_axis)',
         type=str,
-        default="lightgray")
+        default=None)
     parser.add_argument(
         '--axis_stroke_width',
         help='Axis stroke width (optional; float; default: 5 pt for genomes <= 50 kb, 2 pt for genomes >= 50 kb)',
@@ -486,8 +486,9 @@ def linear_main(cmd_args) -> None:
     scale_stroke_width: Optional[float] = args.scale_stroke_width
     scale_font_size: Optional[float] = args.scale_font_size
     ruler_label_font_size: Optional[float] = args.ruler_label_font_size
-    if ruler_label_font_size is not None:
-        scale_font_size = ruler_label_font_size
+    effective_ruler_label_font_size: Optional[float] = (
+        ruler_label_font_size if ruler_label_font_size is not None else scale_font_size
+    )
     scale_label_color: Optional[str] = args.ruler_label_color
     scale_interval: Optional[int] = args.scale_interval
     legend_box_size: Optional[float] = args.legend_box_size
@@ -527,7 +528,11 @@ def linear_main(cmd_args) -> None:
             "WARNING: --ruler_on_axis is ignored unless --scale_style ruler and --track_layout above|below are set."
         )
         ruler_on_axis = False
-    axis_stroke_color: Optional[str] = args.axis_stroke_color
+    axis_stroke_color: str = (
+        args.axis_stroke_color
+        if args.axis_stroke_color is not None
+        else ("dimgray" if ruler_on_axis else "lightgray")
+    )
     if ruler_on_axis and scale_stroke_color is None:
         scale_stroke_color = axis_stroke_color
     if ruler_on_axis and scale_label_color is None:
@@ -566,6 +571,7 @@ def linear_main(cmd_args) -> None:
         scale_label_color=scale_label_color,
         scale_stroke_width=scale_stroke_width,
         scale_font_size=scale_font_size,
+        ruler_label_font_size=effective_ruler_label_font_size,
         scale_interval=scale_interval,
         legend_box_size=legend_box_size,
         legend_font_size=legend_font_size,

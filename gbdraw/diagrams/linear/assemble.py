@@ -66,7 +66,7 @@ def _axis_ruler_extents(canvas_config: LinearCanvasConfigurator, cfg: GbdrawConf
     if not _is_axis_ruler_enabled(canvas_config, cfg):
         return 0.0, 0.0
 
-    font_size = cfg.objects.scale.font_size.for_length_param(canvas_config.length_param)
+    font_size = cfg.objects.scale.ruler_label_font_size.for_length_param(canvas_config.length_param)
     label_height = calculate_bbox_dimensions(
         "0",
         cfg.objects.text.font_family,
@@ -415,23 +415,15 @@ def assemble_linear_diagram(
         comparison_offsets = []
         actual_comparison_heights = []
         for i in range(len(records) - 1):
-            current_record_id = records[i].id
             if non_middle_layout:
-                current_feature_height_below = record_heights_below.get(current_record_id, canvas_config.cds_padding)
-                height_below_axis = current_feature_height_below + canvas_config.gc_padding + canvas_config.skew_padding
-                if track_layout == "below":
-                    height_below_axis += record_label_heights_below.get(current_record_id, 0.0)
+                # In above/below layouts, anchor ribbons to consecutive record axes.
+                ribbon_start_y = record_offsets[i]
+                ribbon_end_y = record_offsets[i + 1]
             else:
                 height_below_axis = canvas_config.cds_padding + canvas_config.gc_padding + canvas_config.skew_padding
-            ribbon_start_y = record_offsets[i] + height_below_axis
-            comparison_offsets.append(ribbon_start_y)
-            next_record_id = records[i + 1].id
-            next_label_height = record_label_heights_above.get(next_record_id, 0)
-            if non_middle_layout:
-                next_feature_height_above = record_heights_above.get(next_record_id, canvas_config.cds_padding)
-                ribbon_end_y = record_offsets[i + 1] - max(next_label_height, next_feature_height_above)
-            else:
+                ribbon_start_y = record_offsets[i] + height_below_axis
                 ribbon_end_y = record_offsets[i + 1] - canvas_config.cds_padding
+            comparison_offsets.append(ribbon_start_y)
             height = max(0.0, ribbon_end_y - ribbon_start_y)
             actual_comparison_heights.append(height)
 

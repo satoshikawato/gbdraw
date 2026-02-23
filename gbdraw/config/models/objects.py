@@ -233,18 +233,25 @@ class ObjectsScaleConfig:
     stroke_width: float
     font_weight: str
     font_size: ShortLongFloatConfig
+    ruler_label_font_size: ShortLongFloatConfig
     interval: Optional[int]
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsScaleConfig":
         interval = d.get("interval")
+        font_size = ShortLongFloatConfig.from_dict(d["font_size"])
         return cls(
             style=str(d.get("style", "bar")),
             stroke_color=str(d["stroke_color"]),
             label_color=str(d.get("label_color", "black")),
             stroke_width=float(d["stroke_width"]),
             font_weight=str(d["font_weight"]),
-            font_size=ShortLongFloatConfig.from_dict(d["font_size"]),
+            font_size=font_size,
+            ruler_label_font_size=(
+                ShortLongFloatConfig.from_dict(d["ruler_label_font_size"])
+                if "ruler_label_font_size" in d
+                else font_size
+            ),
             interval=int(interval) if interval is not None else None,
         )
 

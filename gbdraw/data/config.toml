@@ -58,6 +58,9 @@ font_weight = 'normal'
 [objects.scale.font_size]
 long = 16
 short = 24
+[objects.scale.ruler_label_font_size]
+long = 12
+short = 20
 
 
 [objects.blast_match]
