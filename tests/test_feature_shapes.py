@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,8 @@ from svgwrite import Drawing
 
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
+from gbdraw.api.diagram import assemble_circular_diagram_from_record
+from gbdraw.features.colors import compute_feature_hash
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
 from gbdraw.features.objects import FeatureLocationPart, FeatureObject
@@ -21,6 +24,7 @@ from gbdraw.features.shapes import (
     resolve_directional_feature_types,
 )
 from gbdraw.io.colors import load_default_colors
+from gbdraw.io.genome import load_gbks
 from gbdraw.labels.filtering import preprocess_label_filtering
 from gbdraw.render.drawers.circular.features import FeaturePathGenerator as CircularFeaturePathGenerator
 from gbdraw.render.drawers.linear.features import FeaturePathGenerator as LinearFeaturePathGenerator
@@ -165,6 +169,27 @@ def test_circular_feature_paths_change_with_directionality() -> None:
     assert directional_paths[0][0] == "block"
     assert rectangle_paths[0][0] == "block"
     assert directional_paths[0][1] != rectangle_paths[0][1]
+
+
+def test_hmmtdna_origin_spanning_d_loop_arrow_renders_as_single_block() -> None:
+    record = load_gbks([str(Path("tests/test_inputs/HmmtDNA.gbk"))], "circular")[0]
+    d_loop_feature = next(feature for feature in record.features if feature.type == "D-loop")
+    d_loop_id = compute_feature_hash(d_loop_feature, record_id=record.id)
+
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "repeat_region", "D-loop"],
+        feature_shapes={"D-loop": "arrow"},
+        legend="none",
+    )
+
+    root = ET.fromstring(canvas.tostring())
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    d_loop_paths = [
+        path for path in root.findall(".//svg:path", ns) if path.attrib.get("id") == d_loop_id
+    ]
+
+    assert len(d_loop_paths) == 1
 
 
 def test_circular_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

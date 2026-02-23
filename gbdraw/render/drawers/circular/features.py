@@ -192,14 +192,11 @@ class FeaturePathGenerator:
 
     def _coalesce_origin_spanning_block(self, feature_object: FeatureObject) -> Optional[Dict[str, Union[str, int]]]:
         """
-        Collapse non-directional, two-block origin-spanning features into one block.
+        Collapse two-block origin-spanning features into one block.
 
         This avoids visual splitting at the start/end boundary in circular mode
         (e.g. D-loop represented as join(end..genome,1..start)).
         """
-        if feature_object.is_directional:
-            return None
-
         block_coords = [coord for coord in feature_object.location if coord.kind == "block"]
         if len(block_coords) != 2:
             return None
@@ -240,17 +237,37 @@ class FeaturePathGenerator:
         """
         merged_coord = self._coalesce_origin_spanning_block(feature_object)
         if merged_coord is not None:
-            merged_path = generate_circular_rectangle_path(
-                self.radius,
-                merged_coord,
-                self.total_length,
-                self.track_ratio,
-                self.cds_ratio,
-                self.offset,
-                self.track_type,
-                self.strandedness,
-                self.track_id,
-            )
+            merged_strand = str(merged_coord["coord_strand"])
+            merged_coord_for_draw = merged_coord
+            if merged_strand not in {"positive", "negative"}:
+                merged_coord_for_draw = dict(merged_coord)
+                merged_coord_for_draw["coord_strand"] = "positive"
+            if feature_object.is_directional and merged_strand in {"positive", "negative"}:
+                merged_path = generate_circular_arrowhead_path(
+                    self.radius,
+                    merged_coord_for_draw,
+                    self.total_length,
+                    self.arrow_length,
+                    self.track_ratio,
+                    self.cds_ratio,
+                    self.offset,
+                    self.track_type,
+                    self.strandedness,
+                    self.track_id,
+                )
+            else:
+                # Fallback to rectangle for undefined strand to avoid arrow path errors.
+                merged_path = generate_circular_rectangle_path(
+                    self.radius,
+                    merged_coord_for_draw,
+                    self.total_length,
+                    self.track_ratio,
+                    self.cds_ratio,
+                    self.offset,
+                    self.track_type,
+                    self.strandedness,
+                    self.track_id,
+                )
             return [merged_path]
 
         coords = feature_object.location
