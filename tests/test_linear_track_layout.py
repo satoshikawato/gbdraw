@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from functools import lru_cache
 import re
 import subprocess
 import sys
@@ -8,8 +9,17 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
+from Bio import SeqIO
 
+from gbdraw.canvas import LinearCanvasConfigurator
+from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.modify import modify_config_dict
+from gbdraw.config.toml import load_config_toml
+from gbdraw.configurators import FeatureDrawingConfigurator
+from gbdraw.diagrams.linear.precalc import _precalculate_label_dimensions
+from gbdraw.io.colors import load_default_colors
 from gbdraw.layout.linear import calculate_feature_position_factors_linear
+from gbdraw.labels.linear import calculate_label_y_bounds
 from gbdraw.linear import _parse_linear_track_axis_gap, _parse_linear_track_layout
 from gbdraw.render.groups.linear.length_bar import RULER_TICK_LENGTH
 
@@ -117,6 +127,85 @@ def _extract_min_absolute_feature_y(svg_content: str) -> float:
 
     assert min_absolute_y is not None
     return min_absolute_y
+
+
+def _extract_first_record_axis(svg_content: str) -> tuple[str, float]:
+    root = ET.fromstring(svg_content)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+
+    for group in root.findall("svg:g", namespace):
+        group_id = group.attrib.get("id", "")
+        if group_id == "length_bar" or group_id == "legend" or group_id.startswith("comparison"):
+            continue
+        axis_line = group.find('svg:line[@y1="0"][@y2="0"]', namespace)
+        if axis_line is None:
+            continue
+        transform = group.attrib.get("transform", "")
+        transform_match = re.search(r'translate\([^,]+,([\-0-9.]+)\)', transform)
+        if transform_match is None:
+            continue
+        return group_id, float(transform_match.group(1))
+
+    raise AssertionError("No record axis group found in SVG")
+
+
+def _extract_legend_translate_y(svg_content: str) -> float:
+    root = ET.fromstring(svg_content)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    legend_group = root.find("svg:g[@id='legend']", namespace)
+    assert legend_group is not None
+    transform = legend_group.attrib.get("transform", "")
+    transform_match = re.search(r'translate\([^,]+,([\-0-9.]+)\)', transform)
+    assert transform_match is not None
+    return float(transform_match.group(1))
+
+
+def _extract_viewbox_bottom(svg_content: str) -> float:
+    root = ET.fromstring(svg_content)
+    view_box_raw = root.attrib.get("viewBox", "")
+    parts = [float(value) for value in view_box_raw.split()]
+    assert len(parts) == 4
+    return parts[1] + parts[3]
+
+
+@lru_cache(maxsize=1)
+def _expected_middle_rotated_label_bottom_relative_y() -> float:
+    record = SeqIO.read(str(INPUT_MG1655), "genbank")
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        show_labels="all",
+        strandedness=True,
+        label_placement="above_feature",
+        label_rotation=45.0,
+        linear_track_layout="middle",
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=len(record.seq),
+        config_dict=config_dict,
+        legend="none",
+        cfg=cfg,
+    )
+    feature_config = FeatureDrawingConfigurator(
+        color_table=None,
+        default_colors=load_default_colors("", "default"),
+        selected_features_set=cfg.objects.features.features_drawn,
+        config_dict=config_dict,
+        canvas_config=canvas_config,
+        cfg=cfg,
+    )
+    _, all_labels, _ = _precalculate_label_dimensions(
+        [record],
+        feature_config,
+        canvas_config,
+        config_dict,
+        cfg=cfg,
+    )
+    labels = all_labels.get(record.id, [])
+    assert labels
+    return max(calculate_label_y_bounds(label)[1] for label in labels)
 
 
 @pytest.mark.linear
@@ -429,6 +518,64 @@ def test_linear_above_non_stranded_uses_middle_top_margin_floor(
     middle_top_margin = _extract_min_absolute_feature_y(middle_output_svg.read_text(encoding="utf-8"))
     above_top_margin = _extract_min_absolute_feature_y(above_output_svg.read_text(encoding="utf-8"))
     assert above_top_margin == pytest.approx(middle_top_margin, abs=1e-6)
+
+
+@pytest.mark.linear
+def test_linear_middle_rotated_labels_keep_bottom_legend_below_label_extent(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_MG1655],
+        [
+            "--track_layout",
+            "middle",
+            "--separate_strands",
+            "--label_placement",
+            "above_feature",
+            "--label_rotation",
+            "45",
+            "--show_labels",
+            "all",
+            "--legend",
+            "bottom",
+        ],
+        output_name="linear_middle_rotated_bottom_legend_guard",
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    _, axis_y = _extract_first_record_axis(svg_content)
+    legend_y = _extract_legend_translate_y(svg_content)
+    expected_label_bottom = axis_y + _expected_middle_rotated_label_bottom_relative_y()
+    overlap = expected_label_bottom - legend_y
+    assert max(0.0, overlap) == pytest.approx(0.0, abs=1e-6)
+
+
+@pytest.mark.linear
+def test_linear_middle_rotated_labels_fit_viewbox_without_legend(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_MG1655],
+        [
+            "--track_layout",
+            "middle",
+            "--separate_strands",
+            "--label_placement",
+            "above_feature",
+            "--label_rotation",
+            "45",
+            "--show_labels",
+            "all",
+            "--legend",
+            "none",
+        ],
+        output_name="linear_middle_rotated_no_legend_viewbox_guard",
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    _, axis_y = _extract_first_record_axis(svg_content)
+    viewbox_bottom = _extract_viewbox_bottom(svg_content)
+    expected_label_bottom = axis_y + _expected_middle_rotated_label_bottom_relative_y()
+    overflow = expected_label_bottom - viewbox_bottom
+    assert max(0.0, overflow) == pytest.approx(0.0, abs=1e-6)
 
 
 @pytest.mark.linear
