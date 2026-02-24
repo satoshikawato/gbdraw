@@ -292,6 +292,13 @@ export const createAppSetup = () => {
 
   const errorDisplay = computed(() => buildErrorDisplay(errorLog.value));
 
+  const canUseLinearRulerOnAxis = computed(() => {
+    const rawLayout = String(form.linear_track_layout || '').toLowerCase();
+    const normalizedLayout =
+      rawLayout === 'spreadout' ? 'above' : rawLayout === 'tuckin' ? 'below' : rawLayout;
+    return form.scale_style === 'ruler' && (normalizedLayout === 'above' || normalizedLayout === 'below');
+  });
+
   const sessionTitleLabel = computed(() => {
     const title = normalizeSessionTitle(sessionTitle.value);
     return title || 'Untitled session';
@@ -382,6 +389,7 @@ export const createAppSetup = () => {
     linearSeqs,
     form,
     adv,
+    canUseLinearRulerOnAxis,
     losat,
     losatCacheInfo,
     paletteNames,
