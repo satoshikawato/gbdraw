@@ -91,7 +91,7 @@ def _precalculate_feature_track_heights(
     feature_config: FeatureDrawingConfigurator,
     canvas_config: LinearCanvasConfigurator,
     cfg: GbdrawConfig,
-) -> tuple[dict[str, float], dict[str, float], dict[str, float], dict[str, float]]:
+) -> tuple[dict[str, float], dict[str, float], dict[str, float], dict[str, float], dict[str, float]]:
     """
     Pre-calculates the height required for feature tracks for each record.
     This is needed when resolve_overlaps is enabled as features may span multiple tracks.
@@ -100,12 +100,14 @@ def _precalculate_feature_track_heights(
         - dict mapping record_id -> height below the axis line (for lower tracks)
         - dict mapping record_id -> height above the axis line (for upper tracks)
         - dict mapping record_id -> minimum above-axis extent required to keep top visible
-        - dict mapping record_id -> above-axis extent with middle-layout positioning
+        - dict mapping record_id -> above-axis extent with non-displaced track positioning
+        - dict mapping record_id -> middle-layout above-axis extent with non-displaced tracks
     """
     record_heights_below: dict[str, float] = {}
     record_heights_above: dict[str, float] = {}
     record_top_guard_above: dict[str, float] = {}
-    record_top_guard_middle_ref: dict[str, float] = {}
+    record_top_guard_undisplaced: dict[str, float] = {}
+    record_top_guard_middle_undisplaced: dict[str, float] = {}
     track_layout = str(canvas_config.track_layout).strip().lower()
     axis_gap_factor = (
         (float(canvas_config.track_axis_gap) / float(canvas_config.cds_height))
@@ -132,7 +134,8 @@ def _precalculate_feature_track_heights(
         )
         min_top_y = 0.0
         max_bottom_y = 0.0
-        min_top_y_middle_ref = 0.0
+        min_top_y_undisplaced = 0.0
+        min_top_y_middle_undisplaced = 0.0
         for feature_obj in feature_dict.values():
             track_id = int(getattr(feature_obj, "feature_track_id", 0))
             strand = str(getattr(feature_obj, "strand", "undefined"))
@@ -149,23 +152,33 @@ def _precalculate_feature_track_heights(
                 min_top_y = top_y
             if bottom_y > max_bottom_y:
                 max_bottom_y = bottom_y
-            if track_layout == "above":
-                middle_ref_factors = calculate_feature_position_factors_linear(
-                    strand=strand,
-                    track_id=track_id,
-                    separate_strands=canvas_config.strandedness,
-                    track_layout="middle",
-                    axis_gap_factor=axis_gap_factor,
-                )
-                middle_ref_top_y = canvas_config.cds_height * float(middle_ref_factors[0])
-                if middle_ref_top_y < min_top_y_middle_ref:
-                    min_top_y_middle_ref = middle_ref_top_y
+
+            undisplaced_track_id = -1 if (canvas_config.strandedness and strand == "negative") else 0
+            undisplaced_factors = calculate_feature_position_factors_linear(
+                strand=strand,
+                track_id=undisplaced_track_id,
+                separate_strands=canvas_config.strandedness,
+                track_layout=track_layout,
+                axis_gap_factor=axis_gap_factor,
+            )
+            undisplaced_top_y = canvas_config.cds_height * float(undisplaced_factors[0])
+            if undisplaced_top_y < min_top_y_undisplaced:
+                min_top_y_undisplaced = undisplaced_top_y
+            middle_undisplaced_factors = calculate_feature_position_factors_linear(
+                strand=strand,
+                track_id=undisplaced_track_id,
+                separate_strands=canvas_config.strandedness,
+                track_layout="middle",
+                axis_gap_factor=axis_gap_factor,
+            )
+            middle_undisplaced_top_y = canvas_config.cds_height * float(middle_undisplaced_factors[0])
+            if middle_undisplaced_top_y < min_top_y_middle_undisplaced:
+                min_top_y_middle_undisplaced = middle_undisplaced_top_y
 
         precise_height_above = max(0.0, -min_top_y)
         precise_height_below = max(0.0, max_bottom_y)
-        middle_ref_height_above = (
-            max(0.0, -min_top_y_middle_ref) if track_layout == "above" else precise_height_above
-        )
+        undisplaced_height_above = max(0.0, -min_top_y_undisplaced)
+        middle_undisplaced_height_above = max(0.0, -min_top_y_middle_undisplaced)
         
         if track_layout == "middle":
             # Keep existing middle-mode sizing behavior for backward compatibility.
@@ -201,16 +214,24 @@ def _precalculate_feature_track_heights(
         if axis_ruler_above > 0.0:
             height_above = max(height_above, axis_ruler_above)
             precise_height_above = max(precise_height_above, axis_ruler_above)
-            middle_ref_height_above = max(middle_ref_height_above, axis_ruler_above)
+            undisplaced_height_above = max(undisplaced_height_above, axis_ruler_above)
+            middle_undisplaced_height_above = max(middle_undisplaced_height_above, axis_ruler_above)
         if axis_ruler_below > 0.0:
             height_below = max(height_below, axis_ruler_below)
         
         record_heights_above[record.id] = height_above
         record_heights_below[record.id] = height_below
         record_top_guard_above[record.id] = precise_height_above
-        record_top_guard_middle_ref[record.id] = middle_ref_height_above
+        record_top_guard_undisplaced[record.id] = undisplaced_height_above
+        record_top_guard_middle_undisplaced[record.id] = middle_undisplaced_height_above
 
-    return record_heights_below, record_heights_above, record_top_guard_above, record_top_guard_middle_ref
+    return (
+        record_heights_below,
+        record_heights_above,
+        record_top_guard_above,
+        record_top_guard_undisplaced,
+        record_top_guard_middle_undisplaced,
+    )
 
 
 def _precalculate_label_heights_below(all_labels_by_record: dict[str, list[dict]]) -> dict[str, float]:
@@ -266,7 +287,8 @@ def assemble_linear_diagram(
         record_heights_below,
         record_heights_above,
         record_top_guard_above,
-        record_top_guard_middle_ref,
+        record_top_guard_undisplaced,
+        record_top_guard_middle_undisplaced,
     ) = _precalculate_feature_track_heights(records, feature_config, canvas_config, cfg)
     
     if required_label_height > 0:
@@ -280,16 +302,21 @@ def assemble_linear_diagram(
     if records:
         first_record_id = records[0].id
         base_axis_y = canvas_config.vertical_offset
-        first_above_extent = record_top_guard_above.get(first_record_id, canvas_config.cds_padding)
-        if track_layout == "above":
-            first_middle_extent = record_top_guard_middle_ref.get(first_record_id, first_above_extent)
-            middle_axis_y = max(base_axis_y, first_middle_extent + canvas_config.vertical_padding)
-            target_top_margin = middle_axis_y - first_middle_extent
-            required_axis_y = first_above_extent + target_top_margin
-            # Match above-layout top margin to middle-layout feature-top margin for the first record.
+        first_actual_extent = record_top_guard_above.get(first_record_id, canvas_config.cds_padding)
+        first_normal_extent = record_top_guard_undisplaced.get(first_record_id, first_actual_extent)
+        normal_top_margin = max(canvas_config.vertical_padding, base_axis_y - first_normal_extent)
+        if track_layout == "above" and canvas_config.strandedness:
+            middle_floor_extent = record_top_guard_middle_undisplaced.get(first_record_id, first_actual_extent)
+            middle_floor_margin = max(canvas_config.vertical_padding, base_axis_y - middle_floor_extent)
+            normal_top_margin = max(normal_top_margin, middle_floor_margin)
+        if (canvas_config.resolve_overlaps and track_layout in {"above", "middle"}) or (
+            track_layout == "above" and canvas_config.strandedness
+        ):
+            required_axis_y = first_actual_extent + normal_top_margin
+            # Preserve the non-overlap top spacing while allowing displaced tracks to expand canvas downward.
             canvas_config.vertical_offset = max(base_axis_y, required_axis_y)
         else:
-            minimum_axis_y_for_features = first_above_extent + canvas_config.vertical_padding
+            minimum_axis_y_for_features = first_actual_extent + canvas_config.vertical_padding
             canvas_config.vertical_offset = max(base_axis_y, minimum_axis_y_for_features)
 
     normalize_length = cfg.canvas.linear.normalize_length

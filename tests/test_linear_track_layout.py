@@ -289,48 +289,75 @@ def test_linear_above_layout_keeps_feature_top_inside_canvas_with_resolve_overla
 
 
 @pytest.mark.linear
-def test_linear_above_matches_middle_top_margin_without_separate_or_resolve(tmp_path: Path) -> None:
-    middle_returncode, middle_stdout, middle_stderr, middle_output_svg = _run_linear_with_gbks(
+@pytest.mark.parametrize("layout", ["above", "middle"])
+def test_linear_layout_preserves_top_margin_when_resolve_overlaps_enabled(
+    tmp_path: Path,
+    layout: str,
+) -> None:
+    base_args = [
+        "--track_layout",
+        layout,
+        "--show_labels",
+        "none",
+        "--scale_style",
+        "ruler",
+        "--ruler_on_axis",
+    ]
+    base_returncode, base_stdout, base_stderr, base_output_svg = _run_linear_with_gbks(
         tmp_path,
         [INPUT_HMMTDNA],
-        ["--track_layout", "middle", "--show_labels", "none"],
-        output_name="linear_middle_top_margin_reference",
+        base_args,
+        output_name=f"linear_{layout}_top_margin_resolve_baseline",
     )
-    above_returncode, above_stdout, above_stderr, above_output_svg = _run_linear_with_gbks(
+    resolved_returncode, resolved_stdout, resolved_stderr, resolved_output_svg = _run_linear_with_gbks(
         tmp_path,
         [INPUT_HMMTDNA],
-        ["--track_layout", "above", "--show_labels", "none"],
-        output_name="linear_above_top_margin_reference",
+        [*base_args, "--resolve_overlaps"],
+        output_name=f"linear_{layout}_top_margin_resolve_enabled",
     )
-    assert middle_returncode == 0, f"stdout={middle_stdout}\nstderr={middle_stderr}"
-    assert above_returncode == 0, f"stdout={above_stdout}\nstderr={above_stderr}"
-    middle_svg_content = middle_output_svg.read_text(encoding="utf-8")
-    above_svg_content = above_output_svg.read_text(encoding="utf-8")
-    middle_top_margin = _extract_min_absolute_feature_y(middle_svg_content)
-    above_top_margin = _extract_min_absolute_feature_y(above_svg_content)
-    assert above_top_margin == pytest.approx(middle_top_margin, abs=1e-6)
+    assert base_returncode == 0, f"stdout={base_stdout}\nstderr={base_stderr}"
+    assert resolved_returncode == 0, f"stdout={resolved_stdout}\nstderr={resolved_stderr}"
+    base_svg_content = base_output_svg.read_text(encoding="utf-8")
+    resolved_svg_content = resolved_output_svg.read_text(encoding="utf-8")
+    base_top_margin = _extract_min_absolute_feature_y(base_svg_content)
+    resolved_top_margin = _extract_min_absolute_feature_y(resolved_svg_content)
+    assert resolved_top_margin == pytest.approx(base_top_margin, abs=1e-6)
 
 
 @pytest.mark.linear
-def test_linear_above_matches_middle_top_margin_with_separate_and_resolve(tmp_path: Path) -> None:
+@pytest.mark.parametrize("resolve_overlaps", [False, True])
+def test_linear_above_separate_strands_uses_middle_top_margin_floor(
+    tmp_path: Path,
+    resolve_overlaps: bool,
+) -> None:
+    shared_args = [
+        "--separate_strands",
+        "--show_labels",
+        "none",
+        "--scale_style",
+        "ruler",
+        "--ruler_on_axis",
+    ]
+    maybe_resolve = ["--resolve_overlaps"] if resolve_overlaps else []
+
     middle_returncode, middle_stdout, middle_stderr, middle_output_svg = _run_linear_with_gbks(
         tmp_path,
         [INPUT_HMMTDNA],
-        ["--track_layout", "middle", "--separate_strands", "--resolve_overlaps", "--show_labels", "none"],
-        output_name="linear_middle_top_margin_reference_stranded_resolve",
+        ["--track_layout", "middle", *shared_args, *maybe_resolve],
+        output_name=f"linear_middle_separate_top_margin_{'resolve' if resolve_overlaps else 'base'}",
     )
     above_returncode, above_stdout, above_stderr, above_output_svg = _run_linear_with_gbks(
         tmp_path,
         [INPUT_HMMTDNA],
-        ["--track_layout", "above", "--separate_strands", "--resolve_overlaps", "--show_labels", "none"],
-        output_name="linear_above_top_margin_reference_stranded_resolve",
+        ["--track_layout", "above", *shared_args, *maybe_resolve],
+        output_name=f"linear_above_separate_top_margin_{'resolve' if resolve_overlaps else 'base'}",
     )
+
     assert middle_returncode == 0, f"stdout={middle_stdout}\nstderr={middle_stderr}"
     assert above_returncode == 0, f"stdout={above_stdout}\nstderr={above_stderr}"
-    middle_svg_content = middle_output_svg.read_text(encoding="utf-8")
-    above_svg_content = above_output_svg.read_text(encoding="utf-8")
-    middle_top_margin = _extract_min_absolute_feature_y(middle_svg_content)
-    above_top_margin = _extract_min_absolute_feature_y(above_svg_content)
+
+    middle_top_margin = _extract_min_absolute_feature_y(middle_output_svg.read_text(encoding="utf-8"))
+    above_top_margin = _extract_min_absolute_feature_y(above_output_svg.read_text(encoding="utf-8"))
     assert above_top_margin == pytest.approx(middle_top_margin, abs=1e-6)
 
 
