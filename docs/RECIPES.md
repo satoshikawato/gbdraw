@@ -33,13 +33,13 @@ gbdraw circular --gbk genome.gb -o output -f svg --separate_strands \
 
 ### Circular Plot with Labels (Small Genomes)
 ```bash
-gbdraw circular --gbk genome.gb -o output -f svg --track_type middle --show_labels
+gbdraw circular --gbk genome.gb -o output -f svg --track_type middle --labels
 ```
 
 ### Circular Plot with Inner Labels (Mitochondria/Plasmids)
 ```bash
 gbdraw circular --gbk genome.gb -o output -f svg --track_type middle \
-  --show_labels --allow_inner_labels
+  --labels both
 ```
 
 ### Minimal Circular Plot (No GC/Skew/Legend)
@@ -176,7 +176,7 @@ gbdraw circular --gbk genome.gb -t highlight.tsv -o output -f svg
 
 ### Hide "Hypothetical Protein" Labels
 ```bash
-gbdraw circular --gbk genome.gb --show_labels \
+gbdraw circular --gbk genome.gb --labels \
   --label_blacklist "hypothetical protein" -o output -f svg
 ```
 
@@ -189,7 +189,7 @@ CDS	product	DNA polymerase
 ```
 Then:
 ```bash
-gbdraw circular --gbk genome.gb --show_labels \
+gbdraw circular --gbk genome.gb --labels \
   --label_whitelist whitelist.tsv -o output -f svg
 ```
 
@@ -200,7 +200,7 @@ CDS	gene
 ```
 Then:
 ```bash
-gbdraw circular --gbk genome.gb --show_labels \
+gbdraw circular --gbk genome.gb --labels \
   --qualifier_priority priority.tsv -o output -f svg
 ```
 

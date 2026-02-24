@@ -177,7 +177,7 @@ class TestCircularRegression:
             pytest.skip("MjeNMV.gb not found")
 
         # Test with labels but without color table (color table format varies)
-        args = ["--separate_strands", "--show_labels", "--legend", "none"]
+        args = ["--separate_strands", "--labels", "--legend", "none"]
 
         returncode, output, svg_path = run_gbdraw(
             "circular",
@@ -214,7 +214,7 @@ class TestCircularRegression:
         ]
 
         if whitelist:
-            args.extend(["--show_labels", "--label_whitelist", str(whitelist)])
+            args.extend(["--labels", "--label_whitelist", str(whitelist)])
         if color_table:
             args.extend(["-t", str(color_table)])
 

@@ -208,7 +208,7 @@ CIRCULAR_TEST_CASES = [
     {
         "name": "mje_nmv_labels",
         "gbk": "MjeNMV.gb",
-        "args": ["--separate_strands", "--show_labels", "-t", "feature_specific_color_table.txt"],
+        "args": ["--separate_strands", "--labels", "-t", "feature_specific_color_table.txt"],
         "reference": "MjeNMV_feature_specifc_colors_with_labels.svg",
         "description": "Circular diagram with labels and feature-specific colors",
     },
@@ -217,7 +217,7 @@ CIRCULAR_TEST_CASES = [
         "gbk": "NC_010162.gb",
         "args": [
             "--separate_strands", "-p", "edelweiss", "--track_type", "tuckin",
-            "--show_labels", "--label_whitelist", "NC_010162.whitelist.tsv",
+            "--labels", "--label_whitelist", "NC_010162.whitelist.tsv",
             "-t", "NC_010162.feature-specific_table.tsv", "--legend", "left"
         ],
         "reference": "NC_010162_edelweiss.svg",

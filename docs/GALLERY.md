@@ -64,7 +64,7 @@ gbdraw circular \
 --gbk NC_010162.gb \
 -f svg \
 --palette edelweiss \
---show_labels \
+--labels \
 --separate_strands \
 -t NC_010162.feature-specific_table.tsv \
 --label_whitelist NC_010162.whitelist.tsv \
@@ -127,8 +127,7 @@ gbdraw circular \
 --species "<i>Homo sapiens</i>" \
 --block_stroke_width 2 \
 --axis_stroke_width 5 \
---allow_inner_labels \
---show_labels \
+--labels both \
 --qualifier_priority qualifier_priority.tsv \
 -o NC_012920_middle_qualifier_priority_inner_axis5_def28_italic \
 --definition_font_size 28
@@ -158,8 +157,7 @@ gbdraw circular \
 --suppress_skew \
 -p default \
 --track_type tuckin \
---show_labels \
---allow_inner_labels \
+--labels both \
 --qualifier_priority qualifier_priority.tsv \
 --outer_label_x_radius_offset 0.90 \
 --outer_label_y_radius_offset 0.90 \

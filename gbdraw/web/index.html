@@ -325,10 +325,14 @@
                                     <option value="first">First Record Only</option>
                                 </select>
                             </div>
-                            <label v-else class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                <input type="checkbox" v-model="form.show_labels" class="form-checkbox">
-                                <span class="inline-flex items-center gap-1">Show Labels <help-tip text="Display feature labels on the map."></help-tip></span>
-                            </label>
+                            <div v-else class="col-span-2 mb-1">
+                                <label class="input-label text-[10px] mb-1">Labels <help-tip text="Set circular label placement. 'Out' places labels outside, 'Both' places labels outside and inside (GC/skew are auto-suppressed by CLI in this mode)."></help-tip></label>
+                                <select v-model="form.labels_mode" class="form-input text-xs py-1">
+                                    <option value="none">None</option>
+                                    <option value="out">Out</option>
+                                    <option value="both">Both (Out + Inner)</option>
+                                </select>
+                            </div>
 
                             <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                 <input type="checkbox" v-model="form.separate_strands" class="form-checkbox">
@@ -336,10 +340,6 @@
                             </label>
                             
                             <template v-if="mode === 'circular'">
-                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input type="checkbox" v-model="form.allow_inner_labels" class="form-checkbox">
-                                    <span class="inline-flex items-center gap-1">Inner Labels <help-tip text="Enable labels inside the circle. Automatically suppresses GC content/skew to avoid overlap."></help-tip></span>
-                                </label>
                                 <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                     <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox">
                                     <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Circular mode: effective only when Separate Strands is OFF. If Separate Strands is ON, this option is ignored. Track Layout still applies: Tuckin shifts overlap tracks inward, Middle/Spreadout shift them outward."></help-tip></span>

@@ -97,7 +97,7 @@ TEST_CASES = {
     "circular_with_labels": {
         "type": "circular",
         "gbk": "MjeNMV.gb",
-        "args": ["--separate_strands", "--show_labels", "--legend", "none"],
+        "args": ["--separate_strands", "--labels", "--legend", "none"],
     },
     "circular_tuckin": {
         "type": "circular",

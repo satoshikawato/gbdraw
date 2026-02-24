@@ -40,11 +40,11 @@ gbdraw circular --gff my_genome.gff --fasta my_genome.fasta -o my_plot
 
 1.  **Reduce Font Size**: The simplest fix is to make the labels smaller using `--label_font_size`.
     ```bash
-    gbdraw circular --show_labels --label_font_size 6 ...
+    gbdraw circular --labels --label_font_size 6 ...
     ```
 2.  **Blacklist Common Labels**: Use `--label_blacklist` to hide non-informative labels like "hypothetical protein". This often cleans up the plot significantly.
     ```bash
-    gbdraw circular --show_labels --label_blacklist "hypothetical protein" ...
+    gbdraw circular --labels --label_blacklist "hypothetical protein" ...
     ```
 3.  **Whitelist Key Labels**: If you only care about a few specific genes, use `--label_whitelist` to show *only* those labels.
 
@@ -82,7 +82,7 @@ CDS	gene
 ```
 Then, use it in your command:
 ```bash
-gbdraw circular --show_labels --qualifier_priority priority.tsv ...
+gbdraw circular --labels --qualifier_priority priority.tsv ...
 ```
 
 ---

@@ -369,8 +369,13 @@ json.dumps({
           });
         }
         args.push('--track_type', form.track_type, '-l', form.legend);
-        if (form.show_labels) args.push('--show_labels');
-        if (form.allow_inner_labels) args.push('--allow_inner_labels');
+        const labelsModeRaw =
+          typeof form.labels_mode === 'string'
+            ? form.labels_mode
+            : (form.allow_inner_labels ? 'both' : (form.show_labels ? 'out' : 'none'));
+        const labelsMode = String(labelsModeRaw || 'none').trim().toLowerCase();
+        if (labelsMode === 'out') args.push('--labels');
+        if (labelsMode === 'both') args.push('--labels', 'both');
         if (form.suppress_gc) args.push('--suppress_gc');
         if (form.suppress_skew) args.push('--suppress_skew');
 

@@ -431,6 +431,94 @@ def test_cli_gc_track_width_radius_must_be_positive(option: str) -> None:
         circular_cli_module._get_args(["--gbk", "dummy.gb", option, "-10"])
 
 
+@pytest.mark.parametrize(
+    ("labels_args", "expected_mode"),
+    [
+        ([], "none"),
+        (["--labels"], "out"),
+        (["--labels", "out"], "out"),
+        (["--labels", "both"], "both"),
+        (["--labels", "none"], "none"),
+    ],
+)
+def test_cli_labels_mode_parsing(labels_args: list[str], expected_mode: str) -> None:
+    args = circular_cli_module._get_args(["--gbk", "dummy.gb", *labels_args])
+    assert args.labels == expected_mode
+
+
+@pytest.mark.parametrize("legacy_option", ["--show_labels", "--allow_inner_labels"])
+def test_cli_legacy_label_options_are_rejected(legacy_option: str) -> None:
+    with pytest.raises(SystemExit):
+        circular_cli_module._get_args(["--gbk", "dummy.gb", legacy_option])
+
+
+@pytest.mark.parametrize(
+    ("labels_args", "expected_show_labels", "expected_allow_inner_labels", "expected_show_gc", "expected_show_skew", "expect_gc_warning"),
+    [
+        ([], False, False, True, True, False),
+        (["--labels"], True, False, True, True, False),
+        (["--labels", "out"], True, False, True, True, False),
+        (["--labels", "both"], True, True, False, False, True),
+    ],
+)
+def test_cli_labels_mode_maps_to_internal_flags(
+    labels_args: list[str],
+    expected_show_labels: bool,
+    expected_allow_inner_labels: bool,
+    expected_show_gc: bool,
+    expected_show_skew: bool,
+    expect_gc_warning: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    record = _load_record()
+    captured: dict[str, Any] = {}
+    real_modify_config_dict = modify_config_dict
+
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, mode: [record])
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
+
+    def fake_modify_config_dict(config_dict: dict, **kwargs: Any) -> dict:
+        captured["show_labels"] = kwargs.get("show_labels")
+        captured["allow_inner_labels"] = kwargs.get("allow_inner_labels")
+        captured["show_gc"] = kwargs.get("show_gc")
+        captured["show_skew"] = kwargs.get("show_skew")
+        return real_modify_config_dict(config_dict, **kwargs)
+
+    def fake_assemble(*args: Any, **kwargs: Any) -> Drawing:
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(circular_cli_module, "modify_config_dict", fake_modify_config_dict)
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        circular_cli_module.circular_main(
+            [
+                "--gbk",
+                "dummy.gb",
+                "--format",
+                "svg",
+                "-o",
+                str(tmp_path / "out"),
+                *labels_args,
+            ]
+        )
+
+    assert captured["show_labels"] is expected_show_labels
+    assert captured["allow_inner_labels"] is expected_allow_inner_labels
+    assert captured["show_gc"] is expected_show_gc
+    assert captured["show_skew"] is expected_show_skew
+    gc_warning_present = any(
+        "--labels both requires suppressing GC and skew tracks" in message
+        for message in caplog.messages
+    )
+    assert gc_warning_present is expect_gc_warning
+
+
 def test_cli_feature_width_forwards_internal_feature_track_spec(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     record = _load_record()
     captured: dict[str, Any] = {}

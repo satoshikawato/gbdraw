@@ -59,10 +59,10 @@ The plot will now have a formatted title in the center.
 ![ecoli_with_title.svg](../../examples/ecoli_with_title.svg)
 
 ### 4. Showing Feature Labels
-By default, gene labels are hidden. Use the `--show_labels` option to display them.
+By default, gene labels are hidden. Use the `--labels` option to display them.
 As the *E.coli* genome is a little bit too large for this purpose, we will use the genome of white spot syndrome virus, a large DNA virus infecting crustaceans.
 > [!WARNING]
-> Do not use `--show_labels` for genomes with more than a few hundred genes unless you downsample labels with `--label_blacklist` or `--label_whitelist`.
+> Do not use `--labels` (or `--labels both`) for genomes with more than a few hundred genes unless you downsample labels with `--label_blacklist` or `--label_whitelist`.
 
 ```bash
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027280.1&rettype=gbwithparts&retmode=text" -O AP027280.gb
@@ -77,7 +77,7 @@ gbdraw circular \
  -f svg \
  --block_stroke_width 1 \
  --track_type middle \
- --show_labels
+ --labels
 ```
 ![WSSV_with_labels.svg](../../examples/WSSV_with_labels.svg)
 
@@ -100,7 +100,7 @@ gbdraw circular \
  --suppress_gc \
  --suppress_skew \
  --separate_strands \
- --show_labels \
+ --labels \
  --legend none
 ```
 ![WSSV_filtered.svg](../../examples/WSSV_filtered.svg)

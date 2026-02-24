@@ -154,7 +154,7 @@ form = {
     track_type,                   // 'tuckin' | 'middle' | 'spreadout'
     legend,                       // Position: 'right' | 'left' | 'none' | ...
     scale_style,                  // 'bar' | 'ruler' (linear)
-    show_labels,                  // boolean (circular)
+    labels_mode,                  // 'none' | 'out' | 'both' (circular)
     show_labels_linear,           // 'none' | 'all' | 'first'
     separate_strands,
     suppress_gc, suppress_skew,   // Circular options

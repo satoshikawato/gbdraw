@@ -83,7 +83,7 @@ This method colors individual features that match a specific rule, such as a gen
       --block_stroke_width 1 \
       -d modified_default_colors.tsv \
       -t feature_specifc_colors.tsv \
-      --show_labels \
+      --labels \
       -o MjeNMV_feature_specifc_colors_with_labels
     ```
 The result is a plot where most genes are gray, but specific genes of interest are colored and labeled in the legend.
@@ -93,7 +93,7 @@ The result is a plot where most genes are gray, but specific genes of interest a
 
 ## Part 2: Advanced Label Control
 
-When using `--show_labels`, you can prevent visual clutter using whitelists and blacklists.
+When using `--labels`, you can prevent visual clutter using whitelists and blacklists.
 
 ### Blacklisting Labels (`--label_blacklist`)
 
@@ -109,7 +109,7 @@ This is the most common use case: hiding uninformative labels like "hypothetical
       --block_stroke_width 1 \
       -d modified_default_colors.tsv \
       -t feature_specifc_colors.tsv \
-      --show_labels \
+      --labels \
       --label_blacklist "hypothetical" \
       -o MjeNMV_feature_specifc_colors_with_labels_blacklist
     ```
@@ -135,7 +135,7 @@ This is the opposite: you specify exactly which genes should be labeled, and all
     gbdraw circular \
       --gbk O157_H7.gbk \
       -o O157_H7_stx_whitelist \
-      --show_labels \
+      --labels \
       --separate_strands \
       --species "<i>Escherichia coli</i> O157_H7" \
       --strain "Sakai" \
@@ -163,8 +163,7 @@ By default, `gbdraw` uses the `product` qualifier for labels. If you prefer to u
     --species "<i>Homo sapiens</i>" \
     --block_stroke_width 2 \
     --axis_stroke_width 5 \
-    --allow_inner_labels \
-    --show_labels \
+    --labels both \
     --palette soft_pastels \
     --definition_font_size 28 \
     --label_font_size 18 \

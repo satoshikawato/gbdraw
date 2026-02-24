@@ -63,8 +63,8 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--definition_font_size DEFINITION_FONT_SIZE]
               [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--suppress_gc]
               [--suppress_skew] [-l LEGEND] [--separate_strands]
-              [--track_type TRACK_TYPE] [--resolve_overlaps] [--show_labels]
-              [--allow_inner_labels] [--label_whitelist LABEL_WHITELIST |
+              [--track_type TRACK_TYPE] [--resolve_overlaps]
+              [--labels [{none,out,both}]] [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
               [--outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET]
@@ -145,10 +145,10 @@ options:
   --resolve_overlaps    Resolve overlapping features by placing them on
                         separate tracks (default: False). Useful for plasmid
                         visualization.
-  --show_labels         Show feature labels (default: False).
-  --allow_inner_labels  Place labels inside the circle (default: False). If
-                        enabled, labels are placed both inside and outside the
-                        circle, and gc and skew tracks are not shown.
+  --labels [{none,out,both}]
+                        Label placement mode for circular plots. No argument
+                        or "out" shows outer labels, "both" shows outer+inner
+                        labels, and "none" hides labels (default: none).
   --label_whitelist LABEL_WHITELIST
                         path to a file for label whitelisting (optional);
                         mutually exclusive with --label_blacklist

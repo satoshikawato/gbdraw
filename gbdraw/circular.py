@@ -6,7 +6,6 @@ import argparse
 import logging
 from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from .io.genome import load_gbks, load_gff_fasta
 from .io.colors import load_default_colors, read_color_table
 from .config.toml import load_config_toml
@@ -212,13 +211,13 @@ def _get_args(args) -> argparse.Namespace:
         help='Resolve overlapping features by placing them on separate tracks (default: False). Useful for plasmid visualization.',
         action='store_true')
     parser.add_argument(
-        '--show_labels',
-        help='Show feature labels (default: False).',
-        action='store_true')
-    parser.add_argument(
-        '--allow_inner_labels',
-        help='Place labels inside the circle (default: False). If enabled, labels are placed both inside and outside the circle, and gc and skew tracks are not shown.',
-        action='store_true')
+        '--labels',
+        help='Label placement mode: no argument or "out" (outside), "both" (outside+inside), or "none" (hidden). Default: "none".',
+        nargs='?',
+        const='out',
+        default='none',
+        choices=['none', 'out', 'both'],
+        type=str)
     
     label_list_group = parser.add_mutually_exclusive_group()
     label_list_group.add_argument(
@@ -336,9 +335,10 @@ def circular_main(cmd_args) -> None:
     label_font_size: Optional[float] = args.label_font_size
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
-    show_labels: bool = args.show_labels
+    labels_mode: str = args.labels
+    show_labels: bool = labels_mode != "none"
     resolve_overlaps: bool = args.resolve_overlaps
-    allow_inner_labels: bool = args.allow_inner_labels
+    allow_inner_labels: bool = labels_mode == "both"
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
@@ -363,16 +363,12 @@ def circular_main(cmd_args) -> None:
     outer_label_y_radius_offset: Optional[float] = args.outer_label_y_radius_offset
     inner_label_x_radius_offset: Optional[float] = args.inner_label_x_radius_offset
     inner_label_y_radius_offset: Optional[float] = args.inner_label_y_radius_offset
-    if allow_inner_labels and not show_labels:
-        show_labels = True  # If inner labels are allowed, labels must be shown
-        logger.warning(
-            "WARNING: Inner labels are allowed, but labels are not shown. Enabling labels.")
     if allow_inner_labels and not (suppress_gc and suppress_skew):
 
         suppress_gc = True 
         suppress_skew = True
         logger.warning(
-            "WARNING: Inner labels are allowed, but GC and skew tracks are not suppressed. Suppressing GC and skew tracks.")  # 
+            "WARNING: --labels both requires suppressing GC and skew tracks. Suppressing GC and skew tracks.")  # 
 
     user_defined_default_colors: str = args.default_colors
     block_stroke_color: Optional[str] = args.block_stroke_color
