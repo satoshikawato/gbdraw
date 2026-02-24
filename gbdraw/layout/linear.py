@@ -111,12 +111,24 @@ def calculate_feature_position_factors_linear(
         if strand == "negative":
             middle = -(resolved_axis_gap + half_height + (track_spacing * negative_index))
         else:
-            middle = -(resolved_axis_gap + half_height + strand_band_gap + (track_spacing * positive_index))
+            # Keep above-layout positive tracks displaced outward while aligning
+            # band spacing with track spacing to avoid subtle track mismatch.
+            middle = -(resolved_axis_gap + half_height + track_spacing + (track_spacing * positive_index))
     else:  # below
         if strand == "negative":
             middle = resolved_axis_gap + half_height + strand_band_gap + (track_spacing * negative_index)
         else:
-            middle = resolved_axis_gap + half_height + (track_spacing * positive_index)
+            # Place displaced positive tracks from the default bottom band so
+            # positive track i aligns with negative track -i for i >= 1.
+            if positive_index == 0:
+                middle = resolved_axis_gap + half_height + (track_spacing * positive_index)
+            else:
+                middle = (
+                    resolved_axis_gap
+                    + half_height
+                    + strand_band_gap
+                    + (track_spacing * (positive_index - 1))
+                )
 
     return [middle - half_height, middle, middle + half_height]
 

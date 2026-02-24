@@ -305,15 +305,14 @@ def assemble_linear_diagram(
         first_actual_extent = record_top_guard_above.get(first_record_id, canvas_config.cds_padding)
         first_normal_extent = record_top_guard_undisplaced.get(first_record_id, first_actual_extent)
         normal_top_margin = max(canvas_config.vertical_padding, base_axis_y - first_normal_extent)
-        if track_layout == "above" and canvas_config.strandedness:
+        if track_layout == "above":
             middle_floor_extent = record_top_guard_middle_undisplaced.get(first_record_id, first_actual_extent)
             middle_floor_margin = max(canvas_config.vertical_padding, base_axis_y - middle_floor_extent)
             normal_top_margin = max(normal_top_margin, middle_floor_margin)
-        if (canvas_config.resolve_overlaps and track_layout in {"above", "middle"}) or (
-            track_layout == "above" and canvas_config.strandedness
-        ):
+        if track_layout == "above" or (canvas_config.resolve_overlaps and track_layout == "middle"):
             required_axis_y = first_actual_extent + normal_top_margin
-            # Preserve the non-overlap top spacing while allowing displaced tracks to expand canvas downward.
+            # In above layout, keep at least the middle-layout top-margin floor so
+            # non-stranded tracks do not end up visually too close to the top edge.
             canvas_config.vertical_offset = max(base_axis_y, required_axis_y)
         else:
             minimum_axis_y_for_features = first_actual_extent + canvas_config.vertical_padding
