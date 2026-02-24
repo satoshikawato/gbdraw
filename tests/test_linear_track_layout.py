@@ -216,6 +216,31 @@ def test_linear_layout_factors_separate_strands_above_below_keep_order() -> None
 
 
 @pytest.mark.linear
+@pytest.mark.parametrize("i", [1, 2, 3, 4])
+def test_linear_below_displaced_positive_tracks_align_with_matching_negative_tracks(i: int) -> None:
+    pos_i = calculate_feature_position_factors_linear("positive", i, True, track_layout="below")
+    neg_i = calculate_feature_position_factors_linear("negative", -i, True, track_layout="below")
+    assert pos_i[1] == pytest.approx(neg_i[1])
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("i", [0, 1, 2, 3])
+def test_linear_above_positive_tracks_align_with_negative_tracks_offset_by_two(i: int) -> None:
+    pos_i = calculate_feature_position_factors_linear("positive", i, True, track_layout="above")
+    neg_offset_i = calculate_feature_position_factors_linear("negative", -(i + 2), True, track_layout="above")
+    assert pos_i[1] == pytest.approx(neg_offset_i[1])
+
+
+@pytest.mark.linear
+def test_linear_above_displaced_positive_tracks_move_outward_from_axis() -> None:
+    pos_0 = calculate_feature_position_factors_linear("positive", 0, True, track_layout="above")
+    pos_1 = calculate_feature_position_factors_linear("positive", 1, True, track_layout="above")
+    pos_2 = calculate_feature_position_factors_linear("positive", 2, True, track_layout="above")
+    assert pos_1[1] < pos_0[1]
+    assert pos_2[1] < pos_1[1]
+
+
+@pytest.mark.linear
 @pytest.mark.parametrize("layout", ["above", "below", "spreadout", "tuckin"])
 def test_linear_track_layout_cli_generates_svg(tmp_path: Path, layout: str) -> None:
     returncode, stdout, stderr, output_svg = _run_linear(
@@ -351,6 +376,51 @@ def test_linear_above_separate_strands_uses_middle_top_margin_floor(
         [INPUT_HMMTDNA],
         ["--track_layout", "above", *shared_args, *maybe_resolve],
         output_name=f"linear_above_separate_top_margin_{'resolve' if resolve_overlaps else 'base'}",
+    )
+
+    assert middle_returncode == 0, f"stdout={middle_stdout}\nstderr={middle_stderr}"
+    assert above_returncode == 0, f"stdout={above_stdout}\nstderr={above_stderr}"
+
+    middle_top_margin = _extract_min_absolute_feature_y(middle_output_svg.read_text(encoding="utf-8"))
+    above_top_margin = _extract_min_absolute_feature_y(above_output_svg.read_text(encoding="utf-8"))
+    assert above_top_margin == pytest.approx(middle_top_margin, abs=1e-6)
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    ("scale_style", "axis_args"),
+    [
+        ("bar", []),
+        ("ruler", ["--ruler_on_axis"]),
+    ],
+)
+@pytest.mark.parametrize("resolve_overlaps", [False, True])
+def test_linear_above_non_stranded_uses_middle_top_margin_floor(
+    tmp_path: Path,
+    scale_style: str,
+    axis_args: list[str],
+    resolve_overlaps: bool,
+) -> None:
+    shared_args = [
+        "--show_labels",
+        "none",
+        "--scale_style",
+        scale_style,
+        *axis_args,
+    ]
+    maybe_resolve = ["--resolve_overlaps"] if resolve_overlaps else []
+
+    middle_returncode, middle_stdout, middle_stderr, middle_output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_HMMTDNA],
+        ["--track_layout", "middle", *shared_args, *maybe_resolve],
+        output_name=f"linear_middle_non_stranded_top_margin_{scale_style}_{'resolve' if resolve_overlaps else 'base'}",
+    )
+    above_returncode, above_stdout, above_stderr, above_output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_HMMTDNA],
+        ["--track_layout", "above", *shared_args, *maybe_resolve],
+        output_name=f"linear_above_non_stranded_top_margin_{scale_style}_{'resolve' if resolve_overlaps else 'base'}",
     )
 
     assert middle_returncode == 0, f"stdout={middle_stdout}\nstderr={middle_stderr}"
