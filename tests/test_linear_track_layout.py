@@ -4,6 +4,7 @@ import argparse
 import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from gbdraw.render.groups.linear.length_bar import RULER_TICK_LENGTH
 INPUT_GBK = Path(__file__).parent / "test_inputs" / "MjeNMV.gb"
 INPUT_MELA_GBK = Path(__file__).parent / "test_inputs" / "MelaMJNV.gb"
 INPUT_MG1655 = Path(__file__).parent / "test_inputs" / "MG1655.gbk"
+INPUT_HMMTDNA = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
 INPUT_MJE_MELA_BLAST = Path(__file__).parent / "test_inputs" / "MjeNMV.MelaMJNV.tblastx.out"
 
 
@@ -85,6 +87,36 @@ def _count_ruler_ticks(svg_fragment: str) -> int:
 
 def _extract_ruler_text_tags(svg_fragment: str) -> list[str]:
     return re.findall(r'<text[^>]*>[^<]*(?:bp|kbp|Mbp)</text>', svg_fragment)
+
+
+def _extract_min_absolute_feature_y(svg_content: str) -> float:
+    root = ET.fromstring(svg_content)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    min_absolute_y: float | None = None
+
+    for group in root.findall("svg:g", namespace):
+        group_id = group.attrib.get("id", "")
+        if group_id == "length_bar" or group_id == "legend" or group_id.startswith("comparison"):
+            continue
+        axis_line = group.find('svg:line[@y1="0"][@y2="0"]', namespace)
+        if axis_line is None:
+            continue
+        transform = group.attrib.get("transform", "")
+        transform_match = re.search(r'translate\([^,]+,([\-0-9.]+)\)', transform)
+        if transform_match is None:
+            continue
+        axis_y = float(transform_match.group(1))
+        for path in group.findall("svg:path", namespace):
+            coords = [float(value) for value in re.findall(r"-?\d+(?:\.\d+)?", path.attrib.get("d", ""))]
+            y_values = coords[1::2]
+            if not y_values:
+                continue
+            absolute_top_y = axis_y + min(y_values)
+            if min_absolute_y is None or absolute_top_y < min_absolute_y:
+                min_absolute_y = absolute_top_y
+
+    assert min_absolute_y is not None
+    return min_absolute_y
 
 
 @pytest.mark.linear
@@ -228,6 +260,78 @@ def test_linear_track_layout_with_separate_and_resolve_overlaps(tmp_path: Path, 
     )
     assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
     assert output_svg.exists()
+
+
+@pytest.mark.linear
+def test_linear_middle_layout_keeps_feature_top_inside_canvas_with_resolve_overlaps(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_HMMTDNA],
+        ["--track_layout", "middle", "--separate_strands", "--resolve_overlaps", "--show_labels", "none"],
+        output_name="linear_middle_resolve_overlaps_canvas_top",
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    assert _extract_min_absolute_feature_y(svg_content) >= -1e-6
+
+
+@pytest.mark.linear
+def test_linear_above_layout_keeps_feature_top_inside_canvas_with_resolve_overlaps(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_HMMTDNA],
+        ["--track_layout", "above", "--separate_strands", "--resolve_overlaps", "--show_labels", "none"],
+        output_name="linear_above_resolve_overlaps_canvas_top",
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    assert _extract_min_absolute_feature_y(svg_content) >= -1e-6
+
+
+@pytest.mark.linear
+def test_linear_above_matches_middle_top_margin_without_separate_or_resolve(tmp_path: Path) -> None:
+    middle_returncode, middle_stdout, middle_stderr, middle_output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_HMMTDNA],
+        ["--track_layout", "middle", "--show_labels", "none"],
+        output_name="linear_middle_top_margin_reference",
+    )
+    above_returncode, above_stdout, above_stderr, above_output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_HMMTDNA],
+        ["--track_layout", "above", "--show_labels", "none"],
+        output_name="linear_above_top_margin_reference",
+    )
+    assert middle_returncode == 0, f"stdout={middle_stdout}\nstderr={middle_stderr}"
+    assert above_returncode == 0, f"stdout={above_stdout}\nstderr={above_stderr}"
+    middle_svg_content = middle_output_svg.read_text(encoding="utf-8")
+    above_svg_content = above_output_svg.read_text(encoding="utf-8")
+    middle_top_margin = _extract_min_absolute_feature_y(middle_svg_content)
+    above_top_margin = _extract_min_absolute_feature_y(above_svg_content)
+    assert above_top_margin == pytest.approx(middle_top_margin, abs=1e-6)
+
+
+@pytest.mark.linear
+def test_linear_above_matches_middle_top_margin_with_separate_and_resolve(tmp_path: Path) -> None:
+    middle_returncode, middle_stdout, middle_stderr, middle_output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_HMMTDNA],
+        ["--track_layout", "middle", "--separate_strands", "--resolve_overlaps", "--show_labels", "none"],
+        output_name="linear_middle_top_margin_reference_stranded_resolve",
+    )
+    above_returncode, above_stdout, above_stderr, above_output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_HMMTDNA],
+        ["--track_layout", "above", "--separate_strands", "--resolve_overlaps", "--show_labels", "none"],
+        output_name="linear_above_top_margin_reference_stranded_resolve",
+    )
+    assert middle_returncode == 0, f"stdout={middle_stdout}\nstderr={middle_stderr}"
+    assert above_returncode == 0, f"stdout={above_stdout}\nstderr={above_stderr}"
+    middle_svg_content = middle_output_svg.read_text(encoding="utf-8")
+    above_svg_content = above_output_svg.read_text(encoding="utf-8")
+    middle_top_margin = _extract_min_absolute_feature_y(middle_svg_content)
+    above_top_margin = _extract_min_absolute_feature_y(above_svg_content)
+    assert above_top_margin == pytest.approx(middle_top_margin, abs=1e-6)
 
 
 @pytest.mark.linear
