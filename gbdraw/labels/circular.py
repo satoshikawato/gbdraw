@@ -27,6 +27,7 @@ FULL_SCAN_LABEL_LIMIT = 70
 MAX_EXPANDED_SHIFT_DEG = 90.0
 RELAX_CENTER_DELTA_CAP_DEG = 35.0
 LEGACY_PLACEMENT_LABEL_THRESHOLD = 50
+DENSE_INNER_RELAX_MIN_LABELS = 40
 HEMISPHERE_AXIS_NEUTRAL_DEG = 8.0
 HEMISPHERE_AXIS_EPS_PX = 1.0
 HEMISPHERE_REFINE_MAX_SHIFT_DEG = 90.0
@@ -2442,13 +2443,13 @@ def improved_label_placement_fc(
         cluster_step_limit = min(int(shift_limit_deg / angle_step), 40)
         n_labels = len(labels)
         dense_inner_relax = (
-            n_labels >= LEGACY_PLACEMENT_LABEL_THRESHOLD
+            n_labels >= DENSE_INNER_RELAX_MIN_LABELS
             and all(bool(label.get("is_inner", False)) for label in labels)
         )
         if dense_inner_relax:
             # Inner dense sets are the primary hot path; a coarser search grid keeps
             # near-identical placements while avoiding runaway overlap evaluations.
-            cluster_step_limit = min(cluster_step_limit, 16)
+            cluster_step_limit = min(cluster_step_limit, 10)
         changed = False
 
         for component in components:
@@ -2467,14 +2468,14 @@ def improved_label_placement_fc(
             best_ordered: list[float] | None = None
 
             center_candidates = [component_center]
-            if len(component) >= 2:
+            if not dense_inner_relax and len(component) >= 2:
                 center_candidates.append(component[0])
                 center_candidates.append(component[-1])
             center_candidates = sorted(set(center_candidates))
             center_shift_limit_steps = min(int(shift_limit_deg / angle_step), 48)
             center_shift_step = 8 if dense_inner_relax else 4
             if dense_inner_relax:
-                center_shift_limit_steps = min(center_shift_limit_steps, 24)
+                center_shift_limit_steps = min(center_shift_limit_steps, 16)
             center_shift_steps = range(
                 -center_shift_limit_steps,
                 center_shift_limit_steps + 1,
@@ -2573,6 +2574,10 @@ def improved_label_placement_fc(
 
     def optimize_with_shift_limit(shift_limit_deg: float, *, full_scan_checks: bool) -> None:
         max_steps = int(shift_limit_deg / angle_step)
+        dense_inner_set = (
+            len(labels) >= DENSE_INNER_RELAX_MIN_LABELS
+            and all(bool(label.get("is_inner", False)) for label in labels)
+        )
         for _ in range(max_iterations):
             changes_made = False
             if enforce_order(min_order_gap):
@@ -2680,7 +2685,8 @@ def improved_label_placement_fc(
             if not changes_made:
                 break
         if len(labels) <= HEAVY_CLUSTER_RELAX_MAX_LABELS and count_remaining_overlaps() > 0:
-            for _ in range(3):
+            relax_passes = 1 if dense_inner_set else 3
+            for _ in range(relax_passes):
                 if not relax_overlapping_clusters(shift_limit_deg):
                     break
                 if count_remaining_overlaps() == 0:
@@ -2791,6 +2797,11 @@ def improved_label_placement_fc(
 
     base_shift_limit = min(float(max_angle_shift_deg), MAX_EXPANDED_SHIFT_DEG)
     shift_schedule = [base_shift_limit]
+    dense_inner_set = (
+        len(labels) >= DENSE_INNER_RELAX_MIN_LABELS
+        and all(bool(label.get("is_inner", False)) for label in labels)
+    )
+    allow_full_scan_checks = (len(labels) <= FULL_SCAN_LABEL_LIMIT) and (not dense_inner_set)
     if len(labels) <= HEAVY_CLUSTER_RELAX_MAX_LABELS:
         for extra_shift in (35.0, 45.0, 60.0):
             if extra_shift > shift_schedule[-1]:
@@ -2798,7 +2809,7 @@ def improved_label_placement_fc(
 
     for phase_idx, shift_limit in enumerate(shift_schedule):
         run_full_scan = (
-            len(labels) <= FULL_SCAN_LABEL_LIMIT
+            allow_full_scan_checks
             and len(shift_schedule) > 1
             and phase_idx == (len(shift_schedule) - 1)
         )
@@ -2812,7 +2823,7 @@ def improved_label_placement_fc(
                 continue
             optimize_with_shift_limit(
                 extra_shift,
-                full_scan_checks=(len(labels) <= FULL_SCAN_LABEL_LIMIT),
+                full_scan_checks=allow_full_scan_checks,
             )
             shift_schedule.append(extra_shift)
             if count_remaining_overlaps() == 0:
@@ -2826,7 +2837,7 @@ def improved_label_placement_fc(
         baseline_score = placement_score()
         optimize_with_shift_limit(
             max(shift_schedule),
-            full_scan_checks=(len(labels) <= FULL_SCAN_LABEL_LIMIT),
+            full_scan_checks=allow_full_scan_checks,
         )
         if len(labels) <= HEAVY_CLUSTER_RELAX_MAX_LABELS and count_remaining_overlaps() > 0:
             separate_remaining_adjacent_overlaps(max(shift_schedule))
@@ -2841,7 +2852,7 @@ def improved_label_placement_fc(
         reset_angles_to_targets()
         optimize_with_shift_limit(
             max(shift_schedule),
-            full_scan_checks=(len(labels) <= FULL_SCAN_LABEL_LIMIT),
+            full_scan_checks=allow_full_scan_checks,
         )
         if len(labels) <= HEAVY_CLUSTER_RELAX_MAX_LABELS and count_remaining_overlaps() > 0:
             separate_remaining_adjacent_overlaps(max(shift_schedule))
@@ -2900,6 +2911,109 @@ def _derive_monotonic_unwrapped_angles(labels: list[dict], total_length: int) ->
     return unwrapped_angles
 
 
+def _neighbor_min_gap_overlap_count(
+    labels: list[dict],
+    label_idx: int,
+    candidate_label: dict,
+    total_length: int,
+) -> int:
+    """Count min-gap overlaps for immediate neighbors only."""
+    overlap_count = 0
+    for neighbor_idx in (label_idx - 1, label_idx + 1):
+        if neighbor_idx < 0 or neighbor_idx >= len(labels):
+            continue
+        neighbor_label = labels[neighbor_idx]
+        min_gap_px = minimum_bbox_gap_px(candidate_label, neighbor_label, base_margin_px=0.0)
+        if y_overlap(candidate_label, neighbor_label, total_length, min_gap_px) and x_overlap(
+            candidate_label,
+            neighbor_label,
+            minimum_margin=min_gap_px,
+        ):
+            overlap_count += 1
+    return overlap_count
+
+
+def _inner_rebalance_metrics(labels: list[dict], total_length: int) -> tuple[int, int, int, float, int]:
+    """Return baseline/candidate quality metrics for strict-order inner rebalance."""
+    plain_overlap = _count_label_overlaps(labels, total_length, use_min_gap=False)
+    min_gap_overlap = _count_label_overlaps(labels, total_length, use_min_gap=True)
+    mismatch_count, mismatch_weighted = _hemisphere_mismatch_metrics(labels, total_length)
+    labels_with_leaders = _assign_leader_start_points([label.copy() for label in labels], total_length)
+    leader_collisions = _count_label_leader_line_collisions(
+        labels_with_leaders,
+        total_length,
+        margin_px=LEADER_LABEL_COLLISION_MARGIN_PX,
+    )
+    return plain_overlap, min_gap_overlap, mismatch_count, mismatch_weighted, leader_collisions
+
+
+def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) -> list[dict]:
+    """
+    Rebalance dense inner labels without overtaking by trying small fixed-angle caps.
+
+    Accept candidates only when plain-overlap and leader-line collisions do not
+    regress, then prefer lower hemisphere mismatch and tighter min-gap packing.
+    """
+    if len(labels) < 2:
+        return labels
+
+    base_labels = [label.copy() for label in labels]
+    baseline_mismatch_count, _ = _hemisphere_mismatch_metrics(base_labels, total_length)
+    # Keep this pass lightweight for already-stable sets; dense NC001879-style
+    # datasets otherwise regress y-overlap call budgets without visual benefit.
+    if baseline_mismatch_count <= 3:
+        return labels
+
+    (
+        baseline_plain_overlap,
+        baseline_min_gap_overlap,
+        baseline_mismatch_count,
+        _baseline_mismatch_weighted,
+        baseline_leader_collision,
+    ) = _inner_rebalance_metrics(base_labels, total_length)
+
+    best_score: tuple[int, float, int, float] | None = None
+    best_candidate: list[dict] | None = None
+
+    for max_shift_cap in (22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 30.0):
+        candidate_labels = _resolve_outer_label_overlaps_with_fixed_radii(
+            [label.copy() for label in base_labels],
+            total_length,
+            max_angle_shift_deg=max_shift_cap,
+        )
+        (
+            candidate_plain_overlap,
+            candidate_min_gap_overlap,
+            candidate_mismatch_count,
+            candidate_mismatch_weighted,
+            candidate_leader_collision,
+        ) = _inner_rebalance_metrics(candidate_labels, total_length)
+
+        if candidate_plain_overlap > baseline_plain_overlap:
+            continue
+        if candidate_leader_collision > baseline_leader_collision:
+            continue
+        if not (
+            candidate_mismatch_count < baseline_mismatch_count
+            or candidate_min_gap_overlap < baseline_min_gap_overlap
+        ):
+            continue
+
+        candidate_score = (
+            candidate_mismatch_count,
+            candidate_mismatch_weighted,
+            candidate_min_gap_overlap,
+            max_shift_cap,
+        )
+        if best_score is None or candidate_score < best_score:
+            best_score = candidate_score
+            best_candidate = candidate_labels
+
+    if best_candidate is None:
+        return labels
+    return best_candidate
+
+
 def _refine_labels_to_preferred_hemisphere(
     labels: list[dict],
     total_length: int,
@@ -2943,6 +3057,7 @@ def _refine_labels_to_preferred_hemisphere(
     for pass_order in pass_orders:
         for label_idx in pass_order:
             label = labels[label_idx]
+            is_inner_label = bool(label.get("is_inner", False))
             preferred_half = _preferred_half_for_label(label, total_length, axis_neutral_deg=axis_neutral_deg)
             if preferred_half == 0:
                 continue
@@ -2965,8 +3080,14 @@ def _refine_labels_to_preferred_hemisphere(
             )
             target_angle_mod = target_angle_unwrapped % 360.0
             current_overlap_count = plain_overlap_count_for_candidate(label_idx, label)
-            best_candidate: tuple[dict, float, int] | None = None
-            best_score: tuple[int, float] | None = None
+            current_neighbor_overlap_count = _neighbor_min_gap_overlap_count(
+                labels,
+                label_idx,
+                label,
+                total_length,
+            )
+            best_candidate: tuple[dict, float, int, int] | None = None
+            best_score: tuple[int, int, float] | None = None
 
             for step in range(max_steps + 1):
                 if step == 0:
@@ -3008,12 +3129,31 @@ def _refine_labels_to_preferred_hemisphere(
                     if candidate_plain_total > base_plain_overlaps:
                         continue
 
-                    candidate_score = (candidate_plain_total, abs(offset))
+                    candidate_neighbor_overlap_count = _neighbor_min_gap_overlap_count(
+                        labels,
+                        label_idx,
+                        candidate_label,
+                        total_length,
+                    )
+                    candidate_score = (
+                        candidate_plain_total,
+                        candidate_neighbor_overlap_count,
+                        abs(offset),
+                    )
                     if best_score is None or candidate_score < best_score:
                         best_score = candidate_score
-                        best_candidate = (candidate_label, candidate_angle_unwrapped, candidate_plain_total)
+                        best_candidate = (
+                            candidate_label,
+                            candidate_angle_unwrapped,
+                            candidate_plain_total,
+                            candidate_neighbor_overlap_count,
+                        )
 
-                if best_score is not None and best_score[0] <= base_plain_overlaps:
+                if (
+                    best_score is not None
+                    and best_score[0] <= base_plain_overlaps
+                    and best_score[1] <= current_neighbor_overlap_count
+                ):
                     break
 
             if best_candidate is None:
@@ -3043,8 +3183,14 @@ def _refine_labels_to_preferred_hemisphere(
                         if (block_start, block_end) not in block_candidates:
                             block_candidates.append((block_start, block_end))
 
-                    best_block_score: tuple[int, float, int] | None = None
-                    best_block_result: tuple[list[dict], list[float], int] | None = None
+                    best_block_score: tuple[int, int, float, int] | None = None
+                    best_block_result: tuple[list[dict], list[float], int, int] | None = None
+                    current_block_neighbor_overlap = _neighbor_min_gap_overlap_count(
+                        labels,
+                        label_idx,
+                        label,
+                        total_length,
+                    )
                     for block_start, block_end in block_candidates:
                         for step in range(1, block_max_steps + 1):
                             step_offset = step * angle_step_deg
@@ -3094,23 +3240,48 @@ def _refine_labels_to_preferred_hemisphere(
                                     continue
 
                                 block_width = block_end - block_start
-                                candidate_score = (candidate_plain_total, abs(delta), block_width)
+                                candidate_neighbor_overlap_count = _neighbor_min_gap_overlap_count(
+                                    candidate_labels,
+                                    label_idx,
+                                    candidate_labels[label_idx],
+                                    total_length,
+                                )
+                                candidate_score = (
+                                    candidate_plain_total,
+                                    candidate_neighbor_overlap_count,
+                                    abs(delta),
+                                    block_width,
+                                )
                                 if best_block_score is None or candidate_score < best_block_score:
                                     best_block_score = candidate_score
                                     best_block_result = (
                                         candidate_labels,
                                         candidate_angles,
                                         candidate_plain_total,
+                                        candidate_neighbor_overlap_count,
                                     )
-                            if best_block_score is not None and best_block_score[0] <= base_plain_overlaps:
+                            if (
+                                best_block_score is not None
+                                and best_block_score[0] <= base_plain_overlaps
+                                and best_block_score[1] <= current_block_neighbor_overlap
+                            ):
                                 break
-                        if best_block_score is not None and best_block_score[0] <= base_plain_overlaps:
+                        if (
+                            best_block_score is not None
+                            and best_block_score[0] <= base_plain_overlaps
+                            and best_block_score[1] <= current_block_neighbor_overlap
+                        ):
                             break
 
                     if best_block_result is None:
                         continue
 
-                    candidate_labels, candidate_angles, chosen_plain_total = best_block_result
+                    candidate_labels, candidate_angles, chosen_plain_total, chosen_neighbor_overlap = best_block_result
+                    if is_inner_label and (
+                        chosen_plain_total >= base_plain_overlaps
+                        and chosen_neighbor_overlap >= current_block_neighbor_overlap
+                    ):
+                        continue
                     labels[:] = candidate_labels
                     current_unwrapped_angles = candidate_angles
                     base_plain_overlaps = chosen_plain_total
@@ -3118,7 +3289,12 @@ def _refine_labels_to_preferred_hemisphere(
 
                 continue
 
-            candidate_label, chosen_angle_unwrapped, chosen_plain_total = best_candidate
+            candidate_label, chosen_angle_unwrapped, chosen_plain_total, chosen_neighbor_overlap = best_candidate
+            if is_inner_label and (
+                chosen_plain_total >= base_plain_overlaps
+                and chosen_neighbor_overlap >= current_neighbor_overlap_count
+            ):
+                continue
             label["start_x"] = candidate_label["start_x"]
             label["start_y"] = candidate_label["start_y"]
             if "angle_unwrapped" in label:
@@ -3870,6 +4046,11 @@ def prepare_label_list(
             is_outer=False,
             cfg=cfg,
         )
+        if (not cfg.canvas.resolve_overlaps) and len(inner_labels_rearranged) >= 2:
+            inner_labels_rearranged = _rebalance_inner_labels_strict_order(
+                inner_labels_rearranged,
+                total_length,
+            )
         if feature_inner_radius_intervals is not None and inner_labels_rearranged:
             inner_labels_rearranged = _stabilize_inner_label_clearance(
                 inner_labels_rearranged,
@@ -3946,7 +4127,11 @@ def prepare_label_list(
         if reanchor_required:
             assign_leader_start_points(external_labels_sorted, total_length)
 
-    label_list_fc = embedded_labels + outer_labels_rearranged + inner_labels_rearranged
+    external_labels_ordered = sorted(
+        outer_labels_rearranged + inner_labels_rearranged,
+        key=lambda label: float(label["middle"]),
+    )
+    label_list_fc = embedded_labels + external_labels_ordered
     return label_list_fc
 
 
