@@ -109,8 +109,8 @@ def _count_label_overlaps(labels: list[dict], total_length: int, use_min_gap: bo
             else:
                 y_margin = 0.1
                 x_margin = 1.0
-            if y_overlap(label1, label2, total_length, y_margin) and x_overlap(
-                label1, label2, minimum_margin=x_margin
+            if x_overlap(label1, label2, minimum_margin=x_margin) and y_overlap(
+                label1, label2, total_length, y_margin
             ):
                 overlap_count += 1
     return overlap_count
@@ -767,10 +767,11 @@ def _resolve_label_leader_line_collisions(
             else:
                 y_margin = 0.1
                 x_margin = 1.0
-            if y_overlap(candidate_label, other_label, total_length, y_margin) and x_overlap(
+            if x_overlap(candidate_label, other_label, minimum_margin=x_margin) and y_overlap(
                 candidate_label,
                 other_label,
-                minimum_margin=x_margin,
+                total_length,
+                y_margin,
             ):
                 overlap_count += 1
         return overlap_count
@@ -872,22 +873,6 @@ def _resolve_label_leader_line_collisions(
                     candidate["leader_start_x"] = float(leader_start_x)
                     candidate["leader_start_y"] = float(leader_start_y)
 
-                    candidate_plain_for_label = _label_overlap_count(
-                        label_idx, candidate, use_min_gap=False
-                    )
-                    candidate_plain_total = (
-                        current_plain_overlaps - current_plain_for_label + candidate_plain_for_label
-                    )
-                    if candidate_plain_total > current_plain_overlaps:
-                        continue
-
-                    candidate_min_gap_for_label = _label_overlap_count(
-                        label_idx, candidate, use_min_gap=True
-                    )
-                    candidate_min_gap_total = (
-                        current_min_gap_overlaps - current_min_gap_for_label + candidate_min_gap_for_label
-                    )
-
                     candidate_local_collision_count = _count_local_leader_line_collisions(
                         labels,
                         total_length,
@@ -904,6 +889,32 @@ def _resolve_label_leader_line_collisions(
                         continue
                     if candidate_local_collision_count > local_collision_count:
                         continue
+                    if candidate_local_line_intersection_count > best_score[0]:
+                        continue
+                    if (
+                        candidate_local_line_intersection_count == best_score[0]
+                        and candidate_local_collision_count > best_score[1]
+                    ):
+                        continue
+
+                    candidate_plain_for_label = _label_overlap_count(
+                        label_idx, candidate, use_min_gap=False
+                    )
+                    candidate_plain_total = (
+                        current_plain_overlaps - current_plain_for_label + candidate_plain_for_label
+                    )
+                    if candidate_plain_total > current_plain_overlaps:
+                        continue
+
+                    candidate_min_gap_for_label = _label_overlap_count(
+                        label_idx, candidate, use_min_gap=True
+                    )
+                    candidate_min_gap_total = (
+                        current_min_gap_overlaps - current_min_gap_for_label + candidate_min_gap_for_label
+                    )
+                    if candidate_min_gap_total > current_min_gap_overlaps:
+                        continue
+
                     candidate_score = (
                         candidate_local_line_intersection_count,
                         candidate_local_collision_count,
@@ -947,6 +958,15 @@ def _resolve_label_leader_line_collisions(
             break
         if not pass_changed:
             break
+
+    for label in labels:
+        start_x = float(label.get("start_x", 0.0))
+        start_y = float(label.get("start_y", 0.0))
+        angle_raw = math.degrees(math.atan2(start_y, start_x))
+        target_angle = float(
+            label.get("target_angle_unwrapped", angle_from_middle_unwrapped(float(label["middle"]), total_length))
+        )
+        label["angle_unwrapped"] = normalize_angle_near_reference(angle_raw, target_angle)
 
     return labels
 
