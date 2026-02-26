@@ -31,6 +31,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install build
 
+      - name: Verify static web CSS is up to date
+        run: |
+          python tools/build_web_css.py --check
+
       - name: Build Wheel
         run: python -m build --wheel
 

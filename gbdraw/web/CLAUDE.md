@@ -24,12 +24,51 @@ python -m build
 # Open DevTools Console (F12) to see Pyodide output and errors
 ```
 
+## Offline Asset Workflow
+
+All runtime third-party frontend dependencies are loaded from `gbdraw/web/vendor/`.
+
+### Regenerating Tailwind CSS (static)
+- Source CSS: `gbdraw/web/css/tailwind.source.css`
+- Output CSS: `gbdraw/web/vendor/tailwind/app.min.css`
+- Config: `gbdraw/web/tailwind.config.js`
+- Build/check wrapper: `tools/build_web_css.py`
+- Linux CLI path: `tools/tailwind/bin/tailwindcss-linux-x64`
+- Windows CLI path: `tools/tailwind/bin/tailwindcss-windows-x64.exe`
+
+Commands:
+```bash
+# Regenerate static CSS
+python tools/build_web_css.py
+
+# CI-style check (fails if app.min.css is stale)
+python tools/build_web_css.py --check
+```
+
+### Source of truth
+- `gbdraw/web/vendor/manifest.json` - URL/version/hash inventory for vendored assets
+- `gbdraw/web/vendor/THIRD_PARTY_LICENSES.md` - license tracking
+- `gbdraw/web/js/config.js` - `PYODIDE_REQUIRED_WHEELS` list for offline Python deps
+- `gbdraw/web/css/tailwind.source.css` - Tailwind source CSS (`@apply` and custom layers)
+- `gbdraw/web/vendor/tailwind/app.min.css` - generated static runtime CSS
+- `tools/build_web_css.py` - cross-platform CSS regeneration/check wrapper
+
+### Release checklist (offline mode)
+1. Replace all placeholder files under `gbdraw/web/vendor/` with real upstream assets.
+2. Populate `gbdraw/web/vendor/pyodide-wheels/` with all wheels listed in `PYODIDE_REQUIRED_WHEELS`.
+3. Regenerate static CSS: `python tools/build_web_css.py`.
+4. Confirm `python tools/build_web_css.py --check` succeeds.
+5. Confirm `gbdraw/web/wasm/losat/losat.wasm` exists.
+6. Run `python -m build`.
+7. Verify the built wheel contains `web/vendor/*`, `web/css/tailwind.source.css`, and `web/wasm/losat/losat.wasm`.
+
 ### Key File References
 
 | Section | File | Description |
 |---------|------|-------------|
 | CSP Header | gbdraw/web/index.html | Content Security Policy |
-| CSS Styles | gbdraw/web/index.html | TailwindCSS custom classes |
+| Tailwind Source | gbdraw/web/css/tailwind.source.css | Tailwind directives + `@apply` rules |
+| Runtime CSS | gbdraw/web/vendor/tailwind/app.min.css | Prebuilt static CSS loaded by index.html |
 | Vue App Template | gbdraw/web/index.html | HTML structure |
 | App Entry | gbdraw/web/js/app.js | Mounts Vue and delegates to app setup |
 | App Setup | gbdraw/web/js/app/app-setup.js | Composition root and module wiring |
@@ -47,12 +86,12 @@ python -m build
 
 ## Technology Stack
 
-### Core Libraries (CDN)
+### Core Libraries (Vendored local files)
 | Library | Version | Purpose |
 |---------|---------|---------|
 | Vue.js 3 | 3.5.25 | Reactive UI framework |
 | Pyodide | 0.29.0 | Python WebAssembly runtime |
-| TailwindCSS | CDN | Utility-first CSS styling |
+| TailwindCSS | static prebuilt CSS (`vendor/tailwind/app.min.css`) | Utility-first CSS styling |
 | jsPDF | 3.0.3 | PDF generation |
 | svg2pdf.js | 2.6.0 | SVG to PDF conversion |
 | DOMPurify | 3.2.7 | XSS protection for SVG output |
@@ -68,8 +107,8 @@ python -m build
 index.html
 ├── <head>
 │   ├── Content Security Policy (CSP)
-│   ├── CDN script imports
-│   └── TailwindCSS styles & custom CSS
+│   ├── Local vendor script imports
+│   └── Static stylesheet import (`vendor/tailwind/app.min.css`)
 ├── <body>
 │   ├── Vue app container (#app)
 │   │   ├── Loading overlay (Pyodide init)
@@ -214,7 +253,7 @@ adv = {
 1. Load Pyodide runtime
 2. Install micropip
 3. Load gbdraw wheel from same origin
-4. Install Python dependencies (biopython, svgwrite, pandas, fonttools, bcbio-gff)
+4. Install Python dependencies from local wheels listed in `PYODIDE_REQUIRED_WHEELS`
 5. Initialize helper functions
 6. Mark `pyodideReady = true`
 
@@ -245,9 +284,9 @@ const results = JSON.parse(resultJson);
 ### Content Security Policy (lines 5-17)
 ```
 default-src 'self';
-script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com ...;
-style-src 'self' 'unsafe-inline' https://fonts.googleapis.com ...;
-connect-src 'self' https://cdn.jsdelivr.net https://pypi.org https://files.pythonhosted.org ...;
+script-src 'self' 'unsafe-inline' 'unsafe-eval';
+style-src 'self' 'unsafe-inline';
+connect-src 'self';
 frame-ancestors 'none';
 ```
 
@@ -265,8 +304,9 @@ User-provided regex patterns are validated:
 ## Development Notes
 
 ### Modifying the UI
-- CSS: Tailwind utility classes inline + custom classes in `<style>` block
-- Custom classes: `.card`, `.btn-*`, `.form-input`, etc. (lines 43-72)
+- CSS source: `gbdraw/web/css/tailwind.source.css` (`@tailwind` + `@layer` + `@apply`)
+- Runtime CSS: `gbdraw/web/vendor/tailwind/app.min.css` (generated; do not hand-edit)
+- Regenerate after CSS changes: `python tools/build_web_css.py`
 - Colors: Slate palette with Blue/Indigo accents
 - Collapsible sections: `<details>` element with custom styling
 
@@ -285,15 +325,18 @@ User-provided regex patterns are validated:
 ### Common Issues
 1. **"Pyodide not ready"**: Wait for initialization (~5-15 seconds on first load)
 2. **Memory errors**: Large genomes may exhaust browser memory
-3. **Wheel version mismatch**: Ensure wheel version matches `pyproject.toml`
-4. **CSP errors**: Check CDN URLs in CSP header if adding new dependencies
+3. **Wheel version mismatch**: Ensure web wheel in `gbdraw/web` matches `pyproject.toml`
+4. **Placeholder vendor assets loaded**: Replace files under `gbdraw/web/vendor/` with real upstream assets
+5. **Missing dependency wheel**: Update `PYODIDE_REQUIRED_WHEELS` and `vendor/pyodide-wheels/` together
 
 ## File Dependencies
 
 When deploying:
 - `index.html` (this file)
 - `gbdraw-X.X.X-py3-none-any.whl` (Python wheel, same origin)
-- CDN dependencies (Vue, Pyodide, TailwindCSS, icons, jsPDF, DOMPurify)
+- `gbdraw/web/vendor/*` (Vue/Pyodide/static Tailwind CSS/icons/jsPDF/svg2pdf/DOMPurify/browser_wasi_shim)
+- `gbdraw/web/vendor/pyodide-wheels/*.whl` (Python dependency wheels)
+- `gbdraw/web/wasm/losat/losat.wasm`
 
 ## Known Limitations
 

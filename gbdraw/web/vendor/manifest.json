@@ -1,0 +1,363 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-02-26",
+  "notes": [
+    "All runtime assets required by gbdraw gui are vendored for offline use.",
+    "Update PYODIDE_REQUIRED_WHEELS in gbdraw/web/js/config.js together with vendor/pyodide-wheels.",
+    "Regenerate gbdraw/web/vendor/tailwind/app.min.css via python tools/build_web_css.py when CSS source changes."
+  ],
+  "assets": [
+    {
+      "path": "vue/vue.global.js",
+      "upstream": "https://unpkg.com/vue@3.5.25/dist/vue.global.js",
+      "version": "3.5.25",
+      "license": "MIT",
+      "status": "vendored",
+      "sha256": "6f9eae7631fa9c48f474adf6cd232bd1c95322ec8c5a978acd5e0f87cfb61e7c"
+    },
+    {
+      "path": "tailwind/app.min.css",
+      "upstream": "generated from gbdraw/web/css/tailwind.source.css using tools/build_web_css.py",
+      "version": "tailwind-static-css",
+      "license": "MIT (Tailwind CSS)",
+      "status": "generated",
+      "sha256": "6b866cccec3619efcaa694da2fac6b8419e35380185942668f72bac7ac8657c9"
+    },
+    {
+      "path": "pyodide/v0.29.0/full/ffi.d.ts",
+      "upstream": "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2#pyodide/ffi.d.ts",
+      "version": "0.29.0",
+      "license": "MPL-2.0",
+      "status": "vendored",
+      "sha256": "4cef95f06d393712a6e2de2fed2ec11edca1669099a8bec9780b579fbfe2a313"
+    },
+    {
+      "path": "pyodide/v0.29.0/full/package.json",
+      "upstream": "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2#pyodide/package.json",
+      "version": "0.29.0",
+      "license": "MPL-2.0",
+      "status": "vendored",
+      "sha256": "3e7a3c89258b365ced5cad6b4b781e76fbd85195bedae0c0622ed18b89de6410"
+    },
+    {
+      "path": "pyodide/v0.29.0/full/pyodide-lock.json",
+      "upstream": "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2#pyodide/pyodide-lock.json",
+      "version": "0.29.0",
+      "license": "MPL-2.0",
+      "status": "vendored",
+      "sha256": "701557726114e9a968d2088153414b2f126b8631aa734ed98eaf1797d4e4d087"
+    },
+    {
+      "path": "pyodide/v0.29.0/full/pyodide.asm.js",
+      "upstream": "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2#pyodide/pyodide.asm.js",
+      "version": "0.29.0",
+      "license": "MPL-2.0",
+      "status": "vendored",
+      "sha256": "f1e70077bd701757b2798fc57f540fe39cf23d36ee5cd7c1a9b3a6f35cf500a7"
+    },
+    {
+      "path": "pyodide/v0.29.0/full/pyodide.asm.wasm",
+      "upstream": "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2#pyodide/pyodide.asm.wasm",
+      "version": "0.29.0",
+      "license": "MPL-2.0",
+      "status": "vendored",
+      "sha256": "615172c6b2f5efe53e41d0201a98eb37c1f3aa7675d11cb06b6079b3a6b2bef5"
+    },
+    {
+      "path": "pyodide/v0.29.0/full/pyodide.d.ts",
+      "upstream": "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2#pyodide/pyodide.d.ts",
+      "version": "0.29.0",
+      "license": "MPL-2.0",
+      "status": "vendored",
+      "sha256": "350f2ef1447259b1451c96af727f1b1ce8bd679a4d50006553bfa002fc68be79"
+    },
+    {
+      "path": "pyodide/v0.29.0/full/pyodide.js",
+      "upstream": "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2#pyodide/pyodide.js",
+      "version": "0.29.0",
+      "license": "MPL-2.0",
+      "status": "vendored",
+      "sha256": "4b189b200cd62705bded5c3982e8ea9edfb4757aae03308f13f7431009992554"
+    },
+    {
+      "path": "pyodide/v0.29.0/full/pyodide.mjs",
+      "upstream": "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2#pyodide/pyodide.mjs",
+      "version": "0.29.0",
+      "license": "MPL-2.0",
+      "status": "vendored",
+      "sha256": "31afa960fdf68333de6f3f0513bad154495c8fc635a66b7e58ab9cf356a76501"
+    },
+    {
+      "path": "pyodide/v0.29.0/full/python",
+      "upstream": "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2#pyodide/python",
+      "version": "0.29.0",
+      "license": "MPL-2.0",
+      "status": "vendored",
+      "sha256": "1c41e087b35cf890c36129498344c916514978c784b17a492c9365a0756f5375"
+    },
+    {
+      "path": "pyodide/v0.29.0/full/python_cli_entry.mjs",
+      "upstream": "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2#pyodide/python_cli_entry.mjs",
+      "version": "0.29.0",
+      "license": "MPL-2.0",
+      "status": "vendored",
+      "sha256": "762fa2594e5c89a43636797bad148866bac11ec5e21cca8fde483cda9ef23a04"
+    },
+    {
+      "path": "pyodide/v0.29.0/full/python_stdlib.zip",
+      "upstream": "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2#pyodide/python_stdlib.zip",
+      "version": "0.29.0",
+      "license": "MPL-2.0",
+      "status": "vendored",
+      "sha256": "e389fbdc394a00d31ff0624386c9e3e52e04727130ac73597a99c477afe4f1ca"
+    },
+    {
+      "path": "pyodide/v0.29.0/full/micropip-0.11.0-py3-none-any.whl",
+      "upstream": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/micropip-0.11.0-py3-none-any.whl",
+      "version": "0.11.0",
+      "license": "MPL-2.0",
+      "status": "vendored",
+      "sha256": "d98e6100df5e4145c1b11d559a8620e92b98d994cc1b52381a8815cebf3e7128"
+    },
+    {
+      "path": "pyodide-wheels/six-1.17.0-py2.py3-none-any.whl",
+      "upstream": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/six-1.17.0-py2.py3-none-any.whl",
+      "version": "1.17.0",
+      "license": "MIT",
+      "status": "vendored",
+      "sha256": "32a97ce76f718db29b29511588192894a1bcec5811b2a8d3a49c37c497505740"
+    },
+    {
+      "path": "pyodide-wheels/pytz-2025.2-py2.py3-none-any.whl",
+      "upstream": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pytz-2025.2-py2.py3-none-any.whl",
+      "version": "2025.2",
+      "license": "MIT",
+      "status": "vendored",
+      "sha256": "ee717af3bd5cb77fd4b8e45968a46e679290c206920844fbc8da9b6f4e70c917"
+    },
+    {
+      "path": "pyodide-wheels/python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+      "upstream": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+      "version": "2.9.0.post0",
+      "license": "Apache-2.0 OR BSD",
+      "status": "vendored",
+      "sha256": "ee64661a7ea55297f01114e2ee8babce5d57efb2fa7f7009bc3c7cd14c4c62c7"
+    },
+    {
+      "path": "pyodide-wheels/numpy-2.2.5-cp313-cp313-pyodide_2025_0_wasm32.whl",
+      "upstream": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/numpy-2.2.5-cp313-cp313-pyodide_2025_0_wasm32.whl",
+      "version": "2.2.5",
+      "license": "BSD-3-Clause",
+      "status": "vendored",
+      "sha256": "2ca46b70661caea8f9f8089d22495c7a24c120fc5881e68934ac3a04d3fc8a02"
+    },
+    {
+      "path": "pyodide-wheels/svgwrite-1.4.3-py3-none-any.whl",
+      "upstream": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/svgwrite-1.4.3-py3-none-any.whl",
+      "version": "1.4.3",
+      "license": "MIT",
+      "status": "vendored",
+      "sha256": "146e441aececdd8e9d85f938f6aa1fe52caa0017dbd079b2116d59b78496cc75"
+    },
+    {
+      "path": "pyodide-wheels/fonttools-4.56.0-py3-none-any.whl",
+      "upstream": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/fonttools-4.56.0-py3-none-any.whl",
+      "version": "4.56.0",
+      "license": "MIT",
+      "status": "vendored",
+      "sha256": "1984bd4077a08908f58f972e0a9f2284fecb5b02064b4dd939551b7430f39275"
+    },
+    {
+      "path": "pyodide-wheels/biopython-1.85-cp313-cp313-pyodide_2025_0_wasm32.whl",
+      "upstream": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/biopython-1.85-cp313-cp313-pyodide_2025_0_wasm32.whl",
+      "version": "1.85",
+      "license": "Biopython License",
+      "status": "vendored",
+      "sha256": "1c5c0f202214805e8b3d61258d1f6b6c6e76d35f34e295d8711f8a7117d8c897"
+    },
+    {
+      "path": "pyodide-wheels/pandas-2.3.2-cp313-cp313-pyodide_2025_0_wasm32.whl",
+      "upstream": "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pandas-2.3.2-cp313-cp313-pyodide_2025_0_wasm32.whl",
+      "version": "2.3.2",
+      "license": "BSD-3-Clause",
+      "status": "vendored",
+      "sha256": "1cc4ec1d52a630a5eeb36de472c99baad4dbb78b85b4d36dd70c554edfb58952"
+    },
+    {
+      "path": "pyodide-wheels/bcbio_gff-0.7.1-py3-none-any.whl",
+      "upstream": "https://files.pythonhosted.org/packages/4d/fc/fb0ad7988b7db0bd88c2764fd6b82657786e61cd5ab7f051e823c1aa1d4a/bcbio_gff-0.7.1-py3-none-any.whl",
+      "version": "0.7.1",
+      "license": "Biopython License",
+      "status": "vendored",
+      "sha256": "98b18c797fbabd27f47c2edc2a5c5e75d37a353cc2286684c4650728e66ff8fd"
+    },
+    {
+      "path": "phosphor/index.js",
+      "upstream": "local offline loader for vendored phosphor regular style (adapted from @phosphor-icons/web)",
+      "version": "2.1.2-local",
+      "license": "MIT",
+      "status": "vendored-local-adapter",
+      "sha256": "0aefc363db0699cf76226308b5b7258ce46e7e7835a3182aaf9a8ddd2e126982"
+    },
+    {
+      "path": "phosphor/regular/style.css",
+      "upstream": "https://registry.npmjs.org/@phosphor-icons/web/-/web-2.1.2.tgz#package/src/regular/style.css",
+      "version": "2.1.2",
+      "license": "MIT",
+      "status": "vendored",
+      "sha256": "873761b8711147dc516b6102936e9ad005f3a3015349efcde1a496f0326f1051"
+    },
+    {
+      "path": "phosphor/regular/Phosphor.woff2",
+      "upstream": "https://registry.npmjs.org/@phosphor-icons/web/-/web-2.1.2.tgz#package/src/regular/Phosphor.woff2",
+      "version": "2.1.2",
+      "license": "MIT",
+      "status": "vendored",
+      "sha256": "c2ea45ea05ff5c7df1936770c104725f2a68f43fd343f35f3da23a30b27de32a"
+    },
+    {
+      "path": "phosphor/regular/Phosphor.woff",
+      "upstream": "https://registry.npmjs.org/@phosphor-icons/web/-/web-2.1.2.tgz#package/src/regular/Phosphor.woff",
+      "version": "2.1.2",
+      "license": "MIT",
+      "status": "vendored",
+      "sha256": "396c5eae7f2dfb4d1f5432edd87109eda2f92a451b2167e43a26165b82770f75"
+    },
+    {
+      "path": "phosphor/regular/Phosphor.ttf",
+      "upstream": "https://registry.npmjs.org/@phosphor-icons/web/-/web-2.1.2.tgz#package/src/regular/Phosphor.ttf",
+      "version": "2.1.2",
+      "license": "MIT",
+      "status": "vendored",
+      "sha256": "06b91e022b7ee899a63efced879392a74f0bacbda54e4467e9f663220d173a10"
+    },
+    {
+      "path": "phosphor/regular/Phosphor.svg",
+      "upstream": "https://registry.npmjs.org/@phosphor-icons/web/-/web-2.1.2.tgz#package/src/regular/Phosphor.svg",
+      "version": "2.1.2",
+      "license": "MIT",
+      "status": "vendored",
+      "sha256": "e874e712d3f1b7774b4cba7dafda1eecdb1f075cd5e2ec1109c0553421ecaed3"
+    },
+    {
+      "path": "jspdf/jspdf.umd.min.js",
+      "upstream": "https://cdnjs.cloudflare.com/ajax/libs/jspdf/3.0.3/jspdf.umd.min.js",
+      "version": "3.0.3",
+      "license": "MIT",
+      "status": "vendored",
+      "sha256": "509a1b5b1f3402b81e28510e46145618373a9cba61c94c119d5e9242a86261e1"
+    },
+    {
+      "path": "svg2pdf/svg2pdf.umd.min.js",
+      "upstream": "https://cdn.jsdelivr.net/npm/svg2pdf.js@2.6.0/dist/svg2pdf.umd.min.js",
+      "version": "2.6.0",
+      "license": "MIT",
+      "status": "vendored",
+      "sha256": "7c91b939405364524ccda0eafac0b42b456594504acfa7de0eac83d1b6347723"
+    },
+    {
+      "path": "dompurify/purify.min.js",
+      "upstream": "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.7/purify.min.js",
+      "version": "3.2.7",
+      "license": "Apache-2.0 OR MPL-2.0",
+      "status": "vendored",
+      "sha256": "40cff492b54353a55cdf9ffb369786539ffb7d54d25f97dd4a1e8975b309c35d"
+    },
+    {
+      "path": "browser_wasi_shim/index.js",
+      "upstream": "https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz#package/dist/index.js",
+      "version": "0.4.2",
+      "license": "MIT OR Apache-2.0",
+      "status": "vendored",
+      "sha256": "7e2fd52ee3f728bb0b1d6e449724e0f13e3d586bb25bde6e02a66366175b5605"
+    },
+    {
+      "path": "browser_wasi_shim/fd.js",
+      "upstream": "https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz#package/dist/fd.js",
+      "version": "0.4.2",
+      "license": "MIT OR Apache-2.0",
+      "status": "vendored",
+      "sha256": "9e82e1fc1bfd3e3573f64349dc42b4b624ed61d24e5c553f2bb4d041444f166c"
+    },
+    {
+      "path": "browser_wasi_shim/fs_mem.js",
+      "upstream": "https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz#package/dist/fs_mem.js",
+      "version": "0.4.2",
+      "license": "MIT OR Apache-2.0",
+      "status": "vendored",
+      "sha256": "85dbc9e0ee784d9ff8b55452644e00bf7058e32355aab974f8b71d7d85772324"
+    },
+    {
+      "path": "browser_wasi_shim/fs_opfs.js",
+      "upstream": "https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz#package/dist/fs_opfs.js",
+      "version": "0.4.2",
+      "license": "MIT OR Apache-2.0",
+      "status": "vendored",
+      "sha256": "4b96aaeb5ac5986cf802cbf22b975c656682d22a38248160c96fc2ded5644869"
+    },
+    {
+      "path": "browser_wasi_shim/wasi.js",
+      "upstream": "https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz#package/dist/wasi.js",
+      "version": "0.4.2",
+      "license": "MIT OR Apache-2.0",
+      "status": "vendored",
+      "sha256": "168eb977a826f75ab0c39f9322f78cc58dbd5b233019ad1d6a7e940af8a7c4aa"
+    },
+    {
+      "path": "browser_wasi_shim/wasi_defs.js",
+      "upstream": "https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz#package/dist/wasi_defs.js",
+      "version": "0.4.2",
+      "license": "MIT OR Apache-2.0",
+      "status": "vendored",
+      "sha256": "0db0f42ba330749a7b05095ea1fd0ff63fd2b30e84cead30fe4c28359d15f194"
+    },
+    {
+      "path": "browser_wasi_shim/strace.js",
+      "upstream": "https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz#package/dist/strace.js",
+      "version": "0.4.2",
+      "license": "MIT OR Apache-2.0",
+      "status": "vendored",
+      "sha256": "ece435d3784d928d02bff4d015b7cb686f8c06de8536ff9f8ebc38a8f403a3be"
+    },
+    {
+      "path": "browser_wasi_shim/debug.js",
+      "upstream": "https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz#package/dist/debug.js",
+      "version": "0.4.2",
+      "license": "MIT OR Apache-2.0",
+      "status": "vendored",
+      "sha256": "a91848ee180529e2a60c05dfb9584cad19cd4e1c6f391fdb76a938bcae4c0328"
+    },
+    {
+      "path": "fonts/Inter-Variable.ttf",
+      "upstream": "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf",
+      "version": "google-fonts-main",
+      "license": "OFL-1.1",
+      "status": "vendored",
+      "sha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031"
+    },
+    {
+      "path": "fonts/NotoSansJP-Variable.ttf",
+      "upstream": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf",
+      "version": "google-fonts-main",
+      "license": "OFL-1.1",
+      "status": "vendored",
+      "sha256": "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f"
+    },
+    {
+      "path": "fonts/OFL-Inter.txt",
+      "upstream": "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/OFL.txt",
+      "version": "google-fonts-main",
+      "license": "OFL-1.1",
+      "status": "vendored",
+      "sha256": "5b9321a4298cfeb6b34354164a1c3afc3db114569984c502b9b35d988fd58c57"
+    },
+    {
+      "path": "fonts/OFL-NotoSansJP.txt",
+      "upstream": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansjp/OFL.txt",
+      "version": "google-fonts-main",
+      "license": "OFL-1.1",
+      "status": "vendored",
+      "sha256": "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9"
+    }
+  ]
+}

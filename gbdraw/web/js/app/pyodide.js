@@ -1,4 +1,10 @@
-import { GBDRAW_WHEEL_NAME, GBDRAW_WHEEL_CACHE_BUST } from '../config.js';
+import {
+  GBDRAW_WHEEL_NAME,
+  GBDRAW_WHEEL_CACHE_BUST,
+  PYODIDE_INDEX_URL,
+  PYODIDE_WHEELS_BASE_URL,
+  PYODIDE_REQUIRED_WHEELS
+} from '../config.js';
 import { PYTHON_HELPERS } from './python-helpers.js';
 
 export const createPyodideManager = ({ state }) => {
@@ -17,38 +23,73 @@ export const createPyodideManager = ({ state }) => {
     return JSON.parse(paletteJson);
   };
 
-  const ensureWheelAvailable = async () => {
-    const wheelBaseUrl = new URL(GBDRAW_WHEEL_NAME, window.location.href);
-    if (GBDRAW_WHEEL_CACHE_BUST) {
-      wheelBaseUrl.searchParams.set('v', GBDRAW_WHEEL_CACHE_BUST);
-    }
-    const wheelUrl = wheelBaseUrl.toString();
-    const response = await fetch(wheelUrl, { cache: 'no-store' });
+  const toAbsoluteAssetUrl = (pathOrUrl) => new URL(pathOrUrl, window.location.href).toString();
+
+  const ensureZipAssetAvailable = async (label, pathOrUrl) => {
+    const assetUrl = toAbsoluteAssetUrl(pathOrUrl);
+    const response = await fetch(assetUrl, { cache: 'no-store' });
     if (!response.ok) {
       throw new Error(
-        `Wheel not found (${response.status}). Expected ${GBDRAW_WHEEL_NAME} at the site root. ` +
-        'Build the wheel and copy it into gbdraw/web, or update gbdraw/web/js/config.js.'
+        `${label} missing (${response.status}). Expected local asset: ${pathOrUrl}`
       );
     }
     const buffer = await response.arrayBuffer();
     const bytes = new Uint8Array(buffer.slice(0, 2));
     if (bytes.length < 2 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
       throw new Error(
-        `Wheel file is not a valid zip: ${GBDRAW_WHEEL_NAME}. ` +
-        'Ensure the file is a .whl built from this version and is served correctly.'
+        `${label} is not a valid .whl/.zip archive: ${pathOrUrl}`
       );
     }
-    return wheelUrl;
+    return assetUrl;
+  };
+
+  const ensureWheelAvailable = async () => {
+    const wheelBaseUrl = new URL(GBDRAW_WHEEL_NAME, window.location.href);
+    if (GBDRAW_WHEEL_CACHE_BUST) {
+      wheelBaseUrl.searchParams.set('v', GBDRAW_WHEEL_CACHE_BUST);
+    }
+    return ensureZipAssetAvailable('gbdraw wheel', wheelBaseUrl.toString());
+  };
+
+  const getRequiredWheelNames = () => {
+    if (!Array.isArray(PYODIDE_REQUIRED_WHEELS)) {
+      throw new Error('PYODIDE_REQUIRED_WHEELS must be an array in gbdraw/web/js/config.js');
+    }
+    const wheelNames = PYODIDE_REQUIRED_WHEELS
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean);
+    if (wheelNames.length === 0) {
+      throw new Error(
+        'PYODIDE_REQUIRED_WHEELS is empty. List all local dependency wheels in gbdraw/web/js/config.js.'
+      );
+    }
+    return wheelNames;
+  };
+
+  const ensureDependencyWheelsAvailable = async () => {
+    const wheelNames = getRequiredWheelNames();
+    const wheelBase = toAbsoluteAssetUrl(PYODIDE_WHEELS_BASE_URL);
+    const checks = wheelNames.map(async (wheelName) => {
+      const wheelUrl = new URL(wheelName, wheelBase).toString();
+      return ensureZipAssetAvailable(`Pyodide dependency wheel (${wheelName})`, wheelUrl);
+    });
+    return Promise.all(checks);
   };
 
   const initPyodide = async () => {
     try {
-      const pyodide = await loadPyodide();
+      if (typeof loadPyodide !== 'function') {
+        throw new Error(
+          `Pyodide runtime loader is unavailable. Expected local asset: ${PYODIDE_INDEX_URL}pyodide.js`
+        );
+      }
+      const pyodide = await loadPyodide({ indexURL: toAbsoluteAssetUrl(PYODIDE_INDEX_URL) });
       setPyodide(pyodide);
-      loadingStatus.value = 'Installing dependencies...';
+      loadingStatus.value = 'Installing local dependencies...';
       await pyodide.loadPackage('micropip');
       const micropip = pyodide.pyimport('micropip');
-      await micropip.install(['biopython', 'svgwrite', 'pandas', 'fonttools', 'bcbio-gff']);
+      const dependencyWheelUrls = await ensureDependencyWheelsAvailable();
+      await micropip.install(dependencyWheelUrls);
       loadingStatus.value = 'Installing gbdraw...';
       const wheelUrl = await ensureWheelAvailable();
       await micropip.install(wheelUrl);

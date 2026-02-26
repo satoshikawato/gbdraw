@@ -1,0 +1,27 @@
+{
+  "started_at_utc": "2026-02-26T12:00:53.578080+00:00",
+  "server_url": "http://127.0.0.1:53299",
+  "pyodide_ready": false,
+  "circular_svg_rendered": false,
+  "circular_png_exported": false,
+  "circular_pdf_exported": false,
+  "linear_losat_generated": false,
+  "linear_losat_tsv_exported": false,
+  "external_http_requests": [],
+  "blocked_external_http_requests": [],
+  "request_failures": [],
+  "downloaded_files": [],
+  "errors": [
+    "BrowserType.launch: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /home/kawato/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-HDSBj4 --remote-debugging-pipe --no-startup-window\n<launched> pid=2080\n[pid=2080][err] /home/kawato/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell: error while loading shared libraries: libnspr4.so: cannot open shared object file: No such file or directory\nCall log:\n  - <launching> /home/kawato/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-HDSBj4 --remote-debugging-pipe --no-startup-window\n  - <launched> pid=2080\n  - [pid=2080][err] /home/kawato/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell: error while loading shared libraries: libnspr4.so: cannot open shared object file: No such file or directory\n  - [pid=2080] <gracefully close start>\n  - [pid=2080] <kill>\n  - [pid=2080] <will force kill>\n  - [pid=2080] exception while trying to kill process: Error: kill ESRCH\n  - [pid=2080] <process did exit: exitCode=127, signal=null>\n  - [pid=2080] starting temporary directories cleanup\n  - [pid=2080] finished temporary directories cleanup\n  - [pid=2080] <gracefully close end>\n"
+  ],
+  "inputs": {
+    "circular_gb": "/mnt/c/Users/genom/GitHub/gbdraw/tests/test_inputs/NC_010162.gb",
+    "linear_gb_1": "/mnt/c/Users/genom/GitHub/gbdraw/tests/test_inputs/AP027078.gb",
+    "linear_gb_2": "/mnt/c/Users/genom/GitHub/gbdraw/tests/test_inputs/AP027131.gb"
+  },
+  "server_stdout": [
+    "Launching gbdraw GUI (Local Mode)...",
+    "\u2705 Local server started at: http://localhost:53299"
+  ],
+  "success": false
+}

@@ -2,6 +2,10 @@ include gbdraw/data/color_palettes.toml
 include gbdraw/data/config.toml
 include gbdraw/data/*.ttf
 include gbdraw/web/index.html
+recursive-include gbdraw/web/css *.css
 recursive-include gbdraw/web/js *.js
 recursive-include gbdraw/web/presets *.txt *.tsv
+recursive-include gbdraw/web/vendor *.js *.css *.md *.txt *.json *.mjs *.d.ts *.wasm *.zip *.whl *.ttf *.woff *.woff2 *.svg
+recursive-include gbdraw/web/vendor/pyodide-wheels *
+recursive-include gbdraw/web/wasm *.wasm *.md
 

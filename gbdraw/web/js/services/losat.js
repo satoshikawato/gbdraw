@@ -1,13 +1,18 @@
 const DEFAULT_WASM_PATH = './wasm/losat/losat.wasm';
+const WASI_SHIM_MODULE_PATH = '../../vendor/browser_wasi_shim/index.js';
 
 let wasiShimPromise = null;
 let wasmModulePromise = null;
 
 const loadWasiShim = async () => {
   if (!wasiShimPromise) {
-    wasiShimPromise = import(
-      'https://unpkg.com/@bjorn3/browser_wasi_shim@0.4.2/dist/index.js'
-    );
+    wasiShimPromise = import(WASI_SHIM_MODULE_PATH).catch((error) => {
+      throw new Error(
+        `LOSAT WASI shim is missing or invalid at ${WASI_SHIM_MODULE_PATH}. ` +
+        'Place the browser_wasi_shim module in gbdraw/web/vendor/browser_wasi_shim/. ' +
+        `Original error: ${error.message}`
+      );
+    });
   }
   return wasiShimPromise;
 };
@@ -17,10 +22,17 @@ const loadLosatModule = async (wasmPath = DEFAULT_WASM_PATH) => {
     wasmModulePromise = (async () => {
       const response = await fetch(wasmPath);
       if (!response.ok) {
-        throw new Error(`LOSAT wasm not found at ${wasmPath}`);
+        throw new Error(
+          `LOSAT wasm not found at ${wasmPath}. ` +
+          'Expected local file: gbdraw/web/wasm/losat/losat.wasm'
+        );
       }
       const bytes = await response.arrayBuffer();
-      return WebAssembly.compile(bytes);
+      try {
+        return WebAssembly.compile(bytes);
+      } catch (error) {
+        throw new Error(`LOSAT wasm is invalid at ${wasmPath}: ${error.message}`);
+      }
     })();
   }
   return wasmModulePromise;

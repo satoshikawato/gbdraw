@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  @font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("../fonts/Inter-Variable.ttf") format("truetype-variations");
+  }
+
+  @font-face {
+    font-family: "Noto Sans JP";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("../fonts/NotoSansJP-Variable.ttf") format("truetype-variations");
+  }
+
+  body {
+    font-family: "Inter", "Noto Sans JP", sans-serif;
+    background-color: #f8fafc;
+    color: #334155;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: #f1f5f9; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+  input,
+  select,
+  textarea,
+  button {
+    font-family: inherit;
+  }
+}
+
+@layer components {
+  .card { @apply bg-white p-3 rounded-xl shadow-sm border border-slate-200 mb-2 transition-all; }
+  .card-header { @apply text-lg font-bold mb-2 text-slate-700 flex items-center gap-2 border-b pb-2; }
+  .input-group { @apply mb-3; }
+  .input-label { @apply block text-base font-bold text-slate-500 uppercase tracking-wider mb-0.5 flex items-center gap-1; }
+  .form-input { @apply w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 transition-all; }
+  .form-checkbox { @apply w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2; }
+  .help-tip { margin-left: 0.25rem; }
+  .option-label .help-tip { margin-left: 0; }
+  .input-label-sm { font-size: 10px; letter-spacing: 0.04em; }
+  .adv-section-title { font-size: 10px; letter-spacing: 0.04em; }
+  .adv-options .input-label { font-size: 10px; letter-spacing: 0.04em; }
+  .adv-options .form-input { font-size: 10px; padding: 0.25rem 0.5rem; line-height: 1.2; }
+  .adv-options .form-input.text-xs { font-size: 10px; }
+  .form-input-compact { font-size: 10px; padding: 0.2rem 0.5rem; line-height: 1.2; height: 1.5rem; }
+  .adv-options .form-input-compact { font-size: 10px; padding: 0.2rem 0.5rem; line-height: 1.2; height: 1.5rem; }
+  .basic-settings .input-label { font-size: 10px; letter-spacing: 0.04em; }
+  .basic-settings .form-input { font-size: 10px; padding: 0.25rem 0.5rem; line-height: 1.2; }
+  .basic-settings .form-input.text-xs { font-size: 10px; }
+
+  .btn { @apply font-bold rounded-lg text-base px-4 py-2 shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2; }
+  .btn-primary { @apply text-white bg-blue-600 hover:bg-blue-700; }
+  .btn-secondary { @apply text-slate-700 bg-white border border-slate-300 hover:bg-slate-50; }
+  .btn-danger { @apply text-red-600 bg-white border border-red-200 hover:bg-red-50; }
+  .btn-sm { @apply px-2 py-1 text-xs; }
+
+  /* Highlighted Generate Button Style */
+  .btn-generate { @apply text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 border-b-4 border-indigo-800 shadow-lg shadow-indigo-200; }
+  .btn-generate:active { @apply border-b-0 translate-y-1; }
+
+  .upload-zone { background-color: #fefce8; @apply border-2 border-dashed border-slate-300 rounded-lg p-3 text-center cursor-pointer select-none hover:border-blue-500 hover:bg-blue-50 relative transition-colors flex flex-col items-center justify-center min-h-[60px]; }
+  .upload-zone.ready { @apply bg-green-50 border-green-500; }
+
+  details > summary { @apply list-none cursor-pointer font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2 select-none text-xs; }
+  details > summary::-webkit-details-marker { display: none; }
+  details[open] > summary { @apply mb-2 text-blue-600; }
+  details > summary::before { content: ''; @apply w-4 h-4 bg-contain bg-no-repeat transition-transform duration-200; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 18 15 12 9 6'%3E%3C/polyline%3E%3C/svg%3E"); }
+  details[open] > summary::before { transform: rotate(90deg); }
+}

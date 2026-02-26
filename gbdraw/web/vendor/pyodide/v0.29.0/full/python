@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -e
+
+if [[ $1 == "-m" ]] && [[ $2 == "pip" ]]; then
+    # redirect python -m pip to execute in host environment
+    shift 2
+    which $(dirname $0)/pip > /dev/null || { \
+        >&2 echo "Cannot find pyodide pip. Make a pyodide venv first?" && exit 1; \
+    }
+    exec $(dirname $0)/pip $@
+fi
+
+which node > /dev/null  || { \
+    >&2 echo "No node executable found on the path" && exit 1; \
+}
+
+ARGS=$(node -e "$(cat <<"EOF"
+const major_version = Number(process.version.split(".")[0].slice(1));
+if(major_version < 18) {
+    console.error("Need node version >= 18. Got node version", process.version);
+    process.exit(1);
+}
+
+if (major_version >= 20) {
+    process.stdout.write("--experimental-wasm-stack-switching");
+}
+EOF
+)")
+
+# Macs come with FreeBSD coreutils which doesn't have the -s option
+# so feature detect and work around it.
+if which grealpath > /dev/null; then
+    # It has brew installed gnu core utils, use that
+    REALPATH="grealpath -s"
+elif which realpath > /dev/null && realpath --version > /dev/null 2> /dev/null && realpath --version | grep GNU > /dev/null; then
+    # realpath points to GNU realpath so use it.
+    REALPATH="realpath -s"
+else
+    # Shim for macs without GNU coreutils
+    abs_path () {
+        echo "$(cd "$(dirname "$1")" || exit; pwd)/$(basename "$1")"
+    }
+    REALPATH=abs_path
+fi
+
+
+RESOLVED_DIR=$(dirname $(realpath "$0"))
+
+# Compute our own path, not following symlinks and pass it in so that
+# node_entry.mjs can set sys.executable correctly.
+# Intentionally allow word splitting on $NODEFLAGS.
+exec node $NODEFLAGS $ARGS $RESOLVED_DIR/python_cli_entry.mjs --this-program="$($REALPATH "$0")" "$@"

@@ -33,6 +33,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
+      - name: Verify static web CSS is up to date
+        run: |
+          python tools/build_web_css.py --check
+
       - name: Run fast tests
         run: |
           pytest tests/ -v --tb=short -m "not slow" --timeout=120
