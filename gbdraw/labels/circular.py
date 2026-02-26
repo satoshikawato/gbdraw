@@ -9,6 +9,7 @@ This module contains the circular/arc-based label placement logic that used to l
 """
 
 import math
+from functools import lru_cache
 
 from .filtering import get_label_text, preprocess_label_filtering
 from ..config.models import GbdrawConfig  # type: ignore[reportMissingImports]
@@ -118,12 +119,30 @@ def _count_label_overlaps(labels: list[dict], total_length: int, use_min_gap: bo
 
 def _label_y_bounds(label: dict, total_len: int, minimum_margin: float) -> tuple[float, float]:
     """Return (min_y, max_y) for label bbox using the same baseline model as rendering."""
-    label_start_y = float(label["start_y"])
-    label_angle = (360.0 * (float(label["middle"]) / total_len)) % 360.0
-    label_height = float(label["height_px"])
-    margin_half = 0.5 * float(minimum_margin)
+    return _label_y_bounds_cached(
+        float(label["start_y"]),
+        float(label["middle"]),
+        int(total_len),
+        float(label["height_px"]),
+        float(minimum_margin),
+        label.get("is_inner", False) is False,
+    )
 
-    if label.get("is_inner", False) is False:
+
+@lru_cache(maxsize=262144)
+def _label_y_bounds_cached(
+    label_start_y: float,
+    label_middle: float,
+    total_len: int,
+    label_height: float,
+    minimum_margin: float,
+    is_outer: bool,
+) -> tuple[float, float]:
+    """Cached scalar implementation of `_label_y_bounds`."""
+    label_angle = (360.0 * (label_middle / total_len)) % 360.0
+    margin_half = 0.5 * minimum_margin
+
+    if is_outer:
         if 0 <= label_angle < 10:  # baseline = text-after-edge
             max_y = label_start_y
             min_y = label_start_y - 1.0 * label_height - margin_half
@@ -160,11 +179,25 @@ def _label_y_bounds(label: dict, total_len: int, minimum_margin: float) -> tuple
 
 def _label_x_bounds(label: dict, minimum_margin: float) -> tuple[float, float]:
     """Return (min_x, max_x) for label bbox using current text-anchor semantics."""
-    label_start_x = float(label["start_x"])
-    label_width = float(label["width_px"])
-    margin_half = 0.5 * float(minimum_margin)
+    return _label_x_bounds_cached(
+        float(label["start_x"]),
+        float(label["width_px"]),
+        float(minimum_margin),
+        label.get("is_inner", False) is False,
+    )
 
-    if label.get("is_inner", False) is False:
+
+@lru_cache(maxsize=262144)
+def _label_x_bounds_cached(
+    label_start_x: float,
+    label_width: float,
+    minimum_margin: float,
+    is_outer: bool,
+) -> tuple[float, float]:
+    """Cached scalar implementation of `_label_x_bounds`."""
+    margin_half = 0.5 * minimum_margin
+
+    if is_outer:
         if label_start_x > 0:
             max_x = label_start_x + label_width + margin_half
             min_x = label_start_x - margin_half
@@ -561,6 +594,27 @@ def _primary_leader_segment(label: dict) -> tuple[tuple[float, float], tuple[flo
     return ((middle_x, middle_y), (leader_start_x, leader_start_y))
 
 
+def _build_label_leader_collision_geometry(
+    labels: list[dict],
+    total_length: int,
+    margin_px: float,
+) -> tuple[
+    list[tuple[float, float, float, float]],
+    list[list[tuple[tuple[float, float], tuple[float, float]]]],
+]:
+    """Precompute per-label rectangles and leader segments used by collision checks."""
+    rects = [_label_bbox_rect(label, total_length, margin_px=margin_px) for label in labels]
+    segments = [_leader_segments(label) for label in labels]
+    return rects, segments
+
+
+def _build_primary_leader_segments(
+    labels: list[dict],
+) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    """Precompute primary leader segments used by line-cross checks."""
+    return [_primary_leader_segment(label) for label in labels]
+
+
 def _segments_properly_intersect(
     seg_a: tuple[tuple[float, float], tuple[float, float]],
     seg_b: tuple[tuple[float, float], tuple[float, float]],
@@ -601,13 +655,19 @@ def _segments_properly_intersect(
     return False
 
 
-def _count_leader_line_intersections(labels: list[dict]) -> int:
+def _count_leader_line_intersections(
+    labels: list[dict],
+    *,
+    primary_segments: list[tuple[tuple[float, float], tuple[float, float]]] | None = None,
+) -> int:
     """Count intersections between primary leader segments."""
+    if primary_segments is None:
+        primary_segments = _build_primary_leader_segments(labels)
     intersection_count = 0
-    for idx in range(len(labels)):
-        segment_i = _primary_leader_segment(labels[idx])
-        for jdx in range(idx + 1, len(labels)):
-            if _segments_properly_intersect(segment_i, _primary_leader_segment(labels[jdx])):
+    for idx in range(len(primary_segments)):
+        segment_i = primary_segments[idx]
+        for jdx in range(idx + 1, len(primary_segments)):
+            if _segments_properly_intersect(segment_i, primary_segments[jdx]):
                 intersection_count += 1
     return intersection_count
 
@@ -617,17 +677,25 @@ def _count_local_leader_line_intersections(
     idx: int,
     *,
     candidate: dict | None = None,
+    primary_segments: list[tuple[tuple[float, float], tuple[float, float]]] | None = None,
+    candidate_segment: tuple[tuple[float, float], tuple[float, float]] | None = None,
 ) -> int:
     """Count primary leader-line intersections involving one label."""
     if idx < 0 or idx >= len(labels):
         return 0
-    target_label = candidate if candidate is not None else labels[idx]
-    target_segment = _primary_leader_segment(target_label)
+    if primary_segments is None:
+        primary_segments = _build_primary_leader_segments(labels)
+    if candidate_segment is not None:
+        target_segment = candidate_segment
+    elif candidate is not None:
+        target_segment = _primary_leader_segment(candidate)
+    else:
+        target_segment = primary_segments[idx]
     intersection_count = 0
-    for peer_idx, peer_label in enumerate(labels):
+    for peer_idx, peer_segment in enumerate(primary_segments):
         if peer_idx == idx:
             continue
-        if _segments_properly_intersect(target_segment, _primary_leader_segment(peer_label)):
+        if _segments_properly_intersect(target_segment, peer_segment):
             intersection_count += 1
     return intersection_count
 
@@ -680,17 +748,24 @@ def _segment_intersects_rect_interior(
     return (min_x + eps) < x_mid < (max_x - eps) and (min_y + eps) < y_mid < (max_y - eps)
 
 
-def _count_label_leader_line_collisions(labels: list[dict], total_length: int, margin_px: float) -> int:
+def _count_label_leader_line_collisions(
+    labels: list[dict],
+    total_length: int,
+    margin_px: float,
+    *,
+    rects: list[tuple[float, float, float, float]] | None = None,
+    segments: list[list[tuple[tuple[float, float], tuple[float, float]]]] | None = None,
+) -> int:
     """Count segment-vs-label collisions for all label pairs."""
+    if rects is None or segments is None:
+        rects, segments = _build_label_leader_collision_geometry(labels, total_length, margin_px)
     collision_count = 0
     for idx in range(len(labels)):
-        label_i = labels[idx]
-        rect_i = _label_bbox_rect(label_i, total_length, margin_px=margin_px)
-        segments_i = _leader_segments(label_i)
+        rect_i = rects[idx]
+        segments_i = segments[idx]
         for jdx in range(idx + 1, len(labels)):
-            label_j = labels[jdx]
-            rect_j = _label_bbox_rect(label_j, total_length, margin_px=margin_px)
-            segments_j = _leader_segments(label_j)
+            rect_j = rects[jdx]
+            segments_j = segments[jdx]
             for segment in segments_i:
                 if _segment_intersects_rect_interior(segment[0], segment[1], rect_j):
                     collision_count += 1
@@ -707,23 +782,39 @@ def _count_local_leader_line_collisions(
     margin_px: float,
     *,
     candidate: dict | None = None,
+    rects: list[tuple[float, float, float, float]] | None = None,
+    segments: list[list[tuple[tuple[float, float], tuple[float, float]]]] | None = None,
+    candidate_rect: tuple[float, float, float, float] | None = None,
+    candidate_segments: list[tuple[tuple[float, float], tuple[float, float]]] | None = None,
 ) -> int:
     """Count collisions involving one label (optionally with a candidate geometry)."""
     if idx < 0 or idx >= len(labels):
         return 0
-    target_label = candidate if candidate is not None else labels[idx]
-    target_rect = _label_bbox_rect(target_label, total_length, margin_px=margin_px)
-    target_segments = _leader_segments(target_label)
+    if rects is None or segments is None:
+        rects, segments = _build_label_leader_collision_geometry(labels, total_length, margin_px)
+    if candidate_rect is not None:
+        target_rect = candidate_rect
+    elif candidate is not None:
+        target_rect = _label_bbox_rect(candidate, total_length, margin_px=margin_px)
+    else:
+        target_rect = rects[idx]
+
+    if candidate_segments is not None:
+        target_segments = candidate_segments
+    elif candidate is not None:
+        target_segments = _leader_segments(candidate)
+    else:
+        target_segments = segments[idx]
     collision_count = 0
 
-    for peer_idx, peer_label in enumerate(labels):
+    for peer_idx, peer_segments in enumerate(segments):
         if peer_idx == idx:
             continue
-        peer_rect = _label_bbox_rect(peer_label, total_length, margin_px=margin_px)
+        peer_rect = rects[peer_idx]
         for segment in target_segments:
             if _segment_intersects_rect_interior(segment[0], segment[1], peer_rect):
                 collision_count += 1
-        for peer_segment in _leader_segments(peer_label):
+        for peer_segment in peer_segments:
             if _segment_intersects_rect_interior(peer_segment[0], peer_segment[1], target_rect):
                 collision_count += 1
     return collision_count
@@ -748,10 +839,19 @@ def _resolve_label_leader_line_collisions(
     max_steps = max(1, int(max_shift_deg / step_deg))
     max_passes = max(1, int(max_passes))
     min_order_gap_deg = max(float(min_order_gap_deg), 1e-6)
+    rects, segments = _build_label_leader_collision_geometry(labels, total_length, margin_px)
+    primary_segments = _build_primary_leader_segments(labels)
 
     if (
-        _count_label_leader_line_collisions(labels, total_length, margin_px=margin_px) == 0
-        and _count_leader_line_intersections(labels) == 0
+        _count_label_leader_line_collisions(
+            labels,
+            total_length,
+            margin_px=margin_px,
+            rects=rects,
+            segments=segments,
+        )
+        == 0
+        and _count_leader_line_intersections(labels, primary_segments=primary_segments) == 0
     ):
         return labels
 
@@ -781,8 +881,13 @@ def _resolve_label_leader_line_collisions(
             labels,
             total_length,
             margin_px=margin_px,
+            rects=rects,
+            segments=segments,
         )
-        current_total_line_intersections = _count_leader_line_intersections(labels)
+        current_total_line_intersections = _count_leader_line_intersections(
+            labels,
+            primary_segments=primary_segments,
+        )
         if current_total_bbox_collisions == 0 and current_total_line_intersections == 0:
             break
 
@@ -792,8 +897,19 @@ def _resolve_label_leader_line_collisions(
         unwrapped_angles = _derive_monotonic_unwrapped_angles(labels, total_length)
         local_scores = [
             (
-                _count_local_leader_line_intersections(labels, idx),
-                _count_local_leader_line_collisions(labels, total_length, idx, margin_px=margin_px),
+                _count_local_leader_line_intersections(
+                    labels,
+                    idx,
+                    primary_segments=primary_segments,
+                ),
+                _count_local_leader_line_collisions(
+                    labels,
+                    total_length,
+                    idx,
+                    margin_px=margin_px,
+                    rects=rects,
+                    segments=segments,
+                ),
                 idx,
             )
             for idx in range(len(labels))
@@ -847,6 +963,9 @@ def _resolve_label_leader_line_collisions(
             )
             best_score = current_score
             best_candidate: dict | None = None
+            best_candidate_rect: tuple[float, float, float, float] | None = None
+            best_candidate_segments: list[tuple[tuple[float, float], tuple[float, float]]] | None = None
+            best_candidate_primary_segment: tuple[tuple[float, float], tuple[float, float]] | None = None
             best_angle: float | None = None
             best_plain_total = current_plain_overlaps
             best_min_gap_total = current_min_gap_overlaps
@@ -872,6 +991,9 @@ def _resolve_label_leader_line_collisions(
                     leader_start_x, leader_start_y = _leader_start_point(candidate, total_length)
                     candidate["leader_start_x"] = float(leader_start_x)
                     candidate["leader_start_y"] = float(leader_start_y)
+                    candidate_rect = _label_bbox_rect(candidate, total_length, margin_px=margin_px)
+                    candidate_segments = _leader_segments(candidate)
+                    candidate_primary_segment = _primary_leader_segment(candidate)
 
                     candidate_local_collision_count = _count_local_leader_line_collisions(
                         labels,
@@ -879,11 +1001,17 @@ def _resolve_label_leader_line_collisions(
                         label_idx,
                         margin_px=margin_px,
                         candidate=candidate,
+                        rects=rects,
+                        segments=segments,
+                        candidate_rect=candidate_rect,
+                        candidate_segments=candidate_segments,
                     )
                     candidate_local_line_intersection_count = _count_local_leader_line_intersections(
                         labels,
                         label_idx,
                         candidate=candidate,
+                        primary_segments=primary_segments,
+                        candidate_segment=candidate_primary_segment,
                     )
                     if candidate_local_line_intersection_count > local_line_intersection_count:
                         continue
@@ -925,6 +1053,9 @@ def _resolve_label_leader_line_collisions(
                     if candidate_score < best_score:
                         best_score = candidate_score
                         best_candidate = candidate
+                        best_candidate_rect = candidate_rect
+                        best_candidate_segments = candidate_segments
+                        best_candidate_primary_segment = candidate_primary_segment
                         best_angle = candidate_angle
                         best_plain_total = candidate_plain_total
                         best_min_gap_total = candidate_min_gap_total
@@ -946,14 +1077,29 @@ def _resolve_label_leader_line_collisions(
             label["leader_start_x"] = float(best_candidate["leader_start_x"])
             label["leader_start_y"] = float(best_candidate["leader_start_y"])
             unwrapped_angles[label_idx] = float(best_angle if best_angle is not None else current_angle)
+            if best_candidate_rect is not None:
+                rects[label_idx] = best_candidate_rect
+            if best_candidate_segments is not None:
+                segments[label_idx] = best_candidate_segments
+            if best_candidate_primary_segment is not None:
+                primary_segments[label_idx] = best_candidate_primary_segment
             current_plain_overlaps = best_plain_total
             current_min_gap_overlaps = best_min_gap_total
             pass_changed = True
 
         labels = assign_leader_start_points(labels, total_length)
+        rects, segments = _build_label_leader_collision_geometry(labels, total_length, margin_px)
+        primary_segments = _build_primary_leader_segments(labels)
         if (
-            _count_label_leader_line_collisions(labels, total_length, margin_px=margin_px) == 0
-            and _count_leader_line_intersections(labels) == 0
+            _count_label_leader_line_collisions(
+                labels,
+                total_length,
+                margin_px=margin_px,
+                rects=rects,
+                segments=segments,
+            )
+            == 0
+            and _count_leader_line_intersections(labels, primary_segments=primary_segments) == 0
         ):
             break
         if not pass_changed:
@@ -1638,6 +1784,15 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
         if largest_gap_idx < len(labels) - 1:
             rotate_by = largest_gap_idx + 1
             labels = labels[rotate_by:] + labels[:rotate_by]
+    label_count = len(labels)
+    pair_margins = [[0.0 for _ in range(label_count)] for _ in range(label_count)]
+    for idx in range(label_count):
+        for jdx in range(idx + 1, label_count):
+            pair_margins[idx][jdx] = minimum_bbox_gap_px(
+                labels[idx],
+                labels[jdx],
+                base_margin_px=0.0,
+            )
 
     min_order_gap_deg = 0.05
     max_pair_steps = max(1, int(max_angle_shift_deg / max(step_deg, 1e-6)))
@@ -1680,8 +1835,13 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
         label["start_x"] = radius * math.cos(math.radians(angle_unwrapped))
         label["start_y"] = radius * math.sin(math.radians(angle_unwrapped))
 
-    def _pair_overlaps(left: dict, right: dict) -> bool:
-        min_gap_px = minimum_bbox_gap_px(left, right, base_margin_px=0.0)
+    def _pair_margin(idx: int, jdx: int) -> float:
+        if idx < jdx:
+            return pair_margins[idx][jdx]
+        return pair_margins[jdx][idx]
+
+    def _pair_overlaps(left: dict, right: dict, idx: int, jdx: int) -> bool:
+        min_gap_px = _pair_margin(idx, jdx)
         return y_overlap(left, right, total_length, min_gap_px) and x_overlap(
             left,
             right,
@@ -1704,7 +1864,7 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
         pair_changed = False
 
         for _ in range(max_pair_steps):
-            if not _pair_overlaps(left, right):
+            if not _pair_overlaps(left, right, idx, jdx):
                 break
 
             left_low, left_high = _pair_angle_bounds(idx)
@@ -1748,7 +1908,7 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
         for idx in range(len(labels) - 1):
             left = labels[idx]
             right = labels[idx + 1]
-            if not _pair_overlaps(left, right):
+            if not _pair_overlaps(left, right, idx, idx + 1):
                 continue
 
             for _ in range(max_pair_steps):
@@ -1780,13 +1940,13 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
                 _apply_angle(right)
                 changed = True
 
-                if not _pair_overlaps(left, right):
+                if not _pair_overlaps(left, right, idx, idx + 1):
                     break
 
         # Adjacent passes can still miss sparse non-adjacent bbox collisions.
         for idx in range(len(labels) - 2):
             for jdx in range(idx + 2, len(labels)):
-                if not _pair_overlaps(labels[idx], labels[jdx]):
+                if not _pair_overlaps(labels[idx], labels[jdx], idx, jdx):
                     continue
                 if _separate_pair(idx, jdx):
                     changed = True
@@ -3106,6 +3266,18 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
 
     min_order_gap = 0.05
     max_passes = 6
+    metrics_cache: dict[
+        tuple[tuple[float, float, float, float, float, float, float, float, float, bool, bool], ...],
+        tuple[int, int, int, float, int, int],
+    ] = {}
+    plain_overlap_cache: dict[
+        tuple[tuple[float, float, float, float, float, float, float, float, float, bool, bool], ...],
+        int,
+    ] = {}
+    mismatch_cache: dict[
+        tuple[tuple[float, float, float, float, float, float, float, float, float, bool, bool], ...],
+        tuple[int, float],
+    ] = {}
     delta_schedule = (
         0.25,
         0.5,
@@ -3130,6 +3302,50 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
         28.0,
         30.0,
     )
+
+    def _metrics_cache_key(
+        label_list: list[dict],
+    ) -> tuple[tuple[float, float, float, float, float, float, float, float, float, bool, bool], ...]:
+        return tuple(
+            (
+                float(label.get("middle", 0.0)),
+                float(label.get("start_x", 0.0)),
+                float(label.get("start_y", 0.0)),
+                float(label.get("middle_x", 0.0)),
+                float(label.get("middle_y", 0.0)),
+                float(label.get("width_px", 0.0)),
+                float(label.get("height_px", 0.0)),
+                float(label.get("feature_anchor_x", label.get("feature_middle_x", 0.0))),
+                float(label.get("feature_anchor_y", label.get("feature_middle_y", 0.0))),
+                bool(label.get("is_inner", False)),
+                ("min_outer_start_radius_px" in label),
+            )
+            for label in label_list
+        )
+
+    def _inner_rebalance_metrics_cached(label_list: list[dict]) -> tuple[int, int, int, float, int, int]:
+        cache_key = _metrics_cache_key(label_list)
+        cached = metrics_cache.get(cache_key)
+        if cached is None:
+            cached = _inner_rebalance_metrics(label_list, total_length)
+            metrics_cache[cache_key] = cached
+        return cached
+
+    def _plain_overlap_cached(label_list: list[dict]) -> int:
+        cache_key = _metrics_cache_key(label_list)
+        cached = plain_overlap_cache.get(cache_key)
+        if cached is None:
+            cached = _count_label_overlaps(label_list, total_length, use_min_gap=False)
+            plain_overlap_cache[cache_key] = cached
+        return cached
+
+    def _mismatch_metrics_cached(label_list: list[dict]) -> tuple[int, float]:
+        cache_key = _metrics_cache_key(label_list)
+        cached = mismatch_cache.get(cache_key)
+        if cached is None:
+            cached = _hemisphere_mismatch_metrics(label_list, total_length)
+            mismatch_cache[cache_key] = cached
+        return cached
 
     def _mismatch_indices(label_list: list[dict]) -> list[int]:
         mismatch_indices: list[int] = []
@@ -3201,7 +3417,7 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
             _baseline_mismatch_weighted,
             baseline_leader_bbox_collisions,
             baseline_line_intersections,
-        ) = _inner_rebalance_metrics(ordered_labels, total_length)
+        ) = _inner_rebalance_metrics_cached(ordered_labels)
 
         if baseline_mismatch_count <= 3 and baseline_line_intersections == 0:
             break
@@ -3274,15 +3490,22 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
                     )
                     if candidate_half_bad > current_half_bad:
                         continue
+                    candidate_plain_overlap = _plain_overlap_cached(candidate_labels)
+                    if candidate_plain_overlap > baseline_plain_overlap:
+                        continue
+                    if candidate_half_bad >= current_half_bad and baseline_line_intersections == 0:
+                        candidate_mismatch_count_cheap, _ = _mismatch_metrics_cached(candidate_labels)
+                        if candidate_mismatch_count_cheap >= baseline_mismatch_count:
+                            continue
 
                     (
-                        candidate_plain_overlap,
+                        _candidate_plain_overlap,
                         candidate_min_gap_overlap,
                         candidate_mismatch_count,
                         candidate_mismatch_weighted,
                         candidate_leader_bbox_collisions,
                         candidate_line_intersections,
-                    ) = _inner_rebalance_metrics(candidate_labels, total_length)
+                    ) = _inner_rebalance_metrics_cached(candidate_labels)
 
                     if candidate_plain_overlap > baseline_plain_overlap:
                         continue
@@ -3340,7 +3563,7 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
         baseline_mismatch_weighted,
         baseline_leader_bbox_collisions,
         baseline_line_intersections,
-    ) = _inner_rebalance_metrics(ordered_labels, total_length)
+    ) = _inner_rebalance_metrics_cached(ordered_labels)
     if baseline_plain_overlap == 0 and baseline_mismatch_count <= 3 and baseline_line_intersections == 0:
         return ordered_labels
 
@@ -3354,15 +3577,18 @@ def _rebalance_inner_labels_strict_order(labels: list[dict], total_length: int) 
         )
         if not _is_strict_no_overtake(candidate_labels):
             continue
+        candidate_plain_overlap = _plain_overlap_cached(candidate_labels)
+        if candidate_plain_overlap > baseline_plain_overlap:
+            continue
 
         (
-            candidate_plain_overlap,
+            _candidate_plain_overlap,
             candidate_min_gap_overlap,
             candidate_mismatch_count,
             candidate_mismatch_weighted,
             candidate_leader_bbox_collisions,
             candidate_line_intersections,
-        ) = _inner_rebalance_metrics(candidate_labels, total_length)
+        ) = _inner_rebalance_metrics_cached(candidate_labels)
 
         if candidate_plain_overlap > baseline_plain_overlap:
             continue
