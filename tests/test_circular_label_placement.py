@@ -1297,6 +1297,83 @@ def test_mjenmv_inner_strict_rebalance_keeps_monotonic_inner_order() -> None:
     assert all(unwrapped_angles[idx] < unwrapped_angles[idx + 1] for idx in range(len(unwrapped_angles) - 1))
 
 
+def test_mjenmv_inner_strict_no_overtake_keeps_monotonic_order() -> None:
+    external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
+        strandedness=True,
+        resolve_overlaps=False,
+        track_type="tuckin",
+        allow_inner_labels=True,
+        label_blacklist="",
+    )
+    inner_labels = sorted(
+        [label for label in external_labels if label.get("is_inner")],
+        key=lambda label: float(label["middle"]),
+    )
+    assert len(inner_labels) >= 2
+
+    unwrapped_angles = [_label_unwrapped_angle_for_order_test(label, total_length) for label in inner_labels]
+    assert all(unwrapped_angles[idx] < unwrapped_angles[idx + 1] for idx in range(len(unwrapped_angles) - 1))
+
+
+def test_mjenmv_wsv209_hypothetical_leader_lines_do_not_cross() -> None:
+    external_labels, _total_length, _ = _load_mjenmv_external_labels_with_config(
+        strandedness=True,
+        resolve_overlaps=False,
+        track_type="tuckin",
+        allow_inner_labels=True,
+        label_blacklist="",
+    )
+    inner_labels = [label for label in external_labels if label.get("is_inner")]
+    assert inner_labels
+
+    wsv209 = next((label for label in inner_labels if label.get("label_text") == "wsv209-like protein"), None)
+    near_hypothetical = next(
+        (
+            label
+            for label in inner_labels
+            if label.get("label_text") == "hypothetical protein" and 295954.0 <= float(label["middle"]) <= 296589.0
+        ),
+        None,
+    )
+    assert wsv209 is not None
+    assert near_hypothetical is not None
+
+    assert not circular_labels_module._segments_properly_intersect(
+        circular_labels_module._primary_leader_segment(wsv209),
+        circular_labels_module._primary_leader_segment(near_hypothetical),
+    )
+
+
+def test_mjenmv_wsv209_prefers_left_hemisphere_without_overtake() -> None:
+    external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
+        strandedness=True,
+        resolve_overlaps=False,
+        track_type="tuckin",
+        allow_inner_labels=True,
+        label_blacklist="",
+    )
+    inner_labels = sorted(
+        [label for label in external_labels if label.get("is_inner")],
+        key=lambda label: float(label["middle"]),
+    )
+    assert inner_labels
+    assert _count_overlaps(inner_labels, total_length) == 0
+
+    wsv209 = next((label for label in inner_labels if label.get("label_text") == "wsv209-like protein"), None)
+    assert wsv209 is not None
+
+    preferred_half = circular_labels_module._preferred_half_for_label(wsv209, total_length)
+    current_half = circular_labels_module._current_half_from_x(
+        float(wsv209["start_x"]),
+        axis_eps_px=circular_labels_module.HEMISPHERE_AXIS_EPS_PX,
+    )
+    assert preferred_half == -1
+    assert current_half == preferred_half
+
+    unwrapped_angles = [_label_unwrapped_angle_for_order_test(label, total_length) for label in inner_labels]
+    assert all(unwrapped_angles[idx] < unwrapped_angles[idx + 1] for idx in range(len(unwrapped_angles) - 1))
+
+
 def test_nc001879_outer_only_dense_skips_improved_solver_and_keeps_plain_overlaps_zero() -> None:
     improved_calls = 0
     original_improved = circular_labels_module.improved_label_placement_fc
