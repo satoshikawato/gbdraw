@@ -26,6 +26,7 @@ export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions
     clearAllSpecificRules: ruleActions.clearAllSpecificRules,
     getFeatureColor: ruleActions.getFeatureColor,
     canEditFeatureColor: ruleActions.canEditFeatureColor,
+    requestFeatureColorChange: colorActions.requestFeatureColorChange,
     updateClickedFeatureColor: colorActions.updateClickedFeatureColor,
     handleColorScopeChoice: colorActions.handleColorScopeChoice,
     handleLegendNameCommit: colorActions.handleLegendNameCommit,

@@ -553,14 +553,26 @@ json.dumps({"width": width})
       });
     });
 
-    legendEntries.value = entries;
+    const visuallySortedEntries = [...entries].sort((a, b) => {
+      const yDelta = a.yPos - b.yPos;
+      if (Math.abs(yDelta) < 1) {
+        const xDelta = a.xPos - b.xPos;
+        if (Math.abs(xDelta) < 1) {
+          return a.caption.localeCompare(b.caption, undefined, { sensitivity: 'base' });
+        }
+        return xDelta;
+      }
+      return yDelta;
+    });
 
-    if (originalLegendOrder.value.length === 0 && entries.length > 0) {
-      originalLegendOrder.value = entries.map((e) => e.caption);
+    legendEntries.value = visuallySortedEntries;
+
+    if (originalLegendOrder.value.length === 0 && visuallySortedEntries.length > 0) {
+      originalLegendOrder.value = visuallySortedEntries.map((e) => e.caption);
     }
 
-    if (Object.keys(originalLegendColors.value).length === 0 && entries.length > 0) {
-      entries.forEach((entry) => {
+    if (Object.keys(originalLegendColors.value).length === 0 && visuallySortedEntries.length > 0) {
+      visuallySortedEntries.forEach((entry) => {
         originalLegendColors.value[entry.caption] = entry.color;
       });
     }

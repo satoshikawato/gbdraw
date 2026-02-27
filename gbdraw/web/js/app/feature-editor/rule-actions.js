@@ -25,6 +25,44 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
 
   const { addLegendEntry, removeLegendEntry, extractLegendEntries } = legendActions;
   const normalizeFeatureShape = (value) => (String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle');
+  const normalizeCaption = (value) => String(value || '').trim();
+  const normalizeCaptionKey = (value) => normalizeCaption(value).toLowerCase();
+  const captionMatches = (value, target) => normalizeCaptionKey(value) === normalizeCaptionKey(target);
+
+  const getIndividualFeatureLabel = (feat) => {
+    return feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`;
+  };
+
+  const getFirstMatchingRule = (feat, ruleFilter) => {
+    for (const rule of manualSpecificRules) {
+      if (rule.feat !== feat.type) continue;
+      if (!ruleFilter(rule)) continue;
+      if (ruleMatchesFeature(feat, rule)) return rule;
+    }
+    return null;
+  };
+
+  // Resolve the effective legend item label used by current SVG coloring priority.
+  const getEffectiveLegendCaption = (feat) => {
+    if (!feat) return '';
+
+    const hashRule = getFirstMatchingRule(feat, (rule) => String(rule.qual || '').toLowerCase() === 'hash');
+    if (hashRule) {
+      const hashCaption = normalizeCaption(hashRule.cap);
+      if (hashCaption) return hashCaption;
+    }
+
+    const regexRule = getFirstMatchingRule(feat, (rule) => String(rule.qual || '').toLowerCase() !== 'hash');
+    if (regexRule) {
+      const regexCaption = normalizeCaption(regexRule.cap);
+      if (regexCaption) return regexCaption;
+    }
+
+    const overrideCaption = normalizeCaption(featureColorOverrides[feat.id]?.caption);
+    if (overrideCaption) return overrideCaption;
+
+    return normalizeCaption(feat.type) || normalizeCaption(getIndividualFeatureLabel(feat));
+  };
 
   const addCustomColor = () => {
     if (!newColorFeat.value) return;
@@ -224,7 +262,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   const findMatchingRegexRule = (feat) => {
     for (const rule of manualSpecificRules) {
       if (rule.feat !== feat.type) continue;
-      if (rule.qual === 'hash') continue;
+      if (String(rule.qual || '').toLowerCase() === 'hash') continue;
 
       if (ruleMatchesFeature(feat, rule)) {
         return rule;
@@ -234,7 +272,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   };
 
   const countFeaturesMatchingRule = (rule) => {
-    if (!rule || rule.qual === 'hash') return 0;
+    if (!rule || String(rule.qual || '').toLowerCase() === 'hash') return 0;
 
     let count = 0;
     for (const feat of extractedFeatures.value) {
@@ -245,26 +283,37 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     return count;
   };
 
-  const findFeaturesWithSameCaption = (currentFeat, caption) => {
-    if (!caption) return [];
+  const findFeaturesWithSameLegendItem = (currentFeat, caption = null) => {
+    const targetCaption = normalizeCaption(caption || getEffectiveLegendCaption(currentFeat));
+    if (!targetCaption) return [];
     return extractedFeatures.value.filter((f) => {
       if (f.svg_id === currentFeat.svg_id) return false;
-      const featCaption = f.product || f.gene || f.locus_tag || f.type;
-      return featCaption === caption;
+      return captionMatches(getEffectiveLegendCaption(f), targetCaption);
+    });
+  };
+
+  const findFeaturesWithSameIndividualLabel = (currentFeat, label = null) => {
+    const targetLabel = normalizeCaption(label || getIndividualFeatureLabel(currentFeat));
+    if (!targetLabel) return [];
+
+    return extractedFeatures.value.filter((f) => {
+      if (f.svg_id === currentFeat.svg_id) return false;
+      return normalizeCaption(getIndividualFeatureLabel(f)) === targetLabel;
     });
   };
 
   const findExistingColorForCaption = (currentFeat, caption) => {
-    if (!caption) return null;
+    const targetCaption = normalizeCaption(caption);
+    if (!targetCaption) return null;
 
     for (const rule of manualSpecificRules) {
-      if (rule.cap === caption && rule.qual === 'hash') {
+      if (captionMatches(rule.cap, targetCaption) && String(rule.qual || '').toLowerCase() === 'hash') {
         return { rule, color: rule.color };
       }
     }
 
     for (const rule of manualSpecificRules) {
-      if (rule.cap === caption && rule.qual !== 'hash') {
+      if (captionMatches(rule.cap, targetCaption) && String(rule.qual || '').toLowerCase() !== 'hash') {
         return { rule, color: rule.color };
       }
     }
@@ -285,9 +334,13 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     clearAllSpecificRules,
     countFeaturesMatchingRule,
     findExistingColorForCaption,
-    findFeaturesWithSameCaption,
+    findFeaturesWithSameCaption: findFeaturesWithSameLegendItem,
+    findFeaturesWithSameIndividualLabel,
+    findFeaturesWithSameLegendItem,
     findMatchingRegexRule,
     getFeatureColor,
+    getEffectiveLegendCaption,
+    getIndividualFeatureLabel,
     getFeatureQualifier,
     refreshFeatureOverrides
   };

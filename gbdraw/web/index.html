@@ -1051,11 +1051,11 @@
                                 <template v-if="colorScopeDialog.matchingRule">
                                     This feature matches the rule "<span class="font-bold text-blue-600">{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val }}</span>" ({{ colorScopeDialog.ruleMatchCount }} features).
                                     <template v-if="colorScopeDialog.siblingCount > 0">
-                                        <br>Caption "<span class="font-bold text-green-600">{{ colorScopeDialog.legendName }}</span>" is shared by {{ colorScopeDialog.siblingCount + 1 }} features.
+                                        <br>Legend item "<span class="font-bold text-green-600">{{ colorScopeDialog.legendName }}</span>" is shared by {{ colorScopeDialog.siblingCount + 1 }} features.
                                     </template>
                                 </template>
                                 <template v-else-if="colorScopeDialog.siblingCount > 0">
-                                    There are <span class="font-bold text-blue-600">{{ colorScopeDialog.siblingCount }}</span> other features with the caption "<span class="font-bold text-blue-600">{{ colorScopeDialog.legendName }}</span>".
+                                    There are <span class="font-bold text-blue-600">{{ colorScopeDialog.siblingCount }}</span> other features sharing the legend item "<span class="font-bold text-blue-600">{{ colorScopeDialog.legendName }}</span>".
                                 </template>
                                 <template v-else>
                                     How do you want to apply the color change?
@@ -1071,7 +1071,7 @@
                                     <span>Apply to all "{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val }}" ({{ colorScopeDialog.ruleMatchCount }})</span>
                                 </button>
 
-                                <!-- Apply to all features with same caption (when siblings exist) -->
+                                <!-- Apply to all features with same legend item (when siblings exist) -->
                                 <button v-if="colorScopeDialog.siblingCount > 0"
                                         @click="handleColorScopeChoice('caption')"
                                         class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
@@ -1350,7 +1350,7 @@
                             <input type="color"
                                    :value="getFeatureColor(feat)"
                                    @click.stop
-                                   @change="setFeatureColor(feat, $event.target.value)"
+                                   @change="requestFeatureColorChange(feat, $event.target.value)"
                                    :disabled="!canEditFeatureColor(feat)"
                                    :title="canEditFeatureColor(feat) ? 'Click to change color' : 'No identifier available (no locus_tag, gene, or product)'"
                                    :class="['w-7 h-5 border rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
