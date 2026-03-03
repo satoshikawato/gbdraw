@@ -256,6 +256,28 @@ def test_get_label_text_whitelist_hash_rule_matches_feature_hash() -> None:
     assert get_label_text(feature, filtering, record_id="rec1") == "enzyme alpha"
 
 
+def test_get_label_text_whitelist_record_location_rule_matches_feature() -> None:
+    feature = _make_seq_feature()
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            whitelist_df=_whitelist_df([["CDS", "record_location", "rec1:10..90:+"]]),
+        )
+    )
+
+    assert get_label_text(feature, filtering, record_id="rec1") == "enzyme alpha"
+
+
+def test_get_label_text_whitelist_record_location_rule_non_matching_hides_label() -> None:
+    feature = _make_seq_feature()
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            whitelist_df=_whitelist_df([["CDS", "record_location", "rec1:10..91:+"]]),
+        )
+    )
+
+    assert get_label_text(feature, filtering, record_id="rec1") == ""
+
+
 def test_get_label_text_hash_override_empty_text_hides_label() -> None:
     feature = _make_seq_feature()
     feature_hash = compute_feature_hash(feature, record_id="rec1")

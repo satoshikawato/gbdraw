@@ -1,4 +1,10 @@
-import { buildFeatureMetadataMap, buildLabelOverrideRows, parseLabelOverrideTsv } from './label-override-table.js';
+import {
+  buildFeatureMetadataMap,
+  buildFeatureUniquenessIndex,
+  buildLabelOverrideRows,
+  parseLabelOverrideTsv,
+  selectStableFeatureKey
+} from './label-override-table.js';
 
 const FEATURE_SELECTOR = 'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
 const EXCLUDED_GROUP_SELECTOR =
@@ -419,25 +425,41 @@ export const createFeatureLabelActions = ({ state }) => {
     }
   };
 
-  const ensureWhitelistHashRule = (featureTypeRaw, featureIdRaw) => {
+  const ensureWhitelistRuleForFeature = (featureTypeRaw, featureIdRaw) => {
     const featureType = String(featureTypeRaw || '').trim();
     const featureId = String(featureIdRaw || '').trim();
     if (!featureType || !featureId) return;
+    const metadataByFeatureId = buildFeatureMetadataMap(extractedFeatures.value);
+    const metadata = metadataByFeatureId.get(normalizeKeyToken(featureId));
+    const selector = selectStableFeatureKey(
+      {
+        featureId,
+        record: metadata?.record || '',
+        featureType: metadata?.featureType || featureType,
+        position: metadata?.position || '',
+        qualifiers: metadata?.qualifiers || {}
+      },
+      buildFeatureUniquenessIndex(extractedFeatures.value)
+    );
+    const ruleFeatureType = String(metadata?.featureType || featureType).trim();
+    const ruleQualifier = String(selector?.qualifier || 'hash').trim().toLowerCase();
+    const ruleKey = String(selector?.value || featureId).trim();
+    if (!ruleFeatureType || !ruleQualifier || !ruleKey) return;
     const exists = manualWhitelist.some((rule) => {
       return (
-        normalizeKeyToken(rule?.feat) === normalizeKeyToken(featureType) &&
-        normalizeKeyToken(rule?.qual) === 'hash' &&
-        normalizeKeyToken(rule?.key) === normalizeKeyToken(featureId)
+        normalizeKeyToken(rule?.feat) === normalizeKeyToken(ruleFeatureType) &&
+        normalizeKeyToken(rule?.qual) === normalizeKeyToken(ruleQualifier) &&
+        normalizeKeyToken(rule?.key) === normalizeKeyToken(ruleKey)
       );
     });
     if (exists) return;
-    manualWhitelist.push({ feat: featureType, qual: 'hash', key: featureId });
+    manualWhitelist.push({ feat: ruleFeatureType, qual: ruleQualifier, key: ruleKey });
   };
 
   const applyGlobalLabelModeChoice = (choice, featureType, featureId) => {
     if (choice === 'whitelist_only') {
       filterMode.value = 'Whitelist';
-      ensureWhitelistHashRule(featureType, featureId);
+      ensureWhitelistRuleForFeature(featureType, featureId);
     } else {
       filterMode.value = 'None';
     }
@@ -926,7 +948,7 @@ export const createFeatureLabelActions = ({ state }) => {
 
       let message = `Loaded ${rows.length} row(s). Applied to ${appliedCount} label(s).`;
       if (skippedNonTrackableCount > 0) {
-        message += ` ${skippedNonTrackableCount} match(es) lacked a feature hash and were not tracked for re-export.`;
+        message += ` ${skippedNonTrackableCount} match(es) lacked a feature key and were not tracked for re-export.`;
       }
       window.alert(message);
     } catch (error) {
@@ -938,7 +960,7 @@ export const createFeatureLabelActions = ({ state }) => {
   };
 
   const downloadLabelOverrideTable = () => {
-    const { rows, skippedFeatureCount, skippedFeatureSourceCount, skippedMissingSourceCount } = buildLabelOverrideRows(
+    const { rows, skippedFeatureCount, skippedFeatureSourceCount, skippedMissingSourceCount, fallbackHashCount } = buildLabelOverrideRows(
       labelTextFeatureOverrides,
       labelTextBulkOverrides,
       {
@@ -951,10 +973,13 @@ export const createFeatureLabelActions = ({ state }) => {
     if (rows.length === 0) {
       if (skippedFeatureCount > 0 || skippedFeatureSourceCount > 0 || skippedMissingSourceCount > 0) {
         window.alert(
-          `No exportable label edits. ${skippedFeatureCount} invalid feature hash edit(s) and ` +
+          `No exportable label edits. ${skippedFeatureCount} invalid feature-targeted edit(s) and ` +
           `${skippedFeatureSourceCount} source label lookup failure(s) were skipped.` +
           (skippedMissingSourceCount > 0
             ? ` ${skippedMissingSourceCount} feature override row(s) had missing source label context.`
+            : '') +
+          (fallbackHashCount > 0
+            ? ` ${fallbackHashCount} row(s) fell back to hash because non-hash keys were not unique.`
             : '')
         );
       } else {
@@ -970,12 +995,15 @@ export const createFeatureLabelActions = ({ state }) => {
         : '';
     const outputName = `${makeSafeFilename(resultName, 'gbdraw')}.label_table.tsv`;
     downloadTextFile(outputName, `${rows.join('\n')}\n`);
-    if (skippedFeatureCount > 0 || skippedFeatureSourceCount > 0 || skippedMissingSourceCount > 0) {
+    if (skippedFeatureCount > 0 || skippedFeatureSourceCount > 0 || skippedMissingSourceCount > 0 || fallbackHashCount > 0) {
       window.alert(
-        `Exported ${rows.length} row(s). ${skippedFeatureCount} invalid feature hash edit(s) and ` +
+        `Exported ${rows.length} row(s). ${skippedFeatureCount} invalid feature-targeted edit(s) and ` +
         `${skippedFeatureSourceCount} source label lookup failure(s) were skipped.` +
         (skippedMissingSourceCount > 0
           ? ` ${skippedMissingSourceCount} feature override row(s) had missing source label context.`
+          : '') +
+        (fallbackHashCount > 0
+          ? ` ${fallbackHashCount} row(s) fell back to hash because non-hash keys were not unique.`
           : '')
       );
     }

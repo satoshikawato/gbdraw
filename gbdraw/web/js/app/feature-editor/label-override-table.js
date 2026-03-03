@@ -1,7 +1,7 @@
 const LABEL_OVERRIDE_COLUMN_COUNT = 5;
 const PRIMARY_HEADER = ['record_id', 'feature_type', 'qualifier', 'value', 'label_text'];
 const LEGACY_HEADER = ['record', 'feature_type', 'qualifier_key', 'qualifier_value_regex', 'label_text'];
-const CANDIDATE_QUALIFIERS = ['protein_id', 'locus_tag', 'gene'];
+const STABLE_FEATURE_KEY_QUALIFIERS = ['locus_tag', 'gene'];
 const DEFAULT_LABEL_QUALIFIER_PRIORITY = ['product', 'gene', 'locus_tag', 'protein_id', 'old_locus_tag', 'note'];
 
 const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -121,31 +121,6 @@ const resolveDefaultLabelText = (metadata, editableLabelEntry = null) => {
   return '';
 };
 
-const buildSourceTextByFeatureId = (editableLabels, featureOverrideSources = {}) => {
-  const sourceByFeatureId = new Map();
-
-  if (featureOverrideSources && typeof featureOverrideSources === 'object') {
-    Object.entries(featureOverrideSources).forEach(([featureIdRaw, sourceTextRaw]) => {
-      const key = normalizeFeatureIdKey(featureIdRaw);
-      const sourceText = String(sourceTextRaw ?? '').trim();
-      if (!key || !sourceText || sourceByFeatureId.has(key)) return;
-      sourceByFeatureId.set(key, sourceText);
-    });
-  }
-
-  if (!Array.isArray(editableLabels)) return sourceByFeatureId;
-
-  editableLabels.forEach((entry) => {
-    const featureId = String(entry?.featureId || '').trim();
-    const sourceText = String(entry?.sourceText || '').trim();
-    const key = normalizeFeatureIdKey(featureId);
-    if (!key || sourceByFeatureId.has(key)) return;
-    sourceByFeatureId.set(key, sourceText);
-  });
-
-  return sourceByFeatureId;
-};
-
 const buildFeatureIdsBySourceText = (editableLabels) => {
   const featureIdsBySourceText = new Map();
   if (!Array.isArray(editableLabels)) return featureIdsBySourceText;
@@ -163,44 +138,92 @@ const buildFeatureIdsBySourceText = (editableLabels) => {
   return featureIdsBySourceText;
 };
 
-const buildQualifierUniquenessIndex = (metadataByFeatureId) => {
+const makeUniquenessKey = (record, featureType, qualifier, value) =>
+  `${String(record || '').trim()}\u0000${String(featureType || '').trim()}\u0000` +
+  `${String(qualifier || '').trim().toLowerCase()}\u0000${String(value || '').trim()}`;
+
+const getRecordLocationFromMeta = (metadata) => {
+  const record = String(metadata?.record || '').trim();
+  const position = String(metadata?.position || '').trim();
+  if (!record || !position) return '';
+  return `${record}:${position}`;
+};
+
+const buildFeatureUniquenessIndexFromMetadata = (metadataByFeatureId) => {
   const counts = new Map();
+  if (!(metadataByFeatureId instanceof Map)) return counts;
+
   metadataByFeatureId.forEach((metadata) => {
     const record = String(metadata?.record || '').trim();
     const featureType = String(metadata?.featureType || '').trim();
     if (!record || !featureType) return;
 
-    CANDIDATE_QUALIFIERS.forEach((qualifier) => {
+    STABLE_FEATURE_KEY_QUALIFIERS.forEach((qualifier) => {
       const values = Array.isArray(metadata?.qualifiers?.[qualifier]) ? metadata.qualifiers[qualifier] : [];
       values.forEach((valueRaw) => {
         const value = String(valueRaw || '').trim();
         if (!value) return;
-        const key = `${record}\u0000${featureType}\u0000${qualifier}\u0000${value}`;
+        const key = makeUniquenessKey(record, featureType, qualifier, value);
         counts.set(key, (counts.get(key) || 0) + 1);
       });
     });
+
+    const recordLocation = getRecordLocationFromMeta(metadata);
+    if (recordLocation) {
+      const key = makeUniquenessKey(record, featureType, 'record_location', recordLocation);
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
   });
+
   return counts;
 };
 
-const selectPreferredQualifier = (metadata, qualifierUniquenessIndex) => {
-  if (!metadata) return null;
-  const record = String(metadata?.record || '').trim();
-  const featureType = String(metadata?.featureType || '').trim();
-  if (!record || !featureType) return null;
+export const buildFeatureUniquenessIndex = (features) => {
+  const metadataByFeatureId = buildFeatureMetadataMap(features);
+  return buildFeatureUniquenessIndexFromMetadata(metadataByFeatureId);
+};
 
-  for (const qualifier of CANDIDATE_QUALIFIERS) {
-    const values = Array.isArray(metadata?.qualifiers?.[qualifier]) ? metadata.qualifiers[qualifier] : [];
+export const selectStableFeatureKey = (featureMeta, uniquenessIndex) => {
+  const featureId = String(featureMeta?.featureId || '').trim();
+  const record = String(featureMeta?.record || '').trim();
+  const featureType = String(featureMeta?.featureType || '').trim();
+  const fallback = {
+    qualifier: 'hash',
+    value: featureId,
+    isFallbackHash: true
+  };
+
+  if (!record || !featureType) return fallback;
+
+  for (const qualifier of STABLE_FEATURE_KEY_QUALIFIERS) {
+    const values = Array.isArray(featureMeta?.qualifiers?.[qualifier]) ? featureMeta.qualifiers[qualifier] : [];
     for (const valueRaw of values) {
       const value = String(valueRaw || '').trim();
       if (!value) continue;
-      const key = `${record}\u0000${featureType}\u0000${qualifier}\u0000${value}`;
-      if ((qualifierUniquenessIndex.get(key) || 0) === 1) {
-        return { qualifier, value };
+      const key = makeUniquenessKey(record, featureType, qualifier, value);
+      if ((uniquenessIndex?.get(key) || 0) === 1) {
+        return {
+          qualifier,
+          value,
+          isFallbackHash: false
+        };
       }
     }
   }
-  return null;
+
+  const recordLocation = getRecordLocationFromMeta(featureMeta);
+  if (recordLocation) {
+    const key = makeUniquenessKey(record, featureType, 'record_location', recordLocation);
+    if ((uniquenessIndex?.get(key) || 0) === 1) {
+      return {
+        qualifier: 'record_location',
+        value: recordLocation,
+        isFallbackHash: false
+      };
+    }
+  }
+
+  return fallback;
 };
 
 export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options = {}) => {
@@ -208,14 +231,11 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
   let skippedFeatureCount = 0;
   let skippedFeatureSourceCount = 0;
   let skippedMissingSourceCount = 0;
+  let fallbackHashCount = 0;
   const featureMetadataById = buildFeatureMetadataMap(options.extractedFeatures);
   const editableLabelByFeatureId = buildEditableLabelByFeatureId(options.editableLabels);
-  const sourceTextByFeatureId = buildSourceTextByFeatureId(
-    options.editableLabels,
-    options.featureOverrideSources
-  );
   const featureIdsBySourceText = buildFeatureIdsBySourceText(options.editableLabels);
-  const qualifierUniquenessIndex = buildQualifierUniquenessIndex(featureMetadataById);
+  const featureUniquenessIndex = buildFeatureUniquenessIndexFromMetadata(featureMetadataById);
   const visibilityOverridesByFeatureId = normalizeVisibilityOverrides(options.visibilityOverrides);
   const featureOverrideKeyById = new Map();
   toSortedKeys(featureOverrides).forEach((featureIdRaw) => {
@@ -233,6 +253,16 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
       const recordId = normalizeTsvCell(metadata?.record || '*') || '*';
       const featureType = normalizeTsvCell(metadata?.featureType || '*') || '*';
       const featureIdRaw = featureOverrideKeyById.get(featureIdKey) || featureIdKey;
+      const selector = selectStableFeatureKey(
+        {
+          featureId: featureIdRaw,
+          record: metadata?.record || '',
+          featureType: metadata?.featureType || '',
+          position: metadata?.position || '',
+          qualifiers: metadata?.qualifiers || {}
+        },
+        featureUniquenessIndex
+      );
       const featureOverrideKey = featureOverrideKeyById.get(featureIdKey);
       if (featureOverrideKey) {
         consumedFeatureOverrideKeys.add(featureOverrideKey);
@@ -248,8 +278,12 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
         );
         nextText = normalizeTsvCell(overrideText || fallbackText || featureIdRaw || featureIdKey);
       }
+      const qualifierRegex = selector.qualifier === 'hash'
+        ? getRegexForFeatureHash(selector.value || featureIdRaw)
+        : `^${escapeRegexLiteral(selector.value)}$`;
+      if (selector.isFallbackHash) fallbackHashCount += 1;
       rows.push(
-        `${recordId}\t${featureType}\thash\t${getRegexForFeatureHash(featureIdRaw)}\t${nextText}`
+        `${recordId}\t${featureType}\t${selector.qualifier}\t${qualifierRegex}\t${nextText}`
       );
     });
 
@@ -266,17 +300,22 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
     const metadata = featureMetadataById.get(featureIdKey);
     const recordId = normalizeTsvCell(metadata?.record || '*') || '*';
     const featureType = normalizeTsvCell(metadata?.featureType || '*') || '*';
-    const sourceText = sourceTextByFeatureId.get(featureIdKey) || '';
-    const preferredQualifier = selectPreferredQualifier(metadata, qualifierUniquenessIndex);
-
-    let qualifier = 'hash';
-    let qualifierRegex = getRegexForFeatureHash(featureId);
-    if (preferredQualifier?.qualifier && preferredQualifier?.value) {
-      qualifier = preferredQualifier.qualifier;
-      qualifierRegex = `^${escapeRegexLiteral(preferredQualifier.value)}$`;
-    } else if (sourceText) {
-      qualifier = 'label';
-      qualifierRegex = `^${escapeRegexLiteral(sourceText)}$`;
+    const selector = selectStableFeatureKey(
+      {
+        featureId,
+        record: metadata?.record || '',
+        featureType: metadata?.featureType || '',
+        position: metadata?.position || '',
+        qualifiers: metadata?.qualifiers || {}
+      },
+      featureUniquenessIndex
+    );
+    const qualifier = selector.qualifier;
+    const qualifierRegex = selector.qualifier === 'hash'
+      ? getRegexForFeatureHash(selector.value || featureId)
+      : `^${escapeRegexLiteral(selector.value)}$`;
+    if (selector.isFallbackHash) {
+      fallbackHashCount += 1;
     }
     const nextText = normalizeTsvCell(featureOverrides[featureIdRaw]);
 
@@ -298,10 +337,23 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
       if (!metadata) return;
       const recordId = normalizeTsvCell(metadata?.record || '*') || '*';
       const featureType = normalizeTsvCell(metadata?.featureType || '*') || '*';
-      const preferredQualifier = selectPreferredQualifier(metadata, qualifierUniquenessIndex);
-      const qualifier = preferredQualifier?.qualifier || 'label';
-      const qualifierValue = preferredQualifier?.value || sourceText;
-      const qualifierRegex = `^${escapeRegexLiteral(qualifierValue)}$`;
+      const selector = selectStableFeatureKey(
+        {
+          featureId: metadata?.featureId || '',
+          record: metadata?.record || '',
+          featureType: metadata?.featureType || '',
+          position: metadata?.position || '',
+          qualifiers: metadata?.qualifiers || {}
+        },
+        featureUniquenessIndex
+      );
+      const qualifier = selector.qualifier;
+      const qualifierRegex = selector.qualifier === 'hash'
+        ? getRegexForFeatureHash(selector.value || metadata?.featureId || '')
+        : `^${escapeRegexLiteral(selector.value || '')}$`;
+      if (selector.isFallbackHash) {
+        fallbackHashCount += 1;
+      }
       const row = `${recordId}\t${featureType}\t${qualifier}\t${qualifierRegex}\t${nextText}`;
       if (seen.has(row)) return;
       seen.add(row);
@@ -316,11 +368,17 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
     rows.push(`*\t*\tlabel\t^${escapeRegexLiteral(sourceText)}$\t${nextText}`);
   });
 
-  return { rows, skippedFeatureCount, skippedFeatureSourceCount, skippedMissingSourceCount };
+  return {
+    rows,
+    skippedFeatureCount,
+    skippedFeatureSourceCount,
+    skippedMissingSourceCount,
+    fallbackHashCount
+  };
 };
 
 export const buildLabelOverrideTsv = (featureOverrides, bulkOverrides, options = {}) => {
-  const { rows, skippedFeatureCount, skippedFeatureSourceCount, skippedMissingSourceCount } = buildLabelOverrideRows(
+  const { rows, skippedFeatureCount, skippedFeatureSourceCount, skippedMissingSourceCount, fallbackHashCount } = buildLabelOverrideRows(
     featureOverrides,
     bulkOverrides,
     options
@@ -331,7 +389,8 @@ export const buildLabelOverrideTsv = (featureOverrides, bulkOverrides, options =
     rows,
     skippedFeatureCount,
     skippedFeatureSourceCount,
-    skippedMissingSourceCount
+    skippedMissingSourceCount,
+    fallbackHashCount
   };
 };
 

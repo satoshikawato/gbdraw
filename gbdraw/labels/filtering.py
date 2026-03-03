@@ -622,17 +622,42 @@ def get_label_text(feature: Any, label_filtering: dict, record_id: Optional[str]
     if whitelist_map:
         is_eligible = False
         rules = whitelist_map.get(feature_type, {})
-        hash_keywords = rules.get("hash", set()) if isinstance(rules, dict) else set()
+        if not isinstance(rules, dict):
+            rules = {}
+
+        hash_keywords = rules.get("hash", set())
         if hash_keywords:
             feature_hash = _get_feature_hash(feature, record_id)
             if feature_hash and any(feature_hash == str(keyword) for keyword in hash_keywords):
                 is_eligible = True
-        for key, values in qualifiers.items():
-            normalized_values = _normalize_qualifier_values(values)
-            qualifier_key = str(key).lower()
-            if qualifier_key in rules and any(v in rules[qualifier_key] for v in normalized_values):
-                is_eligible = True
-                break
+
+        if not is_eligible:
+            record_location_keywords = rules.get("record_location", set())
+            if record_location_keywords:
+                feature_record_location = _get_feature_record_location_str(feature, record_id)
+                if feature_record_location and any(
+                    feature_record_location == str(keyword)
+                    for keyword in record_location_keywords
+                ):
+                    is_eligible = True
+
+        if not is_eligible:
+            location_keywords = rules.get("location", set())
+            if location_keywords:
+                feature_location = _get_feature_location_str(feature)
+                if feature_location and any(
+                    feature_location == str(keyword)
+                    for keyword in location_keywords
+                ):
+                    is_eligible = True
+
+        if not is_eligible:
+            for key, values in qualifiers.items():
+                normalized_values = _normalize_qualifier_values(values)
+                qualifier_key = str(key).lower()
+                if qualifier_key in rules and any(v in rules[qualifier_key] for v in normalized_values):
+                    is_eligible = True
+                    break
         if not is_eligible:
             return ""
 
