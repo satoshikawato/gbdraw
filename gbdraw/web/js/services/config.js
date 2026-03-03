@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
-const SESSION_VERSION = 1;
+const SESSION_VERSION = 3;
 
 const safeDeepMerge = (target, source) => {
   if (!source || typeof source !== 'object') return;
@@ -425,9 +425,11 @@ export const exportSession = async (titleOverride = null) => {
       legend: currentLegend,
       circularLegendPosition: savedCircularLegend,
       linearLegendPosition: savedLinearLegend,
+      featurePanelTab: state.featurePanelTab.value,
       cInputType: state.cInputType.value,
       lInputType: state.lInputType.value,
-      downloadDpi: state.downloadDpi.value
+      downloadDpi: state.downloadDpi.value,
+      autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value)
     },
     files: await serializeFiles(),
     results: serializeResults(),
@@ -435,7 +437,11 @@ export const exportSession = async (titleOverride = null) => {
       extractedFeatures: state.extractedFeatures.value,
       featureRecordIds: state.featureRecordIds.value,
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
-      featureColorOverrides: JSON.parse(JSON.stringify(state.featureColorOverrides))
+      featureColorOverrides: JSON.parse(JSON.stringify(state.featureColorOverrides)),
+      labelTextFeatureOverrides: JSON.parse(JSON.stringify(state.labelTextFeatureOverrides)),
+      labelTextBulkOverrides: JSON.parse(JSON.stringify(state.labelTextBulkOverrides)),
+      labelTextFeatureOverrideSources: JSON.parse(JSON.stringify(state.labelTextFeatureOverrideSources)),
+      labelOverrideContextKey: String(state.labelOverrideContextKey.value || '')
     },
     losatCache: {
       entries: losatEntries
@@ -506,6 +512,13 @@ export const importSession = async (e) => {
     if (ui.cInputType) state.cInputType.value = ui.cInputType;
     if (ui.lInputType) state.lInputType.value = ui.lInputType;
     if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
+    state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
+    state.labelOverrideBuildWarning.value = '';
+    if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
+      state.featurePanelTab.value = ui.featurePanelTab;
+    } else {
+      state.featurePanelTab.value = 'colors';
+    }
     if (ui.circularLegendPosition) state.circularLegendPosition.value = ui.circularLegendPosition;
     if (ui.linearLegendPosition) state.linearLegendPosition.value = ui.linearLegendPosition;
     if (ui.generatedLegendPosition) state.generatedLegendPosition.value = ui.generatedLegendPosition;
@@ -553,6 +566,33 @@ export const importSession = async (e) => {
     } else {
       Object.keys(state.featureColorOverrides).forEach((k) => delete state.featureColorOverrides[k]);
     }
+
+    if (features.labelTextFeatureOverrides && typeof features.labelTextFeatureOverrides === 'object') {
+      Object.keys(state.labelTextFeatureOverrides).forEach((k) => delete state.labelTextFeatureOverrides[k]);
+      Object.entries(features.labelTextFeatureOverrides).forEach(([key, value]) => {
+        state.labelTextFeatureOverrides[key] = String(value ?? '');
+      });
+    } else {
+      Object.keys(state.labelTextFeatureOverrides).forEach((k) => delete state.labelTextFeatureOverrides[k]);
+    }
+
+    if (features.labelTextBulkOverrides && typeof features.labelTextBulkOverrides === 'object') {
+      Object.keys(state.labelTextBulkOverrides).forEach((k) => delete state.labelTextBulkOverrides[k]);
+      Object.entries(features.labelTextBulkOverrides).forEach(([key, value]) => {
+        state.labelTextBulkOverrides[key] = String(value ?? '');
+      });
+    } else {
+      Object.keys(state.labelTextBulkOverrides).forEach((k) => delete state.labelTextBulkOverrides[k]);
+    }
+    if (features.labelTextFeatureOverrideSources && typeof features.labelTextFeatureOverrideSources === 'object') {
+      Object.keys(state.labelTextFeatureOverrideSources).forEach((k) => delete state.labelTextFeatureOverrideSources[k]);
+      Object.entries(features.labelTextFeatureOverrideSources).forEach(([key, value]) => {
+        state.labelTextFeatureOverrideSources[key] = String(value ?? '');
+      });
+    } else {
+      Object.keys(state.labelTextFeatureOverrideSources).forEach((k) => delete state.labelTextFeatureOverrideSources[k]);
+    }
+    state.labelOverrideContextKey.value = String(features.labelOverrideContextKey || '');
 
     const resultCount = state.results.value.length;
     if (resultCount > 0) {

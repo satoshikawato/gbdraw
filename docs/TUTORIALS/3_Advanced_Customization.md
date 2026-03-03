@@ -173,6 +173,49 @@ By default, `gbdraw` uses the `product` qualifier for labels. If you prefer to u
 ![HmmtDNA_qualifier_priority_soft_pastels.svg](../../examples/HmmtDNA_qualifier_priority_soft_pastels.svg)
 
 
+### Manual Label Text Overrides (`--label_table`)
+
+`--label_table` applies manual label replacements **after** whitelist/blacklist/priority filtering.
+This means hidden labels stay hidden.
+
+The table format is TSV (no header) with 5 columns:
+
+1. `record_id` (`record_id`, or `*`)
+2. `feature_type` (`CDS`, `repeat_region`, or `*`)
+3. `qualifier` (normal qualifier key, or pseudo key: `record_location`, `hash`, `location`, `label`)
+4. `value` (Python regex, case-insensitive, `re.search`)
+5. `label_text` (replacement text)
+
+Example:
+
+```tsv
+NC_010162.1	CDS	label	^ATP synthase subunit alpha$	ATP synthase subunit alpha
+*	*	label	^hypothetical protein$	HP
+```
+
+Use it in circular mode:
+
+```bash
+gbdraw circular \
+  --gbk MjeNMV.gbk \
+  --labels \
+  --label_table label_override.tsv \
+  -o MjeNMV_label_override
+```
+
+Use it in linear mode:
+
+```bash
+gbdraw linear \
+  --gbk MjeNMV.gbk \
+  --show_labels all \
+  --label_table label_override.tsv \
+  -o MjeNMV_linear_label_override
+```
+
+Tip: The web UI `Feature Editor > Labels` panel can export and load this table (`Export Label TSV` / `Load Label TSV`) for CLI reuse.
+
+
 
 ## Part 3: Fine-Tuning Plot Aesthetics
 Beyond colors and labels, gbdraw provides command-line options to control nearly every visual aspect of your plot for publication-quality results.

@@ -59,15 +59,30 @@ export const createAppSetup = () => {
     featureRecordIds,
     selectedFeatureRecordIdx,
     showFeaturePanel,
+    featurePanelTab,
     featureSearch,
+    labelSearch,
+    editableLabels,
+    filteredEditableLabels,
+    labelTextFeatureOverrides,
+    labelTextBulkOverrides,
+    labelTextFeatureOverrideSources,
+    labelOverrideContextKey,
+    labelOverrideBuildWarning,
+    autoLabelReflowEnabled,
+    labelReflowProcessing,
+    labelReflowLastError,
     featureColorOverrides,
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
     featurePopupRef,
     featurePopupDrag,
+    clickedLabel,
+    clickedLabelPos,
     colorScopeDialog,
     resetColorDialog,
+    labelTextScopeDialog,
     sidebarWidth,
     isResizing,
     showLegendPanel,
@@ -132,6 +147,7 @@ export const createAppSetup = () => {
   const resultsManager = createResultsManager({ state, getPyodide });
   const {
     runAnalysis,
+    runLabelReflow,
     downloadLosatCache,
     downloadLosatPair,
     setLosatPairFilename,
@@ -155,7 +171,8 @@ export const createAppSetup = () => {
     svgActions,
     featureActions,
     legendLayout,
-    resultsManager
+    resultsManager,
+    runLabelReflow
   });
 
   const {
@@ -198,7 +215,17 @@ export const createAppSetup = () => {
     updateClickedFeatureStroke,
     resetClickedFeatureStroke,
     applyStrokeToAllSiblings,
-    setFeatureColor
+    setFeatureColor,
+    openFeatureEditorForFeature,
+    getEditableLabelByFeatureId,
+    syncLabelEditor,
+    downloadLabelOverrideTable,
+    loadLabelOverrideTable,
+    updateClickedFeatureLabelText,
+    handleLabelTextScopeChoice,
+    requestLabelTextChangeByFeatureId,
+    requestLabelTextChangeByKey,
+    resetAllLabelTextOverrides
   } = featureActions;
 
   const { updatePalette, resetColors } = resultsManager;
@@ -353,6 +380,10 @@ export const createAppSetup = () => {
     await exportSession(title);
   };
 
+  const openFeatureEditorFromList = (feat, event) => {
+    openFeatureEditorForFeature(feat, event);
+  };
+
   return {
     pyodideReady,
     processing,
@@ -419,16 +450,31 @@ export const createAppSetup = () => {
     featureRecordIds,
     selectedFeatureRecordIdx,
     showFeaturePanel,
+    featurePanelTab,
     featureSearch,
+    labelSearch,
+    editableLabels,
+    filteredEditableLabels,
+    labelTextFeatureOverrides,
+    labelTextBulkOverrides,
+    labelTextFeatureOverrideSources,
+    labelOverrideContextKey,
+    labelOverrideBuildWarning,
+    autoLabelReflowEnabled,
+    labelReflowProcessing,
+    labelReflowLastError,
     filteredFeatures,
     featureColorOverrides,
     getFeatureColor,
     requestFeatureColorChange,
     setFeatureColor,
     canEditFeatureColor,
+    getEditableLabelByFeatureId,
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
+    clickedLabel,
+    clickedLabelPos,
     featurePopupRef,
     startFeaturePopupDrag,
     clickedFeatureLocation,
@@ -444,6 +490,16 @@ export const createAppSetup = () => {
     handleColorScopeChoice,
     resetColorDialog,
     handleResetColorChoice,
+    labelTextScopeDialog,
+    updateClickedFeatureLabelText,
+    handleLabelTextScopeChoice,
+    requestLabelTextChangeByFeatureId,
+    requestLabelTextChangeByKey,
+    resetAllLabelTextOverrides,
+    downloadLabelOverrideTable,
+    loadLabelOverrideTable,
+    syncLabelEditor,
+    openFeatureEditorFromList,
     showLegendPanel,
     legendEntries,
     newLegendCaption,

@@ -1,3 +1,4 @@
+import copy
 import math
 from pathlib import Path
 from types import SimpleNamespace
@@ -2892,3 +2893,85 @@ def test_expand_canvas_to_fit_external_labels_keeps_all_labels_inside() -> None:
     assert bounds[1] >= pad - 1e-6
     assert bounds[2] <= float(canvas_config.total_width) - pad + 1e-6
     assert bounds[3] <= float(canvas_config.total_height) - pad + 1e-6
+
+
+def test_hmmtdna_label_override_recomputes_embedded_flags() -> None:
+    input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        show_labels=True,
+        strandedness=True,
+        track_type="tuckin",
+        resolve_overlaps=False,
+        allow_inner_labels=False,
+    )
+    override_template_config = copy.deepcopy(config_dict)
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    default_colors = load_default_colors("", "default")
+    color_table = None
+    color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+
+    baseline_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+    baseline_feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        baseline_filtering,
+    )
+    baseline_labels = prepare_label_list(
+        baseline_feature_dict,
+        len(record.seq),
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        config_dict,
+        cfg=cfg,
+    )
+
+    nd4_baseline = next(
+        label for label in baseline_labels if label.get("label_text") == "NADH dehydrogenase subunit 4"
+    )
+    srna_baseline = next(label for label in baseline_labels if label.get("label_text") == "s-rRNA")
+    assert not bool(nd4_baseline["is_embedded"])
+    assert bool(srna_baseline["is_embedded"])
+
+    override_df = pd.DataFrame(
+        [
+            ["*", "*", "label", "^NADH dehydrogenase subunit 4$", "ND4"],
+            ["*", "*", "label", "^s-rRNA$", "12S ribosomal RNA"],
+        ],
+        columns=["record_id", "feature_type", "qualifier", "value", "label_text"],
+    )
+    override_config_dict = copy.deepcopy(override_template_config)
+    override_config_dict["labels"]["filtering"]["label_override_df"] = override_df
+    override_cfg = GbdrawConfig.from_dict(override_config_dict)
+    override_filtering = preprocess_label_filtering(override_cfg.labels.filtering.as_dict())
+    override_feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        override_cfg.canvas.strandedness,
+        override_cfg.canvas.resolve_overlaps,
+        override_filtering,
+    )
+    override_labels = prepare_label_list(
+        override_feature_dict,
+        len(record.seq),
+        override_cfg.canvas.circular.radius,
+        override_cfg.canvas.circular.track_ratio,
+        override_config_dict,
+        cfg=override_cfg,
+    )
+
+    nd4_override = next(label for label in override_labels if label.get("label_text") == "ND4")
+    srna_override = next(label for label in override_labels if label.get("label_text") == "12S ribosomal RNA")
+    assert bool(nd4_override["is_embedded"])
+    assert not bool(srna_override["is_embedded"])

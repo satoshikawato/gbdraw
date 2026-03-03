@@ -35,7 +35,7 @@ def create_repeat_object(
     location = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id)
     feature_type = feature.type
-    label_text = get_label_text(feature, label_filtering)
+    label_text = get_label_text(feature, label_filtering, record_id=record_id)
 
     repeat_object = RepeatObject(
         repeat_id,
@@ -72,7 +72,7 @@ def create_feature_object(
     location = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id)
     feature_type = feature.type
-    label_text = get_label_text(feature, label_filtering)
+    label_text = get_label_text(feature, label_filtering, record_id=record_id)
 
     feature_object = FeatureObject(
         feature_id,
@@ -110,7 +110,7 @@ def create_gene_object(
     feature_type = feature.type
     location = get_exon_and_intron_coordinates(coordinates, genome_length, is_trans_spliced)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id)
-    label_text = get_label_text(feature, label_filtering)
+    label_text = get_label_text(feature, label_filtering, record_id=record_id)
 
     gene_object = GeneObject(
         feature_id,

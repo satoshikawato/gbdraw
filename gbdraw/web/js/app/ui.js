@@ -90,20 +90,23 @@ export const createSidebarResize = (state) => {
 export const setupGlobalUiEvents = ({ state, onMounted, onUnmounted }) => {
   const {
     clickedFeature,
+    clickedLabel,
     showCanvasControls,
     showLegendPanel,
     showFeaturePanel
   } = state;
 
   const closeFeaturePopup = (e) => {
-    if (!e.target.closest('.fixed.z-50')) {
+    if (!e.target.closest('.feature-popup') && !e.target.closest('.label-popup')) {
       if (clickedFeature.value) clickedFeature.value = null;
+      if (clickedLabel.value) clickedLabel.value = null;
     }
   };
 
   const handleEscapeKey = (e) => {
     if (e.key === 'Escape') {
       if (clickedFeature.value) clickedFeature.value = null;
+      if (clickedLabel.value) clickedLabel.value = null;
       if (showCanvasControls.value) showCanvasControls.value = false;
       if (showLegendPanel.value) showLegendPanel.value = false;
       if (showFeaturePanel.value) showFeaturePanel.value = false;

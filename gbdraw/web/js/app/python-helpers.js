@@ -306,7 +306,7 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
                     "type": feat.type,
                     "start": start,
                     "end": end,
-                    "strand": "+" if strand_raw == 1 else "-",
+                    "strand": "+" if strand_raw == 1 else ("-" if strand_raw == -1 else "undefined"),
                     "locus_tag": feat.qualifiers.get("locus_tag", [""])[0],
                     "gene": feat.qualifiers.get("gene", [""])[0],
                     "product": feat.qualifiers.get("product", [""])[0],

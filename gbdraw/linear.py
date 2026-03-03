@@ -15,7 +15,11 @@ from .render.export import parse_formats, save_figure
 from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[reportMissingImports]
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from .labels.filtering import read_qualifier_priority_file, read_filter_list_file  # type: ignore[reportMissingImports]
+from .labels.filtering import (
+    read_filter_list_file,
+    read_label_override_file,
+    read_qualifier_priority_file,
+)  # type: ignore[reportMissingImports]
 from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
 from .exceptions import ValidationError
 
@@ -339,6 +343,11 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         default="")
     parser.add_argument(
+        '--label_table',
+        help='Path to a TSV file defining post-filter label text overrides (optional)',
+        type=str,
+        default="")
+    parser.add_argument(
         '--feature_height',
         help='Feature vertical width (optional; float; default: 80 (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes >= 50 kb)',
         type=float),
@@ -473,6 +482,7 @@ def linear_main(cmd_args) -> None:
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
+    label_table_path: str = args.label_table
     selected_features_set: str = args.features.split(',')
     feature_shapes = parse_feature_shape_overrides(args.feature_shape)
     feature_height: Optional[float] = args.feature_height
@@ -513,6 +523,10 @@ def linear_main(cmd_args) -> None:
         filtering_cfg["whitelist_df"] = read_filter_list_file(label_whitelist)
     else:
         filtering_cfg["whitelist_df"] = None
+    if label_table_path:
+        filtering_cfg["label_override_df"] = read_label_override_file(label_table_path)
+    else:
+        filtering_cfg["label_override_df"] = None
 
     block_stroke_color: Optional[str] = args.block_stroke_color
     block_stroke_width: Optional[float] = args.block_stroke_width
@@ -563,6 +577,7 @@ def linear_main(cmd_args) -> None:
         strandedness=strandedness,
         label_blacklist=label_blacklist,
         label_whitelist=label_whitelist,
+        label_table=label_table_path,
         default_cds_height=feature_height,
         comparison_height=comparison_height,
         gc_height=gc_height,

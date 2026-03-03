@@ -14,7 +14,11 @@ from .api.diagram import assemble_circular_diagram_from_record  # type: ignore[r
 from .config.modify import suppress_gc_content_and_skew, modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .core.sequence import determine_output_file_prefix  # type: ignore[reportMissingImports]
-from .labels.filtering import read_qualifier_priority_file, read_filter_list_file  # type: ignore[reportMissingImports]
+from .labels.filtering import (
+    read_filter_list_file,
+    read_label_override_file,
+    read_qualifier_priority_file,
+)  # type: ignore[reportMissingImports]
 from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
 from .exceptions import ValidationError
 
@@ -237,6 +241,11 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         default="")
     parser.add_argument(
+        '--label_table',
+        help='Path to a TSV file defining post-filter label text overrides (optional)',
+        type=str,
+        default="")
+    parser.add_argument(
         '--outer_label_x_radius_offset',
         help='Outer label x-radius offset factor (float; default from config)',
         type=float)
@@ -342,6 +351,7 @@ def circular_main(cmd_args) -> None:
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
+    label_table_path: str = args.label_table
     scale_interval: Optional[int] = args.scale_interval
     legend_box_size = args.legend_box_size
     legend_font_size = args.legend_font_size
@@ -398,6 +408,10 @@ def circular_main(cmd_args) -> None:
         filtering_cfg["whitelist_df"] = read_filter_list_file(label_whitelist)
     else:
         filtering_cfg["whitelist_df"] = None
+    if label_table_path:
+        filtering_cfg["label_override_df"] = read_label_override_file(label_table_path)
+    else:
+        filtering_cfg["label_override_df"] = None
 
     palette: str = args.palette
     default_colors: Optional[DataFrame] = load_default_colors(
@@ -426,6 +440,7 @@ def circular_main(cmd_args) -> None:
         label_font_size=label_font_size,
         label_blacklist=label_blacklist,
         label_whitelist=label_whitelist,
+        label_table=label_table_path,
         outer_label_x_radius_offset=outer_label_x_radius_offset,
         outer_label_y_radius_offset=outer_label_y_radius_offset,
         inner_label_x_radius_offset=inner_label_x_radius_offset,

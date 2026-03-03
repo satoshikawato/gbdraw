@@ -67,6 +67,7 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--labels [{none,out,both}]] [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
+              [--label_table LABEL_TABLE]
               [--outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET]
               [--outer_label_y_radius_offset OUTER_LABEL_Y_RADIUS_OFFSET]
               [--inner_label_x_radius_offset INNER_LABEL_X_RADIUS_OFFSET]
@@ -159,6 +160,13 @@ options:
   --qualifier_priority QUALIFIER_PRIORITY
                         Path to a TSV file defining qualifier priority for
                         labels (optional)
+  --label_table LABEL_TABLE
+                        Path to a TSV file defining post-filter label text
+                        overrides (optional). Expected columns:
+                        record_id, feature_type, qualifier, value, label_text.
+                        Supports pseudo
+                        keys such as record_location, hash, location, and
+                        label.
   --outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET
                         Outer label x-radius offset factor (float; default
                         from config)
@@ -227,6 +235,7 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
+              [--label_table LABEL_TABLE]
               [--feature_height FEATURE_HEIGHT] [--gc_height GC_HEIGHT]
               [--comparison_height COMPARISON_HEIGHT]
               [--scale_style {bar,ruler}]
@@ -353,6 +362,13 @@ options:
   --qualifier_priority QUALIFIER_PRIORITY
                         Path to a TSV file defining qualifier priority for
                         labels (optional)
+  --label_table LABEL_TABLE
+                        Path to a TSV file defining post-filter label text
+                        overrides (optional). Expected columns:
+                        record_id, feature_type, qualifier, value, label_text.
+                        Supports pseudo
+                        keys such as record_location, hash, location, and
+                        label.
   --feature_height FEATURE_HEIGHT
                         Feature vertical width (optional; float; default: 80
                         (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes

@@ -946,11 +946,11 @@
                         </div>
                     </div>
 
-                    <!-- Feature Color Picker Popup -->
+                    <!-- Feature Editor Popup -->
                     <div v-if="clickedFeature"
                          ref="featurePopupRef"
                          @mousedown="startFeaturePopupDrag"
-                         class="fixed z-50 bg-white rounded-xl shadow-2xl border border-slate-200 p-4 min-w-[320px] max-w-[360px]"
+                         class="fixed z-50 feature-popup bg-white rounded-xl shadow-2xl border border-slate-200 p-4 min-w-[320px] max-w-[360px]"
                          :style="{ top: clickedFeaturePos.y + 'px', left: clickedFeaturePos.x + 'px' }">
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100">
                             <div class="w-4 h-4 rounded mt-1" :style="{ backgroundColor: clickedFeature.color }"></div>
@@ -993,6 +993,43 @@
                             <p v-else class="text-[10px] text-slate-400 mt-1">
                                 No SPECIFIC RULES (-t) legend text available yet
                             </p>
+                        </div>
+                        <div class="mb-4">
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="text-xs font-medium text-slate-500 block">Label text</label>
+                                <span v-if="clickedFeature.hasEditableLabel" class="text-[10px] font-mono text-slate-400">
+                                    {{ clickedFeature.labelKey }}
+                                </span>
+                            </div>
+                            <input type="text"
+                                   v-model="clickedFeature.labelText"
+                                   @keydown.enter.prevent="updateClickedFeatureLabelText"
+                                   :disabled="!clickedFeature.hasEditableLabel"
+                                   :placeholder="clickedFeature.hasEditableLabel ? 'Edit label text' : 'No editable label'"
+                                   :class="[
+                                     'w-full text-sm border rounded-lg px-3 py-2 focus:outline-none',
+                                     clickedFeature.hasEditableLabel
+                                       ? 'border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100'
+                                       : 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                                   ]">
+                            <p v-if="clickedFeature.hasEditableLabel" class="text-[10px] text-slate-400 mt-1">
+                                Source: <span class="font-mono">{{ clickedFeature.labelSourceText }}</span>
+                            </p>
+                            <p v-else class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-2">
+                                {{ clickedFeature.labelUnavailableReason }}
+                            </p>
+                            <div class="mt-2 flex justify-end">
+                                <button @click="updateClickedFeatureLabelText"
+                                        :disabled="!clickedFeature.hasEditableLabel"
+                                        :class="[
+                                          'px-3 py-1.5 text-xs rounded-md',
+                                          clickedFeature.hasEditableLabel
+                                            ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                        ]">
+                                    Apply Label
+                                </button>
+                            </div>
                         </div>
                         <div class="mb-4">
                             <label class="text-xs font-medium text-slate-500 block mb-1">Fill Color</label>
@@ -1042,6 +1079,39 @@
                         </div>
                     </div>
 
+                    <!-- Label Text Scope Dialog -->
+                    <div v-if="labelTextScopeDialog.show"
+                         class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
+                        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">Label Text Scope</h3>
+                            <p class="text-sm text-slate-600 mb-4">
+                                Choose how to apply the label text change for "<span class="font-mono text-slate-700">{{ labelTextScopeDialog.sourceText }}</span>".
+                            </p>
+
+                            <div class="flex flex-col gap-2">
+                                <button @click="handleLabelTextScopeChoice('single')"
+                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-user text-lg"></i>
+                                    <span>This label only</span>
+                                </button>
+                                <button @click="handleLabelTextScopeChoice('all')"
+                                        class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-users text-lg"></i>
+                                    <span>All matching source labels ({{ labelTextScopeDialog.matchingCount }})</span>
+                                </button>
+                            </div>
+
+                            <p v-if="!labelTextScopeDialog.featureId" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-3">
+                                This label is not linked to a feature ID. "This label only" is applied to the current SVG but may not persist after re-generate.
+                            </p>
+
+                            <button @click="handleLabelTextScopeChoice('cancel')"
+                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Color Change Scope Dialog -->
                     <div v-if="colorScopeDialog.show"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
@@ -1086,13 +1156,29 @@
                                     <span>This feature only</span>
                                 </button>
 
-                                <!-- Apply to all features with same individual label (when feature belongs to multi-feature rule and has label siblings) -->
-                                <!-- Hide this button if individualLabel === legendName to avoid duplicate buttons -->
-                                <button v-if="colorScopeDialog.matchingRule && colorScopeDialog.ruleMatchCount > 1 && colorScopeDialog.individualLabelSiblingCount > 0 && colorScopeDialog.individualLabel !== colorScopeDialog.legendName"
-                                        @click="handleColorScopeChoice('individualLabel')"
+                                <!-- Apply to all features with same rendered label text -->
+                                <button v-if="
+                                          colorScopeDialog.displayLabelSiblingCount > 0 &&
+                                          String(colorScopeDialog.displayLabel || '').trim() !== '' &&
+                                          String(colorScopeDialog.displayLabel || '').trim().toLowerCase() !== String(colorScopeDialog.legendName || '').trim().toLowerCase()
+                                        "
+                                        @click="handleColorScopeChoice('displayLabel')"
                                         class="w-full px-4 py-2 bg-teal-100 hover:bg-teal-200 text-teal-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-users text-lg"></i>
-                                    <span>Apply to all "{{ colorScopeDialog.individualLabel }}" ({{ colorScopeDialog.individualLabelSiblingCount + 1 }})</span>
+                                    <span>Apply to all label "{{ colorScopeDialog.displayLabel }}" ({{ colorScopeDialog.displayLabelSiblingCount + 1 }})</span>
+                                </button>
+
+                                <!-- Apply to all features with same source annotation label -->
+                                <button v-if="
+                                          colorScopeDialog.annotationLabelSiblingCount > 0 &&
+                                          String(colorScopeDialog.annotationLabel || '').trim() !== '' &&
+                                          String(colorScopeDialog.annotationLabel || '').trim().toLowerCase() !== String(colorScopeDialog.legendName || '').trim().toLowerCase() &&
+                                          String(colorScopeDialog.annotationLabel || '').trim().toLowerCase() !== String(colorScopeDialog.displayLabel || '').trim().toLowerCase()
+                                        "
+                                        @click="handleColorScopeChoice('annotationLabel')"
+                                        class="w-full px-4 py-2 bg-cyan-100 hover:bg-cyan-200 text-cyan-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-users text-lg"></i>
+                                    <span>Apply to all source label "{{ colorScopeDialog.annotationLabel }}" ({{ colorScopeDialog.annotationLabelSiblingCount + 1 }})</span>
                                 </button>
 
                                 <!-- Use existing caption color (if available) -->
@@ -1290,20 +1376,20 @@
 
                     <!-- Info message -->
                     <div class="p-3 border-t border-slate-200 bg-slate-50 text-xs text-slate-500">
-                        <i class="ph ph-info"></i> Colors are managed via Feature Colors panel
+                        <i class="ph ph-info"></i> Feature colors and labels are managed via Feature Editor
                     </div>
                 </div>
 
-                <!-- Feature Color Editor Toggle Button (floating) -->
+                <!-- Feature Editor Toggle Button (floating) -->
                 <button v-if="extractedFeatures.length > 0"
                         @click="showFeaturePanel = !showFeaturePanel"
                         class="absolute right-0 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-700 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
                         :class="{ 'translate-x-0': !showFeaturePanel, '-translate-x-80': showFeaturePanel }"
-                        :title="showFeaturePanel ? 'Close color panel' : 'Open color panel'">
+                        :title="showFeaturePanel ? 'Close feature editor' : 'Open feature editor'">
                     <i class="ph ph-paint-brush text-lg"></i>
                 </button>
 
-                <!-- Feature Color Editor Drawer (slides from right) -->
+                <!-- Feature Editor Drawer (slides from right) -->
                 <div v-if="extractedFeatures.length > 0"
                      class="absolute right-0 top-0 bottom-0 w-80 bg-white border-l border-slate-200 shadow-xl z-10 transition-transform duration-300 flex flex-col"
                      :class="showFeaturePanel ? 'translate-x-0' : 'translate-x-full'">
@@ -1311,12 +1397,17 @@
                     <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50">
                         <div class="flex items-center gap-2">
                             <i class="ph ph-paint-brush text-blue-600"></i>
-                            <span class="font-bold text-slate-700">Feature Colors</span>
-                            <span class="text-xs text-slate-400">({{ filteredFeatures.length }})</span>
+                            <span class="font-bold text-slate-700">Feature Editor</span>
                         </div>
-                        <button @click="showFeaturePanel = false" class="text-slate-400 hover:text-slate-600" aria-label="Close feature color editor">
+                        <button @click="showFeaturePanel = false" class="text-slate-400 hover:text-slate-600" aria-label="Close feature editor">
                             <i class="ph ph-x text-lg"></i>
                         </button>
+                    </div>
+
+                    <div class="px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
+                        <p class="text-xs font-semibold text-slate-600">
+                            Features ({{ filteredFeatures.length }})
+                        </p>
                     </div>
 
                     <!-- Record Selector (for multi-record files) -->
@@ -1330,30 +1421,45 @@
 
                     <!-- Search -->
                     <div class="px-4 py-2 border-b border-slate-100 shrink-0">
-                        <input v-model="featureSearch" placeholder="Search by product, gene, locus_tag..."
+                        <input v-model="featureSearch" placeholder="Search by feature or annotation..."
                                class="form-input text-xs w-full">
                     </div>
 
                     <!-- Feature List -->
                     <div class="flex-grow overflow-y-auto">
                         <div v-for="feat in filteredFeatures" :key="feat.id"
-                             @click="$event.currentTarget.querySelector('input[type=color]')?.click()"
-                             class="flex items-center gap-2 px-3 py-2 border-b border-slate-100 text-xs hover:bg-blue-50 cursor-pointer transition-colors">
-                            <span class="w-10 font-mono text-slate-400 shrink-0 text-[10px]">{{ feat.type }}</span>
-                            <span class="w-16 font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="`${feat.start}..${feat.end}`">
-                                {{ feat.start }}..{{ feat.end }}
-                            </span>
-                            <span class="flex-grow truncate text-slate-700"
-                                  :title="feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)'">
-                                {{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}
-                            </span>
-                            <input type="color"
-                                   :value="getFeatureColor(feat)"
-                                   @click.stop
-                                   @change="requestFeatureColorChange(feat, $event.target.value)"
-                                   :disabled="!canEditFeatureColor(feat)"
-                                   :title="canEditFeatureColor(feat) ? 'Click to change color' : 'No identifier available (no locus_tag, gene, or product)'"
-                                   :class="['w-7 h-5 border rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
+                             @click="openFeatureEditorFromList(feat, $event)"
+                             class="px-3 py-2 border-b border-slate-100 text-xs hover:bg-blue-50 cursor-pointer transition-colors space-y-1">
+                            <div class="flex items-center gap-2">
+                                <span class="w-10 font-mono text-slate-400 shrink-0 text-[10px]">{{ feat.type }}</span>
+                                <span class="w-16 font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="`${feat.start}..${feat.end}`">
+                                    {{ feat.start }}..{{ feat.end }}
+                                </span>
+                                <span class="flex-grow truncate text-slate-700"
+                                      :title="feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)'">
+                                    {{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}
+                                </span>
+                                <button @click.stop="openFeatureEditorFromList(feat, $event)"
+                                        class="text-[10px] px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 shrink-0"
+                                        title="Open feature editor">
+                                    Edit
+                                </button>
+                                <input type="color"
+                                       :value="getFeatureColor(feat)"
+                                       @click.stop
+                                       @change="requestFeatureColorChange(feat, $event.target.value)"
+                                       :disabled="!canEditFeatureColor(feat)"
+                                       :title="canEditFeatureColor(feat) ? 'Click to change color' : 'No identifier available (no locus_tag, gene, or product)'"
+                                       :class="['w-7 h-5 border rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
+                            </div>
+                            <p class="text-[10px] text-slate-400 truncate">
+                                <template v-if="getEditableLabelByFeatureId(feat.svg_id)">
+                                    Label: {{ getEditableLabelByFeatureId(feat.svg_id).text }}
+                                </template>
+                                <template v-else>
+                                    Label: (not editable)
+                                </template>
+                            </p>
                         </div>
                         <div v-if="filteredFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">
                             No features found
@@ -1362,9 +1468,59 @@
 
                     <!-- Footer -->
                     <div class="px-4 py-2 border-t border-slate-200 shrink-0 bg-slate-50">
-                        <p class="text-[10px] text-slate-400">
-                            <i class="ph ph-info"></i> Click a feature or the diagram to change colors.
-                        </p>
+                        <div class="space-y-2">
+                            <p class="text-[10px] text-slate-400">
+                                <i class="ph ph-info"></i> Click a feature row or the diagram to edit legend name, label text, and colors.
+                            </p>
+                            <div class="flex items-center justify-between gap-2">
+                                <p class="text-[10px] text-slate-400">
+                                    <i class="ph ph-info"></i> Label TSV format: record_id, feature_type, qualifier, value, label_text.
+                                </p>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <button @click="downloadLabelOverrideTable"
+                                            class="text-[10px] px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white">
+                                        Export Label TSV
+                                    </button>
+                                    <button @click="$refs.labelTableInput.click()"
+                                            class="text-[10px] px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-200">
+                                        Load Label TSV
+                                    </button>
+                                    <input type="file"
+                                           ref="labelTableInput"
+                                           accept=".tsv,.txt,text/tab-separated-values,text/plain"
+                                           class="hidden"
+                                           @change="loadLabelOverrideTable">
+                                    <button @click="resetAllLabelTextOverrides"
+                                            class="text-[10px] px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700">
+                                        Reset Label Edits
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between gap-2">
+                                <label class="inline-flex items-center gap-2 text-[10px] text-slate-600 select-none cursor-pointer">
+                                    <input type="checkbox"
+                                           v-model="autoLabelReflowEnabled"
+                                           class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                    <span>Auto Reflow</span>
+                                </label>
+                                <span v-if="labelReflowProcessing"
+                                      class="text-[10px] text-blue-600 flex items-center gap-1"
+                                      aria-live="polite">
+                                    <i class="ph ph-circle-notch animate-spin"></i>
+                                    Reflowing label placement...
+                                </span>
+                            </div>
+                            <p v-if="labelReflowLastError"
+                               class="text-[10px] text-amber-600"
+                               :title="labelReflowLastError">
+                                <i class="ph ph-warning"></i> Auto Reflow failed. Current diagram is kept.
+                            </p>
+                            <p v-if="labelOverrideBuildWarning"
+                               class="text-[10px] text-amber-600"
+                               :title="labelOverrideBuildWarning">
+                                <i class="ph ph-warning"></i> {{ labelOverrideBuildWarning }}
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>

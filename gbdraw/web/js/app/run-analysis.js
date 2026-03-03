@@ -1,4 +1,5 @@
 import { runLosatPair } from '../services/losat.js';
+import { buildLabelOverrideTsv } from './feature-editor/label-override-table.js';
 
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
@@ -71,10 +72,22 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     generatedLegendPosition,
     extractedFeatures,
     featureRecordIds,
-    selectedFeatureRecordIdx
+    selectedFeatureRecordIdx,
+    editableLabels,
+    clickedLabel,
+    labelTextScopeDialog,
+    labelTextFeatureOverrides,
+    labelTextBulkOverrides,
+    labelTextFeatureOverrideSources,
+    labelOverrideBuildWarning,
+    labelReflowProcessing,
+    labelReflowLastError
   } = state;
   let linearLabelSupportCache = null;
   let featureShapeSupportCache = null;
+  let pendingReflowRequestId = 0;
+  let activeReflowRequestId = 0;
+  let pendingReflowReason = 'label-edit';
 
   const getLastLine = (text) => {
     const trimmed = String(text || '').trim();
@@ -254,28 +267,60 @@ json.dumps({
     );
   };
 
-  const runAnalysis = async () => {
-    if (!pyodideReady.value) return;
+  const resetLabelScopeDialogState = () => {
+    labelTextScopeDialog.show = false;
+    labelTextScopeDialog.labelKey = '';
+    labelTextScopeDialog.newText = '';
+    labelTextScopeDialog.sourceText = '';
+    labelTextScopeDialog.featureId = '';
+    labelTextScopeDialog.matchingCount = 0;
+  };
+
+  const runAnalysisInternal = async ({ runMode = 'manual', requestId = 0 } = {}) => {
+    if (!pyodideReady.value) return { status: 'skipped' };
     const pyodide = getPyodide();
-    if (!pyodide) return;
-    processing.value = true;
-    results.value = [];
-    selectedResultIndex.value = 0;
-    errorLog.value = null;
-    zoom.value = 1.0;
-    skipCaptureBaseConfig.value = false;
-    skipPositionReapply.value = false;
-    pairwiseMatchFactors.value = {};
-    addedLegendCaptions.value = new Set();
-    fileLegendCaptions.value = new Set();
-    Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
-    legendEntries.value = [];
-    deletedLegendEntries.value = [];
-    Object.keys(legendColorOverrides).forEach((k) => delete legendColorOverrides[k]);
-    originalLegendOrder.value = [];
-    originalLegendColors.value = {};
-    window._origPairwiseMin = currentColors.value.pairwise_match_min || '#FFE7E7';
-    window._origPairwiseMax = currentColors.value.pairwise_match_max || '#FF7272';
+    if (!pyodide) return { status: 'skipped' };
+
+    const isReflow = runMode === 'reflow';
+    const previousSelectedResultIndex = selectedResultIndex.value;
+    const editableLabelsSnapshot = Array.isArray(editableLabels.value)
+      ? editableLabels.value.map((entry) => ({ ...entry }))
+      : [];
+    const featureOverrideSourcesSnapshot = Object.fromEntries(
+      Object.entries(labelTextFeatureOverrideSources || {}).map(([featureId, sourceText]) => [
+        String(featureId || ''),
+        String(sourceText ?? '')
+      ])
+    );
+
+    if (isReflow) {
+      labelReflowProcessing.value = true;
+      labelReflowLastError.value = null;
+      skipCaptureBaseConfig.value = true;
+      skipPositionReapply.value = true;
+    } else {
+      processing.value = true;
+      results.value = [];
+      selectedResultIndex.value = 0;
+      errorLog.value = null;
+      zoom.value = 1.0;
+      skipCaptureBaseConfig.value = false;
+      skipPositionReapply.value = false;
+      pairwiseMatchFactors.value = {};
+      clickedLabel.value = null;
+      resetLabelScopeDialogState();
+      addedLegendCaptions.value = new Set();
+      fileLegendCaptions.value = new Set();
+      Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
+      legendEntries.value = [];
+      deletedLegendEntries.value = [];
+      Object.keys(legendColorOverrides).forEach((k) => delete legendColorOverrides[k]);
+      originalLegendOrder.value = [];
+      originalLegendColors.value = {};
+      window._origPairwiseMin = currentColors.value.pairwise_match_min || '#FFE7E7';
+      window._origPairwiseMax = currentColors.value.pairwise_match_max || '#FF7272';
+    }
+    labelOverrideBuildWarning.value = '';
 
     try {
       let args = [];
@@ -343,6 +388,22 @@ json.dumps({
       if (pContent.trim() !== '') {
         pyodide.FS.writeFile('/priority.tsv', pContent);
         args.push('--qualifier_priority', '/priority.tsv');
+      }
+
+      const labelOverride = buildLabelOverrideTsv(labelTextFeatureOverrides, labelTextBulkOverrides, {
+        editableLabels: editableLabelsSnapshot,
+        extractedFeatures: extractedFeatures.value,
+        featureOverrideSources: featureOverrideSourcesSnapshot
+      });
+      if (labelOverride.skippedMissingSourceCount > 0) {
+        labelOverrideBuildWarning.value = `${labelOverride.skippedMissingSourceCount} feature override row(s) were skipped due to missing source label context.`;
+      }
+      if (labelOverride.tsv) {
+        pyodide.FS.writeFile('/web_label_table.tsv', labelOverride.tsv);
+        args.push('--label_table', '/web_label_table.tsv');
+      }
+      if (!isReflow) {
+        editableLabels.value = [];
       }
 
       const selectedFeatureShapes = Array.isArray(adv.features)
@@ -766,10 +827,30 @@ json.dumps({
         .get('run_gbdraw_wrapper')(mode.value, pyodide.toPy(args.map(String)));
       const res = JSON.parse(jsonResult);
       if (res.error) {
+        if (isReflow) {
+          labelReflowLastError.value = formatPythonError(res.error)?.summary || 'Auto reflow failed';
+          return { status: 'error' };
+        }
         errorLog.value = formatPythonError(res.error);
-        return;
+        return { status: 'error' };
       }
+
+      if (isReflow && requestId !== pendingReflowRequestId) {
+        return { status: 'stale' };
+      }
+
+      if (isReflow) {
+        skipCaptureBaseConfig.value = true;
+        skipPositionReapply.value = true;
+      }
+
       results.value = res;
+      if (isReflow) {
+        if (res.length > 0) {
+          const safeIndex = Math.max(0, Math.min(previousSelectedResultIndex, res.length - 1));
+          selectedResultIndex.value = safeIndex;
+        }
+      }
 
       generatedLegendPosition.value = form.legend;
 
@@ -833,11 +914,40 @@ json.dumps({
           console.log('Could not extract features:', e);
         }
       }
+      return { status: 'ok' };
     } catch (e) {
+      if (isReflow) {
+        labelReflowLastError.value = formatJsError(e)?.summary || 'Auto reflow failed';
+        return { status: 'error' };
+      }
       errorLog.value = formatJsError(e);
+      return { status: 'error' };
     } finally {
-      processing.value = false;
+      if (isReflow) {
+        labelReflowProcessing.value = false;
+      } else {
+        processing.value = false;
+      }
     }
+  };
+
+  const runAnalysis = async () => runAnalysisInternal({ runMode: 'manual' });
+
+  const runLabelReflow = async (reason = 'label-edit') => {
+    pendingReflowRequestId += 1;
+    pendingReflowReason = String(reason || 'label-edit');
+    if (activeReflowRequestId !== 0) return;
+
+    while (activeReflowRequestId < pendingReflowRequestId) {
+      activeReflowRequestId = pendingReflowRequestId;
+      await runAnalysisInternal({
+        runMode: 'reflow',
+        requestId: activeReflowRequestId,
+        reason: pendingReflowReason
+      });
+    }
+
+    activeReflowRequestId = 0;
   };
 
   const downloadLosatCache = async () => {
@@ -876,6 +986,7 @@ json.dumps({
 
   return {
     runAnalysis,
+    runLabelReflow,
     downloadLosatCache,
     downloadLosatPair,
     setLosatPairFilename,

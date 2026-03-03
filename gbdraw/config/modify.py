@@ -51,6 +51,7 @@ def modify_config_dict(
     label_blacklist=None,
     label_whitelist=None,
     qualifier_priority=None,
+    label_table=None,
     outer_label_x_radius_offset=None,
     outer_label_y_radius_offset=None,
     inner_label_x_radius_offset=None,
@@ -193,6 +194,7 @@ def modify_config_dict(
         "label_blacklist": "labels.filtering.blacklist_keywords",
         "label_whitelist": "labels.filtering.whitelist_df",
         "qualifier_priority": "labels.filtering.qualifier_priority_df",
+        "label_table": "labels.filtering.label_override_df",
         "outer_label_x_radius_offset": "labels.unified_adjustment.outer_labels.x_radius_offset",
         "outer_label_y_radius_offset": "labels.unified_adjustment.outer_labels.y_radius_offset",
         "inner_label_x_radius_offset": "labels.unified_adjustment.inner_labels.x_radius_offset",
@@ -236,10 +238,10 @@ def modify_config_dict(
             # Convert label_blacklist string to list if needed
             if param == "label_blacklist" and isinstance(value, str):
                 value = [kw.strip() for kw in value.split(",") if kw.strip()]
-            # Skip updating whitelist_df and qualifier_priority_df if they're already DataFrames
+            # Skip updating whitelist/priority/label-override tables if they're already DataFrames
             # (they were processed from file paths before this function was called)
             # Also skip if the value is an empty string and existing value is None or DataFrame
-            if param in ["label_whitelist", "qualifier_priority"]:
+            if param in ["label_whitelist", "qualifier_priority", "label_table"]:
                 keys = path.split(".")
                 target_dict = config_dict
                 for key in keys[:-1]:

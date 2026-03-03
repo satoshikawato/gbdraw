@@ -1,7 +1,7 @@
 import { resolveColorToHex } from '../color-utils.js';
 import { getFeatureCaption } from '../feature-utils.js';
 
-export const createFeatureSvgActions = ({ state, getFeatureColor }) => {
+export const createFeatureSvgActions = ({ state, getFeatureColor, onFeaturePopupOpened = null }) => {
   const {
     results,
     selectedResultIndex,
@@ -12,6 +12,81 @@ export const createFeatureSvgActions = ({ state, getFeatureColor }) => {
     clickedFeaturePos,
     skipCaptureBaseConfig
   } = state;
+
+  const getPopupPosition = (eventLike, popupWidth = 360, popupHeight = 360) => {
+    const margin = 12;
+    const fallbackX = window.innerWidth / 2;
+    const fallbackY = window.innerHeight / 2;
+    const rawX = Number.isFinite(eventLike?.clientX) ? eventLike.clientX + 10 : fallbackX;
+    const rawY = Number.isFinite(eventLike?.clientY) ? eventLike.clientY + 10 : fallbackY;
+    const maxX = Math.max(margin, window.innerWidth - popupWidth - margin);
+    const maxY = Math.max(margin, window.innerHeight - popupHeight - margin);
+    return {
+      x: Math.min(Math.max(rawX, margin), maxX),
+      y: Math.min(Math.max(rawY, margin), maxY)
+    };
+  };
+
+  const buildFeatureLocation = (feat) => {
+    const startPos = Number.isFinite(feat.start) ? feat.start + 1 : feat.start;
+    const endPos = Number.isFinite(feat.end) ? feat.end : feat.end;
+    return `${startPos}..${endPos}${feat.strand ? ` (${feat.strand})` : ''}`;
+  };
+
+  const getFeatureElements = (svg, svgId) => {
+    if (!svg || !svgId) return [];
+    return Array.from(svg.querySelectorAll(`#${CSS.escape(svgId)}`));
+  };
+
+  const buildClickedFeaturePayload = (feat, featureElement = null) => {
+    const defaultLabel = getFeatureCaption(feat);
+    const existingOverride = featureColorOverrides[feat.id];
+    const existingCaption = existingOverride?.caption || '';
+
+    const currentColor = resolveColorToHex(
+      featureElement?.getAttribute('fill') || getFeatureColor(feat)
+    );
+    const currentStrokeColor = featureElement?.getAttribute('stroke') || '#000000';
+    const currentStrokeWidth = parseFloat(featureElement?.getAttribute('stroke-width')) || 0.5;
+
+    return {
+      id: feat.id,
+      svg_id: feat.svg_id,
+      label: defaultLabel,
+      location: buildFeatureLocation(feat),
+      color: currentColor,
+      feat,
+      legendName: existingCaption,
+      strokeColor: currentStrokeColor,
+      strokeWidth: currentStrokeWidth,
+      originalStrokeColor: currentStrokeColor,
+      originalStrokeWidth: currentStrokeWidth,
+      labelKey: '',
+      labelText: '',
+      labelSourceText: '',
+      hasEditableLabel: false,
+      labelUnavailableReason: 'No editable feature label for this feature in current diagram.'
+    };
+  };
+
+  const openFeatureEditorForFeature = (feat, eventLike = null) => {
+    if (!feat || !feat.svg_id) return null;
+    if (!svgContainer.value) return null;
+    const svg = svgContainer.value.querySelector('svg');
+    if (!svg) return null;
+
+    const featureElements = getFeatureElements(svg, feat.svg_id);
+    const featureElement = featureElements[0] || null;
+    clickedFeature.value = buildClickedFeaturePayload(feat, featureElement);
+
+    const popupPosition = getPopupPosition(eventLike);
+    clickedFeaturePos.x = popupPosition.x;
+    clickedFeaturePos.y = popupPosition.y;
+    if (typeof onFeaturePopupOpened === 'function') {
+      onFeaturePopupOpened();
+    }
+    return clickedFeature.value;
+  };
 
   const applyInstantPreview = (feat, color) => {
     const svgId = feat.svg_id;
@@ -84,38 +159,7 @@ export const createFeatureSvgActions = ({ state, getFeatureColor }) => {
         e.stopPropagation();
         const feat = extractedFeatures.value.find((f) => f.svg_id === svgId);
         if (feat) {
-          const currentColor = resolveColorToHex(path.getAttribute('fill') || getFeatureColor(feat));
-          const defaultLabel = getFeatureCaption(feat);
-
-          const existingOverride = featureColorOverrides[feat.id];
-          const existingCaption = existingOverride?.caption || '';
-
-          const currentStrokeColor = path.getAttribute('stroke') || '#000000';
-          const currentStrokeWidth = parseFloat(path.getAttribute('stroke-width')) || 0.5;
-          const startPos = Number.isFinite(feat.start) ? feat.start + 1 : feat.start;
-          const endPos = Number.isFinite(feat.end) ? feat.end : feat.end;
-          const location = `${startPos}..${endPos}${feat.strand ? ` (${feat.strand})` : ''}`;
-
-          clickedFeature.value = {
-            id: feat.id,
-            svg_id: svgId,
-            label: defaultLabel,
-            location,
-            color: currentColor,
-            feat: feat,
-            legendName: existingCaption,
-            strokeColor: currentStrokeColor,
-            strokeWidth: currentStrokeWidth,
-            originalStrokeColor: currentStrokeColor,
-            originalStrokeWidth: currentStrokeWidth
-          };
-          const popupWidth = 360;
-          const popupHeight = 260;
-          const margin = 12;
-          const maxX = Math.max(margin, window.innerWidth - popupWidth - margin);
-          const maxY = Math.max(margin, window.innerHeight - popupHeight - margin);
-          clickedFeaturePos.x = Math.min(Math.max(e.clientX + 10, margin), maxX);
-          clickedFeaturePos.y = Math.min(Math.max(e.clientY + 10, margin), maxY);
+          openFeatureEditorForFeature(feat, e);
         } else {
           console.log(`No feature found for svg_id: ${svgId}`);
         }
@@ -129,6 +173,7 @@ export const createFeatureSvgActions = ({ state, getFeatureColor }) => {
 
   return {
     applyInstantPreview,
-    attachSvgFeatureHandlers
+    attachSvgFeatureHandlers,
+    openFeatureEditorForFeature
   };
 };

@@ -29,6 +29,7 @@ export const createDiagramDragActions = ({ state }) => {
   const startDiagramDrag = (e) => {
     if (
       e.target.closest('#legend') ||
+      e.target.closest('text[data-label-editable="true"]') ||
       e.target.closest('path[id^="f"], polygon[id^="f"], rect[id^="f"]')
     ) {
       return;

@@ -43,6 +43,10 @@ const svgContent = computed(() => {
         'id',
         'class',
         'data-legend-key',
+        'data-label-key',
+        'data-label-feature-id',
+        'data-label-source-text',
+        'data-label-editable',
         'fill',
         'fill-opacity',
         'stroke',
@@ -261,8 +265,21 @@ const extractedFeatures = ref([]); // Features from last generation
 const featureRecordIds = ref([]); // Record IDs for multi-record files
 const selectedFeatureRecordIdx = ref(0); // Currently selected record index
 const showFeaturePanel = ref(false);
+const featurePanelTab = ref('colors'); // 'colors' | 'labels'
 const featureSearch = ref('');
 const featureColorOverrides = reactive({}); // {featureKey: color}
+const labelSearch = ref('');
+const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
+const labelTextFeatureOverrides = reactive({}); // { featureId: text }
+const labelTextBulkOverrides = reactive({}); // { sourceText: text }
+const labelTextFeatureOverrideSources = reactive({}); // { featureId: sourceText }
+const labelOverrideContextKey = ref('');
+const labelOverrideBuildWarning = ref('');
+const autoLabelReflowEnabled = ref(false);
+const labelReflowProcessing = ref(false);
+const labelReflowRequestSeq = ref(0);
+const labelReflowRequestReason = ref('');
+const labelReflowLastError = ref(null);
 
 // SVG Feature Click state
 const svgContainer = ref(null);
@@ -270,6 +287,8 @@ const clickedFeature = ref(null); // {id, svg_id, label, location, color, feat}
 const clickedFeaturePos = reactive({ x: 0, y: 0 });
 const featurePopupRef = ref(null);
 const featurePopupDrag = reactive({ active: false, offsetX: 0, offsetY: 0 });
+const clickedLabel = ref(null); // { key, text, sourceText, featureId }
+const clickedLabelPos = reactive({ x: 0, y: 0 });
 
 // Color Change Scope Dialog state
 const colorScopeDialog = reactive({
@@ -280,9 +299,13 @@ const colorScopeDialog = reactive({
   ruleMatchCount: 0, // Number of features matching the rule
   legendName: null,
   siblingCount: 0, // Number of other features with same caption
-  // For individual label option when feature belongs to multi-feature rule
-  individualLabel: null, // Feature's own label (product/gene/locus_tag)
-  individualLabelSiblingCount: 0, // Number of other features with same individual label
+  displayLabel: null, // Current rendered label text in SVG (edited label)
+  displayLabelSiblingCount: 0, // Number of other features sharing display label
+  annotationLabel: null, // Feature's source annotation label (product/gene/locus_tag)
+  annotationLabelSiblingCount: 0, // Number of other features sharing source annotation label
+  // Backward-compatible alias fields for old template/method references
+  individualLabel: null,
+  individualLabelSiblingCount: 0,
   existingCaptionRule: null, // Existing hash rule for same caption (already colored)
   existingCaptionColor: null, // Color of existing caption rule
   resolve: null // Promise resolver
@@ -294,6 +317,16 @@ const resetColorDialog = reactive({
   caption: '',
   defaultColor: '',
   siblingCount: 0
+});
+
+// Label text scope dialog state
+const labelTextScopeDialog = reactive({
+  show: false,
+  labelKey: '',
+  newText: '',
+  sourceText: '',
+  featureId: '',
+  matchingCount: 0
 });
 
 // Sidebar resize state
@@ -468,6 +501,19 @@ const filteredFeatures = computed(() => {
   return features;
 });
 
+const filteredEditableLabels = computed(() => {
+  const query = String(labelSearch.value || '').trim().toLowerCase();
+  if (!query) return editableLabels.value;
+
+  return editableLabels.value.filter((entry) => {
+    return (
+      String(entry.text || '').toLowerCase().includes(query) ||
+      String(entry.sourceText || '').toLowerCase().includes(query) ||
+      String(entry.featureId || '').toLowerCase().includes(query)
+    );
+  });
+});
+
 export const state = {
   pyodideReady,
   processing,
@@ -513,15 +559,31 @@ export const state = {
   featureRecordIds,
   selectedFeatureRecordIdx,
   showFeaturePanel,
+  featurePanelTab,
   featureSearch,
   featureColorOverrides,
+  labelSearch,
+  editableLabels,
+  labelTextFeatureOverrides,
+  labelTextBulkOverrides,
+  labelTextFeatureOverrideSources,
+  labelOverrideContextKey,
+  labelOverrideBuildWarning,
+  autoLabelReflowEnabled,
+  labelReflowProcessing,
+  labelReflowRequestSeq,
+  labelReflowRequestReason,
+  labelReflowLastError,
   svgContainer,
   clickedFeature,
   clickedFeaturePos,
   featurePopupRef,
   featurePopupDrag,
+  clickedLabel,
+  clickedLabelPos,
   colorScopeDialog,
   resetColorDialog,
+  labelTextScopeDialog,
   sidebarWidth,
   isResizing,
   showLegendPanel,
@@ -562,5 +624,6 @@ export const state = {
   newFeatureToAdd,
   addedLegendCaptions,
   fileLegendCaptions,
-  filteredFeatures
+  filteredFeatures,
+  filteredEditableLabels
 };

@@ -19,6 +19,9 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     newFeatureToAdd,
     extractedFeatures,
     featureColorOverrides,
+    editableLabels,
+    labelTextFeatureOverrides,
+    labelTextBulkOverrides,
     addedLegendCaptions,
     fileLegendCaptions
   } = state;
@@ -27,10 +30,46 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   const normalizeFeatureShape = (value) => (String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle');
   const normalizeCaption = (value) => String(value || '').trim();
   const normalizeCaptionKey = (value) => normalizeCaption(value).toLowerCase();
+  const normalizeFeatureIdKey = (value) => String(value || '').trim().toLowerCase();
   const captionMatches = (value, target) => normalizeCaptionKey(value) === normalizeCaptionKey(target);
 
   const getIndividualFeatureLabel = (feat) => {
     return feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`;
+  };
+
+  const getEditableLabelEntryForFeature = (feat) => {
+    if (!feat || !Array.isArray(editableLabels.value)) return null;
+    const featureIdKey = normalizeFeatureIdKey(feat.svg_id || feat.id);
+    if (!featureIdKey) return null;
+    return (
+      editableLabels.value.find((entry) => normalizeFeatureIdKey(entry?.featureId) === featureIdKey) || null
+    );
+  };
+
+  const getDisplayedFeatureLabel = (feat) => {
+    if (!feat) return '';
+
+    const editableEntry = getEditableLabelEntryForFeature(feat);
+    const editableText = normalizeCaption(editableEntry?.text);
+    if (editableText) return editableText;
+
+    const featureIdKey = normalizeFeatureIdKey(feat.svg_id || feat.id);
+    if (featureIdKey) {
+      for (const [overrideFeatureId, overrideText] of Object.entries(labelTextFeatureOverrides)) {
+        if (normalizeFeatureIdKey(overrideFeatureId) !== featureIdKey) continue;
+        const normalizedOverride = normalizeCaption(overrideText);
+        if (normalizedOverride) return normalizedOverride;
+        break;
+      }
+    }
+
+    const sourceText = normalizeCaption(editableEntry?.sourceText);
+    if (sourceText) {
+      const normalizedBulk = normalizeCaption(labelTextBulkOverrides[sourceText]);
+      if (normalizedBulk) return normalizedBulk;
+    }
+
+    return normalizeCaption(getIndividualFeatureLabel(feat));
   };
 
   const getFirstMatchingRule = (feat, ruleFilter) => {
@@ -298,7 +337,17 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
 
     return extractedFeatures.value.filter((f) => {
       if (f.svg_id === currentFeat.svg_id) return false;
-      return normalizeCaption(getIndividualFeatureLabel(f)) === targetLabel;
+      return captionMatches(getIndividualFeatureLabel(f), targetLabel);
+    });
+  };
+
+  const findFeaturesWithSameDisplayedLabel = (currentFeat, label = null) => {
+    const targetLabel = normalizeCaption(label || getDisplayedFeatureLabel(currentFeat));
+    if (!targetLabel) return [];
+
+    return extractedFeatures.value.filter((f) => {
+      if (f.svg_id === currentFeat.svg_id) return false;
+      return captionMatches(getDisplayedFeatureLabel(f), targetLabel);
     });
   };
 
@@ -335,10 +384,12 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     countFeaturesMatchingRule,
     findExistingColorForCaption,
     findFeaturesWithSameCaption: findFeaturesWithSameLegendItem,
+    findFeaturesWithSameDisplayedLabel,
     findFeaturesWithSameIndividualLabel,
     findFeaturesWithSameLegendItem,
     findMatchingRegexRule,
     getFeatureColor,
+    getDisplayedFeatureLabel,
     getEffectiveLegendCaption,
     getIndividualFeatureLabel,
     getFeatureQualifier,

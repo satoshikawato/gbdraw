@@ -17,12 +17,14 @@ export const setupWatchers = ({
   svgActions,
   featureActions,
   legendLayout,
-  resultsManager
+  resultsManager,
+  runLabelReflow
 }) => {
   const {
     manualSpecificRules,
     extractedFeatures,
     addedLegendCaptions,
+    editableLabels,
     svgContent,
     form,
     generatedLegendPosition,
@@ -43,7 +45,16 @@ export const setupWatchers = ({
     featureRecordIds,
     selectedFeatureRecordIdx,
     featureColorOverrides,
+    featurePanelTab,
+    labelSearch,
+    labelOverrideContextKey,
+    labelTextBulkOverrides,
+    labelTextFeatureOverrides,
+    labelTextFeatureOverrideSources,
+    labelOverrideBuildWarning,
     showFeaturePanel,
+    clickedLabel,
+    labelTextScopeDialog,
     files,
     currentColors,
     pyodideReady,
@@ -51,7 +62,10 @@ export const setupWatchers = ({
     manualPriorityRules,
     manualWhitelist,
     manualBlacklist,
-    linearSeqs
+    linearSeqs,
+    autoLabelReflowEnabled,
+    labelReflowRequestSeq,
+    labelReflowRequestReason
   } = state;
 
   const {
@@ -63,7 +77,7 @@ export const setupWatchers = ({
   } = legendActions;
 
   const { applySpecificRulesToSvg, ensureUniquePairwiseGradientIds } = svgActions;
-  const { attachSvgFeatureHandlers, refreshFeatureOverrides } = featureActions;
+  const { attachSvgFeatureHandlers, refreshFeatureOverrides, syncLabelEditor } = featureActions;
   const {
     applyCanvasPadding,
     captureBaseConfig,
@@ -158,6 +172,7 @@ export const setupWatchers = ({
       setupLegendDrag();
       setupDiagramDrag(isIncrementalEdit);
       attachSvgFeatureHandlers();
+      syncLabelEditor();
 
       if (!isIncrementalEdit) {
         captureBaseConfig();
@@ -235,6 +250,16 @@ export const setupWatchers = ({
   });
 
   watch(
+    () => labelReflowRequestSeq.value,
+    async (nextSeq, prevSeq) => {
+      if (nextSeq === prevSeq) return;
+      if (!autoLabelReflowEnabled.value) return;
+      if (typeof runLabelReflow !== 'function') return;
+      await runLabelReflow(labelReflowRequestReason.value || 'label-edit');
+    }
+  );
+
+  watch(
     () => mode.value,
     (newMode, oldMode) => {
       if (oldMode === 'circular') {
@@ -253,6 +278,21 @@ export const setupWatchers = ({
       featureRecordIds.value = [];
       selectedFeatureRecordIdx.value = 0;
       Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
+      editableLabels.value = [];
+      Object.keys(labelTextFeatureOverrides).forEach((k) => delete labelTextFeatureOverrides[k]);
+      Object.keys(labelTextBulkOverrides).forEach((k) => delete labelTextBulkOverrides[k]);
+      Object.keys(labelTextFeatureOverrideSources).forEach((k) => delete labelTextFeatureOverrideSources[k]);
+      labelOverrideContextKey.value = '';
+      labelOverrideBuildWarning.value = '';
+      labelSearch.value = '';
+      featurePanelTab.value = 'colors';
+      clickedLabel.value = null;
+      labelTextScopeDialog.show = false;
+      labelTextScopeDialog.labelKey = '';
+      labelTextScopeDialog.newText = '';
+      labelTextScopeDialog.sourceText = '';
+      labelTextScopeDialog.featureId = '';
+      labelTextScopeDialog.matchingCount = 0;
       showFeaturePanel.value = false;
     }
   );
