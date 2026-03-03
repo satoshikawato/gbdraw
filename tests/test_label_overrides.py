@@ -31,6 +31,10 @@ def _rules_df(rows: list[list[str]]) -> pd.DataFrame:
     )
 
 
+def _whitelist_df(rows: list[list[str]]) -> pd.DataFrame:
+    return pd.DataFrame(rows, columns=["feature_type", "qualifier", "keyword"])
+
+
 def _base_filtering(
     *,
     blacklist_keywords: list[str] | None = None,
@@ -99,6 +103,15 @@ def test_read_label_override_file_extra_columns_raises_parse_error(tmp_path: Pat
 def test_read_label_override_file_not_found_raises_input_file_error() -> None:
     with pytest.raises(InputFileError):
         read_label_override_file("tests/test_inputs/does_not_exist.label_override.tsv")
+
+
+def test_read_label_override_file_empty_label_text_allowed(tmp_path: Path) -> None:
+    table = tmp_path / "label_override_empty_text.tsv"
+    table.write_text("rec1\tCDS\thash\t^f123$\t\n", encoding="utf-8")
+
+    df = read_label_override_file(str(table))
+    assert df is not None
+    assert str(df.iloc[0]["label_text"]) == ""
 
 
 def test_get_label_text_row_order_first_wins() -> None:
@@ -189,6 +202,69 @@ def test_get_label_text_does_not_override_hidden_label() -> None:
             label_override_df=_rules_df(
                 [
                     ["*", "*", "label", "^enzyme alpha$", "Should not re-enable"],
+                ]
+            ),
+        )
+    )
+
+    assert get_label_text(feature, filtering, record_id="rec1") == ""
+
+
+def test_get_label_text_hash_override_bypasses_blacklist() -> None:
+    feature = _make_seq_feature()
+    feature_hash = compute_feature_hash(feature, record_id="rec1")
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            blacklist_keywords=["enzyme"],
+            label_override_df=_rules_df(
+                [
+                    ["*", "*", "hash", f"^{re.escape(feature_hash)}$", "Forced visible label"],
+                ]
+            ),
+        )
+    )
+
+    assert get_label_text(feature, filtering, record_id="rec1") == "Forced visible label"
+
+
+def test_get_label_text_hash_override_bypasses_whitelist() -> None:
+    feature = _make_seq_feature()
+    feature_hash = compute_feature_hash(feature, record_id="rec1")
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            whitelist_df=_whitelist_df([["CDS", "product", "non-matching-keyword"]]),
+            label_override_df=_rules_df(
+                [
+                    ["*", "*", "hash", f"^{re.escape(feature_hash)}$", "Whitelist bypass label"],
+                ]
+            ),
+        )
+    )
+
+    assert get_label_text(feature, filtering, record_id="rec1") == "Whitelist bypass label"
+
+
+def test_get_label_text_whitelist_hash_rule_matches_feature_hash() -> None:
+    feature = _make_seq_feature()
+    feature_hash = compute_feature_hash(feature, record_id="rec1")
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            whitelist_df=_whitelist_df([["CDS", "hash", feature_hash]]),
+        )
+    )
+
+    assert get_label_text(feature, filtering, record_id="rec1") == "enzyme alpha"
+
+
+def test_get_label_text_hash_override_empty_text_hides_label() -> None:
+    feature = _make_seq_feature()
+    feature_hash = compute_feature_hash(feature, record_id="rec1")
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            whitelist_df=_whitelist_df([["CDS", "product", "enzyme alpha"]]),
+            label_override_df=_rules_df(
+                [
+                    ["*", "*", "hash", f"^{re.escape(feature_hash)}$", ""],
                 ]
             ),
         )

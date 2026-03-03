@@ -154,6 +154,8 @@ def read_label_override_file(filepath: str) -> Optional[DataFrame]:
             names=required_cols,
             dtype=str,
             comment="#",
+            keep_default_na=False,
+            na_filter=False,
             on_bad_lines="error",
             engine="python",
         )
@@ -555,7 +557,12 @@ def preprocess_label_filtering(label_filtering: dict):
     if whitelist_df is not None and not whitelist_df.empty:
         whitelist_map = {}
         for row in whitelist_df.itertuples(index=False):
-            whitelist_map.setdefault(row.feature_type, {}).setdefault(row.qualifier, set()).add(row.keyword)
+            feature_type = str(getattr(row, "feature_type", "") or "").strip()
+            qualifier = str(getattr(row, "qualifier", "") or "").strip().lower()
+            keyword = str(getattr(row, "keyword", "") or "").strip()
+            if not feature_type or not qualifier:
+                continue
+            whitelist_map.setdefault(feature_type, {}).setdefault(qualifier, set()).add(keyword)
     else:
         whitelist_map = None
 
@@ -585,17 +592,11 @@ def get_label_text(feature: Any, label_filtering: dict, record_id: Optional[str]
     blacklist = label_filtering.get("blacklist_keywords", [])
     priority_map = label_filtering.get("priority_map", {})
     label_override_rules = label_filtering.get("label_override_rules")
-
-    if whitelist_map:
-        is_eligible = False
-        rules = whitelist_map.get(feature_type, {})
-        for key, values in qualifiers.items():
-            normalized_values = _normalize_qualifier_values(values)
-            if key in rules and any(v in rules[key] for v in normalized_values):
-                is_eligible = True
-                break
-        if not is_eligible:
-            return ""
+    hash_rules = None
+    non_hash_rules = None
+    if label_override_rules:
+        hash_rules = [rule for rule in label_override_rules if rule.get("qualifier_normalized") == "hash"]
+        non_hash_rules = [rule for rule in label_override_rules if rule.get("qualifier_normalized") != "hash"]
 
     priority_list = priority_map.get(feature_type, DEFAULT_LABEL_PRIORITY)
     final_label = ""
@@ -605,16 +606,46 @@ def get_label_text(feature: Any, label_filtering: dict, record_id: Optional[str]
             final_label = values[0]
             break
 
+    # Hash-based per-feature overrides are highest priority and can bypass whitelist/blacklist filters.
+    if hash_rules:
+        hash_override_text = _resolve_label_override(
+            feature=feature,
+            feature_type=feature_type,
+            qualifiers=qualifiers,
+            base_label=final_label,
+            rules=hash_rules,
+            record_id=record_id,
+        )
+        if hash_override_text is not None:
+            return hash_override_text
+
+    if whitelist_map:
+        is_eligible = False
+        rules = whitelist_map.get(feature_type, {})
+        hash_keywords = rules.get("hash", set()) if isinstance(rules, dict) else set()
+        if hash_keywords:
+            feature_hash = _get_feature_hash(feature, record_id)
+            if feature_hash and any(feature_hash == str(keyword) for keyword in hash_keywords):
+                is_eligible = True
+        for key, values in qualifiers.items():
+            normalized_values = _normalize_qualifier_values(values)
+            qualifier_key = str(key).lower()
+            if qualifier_key in rules and any(v in rules[qualifier_key] for v in normalized_values):
+                is_eligible = True
+                break
+        if not is_eligible:
+            return ""
+
     if not whitelist_map and any(bl in final_label.lower() for bl in blacklist):
         return ""
 
-    if final_label and label_override_rules:
+    if final_label and non_hash_rules:
         override_text = _resolve_label_override(
             feature=feature,
             feature_type=feature_type,
             qualifiers=qualifiers,
             base_label=final_label,
-            rules=label_override_rules,
+            rules=non_hash_rules,
             record_id=record_id,
         )
         if override_text is not None:

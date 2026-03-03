@@ -79,6 +79,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     labelTextFeatureOverrides,
     labelTextBulkOverrides,
     labelTextFeatureOverrideSources,
+    labelVisibilityOverrides,
     labelOverrideBuildWarning,
     labelReflowProcessing,
     labelReflowLastError
@@ -292,6 +293,12 @@ json.dumps({
         String(sourceText ?? '')
       ])
     );
+    const visibilityOverridesSnapshot = Object.fromEntries(
+      Object.entries(labelVisibilityOverrides || {}).map(([featureId, modeValue]) => [
+        String(featureId || ''),
+        String(modeValue || '')
+      ])
+    );
 
     if (isReflow) {
       labelReflowProcessing.value = true;
@@ -393,7 +400,8 @@ json.dumps({
       const labelOverride = buildLabelOverrideTsv(labelTextFeatureOverrides, labelTextBulkOverrides, {
         editableLabels: editableLabelsSnapshot,
         extractedFeatures: extractedFeatures.value,
-        featureOverrideSources: featureOverrideSourcesSnapshot
+        featureOverrideSources: featureOverrideSourcesSnapshot,
+        visibilityOverrides: visibilityOverridesSnapshot
       });
       if (labelOverride.skippedMissingSourceCount > 0) {
         labelOverrideBuildWarning.value = `${labelOverride.skippedMissingSourceCount} feature override row(s) were skipped due to missing source label context.`;

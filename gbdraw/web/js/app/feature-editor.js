@@ -55,6 +55,7 @@ export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions
     loadLabelOverrideTable: labelActions.loadLabelOverrideTable,
     updateClickedFeatureLabelText: labelActions.updateClickedFeatureLabelText,
     handleLabelTextScopeChoice: labelActions.handleLabelTextScopeChoice,
+    handleGlobalLabelModeChoice: labelActions.handleGlobalLabelModeChoice,
     requestLabelTextChangeByFeatureId: labelActions.requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey: labelActions.requestLabelTextChangeByKey,
     resetAllLabelTextOverrides: labelActions.resetAllLabelTextOverrides

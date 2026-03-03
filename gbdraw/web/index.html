@@ -1001,6 +1001,15 @@
                                     {{ clickedFeature.labelKey }}
                                 </span>
                             </div>
+                            <div class="mb-2">
+                                <label class="text-[10px] font-medium text-slate-500 block mb-1">Label visibility</label>
+                                <select v-model="clickedFeature.labelVisibility"
+                                        class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                                    <option value="default">Default (follow filter)</option>
+                                    <option value="on">On (force show)</option>
+                                    <option value="off">Off (force hide)</option>
+                                </select>
+                            </div>
                             <input type="text"
                                    v-model="clickedFeature.labelText"
                                    @keydown.enter.prevent="updateClickedFeatureLabelText"
@@ -1109,6 +1118,29 @@
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
                                 Cancel
                             </button>
+                        </div>
+                    </div>
+
+                    <!-- Global Label Mode Dialog -->
+                    <div v-if="globalLabelModeDialog.show"
+                         class="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center">
+                        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">Enable Labels</h3>
+                            <p class="text-sm text-slate-600 mb-4">
+                                Labels are currently off. Choose how to show labels for this edit.
+                            </p>
+                            <div class="flex flex-col gap-2">
+                                <button @click="handleGlobalLabelModeChoice('whitelist_only')"
+                                        class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-funnel text-lg"></i>
+                                    <span>Whitelist only</span>
+                                </button>
+                                <button @click="handleGlobalLabelModeChoice('show_all')"
+                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-list text-lg"></i>
+                                    <span>Show all labels</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
 

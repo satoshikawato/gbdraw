@@ -51,10 +51,12 @@ export const setupWatchers = ({
     labelTextBulkOverrides,
     labelTextFeatureOverrides,
     labelTextFeatureOverrideSources,
+    labelVisibilityOverrides,
     labelOverrideBuildWarning,
     showFeaturePanel,
     clickedLabel,
     labelTextScopeDialog,
+    globalLabelModeDialog,
     files,
     currentColors,
     pyodideReady,
@@ -65,7 +67,9 @@ export const setupWatchers = ({
     linearSeqs,
     autoLabelReflowEnabled,
     labelReflowRequestSeq,
-    labelReflowRequestReason
+    labelReflowRequestReason,
+    labelReflowForceRequestSeq,
+    labelReflowForceRequestReason
   } = state;
 
   const {
@@ -260,6 +264,15 @@ export const setupWatchers = ({
   );
 
   watch(
+    () => labelReflowForceRequestSeq.value,
+    async (nextSeq, prevSeq) => {
+      if (nextSeq === prevSeq) return;
+      if (typeof runLabelReflow !== 'function') return;
+      await runLabelReflow(labelReflowForceRequestReason.value || 'label-edit');
+    }
+  );
+
+  watch(
     () => mode.value,
     (newMode, oldMode) => {
       if (oldMode === 'circular') {
@@ -282,6 +295,7 @@ export const setupWatchers = ({
       Object.keys(labelTextFeatureOverrides).forEach((k) => delete labelTextFeatureOverrides[k]);
       Object.keys(labelTextBulkOverrides).forEach((k) => delete labelTextBulkOverrides[k]);
       Object.keys(labelTextFeatureOverrideSources).forEach((k) => delete labelTextFeatureOverrideSources[k]);
+      Object.keys(labelVisibilityOverrides).forEach((k) => delete labelVisibilityOverrides[k]);
       labelOverrideContextKey.value = '';
       labelOverrideBuildWarning.value = '';
       labelSearch.value = '';
@@ -293,6 +307,10 @@ export const setupWatchers = ({
       labelTextScopeDialog.sourceText = '';
       labelTextScopeDialog.featureId = '';
       labelTextScopeDialog.matchingCount = 0;
+      globalLabelModeDialog.show = false;
+      globalLabelModeDialog.featureId = '';
+      globalLabelModeDialog.featureType = '';
+      globalLabelModeDialog.resolve = null;
       showFeaturePanel.value = false;
     }
   );

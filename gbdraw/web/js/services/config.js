@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
-const SESSION_VERSION = 3;
+const SESSION_VERSION = 4;
 
 const safeDeepMerge = (target, source) => {
   if (!source || typeof source !== 'object') return;
@@ -441,6 +441,7 @@ export const exportSession = async (titleOverride = null) => {
       labelTextFeatureOverrides: JSON.parse(JSON.stringify(state.labelTextFeatureOverrides)),
       labelTextBulkOverrides: JSON.parse(JSON.stringify(state.labelTextBulkOverrides)),
       labelTextFeatureOverrideSources: JSON.parse(JSON.stringify(state.labelTextFeatureOverrideSources)),
+      labelVisibilityOverrides: JSON.parse(JSON.stringify(state.labelVisibilityOverrides)),
       labelOverrideContextKey: String(state.labelOverrideContextKey.value || '')
     },
     losatCache: {
@@ -591,6 +592,16 @@ export const importSession = async (e) => {
       });
     } else {
       Object.keys(state.labelTextFeatureOverrideSources).forEach((k) => delete state.labelTextFeatureOverrideSources[k]);
+    }
+    if (features.labelVisibilityOverrides && typeof features.labelVisibilityOverrides === 'object') {
+      Object.keys(state.labelVisibilityOverrides).forEach((k) => delete state.labelVisibilityOverrides[k]);
+      Object.entries(features.labelVisibilityOverrides).forEach(([key, value]) => {
+        const normalized = String(value || '').trim().toLowerCase();
+        if (normalized !== 'on' && normalized !== 'off') return;
+        state.labelVisibilityOverrides[String(key || '')] = normalized;
+      });
+    } else {
+      Object.keys(state.labelVisibilityOverrides).forEach((k) => delete state.labelVisibilityOverrides[k]);
     }
     state.labelOverrideContextKey.value = String(features.labelOverrideContextKey || '');
 

@@ -273,12 +273,15 @@ const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText
 const labelTextFeatureOverrides = reactive({}); // { featureId: text }
 const labelTextBulkOverrides = reactive({}); // { sourceText: text }
 const labelTextFeatureOverrideSources = reactive({}); // { featureId: sourceText }
+const labelVisibilityOverrides = reactive({}); // { featureId: 'on' | 'off' }
 const labelOverrideContextKey = ref('');
 const labelOverrideBuildWarning = ref('');
 const autoLabelReflowEnabled = ref(false);
 const labelReflowProcessing = ref(false);
 const labelReflowRequestSeq = ref(0);
 const labelReflowRequestReason = ref('');
+const labelReflowForceRequestSeq = ref(0);
+const labelReflowForceRequestReason = ref('');
 const labelReflowLastError = ref(null);
 
 // SVG Feature Click state
@@ -327,6 +330,13 @@ const labelTextScopeDialog = reactive({
   sourceText: '',
   featureId: '',
   matchingCount: 0
+});
+
+const globalLabelModeDialog = reactive({
+  show: false,
+  featureId: '',
+  featureType: '',
+  resolve: null
 });
 
 // Sidebar resize state
@@ -567,12 +577,15 @@ export const state = {
   labelTextFeatureOverrides,
   labelTextBulkOverrides,
   labelTextFeatureOverrideSources,
+  labelVisibilityOverrides,
   labelOverrideContextKey,
   labelOverrideBuildWarning,
   autoLabelReflowEnabled,
   labelReflowProcessing,
   labelReflowRequestSeq,
   labelReflowRequestReason,
+  labelReflowForceRequestSeq,
+  labelReflowForceRequestReason,
   labelReflowLastError,
   svgContainer,
   clickedFeature,
@@ -584,6 +597,7 @@ export const state = {
   colorScopeDialog,
   resetColorDialog,
   labelTextScopeDialog,
+  globalLabelModeDialog,
   sidebarWidth,
   isResizing,
   showLegendPanel,

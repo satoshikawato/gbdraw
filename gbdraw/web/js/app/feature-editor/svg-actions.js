@@ -64,6 +64,7 @@ export const createFeatureSvgActions = ({ state, getFeatureColor, onFeaturePopup
       labelKey: '',
       labelText: '',
       labelSourceText: '',
+      labelVisibility: 'default',
       hasEditableLabel: false,
       labelUnavailableReason: 'No editable feature label for this feature in current diagram.'
     };

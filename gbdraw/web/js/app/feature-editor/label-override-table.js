@@ -2,6 +2,7 @@ const LABEL_OVERRIDE_COLUMN_COUNT = 5;
 const PRIMARY_HEADER = ['record_id', 'feature_type', 'qualifier', 'value', 'label_text'];
 const LEGACY_HEADER = ['record', 'feature_type', 'qualifier_key', 'qualifier_value_regex', 'label_text'];
 const CANDIDATE_QUALIFIERS = ['protein_id', 'locus_tag', 'gene'];
+const DEFAULT_LABEL_QUALIFIER_PRIORITY = ['product', 'gene', 'locus_tag', 'protein_id', 'old_locus_tag', 'note'];
 
 const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const normalizeTsvCell = (value) => String(value ?? '').replace(/[\t\r\n]+/g, ' ').trim();
@@ -65,6 +66,59 @@ export const buildFeatureMetadataMap = (features) => {
   });
 
   return metadataByFeatureId;
+};
+
+const buildEditableLabelByFeatureId = (editableLabels) => {
+  const labelsByFeatureId = new Map();
+  if (!Array.isArray(editableLabels)) return labelsByFeatureId;
+
+  editableLabels.forEach((entry) => {
+    const featureIdKey = normalizeFeatureIdKey(entry?.featureId);
+    if (!featureIdKey || labelsByFeatureId.has(featureIdKey)) return;
+    labelsByFeatureId.set(featureIdKey, {
+      text: String(entry?.text ?? ''),
+      sourceText: String(entry?.sourceText ?? '')
+    });
+  });
+  return labelsByFeatureId;
+};
+
+const normalizeVisibilityOverrides = (visibilityOverrides) => {
+  const normalized = new Map();
+  if (!visibilityOverrides || typeof visibilityOverrides !== 'object') return normalized;
+
+  Object.entries(visibilityOverrides).forEach(([featureIdRaw, modeRaw]) => {
+    const featureIdKey = normalizeFeatureIdKey(featureIdRaw);
+    if (!featureIdKey) return;
+    const mode = String(modeRaw || '').trim().toLowerCase();
+    if (mode !== 'on' && mode !== 'off') return;
+    normalized.set(featureIdKey, mode);
+  });
+
+  return normalized;
+};
+
+const getRegexForFeatureHash = (featureIdRaw) => `^${escapeRegexLiteral(String(featureIdRaw || '').trim())}$`;
+
+const resolveDefaultLabelText = (metadata, editableLabelEntry = null) => {
+  const editableText = String(editableLabelEntry?.text || '').trim();
+  if (editableText) return editableText;
+  const sourceText = String(editableLabelEntry?.sourceText || '').trim();
+  if (sourceText) return sourceText;
+
+  if (!metadata) return '';
+  for (const qualifier of DEFAULT_LABEL_QUALIFIER_PRIORITY) {
+    const values = Array.isArray(metadata?.qualifiers?.[qualifier]) ? metadata.qualifiers[qualifier] : [];
+    const first = values.find((value) => String(value || '').trim() !== '');
+    if (first) return String(first);
+  }
+
+  const featureType = String(metadata.featureType || '').trim();
+  const location = String(metadata.location || '').trim();
+  if (featureType && location) return `${featureType} ${location}`;
+  if (featureType) return featureType;
+  if (location) return location;
+  return '';
 };
 
 const buildSourceTextByFeatureId = (editableLabels, featureOverrideSources = {}) => {
@@ -155,14 +209,52 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
   let skippedFeatureSourceCount = 0;
   let skippedMissingSourceCount = 0;
   const featureMetadataById = buildFeatureMetadataMap(options.extractedFeatures);
+  const editableLabelByFeatureId = buildEditableLabelByFeatureId(options.editableLabels);
   const sourceTextByFeatureId = buildSourceTextByFeatureId(
     options.editableLabels,
     options.featureOverrideSources
   );
   const featureIdsBySourceText = buildFeatureIdsBySourceText(options.editableLabels);
   const qualifierUniquenessIndex = buildQualifierUniquenessIndex(featureMetadataById);
+  const visibilityOverridesByFeatureId = normalizeVisibilityOverrides(options.visibilityOverrides);
+  const featureOverrideKeyById = new Map();
+  toSortedKeys(featureOverrides).forEach((featureIdRaw) => {
+    const key = normalizeFeatureIdKey(featureIdRaw);
+    if (!key || featureOverrideKeyById.has(key)) return;
+    featureOverrideKeyById.set(key, featureIdRaw);
+  });
+  const consumedFeatureOverrideKeys = new Set();
+
+  Array.from(visibilityOverridesByFeatureId.keys())
+    .sort((a, b) => a.localeCompare(b))
+    .forEach((featureIdKey) => {
+      const visibilityMode = visibilityOverridesByFeatureId.get(featureIdKey);
+      const metadata = featureMetadataById.get(featureIdKey);
+      const recordId = normalizeTsvCell(metadata?.record || '*') || '*';
+      const featureType = normalizeTsvCell(metadata?.featureType || '*') || '*';
+      const featureIdRaw = featureOverrideKeyById.get(featureIdKey) || featureIdKey;
+      const featureOverrideKey = featureOverrideKeyById.get(featureIdKey);
+      if (featureOverrideKey) {
+        consumedFeatureOverrideKeys.add(featureOverrideKey);
+      }
+      let nextText = '';
+      if (visibilityMode === 'on') {
+        const overrideText = featureOverrideKey
+          ? String(featureOverrides[featureOverrideKey] ?? '')
+          : '';
+        const fallbackText = resolveDefaultLabelText(
+          metadata,
+          editableLabelByFeatureId.get(featureIdKey) || null
+        );
+        nextText = normalizeTsvCell(overrideText || fallbackText || featureIdRaw || featureIdKey);
+      }
+      rows.push(
+        `${recordId}\t${featureType}\thash\t${getRegexForFeatureHash(featureIdRaw)}\t${nextText}`
+      );
+    });
 
   toSortedKeys(featureOverrides).forEach((featureIdRaw) => {
+    if (consumedFeatureOverrideKeys.has(featureIdRaw)) return;
     const featureId = String(featureIdRaw || '').trim();
     const featureIdKey = normalizeFeatureIdKey(featureId);
     if (!featureId || !featureIdKey) {
@@ -170,21 +262,22 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
       return;
     }
 
-    const sourceText = sourceTextByFeatureId.get(featureIdKey);
-    if (!sourceText) {
-      skippedMissingSourceCount += 1;
-      skippedFeatureSourceCount += 1;
-      return;
-    }
-
+    if (visibilityOverridesByFeatureId.has(featureIdKey)) return;
     const metadata = featureMetadataById.get(featureIdKey);
     const recordId = normalizeTsvCell(metadata?.record || '*') || '*';
     const featureType = normalizeTsvCell(metadata?.featureType || '*') || '*';
+    const sourceText = sourceTextByFeatureId.get(featureIdKey) || '';
     const preferredQualifier = selectPreferredQualifier(metadata, qualifierUniquenessIndex);
 
-    const qualifier = preferredQualifier?.qualifier || 'label';
-    const qualifierValue = preferredQualifier?.value || sourceText;
-    const qualifierRegex = `^${escapeRegexLiteral(qualifierValue)}$`;
+    let qualifier = 'hash';
+    let qualifierRegex = getRegexForFeatureHash(featureId);
+    if (preferredQualifier?.qualifier && preferredQualifier?.value) {
+      qualifier = preferredQualifier.qualifier;
+      qualifierRegex = `^${escapeRegexLiteral(preferredQualifier.value)}$`;
+    } else if (sourceText) {
+      qualifier = 'label';
+      qualifierRegex = `^${escapeRegexLiteral(sourceText)}$`;
+    }
     const nextText = normalizeTsvCell(featureOverrides[featureIdRaw]);
 
     rows.push(`${recordId}\t${featureType}\t${qualifier}\t${qualifierRegex}\t${nextText}`);
