@@ -6,7 +6,7 @@ from typing import Any
 import pandas as pd
 import pytest
 from Bio.Seq import Seq
-from Bio.SeqFeature import FeatureLocation, SeqFeature
+from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
@@ -16,6 +16,7 @@ from gbdraw.core.sequence import check_feature_presence
 from gbdraw.exceptions import InputFileError, ParseError, ValidationError
 from gbdraw.features.colors import compute_feature_hash, precompute_used_color_rules, preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
+from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
     read_feature_visibility_file,
@@ -62,6 +63,41 @@ def _base_label_filtering() -> dict[str, Any]:
         "whitelist_df": None,
         "qualifier_priority_df": None,
     }
+
+
+def _make_origin_spanning_seq_feature() -> SeqFeature:
+    return SeqFeature(
+        CompoundLocation(
+            [
+                SimpleLocation(0, 576, strand=-1),
+                SimpleLocation(16023, 16569, strand=-1),
+            ],
+            operator="join",
+        ),
+        type="D-loop",
+        qualifiers={},
+    )
+
+
+def _make_origin_spanning_feature_object(record_id: str = "rec1") -> FeatureObject:
+    return FeatureObject(
+        feature_id="feature_000000099",
+        location=[
+            FeatureLocationPart("block", "001", "negative", 1, 576, False),
+            FeatureLocationPart("block", "002", "negative", 16023, 16569, True),
+        ],
+        is_directional=False,
+        color="#cccccc",
+        note="",
+        label_text="",
+        coordinates=[
+            SimpleLocation(0, 576, strand=-1),
+            SimpleLocation(16023, 16569, strand=-1),
+        ],
+        type="D-loop",
+        qualifiers={},
+        record_id=record_id,
+    )
 
 
 def test_read_feature_visibility_file_ok(tmp_path: Path) -> None:
@@ -194,6 +230,41 @@ def test_should_render_feature_first_match_wins() -> None:
             selected_features_set=["CDS"],
             feature_visibility_rules=rules_show_first,
             record_id=record.id,
+        )
+        is True
+    )
+
+
+def test_should_render_feature_feature_object_origin_spanning_hash_rule_matches() -> None:
+    feature_object = _make_origin_spanning_feature_object(record_id="rec1")
+    feature_hash = compute_feature_hash(_make_origin_spanning_seq_feature(), record_id="rec1")
+    rules = compile_feature_visibility_rules(
+        _visibility_df([["*", "*", "hash", f"^{feature_hash}$", "hide"]])
+    )
+
+    assert (
+        should_render_feature(
+            feature_object,
+            selected_features_set=["D-loop"],
+            feature_visibility_rules=rules,
+            record_id="rec1",
+        )
+        is False
+    )
+
+
+def test_should_render_feature_feature_object_origin_spanning_record_location_rule_matches() -> None:
+    feature_object = _make_origin_spanning_feature_object(record_id="rec1")
+    rules = compile_feature_visibility_rules(
+        _visibility_df([["*", "*", "record_location", "^rec1:0..16569:-$", "show"]])
+    )
+
+    assert (
+        should_render_feature(
+            feature_object,
+            selected_features_set=["CDS"],
+            feature_visibility_rules=rules,
+            record_id="rec1",
         )
         is True
     )

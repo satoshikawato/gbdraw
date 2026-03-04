@@ -6,17 +6,24 @@ from typing import Any
 
 import pandas as pd
 import pytest
+from Bio import SeqIO
 from Bio.Seq import Seq
-from Bio.SeqFeature import FeatureLocation, SeqFeature
+from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
+from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
+from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import InputFileError, ParseError, ValidationError
-from gbdraw.features.colors import compute_feature_hash
+from gbdraw.features.colors import compute_feature_hash, preprocess_color_tables
+from gbdraw.features.factory import create_feature_dict
+from gbdraw.features.visibility import compile_feature_visibility_rules
 from gbdraw.features.objects import FeatureLocationPart, FeatureObject
+from gbdraw.io.colors import load_default_colors
+from gbdraw.labels.circular import prepare_label_list
 from gbdraw.labels.filtering import (
     get_label_text,
     preprocess_label_filtering,
@@ -67,6 +74,41 @@ def _make_record() -> SeqRecord:
     record = SeqRecord(Seq("A" * 400), id="rec1")
     record.features = [_make_seq_feature()]
     return record
+
+
+def _make_origin_spanning_seq_feature() -> SeqFeature:
+    return SeqFeature(
+        CompoundLocation(
+            [
+                SimpleLocation(0, 576, strand=-1),
+                SimpleLocation(16023, 16569, strand=-1),
+            ],
+            operator="join",
+        ),
+        type="D-loop",
+        qualifiers={},
+    )
+
+
+def _make_origin_spanning_feature_object(record_id: str = "rec1") -> FeatureObject:
+    return FeatureObject(
+        feature_id="feature_000000099",
+        location=[
+            FeatureLocationPart("block", "001", "negative", 1, 576, False),
+            FeatureLocationPart("block", "002", "negative", 16023, 16569, True),
+        ],
+        is_directional=False,
+        color="#cccccc",
+        note="",
+        label_text="",
+        coordinates=[
+            SimpleLocation(0, 576, strand=-1),
+            SimpleLocation(16023, 16569, strand=-1),
+        ],
+        type="D-loop",
+        qualifiers={},
+        record_id=record_id,
+    )
 
 
 def test_read_label_override_file_ok(tmp_path: Path) -> None:
@@ -347,6 +389,120 @@ def test_get_label_text_feature_object_record_location_override_works() -> None:
     )
 
     assert get_label_text(feature_object, filtering) == "Object record location match"
+
+
+def test_get_label_text_feature_object_origin_spanning_hash_override_uses_coordinates() -> None:
+    seq_feature = _make_origin_spanning_seq_feature()
+    feature_hash = compute_feature_hash(seq_feature, record_id="rec1")
+    feature_object = _make_origin_spanning_feature_object(record_id="rec1")
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            label_override_df=_rules_df(
+                [
+                    ["*", "*", "hash", f"^{re.escape(feature_hash)}$", "D-loop"],
+                ]
+            )
+        )
+    )
+
+    assert get_label_text(feature_object, filtering) == "D-loop"
+
+
+def test_get_label_text_feature_object_origin_spanning_record_location_override_uses_coordinates() -> None:
+    feature_object = _make_origin_spanning_feature_object(record_id="rec1")
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            label_override_df=_rules_df(
+                [
+                    ["*", "*", "record_location", "^rec1:0..16569:-$", "D-loop"],
+                ]
+            )
+        )
+    )
+
+    assert get_label_text(feature_object, filtering) == "D-loop"
+
+
+def test_get_label_text_hmmtdna_d_loop_hash_override_matches_origin_spanning_feature_object() -> None:
+    input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+    d_loop_feature = next(feature for feature in record.features if feature.type == "D-loop")
+    d_loop_hash = compute_feature_hash(d_loop_feature, record_id=record.id)
+    feature_object = _make_origin_spanning_feature_object(record_id=record.id)
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            label_override_df=_rules_df(
+                [
+                    [record.id, "D-loop", "hash", f"^{re.escape(d_loop_hash)}$", "D-loop"],
+                ]
+            )
+        )
+    )
+
+    assert get_label_text(feature_object, filtering) == "D-loop"
+
+
+def test_prepare_label_list_hmmtdna_d_loop_hash_override_survives_feature_object_recheck() -> None:
+    input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+    d_loop_feature = next(feature for feature in record.features if feature.type == "D-loop")
+    d_loop_hash = compute_feature_hash(d_loop_feature, record_id=record.id)
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        show_labels=True,
+        strandedness=True,
+        track_type="tuckin",
+        resolve_overlaps=False,
+        allow_inner_labels=False,
+    )
+    override_df = _rules_df(
+        [[record.id, "D-loop", "hash", f"^{re.escape(d_loop_hash)}$", "D-loop"]]
+    )
+    config_dict["labels"]["filtering"]["label_override_df"] = override_df
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    default_colors = load_default_colors("", "default")
+    color_table, default_colors = preprocess_color_tables(None, default_colors)
+    visibility_rules = compile_feature_visibility_rules(
+        pd.DataFrame(
+            [[record.id, "D-loop", "hash", f"^{re.escape(d_loop_hash)}$", "show"]],
+            columns=["record_id", "feature_type", "qualifier", "value", "action"],
+        )
+    )
+    selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "repeat_region"]
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        selected_features,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+        feature_visibility_rules=visibility_rules,
+    )
+
+    labels = prepare_label_list(
+        feature_dict,
+        len(record.seq),
+        cfg.canvas.circular.radius,
+        cfg.canvas.circular.track_ratio,
+        config_dict,
+        cfg=cfg,
+    )
+
+    d_loop_label = next((label for label in labels if label.get("label_text") == "D-loop"), None)
+    assert d_loop_label is not None
+
+    d_loop_parts = list(d_loop_feature.location.parts)
+    merged_start = max(int(part.start) for part in d_loop_parts)
+    merged_end = min(int(part.end) for part in d_loop_parts)
+    wrapped_span = (len(record.seq) - merged_start) + merged_end
+    expected_midpoint = (merged_start + (wrapped_span / 2.0)) % len(record.seq)
+    assert abs(float(d_loop_label["middle"]) - float(expected_midpoint)) <= 1e-6
+    assert bool(d_loop_label["is_embedded"])
 
 
 def test_get_label_text_invalid_override_regex_raises_parse_error() -> None:
