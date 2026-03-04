@@ -2,6 +2,7 @@ import { createFeatureColorActions } from './feature-editor/color-actions.js';
 import { createFeatureLabelActions } from './feature-editor/label-actions.js';
 import { createFeatureRuleActions } from './feature-editor/rule-actions.js';
 import { createFeatureSvgActions } from './feature-editor/svg-actions.js';
+import { createFeatureVisibilityActions } from './feature-editor/visibility-actions.js';
 
 export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions }) => {
   const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions });
@@ -17,6 +18,10 @@ export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions
     legendActions,
     svgActions,
     ruleActions,
+    featureSvgActions
+  });
+  const visibilityActions = createFeatureVisibilityActions({
+    state,
     featureSvgActions
   });
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
@@ -35,6 +40,9 @@ export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions
     clearAllSpecificRules: ruleActions.clearAllSpecificRules,
     getFeatureColor: ruleActions.getFeatureColor,
     canEditFeatureColor: ruleActions.canEditFeatureColor,
+    getFeatureVisibility: visibilityActions.getFeatureVisibility,
+    setFeatureVisibility: visibilityActions.setFeatureVisibility,
+    updateClickedFeatureVisibility: visibilityActions.updateClickedFeatureVisibility,
     requestFeatureColorChange: colorActions.requestFeatureColorChange,
     updateClickedFeatureColor: colorActions.updateClickedFeatureColor,
     handleColorScopeChoice: colorActions.handleColorScopeChoice,

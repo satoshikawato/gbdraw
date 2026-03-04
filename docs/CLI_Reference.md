@@ -68,6 +68,7 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
               [--label_table LABEL_TABLE]
+              [--feature_table FEATURE_TABLE]
               [--outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET]
               [--outer_label_y_radius_offset OUTER_LABEL_Y_RADIUS_OFFSET]
               [--inner_label_x_radius_offset INNER_LABEL_X_RADIUS_OFFSET]
@@ -167,6 +168,10 @@ options:
                         Supports pseudo
                         keys such as record_location, hash, location, and
                         label.
+  --feature_table FEATURE_TABLE
+                        Path to a TSV file defining per-feature visibility
+                        overrides (optional). Expected columns:
+                        record_id, feature_type, qualifier, value, action.
   --outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET
                         Outer label x-radius offset factor (float; default
                         from config)
@@ -236,6 +241,7 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
               [--label_table LABEL_TABLE]
+              [--feature_table FEATURE_TABLE]
               [--feature_height FEATURE_HEIGHT] [--gc_height GC_HEIGHT]
               [--comparison_height COMPARISON_HEIGHT]
               [--scale_style {bar,ruler}]
@@ -369,6 +375,10 @@ options:
                         Supports pseudo
                         keys such as record_location, hash, location, and
                         label.
+  --feature_table FEATURE_TABLE
+                        Path to a TSV file defining per-feature visibility
+                        overrides (optional). Expected columns:
+                        record_id, feature_type, qualifier, value, action.
   --feature_height FEATURE_HEIGHT
                         Feature vertical width (optional; float; default: 80
                         (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes
@@ -420,6 +430,33 @@ options:
                         Reverse complement record per input file (repeatable;
                         order matches input files). Accepted values: 1/0,
                         true/false, yes/no.
+```
+
+## Feature Visibility Table (`--feature_table`)
+
+`--feature_table` lets you force individual features to show/hide independently of `-k/--features`.
+
+- File format: tab-separated, 5 columns (no header required)
+  - `record_id`, `feature_type`, `qualifier`, `value`, `action`
+- Supported qualifiers:
+  - `hash`, `location`, `record_location`, and regular qualifiers like `gene`, `locus_tag`, `product`
+- Wildcards:
+  - Use `*` in `record_id` and/or `feature_type` to match any value
+- Action values (normalized internally):
+  - Show: `show`, `on`, `display`, `include`, `true`, `1`
+  - Hide: `hide`, `off`, `suppress`, `exclude`, `false`, `0`
+- Rule order:
+  - Rules are evaluated from top to bottom, and the first matching rule wins
+- Fallback behavior:
+  - If no rule matches, normal `-k/--features` type filtering is used
+
+Example:
+
+```tsv
+record_id	feature_type	qualifier	value	action
+*	*	hash	^f3a8c1de$	hide
+*	*	record_location	^NC_000913\.3:1000\.\.1500:\+$	show
+*	misc_feature	note	IS element	show
 ```
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | [Recipes](./RECIPES.md) | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)

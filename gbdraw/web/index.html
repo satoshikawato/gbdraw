@@ -995,6 +995,19 @@
                             </p>
                         </div>
                         <div class="mb-4">
+                            <label class="text-xs font-medium text-slate-500 block mb-1">Feature visibility</label>
+                            <select v-model="clickedFeature.featureVisibility"
+                                    @change="updateClickedFeatureVisibility(clickedFeature.featureVisibility)"
+                                    class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                                <option value="default">Default (follow feature filters)</option>
+                                <option value="on">On (force show)</option>
+                                <option value="off">Off (force hide)</option>
+                            </select>
+                            <p class="text-[10px] text-slate-400 mt-1">
+                                Applies to this feature only (hash ID rule).
+                            </p>
+                        </div>
+                        <div class="mb-4">
                             <div class="flex items-center justify-between mb-1">
                                 <label class="text-xs font-medium text-slate-500 block">Label text</label>
                                 <span v-if="clickedFeature.hasEditableLabel" class="text-[10px] font-mono text-slate-400">
@@ -1491,6 +1504,9 @@
                                 <template v-else>
                                     Label: (not editable)
                                 </template>
+                            </p>
+                            <p class="text-[10px] text-slate-400 truncate">
+                                Visibility: {{ getFeatureVisibility(feat) }}
                             </p>
                         </div>
                         <div v-if="filteredFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">

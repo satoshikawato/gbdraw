@@ -131,6 +131,7 @@ def _precalculate_feature_track_heights(
             canvas_config.resolve_overlaps,
             label_filtering,
             directional_feature_types=feature_config.directional_feature_types,
+            feature_visibility_rules=feature_config.feature_visibility_rules,
         )
         min_top_y = 0.0
         max_bottom_y = 0.0
@@ -319,13 +320,21 @@ def assemble_linear_diagram(
     # Prepare legend group
     has_blast = bool(blast_files)
     # Determine which features should be displayed in the legend
-    features_present = check_feature_presence(records, feature_config.selected_features_set)
+    features_present = check_feature_presence(
+        records,
+        feature_config.selected_features_set,
+        feature_visibility_rules=feature_config.feature_visibility_rules,
+    )
     # Pre-compute which color rules are actually used for accurate legend
     color_map, default_color_map = preprocess_color_tables(
         feature_config.color_table, feature_config.default_colors
     )
     used_color_rules, default_used_features = precompute_used_color_rules(
-        records, color_map, default_color_map, set(feature_config.selected_features_set)
+        records,
+        color_map,
+        default_color_map,
+        set(feature_config.selected_features_set),
+        feature_visibility_rules=feature_config.feature_visibility_rules,
     )
     # Prepare legend table
     legend_table = prepare_legend_table(

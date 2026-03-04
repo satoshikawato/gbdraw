@@ -195,6 +195,7 @@ def load_gff_fasta(
     fasta_list: List[str],
     mode: str,
     selected_features_set=None,
+    keep_all_features: bool = False,
     load_comparison: bool = False,
     record_selectors: list[str] | None = None,
     reverse_flags: list[bool] | None = None,
@@ -221,9 +222,13 @@ def load_gff_fasta(
 
         try:
             logger.info("INFO: Loading GFF3 file {}".format(gff_file))
-            gff_records: list[SeqRecord] = [
-                filter_features_by_type(record, selected_features_set) for record in GFF.parse(gff_file)
-            ]
+            if keep_all_features or selected_features_set is None:
+                gff_records = list(GFF.parse(gff_file))
+            else:
+                feature_types_to_keep = set(selected_features_set)
+                gff_records = [
+                    filter_features_by_type(record, feature_types_to_keep) for record in GFF.parse(gff_file)
+                ]
             logger.info("INFO: Loading FASTA file {}".format(fasta_file))
             fasta_records: list[SeqRecord] = list(SeqIO.parse(fasta_file, "fasta"))
             merged_records = merge_gff_fasta_records(gff_records, fasta_records)

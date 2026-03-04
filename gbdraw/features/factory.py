@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import List, Dict, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 
 from .objects import GeneObject, RepeatObject, FeatureObject
+from .visibility import should_render_feature
 from ..labels.filtering import get_label_text
 from .colors import get_color, get_color_with_info
 from .coordinates import get_exon_and_intron_coordinates
@@ -140,6 +141,7 @@ def create_feature_dict(
     label_filtering,
     split_overlaps_by_strand: bool = False,
     directional_feature_types: Optional[Set[str]] = None,
+    feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
 ) -> Tuple[Dict[str, FeatureObject], Set[Tuple[str, str]]]:
     """
     Creates a dictionary mapping feature IDs to FeatureObjects from a GenBank record.
@@ -164,7 +166,12 @@ def create_feature_dict(
     )
 
     for feature in gb_record.features:
-        if feature.type not in selected_features_set:
+        if not should_render_feature(
+            feature,
+            selected_features_set,
+            feature_visibility_rules=feature_visibility_rules,
+            record_id=gb_record.id,
+        ):
             continue
 
         # Track which color rules are actually used

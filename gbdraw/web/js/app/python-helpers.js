@@ -221,8 +221,26 @@ def regenerate_definition_svg(gb_path, species=None, strain=None, font_size=18):
 def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None):
     """Extract feature info from GenBank file for UI display"""
     from Bio import SeqIO
-    from gbdraw.features.colors import compute_feature_hash
     from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
+    import hashlib
+
+    def _compute_svg_feature_hash(feature, record_id=None):
+        loc = feature.location
+        if hasattr(loc, "parts") and loc.parts:
+            first_part = loc.parts[0]
+            start = int(first_part.start)
+            end = int(first_part.end)
+            strand = first_part.strand
+        else:
+            start = int(loc.start)
+            end = int(loc.end)
+            strand = loc.strand
+        if record_id is not None:
+            key = f"{record_id}:{feature.type}:{start}:{end}:{strand}"
+        else:
+            key = f"{feature.type}:{start}:{end}:{strand}"
+        return "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+
     features = []
     record_ids = []
     idx = 0
@@ -254,7 +272,9 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
                             parsed_features = [str(v).strip() for v in loaded if str(v).strip()]
                     if not parsed_features:
                         parsed_features = [part.strip() for part in selected_raw.split(",") if part.strip()]
-            selected_feature_set = set(parsed_features)
+            # Treat null/empty selection as "no feature-type filter" so UI can list all features.
+            if parsed_features:
+                selected_feature_set = set(parsed_features)
         if region_spec:
             from gbdraw.io.regions import apply_region_specs, parse_region_specs
             records = apply_region_specs(records, parse_region_specs([region_spec]))
@@ -272,7 +292,7 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
                 strand_raw = feat.location.strand
 
                 try:
-                    svg_id = compute_feature_hash(feat, record_id=hash_record_id)
+                    svg_id = _compute_svg_feature_hash(feat, record_id=hash_record_id)
                 except Exception:
                     svg_id = None
                 if not svg_id:
@@ -286,7 +306,6 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
                         hash_start = start
                         hash_end = end
                         hash_strand = strand_raw
-                    import hashlib
                     key = f"{feat.type}:{hash_start}:{hash_end}:{hash_strand}"
                     svg_id = "f" + hashlib.md5(key.encode()).hexdigest()[:8]
                 qualifiers = {}

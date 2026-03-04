@@ -28,6 +28,11 @@ from .shapes import (
     parse_feature_shape_overrides,
     resolve_directional_feature_types,
 )
+from .visibility import (
+    compile_feature_visibility_rules,
+    read_feature_visibility_file,
+    should_render_feature,
+)
 
 __all__ = [
     # colors
@@ -56,6 +61,10 @@ __all__ = [
     "parse_feature_shape_assignment",
     "parse_feature_shape_overrides",
     "resolve_directional_feature_types",
+    # visibility
+    "compile_feature_visibility_rules",
+    "read_feature_visibility_file",
+    "should_render_feature",
 ]
 
 

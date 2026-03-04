@@ -20,6 +20,7 @@ from .labels.filtering import (
     read_qualifier_priority_file,
 )  # type: ignore[reportMissingImports]
 from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
+from .features.visibility import read_feature_visibility_file
 from .exceptions import ValidationError
 
 from .cli_utils.common import (
@@ -246,6 +247,11 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         default="")
     parser.add_argument(
+        '--feature_table',
+        help='Path to a TSV file defining per-feature visibility overrides (optional)',
+        type=str,
+        default="")
+    parser.add_argument(
         '--outer_label_x_radius_offset',
         help='Outer label x-radius offset factor (float; default from config)',
         type=float)
@@ -352,6 +358,7 @@ def circular_main(cmd_args) -> None:
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
     label_table_path: str = args.label_table
+    feature_table_path: str = args.feature_table
     scale_interval: Optional[int] = args.scale_interval
     legend_box_size = args.legend_box_size
     legend_font_size = args.legend_font_size
@@ -363,7 +370,13 @@ def circular_main(cmd_args) -> None:
     if args.gbk:
         gb_records = load_gbks(args.gbk, "circular")
     elif args.gff and args.fasta:
-        gb_records = load_gff_fasta(args.gff, args.fasta, "circular", selected_features_set)
+        gb_records = load_gff_fasta(
+            args.gff,
+            args.fasta,
+            "circular",
+            selected_features_set,
+            keep_all_features=bool(feature_table_path),
+        )
     else:
         # This case should not be reached due to arg validation
         logger.error("Invalid input file configuration.")
@@ -418,6 +431,7 @@ def circular_main(cmd_args) -> None:
         user_defined_default_colors, palette)
     
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
+    feature_table: Optional[DataFrame] = read_feature_visibility_file(feature_table_path)
     show_gc, show_skew = suppress_gc_content_and_skew(
         suppress_gc, suppress_skew)
 
@@ -506,6 +520,7 @@ def circular_main(cmd_args) -> None:
             color_table=color_table,
             default_colors=default_colors,
             selected_features_set=selected_features_set,
+            feature_table=feature_table,
             feature_shapes=feature_shapes or None,
             output_prefix=outfile_prefix,
             legend=legend,

@@ -7,11 +7,16 @@ export const createFeatureSvgActions = ({ state, getFeatureColor, onFeaturePopup
     selectedResultIndex,
     extractedFeatures,
     featureColorOverrides,
+    featureVisibilityOverrides,
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
     skipCaptureBaseConfig
   } = state;
+  const normalizeVisibilityMode = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    return normalized === 'on' || normalized === 'off' ? normalized : 'default';
+  };
 
   const getPopupPosition = (eventLike, popupWidth = 360, popupHeight = 360) => {
     const margin = 12;
@@ -49,6 +54,8 @@ export const createFeatureSvgActions = ({ state, getFeatureColor, onFeaturePopup
     const currentStrokeColor = featureElement?.getAttribute('stroke') || '#000000';
     const currentStrokeWidth = parseFloat(featureElement?.getAttribute('stroke-width')) || 0.5;
 
+    const visibilityMode = normalizeVisibilityMode(featureVisibilityOverrides[feat.svg_id]);
+
     return {
       id: feat.id,
       svg_id: feat.svg_id,
@@ -65,6 +72,7 @@ export const createFeatureSvgActions = ({ state, getFeatureColor, onFeaturePopup
       labelText: '',
       labelSourceText: '',
       labelVisibility: 'default',
+      featureVisibility: visibilityMode,
       hasEditableLabel: false,
       labelUnavailableReason: 'No editable feature label for this feature in current diagram.'
     };
@@ -125,6 +133,40 @@ export const createFeatureSvgActions = ({ state, getFeatureColor, onFeaturePopup
     }
   };
 
+  const applyVisibilityPreviewBySvgId = (svgId, modeRaw) => {
+    const mode = normalizeVisibilityMode(modeRaw);
+    if (!svgId || !svgContainer.value) return false;
+    const svg = svgContainer.value.querySelector('svg');
+    if (!svg) return false;
+
+    try {
+      const elements = svg.querySelectorAll(`#${CSS.escape(svgId)}`);
+      if (!elements || elements.length === 0) {
+        console.log(`Instant preview: element ${svgId} not found for visibility update`);
+        return false;
+      }
+      elements.forEach((el) => {
+        if (mode === 'off') {
+          el.setAttribute('display', 'none');
+        } else {
+          el.removeAttribute('display');
+        }
+      });
+
+      const serializer = new XMLSerializer();
+      const newContent = serializer.serializeToString(svg);
+      skipCaptureBaseConfig.value = true;
+      const idx = selectedResultIndex.value;
+      if (idx >= 0 && results.value.length > idx) {
+        results.value[idx] = { ...results.value[idx], content: newContent };
+      }
+      return true;
+    } catch (e) {
+      console.error('Instant visibility preview error:', e);
+      return false;
+    }
+  };
+
   const attachSvgFeatureHandlers = () => {
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
@@ -174,6 +216,7 @@ export const createFeatureSvgActions = ({ state, getFeatureColor, onFeaturePopup
 
   return {
     applyInstantPreview,
+    applyVisibilityPreviewBySvgId,
     attachSvgFeatureHandlers,
     openFeatureEditorForFeature
   };

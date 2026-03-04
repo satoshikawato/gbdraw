@@ -307,6 +307,7 @@ class SeqRecordGroup:
             resolve_overlaps,
             label_filtering,
             directional_feature_types=self.feature_config.directional_feature_types,
+            feature_visibility_rules=self.feature_config.feature_visibility_rules,
         )
         label_list = []
         if self.show_labels:

@@ -21,6 +21,7 @@ from .labels.filtering import (
     read_qualifier_priority_file,
 )  # type: ignore[reportMissingImports]
 from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
+from .features.visibility import read_feature_visibility_file
 from .exceptions import ValidationError
 
 
@@ -348,6 +349,11 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         default="")
     parser.add_argument(
+        '--feature_table',
+        help='Path to a TSV file defining per-feature visibility overrides (optional)',
+        type=str,
+        default="")
+    parser.add_argument(
         '--feature_height',
         help='Feature vertical width (optional; float; default: 80 (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes >= 50 kb)',
         type=float),
@@ -483,6 +489,7 @@ def linear_main(cmd_args) -> None:
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
     label_table_path: str = args.label_table
+    feature_table_path: str = args.feature_table
     selected_features_set: str = args.features.split(',')
     feature_shapes = parse_feature_shape_overrides(args.feature_shape)
     feature_height: Optional[float] = args.feature_height
@@ -512,6 +519,7 @@ def linear_main(cmd_args) -> None:
     default_colors: Optional[DataFrame] = load_default_colors(
         user_defined_default_colors, palette, load_comparison)
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
+    feature_table: Optional[DataFrame] = read_feature_visibility_file(feature_table_path)
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
     filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
@@ -639,7 +647,8 @@ def linear_main(cmd_args) -> None:
             args.fasta,
             "linear",
             selected_features_set,
-            load_comparison,
+            keep_all_features=bool(feature_table_path),
+            load_comparison=load_comparison,
             record_selectors=record_selectors,
             reverse_flags=reverse_flags,
         )
@@ -684,6 +693,7 @@ def linear_main(cmd_args) -> None:
         color_table=color_table,
         default_colors=default_colors,
         selected_features_set=selected_features_set,
+        feature_table=feature_table,
         feature_shapes=feature_shapes or None,
         output_prefix=out_file_prefix,
         legend=legend,
