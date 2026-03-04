@@ -4324,6 +4324,93 @@ def rearrange_labels_fc(
     return _assign_leader_start_points(best_labels, total_length)
 
 
+def _coalesce_origin_spanning_label_segment(
+    feature_object,
+    total_length: int,
+) -> tuple[int, int, str] | None:
+    """
+    Return a merged origin-spanning segment for boundary-touching two-block features.
+
+    This mirrors circular feature path coalescing so label midpoint logic stays
+    consistent with rendered feature geometry.
+    """
+    if total_length <= 0:
+        return None
+
+    block_coords = [coord for coord in feature_object.location if coord.kind == "block"]
+    if len(block_coords) != 2:
+        return None
+
+    starts = [int(coord.start) for coord in block_coords]
+    ends = [int(coord.end) for coord in block_coords]
+    if min(starts) > 1 or max(ends) < int(total_length):
+        return None
+
+    left_blocks = [coord for coord in block_coords if int(coord.start) <= 1]
+    right_blocks = [coord for coord in block_coords if int(coord.end) >= int(total_length)]
+    if len(left_blocks) != 1 or len(right_blocks) != 1 or left_blocks[0] is right_blocks[0]:
+        return None
+
+    merged_start = max(starts)
+    merged_end = min(ends)
+    if merged_start <= merged_end:
+        return None
+
+    return merged_start, merged_end, str(block_coords[0].strand)
+
+
+def _segment_midpoint_bp(
+    segment_start: int,
+    segment_end: int,
+    total_length: int,
+) -> float:
+    """Return segment midpoint in bp, supporting origin-spanning segments."""
+    if segment_start <= segment_end or total_length <= 0:
+        return float(segment_start + segment_end) / 2.0
+
+    span_bp = (float(total_length) - float(segment_start)) + float(segment_end)
+    return float((float(segment_start) + (0.5 * span_bp)) % float(total_length))
+
+
+def _segment_span_bp(
+    segment_start: int,
+    segment_end: int,
+    total_length: int,
+) -> float:
+    """Return segment span in bp, supporting origin-spanning segments."""
+    if segment_start <= segment_end or total_length <= 0:
+        return float(abs(int(segment_end - segment_start)))
+    return float((float(total_length) - float(segment_start)) + float(segment_end))
+
+
+def _is_label_embedded_in_segment(
+    label_start: float,
+    label_end: float,
+    segment_start: int,
+    segment_end: int,
+    total_length: int,
+) -> bool:
+    """Return True when label interval is strictly contained in the target segment."""
+    label_span = float(label_end) - float(label_start)
+    if label_span <= 0.0:
+        return False
+
+    if segment_start <= segment_end:
+        return (label_start > float(segment_start)) and (label_end < float(segment_end))
+
+    if total_length <= 0:
+        return False
+
+    feature_span = (float(total_length) - float(segment_start)) + float(segment_end)
+    if feature_span <= 0.0:
+        return False
+
+    start_offset = (float(label_start) - float(segment_start)) % float(total_length)
+    end_offset = start_offset + label_span
+    eps = 1e-9
+    return (start_offset > eps) and (end_offset < (feature_span - eps))
+
+
 def prepare_label_list(
     feature_dict,
     total_length,
@@ -4390,18 +4477,27 @@ def prepare_label_list(
             label_middle = 0
             coordinate_strand: str = "undefined"
             list_of_coordinates = feature_object.coordinates
-            # `FeatureObject.strand` is derived at creation time; keep placement pure.
-            for coordinate in list_of_coordinates:
-                coordinate_start = int(coordinate.start)
-                coordinate_end = int(coordinate.end)
-                coordinate_strand = get_strand(coordinate.strand)
-                interval_length = abs(int(coordinate_end - coordinate_start) + 1)
-                interval_middle = int(coordinate_end + coordinate_start) / 2
-                if interval_length > longest_segment_length:
-                    longest_segment_start = coordinate_start
-                    longest_segment_end = coordinate_end
-                    longeset_segment_middle = interval_middle
-                    longest_segment_length = interval_length
+            origin_spanning_segment = _coalesce_origin_spanning_label_segment(feature_object, total_length)
+            if origin_spanning_segment is not None:
+                longest_segment_start, longest_segment_end, coordinate_strand = origin_spanning_segment
+                longeset_segment_middle = _segment_midpoint_bp(
+                    longest_segment_start,
+                    longest_segment_end,
+                    total_length,
+                )
+            else:
+                # `FeatureObject.strand` is derived at creation time; keep placement pure.
+                for coordinate in list_of_coordinates:
+                    coordinate_start = int(coordinate.start)
+                    coordinate_end = int(coordinate.end)
+                    coordinate_strand = get_strand(coordinate.strand)
+                    interval_length = abs(int(coordinate_end - coordinate_start) + 1)
+                    interval_middle = int(coordinate_end + coordinate_start) / 2
+                    if interval_length > longest_segment_length:
+                        longest_segment_start = coordinate_start
+                        longest_segment_end = coordinate_end
+                        longeset_segment_middle = interval_middle
+                        longest_segment_length = interval_length
 
             # Get track_id for overlap resolution
             track_id = getattr(feature_object, 'feature_track_id', 0)
@@ -4422,7 +4518,11 @@ def prepare_label_list(
             is_outer_label = (feature_object.strand == "positive") or (allow_inner_labels is False)
             feature_inner_radius = radius * min(float(factors[0]), float(factors[2]))
             feature_outer_radius = radius * max(float(factors[0]), float(factors[2]))
-            longest_segment_bp = abs(int(longest_segment_end - longest_segment_start))
+            longest_segment_bp = _segment_span_bp(
+                longest_segment_start,
+                longest_segment_end,
+                total_length,
+            )
             is_short_directional_feature = (
                 bool(getattr(feature_object, "is_directional", False))
                 and longest_segment_bp < circular_arrow_length_bp
@@ -4498,10 +4598,13 @@ def prepare_label_list(
                         - effective_anchor_clearance_px
                         - OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX,
                     )
-            if label_start > longest_segment_start and label_end < longest_segment_end:
-                is_embedded = True
-            else:
-                is_embedded = False
+            is_embedded = _is_label_embedded_in_segment(
+                label_start,
+                label_end,
+                longest_segment_start,
+                longest_segment_end,
+                total_length,
+            )
             label_entry["label_text"] = feature_label_text
             label_entry["middle"] = label_middle
             label_entry["start"] = label_start

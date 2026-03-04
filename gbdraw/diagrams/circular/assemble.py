@@ -1316,6 +1316,7 @@ def add_record_on_circular_canvas(
             label_filtering,
             split_overlaps_by_strand=split_overlaps_by_strand,
             directional_feature_types=feature_config.directional_feature_types,
+            feature_visibility_rules=feature_config.feature_visibility_rules,
         )
 
     rendered_feature_band_all_tracks: tuple[float, float] | None = None
@@ -1789,14 +1790,22 @@ def assemble_circular_diagram(
     # Prefer a pre-parsed config model when available to avoid repeated from_dict() calls.
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
 
-    features_present = check_feature_presence(gb_record, feature_config.selected_features_set)
+    features_present = check_feature_presence(
+        gb_record,
+        feature_config.selected_features_set,
+        feature_visibility_rules=feature_config.feature_visibility_rules,
+    )
 
     # Pre-compute which color rules are actually used for accurate legend
     color_map, default_color_map = preprocess_color_tables(
         feature_config.color_table, feature_config.default_colors
     )
     used_color_rules, default_used_features = precompute_used_color_rules(
-        gb_record, color_map, default_color_map, set(feature_config.selected_features_set)
+        gb_record,
+        color_map,
+        default_color_map,
+        set(feature_config.selected_features_set),
+        feature_visibility_rules=feature_config.feature_visibility_rules,
     )
     legend_table = prepare_legend_table(
         gc_config,

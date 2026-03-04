@@ -268,6 +268,7 @@ const showFeaturePanel = ref(false);
 const featurePanelTab = ref('colors'); // 'colors' | 'labels'
 const featureSearch = ref('');
 const featureColorOverrides = reactive({}); // {featureKey: color}
+const featureVisibilityOverrides = reactive({}); // {svg_id: 'on' | 'off'}
 const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
 const labelTextFeatureOverrides = reactive({}); // { featureId: text }
@@ -480,8 +481,7 @@ const addedLegendCaptions = ref(new Set());
 const fileLegendCaptions = ref(new Set());
 
 const filteredFeatures = computed(() => {
-  // First filter by feature type (only show features that are actually drawn)
-  let features = extractedFeatures.value.filter((f) => adv.features.includes(f.type));
+  let features = [...extractedFeatures.value];
 
   // Filter by selected record (if multiple records exist)
   if (featureRecordIds.value.length > 1) {
@@ -572,6 +572,7 @@ export const state = {
   featurePanelTab,
   featureSearch,
   featureColorOverrides,
+  featureVisibilityOverrides,
   labelSearch,
   editableLabels,
   labelTextFeatureOverrides,

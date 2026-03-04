@@ -438,6 +438,7 @@ export const exportSession = async (titleOverride = null) => {
       featureRecordIds: state.featureRecordIds.value,
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: JSON.parse(JSON.stringify(state.featureColorOverrides)),
+      featureVisibilityOverrides: JSON.parse(JSON.stringify(state.featureVisibilityOverrides)),
       labelTextFeatureOverrides: JSON.parse(JSON.stringify(state.labelTextFeatureOverrides)),
       labelTextBulkOverrides: JSON.parse(JSON.stringify(state.labelTextBulkOverrides)),
       labelTextFeatureOverrideSources: JSON.parse(JSON.stringify(state.labelTextFeatureOverrideSources)),
@@ -566,6 +567,16 @@ export const importSession = async (e) => {
       });
     } else {
       Object.keys(state.featureColorOverrides).forEach((k) => delete state.featureColorOverrides[k]);
+    }
+    if (features.featureVisibilityOverrides && typeof features.featureVisibilityOverrides === 'object') {
+      Object.keys(state.featureVisibilityOverrides).forEach((k) => delete state.featureVisibilityOverrides[k]);
+      Object.entries(features.featureVisibilityOverrides).forEach(([key, value]) => {
+        const mode = String(value || '').trim().toLowerCase();
+        if (mode !== 'on' && mode !== 'off') return;
+        state.featureVisibilityOverrides[String(key || '')] = mode;
+      });
+    } else {
+      Object.keys(state.featureVisibilityOverrides).forEach((k) => delete state.featureVisibilityOverrides[k]);
     }
 
     if (features.labelTextFeatureOverrides && typeof features.labelTextFeatureOverrides === 'object') {

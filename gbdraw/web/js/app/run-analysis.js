@@ -31,6 +31,11 @@ const makeSafeFilename = (name) => {
   const cleaned = String(name || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
   return cleaned || 'losat';
 };
+const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const normalizeFeatureVisibilityMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'on' || normalized === 'off' ? normalized : 'default';
+};
 
 export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFeatureOverrides }) => {
   const {
@@ -46,6 +51,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     addedLegendCaptions,
     fileLegendCaptions,
     featureColorOverrides,
+    featureVisibilityOverrides,
     legendEntries,
     deletedLegendEntries,
     legendColorOverrides,
@@ -409,6 +415,19 @@ json.dumps({
       if (labelOverride.tsv) {
         pyodide.FS.writeFile('/web_label_table.tsv', labelOverride.tsv);
         args.push('--label_table', '/web_label_table.tsv');
+      }
+      const featureVisibilityRows = [];
+      Object.entries(featureVisibilityOverrides || {}).forEach(([featureIdRaw, modeRaw]) => {
+        const featureId = String(featureIdRaw || '').trim();
+        if (!featureId) return;
+        const mode = normalizeFeatureVisibilityMode(modeRaw);
+        if (mode === 'default') return;
+        const action = mode === 'on' ? 'show' : 'hide';
+        featureVisibilityRows.push(`*\t*\thash\t^${escapeRegexLiteral(featureId)}$\t${action}`);
+      });
+      if (featureVisibilityRows.length > 0) {
+        pyodide.FS.writeFile('/web_feature_table.tsv', `${featureVisibilityRows.join('\n')}\n`);
+        args.push('--feature_table', '/web_feature_table.tsv');
       }
       if (!isReflow) {
         editableLabels.value = [];
@@ -863,13 +882,14 @@ json.dumps({
       generatedLegendPosition.value = form.legend;
 
       extractedFeatures.value = [];
-      const selectedFeatureTypes = adv.features.join(',');
 
       if (mode.value === 'circular' && cInputType.value === 'gb') {
         try {
-          const featJson = pyodide.globals.get('extract_features_from_genbank')('/input.gb', null, null, null, selectedFeatureTypes);
+          const featJson = pyodide.globals.get('extract_features_from_genbank')('/input.gb', null, null, null, null);
           const featData = JSON.parse(featJson);
-          if (!featData.error && featData.features) {
+          if (featData?.error) {
+            console.warn('Feature extraction failed for circular input:', featData.error);
+          } else if (Array.isArray(featData?.features)) {
             extractedFeatures.value = featData.features;
             featureRecordIds.value = featData.record_ids || [];
             selectedFeatureRecordIdx.value = 0;
@@ -877,6 +897,8 @@ json.dumps({
             console.log(
               `Extracted ${featData.features.length} features from ${featData.record_ids.length} record(s) for color editor.`
             );
+          } else {
+            console.warn('Feature extraction returned an unexpected payload for circular input.', featData);
           }
         } catch (e) {
           console.log('Could not extract features:', e);
@@ -896,10 +918,12 @@ json.dumps({
                 regionSpec,
                 recordSelector,
                 reverseFlag,
-                selectedFeatureTypes
+                null
               );
             const featData = JSON.parse(featJson);
-            if (!featData.error && featData.features) {
+            if (featData?.error) {
+              console.warn(`Feature extraction failed for linear input #${i + 1}:`, featData.error);
+            } else if (Array.isArray(featData?.features)) {
               featData.features.forEach((f) => {
                 f.fileIdx = i;
                 f.displayRecordId = `File ${i + 1}: ${f.record_id}`;
@@ -909,6 +933,8 @@ json.dumps({
               featData.record_ids.forEach((rid, ridx) => {
                 allRecordLabels.push({ label: `File ${i + 1}: ${rid}`, fileIdx: i, recordIdx: ridx });
               });
+            } else {
+              console.warn(`Feature extraction returned an unexpected payload for linear input #${i + 1}.`, featData);
             }
           }
           extractedFeatures.value = allFeatures;

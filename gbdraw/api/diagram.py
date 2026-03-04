@@ -25,6 +25,7 @@ from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImpor
 from gbdraw.config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from gbdraw.config.toml import load_config_toml  # type: ignore[reportMissingImports]
 from gbdraw.io.colors import load_default_colors, read_color_table  # type: ignore[reportMissingImports]
+from gbdraw.features.visibility import read_feature_visibility_file  # type: ignore[reportMissingImports]
 from gbdraw.configurators import (  # type: ignore[reportMissingImports]
     BlastMatchConfigurator,
     FeatureDrawingConfigurator,
@@ -73,6 +74,8 @@ def assemble_linear_diagram_from_records(
     default_colors_palette: str = "default",
     default_colors_file: str | None = None,
     selected_features_set: Sequence[str] | None = None,
+    feature_table: DataFrame | None = None,
+    feature_table_file: str | None = None,
     feature_shapes: Mapping[str, str] | None = None,
     output_prefix: str = "out",
     legend: str = "right",
@@ -98,6 +101,8 @@ def assemble_linear_diagram_from_records(
         raise ValidationError("records is empty")
     if color_table is None and color_table_file is not None:
         color_table = read_color_table(color_table_file)
+    if feature_table is None and feature_table_file is not None:
+        feature_table = read_feature_visibility_file(feature_table_file)
 
     if default_colors is None:
         default_colors = load_default_colors(
@@ -163,6 +168,7 @@ def assemble_linear_diagram_from_records(
         color_table=color_table,
         default_colors=default_colors,
         selected_features_set=list(selected_features_set),
+        feature_table=feature_table,
         feature_shapes=feature_shapes,
         config_dict=config_dict,
         canvas_config=canvas_config,
@@ -222,6 +228,8 @@ def assemble_circular_diagram_from_record(
     default_colors_palette: str = "default",
     default_colors_file: str | None = None,
     selected_features_set: Sequence[str] | None = None,
+    feature_table: DataFrame | None = None,
+    feature_table_file: str | None = None,
     feature_shapes: Mapping[str, str] | None = None,
     output_prefix: str = "out",
     legend: str = "right",
@@ -243,6 +251,8 @@ def assemble_circular_diagram_from_record(
     """
     if color_table is None and color_table_file is not None:
         color_table = read_color_table(color_table_file)
+    if feature_table is None and feature_table_file is not None:
+        feature_table = read_feature_visibility_file(feature_table_file)
 
     if default_colors is None:
         default_colors = load_default_colors(
@@ -346,6 +356,7 @@ def assemble_circular_diagram_from_record(
         color_table=color_table,
         default_colors=default_colors,
         selected_features_set=list(selected_features_set),
+        feature_table=feature_table,
         feature_shapes=feature_shapes,
         config_dict=config_dict,
         canvas_config=canvas_config,
@@ -413,6 +424,8 @@ def build_circular_diagram(
         default_colors_palette=colors.default_colors_palette if colors else "default",
         default_colors_file=colors.default_colors_file if colors else None,
         selected_features_set=options.selected_features_set,
+        feature_table=options.feature_table,
+        feature_table_file=options.feature_table_file,
         feature_shapes=options.feature_shapes,
         output_prefix=output.output_prefix if output else "out",
         legend=output.legend if output else "right",
@@ -466,6 +479,8 @@ def build_linear_diagram(
         default_colors_palette=colors.default_colors_palette if colors else "default",
         default_colors_file=colors.default_colors_file if colors else None,
         selected_features_set=options.selected_features_set,
+        feature_table=options.feature_table,
+        feature_table_file=options.feature_table_file,
         feature_shapes=options.feature_shapes,
         output_prefix=output.output_prefix if output else "out",
         legend=output.legend if output else "right",

@@ -10,6 +10,7 @@ from gbdraw.features.shapes import (
     normalize_feature_shape_overrides,
     resolve_directional_feature_types,
 )
+from gbdraw.features.visibility import compile_feature_visibility_rules
 
 
 class FeatureDrawingConfigurator:
@@ -32,6 +33,7 @@ class FeatureDrawingConfigurator:
         selected_features_set: List[str],
         config_dict: Dict,
         canvas_config,
+        feature_table: Optional[DataFrame] = None,
         feature_shapes: Mapping[str, str] | None = None,
         cfg: GbdrawConfig | None = None,
     ) -> None:
@@ -45,6 +47,8 @@ class FeatureDrawingConfigurator:
         """
 
         self.color_table: Optional[DataFrame] = color_table
+        self.feature_table: Optional[DataFrame] = feature_table
+        self.feature_visibility_rules = compile_feature_visibility_rules(feature_table)
         self.default_colors: DataFrame = default_colors
         self.selected_features_set: List[str] = selected_features_set
         self.feature_shapes = normalize_feature_shape_overrides(feature_shapes)

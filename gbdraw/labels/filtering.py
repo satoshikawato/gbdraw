@@ -220,6 +220,42 @@ def _get_feature_record_id(feature: Any, record_id: Optional[str]) -> Optional[s
     return str(feature_record_id)
 
 
+def _iter_feature_coordinates(feature: Any) -> list[Any]:
+    coordinates = getattr(feature, "coordinates", None)
+    if coordinates is None:
+        return []
+    try:
+        return list(coordinates)
+    except Exception:
+        return []
+
+
+def _extract_first_coordinate_part(feature: Any) -> Optional[tuple[int, int, Any]]:
+    for part in _iter_feature_coordinates(feature):
+        try:
+            start = int(getattr(part, "start"))
+            end = int(getattr(part, "end"))
+            strand = getattr(part, "strand", None)
+        except Exception:
+            continue
+        return start, end, strand
+    return None
+
+
+def _extract_coordinate_bounds(feature: Any) -> Optional[tuple[int, int]]:
+    starts: list[int] = []
+    ends: list[int] = []
+    for part in _iter_feature_coordinates(feature):
+        try:
+            starts.append(int(getattr(part, "start")))
+            ends.append(int(getattr(part, "end")))
+        except Exception:
+            continue
+    if not starts or not ends:
+        return None
+    return min(starts), max(ends)
+
+
 def _extract_first_location_part(feature: Any) -> Optional[tuple[int, int, Any]]:
     if isinstance(feature, SeqFeature):
         loc = feature.location
@@ -227,6 +263,10 @@ def _extract_first_location_part(feature: Any) -> Optional[tuple[int, int, Any]]
             part = loc.parts[0]
             return int(part.start), int(part.end), part.strand
         return int(loc.start), int(loc.end), loc.strand
+
+    coordinate_part = _extract_first_coordinate_part(feature)
+    if coordinate_part is not None:
+        return coordinate_part
 
     location = getattr(feature, "location", None)
     if not location:
@@ -302,6 +342,10 @@ def _get_feature_location_str(feature: Any) -> Optional[str]:
             return f"{int(feature.location.start)}..{int(feature.location.end)}"
         except Exception:
             return None
+
+    coordinate_bounds = _extract_coordinate_bounds(feature)
+    if coordinate_bounds is not None:
+        return f"{coordinate_bounds[0]}..{coordinate_bounds[1]}"
 
     location = getattr(feature, "location", None)
     if not location:
@@ -664,7 +708,7 @@ def get_label_text(feature: Any, label_filtering: dict, record_id: Optional[str]
     if not whitelist_map and any(bl in final_label.lower() for bl in blacklist):
         return ""
 
-    if final_label and non_hash_rules:
+    if non_hash_rules:
         override_text = _resolve_label_override(
             feature=feature,
             feature_type=feature_type,

@@ -5,6 +5,8 @@ from typing import List, Union
 
 from Bio.SeqRecord import SeqRecord
 
+from ..features.visibility import should_render_feature
+
 
 def create_dict_for_sequence_lengths(records: list[SeqRecord]) -> dict[str, int]:
     return {record.id: len(record.seq) for record in records}
@@ -26,21 +28,29 @@ def determine_output_file_prefix(gb_records, output_prefix, record_count, access
 
 
 def check_feature_presence(
-    records: Union[List[SeqRecord], SeqRecord], features_list: List[str]
-) -> dict:
+    records: Union[List[SeqRecord], SeqRecord],
+    features_list: List[str],
+    feature_visibility_rules=None,
+) -> list[str]:
     if isinstance(records, SeqRecord):
         records = [records]
 
-    features_to_be_checked = set(features_list)
     features_present: list[str] = []
+    seen_feature_types: set[str] = set()
 
     for record in records:
         for feature in record.features:
-            if feature.type in features_to_be_checked:
-                features_present.append(feature.type)
-                features_to_be_checked.remove(feature.type)
-                if not features_to_be_checked:
-                    break
+            if not should_render_feature(
+                feature,
+                features_list,
+                feature_visibility_rules=feature_visibility_rules,
+                record_id=record.id,
+            ):
+                continue
+            if feature.type in seen_feature_types:
+                continue
+            seen_feature_types.add(feature.type)
+            features_present.append(feature.type)
     return features_present
 
 
