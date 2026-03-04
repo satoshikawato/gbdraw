@@ -252,18 +252,10 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
       const metadata = featureMetadataById.get(featureIdKey);
       const recordId = normalizeTsvCell(metadata?.record || '*') || '*';
       const featureType = normalizeTsvCell(metadata?.featureType || '*') || '*';
-      const featureIdRaw = featureOverrideKeyById.get(featureIdKey) || featureIdKey;
-      const selector = selectStableFeatureKey(
-        {
-          featureId: featureIdRaw,
-          record: metadata?.record || '',
-          featureType: metadata?.featureType || '',
-          position: metadata?.position || '',
-          qualifiers: metadata?.qualifiers || {}
-        },
-        featureUniquenessIndex
-      );
       const featureOverrideKey = featureOverrideKeyById.get(featureIdKey);
+      const featureIdRaw = String(
+        featureOverrideKey || metadata?.featureId || featureIdKey
+      ).trim() || featureIdKey;
       if (featureOverrideKey) {
         consumedFeatureOverrideKeys.add(featureOverrideKey);
       }
@@ -278,12 +270,9 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
         );
         nextText = normalizeTsvCell(overrideText || fallbackText || featureIdRaw || featureIdKey);
       }
-      const qualifierRegex = selector.qualifier === 'hash'
-        ? getRegexForFeatureHash(selector.value || featureIdRaw)
-        : `^${escapeRegexLiteral(selector.value)}$`;
-      if (selector.isFallbackHash) fallbackHashCount += 1;
+      const qualifierRegex = getRegexForFeatureHash(featureIdRaw);
       rows.push(
-        `${recordId}\t${featureType}\t${selector.qualifier}\t${qualifierRegex}\t${nextText}`
+        `${recordId}\t${featureType}\thash\t${qualifierRegex}\t${nextText}`
       );
     });
 
