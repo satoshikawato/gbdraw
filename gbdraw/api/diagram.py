@@ -80,8 +80,12 @@ _MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS = {
 _MULTI_RECORD_SIZE_MODES = {"linear", "sqrt", "equal"}
 _DEFINITION_POSITIONS = {"center", "top", "bottom"}
 _MULTI_RECORD_DEFINITION_MODES = {"shared", "legacy"}
+# Legacy fallback used only when a valid radius cannot be derived.
+_MULTI_RECORD_GRID_GAP_PX = 16.0
+_MULTI_RECORD_GRID_GAP_RATIO = 0.10
 _MULTI_RECORD_LEGEND_EDGE_PADDING_PX = 20.0
 _MULTI_RECORD_LEGEND_GRID_GAP_PX = 20.0
+_MULTI_RECORD_LEGEND_TOP_EDGE_PADDING_PX = 32.0
 _MULTI_RECORD_LEGEND_SHARED_GAP_PX = 20.0
 _MULTI_RECORD_SHARED_BOTTOM_MARGIN_PX = 24.0
 
@@ -248,6 +252,14 @@ def _resolve_multi_record_scale(
         scale = math.sqrt(ratio)
 
     return max(float(min_radius_ratio), min(float(scale), 1.0))
+
+
+def _resolve_multi_record_grid_gap_px(max_record_radius_px: float) -> float:
+    """Return inter-record gap as a ratio of the largest record radius."""
+    radius_px = float(max_record_radius_px)
+    if radius_px > 0:
+        return radius_px * _MULTI_RECORD_GRID_GAP_RATIO
+    return float(_MULTI_RECORD_GRID_GAP_PX)
 
 
 def _scale_circular_cfg(cfg: GbdrawConfig, *, scale: float) -> GbdrawConfig:
@@ -751,6 +763,7 @@ def assemble_circular_diagram_from_records(
     canvases: list[Drawing] = []
     widths: list[float] = []
     heights: list[float] = []
+    record_radii_px: list[float] = []
     for record in records:
         record_scale = _resolve_multi_record_scale(
             len(record.seq),
@@ -759,6 +772,7 @@ def assemble_circular_diagram_from_records(
             min_radius_ratio=normalized_multi_record_min_radius_ratio,
         )
         scaled_cfg = _scale_circular_cfg(cfg, scale=record_scale)
+        record_radii_px.append(float(scaled_cfg.canvas.circular.radius))
         sub_canvas = assemble_circular_diagram_from_record(
             record,
             config_dict=config_dict,
@@ -783,11 +797,58 @@ def assemble_circular_diagram_from_records(
         widths.append(_parse_svg_length_px(sub_canvas.attribs.get("width"), default=0.0))
         heights.append(_parse_svg_length_px(sub_canvas.attribs.get("height"), default=0.0))
 
-    cell_width = max(widths) if widths else 0.0
-    cell_height = max(heights) if heights else 0.0
+    max_record_radius_px = max(
+        [float(radius) for radius in record_radii_px if float(radius) > 0.0],
+        default=float(cfg.canvas.circular.radius),
+    )
+    grid_gap_px = _resolve_multi_record_grid_gap_px(max_record_radius_px)
+
     cols, rows = _estimate_square_grid(len(canvases))
-    grid_width = float(cols) * float(cell_width)
-    grid_height = float(rows) * float(cell_height)
+    row_heights: list[float] = [0.0] * rows
+    row_record_indices: list[list[int]] = [[] for _ in range(rows)]
+    record_sizes: list[tuple[float, float]] = []
+    for record_index, (width_px, height_px) in enumerate(zip(widths, heights)):
+        row = record_index // cols
+        width_value = float(width_px)
+        height_value = float(height_px)
+        row_heights[row] = max(row_heights[row], height_value)
+        row_record_indices[row].append(record_index)
+        record_sizes.append((width_value, height_value))
+
+    def _grid_offsets(lengths: list[float], gap: float) -> list[float]:
+        offsets: list[float] = []
+        cursor = 0.0
+        for index, length in enumerate(lengths):
+            offsets.append(cursor)
+            cursor += float(length)
+            if index < len(lengths) - 1:
+                cursor += float(gap)
+        return offsets
+
+    row_offsets = _grid_offsets(row_heights, grid_gap_px)
+    row_widths: list[float] = []
+    for row_indices in row_record_indices:
+        if not row_indices:
+            row_widths.append(0.0)
+            continue
+        row_width = sum(record_sizes[index][0] for index in row_indices)
+        row_width += max(0, len(row_indices) - 1) * grid_gap_px
+        row_widths.append(float(row_width))
+    grid_width = max(row_widths, default=0.0)
+    grid_height = (
+        (row_offsets[-1] + row_heights[-1]) if row_offsets else 0.0
+    )
+    record_offsets_x: dict[int, float] = {}
+    for row, row_indices in enumerate(row_record_indices):
+        if not row_indices:
+            continue
+        row_width = row_widths[row] if row < len(row_widths) else 0.0
+        cursor_x = max(0.0, (grid_width - row_width) * 0.5)
+        for position, record_index in enumerate(row_indices):
+            record_offsets_x[record_index] = cursor_x
+            cursor_x += record_sizes[record_index][0]
+            if position < len(row_indices) - 1:
+                cursor_x += grid_gap_px
 
     total_width = grid_width
     total_height = grid_height
@@ -915,7 +976,7 @@ def assemble_circular_diagram_from_records(
                 legend_offset_x = legend_config.legend_width * 0.05
                 legend_offset_y = (total_height - legend_config.legend_height) / 2.0
             elif legend_effective == "top":
-                legend_offset_y = _MULTI_RECORD_LEGEND_EDGE_PADDING_PX - legend_local_top
+                legend_offset_y = _MULTI_RECORD_LEGEND_TOP_EDGE_PADDING_PX - legend_local_top
                 legend_bottom = legend_offset_y + legend_local_bottom
                 grid_origin_y = legend_bottom + _MULTI_RECORD_LEGEND_GRID_GAP_PX
                 total_height = grid_origin_y + grid_height
@@ -968,11 +1029,14 @@ def assemble_circular_diagram_from_records(
 
     for record_index, sub_canvas in enumerate(canvases):
         row = record_index // cols
-        col = record_index % cols
-        sub_width = _parse_svg_length_px(sub_canvas.attribs.get("width"), default=cell_width)
-        sub_height = _parse_svg_length_px(sub_canvas.attribs.get("height"), default=cell_height)
-        cell_offset_x = grid_origin_x + float(col) * cell_width + (cell_width - sub_width) * 0.5
-        cell_offset_y = grid_origin_y + float(row) * cell_height + (cell_height - sub_height) * 0.5
+        default_size = record_sizes[record_index] if record_index < len(record_sizes) else (0.0, 0.0)
+        sub_width = _parse_svg_length_px(sub_canvas.attribs.get("width"), default=default_size[0])
+        sub_height = _parse_svg_length_px(sub_canvas.attribs.get("height"), default=default_size[1])
+        cell_height = row_heights[row] if row < len(row_heights) else sub_height
+        cell_origin_x = grid_origin_x + record_offsets_x.get(record_index, 0.0)
+        cell_origin_y = grid_origin_y + (row_offsets[row] if row < len(row_offsets) else 0.0)
+        cell_offset_x = cell_origin_x
+        cell_offset_y = cell_origin_y + (cell_height - sub_height) * 0.5
         record_group = Group(id=f"record_{record_index}")
         record_group.translate(cell_offset_x, cell_offset_y)
 

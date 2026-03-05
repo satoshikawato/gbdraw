@@ -13,8 +13,10 @@ from svgwrite import Drawing
 
 import gbdraw.circular as circular_cli_module
 import gbdraw.api.diagram as diagram_api_module
+import gbdraw.diagrams.circular.assemble as circular_assemble_module
 from gbdraw.api.diagram import assemble_circular_diagram_from_records
 from gbdraw.api.options import DiagramOptions, OutputOptions
+from gbdraw.core.text import calculate_bbox_dimensions
 from gbdraw.features.colors import compute_feature_hash
 
 
@@ -52,6 +54,103 @@ def _build_record_with_source(
             FeatureLocation(feature_start, feature_start + 120, strand=1),
             type="CDS",
             qualifiers={"product": [f"protein_{record_id}"]},
+        ),
+    ]
+    return record
+
+
+def _build_dense_record_with_source(
+    record_id: str,
+    *,
+    organism: str,
+    strain: str,
+    length: int = 2400,
+) -> SeqRecord:
+    record = SeqRecord(Seq("A" * length), id=record_id)
+    record.features = [
+        SeqFeature(
+            FeatureLocation(0, length, strand=1),
+            type="source",
+            qualifiers={
+                "organism": [organism],
+                "strain": [strain],
+            },
+        ),
+        SeqFeature(
+            FeatureLocation(120, 320, strand=1),
+            type="CDS",
+            qualifiers={"product": [f"protein_{record_id}_a"]},
+        ),
+        SeqFeature(
+            FeatureLocation(780, 930, strand=-1),
+            type="CDS",
+            qualifiers={"product": [f"protein_{record_id}_b"]},
+        ),
+        SeqFeature(
+            FeatureLocation(1180, 1320, strand=1),
+            type="tRNA",
+            qualifiers={"product": [f"trna_{record_id}"]},
+        ),
+        SeqFeature(
+            FeatureLocation(1710, 1960, strand=-1),
+            type="rRNA",
+            qualifiers={"product": [f"rrna_{record_id}"]},
+        ),
+    ]
+    return record
+
+
+def _build_multi_feature_record_with_source(
+    record_id: str,
+    *,
+    organism: str,
+    strain: str,
+    length: int = 2600,
+) -> SeqRecord:
+    record = SeqRecord(Seq("A" * length), id=record_id)
+    record.features = [
+        SeqFeature(
+            FeatureLocation(0, length, strand=1),
+            type="source",
+            qualifiers={
+                "organism": [organism],
+                "strain": [strain],
+            },
+        ),
+        SeqFeature(
+            FeatureLocation(80, 260, strand=1),
+            type="CDS",
+            qualifiers={"product": [f"cds_{record_id}"]},
+        ),
+        SeqFeature(
+            FeatureLocation(340, 480, strand=1),
+            type="tRNA",
+            qualifiers={"product": [f"trna_{record_id}"]},
+        ),
+        SeqFeature(
+            FeatureLocation(560, 760, strand=1),
+            type="rRNA",
+            qualifiers={"product": [f"rrna_{record_id}"]},
+        ),
+        SeqFeature(
+            FeatureLocation(840, 980, strand=-1),
+            type="tmRNA",
+            qualifiers={"product": [f"tmrna_{record_id}"]},
+        ),
+        SeqFeature(
+            FeatureLocation(1060, 1180, strand=1),
+            type="ncRNA",
+            qualifiers={"product": [f"ncrna_{record_id}"]},
+        ),
+        SeqFeature(
+            FeatureLocation(1260, 1410, strand=-1),
+            type="misc_RNA",
+            qualifiers={"product": [f"misc_{record_id}"]},
+        ),
+        SeqFeature(
+            FeatureLocation(1490, 1670, strand=1),
+            type="repeat_region",
+            qualifiers={"rpt_type": [f"repeat_{record_id}"]},
         ),
     ]
     return record
@@ -127,6 +226,13 @@ def _extract_viewbox_height(root: ET.Element) -> float:
     return parts[3]
 
 
+def _extract_viewbox_width(root: ET.Element) -> float:
+    view_box = root.attrib.get("viewBox", "")
+    parts = [float(part) for part in view_box.split()]
+    assert len(parts) == 4
+    return parts[2]
+
+
 def _extract_legend_text_transforms(root: ET.Element) -> list[tuple[float, float, str]]:
     ns = {"svg": "http://www.w3.org/2000/svg"}
     legend = root.find(".//svg:g[@id='legend']", ns)
@@ -144,6 +250,52 @@ def _extract_legend_text_transforms(root: ET.Element) -> list[tuple[float, float
         assert match is not None
         text_positions.append((float(match.group(1)), float(match.group(2)), content))
     return text_positions
+
+
+def _extract_horizontal_legend_row_centers(root: ET.Element) -> list[tuple[float, float]]:
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    legend = root.find(".//svg:g[@id='legend']", ns)
+    assert legend is not None
+    legend_x, _legend_y = _parse_translate(legend.attrib.get("transform", ""))
+
+    row_bounds: dict[float, tuple[float, float]] = {}
+    for entry in legend.findall("./svg:g[@data-legend-key]", ns):
+        text = entry.find("./svg:text", ns)
+        if text is None:
+            continue
+
+        rect: ET.Element | None = None
+        for candidate in entry.findall("./svg:path", ns):
+            fill = candidate.attrib.get("fill", "")
+            if fill and fill != "none" and not fill.startswith("url("):
+                rect = candidate
+                break
+        if rect is None:
+            continue
+
+        text_x, text_y = _parse_translate(text.attrib.get("transform", ""))
+        rect_x, _rect_y = _parse_translate(rect.attrib.get("transform", ""))
+        x_margin = text_x - rect_x
+
+        caption = "".join(text.itertext()).strip()
+        font_size = float(text.attrib.get("font-size", "0").replace("px", ""))
+        font_family = text.attrib.get("font-family", "")
+        text_width, _ = calculate_bbox_dimensions(caption, font_family, font_size, 72)
+
+        entry_left = legend_x + rect_x
+        entry_right = entry_left + float(text_width) + 2.0 * float(x_margin)
+        row_key = round(text_y, 3)
+        if row_key not in row_bounds:
+            row_bounds[row_key] = (entry_left, entry_right)
+        else:
+            row_min, row_max = row_bounds[row_key]
+            row_bounds[row_key] = (min(row_min, entry_left), max(row_max, entry_right))
+
+    centers: list[tuple[float, float]] = []
+    for row_key, (row_min, row_max) in row_bounds.items():
+        centers.append((row_key, (row_min + row_max) * 0.5))
+    centers.sort(key=lambda item: item[0])
+    return centers
 
 
 def _parse_translate(transform: str) -> tuple[float, float]:
@@ -379,6 +531,118 @@ def test_assemble_circular_diagram_from_records_min_ratio_clamp(
 
     assert len(captured_radii) == 2
     assert captured_radii[1] / captured_radii[0] == pytest.approx(0.55, rel=1e-6)
+
+
+@pytest.mark.circular
+def test_multi_record_variable_grid_width_is_tighter_than_fixed_cell_layout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("grid_a", 20, length=1000),
+        _build_record("grid_b", 220, length=900),
+        _build_record("grid_c", 420, length=800),
+    ]
+    planned_sizes = [
+        (1000.0, 900.0),
+        (700.0, 900.0),
+        (520.0, 900.0),
+    ]
+    captured_radii: list[float] = []
+
+    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
+        index_map = {record.id: idx for idx, record in enumerate(records)}
+        width, height = planned_sizes[index_map[gb_record.id]]
+        captured_radii.append(float(kwargs["cfg"].canvas.circular.radius))
+        return Drawing(
+            filename=f"{gb_record.id}.svg",
+            size=(f"{width}px", f"{height}px"),
+            viewBox=f"0 0 {width} {height}",
+            debug=False,
+        )
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+    )
+
+    root = ET.fromstring(canvas.tostring())
+    actual_width = _extract_viewbox_width(root)
+    expected_gap = max(captured_radii) * 0.1
+    fixed_cell_width = 2.0 * 1000.0
+    expected_variable_width = 1000.0 + 700.0 + expected_gap
+
+    assert actual_width == pytest.approx(expected_variable_width, rel=1e-6)
+    assert actual_width < fixed_cell_width
+
+
+@pytest.mark.circular
+def test_multi_record_row_gap_uses_ten_percent_of_max_radius_and_keeps_row_centered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("gap_a", 20, length=1000),
+        _build_record("gap_b", 220, length=900),
+        _build_record("gap_c", 420, length=800),
+        _build_record("gap_d", 620, length=700),
+        _build_record("gap_e", 820, length=600),
+        _build_record("gap_f", 1020, length=500),
+    ]
+    planned_sizes = [
+        (1000.0, 900.0),
+        (700.0, 900.0),
+        (520.0, 900.0),
+        (550.0, 900.0),
+        (420.0, 900.0),
+        (390.0, 900.0),
+    ]
+    captured_radii: list[float] = []
+
+    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
+        index_map = {record.id: idx for idx, record in enumerate(records)}
+        width, height = planned_sizes[index_map[gb_record.id]]
+        captured_radii.append(float(kwargs["cfg"].canvas.circular.radius))
+        return Drawing(
+            filename=f"{gb_record.id}.svg",
+            size=(f"{width}px", f"{height}px"),
+            viewBox=f"0 0 {width} {height}",
+            debug=False,
+        )
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    expected_gap = max(captured_radii) * 0.1
+    record_x = [
+        _extract_group_translate_xy(root, f"record_{index}")[0]
+        for index in range(len(records))
+    ]
+
+    assert record_x[1] - (record_x[0] + planned_sizes[0][0]) == pytest.approx(expected_gap, abs=1e-6)
+    assert record_x[2] - (record_x[1] + planned_sizes[1][0]) == pytest.approx(expected_gap, abs=1e-6)
+    assert record_x[4] - (record_x[3] + planned_sizes[3][0]) == pytest.approx(expected_gap, abs=1e-6)
+    assert record_x[5] - (record_x[4] + planned_sizes[4][0]) == pytest.approx(expected_gap, abs=1e-6)
+
+    row0_width = planned_sizes[0][0] + planned_sizes[1][0] + planned_sizes[2][0] + 2.0 * expected_gap
+    row1_width = planned_sizes[3][0] + planned_sizes[4][0] + planned_sizes[5][0] + 2.0 * expected_gap
+    expected_row1_start = (row0_width - row1_width) * 0.5
+    assert record_x[3] == pytest.approx(expected_row1_start, abs=1e-6)
 
 
 @pytest.mark.circular
@@ -631,7 +895,7 @@ def test_multi_record_default_shared_definition_and_record_summary_content() -> 
     shared_texts = _extract_group_texts(root, "shared_definition")
     assert shared_texts == ["Organism alpha Strain A"]
     shared_font_sizes = _extract_group_font_sizes(root, "shared_definition")
-    assert shared_font_sizes == [64.0]
+    assert shared_font_sizes == [32.0]
     shared_font_weights = _extract_group_font_weights(root, "shared_definition")
     assert shared_font_weights == ["normal"]
 
@@ -860,6 +1124,113 @@ def test_single_record_legend_top_bottom_positions_expand_and_move() -> None:
 
 
 @pytest.mark.circular
+@pytest.mark.parametrize(
+    ("legend_position", "show_labels", "track_type"),
+    [
+        ("top", False, "tuckin"),
+        ("bottom", False, "tuckin"),
+        ("top", True, "spreadout"),
+        ("bottom", True, "spreadout"),
+    ],
+)
+def test_single_record_top_bottom_legend_centers_between_edge_and_content(
+    monkeypatch: pytest.MonkeyPatch,
+    legend_position: str,
+    show_labels: bool,
+    track_type: str,
+) -> None:
+    record = _build_dense_record_with_source(
+        f"legend_midpoint_{legend_position}_{track_type}_{'labels' if show_labels else 'nolabels'}",
+        organism="Legend midpoint organism",
+        strain="Legend midpoint strain",
+        length=2600,
+    )
+    captured: dict[str, float] = {}
+    original = circular_assemble_module._position_single_top_bottom_legend_between_edge_and_content
+
+    def wrapped(
+        canvas: Drawing,
+        canvas_config: Any,
+        legend_config: Any,
+        *,
+        position: str,
+        content_top: float,
+        content_bottom: float,
+        edge_min_px: float = 16.0,
+        content_gap_px: float = 12.0,
+    ) -> None:
+        captured["position"] = 0.0 if position == "top" else 1.0
+        captured["content_top"] = float(content_top)
+        captured["content_bottom"] = float(content_bottom)
+        captured["edge_min_px"] = float(edge_min_px)
+        captured["content_gap_px"] = float(content_gap_px)
+        captured["legend_height"] = float(legend_config.legend_height)
+        captured["pre_total_height"] = float(canvas_config.total_height)
+        original(
+            canvas,
+            canvas_config,
+            legend_config,
+            position=position,
+            content_top=content_top,
+            content_bottom=content_bottom,
+            edge_min_px=edge_min_px,
+            content_gap_px=content_gap_px,
+        )
+        captured["post_total_height"] = float(canvas_config.total_height)
+
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "_position_single_top_bottom_legend_between_edge_and_content",
+        wrapped,
+    )
+
+    canvas = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=["CDS", "rRNA", "tRNA"],
+        legend=legend_position,
+        config_overrides={
+            "show_labels": show_labels,
+            "track_type": track_type,
+        },
+    )
+    root = ET.fromstring(canvas.tostring())
+    legend_top, legend_bottom = _extract_legend_vertical_bounds(root)
+    viewbox_height = _extract_viewbox_height(root)
+
+    assert "legend_height" in captured
+    edge_min_px = captured["edge_min_px"]
+    content_gap_px = captured["content_gap_px"]
+    legend_height = captured["legend_height"]
+
+    assert legend_top >= edge_min_px - 1e-6
+    assert legend_bottom <= viewbox_height - edge_min_px + 1e-6
+
+    actual_center = (legend_top + legend_bottom) / 2.0
+    if legend_position == "top":
+        lane_top = edge_min_px
+        lane_bottom_before = captured["content_top"] - content_gap_px
+        free_height = lane_bottom_before - lane_top
+        missing = max(0.0, legend_height - free_height)
+        final_content_top = captured["content_top"] + missing
+        expected_center = (lane_top + (final_content_top - content_gap_px)) / 2.0
+        assert captured["post_total_height"] == pytest.approx(
+            captured["pre_total_height"] + missing, rel=1e-6
+        )
+    else:
+        lane_top = captured["content_bottom"] + content_gap_px
+        lane_bottom_before = captured["pre_total_height"] - edge_min_px
+        free_height = lane_bottom_before - lane_top
+        missing = max(0.0, legend_height - free_height)
+        final_lane_bottom = captured["pre_total_height"] + missing - edge_min_px
+        expected_center = (lane_top + final_lane_bottom) / 2.0
+        assert captured["post_total_height"] == pytest.approx(
+            captured["pre_total_height"] + missing, rel=1e-6
+        )
+
+    assert actual_center == pytest.approx(expected_center, abs=2.0)
+
+
+@pytest.mark.circular
 def test_multi_record_legend_top_bottom_positions_expand_and_move() -> None:
     records = [
         _build_record_with_source(
@@ -938,7 +1309,7 @@ def test_multi_record_top_legend_keeps_minimum_top_padding() -> None:
     )
     root = ET.fromstring(canvas.tostring())
     legend_top, _legend_bottom = _extract_legend_vertical_bounds(root)
-    assert legend_top >= 20.0 - 1e-6
+    assert legend_top >= 32.0 - 1e-6
 
 
 @pytest.mark.circular
@@ -1017,6 +1388,68 @@ def test_circular_top_legend_uses_horizontal_entry_layout() -> None:
     right_unique_y = {round(y, 3) for _, y, _ in right_texts}
     assert len(top_unique_y) < len(top_texts)
     assert len(right_unique_y) == len(right_texts)
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("legend_position", ["top", "bottom"])
+def test_single_record_top_bottom_legend_centers_each_wrapped_row(
+    legend_position: str,
+) -> None:
+    record = _build_multi_feature_record_with_source(
+        f"single_legend_center_{legend_position}",
+        organism="Legend row center organism",
+        strain="Legend row center strain",
+        length=2600,
+    )
+    selected_features = ["CDS", "tRNA", "rRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+
+    canvas = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=selected_features,
+        legend=legend_position,
+    )
+    root = ET.fromstring(canvas.tostring())
+    row_centers = _extract_horizontal_legend_row_centers(root)
+
+    assert len(row_centers) >= 2
+    expected_center = row_centers[0][1]
+    for _row_y, center_x in row_centers[1:]:
+        assert center_x == pytest.approx(expected_center, abs=2.0)
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("legend_position", ["top", "bottom"])
+def test_multi_record_top_bottom_legend_centers_each_wrapped_row(
+    legend_position: str,
+) -> None:
+    records = [
+        _build_multi_feature_record_with_source(
+            "multi_legend_center_a",
+            organism="Multi legend center A",
+            strain="Strain A",
+            length=2600,
+        ),
+        _build_multi_feature_record_with_source(
+            "multi_legend_center_b",
+            organism="Multi legend center B",
+            strain="Strain B",
+            length=2100,
+        ),
+    ]
+    selected_features = ["CDS", "tRNA", "rRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=selected_features,
+        legend=legend_position,
+    )
+    root = ET.fromstring(canvas.tostring())
+    row_centers = _extract_horizontal_legend_row_centers(root)
+
+    assert len(row_centers) >= 2
+    expected_center = row_centers[0][1]
+    for _row_y, center_x in row_centers[1:]:
+        assert center_x == pytest.approx(expected_center, abs=2.0)
 
 
 @pytest.mark.circular

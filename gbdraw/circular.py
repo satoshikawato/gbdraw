@@ -180,7 +180,7 @@ def _get_args(args) -> argparse.Namespace:
         type=float)
     parser.add_argument(
         '--shared_definition_font_size',
-        help='Shared definition font size for multi-record shared mode (optional; default: 64).',
+        help='Shared definition font size for multi-record shared mode (optional; default: 32).',
         type=float)
     parser.add_argument(
         '--label_font_size',
