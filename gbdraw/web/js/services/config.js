@@ -127,6 +127,15 @@ const applyConfigData = (data) => {
     state.form.linear_track_layout = 'middle';
   }
   state.adv.feature_shapes = normalizeFeatureShapes(state.adv.feature_shapes);
+  const normalizedMultiRecordSizeMode = String(state.adv.multi_record_size_mode || '').trim().toLowerCase();
+  state.adv.multi_record_size_mode = ['linear', 'sqrt', 'equal'].includes(normalizedMultiRecordSizeMode)
+    ? normalizedMultiRecordSizeMode
+    : 'sqrt';
+  const numericMinRadiusRatio = Number(state.adv.multi_record_min_radius_ratio);
+  state.adv.multi_record_min_radius_ratio =
+    Number.isFinite(numericMinRadiusRatio) && numericMinRadiusRatio > 0 && numericMinRadiusRatio <= 1
+      ? numericMinRadiusRatio
+      : 0.55;
   if (data.losat) safeDeepMerge(state.losat, data.losat);
   if (data.colors) {
     const normalized = {};

@@ -16,6 +16,7 @@ from .configurators import (
 )
 from .diagram import (  # type: ignore[reportMissingImports]
     DEFAULT_SELECTED_FEATURES,
+    assemble_circular_diagram_from_records,
     assemble_circular_diagram_from_record,
     assemble_linear_diagram_from_records,
     build_circular_diagram,
@@ -60,6 +61,7 @@ __all__ = [
     "LegendDrawingConfigurator",
     # diagrams
     "DEFAULT_SELECTED_FEATURES",
+    "assemble_circular_diagram_from_records",
     "assemble_circular_diagram_from_record",
     "assemble_linear_diagram_from_records",
     "build_circular_diagram",

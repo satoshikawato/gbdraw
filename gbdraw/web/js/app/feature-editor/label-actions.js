@@ -8,7 +8,7 @@ import {
 
 const FEATURE_SELECTOR = 'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
 const EXCLUDED_GROUP_SELECTOR =
-  '#legend, #feature_legend, #pairwise_legend, #horizontal_legend, #vertical_legend, #length_bar, #tick';
+  '#legend, #feature_legend, #pairwise_legend, #horizontal_legend, #vertical_legend, #length_bar, g[id="tick"], g[id^="tick_"]';
 const EDITABLE_LABEL_SELECTOR = 'text[data-label-editable="true"]';
 
 const toNumber = (value, fallback = 0) => {
@@ -131,7 +131,7 @@ const setLabelText = (textEl, value) => {
 const hasExcludedAncestor = (textEl) => Boolean(textEl.closest(EXCLUDED_GROUP_SELECTOR));
 
 const getCircularFeatureAnchor = (svg, textEl) => {
-  const inLabelsGroup = Boolean(textEl.closest('g#labels'));
+  const inLabelsGroup = Boolean(textEl.closest('g[id="labels"], g[id^="labels_"]'));
   if (!inLabelsGroup) return null;
 
   const prev = textEl.previousElementSibling;
@@ -163,7 +163,7 @@ const collectEditableLabelElements = (svg, mode) => {
   const labels = new Set();
 
   if (mode === 'circular') {
-    svg.querySelectorAll('g#labels text').forEach((textEl) => {
+    svg.querySelectorAll('g[id="labels"] text, g[id^="labels_"] text').forEach((textEl) => {
       if (hasExcludedAncestor(textEl)) return;
       labels.add(textEl);
     });

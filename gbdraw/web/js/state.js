@@ -157,6 +157,7 @@ const form = reactive({
   linear_ruler_on_axis: false,
   labels_mode: 'none',
   show_labels_linear: 'none',
+  multi_record_canvas: false,
   separate_strands: true,
   suppress_gc: false,
   suppress_skew: false,
@@ -208,6 +209,8 @@ const adv = reactive({
   ruler_label_color: null,
 
   // Circular Specific
+  multi_record_size_mode: 'sqrt',
+  multi_record_min_radius_ratio: 0.55,
   feature_width_circular: null,
   gc_content_width_circular: null,
   gc_content_radius_circular: null,

@@ -345,6 +345,24 @@
                                     <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Circular mode: effective only when Separate Strands is OFF. If Separate Strands is ON, this option is ignored. Track Layout still applies: Tuckin shifts overlap tracks inward, Middle/Spreadout shift them outward."></help-tip></span>
                                 </label>
                                 <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="form.multi_record_canvas" class="form-checkbox">
+                                    <span class="inline-flex items-center gap-1">Multi-Record Canvas <help-tip text="When multiple records are loaded, place them on one shared circular canvas as an automatic grid (opt-in)."></help-tip></span>
+                                </label>
+                                <div v-if="form.multi_record_canvas" class="col-span-2 grid grid-cols-2 gap-1.5 text-[10px]">
+                                    <div>
+                                        <label class="input-label text-[10px] mb-1">Record Size Mode <help-tip text="Scale circles by record length on multi-record canvas."></help-tip></label>
+                                        <select v-model="adv.multi_record_size_mode" class="form-input py-1 text-xs">
+                                            <option value="sqrt">Sqrt (Default)</option>
+                                            <option value="linear">Linear</option>
+                                            <option value="equal">Equal</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px] mb-1">Min Radius Ratio <help-tip text="Lower bound for short records (0-1)."></help-tip></label>
+                                        <input type="number" min="0.01" max="1" step="0.01" v-model.number="adv.multi_record_min_radius_ratio" class="form-input py-1 text-xs">
+                                    </div>
+                                </div>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                     <input type="checkbox" v-model="form.suppress_gc" class="form-checkbox">
                                     <span class="inline-flex items-center gap-1">Hide GC <help-tip text="Suppress the GC content track."></help-tip></span>
                                 </label>

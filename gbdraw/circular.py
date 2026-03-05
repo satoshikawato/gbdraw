@@ -10,7 +10,10 @@ from .io.genome import load_gbks, load_gff_fasta
 from .io.colors import load_default_colors, read_color_table
 from .config.toml import load_config_toml
 from .render.export import parse_formats, save_figure
-from .api.diagram import assemble_circular_diagram_from_record  # type: ignore[reportMissingImports]
+from .api.diagram import (  # type: ignore[reportMissingImports]
+    assemble_circular_diagram_from_record,
+    assemble_circular_diagram_from_records,
+)
 from .config.modify import suppress_gc_content_and_skew, modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .core.sequence import determine_output_file_prefix  # type: ignore[reportMissingImports]
@@ -61,7 +64,12 @@ def _get_args(args) -> argparse.Namespace:
     visualizing GC content, GC skew, and specific genomic features.
     """
     parser = argparse.ArgumentParser(
-        description='Generate genome diagrams in PNG/PDF/SVG/PS/EPS. Diagrams for multiple entries are saved separately.')
+        description=(
+            "Generate genome diagrams in PNG/PDF/SVG/PS/EPS. "
+            "By default, diagrams for multiple entries are saved separately. "
+            "Use --multi_record_canvas to place multiple records on one grid canvas."
+        )
+    )
     parser.add_argument(
         "--gbk",
         metavar="GBK_FILE",
@@ -203,6 +211,21 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         default="right")
     parser.add_argument(
+        '--multi_record_canvas',
+        help='Place multiple records on one shared canvas using automatic grid layout (default: False).',
+        action='store_true')
+    parser.add_argument(
+        '--multi_record_size_mode',
+        help='Size mode for multi-record circular canvas ("linear", "sqrt", "equal"; default: "sqrt").',
+        type=str,
+        choices=['linear', 'sqrt', 'equal'],
+        default='sqrt')
+    parser.add_argument(
+        '--multi_record_min_radius_ratio',
+        help='Minimum radius ratio for multi-record scaling (0 < ratio <= 1; default: 0.55).',
+        type=float,
+        default=0.55)
+    parser.add_argument(
         '--separate_strands',
         help='Separate strands (default: False).',
         action='store_true')
@@ -313,6 +336,8 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--gc_skew_width must be > 0")
     if args.gc_skew_radius is not None and args.gc_skew_radius <= 0:
         parser.error("--gc_skew_radius must be > 0")
+    if args.multi_record_min_radius_ratio <= 0 or args.multi_record_min_radius_ratio > 1:
+        parser.error("--multi_record_min_radius_ratio must be > 0 and <= 1")
     return args
 
 
@@ -346,6 +371,9 @@ def circular_main(cmd_args) -> None:
     species: str = args.species
     strain: str = args.strain
     legend: str = args.legend
+    multi_record_canvas: bool = args.multi_record_canvas
+    multi_record_size_mode: str = args.multi_record_size_mode
+    multi_record_min_radius_ratio: float = args.multi_record_min_radius_ratio
     definition_font_size: Optional[float] = args.definition_font_size
     label_font_size: Optional[float] = args.label_font_size
     suppress_gc: bool = args.suppress_gc
@@ -507,15 +535,11 @@ def circular_main(cmd_args) -> None:
 
     track_specs_or_none = track_specs or None
 
-    for gb_record in gb_records:
-        record_count += 1
-        accession = gb_record.id
-        seq_length = len(gb_record.seq)
-        window, step = calculate_window_step(seq_length, cfg, manual_window, manual_step)
-
-        outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
-        canvas = assemble_circular_diagram_from_record(
-            gb_record,
+    if multi_record_canvas and len(gb_records) > 1:
+        first_accession = gb_records[0].id if gb_records else "out"
+        outfile_prefix = output_prefix if output_prefix is not None else first_accession
+        canvas = assemble_circular_diagram_from_records(
+            gb_records,
             config_dict=config_dict,
             color_table=color_table,
             default_colors=default_colors,
@@ -525,14 +549,43 @@ def circular_main(cmd_args) -> None:
             output_prefix=outfile_prefix,
             legend=legend,
             dinucleotide=dinucleotide,
-            window=window,
-            step=step,
+            window=manual_window,
+            step=manual_step,
             species=species,
             strain=strain,
+            multi_record_size_mode=multi_record_size_mode,
+            multi_record_min_radius_ratio=multi_record_min_radius_ratio,
             cfg=cfg,
             track_specs=track_specs_or_none,
         )
         save_figure(canvas, out_formats)
+    else:
+        for gb_record in gb_records:
+            record_count += 1
+            accession = gb_record.id
+            seq_length = len(gb_record.seq)
+            window, step = calculate_window_step(seq_length, cfg, manual_window, manual_step)
+
+            outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
+            canvas = assemble_circular_diagram_from_record(
+                gb_record,
+                config_dict=config_dict,
+                color_table=color_table,
+                default_colors=default_colors,
+                selected_features_set=selected_features_set,
+                feature_table=feature_table,
+                feature_shapes=feature_shapes or None,
+                output_prefix=outfile_prefix,
+                legend=legend,
+                dinucleotide=dinucleotide,
+                window=window,
+                step=step,
+                species=species,
+                strain=strain,
+                cfg=cfg,
+                track_specs=track_specs_or_none,
+            )
+            save_figure(canvas, out_formats)
 
 if __name__ == "__main__":
     # Entry point for the script when run as a standalone program.

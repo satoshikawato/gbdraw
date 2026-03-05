@@ -167,8 +167,8 @@ def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=
 
     return json.dumps({"rect": rect_svg, "text": text_svg})
 
-def regenerate_definition_svg(gb_path, species=None, strain=None, font_size=18):
-    """Regenerate just the definition group SVG for instant preview"""
+def regenerate_definition_svgs(gb_path, species=None, strain=None, font_size=18):
+    """Regenerate definition group SVGs for all records in an input file"""
     from Bio import SeqIO
     from gbdraw.render.groups.circular.definition import DefinitionGroup
     from gbdraw.canvas import CircularCanvasConfigurator
@@ -188,35 +188,62 @@ def regenerate_definition_svg(gb_path, species=None, strain=None, font_size=18):
         if not records:
             return json.dumps({"error": "No records found"})
 
-        record = records[0]
+        definitions = []
+        for index, record in enumerate(records):
+            # Create canvas config
+            canvas_config = CircularCanvasConfigurator(
+                output_prefix=f"temp_{index}",
+                config_dict=config_dict,
+                legend="none",
+                gb_record=record,
+            )
 
-        # Create canvas config
-        canvas_config = CircularCanvasConfigurator(
-            output_prefix="temp",
-            config_dict=config_dict,
-            legend="none",
-            gb_record=record,
-        )
+            # Create definition group with custom species/strain
+            def_group = DefinitionGroup(
+                gb_record=record,
+                canvas_config=canvas_config,
+                config_dict=config_dict,
+                species=species if species else None,
+                strain=strain if strain else None,
+            )
 
-        # Create definition group with custom species/strain
-        def_group = DefinitionGroup(
-            gb_record=record,
-            canvas_config=canvas_config,
-            config_dict=config_dict,
-            species=species if species else None,
-            strain=strain if strain else None,
-        )
+            group = def_group.get_group()
+            definitions.append(
+                {
+                    "svg": group.tostring(),
+                    "definition_group_id": def_group.definition_group_id,
+                    "record_index": index,
+                }
+            )
 
-        # Get the SVG content
-        group = def_group.get_group()
-        # Serialize to string using svgwrite's tostring() method
-        svg_content = group.tostring()
-
-        # Return the definition group ID (with _definition suffix)
-        definition_group_id = def_group.definition_group_id
-        return json.dumps({"svg": svg_content, "definition_group_id": definition_group_id})
+        return json.dumps({"definitions": definitions})
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
+
+def regenerate_definition_svg(gb_path, species=None, strain=None, font_size=18):
+    """Backward-compatible single-record definition regeneration helper"""
+    result_json = regenerate_definition_svgs(
+        gb_path,
+        species=species,
+        strain=strain,
+        font_size=font_size,
+    )
+    try:
+        payload = json.loads(result_json)
+    except Exception:
+        return result_json
+    if payload.get("error"):
+        return result_json
+    definitions = payload.get("definitions") or []
+    if not definitions:
+        return json.dumps({"error": "No definitions generated"})
+    first = definitions[0]
+    return json.dumps(
+        {
+            "svg": first.get("svg", ""),
+            "definition_group_id": first.get("definition_group_id", ""),
+        }
+    )
 
 def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None):
     """Extract feature info from GenBank file for UI display"""

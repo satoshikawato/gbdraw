@@ -113,6 +113,28 @@ canvas = assemble_circular_diagram_from_record(
 )
 ```
 
+### 2.4 Multiple records on one circular canvas (grid)
+
+Use `assemble_circular_diagram_from_records(...)` to place multiple records on a
+single circular canvas with automatic near-square grid layout.
+
+```python
+from Bio import SeqIO
+from gbdraw.api import assemble_circular_diagram_from_records
+from gbdraw.api.render import save_figure
+
+records = list(SeqIO.parse("multi_records.gbk", "genbank"))
+
+canvas = assemble_circular_diagram_from_records(
+    records,
+    selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"],
+    output_prefix="circular_grid",
+    legend="right",  # shared legend (single)
+)
+
+save_figure(canvas, ["svg"])
+```
+
 ## 3. Minimal linear example
 
 ```python
@@ -308,7 +330,22 @@ Optional parameters:
 | `track_specs` | `Sequence[str \| TrackSpec] \| None` | `None` | Track controls. |
 | `cfg` | `GbdrawConfig \| None` | `None` | Prebuilt config object. If provided, keep it consistent with `config_dict`. |
 
-### 6.2 `assemble_linear_diagram_from_records(...)`
+### 6.2 `assemble_circular_diagram_from_records(...)`
+
+Required parameters:
+- `records` (`Sequence[SeqRecord]`): input records (non-empty)
+
+Optional parameters:
+- Same optional arguments as `assemble_circular_diagram_from_record(...)` except
+  that `records` replaces `gb_record`.
+
+Notes:
+- When more than one record is provided, records are placed in an automatic
+  near-square grid (`cols = ceil(sqrt(n))`, `rows = ceil(n / cols)`).
+- Legend is shared (single legend group) when `legend != "none"`.
+- `assemble_circular_diagram_from_record(...)` is still available and unchanged.
+
+### 6.3 `assemble_linear_diagram_from_records(...)`
 
 Required parameters:
 - `records` (`Sequence[SeqRecord]`): input records (non-empty)

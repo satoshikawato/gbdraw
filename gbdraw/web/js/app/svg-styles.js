@@ -21,6 +21,22 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
 
   const { getAllFeatureLegendGroups } = legendActions;
 
+  const getGroupsByBaseIds = (svg, baseIds) => {
+    if (!svg || !Array.isArray(baseIds) || baseIds.length === 0) return [];
+    const seen = new Set();
+    const groups = [];
+    baseIds.forEach((baseId) => {
+      if (!baseId) return;
+      const selector = `g[id="${baseId}"], g[id^="${baseId}_"]`;
+      svg.querySelectorAll(selector).forEach((group) => {
+        if (seen.has(group)) return;
+        seen.add(group);
+        groups.push(group);
+      });
+    });
+    return groups;
+  };
+
   const ensureUniquePairwiseGradientIds = (svg) => {
     if (!svg) return;
 
@@ -91,31 +107,35 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       }
     });
 
-    const gcContentGroup = svg.getElementById('gc_content');
-    if (gcContentGroup && colors.gc_content) {
-      const gcPaths = gcContentGroup.querySelectorAll('path');
-      gcPaths.forEach((path) => {
-        path.setAttribute('fill', colors.gc_content);
-        updatedCount++;
+    const gcContentGroups = getGroupsByBaseIds(svg, ['gc_content']);
+    if (gcContentGroups.length > 0 && colors.gc_content) {
+      gcContentGroups.forEach((gcContentGroup) => {
+        const gcPaths = gcContentGroup.querySelectorAll('path');
+        gcPaths.forEach((path) => {
+          path.setAttribute('fill', colors.gc_content);
+          updatedCount++;
+        });
       });
     }
 
-    const skewGroup = svg.getElementById('skew') || svg.getElementById('gc_skew');
-    if (skewGroup) {
-      const skewPaths = skewGroup.querySelectorAll('path');
-      let pathIndex = 0;
-      skewPaths.forEach((path) => {
-        const fill = path.getAttribute('fill');
-        if (fill && fill !== 'white' && fill !== 'none') {
-          if (pathIndex === 0 && colors.skew_high) {
-            path.setAttribute('fill', colors.skew_high);
-            updatedCount++;
-          } else if (pathIndex === 1 && colors.skew_low) {
-            path.setAttribute('fill', colors.skew_low);
-            updatedCount++;
+    const skewGroups = getGroupsByBaseIds(svg, ['skew', 'gc_skew']);
+    if (skewGroups.length > 0) {
+      skewGroups.forEach((skewGroup) => {
+        const skewPaths = skewGroup.querySelectorAll('path');
+        let pathIndex = 0;
+        skewPaths.forEach((path) => {
+          const fill = path.getAttribute('fill');
+          if (fill && fill !== 'white' && fill !== 'none') {
+            if (pathIndex === 0 && colors.skew_high) {
+              path.setAttribute('fill', colors.skew_high);
+              updatedCount++;
+            } else if (pathIndex === 1 && colors.skew_low) {
+              path.setAttribute('fill', colors.skew_low);
+              updatedCount++;
+            }
+            pathIndex++;
           }
-          pathIndex++;
-        }
+        });
       });
     }
 
@@ -349,8 +369,8 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       });
     }
 
-    const axisGroup = svg.getElementById('Axis');
-    if (axisGroup) {
+    const axisGroups = getGroupsByBaseIds(svg, ['Axis']);
+    axisGroups.forEach((axisGroup) => {
       const axisElements = axisGroup.querySelectorAll('path, line, circle');
       axisElements.forEach((el) => {
         if (adv.axis_stroke_color) {
@@ -362,10 +382,10 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
           updatedCount++;
         }
       });
-    }
+    });
 
-    const tickGroup = svg.getElementById('tick');
-    if (tickGroup) {
+    const tickGroups = getGroupsByBaseIds(svg, ['tick']);
+    tickGroups.forEach((tickGroup) => {
       const tickElements = tickGroup.querySelectorAll('path, line');
       tickElements.forEach((el) => {
         if (adv.axis_stroke_color) {
@@ -377,7 +397,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
           updatedCount++;
         }
       });
-    }
+    });
 
     if (adv.line_stroke_color || adv.line_stroke_width !== null) {
       const allPaths = svg.querySelectorAll('path');
@@ -481,7 +501,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
 
     let updated = false;
 
-    const gcContentGroups = svg.querySelectorAll('#gc_content, [id="gc_content"]');
+    const gcContentGroups = getGroupsByBaseIds(svg, ['gc_content']);
     if (gcContentGroups.length > 0) {
       const shouldHide = mode.value === 'circular' ? form.suppress_gc : !form.show_gc;
       gcContentGroups.forEach((gcContentGroup) => {
@@ -496,7 +516,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       });
     }
 
-    const skewGroups = svg.querySelectorAll('#skew, [id="skew"], #gc_skew, [id="gc_skew"]');
+    const skewGroups = getGroupsByBaseIds(svg, ['skew', 'gc_skew']);
     if (skewGroups.length > 0) {
       const shouldHide = mode.value === 'circular' ? form.suppress_skew : !form.show_skew;
       skewGroups.forEach((skewGroup) => {

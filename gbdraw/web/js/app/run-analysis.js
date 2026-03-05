@@ -36,6 +36,14 @@ const normalizeFeatureVisibilityMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized === 'on' || normalized === 'off' ? normalized : 'default';
 };
+const normalizeMultiRecordSizeMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['linear', 'sqrt', 'equal'].includes(normalized) ? normalized : 'sqrt';
+};
+const normalizeMultiRecordMinRadiusRatio = (value) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 && numeric <= 1 ? numeric : 0.55;
+};
 
 export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFeatureOverrides }) => {
   const {
@@ -92,6 +100,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
   } = state;
   let linearLabelSupportCache = null;
   let featureShapeSupportCache = null;
+  let circularMultiRecordCanvasSupportCache = null;
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
   let pendingReflowReason = 'label-edit';
@@ -247,6 +256,39 @@ json.dumps({
       featureShapeSupportCache = { circular: false, linear: false };
     }
     return featureShapeSupportCache;
+  };
+
+  const getCircularMultiRecordCanvasOptionSupport = () => {
+    if (circularMultiRecordCanvasSupportCache) return circularMultiRecordCanvasSupportCache;
+    const pyodide = getPyodide();
+    if (!pyodide) {
+      circularMultiRecordCanvasSupportCache = {
+        circular: false,
+        multi_record_size_mode: false,
+        multi_record_min_radius_ratio: false
+      };
+      return circularMultiRecordCanvasSupportCache;
+    }
+    try {
+      const raw = pyodide.runPython(`
+import inspect, json
+import gbdraw.circular as _gbdraw_circular
+_source = inspect.getsource(_gbdraw_circular._get_args)
+json.dumps({
+  "circular": "--multi_record_canvas" in _source,
+  "multi_record_size_mode": "--multi_record_size_mode" in _source,
+  "multi_record_min_radius_ratio": "--multi_record_min_radius_ratio" in _source,
+})
+      `);
+      circularMultiRecordCanvasSupportCache = JSON.parse(String(raw));
+    } catch (_err) {
+      circularMultiRecordCanvasSupportCache = {
+        circular: false,
+        multi_record_size_mode: false,
+        multi_record_min_radius_ratio: false
+      };
+    }
+    return circularMultiRecordCanvasSupportCache;
   };
 
   const downloadLosatPair = async (pairIndex, customName) => {
@@ -466,6 +508,26 @@ json.dumps({
         if (labelsMode === 'both') args.push('--labels', 'both');
         if (form.suppress_gc) args.push('--suppress_gc');
         if (form.suppress_skew) args.push('--suppress_skew');
+        if (form.multi_record_canvas) {
+          const multiCanvasSupport = getCircularMultiRecordCanvasOptionSupport();
+          if (!multiCanvasSupport.circular) {
+            throw new Error(
+              'Current gbdraw wheel does not support --multi_record_canvas. Rebuild and redeploy the web wheel.'
+            );
+          }
+          if (!multiCanvasSupport.multi_record_size_mode || !multiCanvasSupport.multi_record_min_radius_ratio) {
+            throw new Error(
+              'Current gbdraw wheel does not support multi-record size scaling options. Rebuild and redeploy the web wheel.'
+            );
+          }
+          const normalizedSizeMode = normalizeMultiRecordSizeMode(adv.multi_record_size_mode);
+          const normalizedMinRatio = normalizeMultiRecordMinRadiusRatio(adv.multi_record_min_radius_ratio);
+          adv.multi_record_size_mode = normalizedSizeMode;
+          adv.multi_record_min_radius_ratio = normalizedMinRatio;
+          args.push('--multi_record_canvas');
+          args.push('--multi_record_size_mode', normalizedSizeMode);
+          args.push('--multi_record_min_radius_ratio', String(normalizedMinRatio));
+        }
 
         if (adv.outer_label_x_offset) args.push('--outer_label_x_radius_offset', adv.outer_label_x_offset);
         if (adv.outer_label_y_offset) args.push('--outer_label_y_radius_offset', adv.outer_label_y_offset);
