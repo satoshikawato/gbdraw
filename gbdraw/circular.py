@@ -211,7 +211,7 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-l',
         '--legend',
-        help='Legend position (default: "right"; "left", "right", "upper_left", "upper_right", "lower_left", "lower_right", "none")',
+        help='Legend position (default: "right"; "left", "right", "top", "bottom", "upper_left", "upper_right", "lower_left", "lower_right", "none")',
         type=str,
         default="right")
     parser.add_argument(

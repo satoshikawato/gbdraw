@@ -107,6 +107,98 @@ def _extract_group_translate_y(root: ET.Element, group_id: str) -> float:
     return float(match.group(1))
 
 
+def _extract_group_translate_xy(root: ET.Element, group_id: str) -> tuple[float, float]:
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    group = root.find(f".//svg:g[@id='{group_id}']", ns)
+    assert group is not None
+    transform = group.attrib.get("transform", "")
+    match = re.search(
+        r"translate\(\s*([-+0-9.eE]+)\s*,\s*([-+0-9.eE]+)\s*\)",
+        transform,
+    )
+    assert match is not None
+    return float(match.group(1)), float(match.group(2))
+
+
+def _extract_viewbox_height(root: ET.Element) -> float:
+    view_box = root.attrib.get("viewBox", "")
+    parts = [float(part) for part in view_box.split()]
+    assert len(parts) == 4
+    return parts[3]
+
+
+def _extract_legend_text_transforms(root: ET.Element) -> list[tuple[float, float, str]]:
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    legend = root.find(".//svg:g[@id='legend']", ns)
+    assert legend is not None
+    text_positions: list[tuple[float, float, str]] = []
+    for text in legend.findall(".//svg:text", ns):
+        content = "".join(text.itertext()).strip()
+        if not content:
+            continue
+        transform = text.attrib.get("transform", "")
+        match = re.search(
+            r"translate\(\s*([-+0-9.eE]+)\s*,\s*([-+0-9.eE]+)\s*\)",
+            transform,
+        )
+        assert match is not None
+        text_positions.append((float(match.group(1)), float(match.group(2)), content))
+    return text_positions
+
+
+def _parse_translate(transform: str) -> tuple[float, float]:
+    match = re.search(
+        r"translate\(\s*([-+0-9.eE]+)\s*,\s*([-+0-9.eE]+)\s*\)",
+        transform or "",
+    )
+    if not match:
+        return 0.0, 0.0
+    return float(match.group(1)), float(match.group(2))
+
+
+def _extract_legend_vertical_bounds(root: ET.Element) -> tuple[float, float]:
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    legend = root.find(".//svg:g[@id='legend']", ns)
+    assert legend is not None
+    _, legend_y = _parse_translate(legend.attrib.get("transform", ""))
+
+    min_y = float("inf")
+    max_y = float("-inf")
+    for path in legend.findall(".//svg:path", ns):
+        _, path_y = _parse_translate(path.attrib.get("transform", ""))
+        d_attr = path.attrib.get("d", "")
+        for match in re.finditer(
+            r"[ML]\s*[-+0-9.eE]+\s*,\s*([-+0-9.eE]+)",
+            d_attr,
+        ):
+            y_value = legend_y + path_y + float(match.group(1))
+            min_y = min(min_y, y_value)
+            max_y = max(max_y, y_value)
+
+    assert min_y != float("inf")
+    assert max_y != float("-inf")
+    return min_y, max_y
+
+
+def _extract_definition_top_y(root: ET.Element, group_id: str) -> float:
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    group = root.find(f".//svg:g[@id='{group_id}']", ns)
+    assert group is not None
+    _, group_y = _parse_translate(group.attrib.get("transform", ""))
+
+    min_top = float("inf")
+    for text in group.findall("./svg:text", ns):
+        y_raw = text.attrib.get("y", "0")
+        font_size_raw = text.attrib.get("font-size", "0")
+        y_val = float(str(y_raw).replace("px", ""))
+        font_size = float(str(font_size_raw).replace("px", ""))
+        top = group_y + y_val - (0.5 * font_size)
+        min_top = min(min_top, top)
+
+    assert min_top != float("inf")
+    return min_top
+
+
 @pytest.mark.circular
 def test_assemble_circular_diagram_from_records_shared_legend_and_unique_ids() -> None:
     records = [
@@ -715,6 +807,216 @@ def test_single_record_definition_position_moves_group_vertically() -> None:
     y_bottom = _extract_group_translate_y(ET.fromstring(bottom_canvas.tostring()), group_id)
 
     assert y_top < y_center < y_bottom
+
+
+@pytest.mark.circular
+def test_single_record_legend_top_bottom_positions_expand_and_move() -> None:
+    record = _build_record_with_source(
+        "legend_top_bottom_single",
+        organism="Single legend organism",
+        strain="Single legend strain",
+        length=1400,
+    )
+
+    top_canvas = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=["CDS"],
+        legend="top",
+    )
+    left_canvas = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=["CDS"],
+        legend="left",
+    )
+    bottom_canvas = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=["CDS"],
+        legend="bottom",
+    )
+    none_canvas = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=["CDS"],
+        legend="none",
+    )
+
+    top_root = ET.fromstring(top_canvas.tostring())
+    left_root = ET.fromstring(left_canvas.tostring())
+    bottom_root = ET.fromstring(bottom_canvas.tostring())
+    none_root = ET.fromstring(none_canvas.tostring())
+
+    top_x, top_y = _extract_group_translate_xy(top_root, "legend")
+    bottom_x, bottom_y = _extract_group_translate_xy(bottom_root, "legend")
+    left_y = _extract_group_translate_y(left_root, "legend")
+
+    assert top_x != 0.0 or top_y != 0.0
+    assert bottom_x != 0.0 or bottom_y != 0.0
+    assert top_y < left_y < bottom_y
+
+    none_height = _extract_viewbox_height(none_root)
+    top_height = _extract_viewbox_height(top_root)
+    bottom_height = _extract_viewbox_height(bottom_root)
+    assert top_height > none_height
+    assert bottom_height > none_height
+
+
+@pytest.mark.circular
+def test_multi_record_legend_top_bottom_positions_expand_and_move() -> None:
+    records = [
+        _build_record_with_source(
+            "legend_grid_top_bottom_a",
+            organism="Legend grid A",
+            strain="Strain A",
+            length=1300,
+        ),
+        _build_record_with_source(
+            "legend_grid_top_bottom_b",
+            organism="Legend grid B",
+            strain="Strain B",
+            length=900,
+        ),
+    ]
+
+    top_canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="top",
+    )
+    left_canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="left",
+    )
+    bottom_canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="bottom",
+    )
+    none_canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+    )
+
+    top_root = ET.fromstring(top_canvas.tostring())
+    left_root = ET.fromstring(left_canvas.tostring())
+    bottom_root = ET.fromstring(bottom_canvas.tostring())
+    none_root = ET.fromstring(none_canvas.tostring())
+
+    _, top_y = _extract_group_translate_xy(top_root, "legend")
+    left_y = _extract_group_translate_y(left_root, "legend")
+    _, bottom_y = _extract_group_translate_xy(bottom_root, "legend")
+    assert top_y < left_y < bottom_y
+
+    none_height = _extract_viewbox_height(none_root)
+    top_height = _extract_viewbox_height(top_root)
+    bottom_height = _extract_viewbox_height(bottom_root)
+    assert top_height > none_height
+    assert bottom_height > none_height
+
+
+@pytest.mark.circular
+def test_multi_record_top_legend_keeps_minimum_top_padding() -> None:
+    records = [
+        _build_record_with_source(
+            "legend_top_padding_a",
+            organism="Legend top padding A",
+            strain="Strain A",
+            length=1300,
+        ),
+        _build_record_with_source(
+            "legend_top_padding_b",
+            organism="Legend top padding B",
+            strain="Strain B",
+            length=900,
+        ),
+    ]
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="top",
+    )
+    root = ET.fromstring(canvas.tostring())
+    legend_top, _legend_bottom = _extract_legend_vertical_bounds(root)
+    assert legend_top >= 20.0 - 1e-6
+
+
+@pytest.mark.circular
+def test_multi_record_bottom_shared_definition_stays_below_legend() -> None:
+    records = [
+        _build_record_with_source(
+            "legend_bottom_shared_a",
+            organism="Legend bottom shared A",
+            strain="Strain A",
+            length=1300,
+        ),
+        _build_record_with_source(
+            "legend_bottom_shared_b",
+            organism="Legend bottom shared B",
+            strain="Strain B",
+            length=900,
+        ),
+    ]
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="bottom",
+        multi_record_definition_mode="shared",
+        shared_definition_position="bottom",
+    )
+    root = ET.fromstring(canvas.tostring())
+    _legend_top, legend_bottom = _extract_legend_vertical_bounds(root)
+    shared_top = _extract_definition_top_y(root, "shared_definition")
+    assert shared_top >= legend_bottom + 20.0 - 1e-6
+
+
+@pytest.mark.circular
+def test_circular_top_legend_uses_horizontal_entry_layout() -> None:
+    record = SeqRecord(Seq("A" * 1600), id="legend_layout_top")
+    record.features = [
+        SeqFeature(
+            FeatureLocation(0, 1600, strand=1),
+            type="source",
+            qualifiers={"organism": ["Legend layout"], "strain": ["Layout"]},
+        ),
+        SeqFeature(
+            FeatureLocation(50, 200, strand=1),
+            type="CDS",
+            qualifiers={"product": ["protein_cds"]},
+        ),
+        SeqFeature(
+            FeatureLocation(350, 460, strand=1),
+            type="tRNA",
+            qualifiers={"product": ["protein_trna"]},
+        ),
+        SeqFeature(
+            FeatureLocation(700, 920, strand=1),
+            type="rRNA",
+            qualifiers={"product": ["protein_rrna"]},
+        ),
+    ]
+
+    top_canvas = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=["CDS", "tRNA", "rRNA"],
+        legend="top",
+    )
+    right_canvas = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=["CDS", "tRNA", "rRNA"],
+        legend="right",
+    )
+
+    top_texts = _extract_legend_text_transforms(ET.fromstring(top_canvas.tostring()))
+    right_texts = _extract_legend_text_transforms(ET.fromstring(right_canvas.tostring()))
+    assert len(top_texts) >= 2
+    assert len(right_texts) >= 2
+
+    top_unique_y = {round(y, 3) for _, y, _ in top_texts}
+    right_unique_y = {round(y, 3) for _, y, _ in right_texts}
+    assert len(top_unique_y) < len(top_texts)
+    assert len(right_unique_y) == len(right_texts)
 
 
 @pytest.mark.circular

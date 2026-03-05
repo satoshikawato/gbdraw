@@ -80,6 +80,10 @@ _MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS = {
 _MULTI_RECORD_SIZE_MODES = {"linear", "sqrt", "equal"}
 _DEFINITION_POSITIONS = {"center", "top", "bottom"}
 _MULTI_RECORD_DEFINITION_MODES = {"shared", "legacy"}
+_MULTI_RECORD_LEGEND_EDGE_PADDING_PX = 20.0
+_MULTI_RECORD_LEGEND_GRID_GAP_PX = 20.0
+_MULTI_RECORD_LEGEND_SHARED_GAP_PX = 20.0
+_MULTI_RECORD_SHARED_BOTTOM_MARGIN_PX = 24.0
 
 
 def _resolve_circular_window_step(
@@ -133,6 +137,30 @@ def _estimate_square_grid(record_count: int) -> tuple[int, int]:
     cols = int(math.ceil(math.sqrt(record_count)))
     rows = int(math.ceil(float(record_count) / float(cols)))
     return cols, rows
+
+
+def _group_local_vertical_bounds(group: Group) -> tuple[float, float]:
+    """Return local vertical bounds for text elements in a group."""
+    min_y: float | None = None
+    max_y: float | None = None
+
+    for element in getattr(group, "elements", []):
+        attribs = getattr(element, "attribs", None)
+        if not isinstance(attribs, dict):
+            continue
+        if "y" not in attribs:
+            continue
+        y_value = _parse_svg_length_px(attribs.get("y"), default=0.0)
+        font_size = _parse_svg_length_px(attribs.get("font-size"), default=0.0)
+        half_height = 0.5 * font_size if font_size > 0 else 0.0
+        top = y_value - half_height
+        bottom = y_value + half_height
+        min_y = top if min_y is None else min(min_y, top)
+        max_y = bottom if max_y is None else max(max_y, bottom)
+
+    if min_y is None or max_y is None:
+        return 0.0, 0.0
+    return float(min_y), float(max_y)
 
 
 def _suffix_fixed_top_level_group_id(element: object, record_index: int) -> None:
@@ -764,11 +792,36 @@ def assemble_circular_diagram_from_records(
     total_width = grid_width
     total_height = grid_height
     grid_origin_x = 0.0
+    grid_origin_y = 0.0
     legend_offset_x = 0.0
     legend_offset_y = 0.0
     legend_config: LegendDrawingConfigurator | None = None
     legend_canvas_config: CircularCanvasConfigurator | None = None
     legend_table: dict = {}
+    legend_local_top = 0.0
+    legend_local_bottom = 0.0
+    shared_definition_group: Group | None = None
+    shared_definition_local_bounds = (0.0, 0.0)
+
+    if use_shared_definition:
+        shared_canvas_config = CircularCanvasConfigurator(
+            output_prefix=output_prefix,
+            config_dict=config_dict,
+            legend="none",
+            gb_record=records[0],
+            cfg=cfg,
+        )
+        shared_definition_group = DefinitionGroup(
+            gb_record=records[0],
+            canvas_config=shared_canvas_config,
+            config_dict=config_dict,
+            species=species,
+            strain=strain,
+            definition_profile="shared_common",
+            definition_group_id="shared_definition",
+            cfg=cfg,
+        ).get_group()
+        shared_definition_local_bounds = _group_local_vertical_bounds(shared_definition_group)
 
     if legend_effective != "none":
         legend_canvas_config = CircularCanvasConfigurator(
@@ -849,6 +902,8 @@ def assemble_circular_diagram_from_records(
             legend_config = legend_config.recalculate_legend_dimensions(
                 legend_table, legend_canvas_config
             )
+            legend_local_top = -0.5 * float(legend_config.color_rect_size)
+            legend_local_bottom = legend_local_top + float(legend_config.legend_height)
 
             if legend_effective == "right":
                 total_width = grid_width + (legend_config.legend_width * 1.1)
@@ -859,6 +914,20 @@ def assemble_circular_diagram_from_records(
                 grid_origin_x = legend_config.legend_width * 1.1
                 legend_offset_x = legend_config.legend_width * 0.05
                 legend_offset_y = (total_height - legend_config.legend_height) / 2.0
+            elif legend_effective == "top":
+                legend_offset_y = _MULTI_RECORD_LEGEND_EDGE_PADDING_PX - legend_local_top
+                legend_bottom = legend_offset_y + legend_local_bottom
+                grid_origin_y = legend_bottom + _MULTI_RECORD_LEGEND_GRID_GAP_PX
+                total_height = grid_origin_y + grid_height
+                legend_offset_x = (total_width - legend_config.legend_width) / 2.0
+            elif legend_effective == "bottom":
+                legend_offset_x = (total_width - legend_config.legend_width) / 2.0
+                legend_offset_y = grid_height + _MULTI_RECORD_LEGEND_GRID_GAP_PX - legend_local_top
+                legend_bottom = legend_offset_y + legend_local_bottom
+                total_height = max(
+                    total_height,
+                    legend_bottom + _MULTI_RECORD_LEGEND_EDGE_PADDING_PX,
+                )
             elif legend_effective == "upper_left":
                 legend_offset_x = 0.025 * total_width
                 legend_offset_y = 0.05 * total_height
@@ -871,6 +940,24 @@ def assemble_circular_diagram_from_records(
             elif legend_effective == "lower_right":
                 legend_offset_x = 0.875 * total_width
                 legend_offset_y = 0.75 * total_height
+
+    if (
+        use_shared_definition
+        and shared_definition_group is not None
+        and normalized_shared_definition_position == "bottom"
+        and legend_effective == "bottom"
+        and legend_config is not None
+    ):
+        shared_min_y, shared_max_y = shared_definition_local_bounds
+        shared_height = max(0.0, float(shared_max_y) - float(shared_min_y))
+        legend_bottom = legend_offset_y + legend_local_bottom
+        required_height = (
+            legend_bottom
+            + _MULTI_RECORD_LEGEND_SHARED_GAP_PX
+            + shared_height
+            + _MULTI_RECORD_SHARED_BOTTOM_MARGIN_PX
+        )
+        total_height = max(total_height, required_height)
 
     merged_canvas = Drawing(
         filename=f"{output_prefix}.svg",
@@ -885,7 +972,7 @@ def assemble_circular_diagram_from_records(
         sub_width = _parse_svg_length_px(sub_canvas.attribs.get("width"), default=cell_width)
         sub_height = _parse_svg_length_px(sub_canvas.attribs.get("height"), default=cell_height)
         cell_offset_x = grid_origin_x + float(col) * cell_width + (cell_width - sub_width) * 0.5
-        cell_offset_y = float(row) * cell_height + (cell_height - sub_height) * 0.5
+        cell_offset_y = grid_origin_y + float(row) * cell_height + (cell_height - sub_height) * 0.5
         record_group = Group(id=f"record_{record_index}")
         record_group.translate(cell_offset_x, cell_offset_y)
 
@@ -897,24 +984,7 @@ def assemble_circular_diagram_from_records(
             record_group.add(copied)
         merged_canvas.add(record_group)
 
-    if use_shared_definition:
-        shared_canvas_config = CircularCanvasConfigurator(
-            output_prefix=output_prefix,
-            config_dict=config_dict,
-            legend="none",
-            gb_record=records[0],
-            cfg=cfg,
-        )
-        shared_definition_group = DefinitionGroup(
-            gb_record=records[0],
-            canvas_config=shared_canvas_config,
-            config_dict=config_dict,
-            species=species,
-            strain=strain,
-            definition_profile="shared_common",
-            definition_group_id="shared_definition",
-            cfg=cfg,
-        ).get_group()
+    if shared_definition_group is not None:
         shared_definition_group = place_definition_group_on_size(
             shared_definition_group,
             canvas_width=float(total_width),

@@ -113,6 +113,16 @@ class CircularCanvasConfigurator:
             self.legend_offset_x = legend_config.legend_width * 0.05
             self.offset_x: float = (self.default_width * 0.5) + (legend_config.legend_width * 1.1)
             self.legend_offset_y = (self.total_height - legend_config.legend_height) / 2
+        elif self.legend_position == "top":
+            self.total_height = self.default_height + (legend_config.legend_height * 1.1)
+            self.offset_y = (self.default_height * 0.5) + (legend_config.legend_height * 1.1)
+            self.legend_offset_x = (self.total_width - legend_config.legend_width) / 2
+            self.legend_offset_y = legend_config.legend_height * 0.05
+        elif self.legend_position == "bottom":
+            self.total_height = self.default_height + (legend_config.legend_height * 1.1)
+            self.offset_y = self.default_height * 0.5
+            self.legend_offset_x = (self.total_width - legend_config.legend_width) / 2
+            self.legend_offset_y = self.default_height + (legend_config.legend_height * 0.05)
         elif self.legend_position == "upper_left":
             self.legend_offset_x: float = 0.025 * self.total_width
             self.legend_offset_y: float = 0.05 * self.total_height

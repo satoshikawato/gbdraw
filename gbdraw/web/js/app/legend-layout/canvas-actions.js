@@ -207,17 +207,21 @@ export const createLegendCanvasActions = ({ state }) => {
     } else {
       const legendPos = form.legend;
       let baseVbW = vbW;
+      let baseVbH = vbH;
 
       if (legendPos === 'left' || legendPos === 'right') {
         baseVbW = vbW - legendWidth * 1.1;
       }
+      if (legendPos === 'top' || legendPos === 'bottom') {
+        baseVbH = vbH - legendHeight * 1.1;
+      }
 
       const diagramCenterX = baseVbW / 2;
-      const diagramCenterY = vbH / 2;
+      const diagramCenterY = baseVbH / 2;
 
       circularBaseConfig.value = {
         viewBoxWidth: baseVbW,
-        viewBoxHeight: vbH,
+        viewBoxHeight: baseVbH,
         generatedViewBoxWidth: vbW,
         generatedViewBoxHeight: vbH,
         diagramCenterX: diagramCenterX,
