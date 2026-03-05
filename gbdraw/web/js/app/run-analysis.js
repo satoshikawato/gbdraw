@@ -44,6 +44,18 @@ const normalizeMultiRecordMinRadiusRatio = (value) => {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric > 0 && numeric <= 1 ? numeric : 0.55;
 };
+const normalizeDefinitionPosition = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'center';
+};
+const normalizeMultiRecordDefinitionMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['shared', 'legacy'].includes(normalized) ? normalized : 'shared';
+};
+const normalizeSharedDefinitionPosition = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'bottom';
+};
 
 export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFeatureOverrides }) => {
   const {
@@ -265,7 +277,10 @@ json.dumps({
       circularMultiRecordCanvasSupportCache = {
         circular: false,
         multi_record_size_mode: false,
-        multi_record_min_radius_ratio: false
+        multi_record_min_radius_ratio: false,
+        definition_position: false,
+        multi_record_definition_mode: false,
+        shared_definition_position: false
       };
       return circularMultiRecordCanvasSupportCache;
     }
@@ -278,6 +293,9 @@ json.dumps({
   "circular": "--multi_record_canvas" in _source,
   "multi_record_size_mode": "--multi_record_size_mode" in _source,
   "multi_record_min_radius_ratio": "--multi_record_min_radius_ratio" in _source,
+  "definition_position": "--definition_position" in _source,
+  "multi_record_definition_mode": "--multi_record_definition_mode" in _source,
+  "shared_definition_position": "--shared_definition_position" in _source,
 })
       `);
       circularMultiRecordCanvasSupportCache = JSON.parse(String(raw));
@@ -285,7 +303,10 @@ json.dumps({
       circularMultiRecordCanvasSupportCache = {
         circular: false,
         multi_record_size_mode: false,
-        multi_record_min_radius_ratio: false
+        multi_record_min_radius_ratio: false,
+        definition_position: false,
+        multi_record_definition_mode: false,
+        shared_definition_position: false
       };
     }
     return circularMultiRecordCanvasSupportCache;
@@ -487,6 +508,17 @@ json.dumps({
         : [];
 
       if (mode.value === 'circular') {
+        const multiCanvasSupport = getCircularMultiRecordCanvasOptionSupport();
+        const normalizedDefinitionPosition = normalizeDefinitionPosition(form.definition_position);
+        form.definition_position = normalizedDefinitionPosition;
+        if (multiCanvasSupport.definition_position) {
+          args.push('--definition_position', normalizedDefinitionPosition);
+        } else if (normalizedDefinitionPosition !== 'center') {
+          throw new Error(
+            'Current gbdraw wheel does not support --definition_position. Rebuild and redeploy the web wheel.'
+          );
+        }
+
         if (selectedFeatureShapes.length > 0) {
           const shapeOptionSupport = getFeatureShapeOptionSupport();
           if (!shapeOptionSupport.circular) {
@@ -509,7 +541,6 @@ json.dumps({
         if (form.suppress_gc) args.push('--suppress_gc');
         if (form.suppress_skew) args.push('--suppress_skew');
         if (form.multi_record_canvas) {
-          const multiCanvasSupport = getCircularMultiRecordCanvasOptionSupport();
           if (!multiCanvasSupport.circular) {
             throw new Error(
               'Current gbdraw wheel does not support --multi_record_canvas. Rebuild and redeploy the web wheel.'
@@ -520,13 +551,24 @@ json.dumps({
               'Current gbdraw wheel does not support multi-record size scaling options. Rebuild and redeploy the web wheel.'
             );
           }
+          if (!multiCanvasSupport.multi_record_definition_mode || !multiCanvasSupport.shared_definition_position) {
+            throw new Error(
+              'Current gbdraw wheel does not support multi-record definition layout options. Rebuild and redeploy the web wheel.'
+            );
+          }
           const normalizedSizeMode = normalizeMultiRecordSizeMode(adv.multi_record_size_mode);
           const normalizedMinRatio = normalizeMultiRecordMinRadiusRatio(adv.multi_record_min_radius_ratio);
+          const normalizedDefinitionMode = normalizeMultiRecordDefinitionMode(adv.multi_record_definition_mode);
+          const normalizedSharedDefinitionPosition = normalizeSharedDefinitionPosition(adv.shared_definition_position);
           adv.multi_record_size_mode = normalizedSizeMode;
           adv.multi_record_min_radius_ratio = normalizedMinRatio;
+          adv.multi_record_definition_mode = normalizedDefinitionMode;
+          adv.shared_definition_position = normalizedSharedDefinitionPosition;
           args.push('--multi_record_canvas');
           args.push('--multi_record_size_mode', normalizedSizeMode);
           args.push('--multi_record_min_radius_ratio', String(normalizedMinRatio));
+          args.push('--multi_record_definition_mode', normalizedDefinitionMode);
+          args.push('--shared_definition_position', normalizedSharedDefinitionPosition);
         }
 
         if (adv.outer_label_x_offset) args.push('--outer_label_x_radius_offset', adv.outer_label_x_offset);

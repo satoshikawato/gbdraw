@@ -38,11 +38,12 @@ from gbdraw.configurators import (  # type: ignore[reportMissingImports]
 )
 from gbdraw.core.sequence import create_dict_for_sequence_lengths, check_feature_presence  # type: ignore[reportMissingImports]
 from gbdraw.diagrams.circular import assemble_circular_diagram  # type: ignore[reportMissingImports]
+from gbdraw.diagrams.circular.positioning import place_definition_group_on_size  # type: ignore[reportMissingImports]
 from gbdraw.diagrams.linear import assemble_linear_diagram  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
 from gbdraw.features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from gbdraw.legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
-from gbdraw.render.groups.circular import LegendGroup  # type: ignore[reportMissingImports]
+from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup  # type: ignore[reportMissingImports]
 from gbdraw.tracks import TrackSpec, parse_track_specs  # type: ignore[reportMissingImports]
 
 DEFAULT_SELECTED_FEATURES = (
@@ -61,6 +62,7 @@ _SUPPORTED_CIRCULAR_TRACK_KINDS = {
     "features",
     "gc_content",
     "gc_skew",
+    "definition",
     "ticks",
     "axis",
     "legend",
@@ -76,6 +78,8 @@ _MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS = {
     "gc_skew",
 }
 _MULTI_RECORD_SIZE_MODES = {"linear", "sqrt", "equal"}
+_DEFINITION_POSITIONS = {"center", "top", "bottom"}
+_MULTI_RECORD_DEFINITION_MODES = {"shared", "legacy"}
 
 
 def _resolve_circular_window_step(
@@ -160,6 +164,30 @@ def _resolve_multi_record_size_mode(mode: str) -> Literal["linear", "sqrt", "equ
             "multi_record_size_mode must be one of: linear, sqrt, equal"
         )
     return cast(Literal["linear", "sqrt", "equal"], normalized)
+
+
+def _resolve_definition_position(
+    position: str,
+    *,
+    argument_name: str = "definition_position",
+) -> Literal["center", "top", "bottom"]:
+    normalized = str(position).strip().lower()
+    if normalized not in _DEFINITION_POSITIONS:
+        raise ValidationError(
+            f"{argument_name} must be one of: center, top, bottom"
+        )
+    return cast(Literal["center", "top", "bottom"], normalized)
+
+
+def _resolve_multi_record_definition_mode(
+    mode: str,
+) -> Literal["shared", "legacy"]:
+    normalized = str(mode).strip().lower()
+    if normalized not in _MULTI_RECORD_DEFINITION_MODES:
+        raise ValidationError(
+            "multi_record_definition_mode must be one of: shared, legacy"
+        )
+    return cast(Literal["shared", "legacy"], normalized)
 
 
 def _validate_multi_record_min_radius_ratio(value: float) -> float:
@@ -388,7 +416,9 @@ def assemble_circular_diagram_from_record(
     step: Optional[int] = None,
     species: Optional[str] = None,
     strain: Optional[str] = None,
+    definition_position: Literal["center", "top", "bottom"] = "center",
     track_specs: Sequence[str | TrackSpec] | None = None,
+    _definition_profile: Literal["full", "record_summary", "shared_common"] = "full",
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
@@ -423,6 +453,10 @@ def assemble_circular_diagram_from_record(
 
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
+    normalized_definition_position = _resolve_definition_position(
+        str(definition_position),
+        argument_name="definition_position",
+    )
 
     parsed_track_specs: list[TrackSpec] | None = None
     if track_specs is not None:
@@ -537,6 +571,8 @@ def assemble_circular_diagram_from_record(
         legend_config=legend_config,
         cfg=cfg,
         track_specs=parsed_track_specs,
+        definition_position=normalized_definition_position,
+        definition_profile=_definition_profile,
     )
 
 
@@ -561,6 +597,9 @@ def assemble_circular_diagram_from_records(
     step: Optional[int] = None,
     species: Optional[str] = None,
     strain: Optional[str] = None,
+    definition_position: Literal["center", "top", "bottom"] = "center",
+    multi_record_definition_mode: Literal["shared", "legacy"] = "shared",
+    shared_definition_position: Literal["center", "top", "bottom"] = "bottom",
     multi_record_size_mode: Literal["linear", "sqrt", "equal"] = "sqrt",
     multi_record_min_radius_ratio: float = 0.55,
     track_specs: Sequence[str | TrackSpec] | None = None,
@@ -575,6 +614,17 @@ def assemble_circular_diagram_from_records(
     )
     normalized_multi_record_min_radius_ratio = _validate_multi_record_min_radius_ratio(
         float(multi_record_min_radius_ratio)
+    )
+    normalized_definition_position = _resolve_definition_position(
+        str(definition_position),
+        argument_name="definition_position",
+    )
+    normalized_multi_record_definition_mode = _resolve_multi_record_definition_mode(
+        str(multi_record_definition_mode)
+    )
+    normalized_shared_definition_position = _resolve_definition_position(
+        str(shared_definition_position),
+        argument_name="shared_definition_position",
     )
 
     if len(records) == 1:
@@ -598,6 +648,7 @@ def assemble_circular_diagram_from_records(
             step=step,
             species=species,
             strain=strain,
+            definition_position=normalized_definition_position,
             track_specs=track_specs,
             cfg=cfg,
         )
@@ -660,6 +711,13 @@ def assemble_circular_diagram_from_records(
     show_skew = ts_by_kind.get("gc_skew").show if "gc_skew" in ts_by_kind else cfg.canvas.show_skew
     canvas_cfg = replace(cfg.canvas, show_gc=bool(show_gc), show_skew=bool(show_skew))
     cfg = replace(cfg, canvas=canvas_cfg)
+    use_shared_definition = normalized_multi_record_definition_mode == "shared"
+    record_definition_profile: Literal["full", "record_summary"] = (
+        "record_summary" if use_shared_definition else "full"
+    )
+    record_definition_position: Literal["center", "top", "bottom"] = (
+        "center" if use_shared_definition else normalized_definition_position
+    )
     max_record_length = max(len(record.seq) for record in records)
 
     canvases: list[Drawing] = []
@@ -688,7 +746,9 @@ def assemble_circular_diagram_from_records(
             step=step,
             species=species,
             strain=strain,
+            definition_position=record_definition_position,
             track_specs=parsed_track_specs,
+            _definition_profile=record_definition_profile,
             cfg=scaled_cfg,
         )
         canvases.append(sub_canvas)
@@ -837,6 +897,32 @@ def assemble_circular_diagram_from_records(
             record_group.add(copied)
         merged_canvas.add(record_group)
 
+    if use_shared_definition:
+        shared_canvas_config = CircularCanvasConfigurator(
+            output_prefix=output_prefix,
+            config_dict=config_dict,
+            legend="none",
+            gb_record=records[0],
+            cfg=cfg,
+        )
+        shared_definition_group = DefinitionGroup(
+            gb_record=records[0],
+            canvas_config=shared_canvas_config,
+            config_dict=config_dict,
+            species=species,
+            strain=strain,
+            definition_profile="shared_common",
+            definition_group_id="shared_definition",
+            cfg=cfg,
+        ).get_group()
+        shared_definition_group = place_definition_group_on_size(
+            shared_definition_group,
+            canvas_width=float(total_width),
+            canvas_height=float(total_height),
+            position=normalized_shared_definition_position,
+        )
+        merged_canvas.add(shared_definition_group)
+
     if (
         legend_effective != "none"
         and legend_table
@@ -898,6 +984,7 @@ def build_circular_diagram(
         step=options.step,
         species=options.species,
         strain=options.strain,
+        definition_position=(output.definition_position if output else "center"),
         track_specs=tracks.track_specs if tracks else None,
         cfg=cfg,
     )

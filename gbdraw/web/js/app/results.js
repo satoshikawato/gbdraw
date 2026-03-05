@@ -88,11 +88,16 @@ export const createResultsManager = ({ state, getPyodide }) => {
         const species = form.species || '';
         const strain = form.strain || '';
         const fontSize = adv.def_font_size || 18;
+        const multiRecordDefinitionMode = String(adv.multi_record_definition_mode || 'shared')
+          .trim()
+          .toLowerCase();
 
         const resultJson = pyodide.runPython(
           `regenerate_definition_svgs("${gbPath}", ${
             species ? `"${species.replace(/"/g, '\\"')}"` : 'None'
-          }, ${strain ? `"${strain.replace(/"/g, '\\"')}"` : 'None'}, ${fontSize})`
+          }, ${strain ? `"${strain.replace(/"/g, '\\"')}"` : 'None'}, ${fontSize}, "${
+            multiRecordDefinitionMode.replace(/"/g, '\\"')
+          }")`
         );
         const result = JSON.parse(resultJson);
 

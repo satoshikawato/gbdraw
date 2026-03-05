@@ -167,7 +167,7 @@ def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=
 
     return json.dumps({"rect": rect_svg, "text": text_svg})
 
-def regenerate_definition_svgs(gb_path, species=None, strain=None, font_size=18):
+def regenerate_definition_svgs(gb_path, species=None, strain=None, font_size=18, multi_record_definition_mode="shared"):
     """Regenerate definition group SVGs for all records in an input file"""
     from Bio import SeqIO
     from gbdraw.render.groups.circular.definition import DefinitionGroup
@@ -188,6 +188,11 @@ def regenerate_definition_svgs(gb_path, species=None, strain=None, font_size=18)
         if not records:
             return json.dumps({"error": "No records found"})
 
+        mode = str(multi_record_definition_mode or "shared").strip().lower()
+        if mode not in {"shared", "legacy"}:
+            mode = "shared"
+        use_shared = mode == "shared" and len(records) > 1
+
         definitions = []
         for index, record in enumerate(records):
             # Create canvas config
@@ -198,13 +203,14 @@ def regenerate_definition_svgs(gb_path, species=None, strain=None, font_size=18)
                 gb_record=record,
             )
 
-            # Create definition group with custom species/strain
+            profile = "record_summary" if use_shared else "full"
             def_group = DefinitionGroup(
                 gb_record=record,
                 canvas_config=canvas_config,
                 config_dict=config_dict,
                 species=species if species else None,
                 strain=strain if strain else None,
+                definition_profile=profile,
             )
 
             group = def_group.get_group()
@@ -216,17 +222,42 @@ def regenerate_definition_svgs(gb_path, species=None, strain=None, font_size=18)
                 }
             )
 
+        if use_shared:
+            shared_canvas_config = CircularCanvasConfigurator(
+                output_prefix="temp_shared",
+                config_dict=config_dict,
+                legend="none",
+                gb_record=records[0],
+            )
+            shared_group = DefinitionGroup(
+                gb_record=records[0],
+                canvas_config=shared_canvas_config,
+                config_dict=config_dict,
+                species=species if species else None,
+                strain=strain if strain else None,
+                definition_profile="shared_common",
+                definition_group_id="shared_definition",
+            )
+            definitions.append(
+                {
+                    "svg": shared_group.get_group().tostring(),
+                    "definition_group_id": "shared_definition",
+                    "record_index": None,
+                }
+            )
+
         return json.dumps({"definitions": definitions})
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 
-def regenerate_definition_svg(gb_path, species=None, strain=None, font_size=18):
+def regenerate_definition_svg(gb_path, species=None, strain=None, font_size=18, multi_record_definition_mode="shared"):
     """Backward-compatible single-record definition regeneration helper"""
     result_json = regenerate_definition_svgs(
         gb_path,
         species=species,
         strain=strain,
         font_size=font_size,
+        multi_record_definition_mode=multi_record_definition_mode,
     )
     try:
         payload = json.loads(result_json)

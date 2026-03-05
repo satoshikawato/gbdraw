@@ -587,6 +587,42 @@
                                         <input type="text" v-model="form.species" class="form-input form-input-compact" placeholder="Species (e.g. <i>Escherichia coli</i>)">
                                         <input type="text" v-model="form.strain" class="form-input form-input-compact" placeholder="Strain (e.g. K-12)">
                                     </div>
+                                    <div class="grid grid-cols-2 gap-1.5 mb-1.5">
+                                        <div>
+                                            <label class="input-label text-[10px] mb-0">
+                                                Definition Position
+                                                <help-tip text="Placement of per-record definition text in circular mode. Top/Bottom are centered on the full canvas width."></help-tip>
+                                            </label>
+                                            <select v-model="form.definition_position" class="form-input form-input-compact">
+                                                <option value="center">Center</option>
+                                                <option value="top">Top</option>
+                                                <option value="bottom">Bottom</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="input-label text-[10px] mb-0">
+                                                Multi-record Definition Mode
+                                                <help-tip text="Shared: one common definition plus per-circle summary (accession/length/GC). Legacy: each circle shows full definition."></help-tip>
+                                            </label>
+                                            <select v-model="adv.multi_record_definition_mode" class="form-input form-input-compact">
+                                                <option value="shared">Shared (Default)</option>
+                                                <option value="legacy">Legacy</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div v-if="adv.multi_record_definition_mode === 'shared'" class="grid grid-cols-2 gap-1.5 mb-1.5">
+                                        <div>
+                                            <label class="input-label text-[10px] mb-0">
+                                                Shared Definition Position
+                                                <help-tip text="Placement of the shared definition in multi-record shared mode."></help-tip>
+                                            </label>
+                                            <select v-model="adv.shared_definition_position" class="form-input form-input-compact">
+                                                <option value="center">Center</option>
+                                                <option value="top">Top</option>
+                                                <option value="bottom">Bottom (Default)</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                 </template>
 
                                 <label v-if="mode === 'linear'" class="input-label adv-section-title">Label Settings</label>

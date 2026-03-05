@@ -150,6 +150,7 @@ const form = reactive({
   prefix: '',
   species: '',
   strain: '',
+  definition_position: 'center',
   track_type: 'tuckin',
   linear_track_layout: 'middle',
   legend: 'left',
@@ -211,6 +212,8 @@ const adv = reactive({
   // Circular Specific
   multi_record_size_mode: 'sqrt',
   multi_record_min_radius_ratio: 0.55,
+  multi_record_definition_mode: 'shared',
+  shared_definition_position: 'bottom',
   feature_width_circular: null,
   gc_content_width_circular: null,
   gc_content_radius_circular: null,

@@ -66,6 +66,9 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--multi_record_canvas]
               [--multi_record_size_mode {linear,sqrt,equal}]
               [--multi_record_min_radius_ratio MULTI_RECORD_MIN_RADIUS_RATIO]
+              [--definition_position {center,top,bottom}]
+              [--multi_record_definition_mode {shared,legacy}]
+              [--shared_definition_position {center,top,bottom}]
               [--track_type TRACK_TYPE] [--resolve_overlaps]
               [--labels [{none,out,both}]] [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
@@ -153,6 +156,16 @@ options:
   --multi_record_min_radius_ratio MULTI_RECORD_MIN_RADIUS_RATIO
                         Minimum radius ratio for multi-record scaling (0 <
                         ratio <= 1; default: 0.55).
+  --definition_position {center,top,bottom}
+                        Definition position for single-record and legacy
+                        multi-record mode ("center", "top", "bottom";
+                        default: "center").
+  --multi_record_definition_mode {shared,legacy}
+                        Definition mode for multi-record canvas ("shared" or
+                        "legacy"; default: "shared").
+  --shared_definition_position {center,top,bottom}
+                        Shared definition position in multi-record shared mode
+                        ("center", "top", "bottom"; default: "bottom").
   --separate_strands    Separate strands (default: False).
   --track_type TRACK_TYPE
                         Track type (default: "tuckin"; "tuckin", "middle",

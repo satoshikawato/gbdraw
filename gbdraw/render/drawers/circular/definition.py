@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from __future__ import annotations
+
 from svgwrite.container import Group
 
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
@@ -23,13 +25,17 @@ class DefinitionDrawer:
         definition_group: Group,
         title_x: float,
         title_y: float,
-        species_parts: list,
-        strain_parts: list,
-        organelle_parts: list,
-        repicon_parts: list,
+        species_parts: list[dict],
+        strain_parts: list[dict],
+        organelle_parts: list[dict],
+        replicon_parts: list[dict],
         gc_percent: float,
         accession: str,
         record_length: int,
+        *,
+        show_accession: bool = True,
+        show_length: bool = True,
+        show_gc: bool = True,
     ) -> Group:
         lines: list[dict] = []
 
@@ -39,18 +45,22 @@ class DefinitionDrawer:
             lines.append({"kind": "name", "parts": strain_parts})
         if organelle_parts and organelle_parts[0]["text"] is not None:
             lines.append({"kind": "name", "parts": organelle_parts})
-        if repicon_parts and repicon_parts[0]["text"] is not None:
-            lines.append({"kind": "name", "parts": repicon_parts})
-        if accession.strip():
+        if replicon_parts and replicon_parts[0]["text"] is not None:
+            lines.append({"kind": "name", "parts": replicon_parts})
+        if show_accession and accession.strip():
             lines.append({"kind": "plain", "text": accession})
 
-        length_text = "{:,} bp".format(record_length)
-        lines.append({"kind": "plain", "text": length_text})
+        if show_length:
+            length_text = "{:,} bp".format(record_length)
+            lines.append({"kind": "plain", "text": length_text})
 
-        gc_text = f"{gc_percent}% GC"
-        lines.append({"kind": "plain", "text": gc_text})
+        if show_gc:
+            gc_text = f"{gc_percent}% GC"
+            lines.append({"kind": "plain", "text": gc_text})
 
         n = len(lines)
+        if n == 0:
+            return definition_group
         step = self.interval * 2
         start_offset = -step * (n - 2) / 2
 

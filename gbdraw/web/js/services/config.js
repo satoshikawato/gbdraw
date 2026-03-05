@@ -126,6 +126,10 @@ const applyConfigData = (data) => {
   } else if (!['above', 'middle', 'below'].includes(state.form.linear_track_layout)) {
     state.form.linear_track_layout = 'middle';
   }
+  const normalizedDefinitionPosition = String(state.form.definition_position || '').trim().toLowerCase();
+  state.form.definition_position = ['center', 'top', 'bottom'].includes(normalizedDefinitionPosition)
+    ? normalizedDefinitionPosition
+    : 'center';
   state.adv.feature_shapes = normalizeFeatureShapes(state.adv.feature_shapes);
   const normalizedMultiRecordSizeMode = String(state.adv.multi_record_size_mode || '').trim().toLowerCase();
   state.adv.multi_record_size_mode = ['linear', 'sqrt', 'equal'].includes(normalizedMultiRecordSizeMode)
@@ -136,6 +140,14 @@ const applyConfigData = (data) => {
     Number.isFinite(numericMinRadiusRatio) && numericMinRadiusRatio > 0 && numericMinRadiusRatio <= 1
       ? numericMinRadiusRatio
       : 0.55;
+  const normalizedMultiRecordDefinitionMode = String(state.adv.multi_record_definition_mode || '').trim().toLowerCase();
+  state.adv.multi_record_definition_mode = ['shared', 'legacy'].includes(normalizedMultiRecordDefinitionMode)
+    ? normalizedMultiRecordDefinitionMode
+    : 'shared';
+  const normalizedSharedDefinitionPosition = String(state.adv.shared_definition_position || '').trim().toLowerCase();
+  state.adv.shared_definition_position = ['center', 'top', 'bottom'].includes(normalizedSharedDefinitionPosition)
+    ? normalizedSharedDefinitionPosition
+    : 'bottom';
   if (data.losat) safeDeepMerge(state.losat, data.losat);
   if (data.colors) {
     const normalized = {};

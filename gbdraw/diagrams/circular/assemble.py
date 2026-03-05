@@ -1240,14 +1240,17 @@ def add_record_on_circular_canvas(
     gc_config: GcContentConfigurator,
     skew_config: GcSkewConfigurator,
     gc_df: DataFrame,
-    species: str,
-    strain: str,
+    species: str | None,
+    strain: str | None,
     config_dict: dict,
     legend_config,
     legend_table,
     *,
     cfg: GbdrawConfig | None = None,
     track_specs: list[TrackSpec] | None = None,
+    definition_position: str = "center",
+    definition_profile: str = "full",
+    definition_group_id: str | None = None,
 ) -> Drawing:
     """
     Adds various record-related groups to a circular canvas.
@@ -1494,8 +1497,21 @@ def add_record_on_circular_canvas(
 
     definition_ts = ts_by_kind.get("definition")
     if definition_ts is None or definition_ts.show:
+        definition_kwargs: dict[str, Any] = {"cfg": cfg}
+        if str(definition_profile) != "full":
+            definition_kwargs["definition_profile"] = definition_profile
+        if str(definition_position) != "center":
+            definition_kwargs["definition_position"] = definition_position
+        if definition_group_id is not None:
+            definition_kwargs["definition_group_id"] = definition_group_id
         canvas = add_record_definition_group_on_canvas(
-            canvas, gb_record, canvas_config, species, strain, config_dict, cfg=cfg
+            canvas,
+            gb_record,
+            canvas_config,
+            species,
+            strain,
+            config_dict,
+            **definition_kwargs,
         )
 
     resolved_outer_core_track_annuli: list[tuple[float, float]] = []
@@ -1767,6 +1783,9 @@ def assemble_circular_diagram(
     legend_config: LegendDrawingConfigurator,
     cfg: GbdrawConfig | None = None,
     track_specs: list[TrackSpec] | None = None,
+    definition_position: str = "center",
+    definition_profile: str = "full",
+    definition_group_id: str | None = None,
 ) -> Drawing:
     """
     Assembles a circular diagram for a GenBank record and returns the SVG canvas.
@@ -1833,6 +1852,9 @@ def assemble_circular_diagram(
         legend_table,
         cfg=cfg,
         track_specs=track_specs,
+        definition_position=definition_position,
+        definition_profile=definition_profile,
+        definition_group_id=definition_group_id,
     )
     return canvas
 
@@ -1851,6 +1873,9 @@ def plot_circular_diagram(
     legend_config: LegendDrawingConfigurator,
     cfg: GbdrawConfig | None = None,
     track_specs: list[TrackSpec] | None = None,
+    definition_position: str = "center",
+    definition_profile: str = "full",
+    definition_group_id: str | None = None,
 ) -> Drawing:
     """
     Backwards-compatible wrapper that assembles and saves a circular diagram.
@@ -1868,6 +1893,9 @@ def plot_circular_diagram(
         legend_config=legend_config,
         cfg=cfg,
         track_specs=track_specs,
+        definition_position=definition_position,
+        definition_profile=definition_profile,
+        definition_group_id=definition_group_id,
     )
     save_figure(canvas, out_formats)
     return canvas

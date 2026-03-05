@@ -226,6 +226,24 @@ def _get_args(args) -> argparse.Namespace:
         type=float,
         default=0.55)
     parser.add_argument(
+        '--definition_position',
+        help='Definition position for single-record and legacy multi-record mode ("center", "top", "bottom"; default: "center").',
+        type=str,
+        choices=['center', 'top', 'bottom'],
+        default='center')
+    parser.add_argument(
+        '--multi_record_definition_mode',
+        help='Definition mode for multi-record canvas ("shared" or "legacy"; default: "shared").',
+        type=str,
+        choices=['shared', 'legacy'],
+        default='shared')
+    parser.add_argument(
+        '--shared_definition_position',
+        help='Shared definition position in multi-record shared mode ("center", "top", "bottom"; default: "bottom").',
+        type=str,
+        choices=['center', 'top', 'bottom'],
+        default='bottom')
+    parser.add_argument(
         '--separate_strands',
         help='Separate strands (default: False).',
         action='store_true')
@@ -374,6 +392,9 @@ def circular_main(cmd_args) -> None:
     multi_record_canvas: bool = args.multi_record_canvas
     multi_record_size_mode: str = args.multi_record_size_mode
     multi_record_min_radius_ratio: float = args.multi_record_min_radius_ratio
+    definition_position: str = args.definition_position
+    multi_record_definition_mode: str = args.multi_record_definition_mode
+    shared_definition_position: str = args.shared_definition_position
     definition_font_size: Optional[float] = args.definition_font_size
     label_font_size: Optional[float] = args.label_font_size
     suppress_gc: bool = args.suppress_gc
@@ -431,6 +452,16 @@ def circular_main(cmd_args) -> None:
     track_type: str = args.track_type
     strandedness = args.separate_strands
     scale_interval: Optional[int] = args.scale_interval
+    if (
+        not multi_record_canvas
+        and (
+            multi_record_definition_mode != "shared"
+            or shared_definition_position != "bottom"
+        )
+    ):
+        logger.info(
+            "Ignoring --multi_record_definition_mode/--shared_definition_position because --multi_record_canvas is disabled."
+        )
     
     # Warn if resolve_overlaps is used with separate_strands
     if strandedness and resolve_overlaps:
@@ -553,6 +584,9 @@ def circular_main(cmd_args) -> None:
             step=manual_step,
             species=species,
             strain=strain,
+            definition_position=definition_position,
+            multi_record_definition_mode=multi_record_definition_mode,
+            shared_definition_position=shared_definition_position,
             multi_record_size_mode=multi_record_size_mode,
             multi_record_min_radius_ratio=multi_record_min_radius_ratio,
             cfg=cfg,
@@ -582,6 +616,7 @@ def circular_main(cmd_args) -> None:
                 step=step,
                 species=species,
                 strain=strain,
+                definition_position=definition_position,
                 cfg=cfg,
                 track_specs=track_specs_or_none,
             )
