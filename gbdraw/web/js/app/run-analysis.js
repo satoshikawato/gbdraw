@@ -280,7 +280,8 @@ json.dumps({
         multi_record_min_radius_ratio: false,
         definition_position: false,
         multi_record_definition_mode: false,
-        shared_definition_position: false
+        shared_definition_position: false,
+        shared_definition_font_size: false
       };
       return circularMultiRecordCanvasSupportCache;
     }
@@ -296,6 +297,7 @@ json.dumps({
   "definition_position": "--definition_position" in _source,
   "multi_record_definition_mode": "--multi_record_definition_mode" in _source,
   "shared_definition_position": "--shared_definition_position" in _source,
+  "shared_definition_font_size": "--shared_definition_font_size" in _source,
 })
       `);
       circularMultiRecordCanvasSupportCache = JSON.parse(String(raw));
@@ -306,7 +308,8 @@ json.dumps({
         multi_record_min_radius_ratio: false,
         definition_position: false,
         multi_record_definition_mode: false,
-        shared_definition_position: false
+        shared_definition_position: false,
+        shared_definition_font_size: false
       };
     }
     return circularMultiRecordCanvasSupportCache;
@@ -560,15 +563,41 @@ json.dumps({
           const normalizedMinRatio = normalizeMultiRecordMinRadiusRatio(adv.multi_record_min_radius_ratio);
           const normalizedDefinitionMode = normalizeMultiRecordDefinitionMode(adv.multi_record_definition_mode);
           const normalizedSharedDefinitionPosition = normalizeSharedDefinitionPosition(adv.shared_definition_position);
+          const hasSharedDefinitionFontSize =
+            adv.shared_definition_font_size !== null &&
+            adv.shared_definition_font_size !== undefined &&
+            adv.shared_definition_font_size !== '';
+          const parsedSharedDefinitionFontSize = hasSharedDefinitionFontSize
+            ? Number(adv.shared_definition_font_size)
+            : null;
+          const normalizedSharedDefinitionFontSize =
+            parsedSharedDefinitionFontSize !== null &&
+            Number.isFinite(parsedSharedDefinitionFontSize) &&
+            parsedSharedDefinitionFontSize > 0
+              ? parsedSharedDefinitionFontSize
+              : null;
           adv.multi_record_size_mode = normalizedSizeMode;
           adv.multi_record_min_radius_ratio = normalizedMinRatio;
           adv.multi_record_definition_mode = normalizedDefinitionMode;
           adv.shared_definition_position = normalizedSharedDefinitionPosition;
+          adv.shared_definition_font_size = normalizedSharedDefinitionFontSize;
           args.push('--multi_record_canvas');
           args.push('--multi_record_size_mode', normalizedSizeMode);
           args.push('--multi_record_min_radius_ratio', String(normalizedMinRatio));
           args.push('--multi_record_definition_mode', normalizedDefinitionMode);
           args.push('--shared_definition_position', normalizedSharedDefinitionPosition);
+          if (
+            normalizedDefinitionMode === 'shared' &&
+            normalizedSharedDefinitionFontSize !== null &&
+            Number.isFinite(normalizedSharedDefinitionFontSize)
+          ) {
+            if (!multiCanvasSupport.shared_definition_font_size) {
+              throw new Error(
+                'Current gbdraw wheel does not support --shared_definition_font_size. Rebuild and redeploy the web wheel.'
+              );
+            }
+            args.push('--shared_definition_font_size', String(normalizedSharedDefinitionFontSize));
+          }
         }
 
         if (adv.outer_label_x_offset) args.push('--outer_label_x_radius_offset', adv.outer_label_x_offset);

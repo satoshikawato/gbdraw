@@ -425,6 +425,7 @@ export const setupWatchers = ({
   watch(() => form.species, scheduleDefinitionUpdate);
   watch(() => form.strain, scheduleDefinitionUpdate);
   watch(() => state.adv.def_font_size, scheduleDefinitionUpdate);
+  watch(() => state.adv.shared_definition_font_size, scheduleDefinitionUpdate);
   watch(() => linearSeqs.map((seq) => seq.definition), scheduleDefinitionUpdate);
 
   onMounted(async () => {

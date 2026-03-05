@@ -87,7 +87,14 @@ export const createResultsManager = ({ state, getPyodide }) => {
       try {
         const species = form.species || '';
         const strain = form.strain || '';
-        const fontSize = adv.def_font_size || 18;
+        const hasDefinitionFontSize =
+          adv.def_font_size !== null && adv.def_font_size !== undefined && adv.def_font_size !== '';
+        const definitionFontSize = hasDefinitionFontSize ? Number(adv.def_font_size) : null;
+        const hasSharedDefinitionFontSize =
+          adv.shared_definition_font_size !== null &&
+          adv.shared_definition_font_size !== undefined &&
+          adv.shared_definition_font_size !== '';
+        const sharedDefinitionFontSize = hasSharedDefinitionFontSize ? Number(adv.shared_definition_font_size) : null;
         const multiRecordDefinitionMode = String(adv.multi_record_definition_mode || 'shared')
           .trim()
           .toLowerCase();
@@ -95,7 +102,13 @@ export const createResultsManager = ({ state, getPyodide }) => {
         const resultJson = pyodide.runPython(
           `regenerate_definition_svgs("${gbPath}", ${
             species ? `"${species.replace(/"/g, '\\"')}"` : 'None'
-          }, ${strain ? `"${strain.replace(/"/g, '\\"')}"` : 'None'}, ${fontSize}, "${
+          }, ${strain ? `"${strain.replace(/"/g, '\\"')}"` : 'None'}, ${
+            definitionFontSize === null || Number.isNaN(definitionFontSize) ? 'None' : definitionFontSize
+          }, ${
+            sharedDefinitionFontSize === null || Number.isNaN(sharedDefinitionFontSize)
+              ? 'None'
+              : sharedDefinitionFontSize
+          }, "${
             multiRecordDefinitionMode.replace(/"/g, '\\"')
           }")`
         );

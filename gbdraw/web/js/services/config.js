@@ -148,6 +148,20 @@ const applyConfigData = (data) => {
   state.adv.shared_definition_position = ['center', 'top', 'bottom'].includes(normalizedSharedDefinitionPosition)
     ? normalizedSharedDefinitionPosition
     : 'bottom';
+  const rawSharedDefinitionFontSize = state.adv.shared_definition_font_size;
+  if (
+    rawSharedDefinitionFontSize === null ||
+    rawSharedDefinitionFontSize === undefined ||
+    rawSharedDefinitionFontSize === ''
+  ) {
+    state.adv.shared_definition_font_size = null;
+  } else {
+    const numericSharedDefinitionFontSize = Number(rawSharedDefinitionFontSize);
+    state.adv.shared_definition_font_size =
+      Number.isFinite(numericSharedDefinitionFontSize) && numericSharedDefinitionFontSize > 0
+        ? numericSharedDefinitionFontSize
+        : null;
+  }
   if (data.losat) safeDeepMerge(state.losat, data.losat);
   if (data.colors) {
     const normalized = {};

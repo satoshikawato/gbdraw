@@ -68,6 +68,32 @@ def _extract_group_texts(root: ET.Element, group_id: str) -> list[str]:
     ]
 
 
+def _extract_group_font_sizes(root: ET.Element, group_id: str) -> list[float]:
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    group = root.find(f".//svg:g[@id='{group_id}']", ns)
+    assert group is not None
+    sizes: list[float] = []
+    for text in group.findall("./svg:text", ns):
+        if not "".join(text.itertext()).strip():
+            continue
+        font_size = text.attrib.get("font-size")
+        assert font_size is not None
+        sizes.append(float(font_size))
+    return sizes
+
+
+def _extract_group_font_weights(root: ET.Element, group_id: str) -> list[str]:
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    group = root.find(f".//svg:g[@id='{group_id}']", ns)
+    assert group is not None
+    weights: list[str] = []
+    for text in group.findall("./svg:text", ns):
+        if not "".join(text.itertext()).strip():
+            continue
+        weights.append(text.attrib.get("font-weight", "normal"))
+    return weights
+
+
 def _extract_group_translate_y(root: ET.Element, group_id: str) -> float:
     ns = {"svg": "http://www.w3.org/2000/svg"}
     group = root.find(f".//svg:g[@id='{group_id}']", ns)
@@ -360,6 +386,8 @@ def test_circular_cli_multi_record_canvas_passes_size_scaling_options(
             "legacy",
             "--shared_definition_position",
             "top",
+            "--shared_definition_font_size",
+            "30",
             "-o",
             str(tmp_path / "out"),
         ]
@@ -373,6 +401,7 @@ def test_circular_cli_multi_record_canvas_passes_size_scaling_options(
     assert captured_kwargs["definition_position"] == "top"
     assert captured_kwargs["multi_record_definition_mode"] == "legacy"
     assert captured_kwargs["shared_definition_position"] == "top"
+    assert captured_kwargs["cfg"].objects.definition.circular.shared_font_size == pytest.approx(30.0)
 
 
 @pytest.mark.circular
@@ -450,6 +479,7 @@ def test_circular_cli_definition_layout_defaults() -> None:
     assert args.definition_position == "center"
     assert args.multi_record_definition_mode == "shared"
     assert args.shared_definition_position == "bottom"
+    assert args.shared_definition_font_size is None
 
 
 @pytest.mark.circular
@@ -508,6 +538,10 @@ def test_multi_record_default_shared_definition_and_record_summary_content() -> 
 
     shared_texts = _extract_group_texts(root, "shared_definition")
     assert shared_texts == ["Organism alpha Strain A"]
+    shared_font_sizes = _extract_group_font_sizes(root, "shared_definition")
+    assert shared_font_sizes == [64.0]
+    shared_font_weights = _extract_group_font_weights(root, "shared_definition")
+    assert shared_font_weights == ["normal"]
 
     for record in records:
         record_texts = _extract_group_texts(root, f"{record.id}_definition")
@@ -518,6 +552,45 @@ def test_multi_record_default_shared_definition_and_record_summary_content() -> 
         assert any(text.endswith("% GC") for text in record_texts)
         assert record.features[0].qualifiers["organism"][0] not in record_texts
         assert record.features[0].qualifiers["strain"][0] not in record_texts
+        record_font_sizes = _extract_group_font_sizes(root, f"{record.id}_definition")
+        assert all(size == pytest.approx(18.0) for size in record_font_sizes)
+
+
+@pytest.mark.circular
+def test_shared_definition_font_size_override_only_changes_shared_definition() -> None:
+    records = [
+        _build_record_with_source(
+            "rec_font_a",
+            organism="Organism font A",
+            strain="Strain A",
+            feature_start=20,
+            length=1500,
+        ),
+        _build_record_with_source(
+            "rec_font_b",
+            organism="Organism font B",
+            strain="Strain B",
+            feature_start=240,
+            length=900,
+        ),
+    ]
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+        config_overrides={"shared_definition_font_size": 30},
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    shared_font_sizes = _extract_group_font_sizes(root, "shared_definition")
+    assert shared_font_sizes == [30.0]
+    shared_font_weights = _extract_group_font_weights(root, "shared_definition")
+    assert shared_font_weights == ["normal"]
+
+    for record in records:
+        record_font_sizes = _extract_group_font_sizes(root, f"{record.id}_definition")
+        assert all(size == pytest.approx(18.0) for size in record_font_sizes)
 
 
 @pytest.mark.circular

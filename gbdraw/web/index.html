@@ -622,6 +622,19 @@
                                                 <option value="bottom">Bottom (Default)</option>
                                             </select>
                                         </div>
+                                        <div>
+                                            <label class="input-label text-[10px] mb-0">
+                                                Shared Title Font Size
+                                                <help-tip text="Font size for the shared title in multi-record shared mode."></help-tip>
+                                            </label>
+                                            <input
+                                                type="number"
+                                                :value="adv.shared_definition_font_size ?? ''"
+                                                @input="adv.shared_definition_font_size = $event.target.value === '' ? null : Number($event.target.value)"
+                                                class="form-input form-input-compact"
+                                                placeholder="Auto (64)"
+                                            >
+                                        </div>
                                     </div>
                                 </template>
 

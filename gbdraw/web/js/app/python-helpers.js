@@ -167,7 +167,14 @@ def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=
 
     return json.dumps({"rect": rect_svg, "text": text_svg})
 
-def regenerate_definition_svgs(gb_path, species=None, strain=None, font_size=18, multi_record_definition_mode="shared"):
+def regenerate_definition_svgs(
+    gb_path,
+    species=None,
+    strain=None,
+    font_size=None,
+    shared_font_size=None,
+    multi_record_definition_mode="shared",
+):
     """Regenerate definition group SVGs for all records in an input file"""
     from Bio import SeqIO
     from gbdraw.render.groups.circular.definition import DefinitionGroup
@@ -179,9 +186,11 @@ def regenerate_definition_svgs(gb_path, species=None, strain=None, font_size=18,
         with resources.files("gbdraw.data").joinpath("config.toml").open("rb") as fh:
             config_dict = tomllib.load(fh)
 
-        # Override font size if provided
-        if font_size:
-            config_dict["objects"]["definition"]["circular"]["font_size"] = font_size
+        # Override font sizes if provided
+        if font_size is not None:
+            config_dict["objects"]["definition"]["circular"]["font_size"] = float(font_size)
+        if shared_font_size is not None:
+            config_dict["objects"]["definition"]["circular"]["shared_font_size"] = float(shared_font_size)
 
         # Parse the GenBank file
         records = list(SeqIO.parse(gb_path, "genbank"))
@@ -250,13 +259,21 @@ def regenerate_definition_svgs(gb_path, species=None, strain=None, font_size=18,
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 
-def regenerate_definition_svg(gb_path, species=None, strain=None, font_size=18, multi_record_definition_mode="shared"):
+def regenerate_definition_svg(
+    gb_path,
+    species=None,
+    strain=None,
+    font_size=None,
+    shared_font_size=None,
+    multi_record_definition_mode="shared",
+):
     """Backward-compatible single-record definition regeneration helper"""
     result_json = regenerate_definition_svgs(
         gb_path,
         species=species,
         strain=strain,
         font_size=font_size,
+        shared_font_size=shared_font_size,
         multi_record_definition_mode=multi_record_definition_mode,
     )
     try:

@@ -179,6 +179,10 @@ def _get_args(args) -> argparse.Namespace:
         help='Definition font size (optional; default: 18)',
         type=float)
     parser.add_argument(
+        '--shared_definition_font_size',
+        help='Shared definition font size for multi-record shared mode (optional; default: 64).',
+        type=float)
+    parser.add_argument(
         '--label_font_size',
         help='Label font size (optional; default: 14 (pt) for genomes <= 50 kb, 8 for genomes >= 50 kb)',
         type=float)
@@ -396,6 +400,7 @@ def circular_main(cmd_args) -> None:
     multi_record_definition_mode: str = args.multi_record_definition_mode
     shared_definition_position: str = args.shared_definition_position
     definition_font_size: Optional[float] = args.definition_font_size
+    shared_definition_font_size: Optional[float] = args.shared_definition_font_size
     label_font_size: Optional[float] = args.label_font_size
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
@@ -510,6 +515,7 @@ def circular_main(cmd_args) -> None:
         show_skew=show_skew, 
         allow_inner_labels=allow_inner_labels,
         circular_definition_font_size=definition_font_size,
+        shared_definition_font_size=shared_definition_font_size,
         label_font_size=label_font_size,
         label_blacklist=label_blacklist,
         label_whitelist=label_whitelist,

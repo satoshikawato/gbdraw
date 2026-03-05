@@ -141,6 +141,7 @@ short = 24
 [objects.definition.circular]
 interval = 20
 font_size = 18
+shared_font_size = 64
 
 [objects.features]
 features_drawn = ["CDS", "rRNA", "tRNA" ,"tmRNA", "ncRNA", "misc_RNA", "repeat_region", "regulatory","rep_origin", "misc_feature"]

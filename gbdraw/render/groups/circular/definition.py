@@ -100,6 +100,7 @@ class DefinitionGroup:
         self._cfg = cfg
         self.interval = cfg.objects.definition.circular.interval
         self.font_size = cfg.objects.definition.circular.font_size
+        self.shared_font_size = cfg.objects.definition.circular.shared_font_size
         self.font = cfg.objects.text.font_family
         self.track_id: str = str(self.gb_record.id).replace(" ", "_")
         self.definition_group_id: str = (
@@ -187,6 +188,10 @@ class DefinitionGroup:
             show_accession = False
             show_length = False
             show_gc = False
+        active_font_size = (
+            self.shared_font_size if self.definition_profile == "shared_common" else self.font_size
+        )
+        active_name_font_weight = "normal" if self.definition_profile == "shared_common" else "bold"
 
         self.definition_group: Group = DefinitionDrawer(self.config_dict, cfg=self._cfg).draw(
             self.definition_group,
@@ -202,6 +207,8 @@ class DefinitionGroup:
             show_accession=show_accession,
             show_length=show_length,
             show_gc=show_gc,
+            font_size=active_font_size,
+            name_font_weight=active_name_font_weight,
         )
 
     def get_group(self) -> Group:

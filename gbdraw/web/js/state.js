@@ -214,6 +214,7 @@ const adv = reactive({
   multi_record_min_radius_ratio: 0.55,
   multi_record_definition_mode: 'shared',
   shared_definition_position: 'bottom',
+  shared_definition_font_size: null,
   feature_width_circular: null,
   gc_content_width_circular: null,
   gc_content_radius_circular: null,
