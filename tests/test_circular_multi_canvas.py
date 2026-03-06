@@ -478,6 +478,26 @@ def test_assemble_circular_diagram_from_records_shared_legend_and_unique_ids() -
     assert len(skew_ids) == len(set(skew_ids))
     assert all(gid not in {"skew", "gc_skew"} for gid in skew_ids)
 
+    skew_clip_ids: list[str] = []
+    for skew_id in skew_ids:
+        skew_group = root.find(f".//svg:g[@id='{skew_id}']", ns)
+        assert skew_group is not None
+
+        local_clip_paths = skew_group.findall("./svg:clipPath[@id]", ns)
+        assert len(local_clip_paths) == 1
+        clip_id = local_clip_paths[0].attrib["id"]
+        skew_clip_ids.append(clip_id)
+
+        low_paths = [
+            path
+            for path in skew_group.findall("./svg:path", ns)
+            if path.attrib.get("clip-path")
+        ]
+        assert len(low_paths) == 1
+        assert low_paths[0].attrib.get("clip-path") == f"url(#{clip_id})"
+
+    assert len(skew_clip_ids) == len(set(skew_clip_ids))
+
 
 @pytest.mark.circular
 def test_assemble_circular_diagram_from_records_default_sqrt_scaling(

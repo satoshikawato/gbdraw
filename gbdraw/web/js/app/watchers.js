@@ -81,7 +81,7 @@ export const setupWatchers = ({
     reapplyStrokeOverrides
   } = legendActions;
 
-  const { applySpecificRulesToSvg, ensureUniquePairwiseGradientIds } = svgActions;
+  const { applySpecificRulesToSvg, ensureUniquePairwiseGradientIds, ensureUniqueSkewClipPathIds } = svgActions;
   const { attachSvgFeatureHandlers, refreshFeatureOverrides, syncLabelEditor } = featureActions;
   const {
     applyCanvasPadding,
@@ -194,6 +194,7 @@ export const setupWatchers = ({
         if (svgContainer.value) {
           const svgEl = svgContainer.value.querySelector('svg');
           if (svgEl) {
+            ensureUniqueSkewClipPathIds(svgEl);
             ensureUniquePairwiseGradientIds(svgEl);
             skipCaptureBaseConfig.value = true;
             const idx = selectedResultIndex.value;

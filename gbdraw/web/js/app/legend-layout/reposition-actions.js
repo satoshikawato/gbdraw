@@ -37,7 +37,7 @@ export const createLegendRepositionActions = ({
   } = state;
 
   const { getAllFeatureLegendGroups, reflowDualLegendLayout, reflowSingleLegendLayout } = legendActions;
-  const { ensureUniquePairwiseGradientIds } = svgActions;
+  const { ensureUniquePairwiseGradientIds, ensureUniqueSkewClipPathIds } = svgActions;
   const { applyDiagramShift } = diagramActions;
 
   const getCircularAbsoluteConfig = (position, baseConfig) => {
@@ -423,6 +423,7 @@ export const createLegendRepositionActions = ({
             debugLog('After toggle - horizontal display:', horizontalLegend.getAttribute('display'));
             debugLog('After toggle - vertical display:', verticalLegend.getAttribute('display'));
 
+            ensureUniqueSkewClipPathIds(svg);
             ensureUniquePairwiseGradientIds(svg);
 
             if (currentColors.value.pairwise_match_min && currentColors.value.pairwise_match_max) {

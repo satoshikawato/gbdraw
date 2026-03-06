@@ -37,6 +37,63 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     return groups;
   };
 
+  const ensureUniqueSkewClipPathIds = (svg) => {
+    if (!svg) return;
+
+    const skewGroups = getGroupsByBaseIds(svg, ['skew', 'gc_skew']);
+    if (skewGroups.length === 0) return;
+
+    const idCounts = new Map();
+    svg.querySelectorAll('[id]').forEach((el) => {
+      const id = el.getAttribute('id');
+      if (!id) return;
+      idCounts.set(id, (idCounts.get(id) || 0) + 1);
+    });
+
+    const usedIds = new Set();
+    svg.querySelectorAll('[id]').forEach((el) => {
+      const id = el.getAttribute('id');
+      if (id) usedIds.add(id);
+    });
+
+    skewGroups.forEach((skewGroup, groupIndex) => {
+      const groupId = skewGroup.getAttribute('id') || `skew_group_${groupIndex}`;
+      const clipPaths = skewGroup.querySelectorAll('clipPath[id]');
+
+      clipPaths.forEach((clipPath, clipIndex) => {
+        const oldId = clipPath.getAttribute('id');
+        if (!oldId) return;
+
+        const isDuplicateId = (idCounts.get(oldId) || 0) > 1;
+        if (!isDuplicateId) return;
+
+        const baseNewId = `${oldId}_${groupId}_${clipIndex}`;
+        let newId = baseNewId;
+        let suffix = 1;
+        while (usedIds.has(newId) && newId !== oldId) {
+          newId = `${baseNewId}_${suffix}`;
+          suffix += 1;
+        }
+
+        if (newId === oldId) return;
+
+        clipPath.setAttribute('id', newId);
+        usedIds.add(newId);
+
+        const clipPathUrl = `url(#${oldId})`;
+        const newClipPathUrl = `url(#${newId})`;
+        skewGroup.querySelectorAll('[clip-path], [clipPath]').forEach((element) => {
+          if (element.getAttribute('clip-path') === clipPathUrl) {
+            element.setAttribute('clip-path', newClipPathUrl);
+          }
+          if (element.getAttribute('clipPath') === clipPathUrl) {
+            element.setAttribute('clipPath', newClipPathUrl);
+          }
+        });
+      });
+    });
+  };
+
   const ensureUniquePairwiseGradientIds = (svg) => {
     if (!svg) return;
 
@@ -82,6 +139,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
+    ensureUniqueSkewClipPathIds(svg);
     ensureUniquePairwiseGradientIds(svg);
 
     const colors = currentColors.value;
@@ -575,6 +633,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
   );
 
   return {
+    ensureUniqueSkewClipPathIds,
     ensureUniquePairwiseGradientIds,
     applyPaletteToSvg,
     applySpecificRulesToSvg,

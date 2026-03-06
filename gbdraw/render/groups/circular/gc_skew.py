@@ -59,6 +59,7 @@ class GcSkewGroup:
             self.track_width,
             self.norm_factor,
             self.dinucleotide,
+            record_identifier=self.gb_record.id,
         )
 
     def get_group(self) -> Group:
