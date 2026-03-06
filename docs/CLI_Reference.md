@@ -66,6 +66,8 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--multi_record_canvas]
               [--multi_record_size_mode {linear,sqrt,equal}]
               [--multi_record_min_radius_ratio MULTI_RECORD_MIN_RADIUS_RATIO]
+              [--multi_record_column_gap_ratio MULTI_RECORD_COLUMN_GAP_RATIO]
+              [--multi_record_row_gap_ratio MULTI_RECORD_ROW_GAP_RATIO]
               [--definition_position {center,top,bottom}]
               [--multi_record_definition_mode {shared,legacy}]
               [--shared_definition_position {center,top,bottom}]
@@ -156,6 +158,12 @@ options:
   --multi_record_min_radius_ratio MULTI_RECORD_MIN_RADIUS_RATIO
                         Minimum radius ratio for multi-record scaling (0 <
                         ratio <= 1; default: 0.55).
+  --multi_record_column_gap_ratio MULTI_RECORD_COLUMN_GAP_RATIO
+                        Additional gap ratio between records in each row (>=
+                        0; default: 0.10).
+  --multi_record_row_gap_ratio MULTI_RECORD_ROW_GAP_RATIO
+                        Additional gap ratio between multi-record row content
+                        bounds (>= 0; default: 0.05).
   --definition_position {center,top,bottom}
                         Definition position for single-record and legacy
                         multi-record mode ("center", "top", "bottom";

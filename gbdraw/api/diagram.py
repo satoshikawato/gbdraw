@@ -84,7 +84,8 @@ _DEFINITION_POSITIONS = {"center", "top", "bottom"}
 _MULTI_RECORD_DEFINITION_MODES = {"shared", "legacy"}
 # Legacy fallback used only when a valid radius cannot be derived.
 _MULTI_RECORD_GRID_GAP_PX = 16.0
-_MULTI_RECORD_GRID_GAP_RATIO = 0.10
+_MULTI_RECORD_COLUMN_GAP_RATIO = 0.10
+_MULTI_RECORD_ROW_GAP_RATIO = 0.05
 _MULTI_RECORD_LEGEND_EDGE_PADDING_PX = 20.0
 _MULTI_RECORD_LEGEND_GRID_GAP_PX = 20.0
 _MULTI_RECORD_LEGEND_TOP_EDGE_PADDING_PX = 32.0
@@ -218,59 +219,156 @@ def _estimate_element_local_x_bounds(element: ET.Element) -> tuple[float, float]
     return None
 
 
-def _estimate_subcanvas_horizontal_insets(sub_canvas: Drawing) -> tuple[float, float]:
-    """Estimate left/right insets between viewBox edges and diagram geometry."""
+def _estimate_element_local_y_bounds(element: ET.Element) -> tuple[float, float] | None:
+    """Estimate an element local y-range from geometry attributes."""
+    tag = _svg_local_name(str(element.tag)).lower()
+    attribs = element.attrib
+
+    if tag == "circle":
+        cy = _parse_svg_length_px(attribs.get("cy"), default=0.0)
+        radius = abs(_parse_svg_length_px(attribs.get("r"), default=0.0))
+        return float(cy - radius), float(cy + radius)
+
+    if tag == "ellipse":
+        cy = _parse_svg_length_px(attribs.get("cy"), default=0.0)
+        radius_y = abs(_parse_svg_length_px(attribs.get("ry"), default=0.0))
+        return float(cy - radius_y), float(cy + radius_y)
+
+    if tag == "line":
+        y1 = _parse_svg_length_px(attribs.get("y1"), default=0.0)
+        y2 = _parse_svg_length_px(attribs.get("y2"), default=0.0)
+        return float(min(y1, y2)), float(max(y1, y2))
+
+    if tag in {"rect", "image"}:
+        y = _parse_svg_length_px(attribs.get("y"), default=0.0)
+        height = _parse_svg_length_px(attribs.get("height"), default=0.0)
+        return float(min(y, y + height)), float(max(y, y + height))
+
+    if tag in {"polygon", "polyline"}:
+        points = _parse_svg_numbers(attribs.get("points"))
+        if len(points) >= 2:
+            ys = points[1::2]
+            return float(min(ys)), float(max(ys))
+
+    if tag == "text":
+        text_y = _parse_svg_numbers(attribs.get("y"))
+        if text_y:
+            font_size = _parse_svg_length_px(attribs.get("font-size"), default=0.0)
+            half_height = 0.5 * font_size if font_size > 0.0 else 0.0
+            return float(min(text_y) - half_height), float(max(text_y) + half_height)
+
+    if tag == "path":
+        path_numbers = _parse_svg_numbers(attribs.get("d"))
+        if path_numbers:
+            max_abs = max(abs(value) for value in path_numbers)
+            return -float(max_abs), float(max_abs)
+
+    generic_numbers: list[float] = []
+    for key in ("y", "y1", "y2", "cy", "points", "d"):
+        generic_numbers.extend(_parse_svg_numbers(attribs.get(key)))
+    if generic_numbers:
+        max_abs = max(abs(value) for value in generic_numbers)
+        return -float(max_abs), float(max_abs)
+    return None
+
+
+def _estimate_subcanvas_content_bounds(
+    sub_canvas: Drawing,
+) -> tuple[tuple[float, float, float, float], tuple[float, float, float, float] | None] | None:
+    """Estimate content bounds within a sub-canvas viewBox, excluding defs and legend."""
     try:
         root = ET.fromstring(sub_canvas.tostring())
     except ET.ParseError:
-        return 0.0, 0.0
+        return None
 
     view_box = str(root.attrib.get("viewBox", "")).strip()
     view_box_parts = [part for part in view_box.split() if part]
     if len(view_box_parts) == 4:
         vb_x = _parse_svg_length_px(view_box_parts[0], default=0.0)
+        vb_y = _parse_svg_length_px(view_box_parts[1], default=0.0)
         vb_w = _parse_svg_length_px(view_box_parts[2], default=0.0)
+        vb_h = _parse_svg_length_px(view_box_parts[3], default=0.0)
     else:
         vb_x = 0.0
+        vb_y = 0.0
         vb_w = _parse_svg_length_px(root.attrib.get("width"), default=0.0)
+        vb_h = _parse_svg_length_px(root.attrib.get("height"), default=0.0)
 
-    if vb_w <= 0.0:
-        return 0.0, 0.0
+    if vb_w <= 0.0 and vb_h <= 0.0:
+        return None
 
     min_x: float | None = None
     max_x: float | None = None
+    min_y: float | None = None
+    max_y: float | None = None
 
-    def _walk(node: ET.Element, inherited_tx: float) -> None:
-        nonlocal min_x, max_x
+    def _walk(node: ET.Element, inherited_tx: float, inherited_ty: float) -> None:
+        nonlocal min_x, max_x, min_y, max_y
         tag = _svg_local_name(str(node.tag)).lower()
         if tag == "defs":
             return
         if tag == "g" and str(node.attrib.get("id", "")) == "legend":
             return
 
-        local_tx, _local_ty = _parse_translate_xy(node.attrib.get("transform"))
+        local_tx, local_ty = _parse_translate_xy(node.attrib.get("transform"))
         total_tx = inherited_tx + float(local_tx)
+        total_ty = inherited_ty + float(local_ty)
 
-        bounds = _estimate_element_local_x_bounds(node)
-        if bounds is not None:
-            candidate_min = total_tx + float(bounds[0])
-            candidate_max = total_tx + float(bounds[1])
-            min_x = candidate_min if min_x is None else min(min_x, candidate_min)
-            max_x = candidate_max if max_x is None else max(max_x, candidate_max)
+        bounds_x = _estimate_element_local_x_bounds(node)
+        if bounds_x is not None:
+            candidate_min_x = total_tx + float(bounds_x[0])
+            candidate_max_x = total_tx + float(bounds_x[1])
+            min_x = candidate_min_x if min_x is None else min(min_x, candidate_min_x)
+            max_x = candidate_max_x if max_x is None else max(max_x, candidate_max_x)
+
+        bounds_y = _estimate_element_local_y_bounds(node)
+        if bounds_y is not None:
+            candidate_min_y = total_ty + float(bounds_y[0])
+            candidate_max_y = total_ty + float(bounds_y[1])
+            min_y = candidate_min_y if min_y is None else min(min_y, candidate_min_y)
+            max_y = candidate_max_y if max_y is None else max(max_y, candidate_max_y)
 
         for child in list(node):
-            _walk(child, total_tx)
+            _walk(child, total_tx, total_ty)
 
-    _walk(root, 0.0)
+    _walk(root, 0.0, 0.0)
 
-    if min_x is None or max_x is None:
+    content_bounds: tuple[float, float, float, float] | None = None
+    if min_x is not None and max_x is not None and min_y is not None and max_y is not None:
+        content_bounds = (float(min_x), float(max_x), float(min_y), float(max_y))
+
+    return (
+        (float(vb_x), float(vb_x) + float(vb_w), float(vb_y), float(vb_y) + float(vb_h)),
+        content_bounds,
+    )
+
+
+def _estimate_subcanvas_horizontal_insets(sub_canvas: Drawing) -> tuple[float, float]:
+    """Estimate left/right insets between viewBox edges and diagram geometry."""
+    parsed = _estimate_subcanvas_content_bounds(sub_canvas)
+    if parsed is None:
         return 0.0, 0.0
-
-    view_min_x = float(vb_x)
-    view_max_x = float(vb_x) + float(vb_w)
-    left_inset = max(0.0, float(min_x) - view_min_x)
-    right_inset = max(0.0, view_max_x - float(max_x))
+    (view_min_x, view_max_x, _view_min_y, _view_max_y), content_bounds = parsed
+    if content_bounds is None:
+        return 0.0, 0.0
+    content_min_x, content_max_x, _content_min_y, _content_max_y = content_bounds
+    left_inset = max(0.0, float(content_min_x) - float(view_min_x))
+    right_inset = max(0.0, float(view_max_x) - float(content_max_x))
     return float(left_inset), float(right_inset)
+
+
+def _estimate_subcanvas_vertical_insets(sub_canvas: Drawing) -> tuple[float, float]:
+    """Estimate top/bottom insets between viewBox edges and diagram geometry."""
+    parsed = _estimate_subcanvas_content_bounds(sub_canvas)
+    if parsed is None:
+        return 0.0, 0.0
+    (_view_min_x, _view_max_x, view_min_y, view_max_y), content_bounds = parsed
+    if content_bounds is None:
+        return 0.0, 0.0
+    _content_min_x, _content_max_x, content_min_y, content_max_y = content_bounds
+    top_inset = max(0.0, float(content_min_y) - float(view_min_y))
+    bottom_inset = max(0.0, float(view_max_y) - float(content_max_y))
+    return float(top_inset), float(bottom_inset)
 
 
 def _estimate_square_grid(record_count: int) -> tuple[int, int]:
@@ -369,6 +467,22 @@ def _validate_multi_record_min_radius_ratio(value: float) -> float:
     return ratio
 
 
+def _validate_multi_record_row_gap_ratio(value: float) -> float:
+    """Validate row gap ratio for multi-record grid spacing."""
+    ratio = float(value)
+    if not math.isfinite(ratio) or ratio < 0.0:
+        raise ValidationError("multi_record_row_gap_ratio must be a finite number >= 0")
+    return ratio
+
+
+def _validate_multi_record_column_gap_ratio(value: float) -> float:
+    """Validate column gap ratio for multi-record grid spacing."""
+    ratio = float(value)
+    if not math.isfinite(ratio) or ratio < 0.0:
+        raise ValidationError("multi_record_column_gap_ratio must be a finite number >= 0")
+    return ratio
+
+
 def _resolve_multi_record_scale(
     record_length: int,
     max_record_length: int,
@@ -393,11 +507,11 @@ def _resolve_multi_record_scale(
     return max(float(min_radius_ratio), min(float(scale), 1.0))
 
 
-def _resolve_multi_record_grid_gap_px(max_record_radius_px: float) -> float:
+def _resolve_multi_record_grid_gap_px(max_record_radius_px: float, *, gap_ratio: float) -> float:
     """Return inter-record gap as a ratio of the largest record radius."""
     radius_px = float(max_record_radius_px)
     if radius_px > 0:
-        return radius_px * _MULTI_RECORD_GRID_GAP_RATIO
+        return radius_px * float(gap_ratio)
     return float(_MULTI_RECORD_GRID_GAP_PX)
 
 
@@ -781,6 +895,8 @@ def assemble_circular_diagram_from_records(
     shared_definition_position: Literal["center", "top", "bottom"] = "bottom",
     multi_record_size_mode: Literal["linear", "sqrt", "equal"] = "sqrt",
     multi_record_min_radius_ratio: float = 0.55,
+    multi_record_column_gap_ratio: float = _MULTI_RECORD_COLUMN_GAP_RATIO,
+    multi_record_row_gap_ratio: float = _MULTI_RECORD_ROW_GAP_RATIO,
     track_specs: Sequence[str | TrackSpec] | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
@@ -793,6 +909,12 @@ def assemble_circular_diagram_from_records(
     )
     normalized_multi_record_min_radius_ratio = _validate_multi_record_min_radius_ratio(
         float(multi_record_min_radius_ratio)
+    )
+    normalized_multi_record_column_gap_ratio = _validate_multi_record_column_gap_ratio(
+        float(multi_record_column_gap_ratio)
+    )
+    normalized_multi_record_row_gap_ratio = _validate_multi_record_row_gap_ratio(
+        float(multi_record_row_gap_ratio)
     )
     normalized_definition_position = _resolve_definition_position(
         str(definition_position),
@@ -940,7 +1062,14 @@ def assemble_circular_diagram_from_records(
         [float(radius) for radius in record_radii_px if float(radius) > 0.0],
         default=float(cfg.canvas.circular.radius),
     )
-    grid_gap_px = _resolve_multi_record_grid_gap_px(max_record_radius_px)
+    column_gap_px = _resolve_multi_record_grid_gap_px(
+        max_record_radius_px,
+        gap_ratio=normalized_multi_record_column_gap_ratio,
+    )
+    row_gap_px = _resolve_multi_record_grid_gap_px(
+        max_record_radius_px,
+        gap_ratio=normalized_multi_record_row_gap_ratio,
+    )
 
     cols, rows = _estimate_square_grid(len(canvases))
     row_heights: list[float] = [0.0] * rows
@@ -954,74 +1083,131 @@ def assemble_circular_diagram_from_records(
         row_record_indices[row].append(record_index)
         record_sizes.append((width_value, height_value))
 
-    def _grid_offsets(lengths: list[float], gap: float) -> list[float]:
-        offsets: list[float] = []
-        cursor = 0.0
-        for index, length in enumerate(lengths):
-            offsets.append(cursor)
-            cursor += float(length)
-            if index < len(lengths) - 1:
-                cursor += float(gap)
-        return offsets
+    record_vertical_insets: list[tuple[float, float]] = [
+        _estimate_subcanvas_vertical_insets(sub_canvas) for sub_canvas in canvases
+    ]
+    row_content_tops: list[float] = [0.0] * rows
+    row_content_bottoms: list[float] = [0.0] * rows
+    for row, row_indices in enumerate(row_record_indices):
+        if not row_indices:
+            continue
+        cell_height = float(row_heights[row]) if row < len(row_heights) else 0.0
+        row_content_top: float | None = None
+        row_content_bottom: float | None = None
+        for record_index in row_indices:
+            sub_height = float(record_sizes[record_index][1])
+            top_inset = max(0.0, float(record_vertical_insets[record_index][0]))
+            bottom_inset = max(0.0, float(record_vertical_insets[record_index][1]))
+            if sub_height > 0.0:
+                if top_inset > sub_height:
+                    top_inset = sub_height
+                if top_inset + bottom_inset > sub_height:
+                    bottom_inset = max(0.0, sub_height - top_inset)
+            content_height = max(0.0, sub_height - top_inset - bottom_inset)
+            cell_offset_y = (cell_height - sub_height) * 0.5
+            content_top = cell_offset_y + top_inset
+            content_bottom = content_top + content_height
+            row_content_top = content_top if row_content_top is None else min(row_content_top, content_top)
+            row_content_bottom = content_bottom if row_content_bottom is None else max(row_content_bottom, content_bottom)
+        row_content_tops[row] = float(row_content_top) if row_content_top is not None else 0.0
+        row_content_bottoms[row] = float(row_content_bottom) if row_content_bottom is not None else 0.0
 
-    row_offsets = _grid_offsets(row_heights, grid_gap_px)
-    row_widths: list[float] = []
+    row_offsets: list[float] = [0.0] * rows
+    for row in range(1, rows):
+        previous_row = row - 1
+        required_shift = (
+            row_content_bottoms[previous_row]
+            + float(row_gap_px)
+            - row_content_tops[row]
+        )
+        row_offsets[row] = float(row_offsets[previous_row]) + max(0.0, float(required_shift))
+    row_physical_widths: list[float] = []
     row_total_widths: list[float] = []
     row_outer_left_paddings: list[float] = []
     row_outer_right_paddings: list[float] = []
     record_horizontal_insets: list[tuple[float, float]] = [
         _estimate_subcanvas_horizontal_insets(sub_canvas) for sub_canvas in canvases
     ]
+    record_content_widths: list[float] = []
+    for record_index, (sub_width, _sub_height) in enumerate(record_sizes):
+        left_inset = max(0.0, float(record_horizontal_insets[record_index][0]))
+        right_inset = max(0.0, float(record_horizontal_insets[record_index][1]))
+        if sub_width > 0.0:
+            if left_inset > sub_width:
+                left_inset = sub_width
+            if left_inset + right_inset > sub_width:
+                right_inset = max(0.0, sub_width - left_inset)
+        record_horizontal_insets[record_index] = (float(left_inset), float(right_inset))
+        record_content_widths.append(
+            max(0.0, float(sub_width) - float(left_inset) - float(right_inset))
+        )
     apply_row_margin_symmetry = (
         str(legend_effective).strip().lower() in {"none", "top", "bottom"}
     )
     for row_indices in row_record_indices:
         if not row_indices:
-            row_widths.append(0.0)
+            row_physical_widths.append(0.0)
             row_total_widths.append(0.0)
             row_outer_left_paddings.append(0.0)
             row_outer_right_paddings.append(0.0)
             continue
-        row_width = sum(record_sizes[index][0] for index in row_indices)
-        row_width += max(0, len(row_indices) - 1) * grid_gap_px
-        row_widths.append(float(row_width))
+        row_content_width = sum(
+            float(record_content_widths[index]) for index in row_indices
+        )
+        row_content_width += max(0, len(row_indices) - 1) * column_gap_px
+
+        first_index = row_indices[0]
+        last_index = row_indices[-1]
+        row_left = max(0.0, float(record_horizontal_insets[first_index][0]))
+        row_right = max(0.0, float(record_horizontal_insets[last_index][1]))
+        row_physical_width = float(row_left) + float(row_content_width) + float(row_right)
+        row_physical_widths.append(float(row_physical_width))
 
         extra_left = 0.0
         extra_right = 0.0
         if apply_row_margin_symmetry:
-            first_index = row_indices[0]
-            last_index = row_indices[-1]
-            row_left = max(0.0, float(record_horizontal_insets[first_index][0]))
-            row_right = max(0.0, float(record_horizontal_insets[last_index][1]))
             target_margin = max(row_left, row_right)
             extra_left = max(0.0, target_margin - row_left)
             extra_right = max(0.0, target_margin - row_right)
 
         row_outer_left_paddings.append(float(extra_left))
         row_outer_right_paddings.append(float(extra_right))
-        row_total_widths.append(float(row_width + extra_left + extra_right))
+        row_total_widths.append(float(row_physical_width + extra_left + extra_right))
 
     grid_width = max(row_total_widths, default=0.0)
-    grid_height = (
-        (row_offsets[-1] + row_heights[-1]) if row_offsets else 0.0
+    grid_height = max(
+        (
+            float(row_offsets[row]) + float(row_heights[row])
+            for row in range(rows)
+        ),
+        default=0.0,
     )
     record_offsets_x: dict[int, float] = {}
     for row, row_indices in enumerate(row_record_indices):
         if not row_indices:
             continue
-        row_width = row_widths[row] if row < len(row_widths) else 0.0
+        row_physical_width = (
+            row_physical_widths[row] if row < len(row_physical_widths) else 0.0
+        )
         row_total_width = (
-            row_total_widths[row] if row < len(row_total_widths) else row_width
+            row_total_widths[row] if row < len(row_total_widths) else row_physical_width
         )
         row_outer_left_padding = (
             row_outer_left_paddings[row] if row < len(row_outer_left_paddings) else 0.0
         )
-        cursor_x = max(0.0, (grid_width - row_total_width) * 0.5) + row_outer_left_padding
+        first_index = row_indices[0]
+        content_cursor_x = (
+            max(0.0, (grid_width - row_total_width) * 0.5)
+            + row_outer_left_padding
+            + float(record_horizontal_insets[first_index][0])
+        )
         for position, record_index in enumerate(row_indices):
-            record_offsets_x[record_index] = cursor_x
-            cursor_x += record_sizes[record_index][0]
+            left_inset = float(record_horizontal_insets[record_index][0])
+            content_width = float(record_content_widths[record_index])
+            record_offsets_x[record_index] = content_cursor_x - left_inset
+            content_cursor_x += content_width
             if position < len(row_indices) - 1:
-                cursor_x += grid_gap_px
+                content_cursor_x += column_gap_px
 
     total_width = grid_width
     total_height = grid_height

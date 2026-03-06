@@ -4,6 +4,7 @@
 import sys
 import argparse
 import logging
+import math
 from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .io.genome import load_gbks, load_gff_fasta
@@ -230,6 +231,16 @@ def _get_args(args) -> argparse.Namespace:
         type=float,
         default=0.55)
     parser.add_argument(
+        '--multi_record_column_gap_ratio',
+        help='Additional horizontal gap ratio between visible content bounds in each multi-record row (>= 0; default: 0.10).',
+        type=float,
+        default=0.10)
+    parser.add_argument(
+        '--multi_record_row_gap_ratio',
+        help='Additional gap ratio between multi-record row content bounds (>= 0; default: 0.05).',
+        type=float,
+        default=0.05)
+    parser.add_argument(
         '--definition_position',
         help='Definition position for single-record and legacy multi-record mode ("center", "top", "bottom"; default: "center").',
         type=str,
@@ -360,6 +371,10 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--gc_skew_radius must be > 0")
     if args.multi_record_min_radius_ratio <= 0 or args.multi_record_min_radius_ratio > 1:
         parser.error("--multi_record_min_radius_ratio must be > 0 and <= 1")
+    if not math.isfinite(args.multi_record_column_gap_ratio) or args.multi_record_column_gap_ratio < 0:
+        parser.error("--multi_record_column_gap_ratio must be a finite number >= 0")
+    if not math.isfinite(args.multi_record_row_gap_ratio) or args.multi_record_row_gap_ratio < 0:
+        parser.error("--multi_record_row_gap_ratio must be a finite number >= 0")
     return args
 
 
@@ -396,6 +411,8 @@ def circular_main(cmd_args) -> None:
     multi_record_canvas: bool = args.multi_record_canvas
     multi_record_size_mode: str = args.multi_record_size_mode
     multi_record_min_radius_ratio: float = args.multi_record_min_radius_ratio
+    multi_record_column_gap_ratio: float = args.multi_record_column_gap_ratio
+    multi_record_row_gap_ratio: float = args.multi_record_row_gap_ratio
     definition_position: str = args.definition_position
     multi_record_definition_mode: str = args.multi_record_definition_mode
     shared_definition_position: str = args.shared_definition_position
@@ -595,6 +612,8 @@ def circular_main(cmd_args) -> None:
             shared_definition_position=shared_definition_position,
             multi_record_size_mode=multi_record_size_mode,
             multi_record_min_radius_ratio=multi_record_min_radius_ratio,
+            multi_record_column_gap_ratio=multi_record_column_gap_ratio,
+            multi_record_row_gap_ratio=multi_record_row_gap_ratio,
             cfg=cfg,
             track_specs=track_specs_or_none,
         )

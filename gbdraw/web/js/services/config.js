@@ -140,6 +140,16 @@ const applyConfigData = (data) => {
     Number.isFinite(numericMinRadiusRatio) && numericMinRadiusRatio > 0 && numericMinRadiusRatio <= 1
       ? numericMinRadiusRatio
       : 0.55;
+  const numericColumnGapRatio = Number(state.adv.multi_record_column_gap_ratio);
+  state.adv.multi_record_column_gap_ratio =
+    Number.isFinite(numericColumnGapRatio) && numericColumnGapRatio >= 0
+      ? numericColumnGapRatio
+      : 0.10;
+  const numericRowGapRatio = Number(state.adv.multi_record_row_gap_ratio);
+  state.adv.multi_record_row_gap_ratio =
+    Number.isFinite(numericRowGapRatio) && numericRowGapRatio >= 0
+      ? numericRowGapRatio
+      : 0.05;
   const normalizedMultiRecordDefinitionMode = String(state.adv.multi_record_definition_mode || '').trim().toLowerCase();
   state.adv.multi_record_definition_mode = ['shared', 'legacy'].includes(normalizedMultiRecordDefinitionMode)
     ? normalizedMultiRecordDefinitionMode

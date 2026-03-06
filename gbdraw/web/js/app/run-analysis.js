@@ -44,6 +44,14 @@ const normalizeMultiRecordMinRadiusRatio = (value) => {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric > 0 && numeric <= 1 ? numeric : 0.55;
 };
+const normalizeMultiRecordColumnGapRatio = (value) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0.10;
+};
+const normalizeMultiRecordRowGapRatio = (value) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0.05;
+};
 const normalizeDefinitionPosition = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'center';
@@ -278,6 +286,8 @@ json.dumps({
         circular: false,
         multi_record_size_mode: false,
         multi_record_min_radius_ratio: false,
+        multi_record_column_gap_ratio: false,
+        multi_record_row_gap_ratio: false,
         definition_position: false,
         multi_record_definition_mode: false,
         shared_definition_position: false,
@@ -294,6 +304,8 @@ json.dumps({
   "circular": "--multi_record_canvas" in _source,
   "multi_record_size_mode": "--multi_record_size_mode" in _source,
   "multi_record_min_radius_ratio": "--multi_record_min_radius_ratio" in _source,
+  "multi_record_column_gap_ratio": "--multi_record_column_gap_ratio" in _source,
+  "multi_record_row_gap_ratio": "--multi_record_row_gap_ratio" in _source,
   "definition_position": "--definition_position" in _source,
   "multi_record_definition_mode": "--multi_record_definition_mode" in _source,
   "shared_definition_position": "--shared_definition_position" in _source,
@@ -306,6 +318,8 @@ json.dumps({
         circular: false,
         multi_record_size_mode: false,
         multi_record_min_radius_ratio: false,
+        multi_record_column_gap_ratio: false,
+        multi_record_row_gap_ratio: false,
         definition_position: false,
         multi_record_definition_mode: false,
         shared_definition_position: false,
@@ -549,9 +563,14 @@ json.dumps({
               'Current gbdraw wheel does not support --multi_record_canvas. Rebuild and redeploy the web wheel.'
             );
           }
-          if (!multiCanvasSupport.multi_record_size_mode || !multiCanvasSupport.multi_record_min_radius_ratio) {
+          if (
+            !multiCanvasSupport.multi_record_size_mode ||
+            !multiCanvasSupport.multi_record_min_radius_ratio ||
+            !multiCanvasSupport.multi_record_column_gap_ratio ||
+            !multiCanvasSupport.multi_record_row_gap_ratio
+          ) {
             throw new Error(
-              'Current gbdraw wheel does not support multi-record size scaling options. Rebuild and redeploy the web wheel.'
+              'Current gbdraw wheel does not support multi-record size/grid spacing options. Rebuild and redeploy the web wheel.'
             );
           }
           if (!multiCanvasSupport.multi_record_definition_mode || !multiCanvasSupport.shared_definition_position) {
@@ -561,6 +580,8 @@ json.dumps({
           }
           const normalizedSizeMode = normalizeMultiRecordSizeMode(adv.multi_record_size_mode);
           const normalizedMinRatio = normalizeMultiRecordMinRadiusRatio(adv.multi_record_min_radius_ratio);
+          const normalizedColumnGapRatio = normalizeMultiRecordColumnGapRatio(adv.multi_record_column_gap_ratio);
+          const normalizedRowGapRatio = normalizeMultiRecordRowGapRatio(adv.multi_record_row_gap_ratio);
           const normalizedDefinitionMode = normalizeMultiRecordDefinitionMode(adv.multi_record_definition_mode);
           const normalizedSharedDefinitionPosition = normalizeSharedDefinitionPosition(adv.shared_definition_position);
           const hasSharedDefinitionFontSize =
@@ -578,12 +599,16 @@ json.dumps({
               : null;
           adv.multi_record_size_mode = normalizedSizeMode;
           adv.multi_record_min_radius_ratio = normalizedMinRatio;
+          adv.multi_record_column_gap_ratio = normalizedColumnGapRatio;
+          adv.multi_record_row_gap_ratio = normalizedRowGapRatio;
           adv.multi_record_definition_mode = normalizedDefinitionMode;
           adv.shared_definition_position = normalizedSharedDefinitionPosition;
           adv.shared_definition_font_size = normalizedSharedDefinitionFontSize;
           args.push('--multi_record_canvas');
           args.push('--multi_record_size_mode', normalizedSizeMode);
           args.push('--multi_record_min_radius_ratio', String(normalizedMinRatio));
+          args.push('--multi_record_column_gap_ratio', String(normalizedColumnGapRatio));
+          args.push('--multi_record_row_gap_ratio', String(normalizedRowGapRatio));
           args.push('--multi_record_definition_mode', normalizedDefinitionMode);
           args.push('--shared_definition_position', normalizedSharedDefinitionPosition);
           if (
