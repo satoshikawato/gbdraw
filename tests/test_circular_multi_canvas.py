@@ -39,16 +39,24 @@ def _build_record_with_source(
     strain: str,
     feature_start: int = 30,
     length: int = 1200,
+    chromosome: str | None = None,
+    plasmid: str | None = None,
 ) -> SeqRecord:
+    source_qualifiers: dict[str, list[str]] = {
+        "organism": [organism],
+        "strain": [strain],
+    }
+    if chromosome:
+        source_qualifiers["chromosome"] = [chromosome]
+    if plasmid:
+        source_qualifiers["plasmid"] = [plasmid]
+
     record = SeqRecord(Seq("A" * length), id=record_id)
     record.features = [
         SeqFeature(
             FeatureLocation(0, length, strand=1),
             type="source",
-            qualifiers={
-                "organism": [organism],
-                "strain": [strain],
-            },
+            qualifiers=source_qualifiers,
         ),
         SeqFeature(
             FeatureLocation(feature_start, feature_start + 120, strand=1),
@@ -1101,6 +1109,63 @@ def test_multi_record_default_shared_definition_and_record_summary_content() -> 
         assert record.features[0].qualifiers["strain"][0] not in record_texts
         record_font_sizes = _extract_group_font_sizes(root, f"{record.id}_definition")
         assert all(size == pytest.approx(18.0) for size in record_font_sizes)
+
+
+@pytest.mark.circular
+def test_multi_record_shared_record_summary_includes_replicon_when_available() -> None:
+    records = [
+        _build_record_with_source(
+            "rec_chr",
+            organism="Organism chr",
+            strain="Strain chr",
+            feature_start=20,
+            length=1500,
+            chromosome="1",
+        ),
+        _build_record_with_source(
+            "rec_plasmid",
+            organism="Organism plasmid",
+            strain="Strain plasmid",
+            feature_start=240,
+            length=900,
+            plasmid="pVNTG2",
+        ),
+        _build_record_with_source(
+            "rec_no_replicon",
+            organism="Organism none",
+            strain="Strain none",
+            feature_start=120,
+            length=1000,
+        ),
+    ]
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    expected_replicon_by_record = {
+        "rec_chr": "Chromosome 1",
+        "rec_plasmid": "pVNTG2",
+    }
+    for record in records:
+        group_id = f"{record.id}_definition"
+        record_texts = _extract_group_texts(root, group_id)
+        assert record_texts
+        assert any(text.endswith("bp") for text in record_texts)
+        assert any(text.endswith("% GC") for text in record_texts)
+
+        expected_replicon = expected_replicon_by_record.get(record.id)
+        if expected_replicon is not None:
+            assert record_texts[0] == expected_replicon
+            assert record_texts[1] == record.id
+            record_font_weights = _extract_group_font_weights(root, group_id)
+            assert record_font_weights[0] == "bold"
+        else:
+            # No replicon qualifier: keep current summary fallback (accession first).
+            assert record_texts[0] == record.id
 
 
 @pytest.mark.circular

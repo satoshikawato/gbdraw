@@ -350,7 +350,7 @@ Notes:
   near-square grid (`cols = ceil(sqrt(n))`, `rows = ceil(n / cols)`).
 - Legend is shared (single legend group) when `legend != "none"`.
 - In `multi_record_definition_mode="shared"` (default), each circle shows a
-  per-record summary (`record name + accession + length + GC`) and one shared
+  per-record summary (`replicon if available + accession + length + GC`) and one shared
   definition group (`species + strain`) is added to the merged canvas.
 
 ### 6.3 `assemble_linear_diagram_from_records(...)`

@@ -179,7 +179,6 @@ class DefinitionGroup:
             species_parts = parse_mixed_content_text("")
             strain_parts = parse_mixed_content_text("")
             organelle_parts = parse_mixed_content_text("")
-            replicon_parts = parse_mixed_content_text("")
         elif self.definition_profile == "shared_common":
             species_parts = _merge_name_parts_with_single_space(species_parts, strain_parts)
             strain_parts = parse_mixed_content_text("")
