@@ -233,6 +233,39 @@ def _extract_viewbox_width(root: ET.Element) -> float:
     return parts[2]
 
 
+def _build_mock_circular_subcanvas(width: float, height: float, inset: float) -> Drawing:
+    canvas = Drawing(
+        filename="mock.svg",
+        size=(f"{width}px", f"{height}px"),
+        viewBox=f"0 0 {width} {height}",
+        debug=False,
+    )
+    axis_group = canvas.g(id="Axis")
+    axis_group.translate(width * 0.5, height * 0.5)
+    radius = max(1.0, (width * 0.5) - float(inset))
+    axis_group.add(canvas.circle(center=(0, 0), r=radius, fill="none", stroke="gray"))
+    canvas.add(axis_group)
+    return canvas
+
+
+def _extract_record_axis_outer_edges(root: ET.Element, record_index: int) -> tuple[float, float]:
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    record_group = root.find(f".//svg:g[@id='record_{record_index}']", ns)
+    assert record_group is not None
+    record_x, _record_y = _parse_translate(record_group.attrib.get("transform", ""))
+
+    axis_group = record_group.find(f"./svg:g[@id='Axis_{record_index}']", ns)
+    assert axis_group is not None
+    axis_x, _axis_y = _parse_translate(axis_group.attrib.get("transform", ""))
+
+    circle = axis_group.find("./svg:circle", ns)
+    assert circle is not None
+    radius = float(circle.attrib.get("r", "0"))
+
+    center_x = record_x + axis_x
+    return center_x - radius, center_x + radius
+
+
 def _extract_legend_text_transforms(root: ET.Element) -> list[tuple[float, float, str]]:
     ns = {"svg": "http://www.w3.org/2000/svg"}
     legend = root.find(".//svg:g[@id='legend']", ns)
@@ -644,6 +677,145 @@ def test_multi_record_row_gap_uses_ten_percent_of_max_radius_and_keeps_row_cente
     expected_row1_start = (row0_width - row1_width) * 0.5
     assert record_x[3] == pytest.approx(expected_row1_start, abs=1e-6)
 
+
+@pytest.mark.circular
+@pytest.mark.parametrize("legend_position", ["none", "top", "bottom"])
+def test_multi_record_row_outer_margins_equalize_to_larger_side_for_none_top_bottom(
+    monkeypatch: pytest.MonkeyPatch,
+    legend_position: str,
+) -> None:
+    records = [
+        _build_record("sym_a", 20, length=1000),
+        _build_record("sym_b", 220, length=900),
+        _build_record("sym_c", 420, length=800),
+        _build_record("sym_d", 620, length=700),
+        _build_record("sym_e", 820, length=600),
+        _build_record("sym_f", 1020, length=500),
+    ]
+    planned_sizes = [
+        (1000.0, 900.0),
+        (700.0, 900.0),
+        (520.0, 900.0),
+        (550.0, 900.0),
+        (420.0, 900.0),
+        (390.0, 900.0),
+    ]
+    planned_insets = [120.0, 85.0, 60.0, 70.0, 58.0, 45.0]
+    captured_radii: list[float] = []
+
+    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
+        index_map = {record.id: idx for idx, record in enumerate(records)}
+        index = index_map[gb_record.id]
+        width, height = planned_sizes[index]
+        captured_radii.append(float(kwargs["cfg"].canvas.circular.radius))
+        return _build_mock_circular_subcanvas(width, height, planned_insets[index])
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend=legend_position,
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    expected_gap = max(captured_radii) * 0.1
+    record_x = [
+        _extract_group_translate_xy(root, f"record_{index}")[0]
+        for index in range(len(records))
+    ]
+
+    assert record_x[1] - (record_x[0] + planned_sizes[0][0]) == pytest.approx(expected_gap, abs=1e-6)
+    assert record_x[2] - (record_x[1] + planned_sizes[1][0]) == pytest.approx(expected_gap, abs=1e-6)
+    assert record_x[4] - (record_x[3] + planned_sizes[3][0]) == pytest.approx(expected_gap, abs=1e-6)
+    assert record_x[5] - (record_x[4] + planned_sizes[4][0]) == pytest.approx(expected_gap, abs=1e-6)
+
+    row0_inner_width = planned_sizes[0][0] + planned_sizes[1][0] + planned_sizes[2][0] + 2.0 * expected_gap
+    row1_inner_width = planned_sizes[3][0] + planned_sizes[4][0] + planned_sizes[5][0] + 2.0 * expected_gap
+    row0_target = max(planned_insets[0], planned_insets[2])
+    row1_target = max(planned_insets[3], planned_insets[5])
+    row0_extra_left = row0_target - planned_insets[0]
+    row0_extra_right = row0_target - planned_insets[2]
+    row1_extra_left = row1_target - planned_insets[3]
+    row1_extra_right = row1_target - planned_insets[5]
+    row0_total_width = row0_inner_width + row0_extra_left + row0_extra_right
+    row1_total_width = row1_inner_width + row1_extra_left + row1_extra_right
+    grid_width = max(row0_total_width, row1_total_width)
+    expected_row1_start = ((grid_width - row1_total_width) * 0.5) + row1_extra_left
+    assert record_x[3] == pytest.approx(expected_row1_start, abs=1e-6)
+
+    canvas_width = _extract_viewbox_width(root)
+    row0_left_edge = _extract_record_axis_outer_edges(root, 0)[0]
+    row0_right_edge = _extract_record_axis_outer_edges(root, 2)[1]
+    row0_left_margin = row0_left_edge
+    row0_right_margin = canvas_width - row0_right_edge
+    assert row0_left_margin == pytest.approx(row0_right_margin, abs=1e-6)
+    assert row0_left_margin == pytest.approx(row0_target, abs=1e-6)
+
+    row1_left_edge = _extract_record_axis_outer_edges(root, 3)[0]
+    row1_right_edge = _extract_record_axis_outer_edges(root, 5)[1]
+    row1_left_margin = row1_left_edge
+    row1_right_margin = canvas_width - row1_right_edge
+    assert row1_left_margin == pytest.approx(row1_right_margin, abs=1e-6)
+
+
+@pytest.mark.circular
+def test_multi_record_row_margin_symmetry_not_applied_for_right_legend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("scope_a", 20, length=1000),
+        _build_record("scope_b", 220, length=900),
+        _build_record("scope_c", 420, length=800),
+        _build_record("scope_d", 620, length=700),
+        _build_record("scope_e", 820, length=600),
+        _build_record("scope_f", 1020, length=500),
+    ]
+    planned_sizes = [
+        (1000.0, 900.0),
+        (700.0, 900.0),
+        (520.0, 900.0),
+        (550.0, 900.0),
+        (420.0, 900.0),
+        (390.0, 900.0),
+    ]
+    planned_insets = [120.0, 85.0, 60.0, 70.0, 58.0, 45.0]
+    captured_radii: list[float] = []
+
+    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
+        index_map = {record.id: idx for idx, record in enumerate(records)}
+        index = index_map[gb_record.id]
+        width, height = planned_sizes[index]
+        captured_radii.append(float(kwargs["cfg"].canvas.circular.radius))
+        return _build_mock_circular_subcanvas(width, height, planned_insets[index])
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="right",
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    expected_gap = max(captured_radii) * 0.1
+    record_x = [
+        _extract_group_translate_xy(root, f"record_{index}")[0]
+        for index in range(len(records))
+    ]
+
+    row0_inner_width = planned_sizes[0][0] + planned_sizes[1][0] + planned_sizes[2][0] + 2.0 * expected_gap
+    row1_inner_width = planned_sizes[3][0] + planned_sizes[4][0] + planned_sizes[5][0] + 2.0 * expected_gap
+    expected_row1_start_without_symmetry = (row0_inner_width - row1_inner_width) * 0.5
+    assert record_x[3] == pytest.approx(expected_row1_start_without_symmetry, abs=1e-6)
 
 @pytest.mark.circular
 def test_circular_cli_multi_record_canvas_opt_in_saves_once(

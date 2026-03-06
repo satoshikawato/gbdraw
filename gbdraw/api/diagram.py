@@ -12,6 +12,8 @@ from __future__ import annotations
 import copy
 import logging
 import math
+import re
+import xml.etree.ElementTree as ET
 from dataclasses import replace
 from typing import Optional, Sequence, Mapping, Literal, cast
 
@@ -88,6 +90,10 @@ _MULTI_RECORD_LEGEND_GRID_GAP_PX = 20.0
 _MULTI_RECORD_LEGEND_TOP_EDGE_PADDING_PX = 32.0
 _MULTI_RECORD_LEGEND_SHARED_GAP_PX = 20.0
 _MULTI_RECORD_SHARED_BOTTOM_MARGIN_PX = 24.0
+_SVG_NUMBER_PATTERN = re.compile(r"[-+]?(?:\d*\.?\d+)(?:[eE][-+]?\d+)?")
+_SVG_TRANSLATE_PATTERN = re.compile(
+    r"translate\(\s*([-+0-9.eE]+)(?:[\s,]+([-+0-9.eE]+))?\s*\)"
+)
 
 
 def _resolve_circular_window_step(
@@ -132,6 +138,139 @@ def _parse_svg_length_px(value: object, *, default: float = 0.0) -> float:
         return float(raw)
     except (TypeError, ValueError):
         return float(default)
+
+
+def _svg_local_name(tag: str) -> str:
+    if "}" in tag:
+        return tag.rsplit("}", maxsplit=1)[1]
+    return tag
+
+
+def _parse_translate_xy(value: object) -> tuple[float, float]:
+    text = str(value or "")
+    match = _SVG_TRANSLATE_PATTERN.search(text)
+    if match is None:
+        return 0.0, 0.0
+    x = _parse_svg_length_px(match.group(1), default=0.0)
+    y = _parse_svg_length_px(match.group(2), default=0.0) if match.group(2) is not None else 0.0
+    return float(x), float(y)
+
+
+def _parse_svg_numbers(value: object) -> list[float]:
+    text = str(value or "")
+    values: list[float] = []
+    for raw_value in _SVG_NUMBER_PATTERN.findall(text):
+        try:
+            values.append(float(raw_value))
+        except (TypeError, ValueError):
+            continue
+    return values
+
+
+def _estimate_element_local_x_bounds(element: ET.Element) -> tuple[float, float] | None:
+    """Estimate an element local x-range from geometry attributes."""
+    tag = _svg_local_name(str(element.tag)).lower()
+    attribs = element.attrib
+
+    if tag == "circle":
+        cx = _parse_svg_length_px(attribs.get("cx"), default=0.0)
+        radius = abs(_parse_svg_length_px(attribs.get("r"), default=0.0))
+        return float(cx - radius), float(cx + radius)
+
+    if tag == "ellipse":
+        cx = _parse_svg_length_px(attribs.get("cx"), default=0.0)
+        radius_x = abs(_parse_svg_length_px(attribs.get("rx"), default=0.0))
+        return float(cx - radius_x), float(cx + radius_x)
+
+    if tag == "line":
+        x1 = _parse_svg_length_px(attribs.get("x1"), default=0.0)
+        x2 = _parse_svg_length_px(attribs.get("x2"), default=0.0)
+        return float(min(x1, x2)), float(max(x1, x2))
+
+    if tag in {"rect", "image"}:
+        x = _parse_svg_length_px(attribs.get("x"), default=0.0)
+        width = _parse_svg_length_px(attribs.get("width"), default=0.0)
+        return float(min(x, x + width)), float(max(x, x + width))
+
+    if tag in {"polygon", "polyline"}:
+        points = _parse_svg_numbers(attribs.get("points"))
+        if len(points) >= 2:
+            xs = points[0::2]
+            return float(min(xs)), float(max(xs))
+
+    if tag == "text":
+        text_x = _parse_svg_numbers(attribs.get("x"))
+        if text_x:
+            return float(min(text_x)), float(max(text_x))
+
+    if tag == "path":
+        path_numbers = _parse_svg_numbers(attribs.get("d"))
+        if path_numbers:
+            max_abs = max(abs(value) for value in path_numbers)
+            return -float(max_abs), float(max_abs)
+
+    generic_numbers: list[float] = []
+    for key in ("x", "x1", "x2", "cx", "points", "d"):
+        generic_numbers.extend(_parse_svg_numbers(attribs.get(key)))
+    if generic_numbers:
+        max_abs = max(abs(value) for value in generic_numbers)
+        return -float(max_abs), float(max_abs)
+    return None
+
+
+def _estimate_subcanvas_horizontal_insets(sub_canvas: Drawing) -> tuple[float, float]:
+    """Estimate left/right insets between viewBox edges and diagram geometry."""
+    try:
+        root = ET.fromstring(sub_canvas.tostring())
+    except ET.ParseError:
+        return 0.0, 0.0
+
+    view_box = str(root.attrib.get("viewBox", "")).strip()
+    view_box_parts = [part for part in view_box.split() if part]
+    if len(view_box_parts) == 4:
+        vb_x = _parse_svg_length_px(view_box_parts[0], default=0.0)
+        vb_w = _parse_svg_length_px(view_box_parts[2], default=0.0)
+    else:
+        vb_x = 0.0
+        vb_w = _parse_svg_length_px(root.attrib.get("width"), default=0.0)
+
+    if vb_w <= 0.0:
+        return 0.0, 0.0
+
+    min_x: float | None = None
+    max_x: float | None = None
+
+    def _walk(node: ET.Element, inherited_tx: float) -> None:
+        nonlocal min_x, max_x
+        tag = _svg_local_name(str(node.tag)).lower()
+        if tag == "defs":
+            return
+        if tag == "g" and str(node.attrib.get("id", "")) == "legend":
+            return
+
+        local_tx, _local_ty = _parse_translate_xy(node.attrib.get("transform"))
+        total_tx = inherited_tx + float(local_tx)
+
+        bounds = _estimate_element_local_x_bounds(node)
+        if bounds is not None:
+            candidate_min = total_tx + float(bounds[0])
+            candidate_max = total_tx + float(bounds[1])
+            min_x = candidate_min if min_x is None else min(min_x, candidate_min)
+            max_x = candidate_max if max_x is None else max(max_x, candidate_max)
+
+        for child in list(node):
+            _walk(child, total_tx)
+
+    _walk(root, 0.0)
+
+    if min_x is None or max_x is None:
+        return 0.0, 0.0
+
+    view_min_x = float(vb_x)
+    view_max_x = float(vb_x) + float(vb_w)
+    left_inset = max(0.0, float(min_x) - view_min_x)
+    right_inset = max(0.0, view_max_x - float(max_x))
+    return float(left_inset), float(right_inset)
 
 
 def _estimate_square_grid(record_count: int) -> tuple[int, int]:
@@ -827,14 +966,42 @@ def assemble_circular_diagram_from_records(
 
     row_offsets = _grid_offsets(row_heights, grid_gap_px)
     row_widths: list[float] = []
+    row_total_widths: list[float] = []
+    row_outer_left_paddings: list[float] = []
+    row_outer_right_paddings: list[float] = []
+    record_horizontal_insets: list[tuple[float, float]] = [
+        _estimate_subcanvas_horizontal_insets(sub_canvas) for sub_canvas in canvases
+    ]
+    apply_row_margin_symmetry = (
+        str(legend_effective).strip().lower() in {"none", "top", "bottom"}
+    )
     for row_indices in row_record_indices:
         if not row_indices:
             row_widths.append(0.0)
+            row_total_widths.append(0.0)
+            row_outer_left_paddings.append(0.0)
+            row_outer_right_paddings.append(0.0)
             continue
         row_width = sum(record_sizes[index][0] for index in row_indices)
         row_width += max(0, len(row_indices) - 1) * grid_gap_px
         row_widths.append(float(row_width))
-    grid_width = max(row_widths, default=0.0)
+
+        extra_left = 0.0
+        extra_right = 0.0
+        if apply_row_margin_symmetry:
+            first_index = row_indices[0]
+            last_index = row_indices[-1]
+            row_left = max(0.0, float(record_horizontal_insets[first_index][0]))
+            row_right = max(0.0, float(record_horizontal_insets[last_index][1]))
+            target_margin = max(row_left, row_right)
+            extra_left = max(0.0, target_margin - row_left)
+            extra_right = max(0.0, target_margin - row_right)
+
+        row_outer_left_paddings.append(float(extra_left))
+        row_outer_right_paddings.append(float(extra_right))
+        row_total_widths.append(float(row_width + extra_left + extra_right))
+
+    grid_width = max(row_total_widths, default=0.0)
     grid_height = (
         (row_offsets[-1] + row_heights[-1]) if row_offsets else 0.0
     )
@@ -843,7 +1010,13 @@ def assemble_circular_diagram_from_records(
         if not row_indices:
             continue
         row_width = row_widths[row] if row < len(row_widths) else 0.0
-        cursor_x = max(0.0, (grid_width - row_width) * 0.5)
+        row_total_width = (
+            row_total_widths[row] if row < len(row_total_widths) else row_width
+        )
+        row_outer_left_padding = (
+            row_outer_left_paddings[row] if row < len(row_outer_left_paddings) else 0.0
+        )
+        cursor_x = max(0.0, (grid_width - row_total_width) * 0.5) + row_outer_left_padding
         for position, record_index in enumerate(row_indices):
             record_offsets_x[record_index] = cursor_x
             cursor_x += record_sizes[record_index][0]
