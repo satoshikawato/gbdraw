@@ -384,6 +384,25 @@ def _extract_definition_top_y(root: ET.Element, group_id: str) -> float:
     return min_top
 
 
+def _extract_definition_bottom_y(root: ET.Element, group_id: str) -> float:
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    group = root.find(f".//svg:g[@id='{group_id}']", ns)
+    assert group is not None
+    _, group_y = _parse_translate(group.attrib.get("transform", ""))
+
+    max_bottom = float("-inf")
+    for text in group.findall("./svg:text", ns):
+        y_raw = text.attrib.get("y", "0")
+        font_size_raw = text.attrib.get("font-size", "0")
+        y_val = float(str(y_raw).replace("px", ""))
+        font_size = float(str(font_size_raw).replace("px", ""))
+        bottom = group_y + y_val + (0.5 * font_size)
+        max_bottom = max(max_bottom, bottom)
+
+    assert max_bottom != float("-inf")
+    return max_bottom
+
+
 @pytest.mark.circular
 def test_assemble_circular_diagram_from_records_shared_legend_and_unique_ids() -> None:
     records = [
@@ -1512,6 +1531,52 @@ def test_multi_record_bottom_shared_definition_stays_below_legend() -> None:
     _legend_top, legend_bottom = _extract_legend_vertical_bounds(root)
     shared_top = _extract_definition_top_y(root, "shared_definition")
     assert shared_top >= legend_bottom + 20.0 - 1e-6
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("legend_position", ["left", "right"])
+def test_multi_record_left_right_shared_definition_bottom_keeps_margins(
+    legend_position: str,
+) -> None:
+    records = [
+        _build_record_with_source(
+            "legend_side_shared_a",
+            organism="Legend side shared A",
+            strain="Strain A",
+            length=1300,
+        ),
+        _build_record_with_source(
+            "legend_side_shared_b",
+            organism="Legend side shared B",
+            strain="Strain B",
+            length=900,
+        ),
+    ]
+
+    baseline_canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend=legend_position,
+        multi_record_definition_mode="shared",
+        shared_definition_position="center",
+    )
+    baseline_root = ET.fromstring(baseline_canvas.tostring())
+    baseline_height = _extract_viewbox_height(baseline_root)
+
+    bottom_canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend=legend_position,
+        multi_record_definition_mode="shared",
+        shared_definition_position="bottom",
+    )
+    bottom_root = ET.fromstring(bottom_canvas.tostring())
+    bottom_height = _extract_viewbox_height(bottom_root)
+    shared_top = _extract_definition_top_y(bottom_root, "shared_definition")
+    shared_bottom = _extract_definition_bottom_y(bottom_root, "shared_definition")
+
+    assert shared_top >= baseline_height + 20.0 - 1e-6
+    assert bottom_height - shared_bottom >= 24.0 - 1e-6
 
 
 @pytest.mark.circular

@@ -1179,14 +1179,18 @@ def assemble_circular_diagram_from_records(
         use_shared_definition
         and shared_definition_group is not None
         and normalized_shared_definition_position == "bottom"
-        and legend_effective == "bottom"
-        and legend_config is not None
     ):
         shared_min_y, shared_max_y = shared_definition_local_bounds
         shared_height = max(0.0, float(shared_max_y) - float(shared_min_y))
-        legend_bottom = legend_offset_y + legend_local_bottom
+
+        records_bottom = float(grid_origin_y) + float(grid_height)
+        anchor_bottom = records_bottom
+        if legend_effective == "bottom" and legend_config is not None:
+            legend_bottom = legend_offset_y + legend_local_bottom
+            anchor_bottom = max(anchor_bottom, float(legend_bottom))
+
         required_height = (
-            legend_bottom
+            anchor_bottom
             + _MULTI_RECORD_LEGEND_SHARED_GAP_PX
             + shared_height
             + _MULTI_RECORD_SHARED_BOTTOM_MARGIN_PX
