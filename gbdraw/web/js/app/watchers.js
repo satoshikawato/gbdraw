@@ -39,7 +39,6 @@ export const setupWatchers = ({
     selectedResultIndex,
     diagramElements,
     linearBaseConfig,
-    circularBaseConfig,
     circularLegendPosition,
     linearLegendPosition,
     featureRecordIds,
@@ -127,6 +126,7 @@ export const setupWatchers = ({
   watch(
     () => form.legend,
     (newPos, oldPos) => {
+      if (mode.value !== 'linear') return;
       if (
         svgContent.value &&
         oldPos !== undefined &&
@@ -237,12 +237,10 @@ export const setupWatchers = ({
             shouldSkipPositionReapply
           });
 
-          if (currentLegendPos && currentDiagramPos && currentLegendPos !== currentDiagramPos) {
+          if (isLinear && currentLegendPos && currentDiagramPos && currentLegendPos !== currentDiagramPos) {
             debugLog('Position differs from current - reapplying position shift');
             skipCaptureBaseConfig.value = true;
-            const originalGeneratedPos = isLinear
-              ? linearBaseConfig.value.generatedPosition
-              : circularBaseConfig.value.generatedPosition;
+            const originalGeneratedPos = linearBaseConfig.value.generatedPosition;
             repositionForLegendChange(currentLegendPos, originalGeneratedPos);
             return;
           }
