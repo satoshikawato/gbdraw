@@ -13,6 +13,95 @@ export const createDiagramDragActions = ({ state }) => {
     generatedLegendPosition
   } = state;
 
+  const LEGEND_GROUP_IDS = new Set([
+    'legend',
+    'feature_legend',
+    'pairwise_legend',
+    'horizontal_legend',
+    'vertical_legend'
+  ]);
+
+  let activeDragElements = [];
+  let activeDragMode = 'group'; // 'group' | 'record'
+  let activeDragOriginalTransforms = new Map();
+
+  const isMultiRecordCanvasSvg = (svg) => {
+    return Array.from(svg.children).some((el) => {
+      if (!el || el.tagName.toLowerCase() !== 'g') return false;
+      const id = el.getAttribute('id') || '';
+      return id.startsWith('record_');
+    });
+  };
+
+  const getTopLevelDiagramGroupsForMultiRecord = (svg) => {
+    const groups = [];
+    const ids = [];
+
+    Array.from(svg.children).forEach((el) => {
+      if (!el || el.tagName.toLowerCase() !== 'g') return;
+      const id = el.getAttribute('id');
+      if (!id || LEGEND_GROUP_IDS.has(id)) return;
+      groups.push(el);
+      ids.push(id);
+    });
+
+    return { groups, ids };
+  };
+
+  const getDiagramGroupsForSingleRecordOrLinear = (svg) => {
+    const knownIds = ['tick', 'labels', 'Axis', 'gc_content', 'skew', 'gc_skew', 'length_bar'];
+    const foundElements = [];
+    const foundIds = [];
+
+    knownIds.forEach((id) => {
+      const el = svg.getElementById(id);
+      if (el) {
+        foundElements.push(el);
+        foundIds.push(id);
+      }
+    });
+
+    const allGroups = svg.querySelectorAll('g[id]');
+    allGroups.forEach((group) => {
+      const id = group.id;
+      if (!id) return;
+
+      if (LEGEND_GROUP_IDS.has(id)) return;
+      if (foundElements.includes(group)) return;
+
+      const isAccession = id.match(/^[A-Z]{2}_?\d+/) || id.match(/^[A-Z]+\d+\.\d+$/);
+      const isKnown = knownIds.includes(id);
+      const isDynamic =
+        id.startsWith('record_') ||
+        id.startsWith('definition_') ||
+        id.startsWith('seq_') ||
+        id.startsWith('track_') ||
+        id.startsWith('match_') ||
+        id.startsWith('comparison');
+
+      if (isAccession || isKnown || isDynamic) {
+        foundElements.push(group);
+        if (!foundIds.includes(id)) {
+          foundIds.push(id);
+        }
+      }
+    });
+
+    // Ensure top-level diagram groups (e.g., contig_1) are included even if IDs are lowercase.
+    Array.from(svg.children).forEach((el) => {
+      if (!el || el.tagName.toLowerCase() !== 'g') return;
+      const id = el.getAttribute('id');
+      if (!id || LEGEND_GROUP_IDS.has(id)) return;
+      if (foundElements.includes(el)) return;
+      foundElements.push(el);
+      if (!foundIds.includes(id)) {
+        foundIds.push(id);
+      }
+    });
+
+    return { groups: foundElements, ids: foundIds };
+  };
+
   const applyDiagramShift = (deltaX, deltaY) => {
     if (diagramElements.value.length === 0) return;
     diagramElements.value.forEach((el) => {
@@ -38,18 +127,25 @@ export const createDiagramDragActions = ({ state }) => {
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
-    const clickedGroup = e.target.closest('g[id]');
-    if (!clickedGroup) return;
+    const isMultiRecordCanvas = isMultiRecordCanvasSvg(svg);
+    let dragTargets = [];
 
-    const clickedId = clickedGroup.id;
-    if (
-      clickedId === 'legend' ||
-      clickedId === 'feature_legend' ||
-      clickedId === 'pairwise_legend' ||
-      clickedId === 'horizontal_legend' ||
-      clickedId === 'vertical_legend'
-    ) {
-      return;
+    if (isMultiRecordCanvas) {
+      // Multi-record mode: allow dragging only the clicked record_* group.
+      const clickedRecordGroup = e.target.closest('g[id^="record_"]');
+      if (!clickedRecordGroup) return;
+      dragTargets = [clickedRecordGroup];
+      activeDragMode = 'record';
+    } else {
+      const clickedGroup = e.target.closest('g[id]');
+      if (!clickedGroup) return;
+
+      const clickedId = clickedGroup.id;
+      if (LEGEND_GROUP_IDS.has(clickedId)) return;
+
+      dragTargets = diagramElements.value;
+      if (dragTargets.length === 0) return;
+      activeDragMode = 'group';
     }
 
     e.preventDefault();
@@ -57,7 +153,17 @@ export const createDiagramDragActions = ({ state }) => {
     diagramDragStart.x = e.clientX;
     diagramDragStart.y = e.clientY;
 
-    diagramElements.value.forEach((el) => {
+    activeDragElements = dragTargets;
+    activeDragOriginalTransforms = new Map();
+
+    activeDragElements.forEach((el) => {
+      if (activeDragMode === 'record') {
+        // Keep per-record drag independent from global offsets.
+        activeDragOriginalTransforms.set(el, parseTransform(el.getAttribute('transform')));
+      } else {
+        const original = diagramElementOriginalTransforms.value.get(el) || { x: 0, y: 0 };
+        activeDragOriginalTransforms.set(el, original);
+      }
       el.style.opacity = '0.8';
     });
 
@@ -66,15 +172,18 @@ export const createDiagramDragActions = ({ state }) => {
   };
 
   const onDiagramDrag = (e) => {
-    if (!diagramDragging.value) return;
+    if (!diagramDragging.value || activeDragElements.length === 0) return;
 
     const deltaX = (e.clientX - diagramDragStart.x) / zoom.value;
     const deltaY = (e.clientY - diagramDragStart.y) / zoom.value;
+    const includeGlobalOffset = activeDragMode === 'group';
 
-    diagramElements.value.forEach((el) => {
-      const original = diagramElementOriginalTransforms.value.get(el) || { x: 0, y: 0 };
-      const newX = original.x + diagramOffset.x + deltaX;
-      const newY = original.y + diagramOffset.y + deltaY;
+    activeDragElements.forEach((el) => {
+      const original = activeDragOriginalTransforms.get(el) || { x: 0, y: 0 };
+      const offsetX = includeGlobalOffset ? diagramOffset.x : 0;
+      const offsetY = includeGlobalOffset ? diagramOffset.y : 0;
+      const newX = original.x + offsetX + deltaX;
+      const newY = original.y + offsetY + deltaY;
       el.setAttribute('transform', `translate(${newX}, ${newY})`);
     });
   };
@@ -82,18 +191,25 @@ export const createDiagramDragActions = ({ state }) => {
   const endDiagramDrag = (e) => {
     if (!diagramDragging.value) return;
 
-    const deltaX = (e.clientX - diagramDragStart.x) / zoom.value;
-    const deltaY = (e.clientY - diagramDragStart.y) / zoom.value;
-    diagramOffset.x += deltaX;
-    diagramOffset.y += deltaY;
+    const currentX = typeof e?.clientX === 'number' ? e.clientX : diagramDragStart.x;
+    const currentY = typeof e?.clientY === 'number' ? e.clientY : diagramDragStart.y;
+    const deltaX = (currentX - diagramDragStart.x) / zoom.value;
+    const deltaY = (currentY - diagramDragStart.y) / zoom.value;
+    if (activeDragMode === 'group') {
+      diagramOffset.x += deltaX;
+      diagramOffset.y += deltaY;
+    }
 
     diagramDragging.value = false;
     document.removeEventListener('mousemove', onDiagramDrag);
     document.removeEventListener('mouseup', endDiagramDrag);
 
-    diagramElements.value.forEach((el) => {
+    activeDragElements.forEach((el) => {
       el.style.opacity = '1';
     });
+    activeDragElements = [];
+    activeDragOriginalTransforms = new Map();
+    activeDragMode = 'group';
   };
 
   const resetDiagramPosition = () => {
@@ -134,76 +250,61 @@ export const createDiagramDragActions = ({ state }) => {
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
+    const isMultiRecordCanvas = isMultiRecordCanvasSvg(svg);
 
     if (!preserveOffset) {
       diagramOffset.x = 0;
       diagramOffset.y = 0;
     }
 
-    const knownIds = ['tick', 'labels', 'Axis', 'gc_content', 'skew', 'gc_skew', 'length_bar'];
-    const foundElements = [];
-    const foundIds = [];
-
-    knownIds.forEach((id) => {
-      const el = svg.getElementById(id);
-      if (el) {
-        foundElements.push(el);
-        foundIds.push(id);
-      }
-    });
-
-    const allGroups = svg.querySelectorAll('g[id]');
-    allGroups.forEach((group) => {
-      const id = group.id;
-      if (!id) return;
-
-      if (id === 'legend' || id === 'feature_legend' || id === 'pairwise_legend') return;
-
-      if (foundElements.includes(group)) return;
-
-      const isAccession = id.match(/^[A-Z]{2}_?\d+/) || id.match(/^[A-Z]+\d+\.\d+$/);
-      const isKnown = knownIds.includes(id);
-      const isDynamic =
-        id.startsWith('record_') ||
-        id.startsWith('definition_') ||
-        id.startsWith('seq_') ||
-        id.startsWith('track_') ||
-        id.startsWith('match_') ||
-        id.startsWith('comparison');
-
-      if (isAccession || isKnown || isDynamic) {
-        foundElements.push(group);
-        if (!foundIds.includes(id)) {
-          foundIds.push(id);
-        }
-      }
-    });
-
-    // Ensure top-level diagram groups (e.g., contig_1) are included even if IDs are lowercase.
-    Array.from(svg.children).forEach((el) => {
-      if (!el || el.tagName.toLowerCase() !== 'g') return;
-      const id = el.getAttribute('id');
-      if (!id) return;
-      if (id === 'legend') return;
-      if (foundElements.includes(el)) return;
-      foundElements.push(el);
-      if (!foundIds.includes(id)) {
-        foundIds.push(id);
-      }
-    });
+    const selectedGroups = isMultiRecordCanvas
+      ? getTopLevelDiagramGroupsForMultiRecord(svg)
+      : getDiagramGroupsForSingleRecordOrLinear(svg);
+    const foundElements = selectedGroups.groups;
+    const foundIds = selectedGroups.ids;
 
     diagramElements.value = foundElements;
     diagramElementIds.value = foundIds;
 
+    const previousOriginalTransformsById = new Map();
+    if (preserveOffset && isMultiRecordCanvas && diagramElementOriginalTransforms.value.size > 0) {
+      diagramElementOriginalTransforms.value.forEach((transform, mapEl) => {
+        const id = mapEl?.id || '';
+        if (!id) return;
+        if (!previousOriginalTransformsById.has(id)) {
+          previousOriginalTransformsById.set(id, []);
+        }
+        previousOriginalTransformsById.get(id).push(transform);
+      });
+    }
+
+    const remapCounters = new Map();
     const originalTransforms = new Map();
     console.log(`[DEBUG] ========== setupDiagramDrag CALL #${setupDiagramDragCallCount} ==========`);
     console.log(
-      `[DEBUG] setupDiagramDrag: preserveOffset=${preserveOffset}, offset=(${diagramOffset.x}, ${diagramOffset.y}), generatedLegendPosition=${generatedLegendPosition.value}`
+      `[DEBUG] setupDiagramDrag: preserveOffset=${preserveOffset}, offset=(${diagramOffset.x}, ${diagramOffset.y}), generatedLegendPosition=${generatedLegendPosition.value}, isMultiRecordCanvas=${isMultiRecordCanvas}`
     );
     foundElements.forEach((el, idx) => {
+      if (preserveOffset && isMultiRecordCanvas) {
+        const id = el.id || '';
+        const preserved = previousOriginalTransformsById.get(id);
+        if (preserved && preserved.length > 0) {
+          const preservedIdx = remapCounters.get(id) || 0;
+          if (preservedIdx < preserved.length) {
+            const preservedTransform = preserved[preservedIdx];
+            remapCounters.set(id, preservedIdx + 1);
+            originalTransforms.set(el, preservedTransform);
+            console.log(
+              `[DEBUG] setupDiagramDrag element ${idx} (${id}): remapped preserved original=(${preservedTransform.x}, ${preservedTransform.y})`
+            );
+            return;
+          }
+        }
+      }
+
       const transform = parseTransform(el.getAttribute('transform'));
       console.log(`[DEBUG] setupDiagramDrag element ${idx} (${el.id}): DOM transform=(${transform.x}, ${transform.y})`);
-      if (preserveOffset && (diagramOffset.x !== 0 || diagramOffset.y !== 0)) {
+      if (!isMultiRecordCanvas && preserveOffset && (diagramOffset.x !== 0 || diagramOffset.y !== 0)) {
         const adjusted = {
           x: transform.x - diagramOffset.x,
           y: transform.y - diagramOffset.y
@@ -221,7 +322,11 @@ export const createDiagramDragActions = ({ state }) => {
     });
 
     foundElements.forEach((el) => {
-      el.style.cursor = 'grab';
+      if (isMultiRecordCanvas) {
+        el.style.cursor = (el.id || '').startsWith('record_') ? 'grab' : '';
+      } else {
+        el.style.cursor = 'grab';
+      }
     });
 
     svg.removeEventListener('mousedown', startDiagramDrag);
