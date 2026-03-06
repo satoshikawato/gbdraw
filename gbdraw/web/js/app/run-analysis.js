@@ -36,6 +36,34 @@ const normalizeFeatureVisibilityMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized === 'on' || normalized === 'off' ? normalized : 'default';
 };
+const normalizeMultiRecordSizeMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['linear', 'sqrt', 'equal'].includes(normalized) ? normalized : 'sqrt';
+};
+const normalizeMultiRecordMinRadiusRatio = (value) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 && numeric <= 1 ? numeric : 0.55;
+};
+const normalizeMultiRecordColumnGapRatio = (value) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0.10;
+};
+const normalizeMultiRecordRowGapRatio = (value) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0.05;
+};
+const normalizeDefinitionPosition = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'center';
+};
+const normalizeMultiRecordDefinitionMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['shared', 'legacy'].includes(normalized) ? normalized : 'shared';
+};
+const normalizeSharedDefinitionPosition = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'bottom';
+};
 
 export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFeatureOverrides }) => {
   const {
@@ -92,6 +120,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
   } = state;
   let linearLabelSupportCache = null;
   let featureShapeSupportCache = null;
+  let circularMultiRecordCanvasSupportCache = null;
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
   let pendingReflowReason = 'label-edit';
@@ -247,6 +276,57 @@ json.dumps({
       featureShapeSupportCache = { circular: false, linear: false };
     }
     return featureShapeSupportCache;
+  };
+
+  const getCircularMultiRecordCanvasOptionSupport = () => {
+    if (circularMultiRecordCanvasSupportCache) return circularMultiRecordCanvasSupportCache;
+    const pyodide = getPyodide();
+    if (!pyodide) {
+      circularMultiRecordCanvasSupportCache = {
+        circular: false,
+        multi_record_size_mode: false,
+        multi_record_min_radius_ratio: false,
+        multi_record_column_gap_ratio: false,
+        multi_record_row_gap_ratio: false,
+        definition_position: false,
+        multi_record_definition_mode: false,
+        shared_definition_position: false,
+        shared_definition_font_size: false
+      };
+      return circularMultiRecordCanvasSupportCache;
+    }
+    try {
+      const raw = pyodide.runPython(`
+import inspect, json
+import gbdraw.circular as _gbdraw_circular
+_source = inspect.getsource(_gbdraw_circular._get_args)
+json.dumps({
+  "circular": "--multi_record_canvas" in _source,
+  "multi_record_size_mode": "--multi_record_size_mode" in _source,
+  "multi_record_min_radius_ratio": "--multi_record_min_radius_ratio" in _source,
+  "multi_record_column_gap_ratio": "--multi_record_column_gap_ratio" in _source,
+  "multi_record_row_gap_ratio": "--multi_record_row_gap_ratio" in _source,
+  "definition_position": "--definition_position" in _source,
+  "multi_record_definition_mode": "--multi_record_definition_mode" in _source,
+  "shared_definition_position": "--shared_definition_position" in _source,
+  "shared_definition_font_size": "--shared_definition_font_size" in _source,
+})
+      `);
+      circularMultiRecordCanvasSupportCache = JSON.parse(String(raw));
+    } catch (_err) {
+      circularMultiRecordCanvasSupportCache = {
+        circular: false,
+        multi_record_size_mode: false,
+        multi_record_min_radius_ratio: false,
+        multi_record_column_gap_ratio: false,
+        multi_record_row_gap_ratio: false,
+        definition_position: false,
+        multi_record_definition_mode: false,
+        shared_definition_position: false,
+        shared_definition_font_size: false
+      };
+    }
+    return circularMultiRecordCanvasSupportCache;
   };
 
   const downloadLosatPair = async (pairIndex, customName) => {
@@ -445,6 +525,17 @@ json.dumps({
         : [];
 
       if (mode.value === 'circular') {
+        const multiCanvasSupport = getCircularMultiRecordCanvasOptionSupport();
+        const normalizedDefinitionPosition = normalizeDefinitionPosition(form.definition_position);
+        form.definition_position = normalizedDefinitionPosition;
+        if (multiCanvasSupport.definition_position) {
+          args.push('--definition_position', normalizedDefinitionPosition);
+        } else if (normalizedDefinitionPosition !== 'center') {
+          throw new Error(
+            'Current gbdraw wheel does not support --definition_position. Rebuild and redeploy the web wheel.'
+          );
+        }
+
         if (selectedFeatureShapes.length > 0) {
           const shapeOptionSupport = getFeatureShapeOptionSupport();
           if (!shapeOptionSupport.circular) {
@@ -466,6 +557,73 @@ json.dumps({
         if (labelsMode === 'both') args.push('--labels', 'both');
         if (form.suppress_gc) args.push('--suppress_gc');
         if (form.suppress_skew) args.push('--suppress_skew');
+        if (form.multi_record_canvas) {
+          if (!multiCanvasSupport.circular) {
+            throw new Error(
+              'Current gbdraw wheel does not support --multi_record_canvas. Rebuild and redeploy the web wheel.'
+            );
+          }
+          if (
+            !multiCanvasSupport.multi_record_size_mode ||
+            !multiCanvasSupport.multi_record_min_radius_ratio ||
+            !multiCanvasSupport.multi_record_column_gap_ratio ||
+            !multiCanvasSupport.multi_record_row_gap_ratio
+          ) {
+            throw new Error(
+              'Current gbdraw wheel does not support multi-record size/grid spacing options. Rebuild and redeploy the web wheel.'
+            );
+          }
+          if (!multiCanvasSupport.multi_record_definition_mode || !multiCanvasSupport.shared_definition_position) {
+            throw new Error(
+              'Current gbdraw wheel does not support multi-record definition layout options. Rebuild and redeploy the web wheel.'
+            );
+          }
+          const normalizedSizeMode = normalizeMultiRecordSizeMode(adv.multi_record_size_mode);
+          const normalizedMinRatio = normalizeMultiRecordMinRadiusRatio(adv.multi_record_min_radius_ratio);
+          const normalizedColumnGapRatio = normalizeMultiRecordColumnGapRatio(adv.multi_record_column_gap_ratio);
+          const normalizedRowGapRatio = normalizeMultiRecordRowGapRatio(adv.multi_record_row_gap_ratio);
+          const normalizedDefinitionMode = normalizeMultiRecordDefinitionMode(adv.multi_record_definition_mode);
+          const normalizedSharedDefinitionPosition = normalizeSharedDefinitionPosition(adv.shared_definition_position);
+          const hasSharedDefinitionFontSize =
+            adv.shared_definition_font_size !== null &&
+            adv.shared_definition_font_size !== undefined &&
+            adv.shared_definition_font_size !== '';
+          const parsedSharedDefinitionFontSize = hasSharedDefinitionFontSize
+            ? Number(adv.shared_definition_font_size)
+            : null;
+          const normalizedSharedDefinitionFontSize =
+            parsedSharedDefinitionFontSize !== null &&
+            Number.isFinite(parsedSharedDefinitionFontSize) &&
+            parsedSharedDefinitionFontSize > 0
+              ? parsedSharedDefinitionFontSize
+              : null;
+          adv.multi_record_size_mode = normalizedSizeMode;
+          adv.multi_record_min_radius_ratio = normalizedMinRatio;
+          adv.multi_record_column_gap_ratio = normalizedColumnGapRatio;
+          adv.multi_record_row_gap_ratio = normalizedRowGapRatio;
+          adv.multi_record_definition_mode = normalizedDefinitionMode;
+          adv.shared_definition_position = normalizedSharedDefinitionPosition;
+          adv.shared_definition_font_size = normalizedSharedDefinitionFontSize;
+          args.push('--multi_record_canvas');
+          args.push('--multi_record_size_mode', normalizedSizeMode);
+          args.push('--multi_record_min_radius_ratio', String(normalizedMinRatio));
+          args.push('--multi_record_column_gap_ratio', String(normalizedColumnGapRatio));
+          args.push('--multi_record_row_gap_ratio', String(normalizedRowGapRatio));
+          args.push('--multi_record_definition_mode', normalizedDefinitionMode);
+          args.push('--shared_definition_position', normalizedSharedDefinitionPosition);
+          if (
+            normalizedDefinitionMode === 'shared' &&
+            normalizedSharedDefinitionFontSize !== null &&
+            Number.isFinite(normalizedSharedDefinitionFontSize)
+          ) {
+            if (!multiCanvasSupport.shared_definition_font_size) {
+              throw new Error(
+                'Current gbdraw wheel does not support --shared_definition_font_size. Rebuild and redeploy the web wheel.'
+              );
+            }
+            args.push('--shared_definition_font_size', String(normalizedSharedDefinitionFontSize));
+          }
+        }
 
         if (adv.outer_label_x_offset) args.push('--outer_label_x_radius_offset', adv.outer_label_x_offset);
         if (adv.outer_label_y_offset) args.push('--outer_label_y_radius_offset', adv.outer_label_y_offset);

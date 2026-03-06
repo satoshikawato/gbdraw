@@ -167,8 +167,15 @@ def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=
 
     return json.dumps({"rect": rect_svg, "text": text_svg})
 
-def regenerate_definition_svg(gb_path, species=None, strain=None, font_size=18):
-    """Regenerate just the definition group SVG for instant preview"""
+def regenerate_definition_svgs(
+    gb_path,
+    species=None,
+    strain=None,
+    font_size=None,
+    shared_font_size=None,
+    multi_record_definition_mode="shared",
+):
+    """Regenerate definition group SVGs for all records in an input file"""
     from Bio import SeqIO
     from gbdraw.render.groups.circular.definition import DefinitionGroup
     from gbdraw.canvas import CircularCanvasConfigurator
@@ -179,44 +186,112 @@ def regenerate_definition_svg(gb_path, species=None, strain=None, font_size=18):
         with resources.files("gbdraw.data").joinpath("config.toml").open("rb") as fh:
             config_dict = tomllib.load(fh)
 
-        # Override font size if provided
-        if font_size:
-            config_dict["objects"]["definition"]["circular"]["font_size"] = font_size
+        # Override font sizes if provided
+        if font_size is not None:
+            config_dict["objects"]["definition"]["circular"]["font_size"] = float(font_size)
+        if shared_font_size is not None:
+            config_dict["objects"]["definition"]["circular"]["shared_font_size"] = float(shared_font_size)
 
         # Parse the GenBank file
         records = list(SeqIO.parse(gb_path, "genbank"))
         if not records:
             return json.dumps({"error": "No records found"})
 
-        record = records[0]
+        mode = str(multi_record_definition_mode or "shared").strip().lower()
+        if mode not in {"shared", "legacy"}:
+            mode = "shared"
+        use_shared = mode == "shared" and len(records) > 1
 
-        # Create canvas config
-        canvas_config = CircularCanvasConfigurator(
-            output_prefix="temp",
-            config_dict=config_dict,
-            legend="none",
-            gb_record=record,
-        )
+        definitions = []
+        for index, record in enumerate(records):
+            # Create canvas config
+            canvas_config = CircularCanvasConfigurator(
+                output_prefix=f"temp_{index}",
+                config_dict=config_dict,
+                legend="none",
+                gb_record=record,
+            )
 
-        # Create definition group with custom species/strain
-        def_group = DefinitionGroup(
-            gb_record=record,
-            canvas_config=canvas_config,
-            config_dict=config_dict,
-            species=species if species else None,
-            strain=strain if strain else None,
-        )
+            profile = "record_summary" if use_shared else "full"
+            def_group = DefinitionGroup(
+                gb_record=record,
+                canvas_config=canvas_config,
+                config_dict=config_dict,
+                species=species if species else None,
+                strain=strain if strain else None,
+                definition_profile=profile,
+            )
 
-        # Get the SVG content
-        group = def_group.get_group()
-        # Serialize to string using svgwrite's tostring() method
-        svg_content = group.tostring()
+            group = def_group.get_group()
+            definitions.append(
+                {
+                    "svg": group.tostring(),
+                    "definition_group_id": def_group.definition_group_id,
+                    "record_index": index,
+                }
+            )
 
-        # Return the definition group ID (with _definition suffix)
-        definition_group_id = def_group.definition_group_id
-        return json.dumps({"svg": svg_content, "definition_group_id": definition_group_id})
+        if use_shared:
+            shared_canvas_config = CircularCanvasConfigurator(
+                output_prefix="temp_shared",
+                config_dict=config_dict,
+                legend="none",
+                gb_record=records[0],
+            )
+            shared_group = DefinitionGroup(
+                gb_record=records[0],
+                canvas_config=shared_canvas_config,
+                config_dict=config_dict,
+                species=species if species else None,
+                strain=strain if strain else None,
+                definition_profile="shared_common",
+                definition_group_id="shared_definition",
+            )
+            definitions.append(
+                {
+                    "svg": shared_group.get_group().tostring(),
+                    "definition_group_id": "shared_definition",
+                    "record_index": None,
+                }
+            )
+
+        return json.dumps({"definitions": definitions})
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
+
+def regenerate_definition_svg(
+    gb_path,
+    species=None,
+    strain=None,
+    font_size=None,
+    shared_font_size=None,
+    multi_record_definition_mode="shared",
+):
+    """Backward-compatible single-record definition regeneration helper"""
+    result_json = regenerate_definition_svgs(
+        gb_path,
+        species=species,
+        strain=strain,
+        font_size=font_size,
+        shared_font_size=shared_font_size,
+        multi_record_definition_mode=multi_record_definition_mode,
+    )
+    try:
+        payload = json.loads(result_json)
+    except Exception:
+        return result_json
+    if payload.get("error"):
+        return result_json
+    definitions = payload.get("definitions") or []
+    if not definitions:
+        return json.dumps({"error": "No definitions generated"})
+    first = definitions[0]
+    return json.dumps(
+        {
+            "svg": first.get("svg", ""),
+            "definition_group_id": first.get("definition_group_id", ""),
+        }
+    )
 
 def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None):
     """Extract feature info from GenBank file for UI display"""

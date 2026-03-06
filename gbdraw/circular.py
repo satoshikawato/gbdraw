@@ -4,13 +4,17 @@
 import sys
 import argparse
 import logging
+import math
 from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .io.genome import load_gbks, load_gff_fasta
 from .io.colors import load_default_colors, read_color_table
 from .config.toml import load_config_toml
 from .render.export import parse_formats, save_figure
-from .api.diagram import assemble_circular_diagram_from_record  # type: ignore[reportMissingImports]
+from .api.diagram import (  # type: ignore[reportMissingImports]
+    assemble_circular_diagram_from_record,
+    assemble_circular_diagram_from_records,
+)
 from .config.modify import suppress_gc_content_and_skew, modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .core.sequence import determine_output_file_prefix  # type: ignore[reportMissingImports]
@@ -61,7 +65,12 @@ def _get_args(args) -> argparse.Namespace:
     visualizing GC content, GC skew, and specific genomic features.
     """
     parser = argparse.ArgumentParser(
-        description='Generate genome diagrams in PNG/PDF/SVG/PS/EPS. Diagrams for multiple entries are saved separately.')
+        description=(
+            "Generate genome diagrams in PNG/PDF/SVG/PS/EPS. "
+            "By default, diagrams for multiple entries are saved separately. "
+            "Use --multi_record_canvas to place multiple records on one grid canvas."
+        )
+    )
     parser.add_argument(
         "--gbk",
         metavar="GBK_FILE",
@@ -171,6 +180,10 @@ def _get_args(args) -> argparse.Namespace:
         help='Definition font size (optional; default: 18)',
         type=float)
     parser.add_argument(
+        '--shared_definition_font_size',
+        help='Shared definition font size for multi-record shared mode (optional; default: 32).',
+        type=float)
+    parser.add_argument(
         '--label_font_size',
         help='Label font size (optional; default: 14 (pt) for genomes <= 50 kb, 8 for genomes >= 50 kb)',
         type=float)
@@ -199,9 +212,52 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-l',
         '--legend',
-        help='Legend position (default: "right"; "left", "right", "upper_left", "upper_right", "lower_left", "lower_right", "none")',
+        help='Legend position (default: "right"; "left", "right", "top", "bottom", "upper_left", "upper_right", "lower_left", "lower_right", "none")',
         type=str,
         default="right")
+    parser.add_argument(
+        '--multi_record_canvas',
+        help='Place multiple records on one shared canvas using automatic grid layout (default: False).',
+        action='store_true')
+    parser.add_argument(
+        '--multi_record_size_mode',
+        help='Size mode for multi-record circular canvas ("linear", "sqrt", "equal"; default: "sqrt").',
+        type=str,
+        choices=['linear', 'sqrt', 'equal'],
+        default='sqrt')
+    parser.add_argument(
+        '--multi_record_min_radius_ratio',
+        help='Minimum radius ratio for multi-record scaling (0 < ratio <= 1; default: 0.55).',
+        type=float,
+        default=0.55)
+    parser.add_argument(
+        '--multi_record_column_gap_ratio',
+        help='Additional horizontal gap ratio between visible content bounds in each multi-record row (>= 0; default: 0.10).',
+        type=float,
+        default=0.10)
+    parser.add_argument(
+        '--multi_record_row_gap_ratio',
+        help='Additional gap ratio between multi-record row content bounds (>= 0; default: 0.05).',
+        type=float,
+        default=0.05)
+    parser.add_argument(
+        '--definition_position',
+        help='Definition position for single-record and legacy multi-record mode ("center", "top", "bottom"; default: "center").',
+        type=str,
+        choices=['center', 'top', 'bottom'],
+        default='center')
+    parser.add_argument(
+        '--multi_record_definition_mode',
+        help='Definition mode for multi-record canvas ("shared" or "legacy"; default: "shared").',
+        type=str,
+        choices=['shared', 'legacy'],
+        default='shared')
+    parser.add_argument(
+        '--shared_definition_position',
+        help='Shared definition position in multi-record shared mode ("center", "top", "bottom"; default: "bottom").',
+        type=str,
+        choices=['center', 'top', 'bottom'],
+        default='bottom')
     parser.add_argument(
         '--separate_strands',
         help='Separate strands (default: False).',
@@ -313,6 +369,12 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--gc_skew_width must be > 0")
     if args.gc_skew_radius is not None and args.gc_skew_radius <= 0:
         parser.error("--gc_skew_radius must be > 0")
+    if args.multi_record_min_radius_ratio <= 0 or args.multi_record_min_radius_ratio > 1:
+        parser.error("--multi_record_min_radius_ratio must be > 0 and <= 1")
+    if not math.isfinite(args.multi_record_column_gap_ratio) or args.multi_record_column_gap_ratio < 0:
+        parser.error("--multi_record_column_gap_ratio must be a finite number >= 0")
+    if not math.isfinite(args.multi_record_row_gap_ratio) or args.multi_record_row_gap_ratio < 0:
+        parser.error("--multi_record_row_gap_ratio must be a finite number >= 0")
     return args
 
 
@@ -346,7 +408,16 @@ def circular_main(cmd_args) -> None:
     species: str = args.species
     strain: str = args.strain
     legend: str = args.legend
+    multi_record_canvas: bool = args.multi_record_canvas
+    multi_record_size_mode: str = args.multi_record_size_mode
+    multi_record_min_radius_ratio: float = args.multi_record_min_radius_ratio
+    multi_record_column_gap_ratio: float = args.multi_record_column_gap_ratio
+    multi_record_row_gap_ratio: float = args.multi_record_row_gap_ratio
+    definition_position: str = args.definition_position
+    multi_record_definition_mode: str = args.multi_record_definition_mode
+    shared_definition_position: str = args.shared_definition_position
     definition_font_size: Optional[float] = args.definition_font_size
+    shared_definition_font_size: Optional[float] = args.shared_definition_font_size
     label_font_size: Optional[float] = args.label_font_size
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
@@ -403,6 +474,16 @@ def circular_main(cmd_args) -> None:
     track_type: str = args.track_type
     strandedness = args.separate_strands
     scale_interval: Optional[int] = args.scale_interval
+    if (
+        not multi_record_canvas
+        and (
+            multi_record_definition_mode != "shared"
+            or shared_definition_position != "bottom"
+        )
+    ):
+        logger.info(
+            "Ignoring --multi_record_definition_mode/--shared_definition_position because --multi_record_canvas is disabled."
+        )
     
     # Warn if resolve_overlaps is used with separate_strands
     if strandedness and resolve_overlaps:
@@ -451,6 +532,7 @@ def circular_main(cmd_args) -> None:
         show_skew=show_skew, 
         allow_inner_labels=allow_inner_labels,
         circular_definition_font_size=definition_font_size,
+        shared_definition_font_size=shared_definition_font_size,
         label_font_size=label_font_size,
         label_blacklist=label_blacklist,
         label_whitelist=label_whitelist,
@@ -507,15 +589,11 @@ def circular_main(cmd_args) -> None:
 
     track_specs_or_none = track_specs or None
 
-    for gb_record in gb_records:
-        record_count += 1
-        accession = gb_record.id
-        seq_length = len(gb_record.seq)
-        window, step = calculate_window_step(seq_length, cfg, manual_window, manual_step)
-
-        outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
-        canvas = assemble_circular_diagram_from_record(
-            gb_record,
+    if multi_record_canvas and len(gb_records) > 1:
+        first_accession = gb_records[0].id if gb_records else "out"
+        outfile_prefix = output_prefix if output_prefix is not None else first_accession
+        canvas = assemble_circular_diagram_from_records(
+            gb_records,
             config_dict=config_dict,
             color_table=color_table,
             default_colors=default_colors,
@@ -525,14 +603,49 @@ def circular_main(cmd_args) -> None:
             output_prefix=outfile_prefix,
             legend=legend,
             dinucleotide=dinucleotide,
-            window=window,
-            step=step,
+            window=manual_window,
+            step=manual_step,
             species=species,
             strain=strain,
+            definition_position=definition_position,
+            multi_record_definition_mode=multi_record_definition_mode,
+            shared_definition_position=shared_definition_position,
+            multi_record_size_mode=multi_record_size_mode,
+            multi_record_min_radius_ratio=multi_record_min_radius_ratio,
+            multi_record_column_gap_ratio=multi_record_column_gap_ratio,
+            multi_record_row_gap_ratio=multi_record_row_gap_ratio,
             cfg=cfg,
             track_specs=track_specs_or_none,
         )
         save_figure(canvas, out_formats)
+    else:
+        for gb_record in gb_records:
+            record_count += 1
+            accession = gb_record.id
+            seq_length = len(gb_record.seq)
+            window, step = calculate_window_step(seq_length, cfg, manual_window, manual_step)
+
+            outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
+            canvas = assemble_circular_diagram_from_record(
+                gb_record,
+                config_dict=config_dict,
+                color_table=color_table,
+                default_colors=default_colors,
+                selected_features_set=selected_features_set,
+                feature_table=feature_table,
+                feature_shapes=feature_shapes or None,
+                output_prefix=outfile_prefix,
+                legend=legend,
+                dinucleotide=dinucleotide,
+                window=window,
+                step=step,
+                species=species,
+                strain=strain,
+                definition_position=definition_position,
+                cfg=cfg,
+                track_specs=track_specs_or_none,
+            )
+            save_figure(canvas, out_formats)
 
 if __name__ == "__main__":
     # Entry point for the script when run as a standalone program.

@@ -63,6 +63,14 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--definition_font_size DEFINITION_FONT_SIZE]
               [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--suppress_gc]
               [--suppress_skew] [-l LEGEND] [--separate_strands]
+              [--multi_record_canvas]
+              [--multi_record_size_mode {linear,sqrt,equal}]
+              [--multi_record_min_radius_ratio MULTI_RECORD_MIN_RADIUS_RATIO]
+              [--multi_record_column_gap_ratio MULTI_RECORD_COLUMN_GAP_RATIO]
+              [--multi_record_row_gap_ratio MULTI_RECORD_ROW_GAP_RATIO]
+              [--definition_position {center,top,bottom}]
+              [--multi_record_definition_mode {shared,legacy}]
+              [--shared_definition_position {center,top,bottom}]
               [--track_type TRACK_TYPE] [--resolve_overlaps]
               [--labels [{none,out,both}]] [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
@@ -82,8 +90,9 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--legend_box_size LEGEND_BOX_SIZE]
               [--legend_font_size LEGEND_FONT_SIZE]
 
-Generate genome diagrams in PNG/PDF/SVG/PS/EPS. Diagrams for multiple entries
-are saved separately.
+Generate genome diagrams in PNG/PDF/SVG/PS/EPS. By default, diagrams for
+multiple entries are saved separately. Use --multi_record_canvas to place
+multiple records on one grid canvas.
 
 options:
   -h, --help            show this help message and exit
@@ -140,6 +149,31 @@ options:
   -l, --legend LEGEND   Legend position (default: "right"; "left", "right",
                         "upper_left", "upper_right", "lower_left",
                         "lower_right", "none")
+  --multi_record_canvas
+                        Place multiple records on one shared canvas using
+                        automatic grid layout (default: False).
+  --multi_record_size_mode {linear,sqrt,equal}
+                        Size mode for multi-record circular canvas ("linear",
+                        "sqrt", "equal"; default: "sqrt").
+  --multi_record_min_radius_ratio MULTI_RECORD_MIN_RADIUS_RATIO
+                        Minimum radius ratio for multi-record scaling (0 <
+                        ratio <= 1; default: 0.55).
+  --multi_record_column_gap_ratio MULTI_RECORD_COLUMN_GAP_RATIO
+                        Additional gap ratio between records in each row (>=
+                        0; default: 0.10).
+  --multi_record_row_gap_ratio MULTI_RECORD_ROW_GAP_RATIO
+                        Additional gap ratio between multi-record row content
+                        bounds (>= 0; default: 0.05).
+  --definition_position {center,top,bottom}
+                        Definition position for single-record and legacy
+                        multi-record mode ("center", "top", "bottom";
+                        default: "center").
+  --multi_record_definition_mode {shared,legacy}
+                        Definition mode for multi-record canvas ("shared" or
+                        "legacy"; default: "shared").
+  --shared_definition_position {center,top,bottom}
+                        Shared definition position in multi-record shared mode
+                        ("center", "top", "bottom"; default: "bottom").
   --separate_strands    Separate strands (default: False).
   --track_type TRACK_TYPE
                         Track type (default: "tuckin"; "tuckin", "middle",

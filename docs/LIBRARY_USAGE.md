@@ -113,6 +113,30 @@ canvas = assemble_circular_diagram_from_record(
 )
 ```
 
+### 2.4 Multiple records on one circular canvas (grid)
+
+Use `assemble_circular_diagram_from_records(...)` to place multiple records on a
+single circular canvas with automatic near-square grid layout.
+
+```python
+from Bio import SeqIO
+from gbdraw.api import assemble_circular_diagram_from_records
+from gbdraw.api.render import save_figure
+
+records = list(SeqIO.parse("multi_records.gbk", "genbank"))
+
+canvas = assemble_circular_diagram_from_records(
+    records,
+    selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"],
+    output_prefix="circular_grid",
+    legend="right",  # shared legend (single)
+    multi_record_definition_mode="shared",  # default
+    shared_definition_position="bottom",    # default
+)
+
+save_figure(canvas, ["svg"])
+```
+
 ## 3. Minimal linear example
 
 ```python
@@ -305,10 +329,31 @@ Optional parameters:
 | `step` | `int \| None` | `None` | Sliding step size; auto if `None`. |
 | `species` | `str \| None` | `None` | Display label. |
 | `strain` | `str \| None` | `None` | Display label. |
+| `definition_position` | `"center" \| "top" \| "bottom"` | `"center"` | Definition placement for single-record circular output. |
 | `track_specs` | `Sequence[str \| TrackSpec] \| None` | `None` | Track controls. |
 | `cfg` | `GbdrawConfig \| None` | `None` | Prebuilt config object. If provided, keep it consistent with `config_dict`. |
 
-### 6.2 `assemble_linear_diagram_from_records(...)`
+### 6.2 `assemble_circular_diagram_from_records(...)`
+
+Required parameters:
+- `records` (`Sequence[SeqRecord]`): input records (non-empty)
+
+Optional parameters:
+- Same optional arguments as `assemble_circular_diagram_from_record(...)` except
+  that `records` replaces `gb_record`.
+- Additional multi-record definition options:
+  - `multi_record_definition_mode`: `"shared"` (default) or `"legacy"`
+  - `shared_definition_position`: `"center"`, `"top"`, or `"bottom"` (default: `"bottom"`)
+
+Notes:
+- When more than one record is provided, records are placed in an automatic
+  near-square grid (`cols = ceil(sqrt(n))`, `rows = ceil(n / cols)`).
+- Legend is shared (single legend group) when `legend != "none"`.
+- In `multi_record_definition_mode="shared"` (default), each circle shows a
+  per-record summary (`replicon if available + accession + length + GC`) and one shared
+  definition group (`species + strain`) is added to the merged canvas.
+
+### 6.3 `assemble_linear_diagram_from_records(...)`
 
 Required parameters:
 - `records` (`Sequence[SeqRecord]`): input records (non-empty)

@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import hashlib
+
 from pandas import DataFrame
 from svgwrite.container import Group
 from svgwrite.path import Path
@@ -30,12 +32,17 @@ class SkewDrawer:
         track_width: float,
         norm_factor: float,
         dinucleotide: str,
+        record_identifier: str | None = None,
     ) -> Group:
         skew_desc: str = generate_circular_gc_skew_path_desc(
             radius, gc_df, record_len, track_width, norm_factor, dinucleotide
         )
         circle_desc: str = generate_circle_path_desc(radius, norm_factor)
-        circle_path: ClipPath = ClipPath(id="clipper_circle")
+        clip_id_source = (
+            f"{record_identifier or ''}|{record_len}|{track_width:g}|{norm_factor:g}|{dinucleotide}|{skew_desc}"
+        )
+        clip_id = f"clipper_circle_{hashlib.md5(clip_id_source.encode('utf-8')).hexdigest()[:12]}"
+        circle_path: ClipPath = ClipPath(id=clip_id)
         circle_path.add(Path(d=circle_desc, fill="white", stroke="none"))
         skew_high: Path = Path(
             d=skew_desc,
@@ -49,7 +56,7 @@ class SkewDrawer:
             fill=self.skew_low_fill_color,
             stroke=self.skew_stroke_color,
             fill_opacity=self.skew_fill_opacity,
-            clip_path="url(#clipper_circle)",
+            clip_path=f"url(#{clip_id})",
             clip_rule="nonzero",
             fill_rule="evenodd",
         )

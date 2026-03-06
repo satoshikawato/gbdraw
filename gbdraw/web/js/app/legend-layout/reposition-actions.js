@@ -1,5 +1,10 @@
 import { estimateColorFactor, interpolateColor } from '../color-utils.js';
-import { getElementsBounds, getTransformedBBox } from './transform-utils.js';
+import { getElementsBounds, getTransformedBBox, parseTransform } from './transform-utils.js';
+
+const CIRCULAR_LEGEND_EDGE_PADDING = 16;
+const CIRCULAR_LEGEND_CONTENT_GAP = 12;
+const CIRCULAR_LEGEND_SHARED_GAP = 20;
+const CIRCULAR_SHARED_BOTTOM_MARGIN = 24;
 
 export const createLegendRepositionActions = ({
   state,
@@ -32,7 +37,7 @@ export const createLegendRepositionActions = ({
   } = state;
 
   const { getAllFeatureLegendGroups, reflowDualLegendLayout, reflowSingleLegendLayout } = legendActions;
-  const { ensureUniquePairwiseGradientIds } = svgActions;
+  const { ensureUniquePairwiseGradientIds, ensureUniqueSkewClipPathIds } = svgActions;
   const { applyDiagramShift } = diagramActions;
 
   const getCircularAbsoluteConfig = (position, baseConfig) => {
@@ -65,6 +70,24 @@ export const createLegendRepositionActions = ({
           diagramShiftY: 0,
           legendX: viewBoxWidth + legendWidth * 0.05,
           legendY: (viewBoxHeight - legendHeight) / 2
+        };
+      case 'top':
+        return {
+          vbWidth: viewBoxWidth,
+          vbHeight: viewBoxHeight,
+          diagramShiftX: 0,
+          diagramShiftY: 0,
+          legendX: (viewBoxWidth - legendWidth) / 2,
+          legendY: CIRCULAR_LEGEND_EDGE_PADDING
+        };
+      case 'bottom':
+        return {
+          vbWidth: viewBoxWidth,
+          vbHeight: viewBoxHeight,
+          diagramShiftX: 0,
+          diagramShiftY: 0,
+          legendX: (viewBoxWidth - legendWidth) / 2,
+          legendY: viewBoxHeight - legendHeight - CIRCULAR_LEGEND_EDGE_PADDING
         };
       case 'upper_left':
         return {
@@ -149,6 +172,21 @@ export const createLegendRepositionActions = ({
         return;
       }
 
+      if (legendGroup) {
+        const useHorizontalLayout = newPosition === 'top' || newPosition === 'bottom';
+        const layout = useHorizontalLayout ? 'horizontal' : 'vertical';
+        const widthHint = useHorizontalLayout ? circularBaseConfig.value?.viewBoxWidth || null : null;
+        const reflowResult = reflowSingleLegendLayout(svg, layout, widthHint);
+        if (reflowResult) {
+          legendWidth = reflowResult.legendWidth || legendWidth;
+          legendHeight = reflowResult.legendHeight || legendHeight;
+        } else {
+          const bbox = legendGroup.getBBox();
+          legendWidth = bbox.width || legendWidth;
+          legendHeight = bbox.height || legendHeight;
+        }
+      }
+
       const baseConfig = {
         ...circularBaseConfig.value,
         legendWidth: legendWidth,
@@ -210,6 +248,108 @@ export const createLegendRepositionActions = ({
         diagramOffset.x = 0;
         diagramOffset.y = 0;
         console.log(`[DEBUG] repositionForLegendChange FINISHED updating ${diagramElements.value.length} elements`);
+      }
+
+      const viewBox = svg.getAttribute('viewBox');
+      if (legendGroup && viewBox) {
+        const viewBoxParts = viewBox.split(/\s+/).map(parseFloat);
+        if (viewBoxParts.length === 4) {
+          const [vbX, vbY, vbW] = viewBoxParts;
+          let vbH = viewBoxParts[3];
+
+          if (newPosition === 'top' || newPosition === 'bottom') {
+            const legendLocalBounds = legendGroup.getBBox();
+            const legendLocalX = legendLocalBounds.x || 0;
+            const legendLocalY = legendLocalBounds.y || 0;
+            legendWidth = legendLocalBounds.width || legendWidth;
+            legendHeight = legendLocalBounds.height || legendHeight;
+
+            const getCircularContentBounds = (excludeSharedDefinition = false) => {
+              const contentElements = diagramElements.value.filter((el) => {
+                if (!el) return false;
+                if (excludeSharedDefinition && el.id === 'shared_definition') return false;
+                return true;
+              });
+              return getElementsBounds(contentElements.length > 0 ? contentElements : diagramElements.value);
+            };
+
+            let contentBounds = getCircularContentBounds(newPosition === 'bottom');
+            if (contentBounds) {
+              if (newPosition === 'top') {
+                const laneTop = vbY + CIRCULAR_LEGEND_EDGE_PADDING;
+                let laneBottom = contentBounds.y - CIRCULAR_LEGEND_CONTENT_GAP;
+                const freeHeight = laneBottom - laneTop;
+                if (freeHeight < legendHeight) {
+                  const missing = legendHeight - freeHeight;
+                  applyDiagramShift(0, missing);
+                  contentBounds = getCircularContentBounds(false) || contentBounds;
+                  vbH += missing;
+                  svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                  laneBottom = contentBounds.y - CIRCULAR_LEGEND_CONTENT_GAP;
+                }
+                const legendTop =
+                  laneTop + Math.max(0, (laneBottom - laneTop - legendHeight) / 2);
+                const finalX = vbX + (vbW - legendWidth) / 2 - legendLocalX;
+                const finalY = legendTop - legendLocalY;
+                legendGroup.setAttribute('transform', `translate(${finalX}, ${finalY})`);
+                legendInitialTransform.value = { x: finalX, y: finalY };
+                legendCurrentOffset.x = 0;
+                legendCurrentOffset.y = 0;
+              } else {
+                const laneTopBase =
+                  contentBounds.y + contentBounds.height + CIRCULAR_LEGEND_CONTENT_GAP;
+                let laneBottom = vbY + vbH - CIRCULAR_LEGEND_EDGE_PADDING;
+                const freeHeight = laneBottom - laneTopBase;
+                if (freeHeight < legendHeight) {
+                  const missing = legendHeight - freeHeight;
+                  vbH += missing;
+                  svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                  laneBottom = vbY + vbH - CIRCULAR_LEGEND_EDGE_PADDING;
+                }
+                const legendTop =
+                  laneTopBase + Math.max(0, (laneBottom - laneTopBase - legendHeight) / 2);
+                const finalX = vbX + (vbW - legendWidth) / 2 - legendLocalX;
+                const finalY = legendTop - legendLocalY;
+                legendGroup.setAttribute('transform', `translate(${finalX}, ${finalY})`);
+                legendInitialTransform.value = { x: finalX, y: finalY };
+                legendCurrentOffset.x = 0;
+                legendCurrentOffset.y = 0;
+              }
+            }
+
+            if (newPosition === 'bottom') {
+              const sharedDefinitionGroup = svg.getElementById('shared_definition');
+              if (sharedDefinitionGroup) {
+                const legendBounds = getTransformedBBox(legendGroup);
+                const sharedBounds = getTransformedBBox(sharedDefinitionGroup);
+                if (legendBounds && sharedBounds) {
+                  const requiredSharedTop =
+                    legendBounds.y + legendBounds.height + CIRCULAR_LEGEND_SHARED_GAP;
+                  if (sharedBounds.y < requiredSharedTop) {
+                    const shiftY = requiredSharedTop - sharedBounds.y;
+                    const sharedPos = parseTransform(sharedDefinitionGroup.getAttribute('transform'));
+                    const adjustedSharedY = sharedPos.y + shiftY;
+                    sharedDefinitionGroup.setAttribute(
+                      'transform',
+                      `translate(${sharedPos.x}, ${adjustedSharedY})`
+                    );
+                    diagramElementOriginalTransforms.value.set(sharedDefinitionGroup, {
+                      x: sharedPos.x,
+                      y: adjustedSharedY
+                    });
+
+                    const adjustedSharedBottom = sharedBounds.y + shiftY + sharedBounds.height;
+                    const requiredCanvasBottom = adjustedSharedBottom + CIRCULAR_SHARED_BOTTOM_MARGIN;
+                    if (requiredCanvasBottom > vbY + vbH) {
+                      vbH = requiredCanvasBottom - vbY;
+                      svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     } else {
       debugLog('Linear mode reposition:', { newPosition, oldPosition });
@@ -283,6 +423,7 @@ export const createLegendRepositionActions = ({
             debugLog('After toggle - horizontal display:', horizontalLegend.getAttribute('display'));
             debugLog('After toggle - vertical display:', verticalLegend.getAttribute('display'));
 
+            ensureUniqueSkewClipPathIds(svg);
             ensureUniquePairwiseGradientIds(svg);
 
             if (currentColors.value.pairwise_match_min && currentColors.value.pairwise_match_max) {

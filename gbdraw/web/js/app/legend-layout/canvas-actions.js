@@ -1,3 +1,5 @@
+import { getElementsBounds } from './transform-utils.js';
+
 export const createLegendCanvasActions = ({ state }) => {
   const {
     svgContainer,
@@ -207,17 +209,32 @@ export const createLegendCanvasActions = ({ state }) => {
     } else {
       const legendPos = form.legend;
       let baseVbW = vbW;
+      let baseVbH = vbH;
+      const diagramBounds = getElementsBounds(diagramElements.value);
 
-      if (legendPos === 'left' || legendPos === 'right') {
-        baseVbW = vbW - legendWidth * 1.1;
+      if (diagramBounds) {
+        const marginLeft = diagramBounds.x - vbX;
+        const marginRight = vbX + vbW - (diagramBounds.x + diagramBounds.width);
+        const marginTop = diagramBounds.y - vbY;
+        const marginBottom = vbY + vbH - (diagramBounds.y + diagramBounds.height);
+        const symmetricMarginX = Math.max(0, Math.min(marginLeft, marginRight));
+        const symmetricMarginY = Math.max(0, Math.min(marginTop, marginBottom));
+        const derivedBaseWidth = diagramBounds.width + symmetricMarginX * 2;
+        const derivedBaseHeight = diagramBounds.height + symmetricMarginY * 2;
+        if (Number.isFinite(derivedBaseWidth) && derivedBaseWidth > 0) {
+          baseVbW = derivedBaseWidth;
+        }
+        if (Number.isFinite(derivedBaseHeight) && derivedBaseHeight > 0) {
+          baseVbH = derivedBaseHeight;
+        }
       }
 
-      const diagramCenterX = baseVbW / 2;
-      const diagramCenterY = vbH / 2;
+      const diagramCenterX = vbX + baseVbW / 2;
+      const diagramCenterY = vbY + baseVbH / 2;
 
       circularBaseConfig.value = {
         viewBoxWidth: baseVbW,
-        viewBoxHeight: vbH,
+        viewBoxHeight: baseVbH,
         generatedViewBoxWidth: vbW,
         generatedViewBoxHeight: vbH,
         diagramCenterX: diagramCenterX,

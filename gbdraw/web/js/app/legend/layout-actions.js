@@ -27,6 +27,53 @@ export const createLegendLayoutActions = ({ state }) => {
     return null;
   };
 
+  const centerHorizontalRows = (entries, textXOffset, availableWidth) => {
+    if (!Number.isFinite(availableWidth) || availableWidth <= 0 || !Array.isArray(entries) || entries.length === 0) {
+      return;
+    }
+
+    const rows = new Map();
+    entries.forEach((entry) => {
+      if (entry.newX === undefined || entry.newY === undefined) return;
+      const rowKey = Number(entry.newY).toFixed(3);
+      if (!rows.has(rowKey)) rows.set(rowKey, []);
+      rows.get(rowKey).push(entry);
+    });
+
+    rows.forEach((rowEntries) => {
+      let rowLeft = Infinity;
+      let rowRight = -Infinity;
+
+      rowEntries.forEach((entry) => {
+        const measuredWidth =
+          entry.textWidth !== undefined && Number.isFinite(entry.textWidth)
+            ? entry.textWidth
+            : entry.text.getBBox().width;
+        const left = Number(entry.newX) - textXOffset;
+        const right = Number(entry.newX) + measuredWidth + textXOffset;
+        rowLeft = Math.min(rowLeft, left);
+        rowRight = Math.max(rowRight, right);
+      });
+
+      if (!Number.isFinite(rowLeft) || !Number.isFinite(rowRight) || rowRight <= rowLeft) return;
+
+      const rowWidth = rowRight - rowLeft;
+      const targetLeft = Math.max(0, (availableWidth - rowWidth) * 0.5);
+      const shiftX = targetLeft - rowLeft;
+      if (Math.abs(shiftX) < 1e-6) return;
+
+      rowEntries.forEach((entry) => {
+        const shiftedX = Number(entry.newX) + shiftX;
+        const y = Number(entry.newY);
+        entry.newX = shiftedX;
+        entry.text.setAttribute('transform', `translate(${shiftedX}, ${y})`);
+        if (entry.rect) {
+          entry.rect.setAttribute('transform', `translate(${shiftedX - textXOffset}, ${y})`);
+        }
+      });
+    });
+  };
+
   const expandCanvasForVerticalLegend = (svg) => {
     if (mode.value !== 'linear') return;
 
@@ -349,9 +396,13 @@ export const createLegendLayoutActions = ({ state }) => {
           if (entry.rect) {
             entry.rect.setAttribute('transform', `translate(${newX - textXOffset}, ${newY})`);
           }
+          entry.newX = newX;
+          entry.newY = newY;
+          entry.textWidth = textBBox.width;
 
           newX += entryWidth;
         });
+        centerHorizontalRows(entries, textXOffset, wrapWidth);
       } else {
         entries.sort((a, b) => a.y - b.y);
 
@@ -521,6 +572,9 @@ export const createLegendLayoutActions = ({ state }) => {
           }
 
           entry.text.setAttribute('transform', `translate(${newX}, ${newY})`);
+          entry.newX = newX;
+          entry.newY = newY;
+          entry.textWidth = textBBox.width;
 
           if (entry.rect) {
             const expectedRectX = newX - textXOffset;
@@ -529,6 +583,7 @@ export const createLegendLayoutActions = ({ state }) => {
 
           newX += entryWidth;
         });
+        centerHorizontalRows(entries, textXOffset, maxWidth);
       } else {
         entries.sort((a, b) => a.y - b.y);
 
@@ -681,6 +736,7 @@ export const createLegendLayoutActions = ({ state }) => {
 
         newX += entryWidth;
       });
+      centerHorizontalRows(entries, textXOffset, maxFeatureWidth);
     } else {
       entries.sort((a, b) => a.y - b.y);
       let newY = rectSize / 2;

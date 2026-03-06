@@ -68,6 +68,8 @@ MAX_CANVAS_EXPAND_STEPS = 24
 MIN_LABEL_ORDER_GAP_RAD = 1e-4
 LABEL_CANVAS_PADDING_PX = 8.0
 FEATURE_BAND_EPSILON = 1e-6
+SINGLE_LEGEND_EDGE_MIN_PX = 16.0
+SINGLE_LEGEND_CONTENT_GAP_MIN_PX = 12.0
 
 
 logger = logging.getLogger(__name__)
@@ -628,6 +630,182 @@ def _expand_canvas_for_legend(
         if not _labels_collide_with_legend(labels, total_length, canvas_config, legend_config):
             return True
     return False
+
+
+def _translate_canvas_top_level_groups(canvas: Drawing, *, dy: float) -> None:
+    """Translate top-level canvas elements in Y (except defs)."""
+    if abs(float(dy)) <= 1e-6:
+        return
+    for element in getattr(canvas, "elements", []):
+        class_name = element.__class__.__name__.lower()
+        element_name = str(getattr(element, "elementname", "")).lower()
+        if class_name == "defs" or element_name == "defs":
+            continue
+        translate = getattr(element, "translate", None)
+        if callable(translate):
+            translate(0, float(dy))
+
+
+def _default_feature_outer_radius_px(
+    *,
+    total_length: int,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+    feature_track_ratio_factor_override: float | None,
+) -> float:
+    """Return a conservative outer feature radius when no precomputed feature band is available."""
+    length_param = str(canvas_config.length_param)
+    track_ratio_factor = (
+        float(feature_track_ratio_factor_override)
+        if feature_track_ratio_factor_override is not None
+        else float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+    )
+    cds_ratio, offset = calculate_cds_ratio(
+        float(canvas_config.track_ratio), length_param, track_ratio_factor
+    )
+    factors_positive = calculate_feature_position_factors_circular(
+        total_length,
+        "positive",
+        float(canvas_config.track_ratio),
+        cds_ratio,
+        offset,
+        str(cfg.canvas.circular.track_type),
+        bool(cfg.canvas.strandedness),
+        0,
+    )
+    factors_negative = calculate_feature_position_factors_circular(
+        total_length,
+        "negative",
+        float(canvas_config.track_ratio),
+        cds_ratio,
+        offset,
+        str(cfg.canvas.circular.track_type),
+        bool(cfg.canvas.strandedness),
+        0,
+    )
+    max_factor = max(
+        [abs(float(factor)) for factor in [*factors_positive, *factors_negative]],
+        default=1.0,
+    )
+    return float(canvas_config.radius) * float(max_factor)
+
+
+def _resolve_content_vertical_bounds_for_single_legend(
+    *,
+    total_length: int,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+    show_features: bool,
+    precomputed_feature_dict: dict | None,
+    rendered_feature_band_all_tracks: tuple[float, float] | None,
+    feature_track_ratio_factor_override: float | None,
+    tick_label_annulus: tuple[float, float] | None,
+    external_label_bounds: tuple[float, float, float, float] | None,
+) -> tuple[float, float]:
+    """Return content top/bottom bounds in canvas coordinates for top/bottom legend placement."""
+    content_outer_radius = float(canvas_config.radius)
+
+    feature_band = rendered_feature_band_all_tracks
+    if show_features and feature_band is None and precomputed_feature_dict is not None:
+        length_param = str(canvas_config.length_param)
+        track_ratio_factor = (
+            float(feature_track_ratio_factor_override)
+            if feature_track_ratio_factor_override is not None
+            else float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+        )
+        feature_band = _compute_feature_band_bounds_px(
+            precomputed_feature_dict,
+            total_length,
+            base_radius_px=float(canvas_config.radius),
+            track_ratio=float(canvas_config.track_ratio),
+            length_param=length_param,
+            track_ratio_factor=track_ratio_factor,
+            cfg=cfg,
+        )
+    if show_features and feature_band is None:
+        default_feature_outer = _default_feature_outer_radius_px(
+            total_length=total_length,
+            canvas_config=canvas_config,
+            cfg=cfg,
+            feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+        )
+        content_outer_radius = max(content_outer_radius, default_feature_outer)
+    elif feature_band is not None:
+        content_outer_radius = max(
+            content_outer_radius,
+            abs(float(feature_band[0])),
+            abs(float(feature_band[1])),
+        )
+
+    if tick_label_annulus is not None:
+        content_outer_radius = max(
+            content_outer_radius,
+            abs(float(tick_label_annulus[0])),
+            abs(float(tick_label_annulus[1])),
+        )
+
+    content_top = float(canvas_config.offset_y) - float(content_outer_radius)
+    content_bottom = float(canvas_config.offset_y) + float(content_outer_radius)
+
+    if external_label_bounds is not None:
+        content_top = min(content_top, float(external_label_bounds[1]))
+        content_bottom = max(content_bottom, float(external_label_bounds[3]))
+
+    return content_top, content_bottom
+
+
+def _position_single_top_bottom_legend_between_edge_and_content(
+    canvas: Drawing,
+    canvas_config: CircularCanvasConfigurator,
+    legend_config: LegendDrawingConfigurator,
+    *,
+    position: str,
+    content_top: float,
+    content_bottom: float,
+    edge_min_px: float = SINGLE_LEGEND_EDGE_MIN_PX,
+    content_gap_px: float = SINGLE_LEGEND_CONTENT_GAP_MIN_PX,
+) -> None:
+    """Place top/bottom legend at the midpoint between content edge and canvas edge."""
+    if position not in {"top", "bottom"}:
+        return
+
+    legend_height = float(legend_config.legend_height)
+    legend_local_top = -0.5 * float(legend_config.color_rect_size)
+    canvas_config.legend_offset_x = (
+        float(canvas_config.total_width) - float(legend_config.legend_width)
+    ) / 2.0
+
+    if position == "top":
+        lane_top = float(edge_min_px)
+        lane_bottom = float(content_top) - float(content_gap_px)
+        free_height = lane_bottom - lane_top
+        if free_height < legend_height:
+            missing = legend_height - free_height
+            _translate_canvas_top_level_groups(canvas, dy=missing)
+            canvas_config.offset_y = float(canvas_config.offset_y) + missing
+            canvas_config.total_height = float(canvas_config.total_height) + missing
+            content_top = float(content_top) + missing
+            _sync_canvas_viewbox(canvas, canvas_config)
+            lane_bottom = float(content_top) - float(content_gap_px)
+        legend_top = lane_top + max(0.0, 0.5 * (lane_bottom - lane_top - legend_height))
+        canvas_config.legend_offset_y = legend_top - legend_local_top
+        legend_bottom = legend_top + legend_height
+        required_canvas_bottom = legend_bottom + float(edge_min_px)
+        if required_canvas_bottom > float(canvas_config.total_height):
+            canvas_config.total_height = required_canvas_bottom
+            _sync_canvas_viewbox(canvas, canvas_config)
+        return
+
+    lane_top = float(content_bottom) + float(content_gap_px)
+    lane_bottom = float(canvas_config.total_height) - float(edge_min_px)
+    free_height = lane_bottom - lane_top
+    if free_height < legend_height:
+        missing = legend_height - free_height
+        canvas_config.total_height = float(canvas_config.total_height) + missing
+        _sync_canvas_viewbox(canvas, canvas_config)
+        lane_bottom = float(canvas_config.total_height) - float(edge_min_px)
+    legend_top = lane_top + max(0.0, 0.5 * (lane_bottom - lane_top - legend_height))
+    canvas_config.legend_offset_y = legend_top - legend_local_top
 
 
 def _resolve_label_legend_collisions(
@@ -1240,14 +1418,17 @@ def add_record_on_circular_canvas(
     gc_config: GcContentConfigurator,
     skew_config: GcSkewConfigurator,
     gc_df: DataFrame,
-    species: str,
-    strain: str,
+    species: str | None,
+    strain: str | None,
     config_dict: dict,
     legend_config,
     legend_table,
     *,
     cfg: GbdrawConfig | None = None,
     track_specs: list[TrackSpec] | None = None,
+    definition_position: str = "center",
+    definition_profile: str = "full",
+    definition_group_id: str | None = None,
 ) -> Drawing:
     """
     Adds various record-related groups to a circular canvas.
@@ -1494,11 +1675,25 @@ def add_record_on_circular_canvas(
 
     definition_ts = ts_by_kind.get("definition")
     if definition_ts is None or definition_ts.show:
+        definition_kwargs: dict[str, Any] = {"cfg": cfg}
+        if str(definition_profile) != "full":
+            definition_kwargs["definition_profile"] = definition_profile
+        if str(definition_position) != "center":
+            definition_kwargs["definition_position"] = definition_position
+        if definition_group_id is not None:
+            definition_kwargs["definition_group_id"] = definition_group_id
         canvas = add_record_definition_group_on_canvas(
-            canvas, gb_record, canvas_config, species, strain, config_dict, cfg=cfg
+            canvas,
+            gb_record,
+            canvas_config,
+            species,
+            strain,
+            config_dict,
+            **definition_kwargs,
         )
 
     resolved_outer_core_track_annuli: list[tuple[float, float]] = []
+    tick_label_annulus_for_legend_bounds: tuple[float, float] | None = None
 
     ticks_ts = ts_by_kind.get("ticks")
     if ticks_ts is None or ticks_ts.show:
@@ -1563,17 +1758,22 @@ def add_record_on_circular_canvas(
             resolved_outer_core_track_annuli.append(
                 _tick_annulus_for_center(final_ticks_center, tick_ratio_bounds)
             )
-            tick_label_annulus = get_circular_tick_label_radius_bounds(
-                center_radius_px=final_ticks_center,
-                total_len=len(gb_record.seq),
-                track_type=str(cfg.canvas.circular.track_type),
-                strandedness=bool(cfg.canvas.strandedness),
-                font_size=float(cfg.objects.ticks.tick_labels.font_size),
-                font_family=str(cfg.objects.text.font_family),
-                dpi=int(canvas_config.dpi),
-                manual_interval=cfg.objects.scale.interval,
+        tick_label_annulus = get_circular_tick_label_radius_bounds(
+            center_radius_px=final_ticks_center,
+            total_len=len(gb_record.seq),
+            track_type=str(cfg.canvas.circular.track_type),
+            strandedness=bool(cfg.canvas.strandedness),
+            font_size=float(cfg.objects.ticks.tick_labels.font_size),
+            font_family=str(cfg.objects.text.font_family),
+            dpi=int(canvas_config.dpi),
+            manual_interval=cfg.objects.scale.interval,
+        )
+        if tick_label_annulus is not None:
+            tick_label_annulus_for_legend_bounds = (
+                float(tick_label_annulus[0]),
+                float(tick_label_annulus[1]),
             )
-            if tick_label_annulus is not None:
+            if core_track_overlap_relayout_enabled:
                 resolved_outer_core_track_annuli.append(tick_label_annulus)
         canvas = add_tick_group_on_canvas(
             canvas, gb_record, canvas_config, config_dict, radius_override=ticks_radius_px, cfg=cfg
@@ -1581,6 +1781,34 @@ def add_record_on_circular_canvas(
 
     legend_ts = ts_by_kind.get("legend")
     if canvas_config.legend_position != "none" and (legend_ts is None or legend_ts.show):
+        if canvas_config.legend_position in {"top", "bottom"}:
+            external_label_bounds: tuple[float, float, float, float] | None = None
+            if precalculated_labels is not None:
+                external_label_bounds = _external_label_bounds_on_canvas(
+                    precalculated_labels,
+                    len(gb_record.seq),
+                    canvas_config,
+                    margin_px=0.0,
+                )
+            content_top, content_bottom = _resolve_content_vertical_bounds_for_single_legend(
+                total_length=len(gb_record.seq),
+                canvas_config=canvas_config,
+                cfg=cfg,
+                show_features=show_features,
+                precomputed_feature_dict=precomputed_feature_dict,
+                rendered_feature_band_all_tracks=rendered_feature_band_all_tracks,
+                feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+                tick_label_annulus=tick_label_annulus_for_legend_bounds,
+                external_label_bounds=external_label_bounds,
+            )
+            _position_single_top_bottom_legend_between_edge_and_content(
+                canvas,
+                canvas_config,
+                legend_config,
+                position=canvas_config.legend_position,
+                content_top=content_top,
+                content_bottom=content_bottom,
+            )
         canvas = add_legend_group_on_canvas(canvas, canvas_config, legend_config, legend_table)
 
     # Add GC content group if configured to show.
@@ -1767,6 +1995,9 @@ def assemble_circular_diagram(
     legend_config: LegendDrawingConfigurator,
     cfg: GbdrawConfig | None = None,
     track_specs: list[TrackSpec] | None = None,
+    definition_position: str = "center",
+    definition_profile: str = "full",
+    definition_group_id: str | None = None,
 ) -> Drawing:
     """
     Assembles a circular diagram for a GenBank record and returns the SVG canvas.
@@ -1833,6 +2064,9 @@ def assemble_circular_diagram(
         legend_table,
         cfg=cfg,
         track_specs=track_specs,
+        definition_position=definition_position,
+        definition_profile=definition_profile,
+        definition_group_id=definition_group_id,
     )
     return canvas
 
@@ -1851,6 +2085,9 @@ def plot_circular_diagram(
     legend_config: LegendDrawingConfigurator,
     cfg: GbdrawConfig | None = None,
     track_specs: list[TrackSpec] | None = None,
+    definition_position: str = "center",
+    definition_profile: str = "full",
+    definition_group_id: str | None = None,
 ) -> Drawing:
     """
     Backwards-compatible wrapper that assembles and saves a circular diagram.
@@ -1868,6 +2105,9 @@ def plot_circular_diagram(
         legend_config=legend_config,
         cfg=cfg,
         track_specs=track_specs,
+        definition_position=definition_position,
+        definition_profile=definition_profile,
+        definition_group_id=definition_group_id,
     )
     save_figure(canvas, out_formats)
     return canvas

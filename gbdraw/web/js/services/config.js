@@ -126,7 +126,52 @@ const applyConfigData = (data) => {
   } else if (!['above', 'middle', 'below'].includes(state.form.linear_track_layout)) {
     state.form.linear_track_layout = 'middle';
   }
+  const normalizedDefinitionPosition = String(state.form.definition_position || '').trim().toLowerCase();
+  state.form.definition_position = ['center', 'top', 'bottom'].includes(normalizedDefinitionPosition)
+    ? normalizedDefinitionPosition
+    : 'center';
   state.adv.feature_shapes = normalizeFeatureShapes(state.adv.feature_shapes);
+  const normalizedMultiRecordSizeMode = String(state.adv.multi_record_size_mode || '').trim().toLowerCase();
+  state.adv.multi_record_size_mode = ['linear', 'sqrt', 'equal'].includes(normalizedMultiRecordSizeMode)
+    ? normalizedMultiRecordSizeMode
+    : 'sqrt';
+  const numericMinRadiusRatio = Number(state.adv.multi_record_min_radius_ratio);
+  state.adv.multi_record_min_radius_ratio =
+    Number.isFinite(numericMinRadiusRatio) && numericMinRadiusRatio > 0 && numericMinRadiusRatio <= 1
+      ? numericMinRadiusRatio
+      : 0.55;
+  const numericColumnGapRatio = Number(state.adv.multi_record_column_gap_ratio);
+  state.adv.multi_record_column_gap_ratio =
+    Number.isFinite(numericColumnGapRatio) && numericColumnGapRatio >= 0
+      ? numericColumnGapRatio
+      : 0.10;
+  const numericRowGapRatio = Number(state.adv.multi_record_row_gap_ratio);
+  state.adv.multi_record_row_gap_ratio =
+    Number.isFinite(numericRowGapRatio) && numericRowGapRatio >= 0
+      ? numericRowGapRatio
+      : 0.05;
+  const normalizedMultiRecordDefinitionMode = String(state.adv.multi_record_definition_mode || '').trim().toLowerCase();
+  state.adv.multi_record_definition_mode = ['shared', 'legacy'].includes(normalizedMultiRecordDefinitionMode)
+    ? normalizedMultiRecordDefinitionMode
+    : 'shared';
+  const normalizedSharedDefinitionPosition = String(state.adv.shared_definition_position || '').trim().toLowerCase();
+  state.adv.shared_definition_position = ['center', 'top', 'bottom'].includes(normalizedSharedDefinitionPosition)
+    ? normalizedSharedDefinitionPosition
+    : 'bottom';
+  const rawSharedDefinitionFontSize = state.adv.shared_definition_font_size;
+  if (
+    rawSharedDefinitionFontSize === null ||
+    rawSharedDefinitionFontSize === undefined ||
+    rawSharedDefinitionFontSize === ''
+  ) {
+    state.adv.shared_definition_font_size = null;
+  } else {
+    const numericSharedDefinitionFontSize = Number(rawSharedDefinitionFontSize);
+    state.adv.shared_definition_font_size =
+      Number.isFinite(numericSharedDefinitionFontSize) && numericSharedDefinitionFontSize > 0
+        ? numericSharedDefinitionFontSize
+        : null;
+  }
   if (data.losat) safeDeepMerge(state.losat, data.losat);
   if (data.colors) {
     const normalized = {};

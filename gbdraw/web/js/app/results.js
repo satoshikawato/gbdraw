@@ -87,13 +87,40 @@ export const createResultsManager = ({ state, getPyodide }) => {
       try {
         const species = form.species || '';
         const strain = form.strain || '';
-        const fontSize = adv.def_font_size || 18;
+        const hasDefinitionFontSize =
+          adv.def_font_size !== null && adv.def_font_size !== undefined && adv.def_font_size !== '';
+        const definitionFontSize = hasDefinitionFontSize ? Number(adv.def_font_size) : null;
+        const hasSharedDefinitionFontSize =
+          adv.shared_definition_font_size !== null &&
+          adv.shared_definition_font_size !== undefined &&
+          adv.shared_definition_font_size !== '';
+        const sharedDefinitionFontSize = hasSharedDefinitionFontSize ? Number(adv.shared_definition_font_size) : null;
+        const multiRecordDefinitionMode = String(adv.multi_record_definition_mode || 'shared')
+          .trim()
+          .toLowerCase();
 
-        const resultJson = pyodide.runPython(
-          `regenerate_definition_svg("${gbPath}", ${
-            species ? `"${species.replace(/"/g, '\\"')}"` : 'None'
-          }, ${strain ? `"${strain.replace(/"/g, '\\"')}"` : 'None'}, ${fontSize})`
-        );
+        const normalizedSpecies = species === '' ? null : species;
+        const normalizedStrain = strain === '' ? null : strain;
+        const normalizedDefinitionFontSize =
+          definitionFontSize === null || Number.isNaN(definitionFontSize) ? null : definitionFontSize;
+        const normalizedSharedDefinitionFontSize =
+          sharedDefinitionFontSize === null || Number.isNaN(sharedDefinitionFontSize) ? null : sharedDefinitionFontSize;
+
+        let resultJson = '';
+        let regenerateDefinitionSvgs = null;
+        try {
+          regenerateDefinitionSvgs = pyodide.globals.get('regenerate_definition_svgs');
+          resultJson = regenerateDefinitionSvgs(
+            gbPath,
+            normalizedSpecies,
+            normalizedStrain,
+            normalizedDefinitionFontSize,
+            normalizedSharedDefinitionFontSize,
+            multiRecordDefinitionMode
+          );
+        } finally {
+          regenerateDefinitionSvgs?.destroy?.();
+        }
         const result = JSON.parse(resultJson);
 
         if (result.error) {
@@ -101,37 +128,46 @@ export const createResultsManager = ({ state, getPyodide }) => {
           return;
         }
 
-        const definitionGroupId = result.definition_group_id;
-        console.log('Looking for definition group:', definitionGroupId);
-        const existingGroup = svg.getElementById(definitionGroupId);
+        const definitionEntries = Array.isArray(result.definitions) ? result.definitions : [];
+        if (definitionEntries.length === 0) {
+          return;
+        }
 
-        if (existingGroup) {
+        let updated = false;
+        definitionEntries.forEach((entry) => {
+          const definitionGroupId = entry?.definition_group_id;
+          const definitionSvg = entry?.svg;
+          if (!definitionGroupId || !definitionSvg) return;
+
+          const existingGroup = svg.getElementById(definitionGroupId);
+          if (!existingGroup) return;
+
           const parser = new DOMParser();
           const newDoc = parser.parseFromString(
-            `<svg xmlns="http://www.w3.org/2000/svg">${result.svg}</svg>`,
+            `<svg xmlns="http://www.w3.org/2000/svg">${definitionSvg}</svg>`,
             'image/svg+xml'
           );
           const newGroup = newDoc.querySelector('g');
+          if (!newGroup) return;
 
-          if (newGroup) {
-            const existingTransform = existingGroup.getAttribute('transform');
-            if (existingTransform) {
-              newGroup.setAttribute('transform', existingTransform);
-            }
-
-            existingGroup.parentNode.replaceChild(svg.ownerDocument.importNode(newGroup, true), existingGroup);
-
-            skipCaptureBaseConfig.value = true;
-            const idx = selectedResultIndex.value;
-            if (idx >= 0 && results.value.length > idx) {
-              const serializer = new XMLSerializer();
-              results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
-            }
-
-            console.log('Definition text updated');
+          const existingTransform = existingGroup.getAttribute('transform');
+          if (existingTransform) {
+            newGroup.setAttribute('transform', existingTransform);
           }
-        } else {
-          console.log('Definition group not found in SVG:', definitionGroupId);
+
+          existingGroup.parentNode.replaceChild(svg.ownerDocument.importNode(newGroup, true), existingGroup);
+          updated = true;
+        });
+
+        if (updated) {
+          skipCaptureBaseConfig.value = true;
+          const idx = selectedResultIndex.value;
+          if (idx >= 0 && results.value.length > idx) {
+            const serializer = new XMLSerializer();
+            results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svg) };
+          }
+
+          console.log('Definition text updated');
         }
       } catch (e) {
         console.error('Failed to update definition text:', e);

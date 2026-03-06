@@ -104,6 +104,13 @@ class CircularCanvasConfigurator:
         # Create linear canvas
 
     def recalculate_canvas_dimensions(self, legend_config):
+        legend_local_top = -0.5 * float(legend_config.color_rect_size)
+        legend_edge_margin = 16.0
+        legend_content_gap = 12.0
+        top_bottom_reserved_height = (
+            float(legend_config.legend_height) + legend_edge_margin + legend_content_gap
+        )
+
         if self.legend_position == "right":
             self.total_width = self.default_width + (legend_config.legend_width * 1.1)
             self.legend_offset_x = self.default_width + (legend_config.legend_width * 0.05)
@@ -113,6 +120,16 @@ class CircularCanvasConfigurator:
             self.legend_offset_x = legend_config.legend_width * 0.05
             self.offset_x: float = (self.default_width * 0.5) + (legend_config.legend_width * 1.1)
             self.legend_offset_y = (self.total_height - legend_config.legend_height) / 2
+        elif self.legend_position == "top":
+            self.total_height = self.default_height + top_bottom_reserved_height
+            self.offset_y = (self.default_height * 0.5) + top_bottom_reserved_height
+            self.legend_offset_x = (self.total_width - legend_config.legend_width) / 2
+            self.legend_offset_y = legend_edge_margin - legend_local_top
+        elif self.legend_position == "bottom":
+            self.total_height = self.default_height + top_bottom_reserved_height
+            self.offset_y = self.default_height * 0.5
+            self.legend_offset_x = (self.total_width - legend_config.legend_width) / 2
+            self.legend_offset_y = self.default_height + legend_content_gap - legend_local_top
         elif self.legend_position == "upper_left":
             self.legend_offset_x: float = 0.025 * self.total_width
             self.legend_offset_y: float = 0.05 * self.total_height

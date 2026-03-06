@@ -32,6 +32,7 @@ def modify_config_dict(
     gc_stroke_color=None,
     linear_definition_font_size=None,
     circular_definition_font_size=None,
+    shared_definition_font_size=None,
     label_font_size=None,
     label_placement=None,
     label_rotation=None,
@@ -228,6 +229,7 @@ def modify_config_dict(
         "linear_definition_font_size_short": "objects.definition.linear.font_size.short",
         "linear_definition_font_size_long": "objects.definition.linear.font_size.long",
         "circular_definition_font_size": "objects.definition.circular.font_size",
+        "shared_definition_font_size": "objects.definition.circular.shared_font_size",
         "circular_definition_font_interval": "objects.definition.circular.interval",
         "normalize_length": "canvas.linear.normalize_length",
     }

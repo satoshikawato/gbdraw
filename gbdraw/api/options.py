@@ -7,7 +7,7 @@ keyword arguments in assemble_* helpers. They are optional and additive.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Sequence
+from typing import Literal, Mapping, Sequence
 
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
@@ -39,6 +39,9 @@ class OutputOptions:
 
     output_prefix: str = "out"
     legend: str = "right"
+    definition_position: Literal["center", "top", "bottom"] = "center"
+    multi_record_definition_mode: Literal["shared", "legacy"] = "shared"
+    shared_definition_position: Literal["center", "top", "bottom"] = "bottom"
 
 
 @dataclass(frozen=True)

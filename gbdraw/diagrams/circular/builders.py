@@ -27,7 +27,11 @@ from ...render.groups.circular import (  # type: ignore[reportMissingImports]
     SeqRecordGroup,
     TickGroup,
 )
-from .positioning import center_group_on_canvas, place_legend_on_canvas
+from .positioning import (
+    center_group_on_canvas,
+    place_definition_group_on_canvas,
+    place_legend_on_canvas,
+)
 
 
 def add_gc_skew_group_on_canvas(
@@ -129,10 +133,13 @@ def add_record_definition_group_on_canvas(
     canvas: Drawing,
     gb_record: SeqRecord,
     canvas_config: CircularCanvasConfigurator,
-    species: str,
-    strain: str,
+    species: str | None,
+    strain: str | None,
     config_dict: dict,
     *,
+    definition_profile: str = "full",
+    definition_position: str = "center",
+    definition_group_id: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -150,8 +157,20 @@ def add_record_definition_group_on_canvas(
     Drawing: The updated SVG drawing with the record definition group added.
     """
     definition_group: Group = DefinitionGroup(
-        gb_record, canvas_config, species=species, strain=strain, config_dict=config_dict, cfg=cfg or canvas_config._cfg).get_group()
-    definition_group = center_group_on_canvas(definition_group, canvas_config)
+        gb_record,
+        canvas_config,
+        species=species,
+        strain=strain,
+        config_dict=config_dict,
+        definition_profile=definition_profile,
+        definition_group_id=definition_group_id,
+        cfg=cfg or canvas_config._cfg,
+    ).get_group()
+    definition_group = place_definition_group_on_canvas(
+        definition_group,
+        canvas_config,
+        position=definition_position,
+    )
     canvas.add(definition_group)
     return canvas
 
