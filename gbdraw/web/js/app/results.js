@@ -99,19 +99,28 @@ export const createResultsManager = ({ state, getPyodide }) => {
           .trim()
           .toLowerCase();
 
-        const resultJson = pyodide.runPython(
-          `regenerate_definition_svgs("${gbPath}", ${
-            species ? `"${species.replace(/"/g, '\\"')}"` : 'None'
-          }, ${strain ? `"${strain.replace(/"/g, '\\"')}"` : 'None'}, ${
-            definitionFontSize === null || Number.isNaN(definitionFontSize) ? 'None' : definitionFontSize
-          }, ${
-            sharedDefinitionFontSize === null || Number.isNaN(sharedDefinitionFontSize)
-              ? 'None'
-              : sharedDefinitionFontSize
-          }, "${
-            multiRecordDefinitionMode.replace(/"/g, '\\"')
-          }")`
-        );
+        const normalizedSpecies = species === '' ? null : species;
+        const normalizedStrain = strain === '' ? null : strain;
+        const normalizedDefinitionFontSize =
+          definitionFontSize === null || Number.isNaN(definitionFontSize) ? null : definitionFontSize;
+        const normalizedSharedDefinitionFontSize =
+          sharedDefinitionFontSize === null || Number.isNaN(sharedDefinitionFontSize) ? null : sharedDefinitionFontSize;
+
+        let resultJson = '';
+        let regenerateDefinitionSvgs = null;
+        try {
+          regenerateDefinitionSvgs = pyodide.globals.get('regenerate_definition_svgs');
+          resultJson = regenerateDefinitionSvgs(
+            gbPath,
+            normalizedSpecies,
+            normalizedStrain,
+            normalizedDefinitionFontSize,
+            normalizedSharedDefinitionFontSize,
+            multiRecordDefinitionMode
+          );
+        } finally {
+          regenerateDefinitionSvgs?.destroy?.();
+        }
         const result = JSON.parse(resultJson);
 
         if (result.error) {
