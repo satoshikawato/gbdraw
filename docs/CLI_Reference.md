@@ -64,7 +64,7 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--suppress_gc]
               [--suppress_skew] [-l LEGEND] [--separate_strands]
               [--multi_record_canvas]
-              [--multi_record_size_mode {linear,sqrt,equal}]
+              [--multi_record_size_mode {auto,linear,equal,sqrt}]
               [--multi_record_min_radius_ratio MULTI_RECORD_MIN_RADIUS_RATIO]
               [--multi_record_column_gap_ratio MULTI_RECORD_COLUMN_GAP_RATIO]
               [--multi_record_row_gap_ratio MULTI_RECORD_ROW_GAP_RATIO]
@@ -152,9 +152,10 @@ options:
   --multi_record_canvas
                         Place multiple records on one shared canvas using
                         automatic grid layout (default: False).
-  --multi_record_size_mode {linear,sqrt,equal}
-                        Size mode for multi-record circular canvas ("linear",
-                        "sqrt", "equal"; default: "sqrt").
+  --multi_record_size_mode {auto,linear,equal,sqrt}
+                        Size mode for multi-record circular canvas ("auto",
+                        "linear", "equal"; "sqrt" is accepted as an alias of
+                        "auto"; default: "auto").
   --multi_record_min_radius_ratio MULTI_RECORD_MIN_RADIUS_RATIO
                         Minimum radius ratio for multi-record scaling (0 <
                         ratio <= 1; default: 0.55).

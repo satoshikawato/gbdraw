@@ -221,10 +221,10 @@ def _get_args(args) -> argparse.Namespace:
         action='store_true')
     parser.add_argument(
         '--multi_record_size_mode',
-        help='Size mode for multi-record circular canvas ("linear", "sqrt", "equal"; default: "sqrt").',
+        help='Size mode for multi-record circular canvas ("auto", "linear", "equal"; "sqrt" is accepted as an alias of "auto"; default: "auto").',
         type=str,
-        choices=['linear', 'sqrt', 'equal'],
-        default='sqrt')
+        choices=['auto', 'linear', 'equal', 'sqrt'],
+        default='auto')
     parser.add_argument(
         '--multi_record_min_radius_ratio',
         help='Minimum radius ratio for multi-record scaling (0 < ratio <= 1; default: 0.55).',

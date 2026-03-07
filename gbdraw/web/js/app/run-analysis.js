@@ -38,7 +38,8 @@ const normalizeFeatureVisibilityMode = (value) => {
 };
 const normalizeMultiRecordSizeMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
-  return ['linear', 'sqrt', 'equal'].includes(normalized) ? normalized : 'sqrt';
+  if (normalized === 'sqrt') return 'auto';
+  return ['auto', 'linear', 'equal'].includes(normalized) ? normalized : 'auto';
 };
 const normalizeMultiRecordMinRadiusRatio = (value) => {
   const numeric = Number(value);

@@ -132,9 +132,13 @@ const applyConfigData = (data) => {
     : 'center';
   state.adv.feature_shapes = normalizeFeatureShapes(state.adv.feature_shapes);
   const normalizedMultiRecordSizeMode = String(state.adv.multi_record_size_mode || '').trim().toLowerCase();
-  state.adv.multi_record_size_mode = ['linear', 'sqrt', 'equal'].includes(normalizedMultiRecordSizeMode)
-    ? normalizedMultiRecordSizeMode
-    : 'sqrt';
+  if (normalizedMultiRecordSizeMode === 'sqrt') {
+    state.adv.multi_record_size_mode = 'auto';
+  } else {
+    state.adv.multi_record_size_mode = ['auto', 'linear', 'equal'].includes(normalizedMultiRecordSizeMode)
+      ? normalizedMultiRecordSizeMode
+      : 'auto';
+  }
   const numericMinRadiusRatio = Number(state.adv.multi_record_min_radius_ratio);
   state.adv.multi_record_min_radius_ratio =
     Number.isFinite(numericMinRadiusRatio) && numericMinRadiusRatio > 0 && numericMinRadiusRatio <= 1

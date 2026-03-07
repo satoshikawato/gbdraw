@@ -210,7 +210,7 @@ const adv = reactive({
   ruler_label_color: null,
 
   // Circular Specific
-  multi_record_size_mode: 'sqrt',
+  multi_record_size_mode: 'auto',
   multi_record_min_radius_ratio: 0.55,
   multi_record_column_gap_ratio: 0.10,
   multi_record_row_gap_ratio: 0.05,

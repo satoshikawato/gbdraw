@@ -500,7 +500,7 @@ def test_assemble_circular_diagram_from_records_shared_legend_and_unique_ids() -
 
 
 @pytest.mark.circular
-def test_assemble_circular_diagram_from_records_default_sqrt_scaling(
+def test_assemble_circular_diagram_from_records_default_auto_scaling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     records = [
@@ -543,6 +543,8 @@ def test_assemble_circular_diagram_from_records_default_sqrt_scaling(
 @pytest.mark.parametrize(
     ("size_mode", "min_ratio", "expected_ratio"),
     [
+        ("auto", 0.55, 0.8),
+        ("sqrt", 0.55, 0.8),
         ("linear", 0.55, 0.64),
         ("equal", 0.55, 1.0),
     ],
@@ -591,12 +593,63 @@ def test_assemble_circular_diagram_from_records_scaling_mode_selection(
 
 
 @pytest.mark.circular
-def test_assemble_circular_diagram_from_records_min_ratio_clamp(
+def test_assemble_circular_diagram_from_records_auto_renormalizes_when_multiple_would_clamp(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     records = [
         _build_record("max_len", 30, length=1000),
-        _build_record("tiny_len", 60, length=10),
+        _build_record("mid_len", 60, length=300),
+        _build_record("small_len", 90, length=200),
+        _build_record("tiny_len", 120, length=100),
+    ]
+    captured_radii_by_id: dict[str, float] = {}
+
+    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
+        cfg = kwargs["cfg"]
+        radius = float(cfg.canvas.circular.radius)
+        width = float(cfg.canvas.circular.width.without_labels)
+        height = float(cfg.canvas.circular.height)
+        captured_radii_by_id[gb_record.id] = radius
+        return Drawing(
+            filename=f"{gb_record.id}.svg",
+            size=(f"{width}px", f"{height}px"),
+            viewBox=f"0 0 {width} {height}",
+            debug=False,
+        )
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+        multi_record_size_mode="auto",
+        multi_record_min_radius_ratio=0.55,
+    )
+
+    assert len(captured_radii_by_id) == 4
+    max_radius = captured_radii_by_id["max_len"]
+    tiny_ratio = captured_radii_by_id["tiny_len"] / max_radius
+    small_ratio = captured_radii_by_id["small_len"] / max_radius
+    mid_ratio = captured_radii_by_id["mid_len"] / max_radius
+
+    assert tiny_ratio == pytest.approx(0.55, rel=1e-6)
+    assert small_ratio > 0.55
+    assert mid_ratio > small_ratio
+
+
+@pytest.mark.circular
+def test_assemble_circular_diagram_from_records_auto_keeps_single_clamp_behavior(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("max_len", 30, length=1000),
+        _build_record("mid_len", 60, length=640),
+        _build_record("tiny_len", 90, length=100),
     ]
     captured_radii: list[float] = []
 
@@ -623,12 +676,65 @@ def test_assemble_circular_diagram_from_records_min_ratio_clamp(
         records,
         selected_features_set=["CDS"],
         legend="none",
-        multi_record_size_mode="linear",
+        multi_record_size_mode="auto",
         multi_record_min_radius_ratio=0.55,
     )
 
-    assert len(captured_radii) == 2
-    assert captured_radii[1] / captured_radii[0] == pytest.approx(0.55, rel=1e-6)
+    assert len(captured_radii) == 3
+    assert captured_radii[1] / captured_radii[0] == pytest.approx(0.8, rel=1e-6)
+    assert captured_radii[2] / captured_radii[0] == pytest.approx(0.55, rel=1e-6)
+
+
+@pytest.mark.circular
+def test_assemble_circular_diagram_from_records_sqrt_alias_matches_auto(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("max_len", 30, length=1000),
+        _build_record("mid_len", 60, length=300),
+        _build_record("small_len", 90, length=200),
+        _build_record("tiny_len", 120, length=100),
+    ]
+    captured_radii: dict[str, list[float]] = {"auto": [], "sqrt": []}
+    active_mode = {"value": "auto"}
+
+    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
+        cfg = kwargs["cfg"]
+        radius = float(cfg.canvas.circular.radius)
+        width = float(cfg.canvas.circular.width.without_labels)
+        height = float(cfg.canvas.circular.height)
+        captured_radii[active_mode["value"]].append(radius)
+        return Drawing(
+            filename=f"{gb_record.id}.svg",
+            size=(f"{width}px", f"{height}px"),
+            viewBox=f"0 0 {width} {height}",
+            debug=False,
+        )
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    active_mode["value"] = "auto"
+    assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+        multi_record_size_mode="auto",
+        multi_record_min_radius_ratio=0.55,
+    )
+    active_mode["value"] = "sqrt"
+    assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+        multi_record_size_mode="sqrt",
+        multi_record_min_radius_ratio=0.55,
+    )
+
+    assert captured_radii["auto"] == pytest.approx(captured_radii["sqrt"], rel=1e-6)
 
 
 @pytest.mark.circular
@@ -1199,7 +1305,7 @@ def test_circular_cli_multi_record_canvas_opt_in_saves_once(
     assert calls["single"] == 0
     assert calls["multi"] == 1
     assert calls["save"] == 1
-    assert captured_kwargs["multi_record_size_mode"] == "sqrt"
+    assert captured_kwargs["multi_record_size_mode"] == "auto"
     assert captured_kwargs["multi_record_min_radius_ratio"] == pytest.approx(0.55)
     assert captured_kwargs["multi_record_column_gap_ratio"] == pytest.approx(0.10)
     assert captured_kwargs["multi_record_row_gap_ratio"] == pytest.approx(0.05)
@@ -1276,6 +1382,55 @@ def test_circular_cli_multi_record_canvas_passes_size_scaling_options(
     assert captured_kwargs["multi_record_definition_mode"] == "legacy"
     assert captured_kwargs["shared_definition_position"] == "top"
     assert captured_kwargs["cfg"].objects.definition.circular.shared_font_size == pytest.approx(30.0)
+
+
+@pytest.mark.circular
+def test_circular_cli_multi_record_canvas_accepts_sqrt_alias(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    records = [_build_record("cli_a", 20), _build_record("cli_b", 220)]
+    calls: dict[str, int] = {"single": 0, "multi": 0, "save": 0}
+    captured_kwargs: dict[str, Any] = {}
+
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+
+    def fake_single(*_args: Any, **_kwargs: Any) -> Drawing:
+        calls["single"] += 1
+        return Drawing(filename=str(tmp_path / "single.svg"))
+
+    def fake_multi(*_args: Any, **_kwargs: Any) -> Drawing:
+        calls["multi"] += 1
+        captured_kwargs.update(_kwargs)
+        return Drawing(filename=str(tmp_path / "multi.svg"))
+
+    def fake_save(*_args: Any, **_kwargs: Any) -> None:
+        calls["save"] += 1
+
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_single)
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
+    monkeypatch.setattr(circular_cli_module, "save_figure", fake_save)
+
+    circular_cli_module.circular_main(
+        [
+            "--gbk",
+            "dummy.gb",
+            "--format",
+            "svg",
+            "--multi_record_canvas",
+            "--multi_record_size_mode",
+            "sqrt",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert calls["single"] == 0
+    assert calls["multi"] == 1
+    assert calls["save"] == 1
+    assert captured_kwargs["multi_record_size_mode"] == "sqrt"
 
 
 @pytest.mark.circular

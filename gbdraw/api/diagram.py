@@ -79,7 +79,7 @@ _MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS = {
     "skew",
     "gc_skew",
 }
-_MULTI_RECORD_SIZE_MODES = {"linear", "sqrt", "equal"}
+_MULTI_RECORD_SIZE_MODES = {"linear", "auto", "equal", "sqrt"}
 _DEFINITION_POSITIONS = {"center", "top", "bottom"}
 _MULTI_RECORD_DEFINITION_MODES = {"shared", "legacy"}
 # Legacy fallback used only when a valid radius cannot be derived.
@@ -425,14 +425,16 @@ def _is_defs_element(element: object) -> bool:
     return False
 
 
-def _resolve_multi_record_size_mode(mode: str) -> Literal["linear", "sqrt", "equal"]:
+def _resolve_multi_record_size_mode(mode: str) -> Literal["linear", "auto", "equal"]:
     """Normalize and validate multi-record size mode."""
     normalized = str(mode).strip().lower()
     if normalized not in _MULTI_RECORD_SIZE_MODES:
         raise ValidationError(
-            "multi_record_size_mode must be one of: linear, sqrt, equal"
+            "multi_record_size_mode must be one of: auto, linear, equal, sqrt (alias of auto)"
         )
-    return cast(Literal["linear", "sqrt", "equal"], normalized)
+    if normalized == "sqrt":
+        normalized = "auto"
+    return cast(Literal["linear", "auto", "equal"], normalized)
 
 
 def _resolve_definition_position(
@@ -483,28 +485,54 @@ def _validate_multi_record_column_gap_ratio(value: float) -> float:
     return ratio
 
 
-def _resolve_multi_record_scale(
-    record_length: int,
-    max_record_length: int,
+def _resolve_multi_record_scales(
+    record_lengths: Sequence[int],
     *,
-    mode: Literal["linear", "sqrt", "equal"],
+    mode: Literal["linear", "auto", "equal"],
     min_radius_ratio: float,
-) -> float:
-    """Return per-record circular scale for multi-record canvas rendering."""
+) -> list[float]:
+    """Return per-record circular scales for multi-record canvas rendering."""
+    if not record_lengths:
+        return []
     if mode == "equal":
-        return 1.0
+        return [1.0] * len(record_lengths)
 
+    max_record_length = max(int(length) for length in record_lengths)
     if max_record_length <= 0:
-        ratio = 1.0
+        ratios = [1.0] * len(record_lengths)
     else:
-        ratio = max(0.0, float(record_length) / float(max_record_length))
+        ratios = [
+            max(0.0, float(length) / float(max_record_length))
+            for length in record_lengths
+        ]
 
     if mode == "linear":
-        scale = ratio
+        raw_scales = [float(ratio) for ratio in ratios]
     else:
-        scale = math.sqrt(ratio)
+        base_scales = [math.sqrt(float(ratio)) for ratio in ratios]
+        below_min = [float(scale) for scale in base_scales if float(scale) < float(min_radius_ratio)]
+        if len(below_min) >= 2:
+            base_min = min(below_min)
+            denominator = 1.0 - float(base_min)
+            if denominator > 0.0:
+                raw_scales = [
+                    float(min_radius_ratio)
+                    + (
+                        (float(scale) - float(base_min))
+                        * (1.0 - float(min_radius_ratio))
+                        / denominator
+                    )
+                    for scale in base_scales
+                ]
+            else:
+                raw_scales = [float(min_radius_ratio)] * len(base_scales)
+        else:
+            raw_scales = [float(scale) for scale in base_scales]
 
-    return max(float(min_radius_ratio), min(float(scale), 1.0))
+    return [
+        max(float(min_radius_ratio), min(float(scale), 1.0))
+        for scale in raw_scales
+    ]
 
 
 def _resolve_multi_record_grid_gap_px(max_record_radius_px: float, *, gap_ratio: float) -> float:
@@ -893,7 +921,7 @@ def assemble_circular_diagram_from_records(
     definition_position: Literal["center", "top", "bottom"] = "center",
     multi_record_definition_mode: Literal["shared", "legacy"] = "shared",
     shared_definition_position: Literal["center", "top", "bottom"] = "bottom",
-    multi_record_size_mode: Literal["linear", "sqrt", "equal"] = "sqrt",
+    multi_record_size_mode: Literal["linear", "auto", "equal", "sqrt"] = "auto",
     multi_record_min_radius_ratio: float = 0.55,
     multi_record_column_gap_ratio: float = _MULTI_RECORD_COLUMN_GAP_RATIO,
     multi_record_row_gap_ratio: float = _MULTI_RECORD_ROW_GAP_RATIO,
@@ -1019,19 +1047,18 @@ def assemble_circular_diagram_from_records(
     record_definition_position: Literal["center", "top", "bottom"] = (
         "center" if use_shared_definition else normalized_definition_position
     )
-    max_record_length = max(len(record.seq) for record in records)
+    record_lengths = [len(record.seq) for record in records]
+    record_scales = _resolve_multi_record_scales(
+        record_lengths,
+        mode=normalized_multi_record_size_mode,
+        min_radius_ratio=normalized_multi_record_min_radius_ratio,
+    )
 
     canvases: list[Drawing] = []
     widths: list[float] = []
     heights: list[float] = []
     record_radii_px: list[float] = []
-    for record in records:
-        record_scale = _resolve_multi_record_scale(
-            len(record.seq),
-            max_record_length,
-            mode=normalized_multi_record_size_mode,
-            min_radius_ratio=normalized_multi_record_min_radius_ratio,
-        )
+    for record, record_scale in zip(records, record_scales):
         scaled_cfg = _scale_circular_cfg(cfg, scale=record_scale)
         record_radii_px.append(float(scaled_cfg.canvas.circular.radius))
         sub_canvas = assemble_circular_diagram_from_record(
