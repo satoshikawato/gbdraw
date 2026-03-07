@@ -14,10 +14,12 @@ from svgwrite import Drawing
 import gbdraw.circular as circular_cli_module
 import gbdraw.api.diagram as diagram_api_module
 import gbdraw.diagrams.circular.assemble as circular_assemble_module
+import gbdraw.render.groups.circular.ticks as circular_ticks_group_module
 from gbdraw.api.diagram import assemble_circular_diagram_from_records
 from gbdraw.api.options import DiagramOptions, OutputOptions
 from gbdraw.core.text import calculate_bbox_dimensions
 from gbdraw.features.colors import compute_feature_hash
+from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
 
 
 def _build_record(record_id: str, feature_start: int, length: int = 1200) -> SeqRecord:
@@ -30,6 +32,28 @@ def _build_record(record_id: str, feature_start: int, length: int = 1200) -> Seq
         )
     ]
     return record
+
+
+def _build_distinct_circular_style_config_dict() -> dict[str, Any]:
+    config_dict = diagram_api_module.load_config_toml("gbdraw.data", "config.toml")
+    config_dict["canvas"]["circular"]["track_ratio_factors"]["short"][0] = 0.77
+    config_dict["canvas"]["circular"]["track_ratio_factors"]["long"][0] = 0.33
+    config_dict["canvas"]["circular"]["track_ratio_factors"]["short"][1] = 0.91
+    config_dict["canvas"]["circular"]["track_ratio_factors"]["long"][1] = 0.41
+    config_dict["canvas"]["circular"]["track_ratio_factors"]["short"][2] = 0.81
+    config_dict["canvas"]["circular"]["track_ratio_factors"]["long"][2] = 0.31
+    for track_type in ("tuckin", "middle", "spreadout"):
+        config_dict["canvas"]["circular"]["track_dict"]["short"][track_type]["2"] = 0.24
+        config_dict["canvas"]["circular"]["track_dict"]["short"][track_type]["3"] = 0.19
+        config_dict["canvas"]["circular"]["track_dict"]["long"][track_type]["2"] = 0.74
+        config_dict["canvas"]["circular"]["track_dict"]["long"][track_type]["3"] = 0.59
+    config_dict["objects"]["features"]["block_stroke_width"]["short"] = 9.0
+    config_dict["objects"]["features"]["block_stroke_width"]["long"] = 1.0
+    config_dict["objects"]["features"]["line_stroke_width"]["short"] = 8.0
+    config_dict["objects"]["features"]["line_stroke_width"]["long"] = 2.0
+    config_dict["objects"]["axis"]["circular"]["stroke_width"]["short"] = 7.0
+    config_dict["objects"]["axis"]["circular"]["stroke_width"]["long"] = 3.0
+    return config_dict
 
 
 def _build_record_with_source(
@@ -537,6 +561,256 @@ def test_assemble_circular_diagram_from_records_default_auto_scaling(
     assert len(captured_radii) == 2
     assert captured_radii[0] > captured_radii[1]
     assert captured_radii[1] / captured_radii[0] == pytest.approx(0.8, rel=1e-6)
+
+
+@pytest.mark.circular
+def test_multi_record_mixed_lengths_harmonize_short_feature_axis_style_to_long(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("long_len", 30, length=120_000),
+        _build_record("short_len", 60, length=20_000),
+    ]
+    config_dict = _build_distinct_circular_style_config_dict()
+    captured_styles: dict[str, dict[str, float]] = {}
+    captured_tick_channels: dict[str, str | None] = {}
+
+    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
+        cfg = kwargs["cfg"]
+        threshold = int(cfg.labels.length_threshold.circular)
+        length_param = "short" if len(gb_record.seq) < threshold else "long"
+        track_type = str(cfg.canvas.circular.track_type)
+        captured_tick_channels[gb_record.id] = kwargs.get("_tick_track_channel_override")
+        captured_styles[gb_record.id] = {
+            "feature_ratio_factor": float(cfg.canvas.circular.track_ratio_factors[length_param][0]),
+            "gc_width_ratio_factor": float(cfg.canvas.circular.track_ratio_factors[length_param][1]),
+            "skew_width_ratio_factor": float(cfg.canvas.circular.track_ratio_factors[length_param][2]),
+            "block_stroke_width": float(cfg.objects.features.block_stroke_width.for_length_param(length_param)),
+            "line_stroke_width": float(cfg.objects.features.line_stroke_width.for_length_param(length_param)),
+            "axis_stroke_width": float(cfg.objects.axis.circular.stroke_width.for_length_param(length_param)),
+            "gc_center_ratio": float(cfg.canvas.circular.track_dict[length_param][track_type]["2"]),
+            "skew_center_ratio": float(cfg.canvas.circular.track_dict[length_param][track_type]["3"]),
+        }
+        width = float(cfg.canvas.circular.width.without_labels)
+        height = float(cfg.canvas.circular.height)
+        return Drawing(
+            filename=f"{gb_record.id}.svg",
+            size=(f"{width}px", f"{height}px"),
+            viewBox=f"0 0 {width} {height}",
+            debug=False,
+        )
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    assemble_circular_diagram_from_records(
+        records,
+        config_dict=config_dict,
+        selected_features_set=["CDS"],
+        legend="none",
+    )
+
+    assert captured_styles["short_len"] == pytest.approx(captured_styles["long_len"], rel=1e-9)
+    assert captured_tick_channels == {"long_len": "long", "short_len": "long"}
+    assert captured_styles["short_len"]["feature_ratio_factor"] == pytest.approx(0.33, rel=1e-9)
+    assert captured_styles["short_len"]["gc_width_ratio_factor"] == pytest.approx(0.41, rel=1e-9)
+    assert captured_styles["short_len"]["skew_width_ratio_factor"] == pytest.approx(0.31, rel=1e-9)
+    assert captured_styles["short_len"]["block_stroke_width"] == pytest.approx(1.0, rel=1e-9)
+    assert captured_styles["short_len"]["line_stroke_width"] == pytest.approx(2.0, rel=1e-9)
+    assert captured_styles["short_len"]["axis_stroke_width"] == pytest.approx(3.0, rel=1e-9)
+    assert captured_styles["short_len"]["gc_center_ratio"] == pytest.approx(0.74, rel=1e-9)
+    assert captured_styles["short_len"]["skew_center_ratio"] == pytest.approx(0.59, rel=1e-9)
+
+
+@pytest.mark.circular
+def test_multi_record_all_short_keeps_short_feature_axis_style(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("short_a", 30, length=20_000),
+        _build_record("short_b", 60, length=30_000),
+    ]
+    config_dict = _build_distinct_circular_style_config_dict()
+    captured_styles: dict[str, dict[str, float]] = {}
+    captured_tick_channels: dict[str, str | None] = {}
+
+    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
+        cfg = kwargs["cfg"]
+        threshold = int(cfg.labels.length_threshold.circular)
+        length_param = "short" if len(gb_record.seq) < threshold else "long"
+        track_type = str(cfg.canvas.circular.track_type)
+        captured_tick_channels[gb_record.id] = kwargs.get("_tick_track_channel_override")
+        captured_styles[gb_record.id] = {
+            "feature_ratio_factor": float(cfg.canvas.circular.track_ratio_factors[length_param][0]),
+            "gc_width_ratio_factor": float(cfg.canvas.circular.track_ratio_factors[length_param][1]),
+            "skew_width_ratio_factor": float(cfg.canvas.circular.track_ratio_factors[length_param][2]),
+            "block_stroke_width": float(cfg.objects.features.block_stroke_width.for_length_param(length_param)),
+            "line_stroke_width": float(cfg.objects.features.line_stroke_width.for_length_param(length_param)),
+            "axis_stroke_width": float(cfg.objects.axis.circular.stroke_width.for_length_param(length_param)),
+            "gc_center_ratio": float(cfg.canvas.circular.track_dict[length_param][track_type]["2"]),
+            "skew_center_ratio": float(cfg.canvas.circular.track_dict[length_param][track_type]["3"]),
+        }
+        width = float(cfg.canvas.circular.width.without_labels)
+        height = float(cfg.canvas.circular.height)
+        return Drawing(
+            filename=f"{gb_record.id}.svg",
+            size=(f"{width}px", f"{height}px"),
+            viewBox=f"0 0 {width} {height}",
+            debug=False,
+        )
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    assemble_circular_diagram_from_records(
+        records,
+        config_dict=config_dict,
+        selected_features_set=["CDS"],
+        legend="none",
+    )
+
+    for style in captured_styles.values():
+        assert style["gc_width_ratio_factor"] == pytest.approx(0.91, rel=1e-9)
+        assert style["skew_width_ratio_factor"] == pytest.approx(0.81, rel=1e-9)
+        assert style["feature_ratio_factor"] == pytest.approx(0.77, rel=1e-9)
+        assert style["block_stroke_width"] == pytest.approx(9.0, rel=1e-9)
+        assert style["line_stroke_width"] == pytest.approx(8.0, rel=1e-9)
+        assert style["axis_stroke_width"] == pytest.approx(7.0, rel=1e-9)
+        assert style["gc_center_ratio"] == pytest.approx(0.24, rel=1e-9)
+        assert style["skew_center_ratio"] == pytest.approx(0.19, rel=1e-9)
+    assert captured_tick_channels == {"short_a": None, "short_b": None}
+
+
+@pytest.mark.circular
+def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("long_len", 30, length=120_000),
+        _build_record("short_len", 60, length=20_000),
+    ]
+    captured_tick_path_channels: dict[int, str | None] = {}
+    captured_tick_label_channels: dict[int, str | None] = {}
+
+    def fake_generate_tick_paths(
+        radius: float,
+        total_len: int,
+        size: str,
+        ticks: list[int],
+        tick_width: float,
+        track_type: str,
+        strandedness: bool,
+        tick_track_channel_override: str | None = None,
+    ) -> list[Any]:
+        captured_tick_path_channels[int(total_len)] = tick_track_channel_override
+        return []
+
+    def fake_generate_tick_labels(
+        radius: float,
+        total_len: int,
+        size: str,
+        ticks: list[int],
+        stroke: str,
+        fill: str,
+        font_size: float,
+        font_weight: str,
+        font_family: str,
+        track_type: str,
+        strandedness: bool,
+        dpi: int,
+        tick_track_channel_override: str | None = None,
+    ) -> list[Any]:
+        captured_tick_label_channels[int(total_len)] = tick_track_channel_override
+        return []
+
+    monkeypatch.setattr(
+        circular_ticks_group_module,
+        "generate_circular_tick_paths",
+        fake_generate_tick_paths,
+    )
+    monkeypatch.setattr(
+        circular_ticks_group_module,
+        "generate_circular_tick_labels",
+        fake_generate_tick_labels,
+    )
+
+    assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+        config_overrides={"show_gc": False, "show_skew": False},
+    )
+
+    assert captured_tick_path_channels[20_000] == "long"
+    assert captured_tick_label_channels[20_000] == "long"
+    assert captured_tick_path_channels[120_000] == "long"
+    assert captured_tick_label_channels[120_000] == "long"
+
+    default_short_tick_bounds = get_circular_tick_path_ratio_bounds(
+        20_000,
+        "tuckin",
+        False,
+    )
+    forced_long_tick_bounds = get_circular_tick_path_ratio_bounds(
+        20_000,
+        "tuckin",
+        False,
+        tick_track_channel_override="long",
+    )
+    assert default_short_tick_bounds[1] >= 0.98
+    assert forced_long_tick_bounds[1] < 1.0
+
+
+@pytest.mark.circular
+def test_multi_record_mixed_lengths_keep_gc_window_step_per_record_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("long_len", 30, length=1_200_000),
+        _build_record("short_len", 60, length=20_000),
+    ]
+    captured_gc_window_steps: dict[str, tuple[int, int]] = {}
+
+    def fake_assemble(**kwargs: Any) -> Drawing:
+        gb_record = kwargs["gb_record"]
+        canvas_config = kwargs["canvas_config"]
+        gc_config = kwargs["gc_config"]
+        captured_gc_window_steps[gb_record.id] = (
+            int(gc_config.window),
+            int(gc_config.step),
+        )
+        width = float(canvas_config.total_width)
+        height = float(canvas_config.total_height)
+        return Drawing(
+            filename=f"{gb_record.id}.svg",
+            size=(f"{width}px", f"{height}px"),
+            viewBox=f"0 0 {width} {height}",
+            debug=False,
+        )
+
+    monkeypatch.setattr(diagram_api_module, "assemble_circular_diagram", fake_assemble)
+
+    expected_cfg = diagram_api_module.GbdrawConfig.from_dict(
+        diagram_api_module.load_config_toml("gbdraw.data", "config.toml")
+    )
+    expected_short = tuple(expected_cfg.objects.sliding_window.default)
+    expected_long = tuple(expected_cfg.objects.sliding_window.up1m)
+
+    assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+        config_overrides={"show_gc": False, "show_skew": False},
+    )
+
+    assert captured_gc_window_steps["short_len"] == expected_short
+    assert captured_gc_window_steps["long_len"] == expected_long
 
 
 @pytest.mark.circular

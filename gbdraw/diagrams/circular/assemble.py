@@ -1429,6 +1429,7 @@ def add_record_on_circular_canvas(
     definition_position: str = "center",
     definition_profile: str = "full",
     definition_group_id: str | None = None,
+    _tick_track_channel_override: str | None = None,
 ) -> Drawing:
     """
     Adds various record-related groups to a circular canvas.
@@ -1703,6 +1704,7 @@ def add_record_on_circular_canvas(
             len(gb_record.seq),
             str(cfg.canvas.circular.track_type),
             bool(cfg.canvas.strandedness),
+            tick_track_channel_override=_tick_track_channel_override,
         )
         default_ticks_radius_px = float(canvas_config.radius)
         effective_ticks_radius = (
@@ -1767,6 +1769,7 @@ def add_record_on_circular_canvas(
             font_family=str(cfg.objects.text.font_family),
             dpi=int(canvas_config.dpi),
             manual_interval=cfg.objects.scale.interval,
+            tick_track_channel_override=_tick_track_channel_override,
         )
         if tick_label_annulus is not None:
             tick_label_annulus_for_legend_bounds = (
@@ -1775,8 +1778,18 @@ def add_record_on_circular_canvas(
             )
             if core_track_overlap_relayout_enabled:
                 resolved_outer_core_track_annuli.append(tick_label_annulus)
+        tick_group_kwargs: dict[str, Any] = {
+            "radius_override": ticks_radius_px,
+            "cfg": cfg,
+        }
+        if _tick_track_channel_override is not None:
+            tick_group_kwargs["tick_track_channel_override"] = _tick_track_channel_override
         canvas = add_tick_group_on_canvas(
-            canvas, gb_record, canvas_config, config_dict, radius_override=ticks_radius_px, cfg=cfg
+            canvas,
+            gb_record,
+            canvas_config,
+            config_dict,
+            **tick_group_kwargs,
         )
 
     legend_ts = ts_by_kind.get("legend")
@@ -1998,6 +2011,7 @@ def assemble_circular_diagram(
     definition_position: str = "center",
     definition_profile: str = "full",
     definition_group_id: str | None = None,
+    _tick_track_channel_override: str | None = None,
 ) -> Drawing:
     """
     Assembles a circular diagram for a GenBank record and returns the SVG canvas.
@@ -2067,6 +2081,7 @@ def assemble_circular_diagram(
         definition_position=definition_position,
         definition_profile=definition_profile,
         definition_group_id=definition_group_id,
+        _tick_track_channel_override=_tick_track_channel_override,
     )
     return canvas
 
