@@ -8,6 +8,10 @@ from svgwrite.text import Text, TSpan
 from ....core.text import create_text_element, calculate_bbox_dimensions, parse_mixed_content_text
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 
+_COORD_BASE_KEY = "gbdraw_coord_base"
+_COORD_STEP_KEY = "gbdraw_coord_step"
+_REGION_APPLIED_KEY = "gbdraw_region_applied"
+
 
 class DefinitionGroup:
     """
@@ -94,7 +98,7 @@ class DefinitionGroup:
 
     def get_id_and_length(self) -> None:
         """
-        Extracts the ID and length of the SeqRecord for display purposes.
+        Extracts the ID and secondary label of the SeqRecord for display.
         """
         self.track_id = str(self.record.id)
         override = None
@@ -106,7 +110,33 @@ class DefinitionGroup:
         parts = parse_mixed_content_text(self.record_name)
         self.record_name_plain = "".join(part.get("text") or "" for part in parts)
         self.record_length: int = len(self.record.seq)
-        self.length_label: str = "{:,} bp".format(self.record_length)
+        if self._is_region_applied():
+            self.length_label = self._format_coordinate_span()
+        else:
+            self.length_label = "{:,} bp".format(self.record_length)
+
+    def _is_region_applied(self) -> bool:
+        annotations = getattr(self.record, "annotations", None) or {}
+        raw = annotations.get(_REGION_APPLIED_KEY, False)
+        if isinstance(raw, str):
+            return raw.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(raw)
+
+    def _format_coordinate_span(self) -> str:
+        annotations = getattr(self.record, "annotations", None) or {}
+        try:
+            start_coord = int(annotations.get(_COORD_BASE_KEY, 1))
+        except (TypeError, ValueError):
+            start_coord = 1
+        try:
+            step = int(annotations.get(_COORD_STEP_KEY, 1))
+        except (TypeError, ValueError):
+            step = 1
+        if step == 0:
+            step = 1
+        step = 1 if step > 0 else -1
+        end_coord = start_coord + (step * max(0, self.record_length - 1))
+        return f"{start_coord}-{end_coord}"
 
     def add_elements_to_group(self) -> None:
         """

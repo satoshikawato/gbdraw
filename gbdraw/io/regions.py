@@ -24,6 +24,7 @@ _REGION_COORD_RE = re.compile(
 
 _COORD_BASE_KEY = "gbdraw_coord_base"
 _COORD_STEP_KEY = "gbdraw_coord_step"
+_REGION_APPLIED_KEY = "gbdraw_region_applied"
 
 
 def _read_coord_map(record: SeqRecord) -> tuple[int, int]:
@@ -221,6 +222,10 @@ def _crop_record_to_region(
         rc_base = cropped_base + (cropped_step * max(0, cropped_length - 1))
         rc_step = -cropped_step
         _write_coord_map(new_record, base=rc_base, step=rc_step)
+
+    if getattr(new_record, "annotations", None) is None:
+        new_record.annotations = {}
+    new_record.annotations[_REGION_APPLIED_KEY] = True
 
     return new_record
 

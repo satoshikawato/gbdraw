@@ -71,7 +71,8 @@ def test_linear_region_crop_with_record_selector(temp_output_dir: Path, gbdraw_r
 
     assert returncode == 0, f"gbdraw failed: {output}"
     svg_content = svg_path.read_text()
-    assert "200 bp" in svg_content
+    assert "1-200" in svg_content
+    assert "200 bp" not in svg_content
     assert f"{lengths['RecB']:,} bp" in svg_content
     assert f"{lengths['RecA']:,} bp" not in svg_content
 
@@ -92,7 +93,8 @@ def test_linear_region_crop_with_file_prefix(temp_output_dir: Path, gbdraw_runne
     assert returncode == 0, f"gbdraw failed: {output}"
     assert "reverse complement" in output
     svg_content = svg_path.read_text()
-    assert "200 bp" in svg_content
+    assert "200-1" in svg_content
+    assert "200 bp" not in svg_content
     assert f"{lengths['RecB']:,} bp" in svg_content
     assert f"{lengths['RecA']:,} bp" not in svg_content
 
@@ -112,6 +114,27 @@ def test_linear_reverse_complement_flag(temp_output_dir: Path, gbdraw_runner) ->
     assert returncode == 0, f"gbdraw failed: {output}"
     assert "Reverse complemented 1 record(s)." in output
     assert svg_path.exists()
+
+
+@pytest.mark.linear
+def test_linear_reverse_complement_without_region_keeps_length_label(
+    temp_output_dir: Path,
+    gbdraw_runner,
+) -> None:
+    gbk_path = temp_output_dir / "multi_records_rc_length.gbk"
+    lengths = _write_multi_record_gbk(gbk_path)
+
+    returncode, output, svg_path = gbdraw_runner.run_linear(
+        [gbk_path],
+        "linear_reverse_complement_keeps_length",
+        temp_output_dir,
+        extra_args=["--record_id", "RecA", "--reverse_complement", "true", "--legend", "none"],
+    )
+
+    assert returncode == 0, f"gbdraw failed: {output}"
+    svg_content = svg_path.read_text()
+    assert f"{lengths['RecA']:,} bp" in svg_content
+    assert "1234-1" not in svg_content
 
 
 @pytest.mark.linear
