@@ -316,6 +316,43 @@ def _extract_record_axis_vertical_edges(root: ET.Element, record_index: int) -> 
     return center_y - radius, center_y + radius
 
 
+def _extract_record_axis_and_definition_center_y(
+    root: ET.Element,
+    *,
+    record_index: int,
+    record_id: str,
+) -> tuple[float, float]:
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    record_group = root.find(f".//svg:g[@id='record_{record_index}']", ns)
+    assert record_group is not None
+    _record_x, record_y = _parse_translate(record_group.attrib.get("transform", ""))
+
+    axis_group = record_group.find(f"./svg:g[@id='Axis_{record_index}']", ns)
+    assert axis_group is not None
+    _axis_x, axis_y = _parse_translate(axis_group.attrib.get("transform", ""))
+    axis_center_y = record_y + axis_y
+
+    track_id = str(record_id).replace(" ", "_")
+    definition_group = record_group.find(f"./svg:g[@id='{track_id}_definition']", ns)
+    assert definition_group is not None
+    _definition_x, definition_y = _parse_translate(definition_group.attrib.get("transform", ""))
+
+    min_top = float("inf")
+    max_bottom = float("-inf")
+    for text in definition_group.findall("./svg:text", ns):
+        y_raw = text.attrib.get("y", "0")
+        font_size_raw = text.attrib.get("font-size", "0")
+        y_val = float(str(y_raw).replace("px", ""))
+        font_size = float(str(font_size_raw).replace("px", ""))
+        min_top = min(min_top, y_val - (0.5 * font_size))
+        max_bottom = max(max_bottom, y_val + (0.5 * font_size))
+
+    assert min_top != float("inf")
+    assert max_bottom != float("-inf")
+    definition_center_y = record_y + definition_y + ((min_top + max_bottom) * 0.5)
+    return axis_center_y, definition_center_y
+
+
 def _extract_legend_text_transforms(root: ET.Element) -> list[tuple[float, float, str]]:
     ns = {"svg": "http://www.w3.org/2000/svg"}
     legend = root.find(".//svg:g[@id='legend']", ns)
@@ -2105,6 +2142,86 @@ def test_single_record_definition_position_moves_group_vertically() -> None:
     y_bottom = _extract_group_translate_y(ET.fromstring(bottom_canvas.tostring()), group_id)
 
     assert y_top < y_center < y_bottom
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("definition_mode", ["shared", "legacy"])
+def test_multi_record_center_definition_aligns_with_record_axis(
+    definition_mode: str,
+) -> None:
+    records = [
+        _build_record_with_source(
+            "center_align_a",
+            organism="Center align A",
+            strain="Strain A",
+            length=1400,
+        ),
+        _build_record_with_source(
+            "center_align_b",
+            organism="Center align B",
+            strain="Strain B",
+            length=900,
+        ),
+        _build_record_with_source(
+            "center_align_c",
+            organism="Center align C",
+            strain="Strain C",
+            length=700,
+        ),
+    ]
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+        multi_record_definition_mode=definition_mode,
+        definition_position="center",
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    for index, record in enumerate(records):
+        axis_center_y, definition_center_y = _extract_record_axis_and_definition_center_y(
+            root,
+            record_index=index,
+            record_id=record.id,
+        )
+        assert definition_center_y == pytest.approx(axis_center_y, abs=1e-6)
+
+
+@pytest.mark.circular
+def test_multi_record_legacy_top_definition_keeps_non_center_alignment() -> None:
+    records = [
+        _build_record_with_source(
+            "legacy_top_a",
+            organism="Legacy top A",
+            strain="Strain A",
+            length=1300,
+        ),
+        _build_record_with_source(
+            "legacy_top_b",
+            organism="Legacy top B",
+            strain="Strain B",
+            length=850,
+        ),
+    ]
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+        multi_record_definition_mode="legacy",
+        definition_position="top",
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    for index, record in enumerate(records):
+        axis_center_y, definition_center_y = _extract_record_axis_and_definition_center_y(
+            root,
+            record_index=index,
+            record_id=record.id,
+        )
+        assert definition_center_y < axis_center_y
+        assert definition_center_y != pytest.approx(axis_center_y, abs=1e-6)
 
 
 @pytest.mark.circular

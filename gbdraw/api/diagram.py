@@ -404,6 +404,55 @@ def _group_local_vertical_bounds(group: Group) -> tuple[float, float]:
     return float(min_y), float(max_y)
 
 
+def _set_group_translate(group: Group, *, x: float, y: float) -> None:
+    """Set a group transform to a simple translate(x, y)."""
+    attribs = getattr(group, "attribs", None)
+    if not isinstance(attribs, dict):
+        return
+    attribs["transform"] = f"translate({float(x)}, {float(y)})"
+
+
+def _center_record_definition_group_on_record_axis(
+    record_group: Group,
+    *,
+    record_index: int,
+    record_id: str,
+) -> None:
+    """Center one per-record definition group vertically on its record axis."""
+    axis_group_id = f"Axis_{record_index}"
+    definition_group_id = f"{str(record_id).replace(' ', '_')}_definition"
+    axis_group: Group | None = None
+    definition_group: Group | None = None
+
+    for child in getattr(record_group, "elements", []):
+        attribs = getattr(child, "attribs", None)
+        if not isinstance(attribs, dict):
+            continue
+        child_id = str(attribs.get("id", ""))
+        if child_id == axis_group_id:
+            axis_group = child
+        elif child_id == definition_group_id:
+            definition_group = child
+
+    if axis_group is None or definition_group is None:
+        return
+
+    _axis_x, axis_center_y = _parse_translate_xy(axis_group.attribs.get("transform"))
+    definition_x, definition_y = _parse_translate_xy(definition_group.attribs.get("transform"))
+    definition_min_y, definition_max_y = _group_local_vertical_bounds(definition_group)
+    definition_local_center_y = (float(definition_min_y) + float(definition_max_y)) * 0.5
+    definition_text_center_y = float(definition_y) + float(definition_local_center_y)
+    delta_y = float(axis_center_y) - float(definition_text_center_y)
+
+    if math.isclose(delta_y, 0.0, rel_tol=1e-9, abs_tol=1e-9):
+        return
+    _set_group_translate(
+        definition_group,
+        x=float(definition_x),
+        y=float(definition_y) + float(delta_y),
+    )
+
+
 def _suffix_fixed_top_level_group_id(element: object, record_index: int) -> None:
     """Suffix selected top-level group IDs to avoid collisions on merged canvas."""
     attribs = getattr(element, "attribs", None)
@@ -1559,6 +1608,12 @@ def assemble_circular_diagram_from_records(
             copied = copy.deepcopy(element)
             _suffix_fixed_top_level_group_id(copied, record_index)
             record_group.add(copied)
+        if record_definition_position == "center":
+            _center_record_definition_group_on_record_axis(
+                record_group,
+                record_index=record_index,
+                record_id=str(records[record_index].id),
+            )
         merged_canvas.add(record_group)
 
     if shared_definition_group is not None:
