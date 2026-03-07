@@ -214,6 +214,8 @@ const adv = reactive({
   multi_record_min_radius_ratio: 0.55,
   multi_record_column_gap_ratio: 0.10,
   multi_record_row_gap_ratio: 0.05,
+  multi_record_row_pattern: '',
+  multi_record_order: [],
   multi_record_definition_mode: 'shared',
   shared_definition_position: 'bottom',
   shared_definition_font_size: null,
@@ -237,6 +239,7 @@ const losat = reactive({
 
 const losatCacheInfo = ref([]);
 const losatCache = ref(new Map());
+const circularRecordList = ref([]); // [{ selector: '#1', record_id: 'NC_xxx' }]
 
 // Color & Filter State
 const paletteNames = ref(['default']);
@@ -562,6 +565,7 @@ export const state = {
   losat,
   losatCacheInfo,
   losatCache,
+  circularRecordList,
   paletteNames,
   selectedPalette,
   currentColors,

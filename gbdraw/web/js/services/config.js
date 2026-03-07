@@ -154,6 +154,17 @@ const applyConfigData = (data) => {
     Number.isFinite(numericRowGapRatio) && numericRowGapRatio >= 0
       ? numericRowGapRatio
       : 0.05;
+  state.adv.multi_record_row_pattern = String(state.adv.multi_record_row_pattern ?? '').trim();
+  const rawMultiRecordOrder = Array.isArray(state.adv.multi_record_order) ? state.adv.multi_record_order : [];
+  const dedupedMultiRecordOrder = [];
+  const seenMultiRecordOrder = new Set();
+  rawMultiRecordOrder.forEach((value) => {
+    const selector = String(value ?? '').trim();
+    if (!selector || seenMultiRecordOrder.has(selector)) return;
+    seenMultiRecordOrder.add(selector);
+    dedupedMultiRecordOrder.push(selector);
+  });
+  state.adv.multi_record_order = dedupedMultiRecordOrder;
   const normalizedMultiRecordDefinitionMode = String(state.adv.multi_record_definition_mode || '').trim().toLowerCase();
   state.adv.multi_record_definition_mode = ['shared', 'legacy'].includes(normalizedMultiRecordDefinitionMode)
     ? normalizedMultiRecordDefinitionMode

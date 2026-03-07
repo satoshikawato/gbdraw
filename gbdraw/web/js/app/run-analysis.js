@@ -53,6 +53,27 @@ const normalizeMultiRecordRowGapRatio = (value) => {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0.05;
 };
+const normalizeMultiRecordRowPattern = (value) => String(value ?? '').trim();
+const normalizeMultiRecordOrder = (value) => {
+  if (!Array.isArray(value)) return [];
+  const deduped = [];
+  const seen = new Set();
+  value.forEach((item) => {
+    const selector = String(item ?? '').trim();
+    if (!selector || seen.has(selector)) return;
+    seen.add(selector);
+    deduped.push(selector);
+  });
+  return deduped;
+};
+const areSameStringArrays = (left, right) => {
+  if (!Array.isArray(left) || !Array.isArray(right)) return false;
+  if (left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i += 1) {
+    if (String(left[i]) !== String(right[i])) return false;
+  }
+  return true;
+};
 const normalizeDefinitionPosition = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'center';
@@ -102,6 +123,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     losat,
     losatCacheInfo,
     losatCache,
+    circularRecordList,
     files,
     linearSeqs,
     generatedLegendPosition,
@@ -289,6 +311,8 @@ json.dumps({
         multi_record_min_radius_ratio: false,
         multi_record_column_gap_ratio: false,
         multi_record_row_gap_ratio: false,
+        multi_record_row_pattern: false,
+        multi_record_order: false,
         definition_position: false,
         multi_record_definition_mode: false,
         shared_definition_position: false,
@@ -307,6 +331,8 @@ json.dumps({
   "multi_record_min_radius_ratio": "--multi_record_min_radius_ratio" in _source,
   "multi_record_column_gap_ratio": "--multi_record_column_gap_ratio" in _source,
   "multi_record_row_gap_ratio": "--multi_record_row_gap_ratio" in _source,
+  "multi_record_row_pattern": "--multi_record_row_pattern" in _source,
+  "multi_record_order": "--multi_record_order" in _source,
   "definition_position": "--definition_position" in _source,
   "multi_record_definition_mode": "--multi_record_definition_mode" in _source,
   "shared_definition_position": "--shared_definition_position" in _source,
@@ -321,6 +347,8 @@ json.dumps({
         multi_record_min_radius_ratio: false,
         multi_record_column_gap_ratio: false,
         multi_record_row_gap_ratio: false,
+        multi_record_row_pattern: false,
+        multi_record_order: false,
         definition_position: false,
         multi_record_definition_mode: false,
         shared_definition_position: false,
@@ -362,6 +390,72 @@ json.dumps({
     labelTextScopeDialog.sourceText = '';
     labelTextScopeDialog.featureId = '';
     labelTextScopeDialog.matchingCount = 0;
+  };
+
+  const refreshCircularRecordOrder = async () => {
+    if (!Array.isArray(adv.multi_record_order)) {
+      adv.multi_record_order = [];
+    }
+    const pyodide = getPyodide();
+    if (
+      mode.value !== 'circular' ||
+      cInputType.value !== 'gb' ||
+      !files.c_gb ||
+      !pyodideReady.value ||
+      !pyodide
+    ) {
+      circularRecordList.value = [];
+      if (!files.c_gb || cInputType.value !== 'gb') {
+        adv.multi_record_order.splice(0, adv.multi_record_order.length);
+      }
+      return;
+    }
+
+    try {
+      await writeFileToFs(files.c_gb, '/input.gb');
+      const payloadRaw = pyodide.globals.get('list_genbank_records')('/input.gb');
+      const payload = JSON.parse(String(payloadRaw || '{}'));
+      if (payload?.error) {
+        console.warn('Failed to read circular record list:', payload.error);
+        circularRecordList.value = [];
+        adv.multi_record_order.splice(0, adv.multi_record_order.length);
+        return;
+      }
+
+      const nextRecords = [];
+      const seenSelectors = new Set();
+      (Array.isArray(payload?.records) ? payload.records : []).forEach((entry, index) => {
+        const selector = String(entry?.selector ?? `#${index + 1}`).trim();
+        if (!selector || seenSelectors.has(selector)) return;
+        seenSelectors.add(selector);
+        const recordId = String(entry?.record_id ?? '').trim() || `Record_${index + 1}`;
+        nextRecords.push({ selector, record_id: recordId });
+      });
+      circularRecordList.value = nextRecords;
+
+      const availableSelectors = nextRecords.map((entry) => entry.selector);
+      const availableSet = new Set(availableSelectors);
+      const normalizedCurrentOrder = normalizeMultiRecordOrder(adv.multi_record_order);
+      const nextOrder = [];
+      const seenOrder = new Set();
+
+      normalizedCurrentOrder.forEach((selector) => {
+        if (!availableSet.has(selector) || seenOrder.has(selector)) return;
+        seenOrder.add(selector);
+        nextOrder.push(selector);
+      });
+      availableSelectors.forEach((selector) => {
+        if (seenOrder.has(selector)) return;
+        seenOrder.add(selector);
+        nextOrder.push(selector);
+      });
+
+      adv.multi_record_order.splice(0, adv.multi_record_order.length, ...nextOrder);
+    } catch (error) {
+      console.warn('Failed to refresh circular record order:', error);
+      circularRecordList.value = [];
+      adv.multi_record_order.splice(0, adv.multi_record_order.length);
+    }
   };
 
   const runAnalysisInternal = async ({ runMode = 'manual', requestId = 0 } = {}) => {
@@ -579,6 +673,26 @@ json.dumps({
               'Current gbdraw wheel does not support multi-record definition layout options. Rebuild and redeploy the web wheel.'
             );
           }
+          const normalizedRowPattern = normalizeMultiRecordRowPattern(adv.multi_record_row_pattern);
+          const normalizedRecordOrder = normalizeMultiRecordOrder(adv.multi_record_order);
+          const defaultRecordOrder = Array.isArray(circularRecordList.value)
+            ? circularRecordList.value.map((entry) => String(entry?.selector || '').trim()).filter(Boolean)
+            : [];
+          const effectiveRecordOrder = normalizedRecordOrder.length > 0
+            ? normalizedRecordOrder
+            : defaultRecordOrder;
+          const shouldPassRecordOrder =
+            effectiveRecordOrder.length > 0 && !areSameStringArrays(effectiveRecordOrder, defaultRecordOrder);
+          if (normalizedRowPattern && !multiCanvasSupport.multi_record_row_pattern) {
+            throw new Error(
+              'Current gbdraw wheel does not support --multi_record_row_pattern. Rebuild and redeploy the web wheel.'
+            );
+          }
+          if (shouldPassRecordOrder && !multiCanvasSupport.multi_record_order) {
+            throw new Error(
+              'Current gbdraw wheel does not support --multi_record_order. Rebuild and redeploy the web wheel.'
+            );
+          }
           const normalizedSizeMode = normalizeMultiRecordSizeMode(adv.multi_record_size_mode);
           const normalizedMinRatio = normalizeMultiRecordMinRadiusRatio(adv.multi_record_min_radius_ratio);
           const normalizedColumnGapRatio = normalizeMultiRecordColumnGapRatio(adv.multi_record_column_gap_ratio);
@@ -602,6 +716,8 @@ json.dumps({
           adv.multi_record_min_radius_ratio = normalizedMinRatio;
           adv.multi_record_column_gap_ratio = normalizedColumnGapRatio;
           adv.multi_record_row_gap_ratio = normalizedRowGapRatio;
+          adv.multi_record_row_pattern = normalizedRowPattern;
+          adv.multi_record_order.splice(0, adv.multi_record_order.length, ...effectiveRecordOrder);
           adv.multi_record_definition_mode = normalizedDefinitionMode;
           adv.shared_definition_position = normalizedSharedDefinitionPosition;
           adv.shared_definition_font_size = normalizedSharedDefinitionFontSize;
@@ -610,6 +726,14 @@ json.dumps({
           args.push('--multi_record_min_radius_ratio', String(normalizedMinRatio));
           args.push('--multi_record_column_gap_ratio', String(normalizedColumnGapRatio));
           args.push('--multi_record_row_gap_ratio', String(normalizedRowGapRatio));
+          if (normalizedRowPattern) {
+            args.push('--multi_record_row_pattern', normalizedRowPattern);
+          }
+          if (shouldPassRecordOrder) {
+            effectiveRecordOrder.forEach((selector) => {
+              args.push('--multi_record_order', selector);
+            });
+          }
           args.push('--multi_record_definition_mode', normalizedDefinitionMode);
           args.push('--shared_definition_position', normalizedSharedDefinitionPosition);
           if (
@@ -1180,6 +1304,7 @@ json.dumps({
   return {
     runAnalysis,
     runLabelReflow,
+    refreshCircularRecordOrder,
     downloadLosatCache,
     downloadLosatPair,
     setLosatPairFilename,

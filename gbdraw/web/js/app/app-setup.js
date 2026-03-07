@@ -43,6 +43,7 @@ export const createAppSetup = () => {
     adv,
     losat,
     losatCacheInfo,
+    circularRecordList,
     paletteNames,
     selectedPalette,
     currentColors,
@@ -151,6 +152,7 @@ export const createAppSetup = () => {
   const {
     runAnalysis,
     runLabelReflow,
+    refreshCircularRecordOrder,
     downloadLosatCache,
     downloadLosatPair,
     setLosatPairFilename,
@@ -175,7 +177,8 @@ export const createAppSetup = () => {
     featureActions,
     legendLayout,
     resultsManager,
-    runLabelReflow
+    runLabelReflow,
+    refreshCircularRecordOrder
   });
 
   const {
@@ -391,6 +394,44 @@ export const createAppSetup = () => {
     openFeatureEditorForFeature(feat, event);
   };
 
+  const getCircularRecordOrderLabel = (selector) => {
+    const normalized = String(selector || '').trim();
+    if (!normalized) return '';
+    const records = Array.isArray(circularRecordList.value) ? circularRecordList.value : [];
+    const matched = records.find((entry) => String(entry?.selector || '').trim() === normalized);
+    if (!matched) return normalized;
+    return `${normalized} (${String(matched.record_id || '').trim() || 'Unknown'})`;
+  };
+
+  const moveCircularRecordOrderUp = (index) => {
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx <= 0 || idx >= adv.multi_record_order.length) return;
+    const next = [...adv.multi_record_order];
+    const temp = next[idx - 1];
+    next[idx - 1] = next[idx];
+    next[idx] = temp;
+    adv.multi_record_order.splice(0, adv.multi_record_order.length, ...next);
+  };
+
+  const moveCircularRecordOrderDown = (index) => {
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= adv.multi_record_order.length - 1) return;
+    const next = [...adv.multi_record_order];
+    const temp = next[idx + 1];
+    next[idx + 1] = next[idx];
+    next[idx] = temp;
+    adv.multi_record_order.splice(0, adv.multi_record_order.length, ...next);
+  };
+
+  const resetCircularRecordOrder = () => {
+    const defaults = Array.isArray(circularRecordList.value)
+      ? circularRecordList.value
+          .map((entry) => String(entry?.selector || '').trim())
+          .filter(Boolean)
+      : [];
+    adv.multi_record_order.splice(0, adv.multi_record_order.length, ...defaults);
+  };
+
   return {
     pyodideReady,
     processing,
@@ -423,6 +464,7 @@ export const createAppSetup = () => {
     adv,
     losat,
     losatCacheInfo,
+    circularRecordList,
     paletteNames,
     selectedPalette,
     currentColors,
@@ -433,6 +475,11 @@ export const createAppSetup = () => {
     setLosatPairFilename,
     clearLosatCache,
     getLosatPairDefaultName,
+    refreshCircularRecordOrder,
+    getCircularRecordOrderLabel,
+    moveCircularRecordOrderUp,
+    moveCircularRecordOrderDown,
+    resetCircularRecordOrder,
     filterMode,
     manualBlacklist,
     manualWhitelist,

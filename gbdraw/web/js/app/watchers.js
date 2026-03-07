@@ -18,7 +18,8 @@ export const setupWatchers = ({
   featureActions,
   legendLayout,
   resultsManager,
-  runLabelReflow
+  runLabelReflow,
+  refreshCircularRecordOrder
 }) => {
   const {
     manualSpecificRules,
@@ -29,6 +30,7 @@ export const setupWatchers = ({
     form,
     generatedLegendPosition,
     mode,
+    cInputType,
     canvasPadding,
     skipCaptureBaseConfig,
     skipPositionReapply,
@@ -426,6 +428,13 @@ export const setupWatchers = ({
   watch(() => state.adv.def_font_size, scheduleDefinitionUpdate);
   watch(() => state.adv.shared_definition_font_size, scheduleDefinitionUpdate);
   watch(() => linearSeqs.map((seq) => seq.definition), scheduleDefinitionUpdate);
+  watch(
+    () => [mode.value, cInputType.value, files.c_gb, pyodideReady.value],
+    async () => {
+      if (typeof refreshCircularRecordOrder !== 'function') return;
+      await refreshCircularRecordOrder();
+    }
+  );
 
   onMounted(async () => {
     await pyodideManager.initPyodide();

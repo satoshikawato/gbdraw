@@ -23,6 +23,7 @@ from .labels.filtering import (
     read_label_override_file,
     read_qualifier_priority_file,
 )  # type: ignore[reportMissingImports]
+from .io.record_select import parse_record_selector
 from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
 from .features.visibility import read_feature_visibility_file
 from .exceptions import ValidationError
@@ -241,6 +242,17 @@ def _get_args(args) -> argparse.Namespace:
         type=float,
         default=0.05)
     parser.add_argument(
+        '--multi_record_row_pattern',
+        help='Explicit row pattern for multi-record canvas (comma-separated positive integers, e.g., "2,4").',
+        type=str,
+        default='')
+    parser.add_argument(
+        '--multi_record_order',
+        help='Record order selector for multi-record canvas (repeatable): #index or record_id.',
+        type=str,
+        action='append',
+        default=[])
+    parser.add_argument(
         '--definition_position',
         help='Definition position for single-record and legacy multi-record mode ("center", "top", "bottom"; default: "center").',
         type=str,
@@ -375,6 +387,21 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--multi_record_column_gap_ratio must be a finite number >= 0")
     if not math.isfinite(args.multi_record_row_gap_ratio) or args.multi_record_row_gap_ratio < 0:
         parser.error("--multi_record_row_gap_ratio must be a finite number >= 0")
+    row_pattern_raw = str(args.multi_record_row_pattern or "").strip()
+    if row_pattern_raw:
+        row_parts = [part.strip() for part in row_pattern_raw.split(",")]
+        if not row_parts or any(not part for part in row_parts):
+            parser.error("--multi_record_row_pattern must be a comma-separated list of positive integers")
+        for part in row_parts:
+            if not part.isdigit() or int(part) <= 0:
+                parser.error("--multi_record_row_pattern must be a comma-separated list of positive integers")
+    for selector in args.multi_record_order or []:
+        try:
+            parsed = parse_record_selector(str(selector))
+        except ValueError as exc:
+            parser.error(str(exc))
+        if parsed is None:
+            parser.error("--multi_record_order does not allow empty selectors")
     return args
 
 
@@ -413,6 +440,8 @@ def circular_main(cmd_args) -> None:
     multi_record_min_radius_ratio: float = args.multi_record_min_radius_ratio
     multi_record_column_gap_ratio: float = args.multi_record_column_gap_ratio
     multi_record_row_gap_ratio: float = args.multi_record_row_gap_ratio
+    multi_record_row_pattern: str = str(args.multi_record_row_pattern or "").strip()
+    multi_record_order: list[str] = [str(selector) for selector in (args.multi_record_order or [])]
     definition_position: str = args.definition_position
     multi_record_definition_mode: str = args.multi_record_definition_mode
     shared_definition_position: str = args.shared_definition_position
@@ -479,10 +508,12 @@ def circular_main(cmd_args) -> None:
         and (
             multi_record_definition_mode != "shared"
             or shared_definition_position != "bottom"
+            or bool(multi_record_row_pattern)
+            or bool(multi_record_order)
         )
     ):
         logger.info(
-            "Ignoring --multi_record_definition_mode/--shared_definition_position because --multi_record_canvas is disabled."
+            "Ignoring multi-record layout options because --multi_record_canvas is disabled."
         )
     
     # Warn if resolve_overlaps is used with separate_strands
@@ -614,6 +645,8 @@ def circular_main(cmd_args) -> None:
             multi_record_min_radius_ratio=multi_record_min_radius_ratio,
             multi_record_column_gap_ratio=multi_record_column_gap_ratio,
             multi_record_row_gap_ratio=multi_record_row_gap_ratio,
+            multi_record_row_pattern=multi_record_row_pattern or None,
+            multi_record_order=multi_record_order or None,
             cfg=cfg,
             track_specs=track_specs_or_none,
         )

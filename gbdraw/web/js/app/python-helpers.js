@@ -151,6 +151,23 @@ def get_record_length(path, fmt, record_id=None, record_index=None):
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 
+def list_genbank_records(gb_path):
+    """List record selectors and IDs from a GenBank file."""
+    from Bio import SeqIO
+    try:
+        records = list(SeqIO.parse(gb_path, "genbank"))
+        payload = []
+        for idx, record in enumerate(records):
+            payload.append(
+                {
+                    "selector": f"#{idx + 1}",
+                    "record_id": str(record.id or f"Record_{idx + 1}"),
+                }
+            )
+        return json.dumps({"records": payload})
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
+
 def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=14, font_family="Arial", x_offset=0, stroke_color="black", stroke_width=0.5):
     """Generate SVG elements for a single legend entry"""
     from xml.sax.saxutils import escape as xml_escape

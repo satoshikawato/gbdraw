@@ -30,6 +30,7 @@ from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImpor
 from gbdraw.config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from gbdraw.config.toml import load_config_toml  # type: ignore[reportMissingImports]
 from gbdraw.io.colors import load_default_colors, read_color_table  # type: ignore[reportMissingImports]
+from gbdraw.io.record_select import parse_record_selector  # type: ignore[reportMissingImports]
 from gbdraw.features.visibility import read_feature_visibility_file  # type: ignore[reportMissingImports]
 from gbdraw.configurators import (  # type: ignore[reportMissingImports]
     BlastMatchConfigurator,
@@ -378,6 +379,126 @@ def _estimate_square_grid(record_count: int) -> tuple[int, int]:
     cols = int(math.ceil(math.sqrt(record_count)))
     rows = int(math.ceil(float(record_count) / float(cols)))
     return cols, rows
+
+
+def _resolve_multi_record_order_indices(
+    records: Sequence[SeqRecord],
+    selectors: Sequence[str] | None,
+) -> list[int]:
+    """Resolve order selectors to record indices with append-the-rest behavior."""
+    record_count = len(records)
+    if record_count <= 0:
+        return []
+    if not selectors:
+        return list(range(record_count))
+
+    ordered_indices: list[int] = []
+    seen_indices: set[int] = set()
+
+    for raw_selector in selectors:
+        selector_text = str(raw_selector or "").strip()
+        if not selector_text:
+            raise ValidationError("multi_record_order does not allow empty selectors.")
+        try:
+            selector = parse_record_selector(selector_text)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+        if selector is None:
+            raise ValidationError(f"multi_record_order selector '{selector_text}' is invalid.")
+
+        resolved_index: int | None = None
+        if selector.record_index is not None:
+            idx = int(selector.record_index)
+            if idx < 0 or idx >= record_count:
+                raise ValidationError(
+                    f"multi_record_order selector '{selector_text}' is out of range for "
+                    f"{record_count} record(s)."
+                )
+            resolved_index = idx
+        else:
+            target_record_id = str(selector.record_id or "")
+            matches = [idx for idx, record in enumerate(records) if str(record.id) == target_record_id]
+            if not matches:
+                raise ValidationError(
+                    f"multi_record_order selector '{selector_text}' did not match any record ID."
+                )
+            if len(matches) > 1:
+                raise ValidationError(
+                    f"multi_record_order selector '{selector_text}' matched multiple records. "
+                    "Use #index to disambiguate."
+                )
+            resolved_index = int(matches[0])
+
+        if resolved_index in seen_indices:
+            continue
+        ordered_indices.append(resolved_index)
+        seen_indices.add(resolved_index)
+
+    for idx in range(record_count):
+        if idx not in seen_indices:
+            ordered_indices.append(idx)
+
+    return ordered_indices
+
+
+def _resolve_multi_record_row_counts(
+    record_count: int,
+    row_pattern: str | None,
+) -> list[int]:
+    """Resolve row counts for multi-record canvas layout."""
+    if record_count <= 0:
+        return []
+
+    normalized_pattern = str(row_pattern or "").strip()
+    if not normalized_pattern:
+        cols, rows = _estimate_square_grid(record_count)
+        counts: list[int] = []
+        for row in range(rows):
+            start = row * cols
+            end = min(record_count, start + cols)
+            if end > start:
+                counts.append(end - start)
+        return counts
+
+    counts: list[int] = []
+    pattern_parts = [chunk.strip() for chunk in normalized_pattern.split(",")]
+    if any(not part for part in pattern_parts):
+        raise ValidationError(
+            f"multi_record_row_pattern must be a comma-separated list of positive integers: '{row_pattern}'"
+        )
+    for part in pattern_parts:
+        try:
+            value = int(part)
+        except ValueError as exc:
+            raise ValidationError(
+                f"multi_record_row_pattern must be a comma-separated list of positive integers: '{row_pattern}'"
+            ) from exc
+        if value <= 0:
+            raise ValidationError(
+                f"multi_record_row_pattern must contain only positive integers: '{row_pattern}'"
+            )
+        counts.append(value)
+    if not counts:
+        raise ValidationError(
+            f"multi_record_row_pattern must be a comma-separated list of positive integers: '{row_pattern}'"
+        )
+
+    total = sum(counts)
+    if total < record_count:
+        counts.append(record_count - total)
+    elif total > record_count:
+        overflow = total - record_count
+        cursor = len(counts) - 1
+        while overflow > 0 and cursor >= 0:
+            current = counts[cursor]
+            if current <= overflow:
+                overflow -= current
+                counts.pop(cursor)
+            else:
+                counts[cursor] = current - overflow
+                overflow = 0
+            cursor -= 1
+    return [count for count in counts if count > 0]
 
 
 def _group_local_vertical_bounds(group: Group) -> tuple[float, float]:
@@ -1088,6 +1209,8 @@ def assemble_circular_diagram_from_records(
     multi_record_min_radius_ratio: float = 0.55,
     multi_record_column_gap_ratio: float = _MULTI_RECORD_COLUMN_GAP_RATIO,
     multi_record_row_gap_ratio: float = _MULTI_RECORD_ROW_GAP_RATIO,
+    multi_record_row_pattern: str | None = None,
+    multi_record_order: Sequence[str] | None = None,
     track_specs: Sequence[str | TrackSpec] | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
@@ -1169,6 +1292,9 @@ def assemble_circular_diagram_from_records(
 
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
+
+    ordered_indices = _resolve_multi_record_order_indices(records, multi_record_order)
+    records = [records[idx] for idx in ordered_indices]
 
     parsed_track_specs: list[TrackSpec] | None = None
     if track_specs is not None:
@@ -1270,17 +1396,37 @@ def assemble_circular_diagram_from_records(
         gap_ratio=normalized_multi_record_row_gap_ratio,
     )
 
-    cols, rows = _estimate_square_grid(len(canvases))
+    row_counts = _resolve_multi_record_row_counts(
+        len(canvases),
+        multi_record_row_pattern,
+    )
+    row_record_indices: list[list[int]] = []
+    record_row_by_index: dict[int, int] = {}
+    cursor = 0
+    for row_count in row_counts:
+        if cursor >= len(canvases):
+            break
+        row_indices: list[int] = []
+        for _ in range(max(0, int(row_count))):
+            if cursor >= len(canvases):
+                break
+            row_indices.append(cursor)
+            record_row_by_index[cursor] = len(row_record_indices)
+            cursor += 1
+        if row_indices:
+            row_record_indices.append(row_indices)
+    rows = len(row_record_indices)
     row_heights: list[float] = [0.0] * rows
-    row_record_indices: list[list[int]] = [[] for _ in range(rows)]
-    record_sizes: list[tuple[float, float]] = []
-    for record_index, (width_px, height_px) in enumerate(zip(widths, heights)):
-        row = record_index // cols
-        width_value = float(width_px)
-        height_value = float(height_px)
-        row_heights[row] = max(row_heights[row], height_value)
-        row_record_indices[row].append(record_index)
-        record_sizes.append((width_value, height_value))
+    record_sizes: list[tuple[float, float]] = [
+        (float(width_px), float(height_px))
+        for width_px, height_px in zip(widths, heights)
+    ]
+    for row, row_indices in enumerate(row_record_indices):
+        for record_index in row_indices:
+            if record_index >= len(record_sizes):
+                continue
+            _record_width, record_height = record_sizes[record_index]
+            row_heights[row] = max(row_heights[row], float(record_height))
 
     record_vertical_insets: list[tuple[float, float]] = [
         _estimate_subcanvas_vertical_insets(sub_canvas) for sub_canvas in canvases
@@ -1590,7 +1736,7 @@ def assemble_circular_diagram_from_records(
     )
 
     for record_index, sub_canvas in enumerate(canvases):
-        row = record_index // cols
+        row = int(record_row_by_index.get(record_index, 0))
         default_size = record_sizes[record_index] if record_index < len(record_sizes) else (0.0, 0.0)
         sub_width = _parse_svg_length_px(sub_canvas.attribs.get("width"), default=default_size[0])
         sub_height = _parse_svg_length_px(sub_canvas.attribs.get("height"), default=default_size[1])

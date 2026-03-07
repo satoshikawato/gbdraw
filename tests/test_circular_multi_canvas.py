@@ -18,6 +18,7 @@ import gbdraw.render.groups.circular.ticks as circular_ticks_group_module
 from gbdraw.api.diagram import assemble_circular_diagram_from_records
 from gbdraw.api.options import DiagramOptions, OutputOptions
 from gbdraw.core.text import calculate_bbox_dimensions
+from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import compute_feature_hash
 from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
 
@@ -1397,6 +1398,195 @@ def test_multi_record_row_gap_ratio_adds_visible_gap_between_row_content(
 
 
 @pytest.mark.circular
+def test_multi_record_row_pattern_two_four_applies_two_rows_of_two_and_four(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("row_pattern_a", 20, length=1000),
+        _build_record("row_pattern_b", 220, length=900),
+        _build_record("row_pattern_c", 420, length=800),
+        _build_record("row_pattern_d", 620, length=700),
+        _build_record("row_pattern_e", 820, length=600),
+        _build_record("row_pattern_f", 1020, length=500),
+    ]
+
+    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+        _ = gb_record
+        return Drawing(
+            filename="row_pattern.svg",
+            size=("400px", "300px"),
+            viewBox="0 0 400 300",
+            debug=False,
+        )
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+        multi_record_row_pattern="2,4",
+    )
+    root = ET.fromstring(canvas.tostring())
+    record_x = [
+        _extract_group_translate_xy(root, f"record_{index}")[0]
+        for index in range(len(records))
+    ]
+    record_y = [
+        _extract_group_translate_xy(root, f"record_{index}")[1]
+        for index in range(len(records))
+    ]
+
+    assert record_y[0] == pytest.approx(record_y[1], abs=1e-6)
+    assert record_y[2] == pytest.approx(record_y[3], abs=1e-6)
+    assert record_y[2] == pytest.approx(record_y[4], abs=1e-6)
+    assert record_y[2] == pytest.approx(record_y[5], abs=1e-6)
+    assert record_y[2] > record_y[0]
+    assert record_x[0] > record_x[2]
+
+
+@pytest.mark.circular
+def test_multi_record_row_pattern_underflow_appends_final_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("row_pattern_under_a", 20, length=1000),
+        _build_record("row_pattern_under_b", 220, length=900),
+        _build_record("row_pattern_under_c", 420, length=800),
+        _build_record("row_pattern_under_d", 620, length=700),
+        _build_record("row_pattern_under_e", 820, length=600),
+        _build_record("row_pattern_under_f", 1020, length=500),
+    ]
+
+    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+        _ = gb_record
+        return Drawing(
+            filename="row_pattern_under.svg",
+            size=("400px", "300px"),
+            viewBox="0 0 400 300",
+            debug=False,
+        )
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+        multi_record_row_pattern="2,3",
+    )
+    root = ET.fromstring(canvas.tostring())
+    record_y = [
+        _extract_group_translate_xy(root, f"record_{index}")[1]
+        for index in range(len(records))
+    ]
+
+    assert record_y[0] == pytest.approx(record_y[1], abs=1e-6)
+    assert record_y[2] == pytest.approx(record_y[3], abs=1e-6)
+    assert record_y[2] == pytest.approx(record_y[4], abs=1e-6)
+    assert record_y[5] > record_y[2]
+
+
+@pytest.mark.circular
+def test_multi_record_row_pattern_overflow_trims_tail_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("row_pattern_over_a", 20, length=1000),
+        _build_record("row_pattern_over_b", 220, length=900),
+        _build_record("row_pattern_over_c", 420, length=800),
+        _build_record("row_pattern_over_d", 620, length=700),
+        _build_record("row_pattern_over_e", 820, length=600),
+    ]
+
+    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+        _ = gb_record
+        return Drawing(
+            filename="row_pattern_over.svg",
+            size=("400px", "300px"),
+            viewBox="0 0 400 300",
+            debug=False,
+        )
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+        multi_record_row_pattern="2,4",
+    )
+    root = ET.fromstring(canvas.tostring())
+    record_y = [
+        _extract_group_translate_xy(root, f"record_{index}")[1]
+        for index in range(len(records))
+    ]
+
+    assert record_y[0] == pytest.approx(record_y[1], abs=1e-6)
+    assert record_y[2] == pytest.approx(record_y[3], abs=1e-6)
+    assert record_y[2] == pytest.approx(record_y[4], abs=1e-6)
+    assert record_y[2] > record_y[0]
+
+
+@pytest.mark.circular
+def test_multi_record_order_applies_selectors_then_appends_unlisted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("order_a", 20, length=1000),
+        _build_record("order_b", 220, length=900),
+        _build_record("order_c", 420, length=800),
+        _build_record("order_d", 620, length=700),
+    ]
+
+    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+        canvas = Drawing(
+            filename=f"{gb_record.id}.svg",
+            size=("400px", "300px"),
+            viewBox="0 0 400 300",
+            debug=False,
+        )
+        marker = canvas.g(id=f"marker_{gb_record.id}")
+        marker.add(canvas.circle(center=(10, 10), r=1))
+        canvas.add(marker)
+        return canvas
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+        multi_record_order=["#3", "#1"],
+    )
+    root = ET.fromstring(canvas.tostring())
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    expected_ids = ["order_c", "order_a", "order_b", "order_d"]
+
+    for index, expected in enumerate(expected_ids):
+        record_group = root.find(f".//svg:g[@id='record_{index}']", ns)
+        assert record_group is not None
+        marker_group = record_group.find(f"./svg:g[@id='marker_{expected}']", ns)
+        assert marker_group is not None
+
+
+@pytest.mark.circular
 @pytest.mark.parametrize("legend_position", ["none", "top", "bottom"])
 def test_multi_record_row_outer_margins_equalize_to_larger_side_for_none_top_bottom(
     monkeypatch: pytest.MonkeyPatch,
@@ -1742,6 +1932,168 @@ def test_circular_cli_multi_record_canvas_accepts_sqrt_alias(
     assert calls["multi"] == 1
     assert calls["save"] == 1
     assert captured_kwargs["multi_record_size_mode"] == "sqrt"
+
+
+@pytest.mark.circular
+def test_circular_cli_multi_record_canvas_passes_row_pattern_and_order(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    records = [
+        _build_record("cli_a", 20),
+        _build_record("cli_b", 220),
+        _build_record("cli_c", 420),
+    ]
+    calls: dict[str, int] = {"single": 0, "multi": 0, "save": 0}
+    captured_kwargs: dict[str, Any] = {}
+
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+
+    def fake_single(*_args: Any, **_kwargs: Any) -> Drawing:
+        calls["single"] += 1
+        return Drawing(filename=str(tmp_path / "single.svg"))
+
+    def fake_multi(*_args: Any, **_kwargs: Any) -> Drawing:
+        calls["multi"] += 1
+        captured_kwargs.update(_kwargs)
+        return Drawing(filename=str(tmp_path / "multi.svg"))
+
+    def fake_save(*_args: Any, **_kwargs: Any) -> None:
+        calls["save"] += 1
+
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_single)
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
+    monkeypatch.setattr(circular_cli_module, "save_figure", fake_save)
+
+    circular_cli_module.circular_main(
+        [
+            "--gbk",
+            "dummy.gb",
+            "--format",
+            "svg",
+            "--multi_record_canvas",
+            "--multi_record_row_pattern",
+            "2,4",
+            "--multi_record_order",
+            "#3",
+            "--multi_record_order",
+            "cli_a",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert calls["single"] == 0
+    assert calls["multi"] == 1
+    assert calls["save"] == 1
+    assert captured_kwargs["multi_record_row_pattern"] == "2,4"
+    assert captured_kwargs["multi_record_order"] == ["#3", "cli_a"]
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("row_pattern", ["2,0", "2,-1", "2,abc", ",,,", "2,,3", "2,"])
+def test_circular_cli_rejects_invalid_multi_record_row_pattern(
+    monkeypatch: pytest.MonkeyPatch,
+    row_pattern: str,
+) -> None:
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: [_build_record("cli_a", 20)])
+    with pytest.raises(SystemExit):
+        circular_cli_module.circular_main(
+            [
+                "--gbk",
+                "dummy.gb",
+                "--format",
+                "svg",
+                "--multi_record_row_pattern",
+                row_pattern,
+            ]
+        )
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("selector", ["#0", "#abc", "none", "-"])
+def test_circular_cli_rejects_invalid_multi_record_order_selector(
+    monkeypatch: pytest.MonkeyPatch,
+    selector: str,
+) -> None:
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: [_build_record("cli_a", 20)])
+    with pytest.raises(SystemExit):
+        circular_cli_module.circular_main(
+            [
+                "--gbk",
+                "dummy.gb",
+                "--format",
+                "svg",
+                "--multi_record_order",
+                selector,
+            ]
+        )
+
+
+@pytest.mark.circular
+def test_multi_record_order_invalid_selector_raises_validation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [_build_record("order_err_a", 20, length=1000), _build_record("order_err_b", 220, length=900)]
+
+    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+        _ = gb_record
+        return Drawing(
+            filename="order_err.svg",
+            size=("400px", "300px"),
+            viewBox="0 0 400 300",
+            debug=False,
+        )
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    with pytest.raises(ValidationError):
+        assemble_circular_diagram_from_records(
+            records,
+            selected_features_set=["CDS"],
+            legend="none",
+            multi_record_order=["none"],
+        )
+
+
+@pytest.mark.circular
+def test_multi_record_row_pattern_with_empty_token_raises_validation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("row_err_a", 20, length=1000),
+        _build_record("row_err_b", 220, length=900),
+        _build_record("row_err_c", 420, length=800),
+    ]
+
+    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+        _ = gb_record
+        return Drawing(
+            filename="row_err.svg",
+            size=("400px", "300px"),
+            viewBox="0 0 400 300",
+            debug=False,
+        )
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    with pytest.raises(ValidationError):
+        assemble_circular_diagram_from_records(
+            records,
+            selected_features_set=["CDS"],
+            legend="none",
+            multi_record_row_pattern="2,,1",
+        )
 
 
 @pytest.mark.circular
