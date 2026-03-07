@@ -381,124 +381,128 @@ def _estimate_square_grid(record_count: int) -> tuple[int, int]:
     return cols, rows
 
 
-def _resolve_multi_record_order_indices(
+def _resolve_multi_record_default_row_counts(record_count: int) -> list[int]:
+    """Resolve default near-square row counts for multi-record canvas layout."""
+    if record_count <= 0:
+        return []
+    cols, rows = _estimate_square_grid(record_count)
+    counts: list[int] = []
+    for row in range(rows):
+        start = row * cols
+        end = min(record_count, start + cols)
+        if end > start:
+            counts.append(end - start)
+    return counts
+
+
+def _resolve_multi_record_selector_index(
     records: Sequence[SeqRecord],
-    selectors: Sequence[str] | None,
-) -> list[int]:
-    """Resolve order selectors to record indices with append-the-rest behavior."""
+    selector_text: str,
+) -> int:
+    """Resolve one record selector to an index in records."""
+    record_count = len(records)
+    try:
+        selector = parse_record_selector(selector_text)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+    if selector is None:
+        raise ValidationError(f"multi_record_position selector '{selector_text}' is invalid.")
+
+    if selector.record_index is not None:
+        idx = int(selector.record_index)
+        if idx < 0 or idx >= record_count:
+            raise ValidationError(
+                f"multi_record_position selector '{selector_text}' is out of range for "
+                f"{record_count} record(s)."
+            )
+        return idx
+
+    target_record_id = str(selector.record_id or "")
+    matches = [idx for idx, record in enumerate(records) if str(record.id) == target_record_id]
+    if not matches:
+        raise ValidationError(
+            f"multi_record_position selector '{selector_text}' did not match any record ID."
+        )
+    if len(matches) > 1:
+        raise ValidationError(
+            f"multi_record_position selector '{selector_text}' matched multiple records. "
+            "Use #index to disambiguate."
+        )
+    return int(matches[0])
+
+
+def _parse_multi_record_position(value: str) -> tuple[str, int]:
+    """Parse one <selector>@<row> token."""
+    raw = str(value or "").strip()
+    if not raw:
+        raise ValidationError("multi_record_position does not allow empty entries.")
+    if "@" not in raw:
+        raise ValidationError(
+            f"multi_record_position entry '{raw}' must be in '<selector>@<row>' format."
+        )
+    selector_text, row_text = raw.rsplit("@", 1)
+    selector_text = selector_text.strip()
+    row_text = row_text.strip()
+    if not selector_text:
+        raise ValidationError(
+            f"multi_record_position entry '{raw}' must include a selector before '@'."
+        )
+    if not row_text or not row_text.isdigit() or int(row_text) <= 0:
+        raise ValidationError(
+            f"multi_record_position entry '{raw}' must use a positive integer row."
+        )
+    return selector_text, int(row_text)
+
+
+def _resolve_multi_record_positions(
+    records: Sequence[SeqRecord],
+    positions: Sequence[str] | None,
+) -> tuple[list[int], list[int]]:
+    """Resolve explicit multi-record positions to ordered indices and row counts."""
     record_count = len(records)
     if record_count <= 0:
-        return []
-    if not selectors:
-        return list(range(record_count))
+        return [], []
+    if not positions:
+        return list(range(record_count)), _resolve_multi_record_default_row_counts(record_count)
+
+    seen_indices: set[int] = set()
+    row_entries: dict[int, list[int]] = {}
+    provided_entries = 0
+    for raw_position in positions:
+        selector_text, row_value = _parse_multi_record_position(str(raw_position))
+        resolved_index = _resolve_multi_record_selector_index(records, selector_text)
+        if resolved_index in seen_indices:
+            raise ValidationError(
+                f"multi_record_position selector '{selector_text}' was specified more than once."
+            )
+        seen_indices.add(resolved_index)
+        row_entries.setdefault(int(row_value), []).append(resolved_index)
+        provided_entries += 1
+
+    if len(seen_indices) != record_count:
+        raise ValidationError(
+            f"multi_record_position must include each loaded record exactly once "
+            f"(expected {record_count}, got {len(seen_indices)} unique selector(s))."
+        )
+    if provided_entries != record_count:
+        raise ValidationError(
+            f"multi_record_position must provide exactly {record_count} entry(ies)."
+        )
 
     ordered_indices: list[int] = []
-    seen_indices: set[int] = set()
-
-    for raw_selector in selectors:
-        selector_text = str(raw_selector or "").strip()
-        if not selector_text:
-            raise ValidationError("multi_record_order does not allow empty selectors.")
-        try:
-            selector = parse_record_selector(selector_text)
-        except ValueError as exc:
-            raise ValidationError(str(exc)) from exc
-        if selector is None:
-            raise ValidationError(f"multi_record_order selector '{selector_text}' is invalid.")
-
-        resolved_index: int | None = None
-        if selector.record_index is not None:
-            idx = int(selector.record_index)
-            if idx < 0 or idx >= record_count:
-                raise ValidationError(
-                    f"multi_record_order selector '{selector_text}' is out of range for "
-                    f"{record_count} record(s)."
-                )
-            resolved_index = idx
-        else:
-            target_record_id = str(selector.record_id or "")
-            matches = [idx for idx, record in enumerate(records) if str(record.id) == target_record_id]
-            if not matches:
-                raise ValidationError(
-                    f"multi_record_order selector '{selector_text}' did not match any record ID."
-                )
-            if len(matches) > 1:
-                raise ValidationError(
-                    f"multi_record_order selector '{selector_text}' matched multiple records. "
-                    "Use #index to disambiguate."
-                )
-            resolved_index = int(matches[0])
-
-        if resolved_index in seen_indices:
+    row_counts: list[int] = []
+    for _row_value in sorted(row_entries):
+        indices = row_entries[_row_value]
+        if not indices:
             continue
-        ordered_indices.append(resolved_index)
-        seen_indices.add(resolved_index)
+        ordered_indices.extend(indices)
+        row_counts.append(len(indices))
 
-    for idx in range(record_count):
-        if idx not in seen_indices:
-            ordered_indices.append(idx)
-
-    return ordered_indices
-
-
-def _resolve_multi_record_row_counts(
-    record_count: int,
-    row_pattern: str | None,
-) -> list[int]:
-    """Resolve row counts for multi-record canvas layout."""
-    if record_count <= 0:
-        return []
-
-    normalized_pattern = str(row_pattern or "").strip()
-    if not normalized_pattern:
-        cols, rows = _estimate_square_grid(record_count)
-        counts: list[int] = []
-        for row in range(rows):
-            start = row * cols
-            end = min(record_count, start + cols)
-            if end > start:
-                counts.append(end - start)
-        return counts
-
-    counts: list[int] = []
-    pattern_parts = [chunk.strip() for chunk in normalized_pattern.split(",")]
-    if any(not part for part in pattern_parts):
+    if len(ordered_indices) != record_count:
         raise ValidationError(
-            f"multi_record_row_pattern must be a comma-separated list of positive integers: '{row_pattern}'"
+            "multi_record_position internal error: failed to resolve all records."
         )
-    for part in pattern_parts:
-        try:
-            value = int(part)
-        except ValueError as exc:
-            raise ValidationError(
-                f"multi_record_row_pattern must be a comma-separated list of positive integers: '{row_pattern}'"
-            ) from exc
-        if value <= 0:
-            raise ValidationError(
-                f"multi_record_row_pattern must contain only positive integers: '{row_pattern}'"
-            )
-        counts.append(value)
-    if not counts:
-        raise ValidationError(
-            f"multi_record_row_pattern must be a comma-separated list of positive integers: '{row_pattern}'"
-        )
-
-    total = sum(counts)
-    if total < record_count:
-        counts.append(record_count - total)
-    elif total > record_count:
-        overflow = total - record_count
-        cursor = len(counts) - 1
-        while overflow > 0 and cursor >= 0:
-            current = counts[cursor]
-            if current <= overflow:
-                overflow -= current
-                counts.pop(cursor)
-            else:
-                counts[cursor] = current - overflow
-                overflow = 0
-            cursor -= 1
-    return [count for count in counts if count > 0]
+    return ordered_indices, row_counts
 
 
 def _group_local_vertical_bounds(group: Group) -> tuple[float, float]:
@@ -1209,8 +1213,7 @@ def assemble_circular_diagram_from_records(
     multi_record_min_radius_ratio: float = 0.55,
     multi_record_column_gap_ratio: float = _MULTI_RECORD_COLUMN_GAP_RATIO,
     multi_record_row_gap_ratio: float = _MULTI_RECORD_ROW_GAP_RATIO,
-    multi_record_row_pattern: str | None = None,
-    multi_record_order: Sequence[str] | None = None,
+    multi_record_positions: Sequence[str] | None = None,
     track_specs: Sequence[str | TrackSpec] | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
@@ -1293,7 +1296,9 @@ def assemble_circular_diagram_from_records(
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
 
-    ordered_indices = _resolve_multi_record_order_indices(records, multi_record_order)
+    ordered_indices, row_counts = _resolve_multi_record_positions(
+        records, multi_record_positions
+    )
     records = [records[idx] for idx in ordered_indices]
 
     parsed_track_specs: list[TrackSpec] | None = None
@@ -1396,10 +1401,8 @@ def assemble_circular_diagram_from_records(
         gap_ratio=normalized_multi_record_row_gap_ratio,
     )
 
-    row_counts = _resolve_multi_record_row_counts(
-        len(canvases),
-        multi_record_row_pattern,
-    )
+    if not row_counts:
+        row_counts = _resolve_multi_record_default_row_counts(len(canvases))
     row_record_indices: list[list[int]] = []
     record_row_by_index: dict[int, int] = {}
     cursor = 0

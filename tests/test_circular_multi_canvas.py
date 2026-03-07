@@ -1398,7 +1398,7 @@ def test_multi_record_row_gap_ratio_adds_visible_gap_between_row_content(
 
 
 @pytest.mark.circular
-def test_multi_record_row_pattern_two_four_applies_two_rows_of_two_and_four(
+def test_multi_record_positions_group_rows_and_preserve_within_row_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     records = [
@@ -1411,13 +1411,16 @@ def test_multi_record_row_pattern_two_four_applies_two_rows_of_two_and_four(
     ]
 
     def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
-        _ = gb_record
-        return Drawing(
-            filename="row_pattern.svg",
+        canvas = Drawing(
+            filename=f"{gb_record.id}.svg",
             size=("400px", "300px"),
             viewBox="0 0 400 300",
             debug=False,
         )
+        marker = canvas.g(id=f"marker_{gb_record.id}")
+        marker.add(canvas.circle(center=(10, 10), r=1))
+        canvas.add(marker)
+        return canvas
 
     monkeypatch.setattr(
         diagram_api_module,
@@ -1429,43 +1432,51 @@ def test_multi_record_row_pattern_two_four_applies_two_rows_of_two_and_four(
         records,
         selected_features_set=["CDS"],
         legend="none",
-        multi_record_row_pattern="2,4",
+        multi_record_positions=["#2@2", "#5@1", "#1@1", "#6@2", "#3@1", "#4@2"],
     )
     root = ET.fromstring(canvas.tostring())
-    record_x = [
-        _extract_group_translate_xy(root, f"record_{index}")[0]
-        for index in range(len(records))
-    ]
+    ns = {"svg": "http://www.w3.org/2000/svg"}
     record_y = [
         _extract_group_translate_xy(root, f"record_{index}")[1]
         for index in range(len(records))
     ]
+    expected_ids = [
+        "row_pattern_e",
+        "row_pattern_a",
+        "row_pattern_c",
+        "row_pattern_b",
+        "row_pattern_f",
+        "row_pattern_d",
+    ]
 
+    for index, expected in enumerate(expected_ids):
+        record_group = root.find(f".//svg:g[@id='record_{index}']", ns)
+        assert record_group is not None
+        marker_group = record_group.find(f"./svg:g[@id='marker_{expected}']", ns)
+        assert marker_group is not None
     assert record_y[0] == pytest.approx(record_y[1], abs=1e-6)
-    assert record_y[2] == pytest.approx(record_y[3], abs=1e-6)
-    assert record_y[2] == pytest.approx(record_y[4], abs=1e-6)
-    assert record_y[2] == pytest.approx(record_y[5], abs=1e-6)
-    assert record_y[2] > record_y[0]
-    assert record_x[0] > record_x[2]
+    assert record_y[0] == pytest.approx(record_y[2], abs=1e-6)
+    assert record_y[3] == pytest.approx(record_y[4], abs=1e-6)
+    assert record_y[3] == pytest.approx(record_y[5], abs=1e-6)
+    assert record_y[3] > record_y[0]
 
 
 @pytest.mark.circular
-def test_multi_record_row_pattern_underflow_appends_final_row(
+def test_multi_record_positions_compress_row_gaps(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     records = [
-        _build_record("row_pattern_under_a", 20, length=1000),
-        _build_record("row_pattern_under_b", 220, length=900),
-        _build_record("row_pattern_under_c", 420, length=800),
-        _build_record("row_pattern_under_d", 620, length=700),
-        _build_record("row_pattern_under_e", 820, length=600),
-        _build_record("row_pattern_under_f", 1020, length=500),
+        _build_record("row_gap_a", 20, length=1000),
+        _build_record("row_gap_b", 220, length=900),
+        _build_record("row_gap_c", 420, length=800),
+        _build_record("row_gap_d", 620, length=700),
+        _build_record("row_gap_e", 820, length=600),
     ]
 
     def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
         _ = gb_record
         return Drawing(
-            filename="row_pattern_under.svg",
+            filename="row_gap.svg",
             size=("400px", "300px"),
             viewBox="0 0 400 300",
             debug=False,
@@ -1481,52 +1492,7 @@ def test_multi_record_row_pattern_underflow_appends_final_row(
         records,
         selected_features_set=["CDS"],
         legend="none",
-        multi_record_row_pattern="2,3",
-    )
-    root = ET.fromstring(canvas.tostring())
-    record_y = [
-        _extract_group_translate_xy(root, f"record_{index}")[1]
-        for index in range(len(records))
-    ]
-
-    assert record_y[0] == pytest.approx(record_y[1], abs=1e-6)
-    assert record_y[2] == pytest.approx(record_y[3], abs=1e-6)
-    assert record_y[2] == pytest.approx(record_y[4], abs=1e-6)
-    assert record_y[5] > record_y[2]
-
-
-@pytest.mark.circular
-def test_multi_record_row_pattern_overflow_trims_tail_rows(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    records = [
-        _build_record("row_pattern_over_a", 20, length=1000),
-        _build_record("row_pattern_over_b", 220, length=900),
-        _build_record("row_pattern_over_c", 420, length=800),
-        _build_record("row_pattern_over_d", 620, length=700),
-        _build_record("row_pattern_over_e", 820, length=600),
-    ]
-
-    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
-        _ = gb_record
-        return Drawing(
-            filename="row_pattern_over.svg",
-            size=("400px", "300px"),
-            viewBox="0 0 400 300",
-            debug=False,
-        )
-
-    monkeypatch.setattr(
-        diagram_api_module,
-        "assemble_circular_diagram_from_record",
-        fake_single,
-    )
-
-    canvas = assemble_circular_diagram_from_records(
-        records,
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_row_pattern="2,4",
+        multi_record_positions=["#1@1", "#2@1", "#3@3", "#4@3", "#5@3"],
     )
     root = ET.fromstring(canvas.tostring())
     record_y = [
@@ -1541,7 +1507,51 @@ def test_multi_record_row_pattern_overflow_trims_tail_rows(
 
 
 @pytest.mark.circular
-def test_multi_record_order_applies_selectors_then_appends_unlisted(
+def test_multi_record_positions_default_layout_keeps_auto_square_when_unspecified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("row_auto_a", 20, length=1000),
+        _build_record("row_auto_b", 220, length=900),
+        _build_record("row_auto_c", 420, length=800),
+        _build_record("row_auto_d", 620, length=700),
+        _build_record("row_auto_e", 820, length=600),
+    ]
+
+    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+        _ = gb_record
+        return Drawing(
+            filename="row_auto.svg",
+            size=("400px", "300px"),
+            viewBox="0 0 400 300",
+            debug=False,
+        )
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+    )
+    root = ET.fromstring(canvas.tostring())
+    record_y = [
+        _extract_group_translate_xy(root, f"record_{index}")[1]
+        for index in range(len(records))
+    ]
+
+    assert record_y[0] == pytest.approx(record_y[1], abs=1e-6)
+    assert record_y[0] == pytest.approx(record_y[2], abs=1e-6)
+    assert record_y[3] == pytest.approx(record_y[4], abs=1e-6)
+    assert record_y[3] > record_y[0]
+
+
+@pytest.mark.circular
+def test_multi_record_positions_accept_record_id_selectors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     records = [
@@ -1573,11 +1583,11 @@ def test_multi_record_order_applies_selectors_then_appends_unlisted(
         records,
         selected_features_set=["CDS"],
         legend="none",
-        multi_record_order=["#3", "#1"],
+        multi_record_positions=["order_c@1", "order_a@2", "order_b@2", "order_d@1"],
     )
     root = ET.fromstring(canvas.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
-    expected_ids = ["order_c", "order_a", "order_b", "order_d"]
+    expected_ids = ["order_c", "order_d", "order_a", "order_b"]
 
     for index, expected in enumerate(expected_ids):
         record_group = root.find(f".//svg:g[@id='record_{index}']", ns)
@@ -1935,7 +1945,7 @@ def test_circular_cli_multi_record_canvas_accepts_sqrt_alias(
 
 
 @pytest.mark.circular
-def test_circular_cli_multi_record_canvas_passes_row_pattern_and_order(
+def test_circular_cli_multi_record_canvas_passes_positions(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     records = [
@@ -1974,12 +1984,12 @@ def test_circular_cli_multi_record_canvas_passes_row_pattern_and_order(
             "--format",
             "svg",
             "--multi_record_canvas",
-            "--multi_record_row_pattern",
-            "2,4",
-            "--multi_record_order",
-            "#3",
-            "--multi_record_order",
-            "cli_a",
+            "--multi_record_position",
+            "#3@1",
+            "--multi_record_position",
+            "cli_a@2",
+            "--multi_record_position",
+            "#2@2",
             "-o",
             str(tmp_path / "out"),
         ]
@@ -1988,15 +1998,17 @@ def test_circular_cli_multi_record_canvas_passes_row_pattern_and_order(
     assert calls["single"] == 0
     assert calls["multi"] == 1
     assert calls["save"] == 1
-    assert captured_kwargs["multi_record_row_pattern"] == "2,4"
-    assert captured_kwargs["multi_record_order"] == ["#3", "cli_a"]
+    assert captured_kwargs["multi_record_positions"] == ["#3@1", "cli_a@2", "#2@2"]
 
 
 @pytest.mark.circular
-@pytest.mark.parametrize("row_pattern", ["2,0", "2,-1", "2,abc", ",,,", "2,,3", "2,"])
-def test_circular_cli_rejects_invalid_multi_record_row_pattern(
+@pytest.mark.parametrize(
+    "position",
+    ["#1@", "@1", "#1@0", "#1@-1", "#1@abc", "#0@1", "none@1", "selector_only"],
+)
+def test_circular_cli_rejects_invalid_multi_record_position(
     monkeypatch: pytest.MonkeyPatch,
-    row_pattern: str,
+    position: str,
 ) -> None:
     monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: [_build_record("cli_a", 20)])
     with pytest.raises(SystemExit):
@@ -2006,17 +2018,21 @@ def test_circular_cli_rejects_invalid_multi_record_row_pattern(
                 "dummy.gb",
                 "--format",
                 "svg",
-                "--multi_record_row_pattern",
-                row_pattern,
+                "--multi_record_position",
+                position,
             ]
         )
 
 
 @pytest.mark.circular
-@pytest.mark.parametrize("selector", ["#0", "#abc", "none", "-"])
-def test_circular_cli_rejects_invalid_multi_record_order_selector(
+@pytest.mark.parametrize(
+    ("removed_option", "value"),
+    [("--multi_record_row_pattern", "2,4"), ("--multi_record_order", "#2")],
+)
+def test_circular_cli_rejects_removed_multi_record_layout_options(
     monkeypatch: pytest.MonkeyPatch,
-    selector: str,
+    removed_option: str,
+    value: str,
 ) -> None:
     monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: [_build_record("cli_a", 20)])
     with pytest.raises(SystemExit):
@@ -2026,14 +2042,14 @@ def test_circular_cli_rejects_invalid_multi_record_order_selector(
                 "dummy.gb",
                 "--format",
                 "svg",
-                "--multi_record_order",
-                selector,
+                removed_option,
+                value,
             ]
         )
 
 
 @pytest.mark.circular
-def test_multi_record_order_invalid_selector_raises_validation_error(
+def test_multi_record_positions_invalid_selector_raises_validation_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     records = [_build_record("order_err_a", 20, length=1000), _build_record("order_err_b", 220, length=900)]
@@ -2058,12 +2074,12 @@ def test_multi_record_order_invalid_selector_raises_validation_error(
             records,
             selected_features_set=["CDS"],
             legend="none",
-            multi_record_order=["none"],
+            multi_record_positions=["none@1", "#2@2"],
         )
 
 
 @pytest.mark.circular
-def test_multi_record_row_pattern_with_empty_token_raises_validation_error(
+def test_multi_record_positions_with_duplicate_selector_raises_validation_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     records = [
@@ -2087,12 +2103,79 @@ def test_multi_record_row_pattern_with_empty_token_raises_validation_error(
         fake_single,
     )
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="specified more than once"):
         assemble_circular_diagram_from_records(
             records,
             selected_features_set=["CDS"],
             legend="none",
-            multi_record_row_pattern="2,,1",
+            multi_record_positions=["#1@1", "#1@2", "#3@2"],
+        )
+
+
+@pytest.mark.circular
+def test_multi_record_positions_with_missing_record_raises_validation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("missing_row_a", 20, length=1000),
+        _build_record("missing_row_b", 220, length=900),
+        _build_record("missing_row_c", 420, length=800),
+    ]
+
+    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+        _ = gb_record
+        return Drawing(
+            filename="missing_row.svg",
+            size=("400px", "300px"),
+            viewBox="0 0 400 300",
+            debug=False,
+        )
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    with pytest.raises(ValidationError, match="must include each loaded record exactly once"):
+        assemble_circular_diagram_from_records(
+            records,
+            selected_features_set=["CDS"],
+            legend="none",
+            multi_record_positions=["#1@1", "#2@2"],
+        )
+
+
+@pytest.mark.circular
+def test_multi_record_positions_with_non_positive_row_raises_validation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _build_record("row_err_a", 20, length=1000),
+        _build_record("row_err_b", 220, length=900),
+    ]
+
+    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+        _ = gb_record
+        return Drawing(
+            filename="row_err.svg",
+            size=("400px", "300px"),
+            viewBox="0 0 400 300",
+            debug=False,
+        )
+
+    monkeypatch.setattr(
+        diagram_api_module,
+        "assemble_circular_diagram_from_record",
+        fake_single,
+    )
+
+    with pytest.raises(ValidationError, match="positive integer row"):
+        assemble_circular_diagram_from_records(
+            records,
+            selected_features_set=["CDS"],
+            legend="none",
+            multi_record_positions=["#1@0", "#2@1"],
         )
 
 

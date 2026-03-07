@@ -53,26 +53,96 @@ const normalizeMultiRecordRowGapRatio = (value) => {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0.05;
 };
-const normalizeMultiRecordRowPattern = (value) => String(value ?? '').trim();
-const normalizeMultiRecordOrder = (value) => {
+const normalizeMultiRecordPositions = (value, { maxRow = Number.POSITIVE_INFINITY } = {}) => {
   if (!Array.isArray(value)) return [];
   const deduped = [];
   const seen = new Set();
   value.forEach((item) => {
-    const selector = String(item ?? '').trim();
+    let selector = '';
+    let row = 1;
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      selector = String(item.selector ?? '').trim();
+      row = Number(item.row);
+    } else if (typeof item === 'string') {
+      const raw = String(item || '').trim();
+      if (!raw || !raw.includes('@')) return;
+      const parts = raw.split('@');
+      if (parts.length < 2) return;
+      selector = parts.slice(0, -1).join('@').trim();
+      row = Number(parts[parts.length - 1]);
+    }
     if (!selector || seen.has(selector)) return;
+    const normalizedMaxRow = Number.isInteger(maxRow) && maxRow > 0 ? maxRow : Number.POSITIVE_INFINITY;
+    const normalizedRowRaw = Number.isInteger(row) && row > 0 ? row : 1;
+    const normalizedRow = Number.isFinite(normalizedMaxRow)
+      ? Math.min(normalizedRowRaw, normalizedMaxRow)
+      : normalizedRowRaw;
     seen.add(selector);
-    deduped.push(selector);
+    deduped.push({ selector, row: normalizedRow });
   });
   return deduped;
 };
-const areSameStringArrays = (left, right) => {
-  if (!Array.isArray(left) || !Array.isArray(right)) return false;
-  if (left.length !== right.length) return false;
-  for (let i = 0; i < left.length; i += 1) {
-    if (String(left[i]) !== String(right[i])) return false;
-  }
-  return true;
+const sortMultiRecordPositionsByRow = (positions) => {
+  if (!Array.isArray(positions)) return [];
+  return positions
+    .map((entry, index) => ({ ...entry, __index: index }))
+    .sort((left, right) => {
+      const leftRow = Number(left.row);
+      const rightRow = Number(right.row);
+      if (leftRow !== rightRow) return leftRow - rightRow;
+      return left.__index - right.__index;
+    })
+    .map(({ __index, ...entry }) => entry);
+};
+const buildDefaultMultiRecordPositions = (selectors) => {
+  const normalizedSelectors = Array.isArray(selectors)
+    ? selectors.map((value) => String(value ?? '').trim()).filter(Boolean)
+    : [];
+  if (normalizedSelectors.length === 0) return [];
+  const cols = Math.ceil(Math.sqrt(normalizedSelectors.length));
+  return normalizedSelectors.map((selector, index) => ({
+    selector,
+    row: Math.floor(index / cols) + 1
+  }));
+};
+const mergeCircularRecordPositions = (records, currentPositions) => {
+  const availableSelectors = Array.isArray(records)
+    ? records.map((entry) => String(entry?.selector || '').trim()).filter(Boolean)
+    : [];
+  if (availableSelectors.length === 0) return [];
+  const availableSet = new Set(availableSelectors);
+  const defaultPositions = buildDefaultMultiRecordPositions(availableSelectors);
+  const defaultRowBySelector = new Map(defaultPositions.map((entry) => [entry.selector, entry.row]));
+  const normalizedCurrent = normalizeMultiRecordPositions(currentPositions, { maxRow: availableSelectors.length });
+  const nextPositions = [];
+  const seen = new Set();
+
+  normalizedCurrent.forEach((entry) => {
+    if (!availableSet.has(entry.selector) || seen.has(entry.selector)) return;
+    seen.add(entry.selector);
+    nextPositions.push({
+      selector: entry.selector,
+      row: Number.isInteger(entry.row) && entry.row > 0 ? entry.row : (defaultRowBySelector.get(entry.selector) || 1)
+    });
+  });
+  availableSelectors.forEach((selector) => {
+    if (seen.has(selector)) return;
+    seen.add(selector);
+    nextPositions.push({
+      selector,
+      row: defaultRowBySelector.get(selector) || 1
+    });
+  });
+  return sortMultiRecordPositionsByRow(
+    normalizeMultiRecordPositions(nextPositions, { maxRow: availableSelectors.length })
+  );
+};
+const buildMultiRecordPositionToken = (entry) => {
+  if (!entry || typeof entry !== 'object') return '';
+  const selector = String(entry.selector || '').trim();
+  const row = Number(entry.row);
+  if (!selector || !Number.isInteger(row) || row <= 0) return '';
+  return `${selector}@${row}`;
 };
 const normalizeDefinitionPosition = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -311,8 +381,7 @@ json.dumps({
         multi_record_min_radius_ratio: false,
         multi_record_column_gap_ratio: false,
         multi_record_row_gap_ratio: false,
-        multi_record_row_pattern: false,
-        multi_record_order: false,
+        multi_record_position: false,
         definition_position: false,
         multi_record_definition_mode: false,
         shared_definition_position: false,
@@ -331,8 +400,7 @@ json.dumps({
   "multi_record_min_radius_ratio": "--multi_record_min_radius_ratio" in _source,
   "multi_record_column_gap_ratio": "--multi_record_column_gap_ratio" in _source,
   "multi_record_row_gap_ratio": "--multi_record_row_gap_ratio" in _source,
-  "multi_record_row_pattern": "--multi_record_row_pattern" in _source,
-  "multi_record_order": "--multi_record_order" in _source,
+  "multi_record_position": "--multi_record_position" in _source,
   "definition_position": "--definition_position" in _source,
   "multi_record_definition_mode": "--multi_record_definition_mode" in _source,
   "shared_definition_position": "--shared_definition_position" in _source,
@@ -347,8 +415,7 @@ json.dumps({
         multi_record_min_radius_ratio: false,
         multi_record_column_gap_ratio: false,
         multi_record_row_gap_ratio: false,
-        multi_record_row_pattern: false,
-        multi_record_order: false,
+        multi_record_position: false,
         definition_position: false,
         multi_record_definition_mode: false,
         shared_definition_position: false,
@@ -393,8 +460,8 @@ json.dumps({
   };
 
   const refreshCircularRecordOrder = async () => {
-    if (!Array.isArray(adv.multi_record_order)) {
-      adv.multi_record_order = [];
+    if (!Array.isArray(adv.multi_record_positions)) {
+      adv.multi_record_positions = [];
     }
     const pyodide = getPyodide();
     if (
@@ -406,7 +473,7 @@ json.dumps({
     ) {
       circularRecordList.value = [];
       if (!files.c_gb || cInputType.value !== 'gb') {
-        adv.multi_record_order.splice(0, adv.multi_record_order.length);
+        adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
       }
       return;
     }
@@ -418,7 +485,7 @@ json.dumps({
       if (payload?.error) {
         console.warn('Failed to read circular record list:', payload.error);
         circularRecordList.value = [];
-        adv.multi_record_order.splice(0, adv.multi_record_order.length);
+        adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
         return;
       }
 
@@ -432,29 +499,12 @@ json.dumps({
         nextRecords.push({ selector, record_id: recordId });
       });
       circularRecordList.value = nextRecords;
-
-      const availableSelectors = nextRecords.map((entry) => entry.selector);
-      const availableSet = new Set(availableSelectors);
-      const normalizedCurrentOrder = normalizeMultiRecordOrder(adv.multi_record_order);
-      const nextOrder = [];
-      const seenOrder = new Set();
-
-      normalizedCurrentOrder.forEach((selector) => {
-        if (!availableSet.has(selector) || seenOrder.has(selector)) return;
-        seenOrder.add(selector);
-        nextOrder.push(selector);
-      });
-      availableSelectors.forEach((selector) => {
-        if (seenOrder.has(selector)) return;
-        seenOrder.add(selector);
-        nextOrder.push(selector);
-      });
-
-      adv.multi_record_order.splice(0, adv.multi_record_order.length, ...nextOrder);
+      const nextPositions = mergeCircularRecordPositions(nextRecords, adv.multi_record_positions);
+      adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...nextPositions);
     } catch (error) {
       console.warn('Failed to refresh circular record order:', error);
       circularRecordList.value = [];
-      adv.multi_record_order.splice(0, adv.multi_record_order.length);
+      adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
     }
   };
 
@@ -673,24 +723,14 @@ json.dumps({
               'Current gbdraw wheel does not support multi-record definition layout options. Rebuild and redeploy the web wheel.'
             );
           }
-          const normalizedRowPattern = normalizeMultiRecordRowPattern(adv.multi_record_row_pattern);
-          const normalizedRecordOrder = normalizeMultiRecordOrder(adv.multi_record_order);
-          const defaultRecordOrder = Array.isArray(circularRecordList.value)
-            ? circularRecordList.value.map((entry) => String(entry?.selector || '').trim()).filter(Boolean)
-            : [];
-          const effectiveRecordOrder = normalizedRecordOrder.length > 0
-            ? normalizedRecordOrder
-            : defaultRecordOrder;
-          const shouldPassRecordOrder =
-            effectiveRecordOrder.length > 0 && !areSameStringArrays(effectiveRecordOrder, defaultRecordOrder);
-          if (normalizedRowPattern && !multiCanvasSupport.multi_record_row_pattern) {
+          const effectiveRecordPositions = mergeCircularRecordPositions(
+            circularRecordList.value,
+            adv.multi_record_positions
+          );
+          const shouldPassRecordPositions = effectiveRecordPositions.length > 0;
+          if (shouldPassRecordPositions && !multiCanvasSupport.multi_record_position) {
             throw new Error(
-              'Current gbdraw wheel does not support --multi_record_row_pattern. Rebuild and redeploy the web wheel.'
-            );
-          }
-          if (shouldPassRecordOrder && !multiCanvasSupport.multi_record_order) {
-            throw new Error(
-              'Current gbdraw wheel does not support --multi_record_order. Rebuild and redeploy the web wheel.'
+              'Current gbdraw wheel does not support --multi_record_position. Rebuild and redeploy the web wheel.'
             );
           }
           const normalizedSizeMode = normalizeMultiRecordSizeMode(adv.multi_record_size_mode);
@@ -716,8 +756,11 @@ json.dumps({
           adv.multi_record_min_radius_ratio = normalizedMinRatio;
           adv.multi_record_column_gap_ratio = normalizedColumnGapRatio;
           adv.multi_record_row_gap_ratio = normalizedRowGapRatio;
-          adv.multi_record_row_pattern = normalizedRowPattern;
-          adv.multi_record_order.splice(0, adv.multi_record_order.length, ...effectiveRecordOrder);
+          adv.multi_record_positions.splice(
+            0,
+            adv.multi_record_positions.length,
+            ...effectiveRecordPositions
+          );
           adv.multi_record_definition_mode = normalizedDefinitionMode;
           adv.shared_definition_position = normalizedSharedDefinitionPosition;
           adv.shared_definition_font_size = normalizedSharedDefinitionFontSize;
@@ -726,12 +769,11 @@ json.dumps({
           args.push('--multi_record_min_radius_ratio', String(normalizedMinRatio));
           args.push('--multi_record_column_gap_ratio', String(normalizedColumnGapRatio));
           args.push('--multi_record_row_gap_ratio', String(normalizedRowGapRatio));
-          if (normalizedRowPattern) {
-            args.push('--multi_record_row_pattern', normalizedRowPattern);
-          }
-          if (shouldPassRecordOrder) {
-            effectiveRecordOrder.forEach((selector) => {
-              args.push('--multi_record_order', selector);
+          if (shouldPassRecordPositions) {
+            effectiveRecordPositions.forEach((entry) => {
+              const token = buildMultiRecordPositionToken(entry);
+              if (!token) return;
+              args.push('--multi_record_position', token);
             });
           }
           args.push('--multi_record_definition_mode', normalizedDefinitionMode);

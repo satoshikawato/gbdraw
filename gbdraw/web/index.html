@@ -370,12 +370,8 @@
                                         <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_row_gap_ratio" class="form-input py-1 text-xs">
                                     </div>
                                     <div class="col-span-2">
-                                        <label class="input-label text-[10px] mb-1">Row Pattern <help-tip text='Optional explicit row counts (e.g., "2,4"). Leave blank for auto square layout.'></help-tip></label>
-                                        <input type="text" v-model="adv.multi_record_row_pattern" class="form-input py-1 text-xs" placeholder="Auto (e.g., 2,4)">
-                                    </div>
-                                    <div class="col-span-2">
                                         <div class="flex items-center justify-between mb-1">
-                                            <label class="input-label text-[10px] mb-0">Record Order <help-tip text="Manual order for multi-record canvas. Use Up/Down to reorder."></help-tip></label>
+                                            <label class="input-label text-[10px] mb-0">Record Order <help-tip text="Manual order and row assignment for multi-record canvas. Use Up/Down for left-to-right order within each row."></help-tip></label>
                                             <button
                                                 type="button"
                                                 class="btn btn-secondary text-[10px] py-1 px-2"
@@ -388,19 +384,28 @@
                                         <div v-if="cInputType !== 'gb'" class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-1.5">
                                             Record Order is available for GenBank input.
                                         </div>
-                                        <div v-else-if="adv.multi_record_order.length === 0" class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-1.5">
+                                        <div v-else-if="adv.multi_record_positions.length === 0" class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-1.5">
                                             Upload a GenBank file to load records.
                                         </div>
                                         <div v-else class="space-y-1 bg-slate-50 border border-slate-200 rounded p-1.5">
                                             <div
-                                                v-for="(selector, idx) in adv.multi_record_order"
-                                                :key="`record-order-${selector}-${idx}`"
-                                                class="flex items-center justify-between gap-2"
+                                                v-for="(position, idx) in adv.multi_record_positions"
+                                                :key="`record-order-${position.selector}-${idx}`"
+                                                class="grid grid-cols-[minmax(0,1fr)_3rem_auto] items-center gap-1.5"
                                             >
-                                                <span class="truncate text-[10px] text-slate-700">{{ getCircularRecordOrderLabel(selector) }}</span>
+                                                <span class="truncate text-[10px] text-slate-700">{{ getCircularRecordOrderLabel(position.selector) }}</span>
+                                                <select
+                                                    class="form-input py-0.5 px-1 text-[10px]"
+                                                    :value="getCircularRecordRow(position)"
+                                                    @change="setCircularRecordRow(idx, $event.target.value)"
+                                                >
+                                                    <option v-for="rowOption in getCircularRecordRowOptions()" :key="`record-row-${idx}-${rowOption}`" :value="rowOption">
+                                                        {{ rowOption }}
+                                                    </option>
+                                                </select>
                                                 <div class="flex items-center gap-1 shrink-0">
-                                                    <button type="button" class="btn btn-secondary text-[10px] py-0.5 px-1.5" @click="moveCircularRecordOrderUp(idx)" :disabled="idx === 0">Up</button>
-                                                    <button type="button" class="btn btn-secondary text-[10px] py-0.5 px-1.5" @click="moveCircularRecordOrderDown(idx)" :disabled="idx === adv.multi_record_order.length - 1">Down</button>
+                                                    <button type="button" class="btn btn-secondary text-[10px] py-0.5 px-1.5" @click="moveCircularRecordOrderUp(idx)" :disabled="!canMoveCircularRecordOrderUp(idx)">Up</button>
+                                                    <button type="button" class="btn btn-secondary text-[10px] py-0.5 px-1.5" @click="moveCircularRecordOrderDown(idx)" :disabled="!canMoveCircularRecordOrderDown(idx)">Down</button>
                                                 </div>
                                             </div>
                                             <div class="pt-1 border-t border-slate-200 flex justify-end">

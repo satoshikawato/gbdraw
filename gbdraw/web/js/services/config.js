@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
-const SESSION_VERSION = 4;
+const SESSION_VERSION = 5;
 
 const safeDeepMerge = (target, source) => {
   if (!source || typeof source !== 'object') return;
@@ -154,17 +154,27 @@ const applyConfigData = (data) => {
     Number.isFinite(numericRowGapRatio) && numericRowGapRatio >= 0
       ? numericRowGapRatio
       : 0.05;
-  state.adv.multi_record_row_pattern = String(state.adv.multi_record_row_pattern ?? '').trim();
-  const rawMultiRecordOrder = Array.isArray(state.adv.multi_record_order) ? state.adv.multi_record_order : [];
-  const dedupedMultiRecordOrder = [];
-  const seenMultiRecordOrder = new Set();
-  rawMultiRecordOrder.forEach((value) => {
-    const selector = String(value ?? '').trim();
-    if (!selector || seenMultiRecordOrder.has(selector)) return;
-    seenMultiRecordOrder.add(selector);
-    dedupedMultiRecordOrder.push(selector);
+  const rawMultiRecordPositions = Array.isArray(state.adv.multi_record_positions)
+    ? state.adv.multi_record_positions
+    : [];
+  const dedupedMultiRecordPositions = [];
+  const seenMultiRecordSelectors = new Set();
+  rawMultiRecordPositions.forEach((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
+    const selector = String(entry.selector ?? '').trim();
+    if (!selector || seenMultiRecordSelectors.has(selector)) return;
+    const rowValue = Number(entry.row);
+    const normalizedRow = Number.isInteger(rowValue) && rowValue > 0 ? rowValue : 1;
+    seenMultiRecordSelectors.add(selector);
+    dedupedMultiRecordPositions.push({ selector, row: normalizedRow });
   });
-  state.adv.multi_record_order = dedupedMultiRecordOrder;
+  state.adv.multi_record_positions = dedupedMultiRecordPositions
+    .map((entry, index) => ({ ...entry, __index: index }))
+    .sort((left, right) => {
+      if (left.row !== right.row) return left.row - right.row;
+      return left.__index - right.__index;
+    })
+    .map(({ __index, ...entry }) => entry);
   const normalizedMultiRecordDefinitionMode = String(state.adv.multi_record_definition_mode || '').trim().toLowerCase();
   state.adv.multi_record_definition_mode = ['shared', 'legacy'].includes(normalizedMultiRecordDefinitionMode)
     ? normalizedMultiRecordDefinitionMode
