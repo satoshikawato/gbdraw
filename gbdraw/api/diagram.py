@@ -404,6 +404,55 @@ def _group_local_vertical_bounds(group: Group) -> tuple[float, float]:
     return float(min_y), float(max_y)
 
 
+def _set_group_translate(group: Group, *, x: float, y: float) -> None:
+    """Set a group transform to a simple translate(x, y)."""
+    attribs = getattr(group, "attribs", None)
+    if not isinstance(attribs, dict):
+        return
+    attribs["transform"] = f"translate({float(x)}, {float(y)})"
+
+
+def _center_record_definition_group_on_record_axis(
+    record_group: Group,
+    *,
+    record_index: int,
+    record_id: str,
+) -> None:
+    """Center one per-record definition group vertically on its record axis."""
+    axis_group_id = f"Axis_{record_index}"
+    definition_group_id = f"{str(record_id).replace(' ', '_')}_definition"
+    axis_group: Group | None = None
+    definition_group: Group | None = None
+
+    for child in getattr(record_group, "elements", []):
+        attribs = getattr(child, "attribs", None)
+        if not isinstance(attribs, dict):
+            continue
+        child_id = str(attribs.get("id", ""))
+        if child_id == axis_group_id:
+            axis_group = child
+        elif child_id == definition_group_id:
+            definition_group = child
+
+    if axis_group is None or definition_group is None:
+        return
+
+    _axis_x, axis_center_y = _parse_translate_xy(axis_group.attribs.get("transform"))
+    definition_x, definition_y = _parse_translate_xy(definition_group.attribs.get("transform"))
+    definition_min_y, definition_max_y = _group_local_vertical_bounds(definition_group)
+    definition_local_center_y = (float(definition_min_y) + float(definition_max_y)) * 0.5
+    definition_text_center_y = float(definition_y) + float(definition_local_center_y)
+    delta_y = float(axis_center_y) - float(definition_text_center_y)
+
+    if math.isclose(delta_y, 0.0, rel_tol=1e-9, abs_tol=1e-9):
+        return
+    _set_group_translate(
+        definition_group,
+        x=float(definition_x),
+        y=float(definition_y) + float(delta_y),
+    )
+
+
 def _suffix_fixed_top_level_group_id(element: object, record_index: int) -> None:
     """Suffix selected top-level group IDs to avoid collisions on merged canvas."""
     attribs = getattr(element, "attribs", None)
@@ -541,6 +590,118 @@ def _resolve_multi_record_grid_gap_px(max_record_radius_px: float, *, gap_ratio:
     if radius_px > 0:
         return radius_px * float(gap_ratio)
     return float(_MULTI_RECORD_GRID_GAP_PX)
+
+
+def _has_mixed_short_and_long_records(
+    record_lengths: Sequence[int],
+    *,
+    length_threshold: int,
+) -> bool:
+    """Return whether record lengths span both short and long buckets."""
+    has_short = False
+    has_long = False
+    threshold = int(length_threshold)
+    for record_length in record_lengths:
+        if int(record_length) < threshold:
+            has_short = True
+        else:
+            has_long = True
+        if has_short and has_long:
+            return True
+    return False
+
+
+def _harmonize_multi_record_circular_style_cfg(
+    cfg: GbdrawConfig,
+    *,
+    record_lengths: Sequence[int],
+) -> GbdrawConfig:
+    """Harmonize short-record feature/axis style to long settings for mixed multi-record canvases."""
+    if not _has_mixed_short_and_long_records(
+        record_lengths,
+        length_threshold=cfg.labels.length_threshold.circular,
+    ):
+        return cfg
+
+    circular_cfg = cfg.canvas.circular
+    harmonized_track_ratio_factors = {
+        str(key): [float(value) for value in list(values)]
+        for key, values in circular_cfg.track_ratio_factors.items()
+    }
+    short_factors = list(harmonized_track_ratio_factors.get("short", []))
+    long_factors = list(harmonized_track_ratio_factors.get("long", []))
+    if short_factors and long_factors:
+        for factor_index in (0, 1, 2):
+            if factor_index < len(short_factors) and factor_index < len(long_factors):
+                short_factors[factor_index] = float(long_factors[factor_index])
+        harmonized_track_ratio_factors["short"] = short_factors
+
+    harmonized_track_dict: dict[str, dict[str, dict[str, float]]] = {
+        str(length_param): {
+            str(track_type): {
+                str(track_id): float(track_value)
+                for track_id, track_value in track_values.items()
+            }
+            for track_type, track_values in track_type_values.items()
+        }
+        for length_param, track_type_values in circular_cfg.track_dict.items()
+    }
+    short_track_dict = harmonized_track_dict.get("short")
+    long_track_dict = harmonized_track_dict.get("long")
+    if short_track_dict is not None and long_track_dict is not None:
+        for track_type, short_track_values in short_track_dict.items():
+            long_track_values = long_track_dict.get(str(track_type))
+            if long_track_values is None:
+                continue
+            for track_id in ("2", "3"):
+                if track_id in short_track_values and track_id in long_track_values:
+                    short_track_values[track_id] = float(long_track_values[track_id])
+
+    harmonized_features = replace(
+        cfg.objects.features,
+        block_stroke_width=replace(
+            cfg.objects.features.block_stroke_width,
+            short=float(cfg.objects.features.block_stroke_width.long),
+        ),
+        line_stroke_width=replace(
+            cfg.objects.features.line_stroke_width,
+            short=float(cfg.objects.features.line_stroke_width.long),
+        ),
+    )
+    harmonized_axis_circular = replace(
+        cfg.objects.axis.circular,
+        stroke_width=replace(
+            cfg.objects.axis.circular.stroke_width,
+            short=float(cfg.objects.axis.circular.stroke_width.long),
+        ),
+    )
+    harmonized_axis = replace(cfg.objects.axis, circular=harmonized_axis_circular)
+    harmonized_objects = replace(
+        cfg.objects,
+        features=harmonized_features,
+        axis=harmonized_axis,
+    )
+    harmonized_circular = replace(
+        circular_cfg,
+        track_ratio_factors=harmonized_track_ratio_factors,
+        track_dict=harmonized_track_dict,
+    )
+    harmonized_canvas = replace(cfg.canvas, circular=harmonized_circular)
+    return replace(cfg, canvas=harmonized_canvas, objects=harmonized_objects)
+
+
+def _resolve_multi_record_tick_track_channel_override(
+    record_lengths: Sequence[int],
+    *,
+    length_threshold: int,
+) -> Literal["long"] | None:
+    """Return tick ratio channel override for mixed short/long multi-record canvases."""
+    if _has_mixed_short_and_long_records(
+        record_lengths,
+        length_threshold=length_threshold,
+    ):
+        return "long"
+    return None
 
 
 def _scale_circular_cfg(cfg: GbdrawConfig, *, scale: float) -> GbdrawConfig:
@@ -740,6 +901,7 @@ def assemble_circular_diagram_from_record(
     definition_position: Literal["center", "top", "bottom"] = "center",
     track_specs: Sequence[str | TrackSpec] | None = None,
     _definition_profile: Literal["full", "record_summary", "shared_common"] = "full",
+    _tick_track_channel_override: Literal["short", "long"] | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
@@ -894,6 +1056,7 @@ def assemble_circular_diagram_from_record(
         track_specs=parsed_track_specs,
         definition_position=normalized_definition_position,
         definition_profile=_definition_profile,
+        _tick_track_channel_override=_tick_track_channel_override,
     )
 
 
@@ -1048,6 +1211,14 @@ def assemble_circular_diagram_from_records(
         "center" if use_shared_definition else normalized_definition_position
     )
     record_lengths = [len(record.seq) for record in records]
+    cfg = _harmonize_multi_record_circular_style_cfg(
+        cfg,
+        record_lengths=record_lengths,
+    )
+    tick_track_channel_override = _resolve_multi_record_tick_track_channel_override(
+        record_lengths,
+        length_threshold=cfg.labels.length_threshold.circular,
+    )
     record_scales = _resolve_multi_record_scales(
         record_lengths,
         mode=normalized_multi_record_size_mode,
@@ -1079,6 +1250,7 @@ def assemble_circular_diagram_from_records(
             definition_position=record_definition_position,
             track_specs=parsed_track_specs,
             _definition_profile=record_definition_profile,
+            _tick_track_channel_override=tick_track_channel_override,
             cfg=scaled_cfg,
         )
         canvases.append(sub_canvas)
@@ -1436,6 +1608,12 @@ def assemble_circular_diagram_from_records(
             copied = copy.deepcopy(element)
             _suffix_fixed_top_level_group_id(copied, record_index)
             record_group.add(copied)
+        if record_definition_position == "center":
+            _center_record_definition_group_on_record_axis(
+                record_group,
+                record_index=record_index,
+                record_id=str(records[record_index].id),
+            )
         merged_canvas.add(record_group)
 
     if shared_definition_group is not None:

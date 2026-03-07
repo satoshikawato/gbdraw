@@ -162,6 +162,57 @@ def test_feature_width_override_reaches_feature_drawer(monkeypatch: pytest.Monke
     )
 
 
+def test_short_tuckin_separate_strands_default_tracks_do_not_overlap() -> None:
+    record = _load_record()
+    config_dict = _make_config_dict(show_labels=False)
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    length_param = (
+        "short"
+        if len(record.seq) < int(cfg.labels.length_threshold.circular)
+        else "long"
+    )
+    assert length_param == "short"
+
+    color_table, default_colors = preprocess_color_tables(None, load_default_colors("", "default"))
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        SELECTED_FEATURES,
+        default_colors,
+        cfg.canvas.strandedness,
+        cfg.canvas.resolve_overlaps,
+        label_filtering,
+    )
+
+    base_radius = float(cfg.canvas.circular.radius)
+    base_track_ratio = float(cfg.canvas.circular.track_ratio)
+    feature_track_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+    feature_band = circular_assemble_module._compute_feature_band_bounds_px(
+        feature_dict,
+        len(record.seq),
+        base_radius_px=base_radius,
+        track_ratio=base_track_ratio,
+        length_param=length_param,
+        track_ratio_factor=feature_track_ratio_factor,
+        cfg=cfg,
+    )
+    assert feature_band is not None
+
+    gc_center = base_radius * float(cfg.canvas.circular.track_dict[length_param]["tuckin"]["2"])
+    gc_width = base_radius * base_track_ratio * float(cfg.canvas.circular.track_ratio_factors[length_param][1])
+    gc_annulus = (gc_center - 0.5 * gc_width, gc_center + 0.5 * gc_width)
+
+    skew_center = base_radius * float(cfg.canvas.circular.track_dict[length_param]["tuckin"]["3"])
+    skew_width = base_radius * base_track_ratio * float(cfg.canvas.circular.track_ratio_factors[length_param][2])
+    skew_annulus = (skew_center - 0.5 * skew_width, skew_center + 0.5 * skew_width)
+
+    assert not _annulus_overlaps_band(gc_annulus, feature_band)
+    assert not _annulus_overlaps_band(skew_annulus, feature_band)
+    assert not _annulus_overlaps_band(gc_annulus, skew_annulus)
+
+
 def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     record = _load_record()
     config_dict = _make_config_dict(show_labels=True)

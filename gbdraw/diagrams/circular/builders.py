@@ -256,6 +256,7 @@ def add_tick_group_on_canvas(
     config_dict: dict,
     *,
     radius_override: float | None = None,
+    tick_track_channel_override: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -275,6 +276,7 @@ def add_tick_group_on_canvas(
         canvas_config,
         config_dict,
         radius=radius_override,
+        tick_track_channel_override=tick_track_channel_override,
         cfg=cfg or canvas_config._cfg,
     ).get_group()
     tick_group = center_group_on_canvas(tick_group, canvas_config)
