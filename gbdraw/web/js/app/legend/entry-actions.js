@@ -525,16 +525,14 @@ json.dumps({"width": width})
       let xPos = 0,
         yPos = 0;
       const groupTransform = parseTransform(entryGroup.getAttribute('transform'));
-      if (groupTransform.x !== 0 || groupTransform.y !== 0) {
+      const textEl = entryGroup.querySelector('text');
+      if (textEl) {
+        const textTransform = parseTransform(textEl.getAttribute('transform'));
+        xPos = groupTransform.x + textTransform.x;
+        yPos = groupTransform.y + textTransform.y;
+      } else if (groupTransform.x !== 0 || groupTransform.y !== 0) {
         xPos = groupTransform.x;
         yPos = groupTransform.y;
-      } else {
-        const textEl = entryGroup.querySelector('text');
-        if (textEl) {
-          const textTransform = parseTransform(textEl.getAttribute('transform'));
-          xPos = textTransform.x;
-          yPos = textTransform.y;
-        }
       }
 
       const existingEntry = legendEntries.value.find((e) => e.caption === caption);
