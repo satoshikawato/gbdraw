@@ -153,7 +153,13 @@ const normalizeLinearPlotTitlePosition = (value) => {
   return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'bottom';
 };
 
-export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFeatureOverrides }) => {
+export const createRunAnalysis = ({
+  state,
+  getPyodide,
+  writeFileToFs,
+  refreshFeatureOverrides,
+  resetPreviewViewport
+}) => {
   const {
     pyodideReady,
     processing,
@@ -547,7 +553,11 @@ json.dumps({
       results.value = [];
       selectedResultIndex.value = 0;
       errorLog.value = null;
-      zoom.value = 1.0;
+      if (typeof resetPreviewViewport === 'function') {
+        resetPreviewViewport({ resetZoom: true });
+      } else {
+        zoom.value = 1.0;
+      }
       skipCaptureBaseConfig.value = false;
       skipPositionReapply.value = false;
       pairwiseMatchFactors.value = {};

@@ -133,7 +133,7 @@ export const createAppSetup = () => {
   const pyodideManager = createPyodideManager({ state });
   const getPyodide = pyodideManager.getPyodide;
 
-  const { handleWheel, startPan, doPan, endPan } = createPanZoom(state);
+  const { handleWheel, startPan, doPan, endPan, resetPreviewViewport } = createPanZoom(state);
   const { startResizing } = createSidebarResize(state);
 
   const legendActions = createLegendManager({ state, getPyodide, debugLog });
@@ -162,7 +162,8 @@ export const createAppSetup = () => {
     state,
     getPyodide,
     writeFileToFs: pyodideManager.writeFileToFs,
-    refreshFeatureOverrides: featureActions.refreshFeatureOverrides
+    refreshFeatureOverrides: featureActions.refreshFeatureOverrides,
+    resetPreviewViewport
   });
 
   setupWatchers({
@@ -178,7 +179,8 @@ export const createAppSetup = () => {
     legendLayout,
     resultsManager,
     runLabelReflow,
-    refreshCircularRecordOrder
+    refreshCircularRecordOrder,
+    resetPreviewViewport
   });
 
   const {

@@ -19,7 +19,8 @@ export const setupWatchers = ({
   legendLayout,
   resultsManager,
   runLabelReflow,
-  refreshCircularRecordOrder
+  refreshCircularRecordOrder,
+  resetPreviewViewport
 }) => {
   const {
     manualSpecificRules,
@@ -314,6 +315,10 @@ export const setupWatchers = ({
         form.legend = circularLegendPosition.value;
       } else if (newMode === 'linear') {
         form.legend = linearLegendPosition.value;
+      }
+
+      if (typeof resetPreviewViewport === 'function') {
+        resetPreviewViewport();
       }
 
       extractedFeatures.value = [];

@@ -1,6 +1,24 @@
 export const createPanZoom = (state) => {
   const { zoom, isPanning, panStart, canvasPan, canvasContainerRef } = state;
 
+  const resetPreviewViewport = ({ resetZoom = false } = {}) => {
+    isPanning.value = false;
+    panStart.x = 0;
+    panStart.y = 0;
+    panStart.panX = 0;
+    panStart.panY = 0;
+    canvasPan.x = 0;
+    canvasPan.y = 0;
+    if (resetZoom) {
+      zoom.value = 1.0;
+    }
+
+    const container = canvasContainerRef.value;
+    if (container) {
+      container.style.cursor = 'grab';
+    }
+  };
+
   const handleWheel = (event) => {
     const delta = event.deltaY > 0 ? -0.1 : 0.1;
     const newZoom = Math.max(0.1, Math.min(5, zoom.value + delta));
@@ -60,7 +78,7 @@ export const createPanZoom = (state) => {
     }
   };
 
-  return { handleWheel, startPan, doPan, endPan };
+  return { handleWheel, startPan, doPan, endPan, resetPreviewViewport };
 };
 
 export const createSidebarResize = (state) => {
