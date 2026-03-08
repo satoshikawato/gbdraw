@@ -188,9 +188,11 @@ def regenerate_definition_svgs(
     gb_path,
     species=None,
     strain=None,
+    plot_title=None,
     font_size=None,
-    shared_font_size=None,
-    multi_record_definition_mode="shared",
+    plot_title_font_size=None,
+    plot_title_position="none",
+    multi_record_canvas=False,
 ):
     """Regenerate definition group SVGs for all records in an input file"""
     from Bio import SeqIO
@@ -206,18 +208,19 @@ def regenerate_definition_svgs(
         # Override font sizes if provided
         if font_size is not None:
             config_dict["objects"]["definition"]["circular"]["font_size"] = float(font_size)
-        if shared_font_size is not None:
-            config_dict["objects"]["definition"]["circular"]["shared_font_size"] = float(shared_font_size)
+        if plot_title_font_size is not None:
+            config_dict["objects"]["definition"]["circular"]["plot_title_font_size"] = float(plot_title_font_size)
 
         # Parse the GenBank file
         records = list(SeqIO.parse(gb_path, "genbank"))
         if not records:
             return json.dumps({"error": "No records found"})
 
-        mode = str(multi_record_definition_mode or "shared").strip().lower()
-        if mode not in {"shared", "legacy"}:
-            mode = "shared"
-        use_shared = mode == "shared" and len(records) > 1
+        normalized_plot_title_position = str(plot_title_position or "none").strip().lower()
+        if normalized_plot_title_position not in {"none", "top", "bottom"}:
+            normalized_plot_title_position = "none"
+        normalized_plot_title = str(plot_title or "").strip()
+        show_plot_title = normalized_plot_title_position in {"top", "bottom"}
 
         definitions = []
         for index, record in enumerate(records):
@@ -229,13 +232,14 @@ def regenerate_definition_svgs(
                 gb_record=record,
             )
 
-            profile = "record_summary" if use_shared else "full"
+            profile = "record_summary" if (bool(multi_record_canvas) or show_plot_title) else "full"
             def_group = DefinitionGroup(
                 gb_record=record,
                 canvas_config=canvas_config,
                 config_dict=config_dict,
                 species=species if species else None,
                 strain=strain if strain else None,
+                plot_title=None,
                 definition_profile=profile,
             )
 
@@ -248,7 +252,7 @@ def regenerate_definition_svgs(
                 }
             )
 
-        if use_shared:
+        if show_plot_title:
             shared_canvas_config = CircularCanvasConfigurator(
                 output_prefix="temp_shared",
                 config_dict=config_dict,
@@ -261,13 +265,14 @@ def regenerate_definition_svgs(
                 config_dict=config_dict,
                 species=species if species else None,
                 strain=strain if strain else None,
+                plot_title=normalized_plot_title if normalized_plot_title else None,
                 definition_profile="shared_common",
-                definition_group_id="shared_definition",
+                definition_group_id="plot_title",
             )
             definitions.append(
                 {
                     "svg": shared_group.get_group().tostring(),
-                    "definition_group_id": "shared_definition",
+                    "definition_group_id": "plot_title",
                     "record_index": None,
                 }
             )
@@ -280,18 +285,22 @@ def regenerate_definition_svg(
     gb_path,
     species=None,
     strain=None,
+    plot_title=None,
     font_size=None,
-    shared_font_size=None,
-    multi_record_definition_mode="shared",
+    plot_title_font_size=None,
+    plot_title_position="none",
+    multi_record_canvas=False,
 ):
     """Backward-compatible single-record definition regeneration helper"""
     result_json = regenerate_definition_svgs(
         gb_path,
         species=species,
         strain=strain,
+        plot_title=plot_title,
         font_size=font_size,
-        shared_font_size=shared_font_size,
-        multi_record_definition_mode=multi_record_definition_mode,
+        plot_title_font_size=plot_title_font_size,
+        plot_title_position=plot_title_position,
+        multi_record_canvas=multi_record_canvas,
     )
     try:
         payload = json.loads(result_json)

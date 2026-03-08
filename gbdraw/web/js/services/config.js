@@ -126,10 +126,7 @@ const applyConfigData = (data) => {
   } else if (!['above', 'middle', 'below'].includes(state.form.linear_track_layout)) {
     state.form.linear_track_layout = 'middle';
   }
-  const normalizedDefinitionPosition = String(state.form.definition_position || '').trim().toLowerCase();
-  state.form.definition_position = ['center', 'top', 'bottom'].includes(normalizedDefinitionPosition)
-    ? normalizedDefinitionPosition
-    : 'center';
+  state.form.plot_title = String(state.form.plot_title || '');
   state.adv.feature_shapes = normalizeFeatureShapes(state.adv.feature_shapes);
   const normalizedMultiRecordSizeMode = String(state.adv.multi_record_size_mode || '').trim().toLowerCase();
   if (normalizedMultiRecordSizeMode === 'sqrt') {
@@ -175,26 +172,28 @@ const applyConfigData = (data) => {
       return left.__index - right.__index;
     })
     .map(({ __index, ...entry }) => entry);
-  const normalizedMultiRecordDefinitionMode = String(state.adv.multi_record_definition_mode || '').trim().toLowerCase();
-  state.adv.multi_record_definition_mode = ['shared', 'legacy'].includes(normalizedMultiRecordDefinitionMode)
-    ? normalizedMultiRecordDefinitionMode
-    : 'shared';
-  const normalizedSharedDefinitionPosition = String(state.adv.shared_definition_position || '').trim().toLowerCase();
-  state.adv.shared_definition_position = ['center', 'top', 'bottom'].includes(normalizedSharedDefinitionPosition)
-    ? normalizedSharedDefinitionPosition
-    : 'bottom';
-  const rawSharedDefinitionFontSize = state.adv.shared_definition_font_size;
-  if (
-    rawSharedDefinitionFontSize === null ||
-    rawSharedDefinitionFontSize === undefined ||
-    rawSharedDefinitionFontSize === ''
-  ) {
-    state.adv.shared_definition_font_size = null;
+  const normalizedPlotTitlePosition = String(state.adv.plot_title_position || '').trim().toLowerCase();
+  if (state.mode.value === 'linear') {
+    state.adv.plot_title_position = ['center', 'top', 'bottom'].includes(normalizedPlotTitlePosition)
+      ? normalizedPlotTitlePosition
+      : 'bottom';
   } else {
-    const numericSharedDefinitionFontSize = Number(rawSharedDefinitionFontSize);
-    state.adv.shared_definition_font_size =
-      Number.isFinite(numericSharedDefinitionFontSize) && numericSharedDefinitionFontSize > 0
-        ? numericSharedDefinitionFontSize
+    state.adv.plot_title_position = ['none', 'top', 'bottom'].includes(normalizedPlotTitlePosition)
+      ? normalizedPlotTitlePosition
+      : 'none';
+  }
+  const rawPlotTitleFontSize = state.adv.plot_title_font_size;
+  if (
+    rawPlotTitleFontSize === null ||
+    rawPlotTitleFontSize === undefined ||
+    rawPlotTitleFontSize === ''
+  ) {
+    state.adv.plot_title_font_size = null;
+  } else {
+    const numericPlotTitleFontSize = Number(rawPlotTitleFontSize);
+    state.adv.plot_title_font_size =
+      Number.isFinite(numericPlotTitleFontSize) && numericPlotTitleFontSize > 0
+        ? numericPlotTitleFontSize
         : null;
   }
   if (data.losat) safeDeepMerge(state.losat, data.losat);

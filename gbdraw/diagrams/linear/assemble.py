@@ -23,7 +23,7 @@ from ...configurators import (  # type: ignore[reportMissingImports]
 )
 from ...core.text import calculate_bbox_dimensions
 from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
-from ...render.groups.linear import LengthBarGroup, LegendGroup  # type: ignore[reportMissingImports]
+from ...render.groups.linear import LengthBarGroup, LegendGroup, PlotTitleGroup  # type: ignore[reportMissingImports]
 from ...render.groups.linear.length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
@@ -263,6 +263,9 @@ def assemble_linear_diagram(
     config_dict: dict,
     legend_config: LegendDrawingConfigurator,
     skew_config,
+    plot_title: str | None = None,
+    plot_title_position: str = "bottom",
+    plot_title_font_size: float = 32.0,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -273,6 +276,29 @@ def assemble_linear_diagram(
     track_layout = str(canvas_config.track_layout).strip().lower()
     non_middle_layout = track_layout in {"above", "below"}
     axis_ruler_enabled = _is_axis_ruler_enabled(canvas_config, cfg)
+    normalized_plot_title = str(plot_title or "").strip()
+    normalized_plot_title_position = str(plot_title_position or "bottom").strip().lower()
+    if normalized_plot_title_position not in {"center", "top", "bottom"}:
+        raise ValueError("plot_title_position must be one of: center, top, bottom")
+
+    plot_title_obj: PlotTitleGroup | None = None
+    plot_title_edge_margin = 24.0
+    plot_title_vertical_gap = float(canvas_config.vertical_padding)
+    plot_title_top_reserve = 0.0
+    plot_title_bottom_reserve = 0.0
+    if normalized_plot_title:
+        plot_title_obj = PlotTitleGroup(
+            normalized_plot_title,
+            config_dict,
+            font_size=float(plot_title_font_size),
+            cfg=cfg,
+        )
+        plot_title_text_height = max(float(plot_title_obj.text_bbox_height), float(plot_title_font_size))
+        reserve = plot_title_edge_margin + plot_title_text_height + plot_title_vertical_gap
+        if normalized_plot_title_position == "top":
+            plot_title_top_reserve = reserve
+        elif normalized_plot_title_position == "bottom":
+            plot_title_bottom_reserve = reserve
 
     required_label_height, all_labels, record_label_heights_above = _precalculate_label_dimensions(
         records, feature_config, canvas_config, config_dict, cfg=cfg
@@ -372,6 +398,7 @@ def assemble_linear_diagram(
             current_y = canvas_config.vertical_offset
         else:
             current_y = canvas_config.original_vertical_offset + vertical_shift
+    current_y += plot_title_top_reserve
 
     for i, _ in enumerate(record_ids):
         record_offsets.append(current_y)
@@ -437,6 +464,7 @@ def assemble_linear_diagram(
         + length_bar_height
         + 4 * canvas_config.vertical_padding
         + canvas_config.original_vertical_offset
+        + plot_title_bottom_reserve
     )
     canvas_config.height_below_final_record = (
         current_y
@@ -476,6 +504,9 @@ def assemble_linear_diagram(
 
     canvas.attribs["data-vertical-viewbox"] = f"0 0 {vertical_vb_width} {vertical_vb_height}"
     canvas.attribs["data-horizontal-viewbox"] = f"0 0 {horizontal_vb_width} {horizontal_vb_height}"
+
+    if canvas_config.legend_position == "top" and plot_title_top_reserve > 0:
+        canvas_config.legend_offset_y += plot_title_top_reserve
 
     if canvas_config.legend_position != "none":
         canvas = add_legends_on_linear_canvas(canvas, config_dict, canvas_config, legend_group, legend_table)
@@ -584,6 +615,17 @@ def assemble_linear_diagram(
                 config_dict,
                 cfg=record_cfg,
             )
+
+    if plot_title_obj is not None:
+        title_group = plot_title_obj.get_group()
+        title_height = float(plot_title_obj.text_bbox_height)
+        title_y = 0.5 * float(canvas_config.total_height)
+        if normalized_plot_title_position == "top":
+            title_y = plot_title_edge_margin + (0.5 * title_height)
+        elif normalized_plot_title_position == "bottom":
+            title_y = float(canvas_config.total_height) - plot_title_edge_margin - (0.5 * title_height)
+        title_group.translate(0.5 * float(canvas_config.total_width), title_y)
+        canvas.add(title_group)
 
     return canvas
 

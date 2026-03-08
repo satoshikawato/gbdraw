@@ -144,15 +144,11 @@ const buildMultiRecordPositionToken = (entry) => {
   if (!selector || !Number.isInteger(row) || row <= 0) return '';
   return `${selector}@${row}`;
 };
-const normalizeDefinitionPosition = (value) => {
+const normalizeCircularPlotTitlePosition = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
-  return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'center';
+  return ['none', 'top', 'bottom'].includes(normalized) ? normalized : 'none';
 };
-const normalizeMultiRecordDefinitionMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['shared', 'legacy'].includes(normalized) ? normalized : 'shared';
-};
-const normalizeSharedDefinitionPosition = (value) => {
+const normalizeLinearPlotTitlePosition = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'bottom';
 };
@@ -307,7 +303,10 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
         ruler_on_axis: false,
         scale_font_size: true,
         ruler_label_font_size: false,
-        ruler_label_color: false
+        ruler_label_color: false,
+        plot_title: false,
+        plot_title_position: false,
+        plot_title_font_size: false
       };
       return linearLabelSupportCache;
     }
@@ -325,6 +324,9 @@ json.dumps({
   "scale_font_size": "--scale_font_size" in _source,
   "ruler_label_font_size": "--ruler_label_font_size" in _source,
   "ruler_label_color": "--ruler_label_color" in _source,
+  "plot_title": "--plot_title" in _source,
+  "plot_title_position": "--plot_title_position" in _source,
+  "plot_title_font_size": "--plot_title_font_size" in _source,
 })
       `);
       linearLabelSupportCache = JSON.parse(String(raw));
@@ -337,7 +339,10 @@ json.dumps({
         ruler_on_axis: false,
         scale_font_size: true,
         ruler_label_font_size: false,
-        ruler_label_color: false
+        ruler_label_color: false,
+        plot_title: false,
+        plot_title_position: false,
+        plot_title_font_size: false
       };
     }
     return linearLabelSupportCache;
@@ -382,10 +387,9 @@ json.dumps({
         multi_record_column_gap_ratio: false,
         multi_record_row_gap_ratio: false,
         multi_record_position: false,
-        definition_position: false,
-        multi_record_definition_mode: false,
-        shared_definition_position: false,
-        shared_definition_font_size: false
+        plot_title: false,
+        plot_title_position: false,
+        plot_title_font_size: false
       };
       return circularMultiRecordCanvasSupportCache;
     }
@@ -401,10 +405,9 @@ json.dumps({
   "multi_record_column_gap_ratio": "--multi_record_column_gap_ratio" in _source,
   "multi_record_row_gap_ratio": "--multi_record_row_gap_ratio" in _source,
   "multi_record_position": "--multi_record_position" in _source,
-  "definition_position": "--definition_position" in _source,
-  "multi_record_definition_mode": "--multi_record_definition_mode" in _source,
-  "shared_definition_position": "--shared_definition_position" in _source,
-  "shared_definition_font_size": "--shared_definition_font_size" in _source,
+  "plot_title": "--plot_title" in _source,
+  "plot_title_position": "--plot_title_position" in _source,
+  "plot_title_font_size": "--plot_title_font_size" in _source,
 })
       `);
       circularMultiRecordCanvasSupportCache = JSON.parse(String(raw));
@@ -416,10 +419,9 @@ json.dumps({
         multi_record_column_gap_ratio: false,
         multi_record_row_gap_ratio: false,
         multi_record_position: false,
-        definition_position: false,
-        multi_record_definition_mode: false,
-        shared_definition_position: false,
-        shared_definition_font_size: false
+        plot_title: false,
+        plot_title_position: false,
+        plot_title_font_size: false
       };
     }
     return circularMultiRecordCanvasSupportCache;
@@ -671,15 +673,24 @@ json.dumps({
 
       if (mode.value === 'circular') {
         const multiCanvasSupport = getCircularMultiRecordCanvasOptionSupport();
-        const normalizedDefinitionPosition = normalizeDefinitionPosition(form.definition_position);
-        form.definition_position = normalizedDefinitionPosition;
-        if (multiCanvasSupport.definition_position) {
-          args.push('--definition_position', normalizedDefinitionPosition);
-        } else if (normalizedDefinitionPosition !== 'center') {
-          throw new Error(
-            'Current gbdraw wheel does not support --definition_position. Rebuild and redeploy the web wheel.'
-          );
-        }
+        const normalizedCircularPlotTitle = String(form.plot_title || '').trim();
+        const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(adv.plot_title_position);
+        const hasPlotTitleFontSize =
+          adv.plot_title_font_size !== null &&
+          adv.plot_title_font_size !== undefined &&
+          adv.plot_title_font_size !== '';
+        const parsedPlotTitleFontSize = hasPlotTitleFontSize
+          ? Number(adv.plot_title_font_size)
+          : null;
+        const normalizedPlotTitleFontSize =
+          parsedPlotTitleFontSize !== null &&
+          Number.isFinite(parsedPlotTitleFontSize) &&
+          parsedPlotTitleFontSize > 0
+            ? parsedPlotTitleFontSize
+            : null;
+        form.plot_title = normalizedCircularPlotTitle;
+        adv.plot_title_position = normalizedPlotTitlePosition;
+        adv.plot_title_font_size = normalizedPlotTitleFontSize;
 
         if (selectedFeatureShapes.length > 0) {
           const shapeOptionSupport = getFeatureShapeOptionSupport();
@@ -693,6 +704,33 @@ json.dumps({
           });
         }
         args.push('--track_type', form.track_type, '-l', form.legend);
+        const wantsCircularPlotTitleOption = normalizedCircularPlotTitle.length > 0;
+        if (wantsCircularPlotTitleOption) {
+          if (!multiCanvasSupport.plot_title) {
+            throw new Error(
+              'Current gbdraw wheel does not support --plot_title for circular diagrams. Rebuild and redeploy the web wheel.'
+            );
+          }
+          args.push('--plot_title', normalizedCircularPlotTitle);
+        }
+        if (!multiCanvasSupport.plot_title_position) {
+          throw new Error(
+            'Current gbdraw wheel does not support circular plot title layout options. Rebuild and redeploy the web wheel.'
+          );
+        }
+        args.push('--plot_title_position', normalizedPlotTitlePosition);
+        if (
+          normalizedPlotTitlePosition !== 'none' &&
+          normalizedPlotTitleFontSize !== null &&
+          Number.isFinite(normalizedPlotTitleFontSize)
+        ) {
+          if (!multiCanvasSupport.plot_title_font_size) {
+            throw new Error(
+              'Current gbdraw wheel does not support --plot_title_font_size. Rebuild and redeploy the web wheel.'
+            );
+          }
+          args.push('--plot_title_font_size', String(normalizedPlotTitleFontSize));
+        }
         const labelsModeRaw =
           typeof form.labels_mode === 'string'
             ? form.labels_mode
@@ -718,9 +756,9 @@ json.dumps({
               'Current gbdraw wheel does not support multi-record size/grid spacing options. Rebuild and redeploy the web wheel.'
             );
           }
-          if (!multiCanvasSupport.multi_record_definition_mode || !multiCanvasSupport.shared_definition_position) {
+          if (!multiCanvasSupport.plot_title_position) {
             throw new Error(
-              'Current gbdraw wheel does not support multi-record definition layout options. Rebuild and redeploy the web wheel.'
+              'Current gbdraw wheel does not support multi-record plot-title layout options. Rebuild and redeploy the web wheel.'
             );
           }
           const effectiveRecordPositions = mergeCircularRecordPositions(
@@ -737,21 +775,6 @@ json.dumps({
           const normalizedMinRatio = normalizeMultiRecordMinRadiusRatio(adv.multi_record_min_radius_ratio);
           const normalizedColumnGapRatio = normalizeMultiRecordColumnGapRatio(adv.multi_record_column_gap_ratio);
           const normalizedRowGapRatio = normalizeMultiRecordRowGapRatio(adv.multi_record_row_gap_ratio);
-          const normalizedDefinitionMode = normalizeMultiRecordDefinitionMode(adv.multi_record_definition_mode);
-          const normalizedSharedDefinitionPosition = normalizeSharedDefinitionPosition(adv.shared_definition_position);
-          const hasSharedDefinitionFontSize =
-            adv.shared_definition_font_size !== null &&
-            adv.shared_definition_font_size !== undefined &&
-            adv.shared_definition_font_size !== '';
-          const parsedSharedDefinitionFontSize = hasSharedDefinitionFontSize
-            ? Number(adv.shared_definition_font_size)
-            : null;
-          const normalizedSharedDefinitionFontSize =
-            parsedSharedDefinitionFontSize !== null &&
-            Number.isFinite(parsedSharedDefinitionFontSize) &&
-            parsedSharedDefinitionFontSize > 0
-              ? parsedSharedDefinitionFontSize
-              : null;
           adv.multi_record_size_mode = normalizedSizeMode;
           adv.multi_record_min_radius_ratio = normalizedMinRatio;
           adv.multi_record_column_gap_ratio = normalizedColumnGapRatio;
@@ -761,9 +784,8 @@ json.dumps({
             adv.multi_record_positions.length,
             ...effectiveRecordPositions
           );
-          adv.multi_record_definition_mode = normalizedDefinitionMode;
-          adv.shared_definition_position = normalizedSharedDefinitionPosition;
-          adv.shared_definition_font_size = normalizedSharedDefinitionFontSize;
+          adv.plot_title_position = normalizedPlotTitlePosition;
+          adv.plot_title_font_size = normalizedPlotTitleFontSize;
           args.push('--multi_record_canvas');
           args.push('--multi_record_size_mode', normalizedSizeMode);
           args.push('--multi_record_min_radius_ratio', String(normalizedMinRatio));
@@ -775,20 +797,6 @@ json.dumps({
               if (!token) return;
               args.push('--multi_record_position', token);
             });
-          }
-          args.push('--multi_record_definition_mode', normalizedDefinitionMode);
-          args.push('--shared_definition_position', normalizedSharedDefinitionPosition);
-          if (
-            normalizedDefinitionMode === 'shared' &&
-            normalizedSharedDefinitionFontSize !== null &&
-            Number.isFinite(normalizedSharedDefinitionFontSize)
-          ) {
-            if (!multiCanvasSupport.shared_definition_font_size) {
-              throw new Error(
-                'Current gbdraw wheel does not support --shared_definition_font_size. Rebuild and redeploy the web wheel.'
-              );
-            }
-            args.push('--shared_definition_font_size', String(normalizedSharedDefinitionFontSize));
           }
         }
 
@@ -878,6 +886,23 @@ json.dumps({
         if (form.legend !== 'right') args.push('-l', form.legend);
         args.push('--bitscore', adv.min_bitscore, '--evalue', adv.evalue, '--identity', adv.identity);
 
+        const normalizedPlotTitle = String(form.plot_title || '').trim();
+        const normalizedPlotTitlePosition = normalizeLinearPlotTitlePosition(adv.plot_title_position);
+        const hasPlotTitleFontSize =
+          adv.plot_title_font_size !== null &&
+          adv.plot_title_font_size !== undefined &&
+          adv.plot_title_font_size !== '';
+        const parsedPlotTitleFontSize = hasPlotTitleFontSize ? Number(adv.plot_title_font_size) : null;
+        const normalizedPlotTitleFontSize =
+          parsedPlotTitleFontSize !== null &&
+          Number.isFinite(parsedPlotTitleFontSize) &&
+          parsedPlotTitleFontSize > 0
+            ? parsedPlotTitleFontSize
+            : null;
+        form.plot_title = normalizedPlotTitle;
+        adv.plot_title_position = normalizedPlotTitlePosition;
+        adv.plot_title_font_size = normalizedPlotTitleFontSize;
+
         if (form.show_labels_linear !== 'none') {
           args.push('--show_labels');
           if (form.show_labels_linear === 'first') args.push('first');
@@ -894,6 +919,9 @@ json.dumps({
           adv.ruler_label_color !== null &&
           adv.ruler_label_color !== undefined &&
           String(adv.ruler_label_color).trim() !== '';
+        const wantsPlotTitleOption = normalizedPlotTitle !== '';
+        const wantsPlotTitlePositionOption = normalizedPlotTitlePosition !== 'bottom';
+        const wantsPlotTitleFontSizeOption = normalizedPlotTitleFontSize !== null;
         const wantsRulerOnAxisOption =
           Boolean(form.linear_ruler_on_axis) &&
           form.scale_style === 'ruler' &&
@@ -905,7 +933,10 @@ json.dumps({
           wantsTrackLayoutOption ||
           wantsTrackAxisGapOption ||
           wantsRulerOnAxisOption ||
-          wantsRulerLabelColorOption
+          wantsRulerLabelColorOption ||
+          wantsPlotTitleOption ||
+          wantsPlotTitlePositionOption ||
+          wantsPlotTitleFontSizeOption
         ) {
           if (wantsPlacementOption && !linearLabelSupport.placement) {
             throw new Error("Current gbdraw wheel does not support --label_placement. Rebuild and redeploy the web wheel.");
@@ -925,7 +956,19 @@ json.dumps({
           if (wantsRulerLabelColorOption && !linearLabelSupport.ruler_label_color) {
             throw new Error("Current gbdraw wheel does not support --ruler_label_color. Rebuild and redeploy the web wheel.");
           }
+          if (wantsPlotTitleOption && !linearLabelSupport.plot_title) {
+            throw new Error("Current gbdraw wheel does not support --plot_title. Rebuild and redeploy the web wheel.");
+          }
+          if (wantsPlotTitlePositionOption && !linearLabelSupport.plot_title_position) {
+            throw new Error("Current gbdraw wheel does not support --plot_title_position. Rebuild and redeploy the web wheel.");
+          }
+          if (wantsPlotTitleFontSizeOption && !linearLabelSupport.plot_title_font_size) {
+            throw new Error("Current gbdraw wheel does not support --plot_title_font_size. Rebuild and redeploy the web wheel.");
+          }
         }
+        if (wantsPlotTitleOption) args.push('--plot_title', normalizedPlotTitle);
+        if (wantsPlotTitlePositionOption) args.push('--plot_title_position', normalizedPlotTitlePosition);
+        if (wantsPlotTitleFontSizeOption) args.push('--plot_title_font_size', String(normalizedPlotTitleFontSize));
         if (normalizedLabelPlacement && normalizedLabelPlacement !== 'auto') {
           args.push('--label_placement', normalizedLabelPlacement);
         }

@@ -82,7 +82,8 @@ _MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS = {
 }
 _MULTI_RECORD_SIZE_MODES = {"linear", "auto", "equal", "sqrt"}
 _DEFINITION_POSITIONS = {"center", "top", "bottom"}
-_MULTI_RECORD_DEFINITION_MODES = {"shared", "legacy"}
+_LINEAR_PLOT_TITLE_POSITIONS = {"center", "top", "bottom"}
+_CIRCULAR_PLOT_TITLE_POSITIONS = {"none", "top", "bottom"}
 # Legacy fallback used only when a valid radius cannot be derived.
 _MULTI_RECORD_GRID_GAP_PX = 16.0
 _MULTI_RECORD_COLUMN_GAP_RATIO = 0.10
@@ -90,8 +91,9 @@ _MULTI_RECORD_ROW_GAP_RATIO = 0.05
 _MULTI_RECORD_LEGEND_EDGE_PADDING_PX = 20.0
 _MULTI_RECORD_LEGEND_GRID_GAP_PX = 20.0
 _MULTI_RECORD_LEGEND_TOP_EDGE_PADDING_PX = 32.0
-_MULTI_RECORD_LEGEND_SHARED_GAP_PX = 20.0
-_MULTI_RECORD_SHARED_BOTTOM_MARGIN_PX = 24.0
+_MULTI_RECORD_LEGEND_PLOT_TITLE_GAP_PX = 20.0
+_MULTI_RECORD_PLOT_TITLE_BOTTOM_MARGIN_PX = 24.0
+_PLOT_TITLE_DEFAULT_FONT_SIZE = 32.0
 _SVG_NUMBER_PATTERN = re.compile(r"[-+]?(?:\d*\.?\d+)(?:[eE][-+]?\d+)?")
 _SVG_TRANSLATE_PATTERN = re.compile(
     r"translate\(\s*([-+0-9.eE]+)(?:[\s,]+([-+0-9.eE]+))?\s*\)"
@@ -578,6 +580,45 @@ def _center_record_definition_group_on_record_axis(
     )
 
 
+def _center_single_record_definition_group_on_axis(
+    canvas: Drawing,
+    *,
+    record_id: str,
+) -> None:
+    """Center a top-level single-record definition group vertically on its axis."""
+    axis_group: Group | None = None
+    definition_group: Group | None = None
+    definition_group_id = f"{str(record_id).replace(' ', '_')}_definition"
+
+    for child in getattr(canvas, "elements", []):
+        attribs = getattr(child, "attribs", None)
+        if not isinstance(attribs, dict):
+            continue
+        child_id = str(attribs.get("id", ""))
+        if child_id == "Axis":
+            axis_group = child
+        elif child_id == definition_group_id:
+            definition_group = child
+
+    if axis_group is None or definition_group is None:
+        return
+
+    _axis_x, axis_center_y = _parse_translate_xy(axis_group.attribs.get("transform"))
+    definition_x, definition_y = _parse_translate_xy(definition_group.attribs.get("transform"))
+    definition_min_y, definition_max_y = _group_local_vertical_bounds(definition_group)
+    definition_local_center_y = (float(definition_min_y) + float(definition_max_y)) * 0.5
+    definition_text_center_y = float(definition_y) + float(definition_local_center_y)
+    delta_y = float(axis_center_y) - float(definition_text_center_y)
+
+    if math.isclose(delta_y, 0.0, rel_tol=1e-9, abs_tol=1e-9):
+        return
+    _set_group_translate(
+        definition_group,
+        x=float(definition_x),
+        y=float(definition_y) + float(delta_y),
+    )
+
+
 def _suffix_fixed_top_level_group_id(element: object, record_index: int) -> None:
     """Suffix selected top-level group IDs to avoid collisions on merged canvas."""
     attribs = getattr(element, "attribs", None)
@@ -620,19 +661,200 @@ def _resolve_definition_position(
     if normalized not in _DEFINITION_POSITIONS:
         raise ValidationError(
             f"{argument_name} must be one of: center, top, bottom"
+    )
+    return cast(Literal["center", "top", "bottom"], normalized)
+
+
+def _resolve_linear_plot_title_position(
+    position: str,
+) -> Literal["center", "top", "bottom"]:
+    normalized = str(position).strip().lower()
+    if normalized not in _LINEAR_PLOT_TITLE_POSITIONS:
+        raise ValidationError(
+            "plot_title_position must be one of: center, top, bottom"
         )
     return cast(Literal["center", "top", "bottom"], normalized)
 
 
-def _resolve_multi_record_definition_mode(
-    mode: str,
-) -> Literal["shared", "legacy"]:
-    normalized = str(mode).strip().lower()
-    if normalized not in _MULTI_RECORD_DEFINITION_MODES:
+def _resolve_circular_plot_title_position(
+    position: str,
+) -> Literal["none", "top", "bottom"]:
+    normalized = str(position).strip().lower()
+    if normalized not in _CIRCULAR_PLOT_TITLE_POSITIONS:
         raise ValidationError(
-            "multi_record_definition_mode must be one of: shared, legacy"
+            "plot_title_position must be one of: none, top, bottom"
         )
-    return cast(Literal["shared", "legacy"], normalized)
+    return cast(Literal["none", "top", "bottom"], normalized)
+
+
+def _resolve_plot_title_font_size(value: float | None) -> float:
+    if value is None:
+        return float(_PLOT_TITLE_DEFAULT_FONT_SIZE)
+    if not math.isfinite(float(value)) or float(value) <= 0.0:
+        raise ValidationError("plot_title_font_size must be a finite number > 0")
+    return float(value)
+
+
+def _normalize_plot_title(plot_title: str | None) -> str:
+    return str(plot_title or "").strip()
+
+
+def _apply_circular_plot_title_font_size_override(
+    *,
+    config_dict: dict,
+    cfg: GbdrawConfig,
+    plot_title_font_size: float | None,
+) -> tuple[dict, GbdrawConfig]:
+    if plot_title_font_size is None:
+        return config_dict, cfg
+    resolved_font_size = _resolve_plot_title_font_size(plot_title_font_size)
+    updated_config_dict = modify_config_dict(
+        config_dict,
+        plot_title_font_size=resolved_font_size,
+    )
+    updated_cfg = apply_config_overrides(
+        cfg,
+        {"plot_title_font_size": resolved_font_size},
+    )
+    return updated_config_dict, updated_cfg
+
+
+def _sync_drawing_canvas_size(
+    canvas: Drawing,
+    *,
+    width: float,
+    height: float,
+) -> None:
+    canvas.attribs["width"] = f"{float(width)}px"
+    canvas.attribs["height"] = f"{float(height)}px"
+    canvas.attribs["viewBox"] = f"0 0 {float(width)} {float(height)}"
+
+
+def _translate_canvas_top_level_groups(canvas: Drawing, *, dy: float) -> None:
+    if abs(float(dy)) <= 1e-6:
+        return
+    for element in getattr(canvas, "elements", []):
+        if _is_defs_element(element):
+            continue
+        translate = getattr(element, "translate", None)
+        if callable(translate):
+            translate(0, float(dy))
+
+
+def _build_circular_plot_title_group(
+    *,
+    gb_record: SeqRecord,
+    output_prefix: str,
+    config_dict: dict,
+    cfg: GbdrawConfig,
+    species: str | None,
+    strain: str | None,
+    plot_title: str | None,
+) -> tuple[Group, tuple[float, float]]:
+    plot_title_canvas_config = CircularCanvasConfigurator(
+        output_prefix=output_prefix,
+        config_dict=config_dict,
+        legend="none",
+        gb_record=gb_record,
+        cfg=cfg,
+    )
+    plot_title_group = DefinitionGroup(
+        gb_record=gb_record,
+        canvas_config=plot_title_canvas_config,
+        config_dict=config_dict,
+        species=species,
+        strain=strain,
+        plot_title=plot_title,
+        definition_profile="shared_common",
+        definition_group_id="plot_title",
+        cfg=cfg,
+    ).get_group()
+    return plot_title_group, _group_local_vertical_bounds(plot_title_group)
+
+
+def _add_single_record_plot_title_group(
+    *,
+    canvas: Drawing,
+    canvas_config: CircularCanvasConfigurator,
+    legend_config: LegendDrawingConfigurator,
+    gb_record: SeqRecord,
+    output_prefix: str,
+    config_dict: dict,
+    cfg: GbdrawConfig,
+    species: str | None,
+    strain: str | None,
+    plot_title: str | None,
+    plot_title_position: Literal["none", "top", "bottom"],
+) -> None:
+    plot_title_group, plot_title_local_bounds = _build_circular_plot_title_group(
+        gb_record=gb_record,
+        output_prefix=output_prefix,
+        config_dict=config_dict,
+        cfg=cfg,
+        species=species,
+        strain=strain,
+        plot_title=plot_title,
+    )
+    plot_title_min_y, plot_title_max_y = plot_title_local_bounds
+    plot_title_height = max(
+        0.0,
+        float(plot_title_max_y) - float(plot_title_min_y),
+    )
+
+    if (
+        plot_title_position == "top"
+        and str(canvas_config.legend_position).strip().lower() == "top"
+        and float(legend_config.legend_height) > 0.0
+    ):
+        legend_top = (
+            float(canvas_config.legend_offset_y)
+            - (0.5 * float(legend_config.color_rect_size))
+        )
+        required_legend_top = (
+            _MULTI_RECORD_PLOT_TITLE_BOTTOM_MARGIN_PX
+            + plot_title_height
+            + _MULTI_RECORD_LEGEND_PLOT_TITLE_GAP_PX
+        )
+        if legend_top < required_legend_top:
+            shift_y = required_legend_top - legend_top
+            _translate_canvas_top_level_groups(canvas, dy=shift_y)
+            canvas_config.offset_y = float(canvas_config.offset_y) + float(shift_y)
+            canvas_config.total_height = float(canvas_config.total_height) + float(shift_y)
+            _sync_drawing_canvas_size(
+                canvas,
+                width=float(canvas_config.total_width),
+                height=float(canvas_config.total_height),
+            )
+
+    if plot_title_position == "bottom":
+        anchor_bottom = 0.0
+        if str(canvas_config.legend_position).strip().lower() == "bottom":
+            anchor_bottom = (
+                float(canvas_config.legend_offset_y)
+                - (0.5 * float(legend_config.color_rect_size))
+                + float(legend_config.legend_height)
+            )
+        required_height = (
+            anchor_bottom
+            + _MULTI_RECORD_LEGEND_PLOT_TITLE_GAP_PX
+            + plot_title_height
+            + _MULTI_RECORD_PLOT_TITLE_BOTTOM_MARGIN_PX
+        )
+        if required_height > float(canvas_config.total_height):
+            canvas_config.total_height = float(required_height)
+            _sync_drawing_canvas_size(
+                canvas,
+                width=float(canvas_config.total_width),
+                height=float(canvas_config.total_height),
+            )
+
+    plot_title_group = place_definition_group_on_size(
+        plot_title_group,
+        canvas_width=float(canvas_config.total_width),
+        canvas_height=float(canvas_config.total_height),
+        position=plot_title_position,
+    )
+    canvas.add(plot_title_group)
 
 
 def _validate_multi_record_min_radius_ratio(value: float) -> float:
@@ -867,6 +1089,9 @@ def assemble_linear_diagram_from_records(
     dinucleotide: str = "GC",
     window: Optional[int] = None,
     step: Optional[int] = None,
+    plot_title: str | None = None,
+    plot_title_position: Literal["center", "top", "bottom"] = "bottom",
+    plot_title_font_size: float | None = None,
     evalue: float = 1e-5,
     bitscore: float = 50.0,
     identity: float = 70.0,
@@ -908,6 +1133,11 @@ def assemble_linear_diagram_from_records(
 
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
+    normalized_plot_title = str(plot_title or "").strip()
+    normalized_plot_title_position = _resolve_linear_plot_title_position(
+        str(plot_title_position)
+    )
+    resolved_plot_title_font_size = _resolve_plot_title_font_size(plot_title_font_size)
 
     seq_len_dict = create_dict_for_sequence_lengths(records)
     # Use raw records to avoid collapsing lengths when IDs are duplicated.
@@ -998,6 +1228,9 @@ def assemble_linear_diagram_from_records(
         config_dict=config_dict,
         legend_config=legend_config,
         skew_config=skew_config,
+        plot_title=normalized_plot_title or None,
+        plot_title_position=normalized_plot_title_position,
+        plot_title_font_size=resolved_plot_title_font_size,
         cfg=cfg,
     )
 
@@ -1023,7 +1256,9 @@ def assemble_circular_diagram_from_record(
     step: Optional[int] = None,
     species: Optional[str] = None,
     strain: Optional[str] = None,
-    definition_position: Literal["center", "top", "bottom"] = "center",
+    plot_title: str | None = None,
+    plot_title_position: Literal["none", "top", "bottom"] = "none",
+    plot_title_font_size: float | None = None,
     track_specs: Sequence[str | TrackSpec] | None = None,
     _definition_profile: Literal["full", "record_summary", "shared_common"] = "full",
     _tick_track_channel_override: Literal["short", "long"] | None = None,
@@ -1058,13 +1293,25 @@ def assemble_circular_diagram_from_record(
             )
         config_dict = modify_config_dict(config_dict, **config_overrides)
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
+    config_dict, cfg = _apply_circular_plot_title_font_size_override(
+        config_dict=config_dict,
+        cfg=cfg,
+        plot_title_font_size=plot_title_font_size,
+    )
 
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
-    normalized_definition_position = _resolve_definition_position(
-        str(definition_position),
-        argument_name="definition_position",
+    normalized_plot_title_position = _resolve_circular_plot_title_position(
+        str(plot_title_position)
     )
+    normalized_plot_title = _normalize_plot_title(plot_title)
+    show_plot_title = False
+    effective_definition_profile: Literal["full", "record_summary", "shared_common"] = (
+        _definition_profile
+    )
+    if _definition_profile == "full":
+        show_plot_title = normalized_plot_title_position != "none"
+        effective_definition_profile = "record_summary" if show_plot_title else "full"
 
     parsed_track_specs: list[TrackSpec] | None = None
     if track_specs is not None:
@@ -1166,7 +1413,7 @@ def assemble_circular_diagram_from_record(
         cfg=cfg,
     )
 
-    return assemble_circular_diagram(
+    canvas = assemble_circular_diagram(
         gb_record=gb_record,
         canvas_config=canvas_config,
         gc_df=gc_df,
@@ -1175,14 +1422,38 @@ def assemble_circular_diagram_from_record(
         feature_config=feature_config,
         species=species,
         strain=strain,
+        plot_title=(
+            normalized_plot_title or None
+            if effective_definition_profile == "shared_common"
+            else None
+        ),
         config_dict=config_dict,
         legend_config=legend_config,
         cfg=cfg,
         track_specs=parsed_track_specs,
-        definition_position=normalized_definition_position,
-        definition_profile=_definition_profile,
+        definition_position="center",
+        definition_profile=effective_definition_profile,
         _tick_track_channel_override=_tick_track_channel_override,
     )
+    if show_plot_title:
+        _center_single_record_definition_group_on_axis(
+            canvas,
+            record_id=str(gb_record.id),
+        )
+        _add_single_record_plot_title_group(
+            canvas=canvas,
+            canvas_config=canvas_config,
+            legend_config=legend_config,
+            gb_record=gb_record,
+            output_prefix=output_prefix,
+            config_dict=config_dict,
+            cfg=cfg,
+            species=species,
+            strain=strain,
+            plot_title=normalized_plot_title or None,
+            plot_title_position=normalized_plot_title_position,
+        )
+    return canvas
 
 
 def assemble_circular_diagram_from_records(
@@ -1206,9 +1477,9 @@ def assemble_circular_diagram_from_records(
     step: Optional[int] = None,
     species: Optional[str] = None,
     strain: Optional[str] = None,
-    definition_position: Literal["center", "top", "bottom"] = "center",
-    multi_record_definition_mode: Literal["shared", "legacy"] = "shared",
-    shared_definition_position: Literal["center", "top", "bottom"] = "bottom",
+    plot_title: str | None = None,
+    plot_title_position: Literal["none", "top", "bottom"] = "none",
+    plot_title_font_size: float | None = None,
     multi_record_size_mode: Literal["linear", "auto", "equal", "sqrt"] = "auto",
     multi_record_min_radius_ratio: float = 0.55,
     multi_record_column_gap_ratio: float = _MULTI_RECORD_COLUMN_GAP_RATIO,
@@ -1233,17 +1504,10 @@ def assemble_circular_diagram_from_records(
     normalized_multi_record_row_gap_ratio = _validate_multi_record_row_gap_ratio(
         float(multi_record_row_gap_ratio)
     )
-    normalized_definition_position = _resolve_definition_position(
-        str(definition_position),
-        argument_name="definition_position",
+    normalized_plot_title_position = _resolve_circular_plot_title_position(
+        str(plot_title_position)
     )
-    normalized_multi_record_definition_mode = _resolve_multi_record_definition_mode(
-        str(multi_record_definition_mode)
-    )
-    normalized_shared_definition_position = _resolve_definition_position(
-        str(shared_definition_position),
-        argument_name="shared_definition_position",
-    )
+    normalized_plot_title = _normalize_plot_title(plot_title)
 
     if len(records) == 1:
         return assemble_circular_diagram_from_record(
@@ -1266,7 +1530,9 @@ def assemble_circular_diagram_from_records(
             step=step,
             species=species,
             strain=strain,
-            definition_position=normalized_definition_position,
+            plot_title=normalized_plot_title or None,
+            plot_title_position=normalized_plot_title_position,
+            plot_title_font_size=plot_title_font_size,
             track_specs=track_specs,
             cfg=cfg,
         )
@@ -1292,6 +1558,11 @@ def assemble_circular_diagram_from_records(
             )
         config_dict = modify_config_dict(config_dict, **config_overrides)
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
+    config_dict, cfg = _apply_circular_plot_title_font_size_override(
+        config_dict=config_dict,
+        cfg=cfg,
+        plot_title_font_size=plot_title_font_size,
+    )
 
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
@@ -1334,13 +1605,8 @@ def assemble_circular_diagram_from_records(
     show_skew = ts_by_kind.get("gc_skew").show if "gc_skew" in ts_by_kind else cfg.canvas.show_skew
     canvas_cfg = replace(cfg.canvas, show_gc=bool(show_gc), show_skew=bool(show_skew))
     cfg = replace(cfg, canvas=canvas_cfg)
-    use_shared_definition = normalized_multi_record_definition_mode == "shared"
-    record_definition_profile: Literal["full", "record_summary"] = (
-        "record_summary" if use_shared_definition else "full"
-    )
-    record_definition_position: Literal["center", "top", "bottom"] = (
-        "center" if use_shared_definition else normalized_definition_position
-    )
+    show_plot_title = normalized_plot_title_position != "none"
+    record_definition_profile: Literal["record_summary"] = "record_summary"
     record_lengths = [len(record.seq) for record in records]
     cfg = _harmonize_multi_record_circular_style_cfg(
         cfg,
@@ -1378,7 +1644,8 @@ def assemble_circular_diagram_from_records(
             step=step,
             species=species,
             strain=strain,
-            definition_position=record_definition_position,
+            plot_title=None,
+            plot_title_position="none",
             track_specs=parsed_track_specs,
             _definition_profile=record_definition_profile,
             _tick_track_channel_override=tick_track_channel_override,
@@ -1568,10 +1835,10 @@ def assemble_circular_diagram_from_records(
     legend_table: dict = {}
     legend_local_top = 0.0
     legend_local_bottom = 0.0
-    shared_definition_group: Group | None = None
-    shared_definition_local_bounds = (0.0, 0.0)
+    plot_title_group: Group | None = None
+    plot_title_local_bounds = (0.0, 0.0)
 
-    if use_shared_definition:
+    if show_plot_title:
         shared_canvas_config = CircularCanvasConfigurator(
             output_prefix=output_prefix,
             config_dict=config_dict,
@@ -1579,17 +1846,18 @@ def assemble_circular_diagram_from_records(
             gb_record=records[0],
             cfg=cfg,
         )
-        shared_definition_group = DefinitionGroup(
+        plot_title_group = DefinitionGroup(
             gb_record=records[0],
             canvas_config=shared_canvas_config,
             config_dict=config_dict,
             species=species,
             strain=strain,
+            plot_title=normalized_plot_title or None,
             definition_profile="shared_common",
-            definition_group_id="shared_definition",
+            definition_group_id="plot_title",
             cfg=cfg,
         ).get_group()
-        shared_definition_local_bounds = _group_local_vertical_bounds(shared_definition_group)
+        plot_title_local_bounds = _group_local_vertical_bounds(plot_title_group)
 
     if legend_effective != "none":
         legend_canvas_config = CircularCanvasConfigurator(
@@ -1710,12 +1978,12 @@ def assemble_circular_diagram_from_records(
                 legend_offset_y = 0.75 * total_height
 
     if (
-        use_shared_definition
-        and shared_definition_group is not None
-        and normalized_shared_definition_position == "bottom"
+        show_plot_title
+        and plot_title_group is not None
+        and normalized_plot_title_position == "bottom"
     ):
-        shared_min_y, shared_max_y = shared_definition_local_bounds
-        shared_height = max(0.0, float(shared_max_y) - float(shared_min_y))
+        plot_title_min_y, plot_title_max_y = plot_title_local_bounds
+        plot_title_height = max(0.0, float(plot_title_max_y) - float(plot_title_min_y))
 
         records_bottom = float(grid_origin_y) + float(grid_height)
         anchor_bottom = records_bottom
@@ -1725,9 +1993,9 @@ def assemble_circular_diagram_from_records(
 
         required_height = (
             anchor_bottom
-            + _MULTI_RECORD_LEGEND_SHARED_GAP_PX
-            + shared_height
-            + _MULTI_RECORD_SHARED_BOTTOM_MARGIN_PX
+            + _MULTI_RECORD_LEGEND_PLOT_TITLE_GAP_PX
+            + plot_title_height
+            + _MULTI_RECORD_PLOT_TITLE_BOTTOM_MARGIN_PX
         )
         total_height = max(total_height, required_height)
 
@@ -1757,22 +2025,21 @@ def assemble_circular_diagram_from_records(
             copied = copy.deepcopy(element)
             _suffix_fixed_top_level_group_id(copied, record_index)
             record_group.add(copied)
-        if record_definition_position == "center":
-            _center_record_definition_group_on_record_axis(
-                record_group,
-                record_index=record_index,
-                record_id=str(records[record_index].id),
-            )
+        _center_record_definition_group_on_record_axis(
+            record_group,
+            record_index=record_index,
+            record_id=str(records[record_index].id),
+        )
         merged_canvas.add(record_group)
 
-    if shared_definition_group is not None:
-        shared_definition_group = place_definition_group_on_size(
-            shared_definition_group,
+    if plot_title_group is not None:
+        plot_title_group = place_definition_group_on_size(
+            plot_title_group,
             canvas_width=float(total_width),
             canvas_height=float(total_height),
-            position=normalized_shared_definition_position,
+            position=normalized_plot_title_position,
         )
-        merged_canvas.add(shared_definition_group)
+        merged_canvas.add(plot_title_group)
 
     if (
         legend_effective != "none"
@@ -1835,7 +2102,13 @@ def build_circular_diagram(
         step=options.step,
         species=options.species,
         strain=options.strain,
-        definition_position=(output.definition_position if output else "center"),
+        plot_title=options.plot_title,
+        plot_title_position=(
+            output.plot_title_position
+            if output and output.plot_title_position is not None
+            else "none"
+        ),
+        plot_title_font_size=options.plot_title_font_size,
         track_specs=tracks.track_specs if tracks else None,
         cfg=cfg,
     )
@@ -1889,6 +2162,13 @@ def build_linear_diagram(
         dinucleotide=options.dinucleotide,
         window=options.window,
         step=options.step,
+        plot_title=options.plot_title,
+        plot_title_position=(
+            output.plot_title_position
+            if output and output.plot_title_position is not None
+            else "bottom"
+        ),
+        plot_title_font_size=options.plot_title_font_size,
         evalue=options.evalue,
         bitscore=options.bitscore,
         identity=options.identity,
@@ -1904,5 +2184,3 @@ __all__ = [
     "build_circular_diagram",
     "build_linear_diagram",
 ]
-
-

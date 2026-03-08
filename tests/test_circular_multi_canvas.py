@@ -354,6 +354,42 @@ def _extract_record_axis_and_definition_center_y(
     return axis_center_y, definition_center_y
 
 
+def _extract_single_axis_and_definition_center_y(
+    root: ET.Element,
+    *,
+    record_id: str,
+) -> tuple[float, float]:
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    axis_group = root.find(".//svg:g[@id='Axis']", ns)
+    assert axis_group is not None
+    _axis_x, axis_y = _parse_translate(axis_group.attrib.get("transform", ""))
+
+    circle = axis_group.find("./svg:circle", ns)
+    assert circle is not None
+    _radius = float(circle.attrib.get("r", "0"))
+    axis_center_y = axis_y
+
+    track_id = str(record_id).replace(" ", "_")
+    definition_group = root.find(f".//svg:g[@id='{track_id}_definition']", ns)
+    assert definition_group is not None
+    _definition_x, definition_y = _parse_translate(definition_group.attrib.get("transform", ""))
+
+    min_top = float("inf")
+    max_bottom = float("-inf")
+    for text in definition_group.findall("./svg:text", ns):
+        y_raw = text.attrib.get("y", "0")
+        font_size_raw = text.attrib.get("font-size", "0")
+        y_val = float(str(y_raw).replace("px", ""))
+        font_size = float(str(font_size_raw).replace("px", ""))
+        min_top = min(min_top, y_val - (0.5 * font_size))
+        max_bottom = max(max_bottom, y_val + (0.5 * font_size))
+
+    assert min_top != float("inf")
+    assert max_bottom != float("-inf")
+    definition_center_y = definition_y + ((min_top + max_bottom) * 0.5)
+    return axis_center_y, definition_center_y
+
+
 def _extract_legend_text_transforms(root: ET.Element) -> list[tuple[float, float, str]]:
     ns = {"svg": "http://www.w3.org/2000/svg"}
     legend = root.find(".//svg:g[@id='legend']", ns)
@@ -1820,9 +1856,7 @@ def test_circular_cli_multi_record_canvas_opt_in_saves_once(
     assert captured_kwargs["multi_record_min_radius_ratio"] == pytest.approx(0.55)
     assert captured_kwargs["multi_record_column_gap_ratio"] == pytest.approx(0.10)
     assert captured_kwargs["multi_record_row_gap_ratio"] == pytest.approx(0.05)
-    assert captured_kwargs["definition_position"] == "center"
-    assert captured_kwargs["multi_record_definition_mode"] == "shared"
-    assert captured_kwargs["shared_definition_position"] == "bottom"
+    assert captured_kwargs["plot_title_position"] == "none"
 
 
 @pytest.mark.circular
@@ -1869,13 +1903,9 @@ def test_circular_cli_multi_record_canvas_passes_size_scaling_options(
             "0.2",
             "--multi_record_row_gap_ratio",
             "0.12",
-            "--definition_position",
+            "--plot_title_position",
             "top",
-            "--multi_record_definition_mode",
-            "legacy",
-            "--shared_definition_position",
-            "top",
-            "--shared_definition_font_size",
+            "--plot_title_font_size",
             "30",
             "-o",
             str(tmp_path / "out"),
@@ -1889,10 +1919,8 @@ def test_circular_cli_multi_record_canvas_passes_size_scaling_options(
     assert captured_kwargs["multi_record_min_radius_ratio"] == pytest.approx(0.4)
     assert captured_kwargs["multi_record_column_gap_ratio"] == pytest.approx(0.2)
     assert captured_kwargs["multi_record_row_gap_ratio"] == pytest.approx(0.12)
-    assert captured_kwargs["definition_position"] == "top"
-    assert captured_kwargs["multi_record_definition_mode"] == "legacy"
-    assert captured_kwargs["shared_definition_position"] == "top"
-    assert captured_kwargs["cfg"].objects.definition.circular.shared_font_size == pytest.approx(30.0)
+    assert captured_kwargs["plot_title_position"] == "top"
+    assert captured_kwargs["cfg"].objects.definition.circular.plot_title_font_size == pytest.approx(30.0)
 
 
 @pytest.mark.circular
@@ -2214,12 +2242,12 @@ def test_circular_cli_without_multi_record_canvas_keeps_per_record_saves(
             "dummy.gb",
             "--format",
             "svg",
-            "--definition_position",
+            "--plot_title",
+            "CLI Shared Title",
+            "--plot_title_position",
             "top",
-            "--multi_record_definition_mode",
-            "legacy",
-            "--shared_definition_position",
-            "top",
+            "--plot_title_font_size",
+            "30",
             "-o",
             str(tmp_path / "out"),
         ]
@@ -2229,9 +2257,9 @@ def test_circular_cli_without_multi_record_canvas_keeps_per_record_saves(
     assert calls["multi"] == 0
     assert calls["save"] == len(records)
     assert single_kwargs
-    assert all(kwargs.get("definition_position") == "top" for kwargs in single_kwargs)
-    assert all("multi_record_definition_mode" not in kwargs for kwargs in single_kwargs)
-    assert all("shared_definition_position" not in kwargs for kwargs in single_kwargs)
+    assert all(kwargs.get("plot_title") == "CLI Shared Title" for kwargs in single_kwargs)
+    assert all(kwargs.get("plot_title_position") == "top" for kwargs in single_kwargs)
+    assert all(kwargs.get("plot_title_font_size") == pytest.approx(30.0) for kwargs in single_kwargs)
 
 
 @pytest.mark.circular
@@ -2279,21 +2307,19 @@ def test_circular_cli_rejects_invalid_multi_record_row_gap_ratio(ratio: str) -> 
 @pytest.mark.circular
 def test_circular_cli_definition_layout_defaults() -> None:
     args = circular_cli_module._get_args(["--gbk", "dummy.gb"])
-    assert args.definition_position == "center"
-    assert args.multi_record_definition_mode == "shared"
+    assert args.plot_title is None
     assert args.multi_record_column_gap_ratio == pytest.approx(0.10)
     assert args.multi_record_row_gap_ratio == pytest.approx(0.05)
-    assert args.shared_definition_position == "bottom"
-    assert args.shared_definition_font_size is None
+    assert args.plot_title_position == "none"
+    assert args.plot_title_font_size is None
 
 
 @pytest.mark.circular
 @pytest.mark.parametrize(
     ("option", "value"),
     [
-        ("--definition_position", "left"),
-        ("--multi_record_definition_mode", "invalid"),
-        ("--shared_definition_position", "left"),
+        ("--plot_title_position", "center"),
+        ("--plot_title_position", "left"),
     ],
 )
 def test_circular_cli_rejects_invalid_definition_layout_options(
@@ -2312,7 +2338,33 @@ def test_circular_cli_rejects_invalid_definition_layout_options(
 
 
 @pytest.mark.circular
-def test_multi_record_default_shared_definition_and_record_summary_content() -> None:
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("--definition_position", "bottom"),
+        ("--multi_record_title_mode", "shared"),
+        ("--multi_record_definition_mode", "shared"),
+        ("--shared_definition_position", "bottom"),
+        ("--shared_definition_font_size", "30"),
+    ],
+)
+def test_circular_cli_rejects_legacy_shared_definition_options(
+    option: str,
+    value: str,
+) -> None:
+    with pytest.raises(SystemExit):
+        circular_cli_module._get_args(
+            [
+                "--gbk",
+                "dummy.gb",
+                option,
+                value,
+            ]
+        )
+
+
+@pytest.mark.circular
+def test_multi_record_default_hides_plot_title_and_keeps_record_summary_content() -> None:
     records = [
         _build_record_with_source(
             "rec_alpha",
@@ -2338,15 +2390,8 @@ def test_multi_record_default_shared_definition_and_record_summary_content() -> 
     root = ET.fromstring(canvas.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
 
-    shared_groups = root.findall(".//svg:g[@id='shared_definition']", ns)
-    assert len(shared_groups) == 1
-
-    shared_texts = _extract_group_texts(root, "shared_definition")
-    assert shared_texts == ["Organism alpha Strain A"]
-    shared_font_sizes = _extract_group_font_sizes(root, "shared_definition")
-    assert shared_font_sizes == [32.0]
-    shared_font_weights = _extract_group_font_weights(root, "shared_definition")
-    assert shared_font_weights == ["normal"]
+    shared_groups = root.findall(".//svg:g[@id='plot_title']", ns)
+    assert len(shared_groups) == 0
 
     for record in records:
         record_texts = _extract_group_texts(root, f"{record.id}_definition")
@@ -2419,7 +2464,7 @@ def test_multi_record_shared_record_summary_includes_replicon_when_available() -
 
 
 @pytest.mark.circular
-def test_shared_definition_font_size_override_only_changes_shared_definition() -> None:
+def test_plot_title_font_size_override_only_changes_plot_title() -> None:
     records = [
         _build_record_with_source(
             "rec_font_a",
@@ -2441,13 +2486,14 @@ def test_shared_definition_font_size_override_only_changes_shared_definition() -
         records,
         selected_features_set=["CDS"],
         legend="none",
-        config_overrides={"shared_definition_font_size": 30},
+        plot_title_position="top",
+        config_overrides={"plot_title_font_size": 30},
     )
     root = ET.fromstring(canvas.tostring())
 
-    shared_font_sizes = _extract_group_font_sizes(root, "shared_definition")
-    assert shared_font_sizes == [30.0]
-    shared_font_weights = _extract_group_font_weights(root, "shared_definition")
+    plot_title_font_sizes = _extract_group_font_sizes(root, "plot_title")
+    assert plot_title_font_sizes == [30.0]
+    shared_font_weights = _extract_group_font_weights(root, "plot_title")
     assert shared_font_weights == ["normal"]
 
     for record in records:
@@ -2463,7 +2509,7 @@ def test_shared_definition_font_size_override_only_changes_shared_definition() -
         ("", "Strain only", "Strain only"),
     ],
 )
-def test_shared_definition_single_line_with_missing_species_or_strain(
+def test_plot_title_single_line_with_missing_species_or_strain(
     organism: str,
     strain: str,
     expected_shared: str,
@@ -2487,15 +2533,16 @@ def test_shared_definition_single_line_with_missing_species_or_strain(
         records,
         selected_features_set=["CDS"],
         legend="none",
+        plot_title_position="top",
     )
     root = ET.fromstring(canvas.tostring())
 
-    shared_texts = _extract_group_texts(root, "shared_definition")
+    shared_texts = _extract_group_texts(root, "plot_title")
     assert shared_texts == [expected_shared]
 
 
 @pytest.mark.circular
-def test_shared_definition_position_moves_shared_group_vertically() -> None:
+def test_plot_title_position_moves_shared_group_vertically() -> None:
     records = [
         _build_record_with_source(
             "rec_top_bottom_a",
@@ -2511,40 +2558,100 @@ def test_shared_definition_position_moves_shared_group_vertically() -> None:
         ),
     ]
 
+    none_canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+        plot_title_position="none",
+    )
     top_canvas = assemble_circular_diagram_from_records(
         records,
         selected_features_set=["CDS"],
         legend="none",
-        shared_definition_position="top",
-    )
-    center_canvas = assemble_circular_diagram_from_records(
-        records,
-        selected_features_set=["CDS"],
-        legend="none",
-        shared_definition_position="center",
+        plot_title_position="top",
     )
     bottom_canvas = assemble_circular_diagram_from_records(
         records,
         selected_features_set=["CDS"],
         legend="none",
-        shared_definition_position="bottom",
+        plot_title_position="bottom",
     )
 
-    y_top = _extract_group_translate_y(ET.fromstring(top_canvas.tostring()), "shared_definition")
-    y_center = _extract_group_translate_y(
-        ET.fromstring(center_canvas.tostring()),
-        "shared_definition",
-    )
+    none_root = ET.fromstring(none_canvas.tostring())
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    assert none_root.findall(".//svg:g[@id='plot_title']", ns) == []
+
+    y_top = _extract_group_translate_y(ET.fromstring(top_canvas.tostring()), "plot_title")
     y_bottom = _extract_group_translate_y(
         ET.fromstring(bottom_canvas.tostring()),
-        "shared_definition",
+        "plot_title",
     )
 
-    assert y_top < y_center < y_bottom
+    assert y_top < y_bottom
 
 
 @pytest.mark.circular
-def test_single_record_definition_position_moves_group_vertically() -> None:
+def test_single_record_bottom_plot_title_uses_summary_center_definition() -> None:
+    record = _build_record_with_source(
+        "single_shared_bottom",
+        organism="Single shared organism",
+        strain="Single shared strain",
+        length=1200,
+        chromosome="1",
+    )
+
+    canvas = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=["CDS"],
+        legend="none",
+        plot_title_position="bottom",
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    assert _extract_group_texts(root, "plot_title") == ["Single shared organism Single shared strain"]
+    record_texts = _extract_group_texts(root, f"{record.id}_definition")
+    assert record_texts[:2] == ["Chromosome 1", record.id]
+    assert any(text.endswith("bp") for text in record_texts)
+    assert any(text.endswith("% GC") for text in record_texts)
+    assert "Single shared organism" not in record_texts
+    assert "Single shared strain" not in record_texts
+
+    axis_center_y, definition_center_y = _extract_single_axis_and_definition_center_y(
+        root,
+        record_id=record.id,
+    )
+    assert definition_center_y == pytest.approx(axis_center_y, abs=1e-6)
+
+
+@pytest.mark.circular
+def test_single_record_custom_plot_title_overrides_default_when_visible() -> None:
+    record = _build_record_with_source(
+        "single_custom_title",
+        organism="Default single organism",
+        strain="Default single strain",
+        length=1200,
+    )
+
+    canvas = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=["CDS"],
+        legend="none",
+        plot_title="Custom Circular Title",
+        plot_title_position="top",
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    assert _extract_group_texts(root, "plot_title") == ["Custom Circular Title"]
+    record_texts = _extract_group_texts(root, f"{record.id}_definition")
+    assert record_texts[0] == record.id
+    assert any(text.endswith("bp") for text in record_texts)
+    assert any(text.endswith("% GC") for text in record_texts)
+    assert "Default single organism" not in record_texts
+    assert "Default single strain" not in record_texts
+
+
+@pytest.mark.circular
+def test_single_record_hidden_plot_title_ignores_custom_title_and_keeps_full_definition() -> None:
     record = _build_record_with_source(
         "single_layout",
         organism="Single organism",
@@ -2552,37 +2659,25 @@ def test_single_record_definition_position_moves_group_vertically() -> None:
         length=1200,
     )
 
-    top_canvas = diagram_api_module.assemble_circular_diagram_from_record(
+    canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
         selected_features_set=["CDS"],
         legend="none",
-        definition_position="top",
+        plot_title="Hidden Circular Title",
     )
-    center_canvas = diagram_api_module.assemble_circular_diagram_from_record(
-        record,
-        selected_features_set=["CDS"],
-        legend="none",
-        definition_position="center",
-    )
-    bottom_canvas = diagram_api_module.assemble_circular_diagram_from_record(
-        record,
-        selected_features_set=["CDS"],
-        legend="none",
-        definition_position="bottom",
-    )
+    root = ET.fromstring(canvas.tostring())
+    ns = {"svg": "http://www.w3.org/2000/svg"}
 
-    group_id = f"{record.id}_definition"
-    y_top = _extract_group_translate_y(ET.fromstring(top_canvas.tostring()), group_id)
-    y_center = _extract_group_translate_y(ET.fromstring(center_canvas.tostring()), group_id)
-    y_bottom = _extract_group_translate_y(ET.fromstring(bottom_canvas.tostring()), group_id)
-
-    assert y_top < y_center < y_bottom
+    assert root.findall(".//svg:g[@id='plot_title']", ns) == []
+    record_texts = _extract_group_texts(root, f"{record.id}_definition")
+    assert "Single organism" in record_texts
+    assert "Single strain" in record_texts
 
 
 @pytest.mark.circular
-@pytest.mark.parametrize("definition_mode", ["shared", "legacy"])
+@pytest.mark.parametrize("plot_title_position", ["none", "top", "bottom"])
 def test_multi_record_center_definition_aligns_with_record_axis(
-    definition_mode: str,
+    plot_title_position: str,
 ) -> None:
     records = [
         _build_record_with_source(
@@ -2609,8 +2704,7 @@ def test_multi_record_center_definition_aligns_with_record_axis(
         records,
         selected_features_set=["CDS"],
         legend="none",
-        multi_record_definition_mode=definition_mode,
-        definition_position="center",
+        plot_title_position=plot_title_position,
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -2621,42 +2715,6 @@ def test_multi_record_center_definition_aligns_with_record_axis(
             record_id=record.id,
         )
         assert definition_center_y == pytest.approx(axis_center_y, abs=1e-6)
-
-
-@pytest.mark.circular
-def test_multi_record_legacy_top_definition_keeps_non_center_alignment() -> None:
-    records = [
-        _build_record_with_source(
-            "legacy_top_a",
-            organism="Legacy top A",
-            strain="Strain A",
-            length=1300,
-        ),
-        _build_record_with_source(
-            "legacy_top_b",
-            organism="Legacy top B",
-            strain="Strain B",
-            length=850,
-        ),
-    ]
-
-    canvas = assemble_circular_diagram_from_records(
-        records,
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_definition_mode="legacy",
-        definition_position="top",
-    )
-    root = ET.fromstring(canvas.tostring())
-
-    for index, record in enumerate(records):
-        axis_center_y, definition_center_y = _extract_record_axis_and_definition_center_y(
-            root,
-            record_index=index,
-            record_id=record.id,
-        )
-        assert definition_center_y < axis_center_y
-        assert definition_center_y != pytest.approx(axis_center_y, abs=1e-6)
 
 
 @pytest.mark.circular
@@ -2899,7 +2957,7 @@ def test_multi_record_top_legend_keeps_minimum_top_padding() -> None:
 
 
 @pytest.mark.circular
-def test_multi_record_bottom_shared_definition_stays_below_legend() -> None:
+def test_multi_record_bottom_plot_title_stays_below_legend() -> None:
     records = [
         _build_record_with_source(
             "legend_bottom_shared_a",
@@ -2919,18 +2977,67 @@ def test_multi_record_bottom_shared_definition_stays_below_legend() -> None:
         records,
         selected_features_set=["CDS"],
         legend="bottom",
-        multi_record_definition_mode="shared",
-        shared_definition_position="bottom",
+        plot_title_position="bottom",
     )
     root = ET.fromstring(canvas.tostring())
     _legend_top, legend_bottom = _extract_legend_vertical_bounds(root)
-    shared_top = _extract_definition_top_y(root, "shared_definition")
+    shared_top = _extract_definition_top_y(root, "plot_title")
     assert shared_top >= legend_bottom + 20.0 - 1e-6
 
 
 @pytest.mark.circular
+def test_single_record_bottom_plot_title_stays_below_legend() -> None:
+    record = _build_record_with_source(
+        "single_bottom_shared",
+        organism="Single bottom shared",
+        strain="Strain shared",
+        length=1300,
+    )
+
+    canvas = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=["CDS"],
+        legend="bottom",
+        plot_title_position="bottom",
+    )
+    root = ET.fromstring(canvas.tostring())
+    _legend_top, legend_bottom = _extract_legend_vertical_bounds(root)
+    shared_top = _extract_definition_top_y(root, "plot_title")
+    assert shared_top >= legend_bottom + 20.0 - 1e-6
+
+
+@pytest.mark.circular
+def test_multi_record_custom_plot_title_overrides_default_shared_title() -> None:
+    records = [
+        _build_record_with_source(
+            "custom_shared_a",
+            organism="Custom shared A",
+            strain="Strain A",
+            length=1300,
+        ),
+        _build_record_with_source(
+            "custom_shared_b",
+            organism="Custom shared B",
+            strain="Strain B",
+            length=900,
+        ),
+    ]
+
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+        plot_title="Custom Shared Plot Title",
+        plot_title_position="top",
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    assert _extract_group_texts(root, "plot_title") == ["Custom Shared Plot Title"]
+
+
+@pytest.mark.circular
 @pytest.mark.parametrize("legend_position", ["left", "right"])
-def test_multi_record_left_right_shared_definition_bottom_keeps_margins(
+def test_multi_record_left_right_plot_title_bottom_keeps_margins(
     legend_position: str,
 ) -> None:
     records = [
@@ -2952,8 +3059,7 @@ def test_multi_record_left_right_shared_definition_bottom_keeps_margins(
         records,
         selected_features_set=["CDS"],
         legend=legend_position,
-        multi_record_definition_mode="shared",
-        shared_definition_position="center",
+        plot_title_position="none",
     )
     baseline_root = ET.fromstring(baseline_canvas.tostring())
     baseline_height = _extract_viewbox_height(baseline_root)
@@ -2962,13 +3068,12 @@ def test_multi_record_left_right_shared_definition_bottom_keeps_margins(
         records,
         selected_features_set=["CDS"],
         legend=legend_position,
-        multi_record_definition_mode="shared",
-        shared_definition_position="bottom",
+        plot_title_position="bottom",
     )
     bottom_root = ET.fromstring(bottom_canvas.tostring())
     bottom_height = _extract_viewbox_height(bottom_root)
-    shared_top = _extract_definition_top_y(bottom_root, "shared_definition")
-    shared_bottom = _extract_definition_bottom_y(bottom_root, "shared_definition")
+    shared_top = _extract_definition_top_y(bottom_root, "plot_title")
+    shared_bottom = _extract_definition_bottom_y(bottom_root, "plot_title")
 
     assert shared_top >= baseline_height + 20.0 - 1e-6
     assert bottom_height - shared_bottom >= 24.0 - 1e-6
@@ -3085,7 +3190,7 @@ def test_multi_record_top_bottom_legend_centers_each_wrapped_row(
 
 
 @pytest.mark.circular
-def test_multi_record_legacy_keeps_full_per_record_definition() -> None:
+def test_multi_record_visible_plot_title_uses_default_shared_title_when_blank() -> None:
     records = [
         _build_record_with_source(
             "legacy_a",
@@ -3105,22 +3210,19 @@ def test_multi_record_legacy_keeps_full_per_record_definition() -> None:
         records,
         selected_features_set=["CDS"],
         legend="none",
-        multi_record_definition_mode="legacy",
+        plot_title_position="top",
     )
     root = ET.fromstring(canvas.tostring())
-    ns = {"svg": "http://www.w3.org/2000/svg"}
-
-    shared_groups = root.findall(".//svg:g[@id='shared_definition']", ns)
-    assert len(shared_groups) == 0
+    assert _extract_group_texts(root, "plot_title") == ["Legacy organism A Legacy strain A"]
 
     for record in records:
         record_texts = _extract_group_texts(root, f"{record.id}_definition")
-        assert record.features[0].qualifiers["organism"][0] in record_texts
-        assert record.features[0].qualifiers["strain"][0] in record_texts
+        assert record.features[0].qualifiers["organism"][0] not in record_texts
+        assert record.features[0].qualifiers["strain"][0] not in record_texts
 
 
 @pytest.mark.circular
-def test_build_circular_diagram_passes_definition_position_option(
+def test_build_circular_diagram_passes_plot_title_position_option(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     record = _build_record("build_options_record", 30)
@@ -3139,8 +3241,12 @@ def test_build_circular_diagram_passes_definition_position_option(
     diagram_api_module.build_circular_diagram(
         record,
         options=DiagramOptions(
-            output=OutputOptions(definition_position="bottom"),
+            plot_title="Build Shared Title",
+            plot_title_font_size=28,
+            output=OutputOptions(plot_title_position="bottom"),
         ),
     )
 
-    assert captured_kwargs["definition_position"] == "bottom"
+    assert captured_kwargs["plot_title"] == "Build Shared Title"
+    assert captured_kwargs["plot_title_font_size"] == pytest.approx(28.0)
+    assert captured_kwargs["plot_title_position"] == "bottom"

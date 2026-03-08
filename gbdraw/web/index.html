@@ -642,49 +642,38 @@
                                         <input type="text" v-model="form.strain" class="form-input form-input-compact" placeholder="Strain (e.g. K-12)">
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5 mb-1.5">
+                                        <div class="col-span-2">
+                                            <label class="input-label text-[10px] mb-0">
+                                                Plot Title
+                                                <help-tip text="Optional circular plot title used when the title position is Top or Bottom. Leave blank to use the default species + strain title."></help-tip>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                v-model="form.plot_title"
+                                                class="form-input form-input-compact"
+                                                placeholder="Optional shared plot title"
+                                            >
+                                        </div>
                                         <div>
                                             <label class="input-label text-[10px] mb-0">
-                                                Definition Position
-                                                <help-tip text="Placement of per-record definition text in circular mode. Top/Bottom are centered on the full canvas width."></help-tip>
+                                                Plot Title Position
+                                                <help-tip text="Placement of the shared circular plot title. Per-record definitions stay centered."></help-tip>
                                             </label>
-                                            <select v-model="form.definition_position" class="form-input form-input-compact">
-                                                <option value="center">Center</option>
+                                            <select v-model="adv.plot_title_position" class="form-input form-input-compact">
+                                                <option value="none">None (Default)</option>
                                                 <option value="top">Top</option>
                                                 <option value="bottom">Bottom</option>
                                             </select>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px] mb-0">
-                                                Multi-record Definition Mode
-                                                <help-tip text="Shared: one common definition plus per-circle summary (replicon if available + accession/length/GC). Legacy: each circle shows full definition."></help-tip>
-                                            </label>
-                                            <select v-model="adv.multi_record_definition_mode" class="form-input form-input-compact">
-                                                <option value="shared">Shared (Default)</option>
-                                                <option value="legacy">Legacy</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div v-if="adv.multi_record_definition_mode === 'shared'" class="grid grid-cols-2 gap-1.5 mb-1.5">
-                                        <div>
-                                            <label class="input-label text-[10px] mb-0">
-                                                Shared Definition Position
-                                                <help-tip text="Placement of the shared definition in multi-record shared mode."></help-tip>
-                                            </label>
-                                            <select v-model="adv.shared_definition_position" class="form-input form-input-compact">
-                                                <option value="center">Center</option>
-                                                <option value="top">Top</option>
-                                                <option value="bottom">Bottom (Default)</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label class="input-label text-[10px] mb-0">
-                                                Shared Title Font Size
-                                                <help-tip text="Font size for the shared title in multi-record shared mode."></help-tip>
+                                                Plot Title Font Size
+                                                <help-tip text="Font size for the circular shared plot title. Only used when the title position is Top or Bottom."></help-tip>
                                             </label>
                                             <input
                                                 type="number"
-                                                :value="adv.shared_definition_font_size ?? ''"
-                                                @input="adv.shared_definition_font_size = $event.target.value === '' ? null : Number($event.target.value)"
+                                                :value="adv.plot_title_font_size ?? ''"
+                                                @input="adv.plot_title_font_size = $event.target.value === '' ? null : Number($event.target.value)"
                                                 class="form-input form-input-compact"
                                                 placeholder="Auto (32)"
                                             >
@@ -693,6 +682,45 @@
                                 </template>
 
                                 <label v-if="mode === 'linear'" class="input-label adv-section-title">Label Settings</label>
+
+                                <div v-if="mode === 'linear'" class="grid grid-cols-2 gap-1.5 mb-1">
+                                    <div class="col-span-2">
+                                        <label class="input-label text-[10px] mb-0">
+                                            Plot Title
+                                            <help-tip text="Global title shown once for the whole linear plot."></help-tip>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            v-model="form.plot_title"
+                                            class="form-input form-input-compact"
+                                            placeholder="Optional plot title"
+                                        >
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px] mb-0">
+                                            Plot Title Position
+                                            <help-tip text="Placement of the linear plot title."></help-tip>
+                                        </label>
+                                        <select v-model="adv.plot_title_position" class="form-input form-input-compact">
+                                            <option value="center">Center</option>
+                                            <option value="top">Top</option>
+                                            <option value="bottom">Bottom (Default)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px] mb-0">
+                                            Plot Title Font Size
+                                            <help-tip text="Font size for the linear plot title."></help-tip>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            :value="adv.plot_title_font_size ?? ''"
+                                            @input="adv.plot_title_font_size = $event.target.value === '' ? null : Number($event.target.value)"
+                                            class="form-input form-input-compact"
+                                            placeholder="Auto (32)"
+                                        >
+                                    </div>
+                                </div>
 
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>

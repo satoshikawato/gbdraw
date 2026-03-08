@@ -206,14 +206,14 @@ class ObjectsDefinitionLinearConfig:
 class ObjectsDefinitionCircularConfig:
     interval: int
     font_size: float
-    shared_font_size: float
+    plot_title_font_size: float
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsDefinitionCircularConfig":
         return cls(
             interval=int(d["interval"]),
             font_size=float(d["font_size"]),
-            shared_font_size=float(d.get("shared_font_size", d["font_size"])),
+            plot_title_font_size=float(d.get("plot_title_font_size", d["font_size"])),
         )
 
 

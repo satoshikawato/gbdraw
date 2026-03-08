@@ -425,8 +425,10 @@ export const setupWatchers = ({
 
   watch(() => form.species, scheduleDefinitionUpdate);
   watch(() => form.strain, scheduleDefinitionUpdate);
+  watch(() => form.plot_title, scheduleDefinitionUpdate);
   watch(() => state.adv.def_font_size, scheduleDefinitionUpdate);
-  watch(() => state.adv.shared_definition_font_size, scheduleDefinitionUpdate);
+  watch(() => state.adv.plot_title_position, scheduleDefinitionUpdate);
+  watch(() => state.adv.plot_title_font_size, scheduleDefinitionUpdate);
   watch(() => linearSeqs.map((seq) => seq.definition), scheduleDefinitionUpdate);
   watch(
     () => [mode.value, cInputType.value, files.c_gb, pyodideReady.value],

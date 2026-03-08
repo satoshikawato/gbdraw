@@ -68,9 +68,8 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--multi_record_min_radius_ratio MULTI_RECORD_MIN_RADIUS_RATIO]
               [--multi_record_column_gap_ratio MULTI_RECORD_COLUMN_GAP_RATIO]
               [--multi_record_row_gap_ratio MULTI_RECORD_ROW_GAP_RATIO]
-              [--definition_position {center,top,bottom}]
-              [--multi_record_definition_mode {shared,legacy}]
-              [--shared_definition_position {center,top,bottom}]
+              [--plot_title_position {none,top,bottom}]
+              [--plot_title_font_size PLOT_TITLE_FONT_SIZE]
               [--track_type TRACK_TYPE] [--resolve_overlaps]
               [--labels [{none,out,both}]] [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
@@ -165,16 +164,12 @@ options:
   --multi_record_row_gap_ratio MULTI_RECORD_ROW_GAP_RATIO
                         Additional gap ratio between multi-record row content
                         bounds (>= 0; default: 0.05).
-  --definition_position {center,top,bottom}
-                        Definition position for single-record and legacy
-                        multi-record mode ("center", "top", "bottom";
-                        default: "center").
-  --multi_record_definition_mode {shared,legacy}
-                        Definition mode for multi-record canvas ("shared" or
-                        "legacy"; default: "shared").
-  --shared_definition_position {center,top,bottom}
-                        Shared definition position in multi-record shared mode
-                        ("center", "top", "bottom"; default: "bottom").
+  --plot_title_position {none,top,bottom}
+                        Plot title position in circular mode ("none",
+                        "top", "bottom"; default: "none").
+  --plot_title_font_size PLOT_TITLE_FONT_SIZE
+                        Plot title font size in circular top/bottom title
+                        layout (optional; float; default: 32).
   --separate_strands    Separate strands (default: False).
   --track_type TRACK_TYPE
                         Track type (default: "tuckin"; "tuckin", "middle",
@@ -264,6 +259,9 @@ usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--line_stroke_color LINE_STROKE_COLOR]
               [--line_stroke_width LINE_STROKE_WIDTH]
               [--definition_font_size DEFINITION_FONT_SIZE]
+              [--plot_title PLOT_TITLE]
+              [--plot_title_position {center,top,bottom}]
+              [--plot_title_font_size PLOT_TITLE_FONT_SIZE]
               [--record_label RECORD_LABEL]
               [--label_font_size LABEL_FONT_SIZE]
               [--label_placement {auto,above_feature}]
@@ -354,6 +352,14 @@ options:
   --definition_font_size DEFINITION_FONT_SIZE
                         Definition font size (optional; float; default: 24 pt
                         for genomes <= 50 kb, 10 pt for genomes >= 50 kb)
+  --plot_title PLOT_TITLE
+                        Shared plot title text (optional)
+  --plot_title_position {center,top,bottom}
+                        Shared plot title position ("center", "top",
+                        "bottom"; default: "bottom")
+  --plot_title_font_size PLOT_TITLE_FONT_SIZE
+                        Shared plot title font size (optional; float;
+                        default: 32)
   --record_label RECORD_LABEL
                         Override record definition label (repeatable; order
                         matches input records)

@@ -81,6 +81,7 @@ class DefinitionGroup:
         config_dict: dict,
         species: Optional[str] = None,
         strain: Optional[str] = None,
+        plot_title: Optional[str] = None,
         definition_profile: CircularDefinitionProfile | str = "full",
         definition_group_id: str | None = None,
         cfg: GbdrawConfig | None = None,
@@ -89,6 +90,7 @@ class DefinitionGroup:
         self.canvas_config: CircularCanvasConfigurator = canvas_config
         self.species: str | None = species
         self.strain: str | None = strain
+        self.plot_title: str | None = plot_title
         self.definition_profile: CircularDefinitionProfile = _normalize_definition_profile(
             str(definition_profile)
         )
@@ -100,7 +102,7 @@ class DefinitionGroup:
         self._cfg = cfg
         self.interval = cfg.objects.definition.circular.interval
         self.font_size = cfg.objects.definition.circular.font_size
-        self.shared_font_size = cfg.objects.definition.circular.shared_font_size
+        self.plot_title_font_size = cfg.objects.definition.circular.plot_title_font_size
         self.font = cfg.objects.text.font_family
         self.track_id: str = str(self.gb_record.id).replace(" ", "_")
         self.definition_group_id: str = (
@@ -180,7 +182,10 @@ class DefinitionGroup:
             strain_parts = parse_mixed_content_text("")
             organelle_parts = parse_mixed_content_text("")
         elif self.definition_profile == "shared_common":
-            species_parts = _merge_name_parts_with_single_space(species_parts, strain_parts)
+            if isinstance(self.plot_title, str) and self.plot_title.strip():
+                species_parts = parse_mixed_content_text(self.plot_title)
+            else:
+                species_parts = _merge_name_parts_with_single_space(species_parts, strain_parts)
             strain_parts = parse_mixed_content_text("")
             organelle_parts = parse_mixed_content_text("")
             replicon_parts = parse_mixed_content_text("")
@@ -188,7 +193,7 @@ class DefinitionGroup:
             show_length = False
             show_gc = False
         active_font_size = (
-            self.shared_font_size if self.definition_profile == "shared_common" else self.font_size
+            self.plot_title_font_size if self.definition_profile == "shared_common" else self.font_size
         )
         active_name_font_weight = "normal" if self.definition_profile == "shared_common" else "bold"
 
@@ -215,5 +220,4 @@ class DefinitionGroup:
 
 
 __all__ = ["CircularDefinitionProfile", "DefinitionGroup"]
-
 

@@ -3,8 +3,8 @@ import { getElementsBounds, getTransformedBBox, parseTransform } from './transfo
 
 const CIRCULAR_LEGEND_EDGE_PADDING = 16;
 const CIRCULAR_LEGEND_CONTENT_GAP = 12;
-const CIRCULAR_LEGEND_SHARED_GAP = 20;
-const CIRCULAR_SHARED_BOTTOM_MARGIN = 24;
+const CIRCULAR_LEGEND_PLOT_TITLE_GAP = 20;
+const CIRCULAR_PLOT_TITLE_BOTTOM_MARGIN = 24;
 
 export const createLegendRepositionActions = ({
   state,
@@ -264,10 +264,10 @@ export const createLegendRepositionActions = ({
             legendWidth = legendLocalBounds.width || legendWidth;
             legendHeight = legendLocalBounds.height || legendHeight;
 
-            const getCircularContentBounds = (excludeSharedDefinition = false) => {
+            const getCircularContentBounds = (excludePlotTitle = false) => {
               const contentElements = diagramElements.value.filter((el) => {
                 if (!el) return false;
-                if (excludeSharedDefinition && el.id === 'shared_definition') return false;
+                if (excludePlotTitle && el.id === 'plot_title') return false;
                 return true;
               });
               return getElementsBounds(contentElements.length > 0 ? contentElements : diagramElements.value);
@@ -318,28 +318,28 @@ export const createLegendRepositionActions = ({
             }
 
             if (newPosition === 'bottom') {
-              const sharedDefinitionGroup = svg.getElementById('shared_definition');
-              if (sharedDefinitionGroup) {
+              const plotTitleGroup = svg.getElementById('plot_title');
+              if (plotTitleGroup) {
                 const legendBounds = getTransformedBBox(legendGroup);
-                const sharedBounds = getTransformedBBox(sharedDefinitionGroup);
-                if (legendBounds && sharedBounds) {
-                  const requiredSharedTop =
-                    legendBounds.y + legendBounds.height + CIRCULAR_LEGEND_SHARED_GAP;
-                  if (sharedBounds.y < requiredSharedTop) {
-                    const shiftY = requiredSharedTop - sharedBounds.y;
-                    const sharedPos = parseTransform(sharedDefinitionGroup.getAttribute('transform'));
-                    const adjustedSharedY = sharedPos.y + shiftY;
-                    sharedDefinitionGroup.setAttribute(
+                const plotTitleBounds = getTransformedBBox(plotTitleGroup);
+                if (legendBounds && plotTitleBounds) {
+                  const requiredPlotTitleTop =
+                    legendBounds.y + legendBounds.height + CIRCULAR_LEGEND_PLOT_TITLE_GAP;
+                  if (plotTitleBounds.y < requiredPlotTitleTop) {
+                    const shiftY = requiredPlotTitleTop - plotTitleBounds.y;
+                    const plotTitlePos = parseTransform(plotTitleGroup.getAttribute('transform'));
+                    const adjustedPlotTitleY = plotTitlePos.y + shiftY;
+                    plotTitleGroup.setAttribute(
                       'transform',
-                      `translate(${sharedPos.x}, ${adjustedSharedY})`
+                      `translate(${plotTitlePos.x}, ${adjustedPlotTitleY})`
                     );
-                    diagramElementOriginalTransforms.value.set(sharedDefinitionGroup, {
-                      x: sharedPos.x,
-                      y: adjustedSharedY
+                    diagramElementOriginalTransforms.value.set(plotTitleGroup, {
+                      x: plotTitlePos.x,
+                      y: adjustedPlotTitleY
                     });
 
-                    const adjustedSharedBottom = sharedBounds.y + shiftY + sharedBounds.height;
-                    const requiredCanvasBottom = adjustedSharedBottom + CIRCULAR_SHARED_BOTTOM_MARGIN;
+                    const adjustedPlotTitleBottom = plotTitleBounds.y + shiftY + plotTitleBounds.height;
+                    const requiredCanvasBottom = adjustedPlotTitleBottom + CIRCULAR_PLOT_TITLE_BOTTOM_MARGIN;
                     if (requiredCanvasBottom > vbY + vbH) {
                       vbH = requiredCanvasBottom - vbY;
                       svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
