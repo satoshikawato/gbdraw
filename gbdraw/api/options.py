@@ -60,6 +60,7 @@ class DiagramOptions:
     step: int | None = None
     plot_title: str | None = None
     plot_title_font_size: float | None = None
+    keep_full_definition_with_plot_title: bool = False
     species: str | None = None
     strain: str | None = None
     blast_files: Sequence[str] | None = None

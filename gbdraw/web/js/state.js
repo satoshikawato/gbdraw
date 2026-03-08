@@ -112,6 +112,7 @@ const canvasContainerRef = ref(null);
 const mode = ref('circular');
 const circularLegendPosition = ref('left'); // Separate legend position for circular mode
 const linearLegendPosition = ref('bottom'); // Separate legend position for linear mode
+const suppressCircularMultiRecordDefaults = ref(false);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
 const blastSource = ref('upload'); // 'upload' | 'losat'
@@ -217,6 +218,7 @@ const adv = reactive({
   multi_record_positions: [],
   plot_title_position: 'none',
   plot_title_font_size: null,
+  keep_full_definition_with_plot_title: false,
   feature_width_circular: null,
   gc_content_width_circular: null,
   gc_content_radius_circular: null,
@@ -552,6 +554,7 @@ export const state = {
   mode,
   circularLegendPosition,
   linearLegendPosition,
+  suppressCircularMultiRecordDefaults,
   cInputType,
   lInputType,
   blastSource,

@@ -187,6 +187,7 @@ export const createResultsManager = ({ state, getPyodide }) => {
           definitionFontSize === null || Number.isNaN(definitionFontSize) ? null : definitionFontSize;
         const normalizedPlotTitleFontSize =
           plotTitleFontSize === null || Number.isNaN(plotTitleFontSize) ? null : plotTitleFontSize;
+        const keepFullDefinitionWithPlotTitle = Boolean(adv.keep_full_definition_with_plot_title);
 
         let resultJson = '';
         let regenerateDefinitionSvgs = null;
@@ -200,7 +201,8 @@ export const createResultsManager = ({ state, getPyodide }) => {
             normalizedDefinitionFontSize,
             normalizedPlotTitleFontSize,
             normalizedPlotTitlePosition,
-            isMultiRecordCanvasOnSvg
+            isMultiRecordCanvasOnSvg,
+            keepFullDefinitionWithPlotTitle
           );
         } finally {
           regenerateDefinitionSvgs?.destroy?.();

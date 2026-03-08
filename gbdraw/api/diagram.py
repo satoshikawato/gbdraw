@@ -1259,6 +1259,7 @@ def assemble_circular_diagram_from_record(
     plot_title: str | None = None,
     plot_title_position: Literal["none", "top", "bottom"] = "none",
     plot_title_font_size: float | None = None,
+    keep_full_definition_with_plot_title: bool = False,
     track_specs: Sequence[str | TrackSpec] | None = None,
     _definition_profile: Literal["full", "record_summary", "shared_common"] = "full",
     _tick_track_channel_override: Literal["short", "long"] | None = None,
@@ -1311,7 +1312,12 @@ def assemble_circular_diagram_from_record(
     )
     if _definition_profile == "full":
         show_plot_title = normalized_plot_title_position != "none"
-        effective_definition_profile = "record_summary" if show_plot_title else "full"
+        if show_plot_title and keep_full_definition_with_plot_title:
+            effective_definition_profile = "full"
+        elif show_plot_title:
+            effective_definition_profile = "record_summary"
+        else:
+            effective_definition_profile = "full"
 
     parsed_track_specs: list[TrackSpec] | None = None
     if track_specs is not None:
@@ -1480,6 +1486,7 @@ def assemble_circular_diagram_from_records(
     plot_title: str | None = None,
     plot_title_position: Literal["none", "top", "bottom"] = "none",
     plot_title_font_size: float | None = None,
+    keep_full_definition_with_plot_title: bool = False,
     multi_record_size_mode: Literal["linear", "auto", "equal", "sqrt"] = "auto",
     multi_record_min_radius_ratio: float = 0.55,
     multi_record_column_gap_ratio: float = _MULTI_RECORD_COLUMN_GAP_RATIO,
@@ -1533,6 +1540,7 @@ def assemble_circular_diagram_from_records(
             plot_title=normalized_plot_title or None,
             plot_title_position=normalized_plot_title_position,
             plot_title_font_size=plot_title_font_size,
+            keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
             track_specs=track_specs,
             cfg=cfg,
         )
@@ -1606,7 +1614,9 @@ def assemble_circular_diagram_from_records(
     canvas_cfg = replace(cfg.canvas, show_gc=bool(show_gc), show_skew=bool(show_skew))
     cfg = replace(cfg, canvas=canvas_cfg)
     show_plot_title = normalized_plot_title_position != "none"
-    record_definition_profile: Literal["record_summary"] = "record_summary"
+    record_definition_profile: Literal["full", "record_summary"] = "record_summary"
+    if show_plot_title and keep_full_definition_with_plot_title:
+        record_definition_profile = "full"
     record_lengths = [len(record.seq) for record in records]
     cfg = _harmonize_multi_record_circular_style_cfg(
         cfg,
@@ -2109,6 +2119,7 @@ def build_circular_diagram(
             else "none"
         ),
         plot_title_font_size=options.plot_title_font_size,
+        keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,
         track_specs=tracks.track_specs if tracks else None,
         cfg=cfg,
     )

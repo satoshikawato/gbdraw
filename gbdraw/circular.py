@@ -221,6 +221,10 @@ def _get_args(args) -> argparse.Namespace:
         help='Plot title font size for circular top/bottom title layout (optional; default: 32).',
         type=float)
     parser.add_argument(
+        '--keep_full_definition_with_plot_title',
+        help='Keep the full centered record definition when a circular plot title is shown (default: False).',
+        action='store_true')
+    parser.add_argument(
         '--label_font_size',
         help='Label font size (optional; default: 14 (pt) for genomes <= 50 kb, 8 for genomes >= 50 kb)',
         type=float)
@@ -449,6 +453,7 @@ def circular_main(cmd_args) -> None:
     plot_title_position: str = args.plot_title_position
     definition_font_size: Optional[float] = args.definition_font_size
     plot_title_font_size: Optional[float] = args.plot_title_font_size
+    keep_full_definition_with_plot_title: bool = args.keep_full_definition_with_plot_title
     label_font_size: Optional[float] = args.label_font_size
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
@@ -514,7 +519,6 @@ def circular_main(cmd_args) -> None:
         logger.info(
             "Ignoring --multi_record_position because --multi_record_canvas is disabled."
         )
-    
     # Warn if resolve_overlaps is used with separate_strands
     if strandedness and resolve_overlaps:
         logger.warning(
@@ -640,6 +644,7 @@ def circular_main(cmd_args) -> None:
             plot_title=plot_title,
             plot_title_position=plot_title_position,
             plot_title_font_size=plot_title_font_size,
+            keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
             multi_record_size_mode=multi_record_size_mode,
             multi_record_min_radius_ratio=multi_record_min_radius_ratio,
             multi_record_column_gap_ratio=multi_record_column_gap_ratio,
@@ -675,6 +680,7 @@ def circular_main(cmd_args) -> None:
                 plot_title=plot_title,
                 plot_title_position=plot_title_position,
                 plot_title_font_size=plot_title_font_size,
+                keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
                 cfg=cfg,
                 track_specs=track_specs_or_none,
             )

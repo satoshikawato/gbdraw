@@ -193,6 +193,7 @@ def regenerate_definition_svgs(
     plot_title_font_size=None,
     plot_title_position="none",
     multi_record_canvas=False,
+    keep_full_definition_with_plot_title=False,
 ):
     """Regenerate definition group SVGs for all records in an input file"""
     from Bio import SeqIO
@@ -221,6 +222,7 @@ def regenerate_definition_svgs(
             normalized_plot_title_position = "none"
         normalized_plot_title = str(plot_title or "").strip()
         show_plot_title = normalized_plot_title_position in {"top", "bottom"}
+        keep_full_definition = bool(keep_full_definition_with_plot_title)
 
         definitions = []
         for index, record in enumerate(records):
@@ -232,7 +234,10 @@ def regenerate_definition_svgs(
                 gb_record=record,
             )
 
-            profile = "record_summary" if (bool(multi_record_canvas) or show_plot_title) else "full"
+            if show_plot_title and keep_full_definition:
+                profile = "full"
+            else:
+                profile = "record_summary" if bool(multi_record_canvas) or show_plot_title else "full"
             def_group = DefinitionGroup(
                 gb_record=record,
                 canvas_config=canvas_config,
@@ -290,6 +295,7 @@ def regenerate_definition_svg(
     plot_title_font_size=None,
     plot_title_position="none",
     multi_record_canvas=False,
+    keep_full_definition_with_plot_title=False,
 ):
     """Backward-compatible single-record definition regeneration helper"""
     result_json = regenerate_definition_svgs(
@@ -301,6 +307,7 @@ def regenerate_definition_svg(
         plot_title_font_size=plot_title_font_size,
         plot_title_position=plot_title_position,
         multi_record_canvas=multi_record_canvas,
+        keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
     )
     try:
         payload = json.loads(result_json)

@@ -99,6 +99,13 @@ const buildConfigData = () => ({
   losatProgram: state.losatProgram.value
 });
 
+const shouldSuppressCircularMultiRecordDefaults = (incomingForm) => {
+  if (state.mode.value !== 'circular') return false;
+  if (!incomingForm || typeof incomingForm !== 'object' || Array.isArray(incomingForm)) return false;
+  if (!Object.prototype.hasOwnProperty.call(incomingForm, 'multi_record_canvas')) return false;
+  return state.form.multi_record_canvas === false && incomingForm.multi_record_canvas === true;
+};
+
 const applyConfigData = (data) => {
   if (data.form) safeDeepMerge(state.form, data.form);
   if (data.adv) safeDeepMerge(state.adv, data.adv);
@@ -196,6 +203,8 @@ const applyConfigData = (data) => {
         ? numericPlotTitleFontSize
         : null;
   }
+  state.adv.keep_full_definition_with_plot_title =
+    state.adv.keep_full_definition_with_plot_title === true;
   if (data.losat) safeDeepMerge(state.losat, data.losat);
   if (data.colors) {
     const normalized = {};
@@ -544,10 +553,12 @@ export const importConfig = async (e) => {
       }
       return value;
     });
+    state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.form);
     applyConfigData(data);
     alert('Configuration loaded successfully!');
   } catch (err) {
     console.error(err);
+    state.suppressCircularMultiRecordDefaults.value = false;
     alert('Failed to load config: Invalid JSON structure.');
   } finally {
     e.target.value = '';
@@ -595,6 +606,7 @@ export const importSession = async (e) => {
     if (ui.generatedLegendPosition) state.generatedLegendPosition.value = ui.generatedLegendPosition;
 
     if (data.config) {
+      state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.config.form);
       applyConfigData(data.config);
     }
 
@@ -732,6 +744,7 @@ export const importSession = async (e) => {
     alert('Session loaded successfully!');
   } catch (err) {
     console.error(err);
+    state.suppressCircularMultiRecordDefaults.value = false;
     alert('Failed to load session: Invalid JSON structure.');
   } finally {
     e.target.value = '';
