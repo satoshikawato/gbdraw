@@ -1,6 +1,11 @@
-import { parseTransform } from './legend-layout/transform-utils.js';
+import {
+  getDefinitionGroupTranslate,
+  getLocalVerticalBounds,
+  getTransformedBBox,
+  parseTransform
+} from './legend-layout/transform-utils.js';
 
-export const createResultsManager = ({ state, getPyodide }) => {
+export const createResultsManager = ({ state, getPyodide, legendLayout }) => {
   const {
     pyodideReady,
     svgContent,
@@ -16,6 +21,7 @@ export const createResultsManager = ({ state, getPyodide }) => {
     selectedPalette,
     currentColors
   } = state;
+  const { clearPlotTitleState, setPlotTitleAutoTransform } = legendLayout;
 
   let definitionUpdateTimeout = null;
 
@@ -38,13 +44,18 @@ export const createResultsManager = ({ state, getPyodide }) => {
         throw new Error('Parse error');
       }
       const root = doc.documentElement;
-      const elements = Array.from(root.children);
-      if (elements.length) {
-        elements.forEach((el) => {
-          parts.push({ text: el.textContent || '', italic: el.tagName.toLowerCase() === 'i' });
-          const tail = el.nextSibling;
-          if (tail && tail.nodeType === Node.TEXT_NODE) {
-            parts.push({ text: tail.nodeValue || '', italic: false });
+      const nodes = Array.from(root.childNodes);
+      if (nodes.length) {
+        nodes.forEach((node) => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            parts.push({ text: node.nodeValue || '', italic: false });
+            return;
+          }
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            parts.push({
+              text: node.textContent || '',
+              italic: node.tagName.toLowerCase() === 'i'
+            });
           }
         });
       } else {
@@ -71,6 +82,60 @@ export const createResultsManager = ({ state, getPyodide }) => {
     });
   };
 
+  const parseSvgCanvasSize = (svg) => {
+    const viewBox = String(svg.getAttribute('viewBox') || '').trim().split(/\s+/);
+    if (viewBox.length === 4) {
+      const width = Number(viewBox[2]);
+      const height = Number(viewBox[3]);
+      if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+        return { width, height };
+      }
+    }
+    const width = Number(svg.getAttribute('width'));
+    const height = Number(svg.getAttribute('height'));
+    if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+      return { width, height };
+    }
+    return null;
+  };
+
+  const setGroupTranslate = (group, x, y) => {
+    if (!group) return;
+    group.setAttribute('transform', `translate(${x}, ${y})`);
+  };
+
+  const syncSvgCanvasSize = (svg, width, height) => {
+    svg.setAttribute('width', `${width}px`);
+    svg.setAttribute('height', `${height}px`);
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  };
+
+  const translateTopLevelGroups = (svg, dy, excludedIds = new Set()) => {
+    if (!Number.isFinite(dy) || Math.abs(dy) <= 1e-6) return;
+    Array.from(svg.children).forEach((child) => {
+      const tagName = String(child.tagName || '').toLowerCase();
+      if (tagName === 'defs') return;
+      const childId = String(child.getAttribute('id') || '');
+      if (excludedIds.has(childId)) return;
+      const current = parseTransform(child.getAttribute('transform'));
+      setGroupTranslate(child, current.x, current.y + dy);
+    });
+  };
+
+  const placeDefinitionGroup = (group, canvasWidth, canvasHeight, position) => {
+    const nextTransform = getDefinitionGroupTranslate(group, canvasWidth, canvasHeight, position);
+    setGroupTranslate(group, nextTransform.x, nextTransform.y);
+  };
+
+  const parseGroupSvg = (svgMarkup) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(
+      `<svg xmlns="http://www.w3.org/2000/svg">${svgMarkup}</svg>`,
+      'image/svg+xml'
+    );
+    return doc.querySelector('g');
+  };
+
   const updateDefinitionText = async () => {
     if (!svgContent.value) return;
     if (!svgContainer.value) return;
@@ -83,6 +148,7 @@ export const createResultsManager = ({ state, getPyodide }) => {
       if (!pyodide) return;
 
       const gbPath = cInputType.value === 'gb' ? '/input.gb' : '/input.gb';
+      const isMultiRecordCanvasOnSvg = svg.querySelector('g[id^="record_"]') !== null;
 
       try {
         const species = form.species || '';
@@ -90,21 +156,24 @@ export const createResultsManager = ({ state, getPyodide }) => {
         const hasDefinitionFontSize =
           adv.def_font_size !== null && adv.def_font_size !== undefined && adv.def_font_size !== '';
         const definitionFontSize = hasDefinitionFontSize ? Number(adv.def_font_size) : null;
-        const hasSharedDefinitionFontSize =
-          adv.shared_definition_font_size !== null &&
-          adv.shared_definition_font_size !== undefined &&
-          adv.shared_definition_font_size !== '';
-        const sharedDefinitionFontSize = hasSharedDefinitionFontSize ? Number(adv.shared_definition_font_size) : null;
-        const multiRecordDefinitionMode = String(adv.multi_record_definition_mode || 'shared')
-          .trim()
-          .toLowerCase();
+        const hasPlotTitleFontSize =
+          adv.plot_title_font_size !== null &&
+          adv.plot_title_font_size !== undefined &&
+          adv.plot_title_font_size !== '';
+        const plotTitleFontSize = hasPlotTitleFontSize ? Number(adv.plot_title_font_size) : null;
 
         const normalizedSpecies = species === '' ? null : species;
         const normalizedStrain = strain === '' ? null : strain;
+        const normalizedPlotTitle = String(form.plot_title || '').trim();
+        const rawCircularPlotTitlePosition = String(adv.plot_title_position || 'none').trim().toLowerCase();
+        const normalizedPlotTitlePosition = ['none', 'top', 'bottom'].includes(rawCircularPlotTitlePosition)
+          ? rawCircularPlotTitlePosition
+          : 'none';
         const normalizedDefinitionFontSize =
           definitionFontSize === null || Number.isNaN(definitionFontSize) ? null : definitionFontSize;
-        const normalizedSharedDefinitionFontSize =
-          sharedDefinitionFontSize === null || Number.isNaN(sharedDefinitionFontSize) ? null : sharedDefinitionFontSize;
+        const normalizedPlotTitleFontSize =
+          plotTitleFontSize === null || Number.isNaN(plotTitleFontSize) ? null : plotTitleFontSize;
+        const keepFullDefinitionWithPlotTitle = Boolean(adv.keep_full_definition_with_plot_title);
 
         let resultJson = '';
         let regenerateDefinitionSvgs = null;
@@ -114,9 +183,12 @@ export const createResultsManager = ({ state, getPyodide }) => {
             gbPath,
             normalizedSpecies,
             normalizedStrain,
+            normalizedPlotTitle === '' ? null : normalizedPlotTitle,
             normalizedDefinitionFontSize,
-            normalizedSharedDefinitionFontSize,
-            multiRecordDefinitionMode
+            normalizedPlotTitleFontSize,
+            normalizedPlotTitlePosition,
+            isMultiRecordCanvasOnSvg,
+            keepFullDefinitionWithPlotTitle
           );
         } finally {
           regenerateDefinitionSvgs?.destroy?.();
@@ -133,31 +205,95 @@ export const createResultsManager = ({ state, getPyodide }) => {
           return;
         }
 
+        const desiredGroupIds = new Set(
+          definitionEntries
+            .map((entry) => String(entry?.definition_group_id || '').trim())
+            .filter(Boolean)
+        );
         let updated = false;
         definitionEntries.forEach((entry) => {
           const definitionGroupId = entry?.definition_group_id;
           const definitionSvg = entry?.svg;
           if (!definitionGroupId || !definitionSvg) return;
 
-          const existingGroup = svg.getElementById(definitionGroupId);
-          if (!existingGroup) return;
-
-          const parser = new DOMParser();
-          const newDoc = parser.parseFromString(
-            `<svg xmlns="http://www.w3.org/2000/svg">${definitionSvg}</svg>`,
-            'image/svg+xml'
-          );
-          const newGroup = newDoc.querySelector('g');
+          const newGroup = parseGroupSvg(definitionSvg);
           if (!newGroup) return;
+          const existingGroup = svg.getElementById(definitionGroupId);
+          const importedGroup = svg.ownerDocument.importNode(newGroup, true);
 
-          const existingTransform = existingGroup.getAttribute('transform');
-          if (existingTransform) {
-            newGroup.setAttribute('transform', existingTransform);
+          if (existingGroup) {
+            const existingTransform = existingGroup.getAttribute('transform');
+            if (existingTransform) {
+              importedGroup.setAttribute('transform', existingTransform);
+            }
+            existingGroup.parentNode.replaceChild(importedGroup, existingGroup);
+            updated = true;
+            return;
           }
 
-          existingGroup.parentNode.replaceChild(svg.ownerDocument.importNode(newGroup, true), existingGroup);
-          updated = true;
+          if (definitionGroupId === 'plot_title') {
+            svg.appendChild(importedGroup);
+            updated = true;
+          }
         });
+
+        const stalePlotTitleGroup = svg.getElementById('plot_title');
+        if (stalePlotTitleGroup && !desiredGroupIds.has('plot_title')) {
+          stalePlotTitleGroup.remove();
+          updated = true;
+        }
+
+        const canvasSize = parseSvgCanvasSize(svg);
+        if (canvasSize) {
+          let canvasWidth = canvasSize.width;
+          let canvasHeight = canvasSize.height;
+          const legendPosition = String(form.legend || 'right').trim().toLowerCase();
+          const legendGroup = svg.getElementById('legend');
+          const singleDefinitionGroup = Array.from(svg.querySelectorAll('g[id$="_definition"]'))
+            .find((group) => !group.closest('g[id^="record_"]'));
+          if (singleDefinitionGroup) {
+            placeDefinitionGroup(singleDefinitionGroup, canvasWidth, canvasHeight, 'center');
+            updated = true;
+          }
+
+          const plotTitleGroup = svg.getElementById('plot_title');
+          if (plotTitleGroup) {
+            const plotTitleBounds = getLocalVerticalBounds(plotTitleGroup);
+            if (normalizedPlotTitlePosition === 'top' && legendPosition === 'top' && legendGroup) {
+              const legendBounds = getTransformedBBox(legendGroup);
+              const requiredLegendTop = 24 + plotTitleBounds.height + 20;
+              if (legendBounds && legendBounds.y < requiredLegendTop) {
+                const shiftY = requiredLegendTop - legendBounds.y;
+                translateTopLevelGroups(svg, shiftY, new Set(['plot_title']));
+                canvasHeight += shiftY;
+                syncSvgCanvasSize(svg, canvasWidth, canvasHeight);
+                updated = true;
+              }
+            }
+            if (normalizedPlotTitlePosition === 'bottom' && legendPosition === 'bottom' && legendGroup) {
+              const legendBounds = getTransformedBBox(legendGroup);
+              const legendBottom = legendBounds ? legendBounds.y + legendBounds.height : 0;
+              const requiredHeight = legendBottom + 20 + plotTitleBounds.height + 24;
+              if (requiredHeight > canvasHeight) {
+                canvasHeight = requiredHeight;
+                syncSvgCanvasSize(svg, canvasWidth, canvasHeight);
+                updated = true;
+              }
+            }
+            const nextTitleTransform = getDefinitionGroupTranslate(
+              plotTitleGroup,
+              canvasWidth,
+              canvasHeight,
+              normalizedPlotTitlePosition
+            );
+            setPlotTitleAutoTransform(plotTitleGroup, nextTitleTransform, {
+              preserveUserOffset: true
+            });
+            updated = true;
+          } else {
+            clearPlotTitleState();
+          }
+        }
 
         if (updated) {
           skipCaptureBaseConfig.value = true;
@@ -176,11 +312,13 @@ export const createResultsManager = ({ state, getPyodide }) => {
     }
 
     if (mode.value === 'linear') {
+      const plotTitleGroup = svg.getElementById('plot_title');
       const groups = Array.from(svg.querySelectorAll('g[id]'))
         .filter((group) => {
           const id = group.getAttribute('id');
           if (!id) return false;
           if (
+            id === 'plot_title' ||
             id === 'legend' ||
             id === 'feature_legend' ||
             id === 'pairwise_legend' ||
@@ -223,6 +361,50 @@ export const createResultsManager = ({ state, getPyodide }) => {
           });
         }
       });
+
+      if (plotTitleGroup) {
+        const titleText = String(form.plot_title || '').trim();
+        const titleTexts = Array.from(plotTitleGroup.querySelectorAll('text'));
+        if (titleTexts.length > 0) {
+          applyMixedText(titleTexts[0], titleText);
+          updated = true;
+        }
+        const titleFontSize =
+          adv.plot_title_font_size !== null &&
+          adv.plot_title_font_size !== undefined &&
+          adv.plot_title_font_size !== ''
+            ? Number(adv.plot_title_font_size)
+            : null;
+        if (titleFontSize !== null && Number.isFinite(titleFontSize) && titleFontSize > 0) {
+          titleTexts.forEach((t) => {
+            if (t.getAttribute('font-size') !== String(titleFontSize)) {
+              t.setAttribute('font-size', String(titleFontSize));
+              updated = true;
+            }
+          });
+        }
+        const canvasSize = parseSvgCanvasSize(svg);
+        if (canvasSize) {
+          const normalizedTitlePosition = String(adv.plot_title_position || 'bottom').trim().toLowerCase();
+          const safeTitlePosition = ['center', 'top', 'bottom'].includes(normalizedTitlePosition)
+            ? normalizedTitlePosition
+            : 'bottom';
+          const titleHeightRaw = titleTexts[0]?.getBBox?.().height;
+          const titleHeight = Number.isFinite(titleHeightRaw) && titleHeightRaw > 0 ? titleHeightRaw : 32;
+          const edgeMargin = 24;
+          let titleY = 0.5 * canvasSize.height;
+          if (safeTitlePosition === 'top') {
+            titleY = edgeMargin + (0.5 * titleHeight);
+          } else if (safeTitlePosition === 'bottom') {
+            titleY = canvasSize.height - edgeMargin - (0.5 * titleHeight);
+          }
+          const nextTransform = `translate(${0.5 * canvasSize.width},${titleY})`;
+          if (plotTitleGroup.getAttribute('transform') !== nextTransform) {
+            plotTitleGroup.setAttribute('transform', nextTransform);
+            updated = true;
+          }
+        }
+      }
 
       if (updated) {
         skipCaptureBaseConfig.value = true;

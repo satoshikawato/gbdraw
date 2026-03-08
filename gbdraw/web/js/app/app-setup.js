@@ -43,6 +43,7 @@ export const createAppSetup = () => {
     adv,
     losat,
     losatCacheInfo,
+    circularRecordList,
     paletteNames,
     selectedPalette,
     currentColors,
@@ -132,7 +133,7 @@ export const createAppSetup = () => {
   const pyodideManager = createPyodideManager({ state });
   const getPyodide = pyodideManager.getPyodide;
 
-  const { handleWheel, startPan, doPan, endPan } = createPanZoom(state);
+  const { handleWheel, startPan, doPan, endPan, resetPreviewViewport } = createPanZoom(state);
   const { startResizing } = createSidebarResize(state);
 
   const legendActions = createLegendManager({ state, getPyodide, debugLog });
@@ -147,10 +148,11 @@ export const createAppSetup = () => {
   setupGlobalUiEvents({ state, onMounted, onUnmounted });
 
   const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions });
-  const resultsManager = createResultsManager({ state, getPyodide });
+  const resultsManager = createResultsManager({ state, getPyodide, legendLayout });
   const {
     runAnalysis,
     runLabelReflow,
+    refreshCircularRecordOrder,
     downloadLosatCache,
     downloadLosatPair,
     setLosatPairFilename,
@@ -160,7 +162,8 @@ export const createAppSetup = () => {
     state,
     getPyodide,
     writeFileToFs: pyodideManager.writeFileToFs,
-    refreshFeatureOverrides: featureActions.refreshFeatureOverrides
+    refreshFeatureOverrides: featureActions.refreshFeatureOverrides,
+    resetPreviewViewport
   });
 
   setupWatchers({
@@ -175,7 +178,9 @@ export const createAppSetup = () => {
     featureActions,
     legendLayout,
     resultsManager,
-    runLabelReflow
+    runLabelReflow,
+    refreshCircularRecordOrder,
+    resetPreviewViewport
   });
 
   const {
@@ -391,6 +396,109 @@ export const createAppSetup = () => {
     openFeatureEditorForFeature(feat, event);
   };
 
+  const getCircularRecordOrderLabel = (selector) => {
+    const normalized = String(selector || '').trim();
+    if (!normalized) return '';
+    const records = Array.isArray(circularRecordList.value) ? circularRecordList.value : [];
+    const matched = records.find((entry) => String(entry?.selector || '').trim() === normalized);
+    if (!matched) return normalized;
+    return `${normalized} (${String(matched.record_id || '').trim() || 'Unknown'})`;
+  };
+
+  const buildDefaultCircularRecordPositions = () => {
+    const selectors = Array.isArray(circularRecordList.value)
+      ? circularRecordList.value
+          .map((entry) => String(entry?.selector || '').trim())
+          .filter(Boolean)
+      : [];
+    if (selectors.length === 0) return [];
+    const cols = Math.ceil(Math.sqrt(selectors.length));
+    return selectors.map((selector, index) => ({
+      selector,
+      row: Math.floor(index / cols) + 1
+    }));
+  };
+
+  const getCircularRecordRow = (position) => {
+    const rowValue = Number(position?.row);
+    const maxRow = Math.max(1, Array.isArray(adv.multi_record_positions) ? adv.multi_record_positions.length : 1);
+    if (!Number.isInteger(rowValue) || rowValue <= 0) return 1;
+    return Math.min(rowValue, maxRow);
+  };
+
+  const getCircularRecordRowOptions = () => {
+    const count = Array.isArray(adv.multi_record_positions) ? adv.multi_record_positions.length : 0;
+    const maxRow = Math.max(1, count);
+    return Array.from({ length: maxRow }, (_unused, index) => index + 1);
+  };
+
+  const sortCircularRecordPositionsByRow = () => {
+    if (!Array.isArray(adv.multi_record_positions) || adv.multi_record_positions.length <= 1) return;
+    const sorted = adv.multi_record_positions
+      .map((entry, index) => ({ ...entry, __index: index }))
+      .sort((left, right) => {
+        const leftRow = Number(left.row);
+        const rightRow = Number(right.row);
+        if (leftRow !== rightRow) return leftRow - rightRow;
+        return left.__index - right.__index;
+      })
+      .map(({ __index, ...entry }) => entry);
+    adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...sorted);
+  };
+
+  const setCircularRecordRow = (index, rowValue) => {
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= adv.multi_record_positions.length) return;
+    const target = adv.multi_record_positions[idx];
+    if (!target || typeof target !== 'object' || Array.isArray(target)) return;
+    const maxRow = Math.max(1, adv.multi_record_positions.length);
+    const parsedRow = Number(rowValue);
+    const normalizedRow = Number.isInteger(parsedRow) && parsedRow > 0 ? Math.min(parsedRow, maxRow) : 1;
+    target.row = normalizedRow;
+    sortCircularRecordPositionsByRow();
+  };
+
+  const canMoveCircularRecordOrderUp = (index) => {
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx <= 0 || idx >= adv.multi_record_positions.length) return false;
+    const currentRow = getCircularRecordRow(adv.multi_record_positions[idx]);
+    const prevRow = getCircularRecordRow(adv.multi_record_positions[idx - 1]);
+    return currentRow === prevRow;
+  };
+
+  const canMoveCircularRecordOrderDown = (index) => {
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= adv.multi_record_positions.length - 1) return false;
+    const currentRow = getCircularRecordRow(adv.multi_record_positions[idx]);
+    const nextRow = getCircularRecordRow(adv.multi_record_positions[idx + 1]);
+    return currentRow === nextRow;
+  };
+
+  const moveCircularRecordOrderUp = (index) => {
+    const idx = Number(index);
+    if (!canMoveCircularRecordOrderUp(idx)) return;
+    const next = [...adv.multi_record_positions];
+    const temp = next[idx - 1];
+    next[idx - 1] = next[idx];
+    next[idx] = temp;
+    adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...next);
+  };
+
+  const moveCircularRecordOrderDown = (index) => {
+    const idx = Number(index);
+    if (!canMoveCircularRecordOrderDown(idx)) return;
+    const next = [...adv.multi_record_positions];
+    const temp = next[idx + 1];
+    next[idx + 1] = next[idx];
+    next[idx] = temp;
+    adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...next);
+  };
+
+  const resetCircularRecordOrder = () => {
+    const defaults = buildDefaultCircularRecordPositions();
+    adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...defaults);
+  };
+
   return {
     pyodideReady,
     processing,
@@ -423,6 +531,7 @@ export const createAppSetup = () => {
     adv,
     losat,
     losatCacheInfo,
+    circularRecordList,
     paletteNames,
     selectedPalette,
     currentColors,
@@ -433,6 +542,16 @@ export const createAppSetup = () => {
     setLosatPairFilename,
     clearLosatCache,
     getLosatPairDefaultName,
+    refreshCircularRecordOrder,
+    getCircularRecordOrderLabel,
+    getCircularRecordRow,
+    getCircularRecordRowOptions,
+    setCircularRecordRow,
+    canMoveCircularRecordOrderUp,
+    canMoveCircularRecordOrderDown,
+    moveCircularRecordOrderUp,
+    moveCircularRecordOrderDown,
+    resetCircularRecordOrder,
     filterMode,
     manualBlacklist,
     manualWhitelist,

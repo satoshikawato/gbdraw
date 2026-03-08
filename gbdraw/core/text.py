@@ -379,6 +379,8 @@ def parse_mixed_content_text(input_text: str) -> List[Dict[str, Union[str, bool,
         wrapped_text: str = f"<root>{input_text}</root>"
         root: ET.Element = ET.fromstring(wrapped_text)
         if list(root):
+            if root.text is not None:
+                parts.append({"text": root.text, "italic": False})
             for element in root:
                 if element.tag == "i":
                     parts.append({"text": element.text, "italic": True})

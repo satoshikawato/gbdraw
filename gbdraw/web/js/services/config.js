@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
-const SESSION_VERSION = 4;
+const SESSION_VERSION = 5;
 
 const safeDeepMerge = (target, source) => {
   if (!source || typeof source !== 'object') return;
@@ -99,6 +99,13 @@ const buildConfigData = () => ({
   losatProgram: state.losatProgram.value
 });
 
+const shouldSuppressCircularMultiRecordDefaults = (incomingForm) => {
+  if (state.mode.value !== 'circular') return false;
+  if (!incomingForm || typeof incomingForm !== 'object' || Array.isArray(incomingForm)) return false;
+  if (!Object.prototype.hasOwnProperty.call(incomingForm, 'multi_record_canvas')) return false;
+  return state.form.multi_record_canvas === false && incomingForm.multi_record_canvas === true;
+};
+
 const applyConfigData = (data) => {
   if (data.form) safeDeepMerge(state.form, data.form);
   if (data.adv) safeDeepMerge(state.adv, data.adv);
@@ -126,10 +133,7 @@ const applyConfigData = (data) => {
   } else if (!['above', 'middle', 'below'].includes(state.form.linear_track_layout)) {
     state.form.linear_track_layout = 'middle';
   }
-  const normalizedDefinitionPosition = String(state.form.definition_position || '').trim().toLowerCase();
-  state.form.definition_position = ['center', 'top', 'bottom'].includes(normalizedDefinitionPosition)
-    ? normalizedDefinitionPosition
-    : 'center';
+  state.form.plot_title = String(state.form.plot_title || '');
   state.adv.feature_shapes = normalizeFeatureShapes(state.adv.feature_shapes);
   const normalizedMultiRecordSizeMode = String(state.adv.multi_record_size_mode || '').trim().toLowerCase();
   if (normalizedMultiRecordSizeMode === 'sqrt') {
@@ -154,28 +158,53 @@ const applyConfigData = (data) => {
     Number.isFinite(numericRowGapRatio) && numericRowGapRatio >= 0
       ? numericRowGapRatio
       : 0.05;
-  const normalizedMultiRecordDefinitionMode = String(state.adv.multi_record_definition_mode || '').trim().toLowerCase();
-  state.adv.multi_record_definition_mode = ['shared', 'legacy'].includes(normalizedMultiRecordDefinitionMode)
-    ? normalizedMultiRecordDefinitionMode
-    : 'shared';
-  const normalizedSharedDefinitionPosition = String(state.adv.shared_definition_position || '').trim().toLowerCase();
-  state.adv.shared_definition_position = ['center', 'top', 'bottom'].includes(normalizedSharedDefinitionPosition)
-    ? normalizedSharedDefinitionPosition
-    : 'bottom';
-  const rawSharedDefinitionFontSize = state.adv.shared_definition_font_size;
-  if (
-    rawSharedDefinitionFontSize === null ||
-    rawSharedDefinitionFontSize === undefined ||
-    rawSharedDefinitionFontSize === ''
-  ) {
-    state.adv.shared_definition_font_size = null;
+  const rawMultiRecordPositions = Array.isArray(state.adv.multi_record_positions)
+    ? state.adv.multi_record_positions
+    : [];
+  const dedupedMultiRecordPositions = [];
+  const seenMultiRecordSelectors = new Set();
+  rawMultiRecordPositions.forEach((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
+    const selector = String(entry.selector ?? '').trim();
+    if (!selector || seenMultiRecordSelectors.has(selector)) return;
+    const rowValue = Number(entry.row);
+    const normalizedRow = Number.isInteger(rowValue) && rowValue > 0 ? rowValue : 1;
+    seenMultiRecordSelectors.add(selector);
+    dedupedMultiRecordPositions.push({ selector, row: normalizedRow });
+  });
+  state.adv.multi_record_positions = dedupedMultiRecordPositions
+    .map((entry, index) => ({ ...entry, __index: index }))
+    .sort((left, right) => {
+      if (left.row !== right.row) return left.row - right.row;
+      return left.__index - right.__index;
+    })
+    .map(({ __index, ...entry }) => entry);
+  const normalizedPlotTitlePosition = String(state.adv.plot_title_position || '').trim().toLowerCase();
+  if (state.mode.value === 'linear') {
+    state.adv.plot_title_position = ['center', 'top', 'bottom'].includes(normalizedPlotTitlePosition)
+      ? normalizedPlotTitlePosition
+      : 'bottom';
   } else {
-    const numericSharedDefinitionFontSize = Number(rawSharedDefinitionFontSize);
-    state.adv.shared_definition_font_size =
-      Number.isFinite(numericSharedDefinitionFontSize) && numericSharedDefinitionFontSize > 0
-        ? numericSharedDefinitionFontSize
+    state.adv.plot_title_position = ['none', 'top', 'bottom'].includes(normalizedPlotTitlePosition)
+      ? normalizedPlotTitlePosition
+      : 'none';
+  }
+  const rawPlotTitleFontSize = state.adv.plot_title_font_size;
+  if (
+    rawPlotTitleFontSize === null ||
+    rawPlotTitleFontSize === undefined ||
+    rawPlotTitleFontSize === ''
+  ) {
+    state.adv.plot_title_font_size = null;
+  } else {
+    const numericPlotTitleFontSize = Number(rawPlotTitleFontSize);
+    state.adv.plot_title_font_size =
+      Number.isFinite(numericPlotTitleFontSize) && numericPlotTitleFontSize > 0
+        ? numericPlotTitleFontSize
         : null;
   }
+  state.adv.keep_full_definition_with_plot_title =
+    state.adv.keep_full_definition_with_plot_title === true;
   if (data.losat) safeDeepMerge(state.losat, data.losat);
   if (data.colors) {
     const normalized = {};
@@ -524,10 +553,12 @@ export const importConfig = async (e) => {
       }
       return value;
     });
+    state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.form);
     applyConfigData(data);
     alert('Configuration loaded successfully!');
   } catch (err) {
     console.error(err);
+    state.suppressCircularMultiRecordDefaults.value = false;
     alert('Failed to load config: Invalid JSON structure.');
   } finally {
     e.target.value = '';
@@ -570,11 +601,13 @@ export const importSession = async (e) => {
     } else {
       state.featurePanelTab.value = 'colors';
     }
+    state.generatedMode.value = ui.mode === 'linear' ? 'linear' : 'circular';
     if (ui.circularLegendPosition) state.circularLegendPosition.value = ui.circularLegendPosition;
     if (ui.linearLegendPosition) state.linearLegendPosition.value = ui.linearLegendPosition;
     if (ui.generatedLegendPosition) state.generatedLegendPosition.value = ui.generatedLegendPosition;
 
     if (data.config) {
+      state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.config.form);
       applyConfigData(data.config);
     }
 
@@ -712,6 +745,7 @@ export const importSession = async (e) => {
     alert('Session loaded successfully!');
   } catch (err) {
     console.error(err);
+    state.suppressCircularMultiRecordDefaults.value = false;
     alert('Failed to load session: Invalid JSON structure.');
   } finally {
     e.target.value = '';

@@ -23,6 +23,7 @@ from .labels.filtering import (
     read_label_override_file,
     read_qualifier_priority_file,
 )  # type: ignore[reportMissingImports]
+from .io.record_select import parse_record_selector
 from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
 from .features.visibility import read_feature_visibility_file
 from .exceptions import ValidationError
@@ -47,6 +48,38 @@ def _parse_feature_shape_assignment_arg(value: str) -> str:
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
     return value
+
+
+def _parse_multi_record_position_arg(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        raise argparse.ArgumentTypeError(
+            "multi_record_position does not allow empty entries."
+        )
+    if "@" not in raw:
+        raise argparse.ArgumentTypeError(
+            f"multi_record_position entry '{raw}' must be in '<selector>@<row>' format."
+        )
+    selector_text, row_text = raw.rsplit("@", 1)
+    selector_text = selector_text.strip()
+    row_text = row_text.strip()
+    if not selector_text:
+        raise argparse.ArgumentTypeError(
+            f"multi_record_position entry '{raw}' must include a selector before '@'."
+        )
+    if not row_text.isdigit() or int(row_text) <= 0:
+        raise argparse.ArgumentTypeError(
+            f"multi_record_position entry '{raw}' must use a positive integer row."
+        )
+    try:
+        selector = parse_record_selector(selector_text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    if selector is None:
+        raise argparse.ArgumentTypeError(
+            f"multi_record_position selector '{selector_text}' is invalid."
+        )
+    return f"{selector_text}@{int(row_text)}"
 
 
 def _get_args(args) -> argparse.Namespace:
@@ -180,9 +213,17 @@ def _get_args(args) -> argparse.Namespace:
         help='Definition font size (optional; default: 18)',
         type=float)
     parser.add_argument(
-        '--shared_definition_font_size',
-        help='Shared definition font size for multi-record shared mode (optional; default: 32).',
+        '--plot_title',
+        help='Circular plot title shown when plot_title_position is top or bottom (optional; defaults to species + strain).',
+        type=str)
+    parser.add_argument(
+        '--plot_title_font_size',
+        help='Plot title font size for circular top/bottom title layout (optional; default: 32).',
         type=float)
+    parser.add_argument(
+        '--keep_full_definition_with_plot_title',
+        help='Keep the full centered record definition when a circular plot title is shown (default: False).',
+        action='store_true')
     parser.add_argument(
         '--label_font_size',
         help='Label font size (optional; default: 14 (pt) for genomes <= 50 kb, 8 for genomes >= 50 kb)',
@@ -241,23 +282,17 @@ def _get_args(args) -> argparse.Namespace:
         type=float,
         default=0.05)
     parser.add_argument(
-        '--definition_position',
-        help='Definition position for single-record and legacy multi-record mode ("center", "top", "bottom"; default: "center").',
-        type=str,
-        choices=['center', 'top', 'bottom'],
-        default='center')
+        '--multi_record_position',
+        help="Record placement for multi-record canvas (repeatable): <selector>@<row> where selector is #index or record_id and row starts at 1.",
+        type=_parse_multi_record_position_arg,
+        action='append',
+        default=[])
     parser.add_argument(
-        '--multi_record_definition_mode',
-        help='Definition mode for multi-record canvas ("shared" or "legacy"; default: "shared").',
+        '--plot_title_position',
+        help='Plot title position in circular mode ("none", "top", "bottom"; default: "none").',
         type=str,
-        choices=['shared', 'legacy'],
-        default='shared')
-    parser.add_argument(
-        '--shared_definition_position',
-        help='Shared definition position in multi-record shared mode ("center", "top", "bottom"; default: "bottom").',
-        type=str,
-        choices=['center', 'top', 'bottom'],
-        default='bottom')
+        choices=['none', 'top', 'bottom'],
+        default='none')
     parser.add_argument(
         '--separate_strands',
         help='Separate strands (default: False).',
@@ -413,11 +448,12 @@ def circular_main(cmd_args) -> None:
     multi_record_min_radius_ratio: float = args.multi_record_min_radius_ratio
     multi_record_column_gap_ratio: float = args.multi_record_column_gap_ratio
     multi_record_row_gap_ratio: float = args.multi_record_row_gap_ratio
-    definition_position: str = args.definition_position
-    multi_record_definition_mode: str = args.multi_record_definition_mode
-    shared_definition_position: str = args.shared_definition_position
+    multi_record_positions: list[str] = [str(position) for position in (args.multi_record_position or [])]
+    plot_title: str = str(args.plot_title or "").strip()
+    plot_title_position: str = args.plot_title_position
     definition_font_size: Optional[float] = args.definition_font_size
-    shared_definition_font_size: Optional[float] = args.shared_definition_font_size
+    plot_title_font_size: Optional[float] = args.plot_title_font_size
+    keep_full_definition_with_plot_title: bool = args.keep_full_definition_with_plot_title
     label_font_size: Optional[float] = args.label_font_size
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
@@ -438,6 +474,8 @@ def circular_main(cmd_args) -> None:
     gc_content_radius: Optional[float] = args.gc_content_radius
     gc_skew_width: Optional[float] = args.gc_skew_width
     gc_skew_radius: Optional[float] = args.gc_skew_radius
+    if plot_title_font_size is not None and float(plot_title_font_size) <= 0:
+        raise ValidationError("plot_title_font_size must be > 0")
     if args.gbk:
         gb_records = load_gbks(args.gbk, "circular")
     elif args.gff and args.fasta:
@@ -476,15 +514,11 @@ def circular_main(cmd_args) -> None:
     scale_interval: Optional[int] = args.scale_interval
     if (
         not multi_record_canvas
-        and (
-            multi_record_definition_mode != "shared"
-            or shared_definition_position != "bottom"
-        )
+        and bool(multi_record_positions)
     ):
         logger.info(
-            "Ignoring --multi_record_definition_mode/--shared_definition_position because --multi_record_canvas is disabled."
+            "Ignoring --multi_record_position because --multi_record_canvas is disabled."
         )
-    
     # Warn if resolve_overlaps is used with separate_strands
     if strandedness and resolve_overlaps:
         logger.warning(
@@ -532,7 +566,7 @@ def circular_main(cmd_args) -> None:
         show_skew=show_skew, 
         allow_inner_labels=allow_inner_labels,
         circular_definition_font_size=definition_font_size,
-        shared_definition_font_size=shared_definition_font_size,
+        plot_title_font_size=plot_title_font_size,
         label_font_size=label_font_size,
         label_blacklist=label_blacklist,
         label_whitelist=label_whitelist,
@@ -607,13 +641,15 @@ def circular_main(cmd_args) -> None:
             step=manual_step,
             species=species,
             strain=strain,
-            definition_position=definition_position,
-            multi_record_definition_mode=multi_record_definition_mode,
-            shared_definition_position=shared_definition_position,
+            plot_title=plot_title,
+            plot_title_position=plot_title_position,
+            plot_title_font_size=plot_title_font_size,
+            keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
             multi_record_size_mode=multi_record_size_mode,
             multi_record_min_radius_ratio=multi_record_min_radius_ratio,
             multi_record_column_gap_ratio=multi_record_column_gap_ratio,
             multi_record_row_gap_ratio=multi_record_row_gap_ratio,
+            multi_record_positions=multi_record_positions or None,
             cfg=cfg,
             track_specs=track_specs_or_none,
         )
@@ -641,7 +677,10 @@ def circular_main(cmd_args) -> None:
                 step=step,
                 species=species,
                 strain=strain,
-                definition_position=definition_position,
+                plot_title=plot_title,
+                plot_title_position=plot_title_position,
+                plot_title_font_size=plot_title_font_size,
+                keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
                 cfg=cfg,
                 track_specs=track_specs_or_none,
             )

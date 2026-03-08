@@ -39,9 +39,7 @@ class OutputOptions:
 
     output_prefix: str = "out"
     legend: str = "right"
-    definition_position: Literal["center", "top", "bottom"] = "center"
-    multi_record_definition_mode: Literal["shared", "legacy"] = "shared"
-    shared_definition_position: Literal["center", "top", "bottom"] = "bottom"
+    plot_title_position: Literal["none", "center", "top", "bottom"] | None = None
 
 
 @dataclass(frozen=True)
@@ -60,6 +58,9 @@ class DiagramOptions:
     dinucleotide: str = "GC"
     window: int | None = None
     step: int | None = None
+    plot_title: str | None = None
+    plot_title_font_size: float | None = None
+    keep_full_definition_with_plot_title: bool = False
     species: str | None = None
     strain: str | None = None
     blast_files: Sequence[str] | None = None

@@ -130,8 +130,8 @@ canvas = assemble_circular_diagram_from_records(
     selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"],
     output_prefix="circular_grid",
     legend="right",  # shared legend (single)
-    multi_record_definition_mode="shared",  # default
-    shared_definition_position="bottom",    # default
+    plot_title_position="none",        # default; use "top" or "bottom" to show a shared title
+    plot_title_font_size=32,            # default
 )
 
 save_figure(canvas, ["svg"])
@@ -152,6 +152,9 @@ canvas = assemble_linear_diagram_from_records(
     selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"],
     output_prefix="pairwise_linear",
     legend="right",
+    plot_title="<i>Escherichia coli</i> pairwise map",
+    plot_title_position="bottom",  # default
+    plot_title_font_size=32,        # default
 )
 
 save_figure(canvas, ["svg"])
@@ -329,7 +332,7 @@ Optional parameters:
 | `step` | `int \| None` | `None` | Sliding step size; auto if `None`. |
 | `species` | `str \| None` | `None` | Display label. |
 | `strain` | `str \| None` | `None` | Display label. |
-| `definition_position` | `"center" \| "top" \| "bottom"` | `"center"` | Definition placement for single-record circular output. |
+| `plot_title_position` | `"none" \| "top" \| "bottom"` | `"none"` | Shared circular plot title placement. `none` hides the outer title and keeps the full definition in the center. |
 | `track_specs` | `Sequence[str \| TrackSpec] \| None` | `None` | Track controls. |
 | `cfg` | `GbdrawConfig \| None` | `None` | Prebuilt config object. If provided, keep it consistent with `config_dict`. |
 
@@ -341,17 +344,17 @@ Required parameters:
 Optional parameters:
 - Same optional arguments as `assemble_circular_diagram_from_record(...)` except
   that `records` replaces `gb_record`.
-- Additional multi-record definition options:
-  - `multi_record_definition_mode`: `"shared"` (default) or `"legacy"`
-  - `shared_definition_position`: `"center"`, `"top"`, or `"bottom"` (default: `"bottom"`)
+- Additional multi-record title options:
+  - `plot_title_position`: `"none"` (default), `"top"`, or `"bottom"`
+  - `plot_title_font_size`: `float` (default: `32`)
 
 Notes:
 - When more than one record is provided, records are placed in an automatic
   near-square grid (`cols = ceil(sqrt(n))`, `rows = ceil(n / cols)`).
 - Legend is shared (single legend group) when `legend != "none"`.
-- In `multi_record_definition_mode="shared"` (default), each circle shows a
-  per-record summary (`replicon if available + accession + length + GC`) and one shared
-  definition group (`species + strain`) is added to the merged canvas.
+- In multi-record circular output, each circle always shows a centered
+  per-record summary (`replicon if available + accession + length + GC`).
+- A shared plot title is only added when `plot_title_position` is `"top"` or `"bottom"`.
 
 ### 6.3 `assemble_linear_diagram_from_records(...)`
 
@@ -376,6 +379,9 @@ Optional parameters:
 | `dinucleotide` | `str` | `"GC"` | GC/AT content target. |
 | `window` | `int \| None` | `None` | Sliding window size; auto if `None`. |
 | `step` | `int \| None` | `None` | Sliding step size; auto if `None`. |
+| `plot_title` | `str \| None` | `None` | Global linear plot title rendered once per canvas. |
+| `plot_title_position` | `"center" \| "top" \| "bottom"` | `"bottom"` | Position for the global linear plot title. |
+| `plot_title_font_size` | `float \| None` | `None` | Plot title font size. `None` resolves to `32`. |
 | `evalue` | `float` | `1e-5` | BLAST filter. |
 | `bitscore` | `float` | `50.0` | BLAST filter. |
 | `identity` | `float` | `70.0` | BLAST filter (percent). |

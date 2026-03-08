@@ -231,6 +231,112 @@ def test_parse_linear_track_axis_gap() -> None:
 
 
 @pytest.mark.linear
+def test_linear_arrow_length_keeps_legacy_default_for_long_non_stranded() -> None:
+    longest_genome = 200_000
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=longest_genome,
+        config_dict=config_dict,
+        legend="none",
+        cfg=cfg,
+    )
+
+    expected_arrow_length = cfg.canvas.linear.arrow_length_parameter.long * longest_genome
+    assert canvas_config.length_param == "long"
+    assert canvas_config.arrow_length == pytest.approx(expected_arrow_length)
+
+
+@pytest.mark.linear
+def test_linear_arrow_length_scales_with_feature_height_override_for_long_records() -> None:
+    longest_genome = 200_000
+    default_config = load_config_toml("gbdraw.data", "config.toml")
+    default_cfg = GbdrawConfig.from_dict(default_config)
+    default_canvas = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=longest_genome,
+        config_dict=default_config,
+        legend="none",
+        cfg=default_cfg,
+    )
+
+    overridden_config = load_config_toml("gbdraw.data", "config.toml")
+    overridden_config = modify_config_dict(overridden_config, default_cds_height=50)
+    overridden_cfg = GbdrawConfig.from_dict(overridden_config)
+    overridden_canvas = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=longest_genome,
+        config_dict=overridden_config,
+        legend="none",
+        cfg=overridden_cfg,
+    )
+
+    assert default_canvas.length_param == "long"
+    assert overridden_canvas.length_param == "long"
+    assert overridden_canvas.arrow_length == pytest.approx(default_canvas.arrow_length * 2.5)
+
+
+@pytest.mark.linear
+def test_linear_arrow_length_is_independent_of_strandedness_for_long_records() -> None:
+    longest_genome = 200_000
+    default_config = load_config_toml("gbdraw.data", "config.toml")
+    default_cfg = GbdrawConfig.from_dict(default_config)
+    non_stranded_canvas = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=longest_genome,
+        config_dict=default_config,
+        legend="none",
+        cfg=default_cfg,
+    )
+
+    stranded_config = load_config_toml("gbdraw.data", "config.toml")
+    stranded_config = modify_config_dict(stranded_config, strandedness=True)
+    stranded_cfg = GbdrawConfig.from_dict(stranded_config)
+    stranded_canvas = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=longest_genome,
+        config_dict=stranded_config,
+        legend="none",
+        cfg=stranded_cfg,
+    )
+
+    assert non_stranded_canvas.length_param == "long"
+    assert stranded_canvas.length_param == "long"
+    assert stranded_canvas.arrow_length == pytest.approx(non_stranded_canvas.arrow_length)
+
+
+@pytest.mark.linear
+def test_linear_arrow_length_with_feature_height_override_is_independent_of_strandedness() -> None:
+    longest_genome = 200_000
+    non_stranded_config = load_config_toml("gbdraw.data", "config.toml")
+    non_stranded_config = modify_config_dict(non_stranded_config, default_cds_height=50)
+    non_stranded_cfg = GbdrawConfig.from_dict(non_stranded_config)
+    non_stranded_canvas = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=longest_genome,
+        config_dict=non_stranded_config,
+        legend="none",
+        cfg=non_stranded_cfg,
+    )
+
+    stranded_config = load_config_toml("gbdraw.data", "config.toml")
+    stranded_config = modify_config_dict(stranded_config, default_cds_height=50, strandedness=True)
+    stranded_cfg = GbdrawConfig.from_dict(stranded_config)
+    stranded_canvas = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=longest_genome,
+        config_dict=stranded_config,
+        legend="none",
+        cfg=stranded_cfg,
+    )
+
+    assert non_stranded_canvas.length_param == "long"
+    assert stranded_canvas.length_param == "long"
+    assert stranded_canvas.arrow_length == pytest.approx(non_stranded_canvas.arrow_length)
+
+
+@pytest.mark.linear
 def test_linear_layout_factors_non_stranded_above_below() -> None:
     above_track0 = calculate_feature_position_factors_linear("positive", 0, False, track_layout="above")
     above_track1 = calculate_feature_position_factors_linear("positive", 1, False, track_layout="above")

@@ -112,6 +112,7 @@ const canvasContainerRef = ref(null);
 const mode = ref('circular');
 const circularLegendPosition = ref('left'); // Separate legend position for circular mode
 const linearLegendPosition = ref('bottom'); // Separate legend position for linear mode
+const suppressCircularMultiRecordDefaults = ref(false);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
 const blastSource = ref('upload'); // 'upload' | 'losat'
@@ -150,7 +151,7 @@ const form = reactive({
   prefix: '',
   species: '',
   strain: '',
-  definition_position: 'center',
+  plot_title: '',
   track_type: 'tuckin',
   linear_track_layout: 'middle',
   legend: 'left',
@@ -214,9 +215,10 @@ const adv = reactive({
   multi_record_min_radius_ratio: 0.55,
   multi_record_column_gap_ratio: 0.10,
   multi_record_row_gap_ratio: 0.05,
-  multi_record_definition_mode: 'shared',
-  shared_definition_position: 'bottom',
-  shared_definition_font_size: null,
+  multi_record_positions: [],
+  plot_title_position: 'none',
+  plot_title_font_size: null,
+  keep_full_definition_with_plot_title: false,
   feature_width_circular: null,
   gc_content_width_circular: null,
   gc_content_radius_circular: null,
@@ -237,6 +239,7 @@ const losat = reactive({
 
 const losatCacheInfo = ref([]);
 const losatCache = ref(new Map());
+const circularRecordList = ref([]); // [{ selector: '#1', record_id: 'NC_xxx' }]
 
 // Color & Filter State
 const paletteNames = ref(['default']);
@@ -385,6 +388,11 @@ const diagramOffset = reactive({ x: 0, y: 0 }); // Cumulative drag offset
 const diagramElementIds = ref([]); // IDs of elements that move together
 const diagramElementOriginalTransforms = ref(new Map()); // Store original transforms for each element
 const diagramElements = ref([]);
+const plotTitleElement = ref(null);
+const plotTitleDragging = ref(false);
+const plotTitleDragStart = reactive({ x: 0, y: 0 });
+const plotTitleAutoTransform = ref({ x: 0, y: 0 });
+const plotTitleUserOffset = reactive({ x: 0, y: 0 });
 
 // Canvas size state
 const canvasPadding = reactive({ top: 0, right: 0, bottom: 0, left: 0 });
@@ -392,6 +400,7 @@ const showCanvasControls = ref(false);
 
 // Track legend position at generation time (for repositioning without regeneration)
 const generatedLegendPosition = ref('left');
+const generatedMode = ref('circular');
 
 // Flag to skip captureBaseConfig when editing SVG (repositioning legend, adding legend entries, etc.)
 // This prevents base config from being overwritten during incremental edits
@@ -551,6 +560,7 @@ export const state = {
   mode,
   circularLegendPosition,
   linearLegendPosition,
+  suppressCircularMultiRecordDefaults,
   cInputType,
   lInputType,
   blastSource,
@@ -562,6 +572,7 @@ export const state = {
   losat,
   losatCacheInfo,
   losatCache,
+  circularRecordList,
   paletteNames,
   selectedPalette,
   currentColors,
@@ -631,9 +642,15 @@ export const state = {
   diagramElementIds,
   diagramElementOriginalTransforms,
   diagramElements,
+  plotTitleElement,
+  plotTitleDragging,
+  plotTitleDragStart,
+  plotTitleAutoTransform,
+  plotTitleUserOffset,
   canvasPadding,
   showCanvasControls,
   generatedLegendPosition,
+  generatedMode,
   skipCaptureBaseConfig,
   skipPositionReapply,
   skipExtractOnSvgChange,

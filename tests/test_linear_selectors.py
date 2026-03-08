@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,41 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 INPUT_MG1655 = Path(__file__).parent / "test_inputs" / "MG1655.gbk"
+SVG_NS = {"svg": "http://www.w3.org/2000/svg"}
+
+
+def _extract_group_translate_y(root: ET.Element, group_id: str) -> float:
+    group = root.find(f".//svg:g[@id='{group_id}']", SVG_NS)
+    assert group is not None
+    transform = group.attrib.get("transform", "")
+    match = re.search(r"translate\(\s*[-0-9.]+(?:px)?[\s,]+([-0-9.]+)", transform)
+    assert match is not None
+    return float(match.group(1))
+
+
+def _extract_group_font_sizes(root: ET.Element, group_id: str) -> list[float]:
+    group = root.find(f".//svg:g[@id='{group_id}']", SVG_NS)
+    assert group is not None
+    sizes: list[float] = []
+    for text in group.findall(".//svg:text", SVG_NS):
+        raw_size = text.attrib.get("font-size")
+        if raw_size is None:
+            continue
+        try:
+            sizes.append(float(raw_size))
+        except ValueError:
+            continue
+    return sizes
+
+
+def _extract_group_italic_tspan_texts(root: ET.Element, group_id: str) -> list[str]:
+    group = root.find(f".//svg:g[@id='{group_id}']", SVG_NS)
+    assert group is not None
+    return [
+        "".join(tspan.itertext()).strip()
+        for tspan in group.findall(".//svg:tspan[@font-style='italic']", SVG_NS)
+        if "".join(tspan.itertext()).strip()
+    ]
 
 
 def _write_multi_record_gbk(path: Path) -> dict[str, int]:
@@ -241,3 +277,139 @@ def test_linear_region_ruler_on_axis_uses_span_based_units_for_high_coordinates(
     assert 'id="length_bar"' not in svg_content
     assert re.search(r">\d+(?:\.\d+)? kbp<", svg_content) is not None
     assert "Mbp" not in svg_content
+
+
+@pytest.mark.linear
+def test_linear_plot_title_drawn_once_and_coexists_with_record_labels(
+    temp_output_dir: Path,
+    gbdraw_runner,
+) -> None:
+    gbk_path = temp_output_dir / "multi_records_plot_title.gbk"
+    _write_multi_record_gbk(gbk_path)
+
+    returncode, output, svg_path = gbdraw_runner.run_linear(
+        [gbk_path],
+        "linear_plot_title_with_labels",
+        temp_output_dir,
+        extra_args=[
+            "--plot_title",
+            "Global Plot Title",
+            "--record_label",
+            "Record A Label",
+            "--record_label",
+            "Record B Label",
+            "--legend",
+            "none",
+        ],
+    )
+
+    assert returncode == 0, f"gbdraw failed: {output}"
+    svg_content = svg_path.read_text(encoding="utf-8")
+    root = ET.fromstring(svg_content)
+    plot_title_groups = root.findall(".//svg:g[@id='plot_title']", SVG_NS)
+    assert len(plot_title_groups) == 1
+    assert "Global Plot Title" in "".join(plot_title_groups[0].itertext())
+    assert "Record A Label" in svg_content
+    assert "Record B Label" in svg_content
+    assert root.find(".//svg:g[@id='RecA']", SVG_NS) is not None
+    assert root.find(".//svg:g[@id='RecB']", SVG_NS) is not None
+
+
+@pytest.mark.linear
+def test_linear_plot_title_position_changes_vertical_location(
+    temp_output_dir: Path,
+    gbdraw_runner,
+) -> None:
+    gbk_path = temp_output_dir / "multi_records_plot_title_position.gbk"
+    _write_multi_record_gbk(gbk_path)
+
+    y_positions: dict[str, float] = {}
+    for position in ("top", "center", "bottom"):
+        returncode, output, svg_path = gbdraw_runner.run_linear(
+            [gbk_path],
+            f"linear_plot_title_{position}",
+            temp_output_dir,
+            extra_args=[
+                "--plot_title",
+                "Position Test",
+                "--plot_title_position",
+                position,
+                "--legend",
+                "none",
+            ],
+        )
+        assert returncode == 0, f"gbdraw failed: {output}"
+        root = ET.fromstring(svg_path.read_text(encoding="utf-8"))
+        y_positions[position] = _extract_group_translate_y(root, "plot_title")
+
+    assert y_positions["top"] < y_positions["center"] < y_positions["bottom"]
+
+
+@pytest.mark.linear
+def test_linear_plot_title_font_size_default_and_override(
+    temp_output_dir: Path,
+    gbdraw_runner,
+) -> None:
+    gbk_path = temp_output_dir / "multi_records_plot_title_size.gbk"
+    _write_multi_record_gbk(gbk_path)
+
+    default_returncode, default_output, default_svg = gbdraw_runner.run_linear(
+        [gbk_path],
+        "linear_plot_title_default_size",
+        temp_output_dir,
+        extra_args=["--plot_title", "Default Size", "--legend", "none"],
+    )
+    assert default_returncode == 0, f"gbdraw failed: {default_output}"
+    default_root = ET.fromstring(default_svg.read_text(encoding="utf-8"))
+    default_sizes = _extract_group_font_sizes(default_root, "plot_title")
+    assert default_sizes == [32.0]
+
+    override_returncode, override_output, override_svg = gbdraw_runner.run_linear(
+        [gbk_path],
+        "linear_plot_title_override_size",
+        temp_output_dir,
+        extra_args=[
+            "--plot_title",
+            "Override Size",
+            "--plot_title_font_size",
+            "40",
+            "--legend",
+            "none",
+        ],
+    )
+    assert override_returncode == 0, f"gbdraw failed: {override_output}"
+    override_root = ET.fromstring(override_svg.read_text(encoding="utf-8"))
+    override_sizes = _extract_group_font_sizes(override_root, "plot_title")
+    assert override_sizes == [40.0]
+
+
+@pytest.mark.linear
+def test_linear_plot_title_keeps_plain_text_around_inline_italics(
+    temp_output_dir: Path,
+    gbdraw_runner,
+) -> None:
+    gbk_path = temp_output_dir / "multi_records_plot_title_mixed_content.gbk"
+    _write_multi_record_gbk(gbk_path)
+    plot_title = (
+        "Erythromycin A biosynthetic gene cluster from "
+        "<i>Saccharopolyspora erythraea</i>"
+    )
+
+    returncode, output, svg_path = gbdraw_runner.run_linear(
+        [gbk_path],
+        "linear_plot_title_mixed_content",
+        temp_output_dir,
+        extra_args=[
+            "--plot_title",
+            plot_title,
+            "--legend",
+            "none",
+        ],
+    )
+
+    assert returncode == 0, f"gbdraw failed: {output}"
+    root = ET.fromstring(svg_path.read_text(encoding="utf-8"))
+    plot_title_group = root.find(".//svg:g[@id='plot_title']", SVG_NS)
+    assert plot_title_group is not None
+    assert "".join(plot_title_group.itertext()) == "Erythromycin A biosynthetic gene cluster from Saccharopolyspora erythraea"
+    assert _extract_group_italic_tspan_texts(root, "plot_title") == ["Saccharopolyspora erythraea"]

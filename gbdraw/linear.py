@@ -246,6 +246,21 @@ def _get_args(args) -> argparse.Namespace:
         help='Definition font size (optional; float; default: 24 pt for genomes <= 50 kb, 10 pt for genomes >= 50 kb)',
         type=float)
     parser.add_argument(
+        '--plot_title',
+        help='Shared plot title text (optional).',
+        type=str,
+        default="")
+    parser.add_argument(
+        '--plot_title_position',
+        help='Shared plot title position ("center", "top", "bottom"; default: "bottom").',
+        type=str,
+        choices=["center", "top", "bottom"],
+        default="bottom")
+    parser.add_argument(
+        '--plot_title_font_size',
+        help='Shared plot title font size (optional; float; default: 32).',
+        type=float)
+    parser.add_argument(
         '--record_label',
         help='Override record definition label (repeatable; order matches input records)',
         type=str,
@@ -539,6 +554,9 @@ def linear_main(cmd_args) -> None:
     block_stroke_color: Optional[str] = args.block_stroke_color
     block_stroke_width: Optional[float] = args.block_stroke_width
     definition_font_size: Optional[float] = args.definition_font_size
+    plot_title: str = str(args.plot_title or "").strip()
+    plot_title_position: str = str(args.plot_title_position or "bottom").strip().lower()
+    plot_title_font_size: Optional[float] = args.plot_title_font_size
     label_font_size: Optional[float] = args.label_font_size
     label_placement: Optional[str] = args.label_placement
     label_rotation: Optional[float] = args.label_rotation
@@ -562,6 +580,8 @@ def linear_main(cmd_args) -> None:
     axis_stroke_width: Optional[float] = args.axis_stroke_width
     line_stroke_color: Optional[str] = args.line_stroke_color
     line_stroke_width: Optional[float] = args.line_stroke_width       
+    if plot_title_font_size is not None and float(plot_title_font_size) <= 0:
+        raise ValidationError("plot_title_font_size must be > 0")
     config_dict = modify_config_dict(
         config_dict, 
         block_stroke_color=block_stroke_color, 
@@ -700,6 +720,9 @@ def linear_main(cmd_args) -> None:
         dinucleotide=dinucleotide,
         window=window,
         step=step,
+        plot_title=plot_title,
+        plot_title_position=plot_title_position,
+        plot_title_font_size=plot_title_font_size,
         evalue=evalue,
         bitscore=bitscore,
         identity=identity,

@@ -1420,6 +1420,7 @@ def add_record_on_circular_canvas(
     gc_df: DataFrame,
     species: str | None,
     strain: str | None,
+    plot_title: str | None,
     config_dict: dict,
     legend_config,
     legend_table,
@@ -1677,6 +1678,8 @@ def add_record_on_circular_canvas(
     definition_ts = ts_by_kind.get("definition")
     if definition_ts is None or definition_ts.show:
         definition_kwargs: dict[str, Any] = {"cfg": cfg}
+        if plot_title is not None:
+            definition_kwargs["plot_title"] = plot_title
         if str(definition_profile) != "full":
             definition_kwargs["definition_profile"] = definition_profile
         if str(definition_position) != "center":
@@ -2004,6 +2007,7 @@ def assemble_circular_diagram(
     feature_config: FeatureDrawingConfigurator,
     species: Optional[str],
     strain: Optional[str],
+    plot_title: Optional[str],
     config_dict: dict,
     legend_config: LegendDrawingConfigurator,
     cfg: GbdrawConfig | None = None,
@@ -2073,6 +2077,7 @@ def assemble_circular_diagram(
         gc_df,
         species,
         strain,
+        plot_title,
         config_dict,
         legend_config,
         legend_table,
@@ -2095,6 +2100,7 @@ def plot_circular_diagram(
     feature_config: FeatureDrawingConfigurator,
     species: Optional[str],
     strain: Optional[str],
+    plot_title: Optional[str],
     config_dict: dict,
     out_formats: list,
     legend_config: LegendDrawingConfigurator,
@@ -2116,6 +2122,7 @@ def plot_circular_diagram(
         feature_config=feature_config,
         species=species,
         strain=strain,
+        plot_title=plot_title,
         config_dict=config_dict,
         legend_config=legend_config,
         cfg=cfg,

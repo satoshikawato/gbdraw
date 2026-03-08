@@ -18,7 +18,9 @@ export const setupWatchers = ({
   featureActions,
   legendLayout,
   resultsManager,
-  runLabelReflow
+  runLabelReflow,
+  refreshCircularRecordOrder,
+  resetPreviewViewport
 }) => {
   const {
     manualSpecificRules,
@@ -28,7 +30,9 @@ export const setupWatchers = ({
     svgContent,
     form,
     generatedLegendPosition,
+    generatedMode,
     mode,
+    cInputType,
     canvasPadding,
     skipCaptureBaseConfig,
     skipPositionReapply,
@@ -41,6 +45,7 @@ export const setupWatchers = ({
     linearBaseConfig,
     circularLegendPosition,
     linearLegendPosition,
+    suppressCircularMultiRecordDefaults,
     featureRecordIds,
     selectedFeatureRecordIdx,
     featureColorOverrides,
@@ -91,6 +96,19 @@ export const setupWatchers = ({
   } = legendLayout;
   const { scheduleDefinitionUpdate } = resultsManager;
 
+  const applyCircularMultiRecordSmartDefaults = () => {
+    if (mode.value !== 'circular' || !form.multi_record_canvas) return;
+
+    if (form.legend === 'left') {
+      form.legend = 'bottom';
+      circularLegendPosition.value = 'bottom';
+    }
+
+    if (String(state.adv.plot_title_position || '').trim().toLowerCase() === 'none') {
+      state.adv.plot_title_position = 'bottom';
+    }
+  };
+
   watch(
     () => [...manualSpecificRules],
     async (newRules, oldRules) => {
@@ -126,7 +144,7 @@ export const setupWatchers = ({
   watch(
     () => form.legend,
     (newPos, oldPos) => {
-      if (mode.value !== 'linear') return;
+      if (generatedMode.value !== mode.value) return;
       if (
         svgContent.value &&
         oldPos !== undefined &&
@@ -137,6 +155,18 @@ export const setupWatchers = ({
           repositionForLegendChange(newPos, generatedLegendPosition.value);
         });
       }
+    }
+  );
+
+  watch(
+    () => form.multi_record_canvas,
+    (enabled, previousEnabled) => {
+      if (enabled !== true || previousEnabled !== false) return;
+      if (suppressCircularMultiRecordDefaults.value) {
+        suppressCircularMultiRecordDefaults.value = false;
+        return;
+      }
+      applyCircularMultiRecordSmartDefaults();
     }
   );
 
@@ -287,6 +317,10 @@ export const setupWatchers = ({
         form.legend = linearLegendPosition.value;
       }
 
+      if (typeof resetPreviewViewport === 'function') {
+        resetPreviewViewport();
+      }
+
       extractedFeatures.value = [];
       featureRecordIds.value = [];
       selectedFeatureRecordIdx.value = 0;
@@ -423,9 +457,19 @@ export const setupWatchers = ({
 
   watch(() => form.species, scheduleDefinitionUpdate);
   watch(() => form.strain, scheduleDefinitionUpdate);
+  watch(() => form.plot_title, scheduleDefinitionUpdate);
   watch(() => state.adv.def_font_size, scheduleDefinitionUpdate);
-  watch(() => state.adv.shared_definition_font_size, scheduleDefinitionUpdate);
+  watch(() => state.adv.plot_title_position, scheduleDefinitionUpdate);
+  watch(() => state.adv.plot_title_font_size, scheduleDefinitionUpdate);
+  watch(() => state.adv.keep_full_definition_with_plot_title, scheduleDefinitionUpdate);
   watch(() => linearSeqs.map((seq) => seq.definition), scheduleDefinitionUpdate);
+  watch(
+    () => [mode.value, cInputType.value, files.c_gb, pyodideReady.value],
+    async () => {
+      if (typeof refreshCircularRecordOrder !== 'function') return;
+      await refreshCircularRecordOrder();
+    }
+  );
 
   onMounted(async () => {
     await pyodideManager.initPyodide();

@@ -15,13 +15,17 @@ export const createLegendLayout = ({ state, debugLog, legendActions, svgActions 
 
   const resetAllPositions = () => {
     diagramActions.resetDiagramPosition();
+    diagramActions.resetPlotTitlePosition();
     legendActions.resetLegendPositionOnly();
   };
 
   return {
     ...canvasActions,
     ...repositionActions,
+    clearPlotTitleState: diagramActions.clearPlotTitleState,
     resetAllPositions,
+    resetPlotTitlePosition: diagramActions.resetPlotTitlePosition,
+    setPlotTitleAutoTransform: diagramActions.setPlotTitleAutoTransform,
     setupDiagramDrag: diagramActions.setupDiagramDrag
   };
 };
