@@ -1,6 +1,11 @@
-import { getTransformedBBox, parseTransform } from './legend-layout/transform-utils.js';
+import {
+  getDefinitionGroupTranslate,
+  getLocalVerticalBounds,
+  getTransformedBBox,
+  parseTransform
+} from './legend-layout/transform-utils.js';
 
-export const createResultsManager = ({ state, getPyodide }) => {
+export const createResultsManager = ({ state, getPyodide, legendLayout }) => {
   const {
     pyodideReady,
     svgContent,
@@ -16,6 +21,7 @@ export const createResultsManager = ({ state, getPyodide }) => {
     selectedPalette,
     currentColors
   } = state;
+  const { clearPlotTitleState, setPlotTitleAutoTransform } = legendLayout;
 
   let definitionUpdateTimeout = null;
 
@@ -38,13 +44,18 @@ export const createResultsManager = ({ state, getPyodide }) => {
         throw new Error('Parse error');
       }
       const root = doc.documentElement;
-      const elements = Array.from(root.children);
-      if (elements.length) {
-        elements.forEach((el) => {
-          parts.push({ text: el.textContent || '', italic: el.tagName.toLowerCase() === 'i' });
-          const tail = el.nextSibling;
-          if (tail && tail.nodeType === Node.TEXT_NODE) {
-            parts.push({ text: tail.nodeValue || '', italic: false });
+      const nodes = Array.from(root.childNodes);
+      if (nodes.length) {
+        nodes.forEach((node) => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            parts.push({ text: node.nodeValue || '', italic: false });
+            return;
+          }
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            parts.push({
+              text: node.textContent || '',
+              italic: node.tagName.toLowerCase() === 'i'
+            });
           }
         });
       } else {
@@ -88,24 +99,6 @@ export const createResultsManager = ({ state, getPyodide }) => {
     return null;
   };
 
-  const getLocalVerticalBounds = (group) => {
-    let minY = Number.POSITIVE_INFINITY;
-    let maxY = Number.NEGATIVE_INFINITY;
-    const texts = Array.from(group?.children || [])
-      .filter((child) => String(child?.tagName || '').toLowerCase() === 'text');
-    texts.forEach((textEl) => {
-      const yValue = Number(String(textEl.getAttribute('y') || '0').replace('px', ''));
-      const fontSize = Number(String(textEl.getAttribute('font-size') || '0').replace('px', ''));
-      const halfHeight = Number.isFinite(fontSize) && fontSize > 0 ? 0.5 * fontSize : 0;
-      minY = Math.min(minY, yValue - halfHeight);
-      maxY = Math.max(maxY, yValue + halfHeight);
-    });
-    if (!Number.isFinite(minY) || !Number.isFinite(maxY)) {
-      return { minY: 0, maxY: 0, height: 0 };
-    }
-    return { minY, maxY, height: maxY - minY };
-  };
-
   const setGroupTranslate = (group, x, y) => {
     if (!group) return;
     group.setAttribute('transform', `translate(${x}, ${y})`);
@@ -130,15 +123,8 @@ export const createResultsManager = ({ state, getPyodide }) => {
   };
 
   const placeDefinitionGroup = (group, canvasWidth, canvasHeight, position) => {
-    const normalizedPosition = ['center', 'top', 'bottom'].includes(position) ? position : 'center';
-    const bounds = getLocalVerticalBounds(group);
-    let y = 0.5 * canvasHeight;
-    if (normalizedPosition === 'top') {
-      y = 24 - bounds.minY;
-    } else if (normalizedPosition === 'bottom') {
-      y = canvasHeight - 24 - bounds.maxY;
-    }
-    setGroupTranslate(group, 0.5 * canvasWidth, y);
+    const nextTransform = getDefinitionGroupTranslate(group, canvasWidth, canvasHeight, position);
+    setGroupTranslate(group, nextTransform.x, nextTransform.y);
   };
 
   const parseGroupSvg = (svgMarkup) => {
@@ -294,8 +280,18 @@ export const createResultsManager = ({ state, getPyodide }) => {
                 updated = true;
               }
             }
-            placeDefinitionGroup(plotTitleGroup, canvasWidth, canvasHeight, normalizedPlotTitlePosition);
+            const nextTitleTransform = getDefinitionGroupTranslate(
+              plotTitleGroup,
+              canvasWidth,
+              canvasHeight,
+              normalizedPlotTitlePosition
+            );
+            setPlotTitleAutoTransform(plotTitleGroup, nextTitleTransform, {
+              preserveUserOffset: true
+            });
             updated = true;
+          } else {
+            clearPlotTitleState();
           }
         }
 

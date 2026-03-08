@@ -148,7 +148,7 @@ export const createAppSetup = () => {
   setupGlobalUiEvents({ state, onMounted, onUnmounted });
 
   const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions });
-  const resultsManager = createResultsManager({ state, getPyodide });
+  const resultsManager = createResultsManager({ state, getPyodide, legendLayout });
   const {
     runAnalysis,
     runLabelReflow,

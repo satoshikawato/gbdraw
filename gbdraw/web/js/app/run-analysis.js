@@ -193,6 +193,7 @@ export const createRunAnalysis = ({ state, getPyodide, writeFileToFs, refreshFea
     files,
     linearSeqs,
     generatedLegendPosition,
+    generatedMode,
     extractedFeatures,
     featureRecordIds,
     selectedFeatureRecordIdx,
@@ -1261,6 +1262,7 @@ json.dumps({
       }
 
       generatedLegendPosition.value = form.legend;
+      generatedMode.value = mode.value;
 
       extractedFeatures.value = [];
 

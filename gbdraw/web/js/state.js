@@ -388,6 +388,11 @@ const diagramOffset = reactive({ x: 0, y: 0 }); // Cumulative drag offset
 const diagramElementIds = ref([]); // IDs of elements that move together
 const diagramElementOriginalTransforms = ref(new Map()); // Store original transforms for each element
 const diagramElements = ref([]);
+const plotTitleElement = ref(null);
+const plotTitleDragging = ref(false);
+const plotTitleDragStart = reactive({ x: 0, y: 0 });
+const plotTitleAutoTransform = ref({ x: 0, y: 0 });
+const plotTitleUserOffset = reactive({ x: 0, y: 0 });
 
 // Canvas size state
 const canvasPadding = reactive({ top: 0, right: 0, bottom: 0, left: 0 });
@@ -395,6 +400,7 @@ const showCanvasControls = ref(false);
 
 // Track legend position at generation time (for repositioning without regeneration)
 const generatedLegendPosition = ref('left');
+const generatedMode = ref('circular');
 
 // Flag to skip captureBaseConfig when editing SVG (repositioning legend, adding legend entries, etc.)
 // This prevents base config from being overwritten during incremental edits
@@ -636,9 +642,15 @@ export const state = {
   diagramElementIds,
   diagramElementOriginalTransforms,
   diagramElements,
+  plotTitleElement,
+  plotTitleDragging,
+  plotTitleDragStart,
+  plotTitleAutoTransform,
+  plotTitleUserOffset,
   canvasPadding,
   showCanvasControls,
   generatedLegendPosition,
+  generatedMode,
   skipCaptureBaseConfig,
   skipPositionReapply,
   skipExtractOnSvgChange,

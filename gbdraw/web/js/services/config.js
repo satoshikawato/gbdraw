@@ -601,6 +601,7 @@ export const importSession = async (e) => {
     } else {
       state.featurePanelTab.value = 'colors';
     }
+    state.generatedMode.value = ui.mode === 'linear' ? 'linear' : 'circular';
     if (ui.circularLegendPosition) state.circularLegendPosition.value = ui.circularLegendPosition;
     if (ui.linearLegendPosition) state.linearLegendPosition.value = ui.linearLegendPosition;
     if (ui.generatedLegendPosition) state.generatedLegendPosition.value = ui.generatedLegendPosition;

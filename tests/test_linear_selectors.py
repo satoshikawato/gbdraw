@@ -38,6 +38,16 @@ def _extract_group_font_sizes(root: ET.Element, group_id: str) -> list[float]:
     return sizes
 
 
+def _extract_group_italic_tspan_texts(root: ET.Element, group_id: str) -> list[str]:
+    group = root.find(f".//svg:g[@id='{group_id}']", SVG_NS)
+    assert group is not None
+    return [
+        "".join(tspan.itertext()).strip()
+        for tspan in group.findall(".//svg:tspan[@font-style='italic']", SVG_NS)
+        if "".join(tspan.itertext()).strip()
+    ]
+
+
 def _write_multi_record_gbk(path: Path) -> dict[str, int]:
     rec_a_len = 1234
     rec_b_len = 567
@@ -371,3 +381,35 @@ def test_linear_plot_title_font_size_default_and_override(
     override_root = ET.fromstring(override_svg.read_text(encoding="utf-8"))
     override_sizes = _extract_group_font_sizes(override_root, "plot_title")
     assert override_sizes == [40.0]
+
+
+@pytest.mark.linear
+def test_linear_plot_title_keeps_plain_text_around_inline_italics(
+    temp_output_dir: Path,
+    gbdraw_runner,
+) -> None:
+    gbk_path = temp_output_dir / "multi_records_plot_title_mixed_content.gbk"
+    _write_multi_record_gbk(gbk_path)
+    plot_title = (
+        "Erythromycin A biosynthetic gene cluster from "
+        "<i>Saccharopolyspora erythraea</i>"
+    )
+
+    returncode, output, svg_path = gbdraw_runner.run_linear(
+        [gbk_path],
+        "linear_plot_title_mixed_content",
+        temp_output_dir,
+        extra_args=[
+            "--plot_title",
+            plot_title,
+            "--legend",
+            "none",
+        ],
+    )
+
+    assert returncode == 0, f"gbdraw failed: {output}"
+    root = ET.fromstring(svg_path.read_text(encoding="utf-8"))
+    plot_title_group = root.find(".//svg:g[@id='plot_title']", SVG_NS)
+    assert plot_title_group is not None
+    assert "".join(plot_title_group.itertext()) == "Erythromycin A biosynthetic gene cluster from Saccharopolyspora erythraea"
+    assert _extract_group_italic_tspan_texts(root, "plot_title") == ["Saccharopolyspora erythraea"]

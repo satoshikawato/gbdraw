@@ -226,6 +226,17 @@ def _extract_group_font_weights(root: ET.Element, group_id: str) -> list[str]:
     return weights
 
 
+def _extract_group_italic_tspan_texts(root: ET.Element, group_id: str) -> list[str]:
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    group = root.find(f".//svg:g[@id='{group_id}']", ns)
+    assert group is not None
+    return [
+        "".join(tspan.itertext()).strip()
+        for tspan in group.findall(".//svg:tspan[@font-style='italic']", ns)
+        if "".join(tspan.itertext()).strip()
+    ]
+
+
 def _extract_group_translate_y(root: ET.Element, group_id: str) -> float:
     ns = {"svg": "http://www.w3.org/2000/svg"}
     group = root.find(f".//svg:g[@id='{group_id}']", ns)
@@ -2732,6 +2743,34 @@ def test_single_record_custom_plot_title_overrides_default_when_visible() -> Non
     assert any(text.endswith("% GC") for text in record_texts)
     assert "Default single organism" not in record_texts
     assert "Default single strain" not in record_texts
+
+
+@pytest.mark.circular
+def test_single_record_plot_title_keeps_plain_text_around_inline_italics() -> None:
+    record = _build_record_with_source(
+        "single_mixed_content_title",
+        organism="Default single organism",
+        strain="Default single strain",
+        length=1200,
+    )
+    plot_title = (
+        "Erythromycin A biosynthetic gene cluster from "
+        "<i>Saccharopolyspora erythraea</i>"
+    )
+
+    canvas = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=["CDS"],
+        legend="none",
+        plot_title=plot_title,
+        plot_title_position="top",
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    assert _extract_group_texts(root, "plot_title") == [
+        "Erythromycin A biosynthetic gene cluster from Saccharopolyspora erythraea"
+    ]
+    assert _extract_group_italic_tspan_texts(root, "plot_title") == ["Saccharopolyspora erythraea"]
 
 
 @pytest.mark.circular

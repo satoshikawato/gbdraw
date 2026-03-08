@@ -1,5 +1,10 @@
 import { estimateColorFactor, interpolateColor } from '../color-utils.js';
-import { getElementsBounds, getTransformedBBox, parseTransform } from './transform-utils.js';
+import {
+  getDefinitionGroupTranslate,
+  getElementsBounds,
+  getTransformedBBox,
+  parseTransform
+} from './transform-utils.js';
 
 const CIRCULAR_LEGEND_EDGE_PADDING = 16;
 const CIRCULAR_LEGEND_CONTENT_GAP = 12;
@@ -26,6 +31,7 @@ export const createLegendRepositionActions = ({
     diagramOffset,
     legendInitialTransform,
     legendCurrentOffset,
+    plotTitleAutoTransform,
     pairwiseMatchFactors,
     currentColors,
     legendColorOverrides,
@@ -33,12 +39,13 @@ export const createLegendRepositionActions = ({
     results,
     skipCaptureBaseConfig,
     skipPositionReapply,
-    form
+    form,
+    adv
   } = state;
 
   const { getAllFeatureLegendGroups, reflowDualLegendLayout, reflowSingleLegendLayout } = legendActions;
   const { ensureUniquePairwiseGradientIds, ensureUniqueSkewClipPathIds } = svgActions;
-  const { applyDiagramShift } = diagramActions;
+  const { applyDiagramShift, clearPlotTitleState, setPlotTitleAutoTransform } = diagramActions;
 
   const getCircularAbsoluteConfig = (position, baseConfig) => {
     const { viewBoxWidth, viewBoxHeight, legendWidth, legendHeight } = baseConfig;
@@ -167,12 +174,7 @@ export const createLegendRepositionActions = ({
         }
       }
 
-      if (newPosition === 'none') {
-        generatedLegendPosition.value = newPosition;
-        return;
-      }
-
-      if (legendGroup) {
+      if (legendGroup && newPosition !== 'none') {
         const useHorizontalLayout = newPosition === 'top' || newPosition === 'bottom';
         const layout = useHorizontalLayout ? 'horizontal' : 'vertical';
         const widthHint = useHorizontalLayout ? circularBaseConfig.value?.viewBoxWidth || null : null;
@@ -317,37 +319,74 @@ export const createLegendRepositionActions = ({
               }
             }
 
-            if (newPosition === 'bottom') {
-              const plotTitleGroup = svg.getElementById('plot_title');
-              if (plotTitleGroup) {
-                const legendBounds = getTransformedBBox(legendGroup);
-                const plotTitleBounds = getTransformedBBox(plotTitleGroup);
-                if (legendBounds && plotTitleBounds) {
-                  const requiredPlotTitleTop =
-                    legendBounds.y + legendBounds.height + CIRCULAR_LEGEND_PLOT_TITLE_GAP;
-                  if (plotTitleBounds.y < requiredPlotTitleTop) {
-                    const shiftY = requiredPlotTitleTop - plotTitleBounds.y;
-                    const plotTitlePos = parseTransform(plotTitleGroup.getAttribute('transform'));
-                    const adjustedPlotTitleY = plotTitlePos.y + shiftY;
-                    plotTitleGroup.setAttribute(
-                      'transform',
-                      `translate(${plotTitlePos.x}, ${adjustedPlotTitleY})`
-                    );
-                    diagramElementOriginalTransforms.value.set(plotTitleGroup, {
-                      x: plotTitlePos.x,
-                      y: adjustedPlotTitleY
-                    });
+          }
 
-                    const adjustedPlotTitleBottom = plotTitleBounds.y + shiftY + plotTitleBounds.height;
-                    const requiredCanvasBottom = adjustedPlotTitleBottom + CIRCULAR_PLOT_TITLE_BOTTOM_MARGIN;
-                    if (requiredCanvasBottom > vbY + vbH) {
-                      vbH = requiredCanvasBottom - vbY;
-                      svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
-                    }
+          const normalizedPlotTitlePosition = String(adv.plot_title_position || 'none').trim().toLowerCase();
+          const plotTitleGroup = svg.getElementById('plot_title');
+          if (plotTitleGroup && ['top', 'bottom'].includes(normalizedPlotTitlePosition)) {
+            const nextTitleTransform = getDefinitionGroupTranslate(
+              plotTitleGroup,
+              vbW,
+              vbH,
+              normalizedPlotTitlePosition
+            );
+            setPlotTitleAutoTransform(plotTitleGroup, nextTitleTransform, {
+              preserveUserOffset: true
+            });
+
+            if (newPosition === 'top' && normalizedPlotTitlePosition === 'top') {
+              const legendBounds = getTransformedBBox(legendGroup);
+              const plotTitleBounds = getTransformedBBox(plotTitleGroup);
+              if (legendBounds && plotTitleBounds) {
+                const requiredLegendTop =
+                  plotTitleBounds.y + plotTitleBounds.height + CIRCULAR_LEGEND_PLOT_TITLE_GAP;
+                if (legendBounds.y < requiredLegendTop) {
+                  const shiftY = requiredLegendTop - legendBounds.y;
+                  const legendPos = parseTransform(legendGroup.getAttribute('transform'));
+                  const shiftedLegendY = legendPos.y + shiftY;
+                  legendGroup.setAttribute('transform', `translate(${legendPos.x}, ${shiftedLegendY})`);
+                  legendInitialTransform.value = { x: legendPos.x, y: shiftedLegendY };
+                  legendCurrentOffset.x = 0;
+                  legendCurrentOffset.y = 0;
+                  applyDiagramShift(0, shiftY);
+                  vbH += shiftY;
+                  svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+                }
+              }
+            }
+
+            if (newPosition === 'bottom' && normalizedPlotTitlePosition === 'bottom') {
+              let legendBounds = getTransformedBBox(legendGroup);
+              let plotTitleBounds = getTransformedBBox(plotTitleGroup);
+              if (legendBounds && plotTitleBounds) {
+                const requiredPlotTitleTop =
+                  legendBounds.y + legendBounds.height + CIRCULAR_LEGEND_PLOT_TITLE_GAP;
+                if (plotTitleBounds.y < requiredPlotTitleTop) {
+                  const shiftY = requiredPlotTitleTop - plotTitleBounds.y;
+                  setPlotTitleAutoTransform(
+                    plotTitleGroup,
+                    {
+                      x: plotTitleAutoTransform.value.x,
+                      y: plotTitleAutoTransform.value.y + shiftY
+                    },
+                    { preserveUserOffset: true }
+                  );
+                  legendBounds = getTransformedBBox(legendGroup);
+                  plotTitleBounds = getTransformedBBox(plotTitleGroup);
+                }
+
+                if (plotTitleBounds) {
+                  const requiredCanvasBottom =
+                    plotTitleBounds.y + plotTitleBounds.height + CIRCULAR_PLOT_TITLE_BOTTOM_MARGIN;
+                  if (requiredCanvasBottom > vbY + vbH) {
+                    vbH = requiredCanvasBottom - vbY;
+                    svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
                   }
                 }
               }
             }
+          } else {
+            clearPlotTitleState();
           }
         }
       }

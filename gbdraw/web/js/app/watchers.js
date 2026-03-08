@@ -29,6 +29,7 @@ export const setupWatchers = ({
     svgContent,
     form,
     generatedLegendPosition,
+    generatedMode,
     mode,
     cInputType,
     canvasPadding,
@@ -142,7 +143,7 @@ export const setupWatchers = ({
   watch(
     () => form.legend,
     (newPos, oldPos) => {
-      if (mode.value !== 'linear') return;
+      if (generatedMode.value !== mode.value) return;
       if (
         svgContent.value &&
         oldPos !== undefined &&
