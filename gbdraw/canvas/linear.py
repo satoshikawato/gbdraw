@@ -1,12 +1,25 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from functools import lru_cache
 from typing import Literal
 
 from svgwrite import Drawing
 
 from ..config.models import GbdrawConfig
+from ..config.toml import load_config_toml
 from ..core.sequence import determine_length_parameter
+
+
+@lru_cache(maxsize=1)
+def _get_default_linear_non_stranded_cds_heights() -> dict[str, float]:
+    """Return baseline CDS heights from the unmodified default config."""
+    default_config = load_config_toml("gbdraw.data", "config.toml")
+    default_cfg = GbdrawConfig.from_dict(default_config)
+    return {
+        "short": 0.5 * float(default_cfg.canvas.linear.default_cds_height.short),
+        "long": 0.5 * float(default_cfg.canvas.linear.default_cds_height.long),
+    }
 
 
 class LinearCanvasConfigurator:
@@ -83,6 +96,7 @@ class LinearCanvasConfigurator:
         self.length_threshold = cfg.labels.length_threshold.linear
         self.length_param = determine_length_parameter(self.longest_genome, self.length_threshold)
         self.default_cds_height: float = getattr(cfg.canvas.linear.default_cds_height, self.length_param)
+        self.baseline_non_stranded_cds_heights = _get_default_linear_non_stranded_cds_heights()
         self.default_gc_height: float = cfg.canvas.linear.default_gc_height
         self.dpi: int = cfg.canvas.dpi
         self.show_gc: bool = cfg.canvas.show_gc
@@ -151,7 +165,13 @@ class LinearCanvasConfigurator:
         """
 
         self.arrow_length_param = getattr(self._cfg.canvas.linear.arrow_length_parameter, self.length_param)
-        self.arrow_length: float = self.arrow_length_param * self.longest_genome
+        base_arrow_length = self.arrow_length_param * self.longest_genome
+        baseline_cds_height = float(self.baseline_non_stranded_cds_heights.get(self.length_param, 0.0))
+        if baseline_cds_height <= 0.0:
+            self.arrow_length = base_arrow_length
+            return
+        current_non_stranded_cds_height = 0.5 * float(self.default_cds_height)
+        self.arrow_length = base_arrow_length * (current_non_stranded_cds_height / baseline_cds_height)
 
     def calculate_dimensions(self) -> None:
         """
