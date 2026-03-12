@@ -27,6 +27,7 @@ from .io.record_select import parse_record_selector
 from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
 from .features.visibility import read_feature_visibility_file
 from .exceptions import ValidationError
+from .tracks import load_circular_track_specs
 
 from .cli_utils.common import (
     CAIROSVG_AVAILABLE,
@@ -363,6 +364,11 @@ def _get_args(args) -> argparse.Namespace:
         help='Manual scale interval for circular mode (in bp). Overrides automatic calculation.',
         type=int)
     parser.add_argument(
+        '--track_file',
+        help='Path to an ordered JSON track file for circular annular tracks.',
+        type=str,
+        default="")
+    parser.add_argument(
         '--feature_width',
         help='Feature track width for circular mode (in px; must be > 0).',
         type=float)
@@ -474,6 +480,7 @@ def circular_main(cmd_args) -> None:
     gc_content_radius: Optional[float] = args.gc_content_radius
     gc_skew_width: Optional[float] = args.gc_skew_width
     gc_skew_radius: Optional[float] = args.gc_skew_radius
+    track_file_path: str = str(args.track_file or "").strip()
     if plot_title_font_size is not None and float(plot_title_font_size) <= 0:
         raise ValidationError("plot_title_font_size must be > 0")
     if args.gbk:
@@ -587,15 +594,29 @@ def circular_main(cmd_args) -> None:
 
 
     cfg = GbdrawConfig.from_dict(config_dict)
-    track_specs: list[str] = []
+    track_specs: list[str | object] = []
+    file_track_specs = load_circular_track_specs(track_file_path) if track_file_path else []
+    file_defined_builtins = {str(track_spec.kind) for track_spec in file_track_specs if str(track_spec.kind) in {"features", "gc_content", "gc_skew"}}
+    if file_track_specs:
+        track_specs.extend(file_track_specs)
+
     if feature_width is not None:
-        track_specs.append(f"features@w={float(feature_width):g}px")
+        if "features" in file_defined_builtins:
+            logger.warning(
+                "WARNING: Ignoring --feature_width because --track_file defines the built-in features track."
+            )
+        else:
+            track_specs.append(f"features@w={float(feature_width):g}px")
 
     gc_content_spec_requested = (gc_content_width is not None) or (gc_content_radius is not None)
     if gc_content_spec_requested:
         if not show_gc:
             logger.warning(
                 "WARNING: GC content track is suppressed. Ignoring --gc_content_width/--gc_content_radius."
+            )
+        elif "gc_content" in file_defined_builtins:
+            logger.warning(
+                "WARNING: Ignoring --gc_content_width/--gc_content_radius because --track_file defines the built-in gc_content track."
             )
         else:
             gc_content_opts: list[str] = []
@@ -611,6 +632,10 @@ def circular_main(cmd_args) -> None:
         if not show_skew:
             logger.warning(
                 "WARNING: GC skew track is suppressed. Ignoring --gc_skew_width/--gc_skew_radius."
+            )
+        elif "gc_skew" in file_defined_builtins:
+            logger.warning(
+                "WARNING: Ignoring --gc_skew_width/--gc_skew_radius because --track_file defines the built-in gc_skew track."
             )
         else:
             gc_skew_opts: list[str] = []

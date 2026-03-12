@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import List, Optional, Set, Tuple
+from typing import Any, List, Mapping, Optional, Sequence, Set, Tuple
 
 from pandas import DataFrame
 
@@ -188,6 +188,73 @@ def prepare_legend_table(
     return legend_table
 
 
-__all__ = ["prepare_legend_table"]
+def append_analysis_track_legend_entries(
+    legend_table: dict[str, dict[str, Any]],
+    analysis_tracks: Sequence[Mapping[str, Any]],
+    gc_config,
+    skew_config,
+) -> dict[str, dict[str, Any]]:
+    gc_stroke_color: str = gc_config.stroke_color
+    gc_stroke_width: float = gc_config.stroke_width
+    gc_high_fill_color: str = gc_config.high_fill_color
+    gc_low_fill_color: str = gc_config.low_fill_color
+    skew_high_fill_color: str = skew_config.high_fill_color
+    skew_low_fill_color: str = skew_config.low_fill_color
+    skew_stroke_color: str = skew_config.stroke_color
+    skew_stroke_width: float = skew_config.stroke_width
+
+    for track in analysis_tracks:
+        metric = str(track.get("metric") or "").strip().lower()
+        caption = str(track.get("caption") or "").strip()
+        if not caption or metric not in {"content", "skew"}:
+            continue
+
+        if metric == "content":
+            if gc_high_fill_color == gc_low_fill_color:
+                legend_table[caption] = {
+                    "type": "solid",
+                    "fill": gc_high_fill_color,
+                    "stroke": gc_stroke_color,
+                    "width": gc_stroke_width,
+                }
+            else:
+                legend_table[f"{caption} (+)"] = {
+                    "type": "solid",
+                    "fill": gc_high_fill_color,
+                    "stroke": gc_stroke_color,
+                    "width": gc_stroke_width,
+                }
+                legend_table[f"{caption} (-)"] = {
+                    "type": "solid",
+                    "fill": gc_low_fill_color,
+                    "stroke": gc_stroke_color,
+                    "width": gc_stroke_width,
+                }
+            continue
+
+        if skew_high_fill_color == skew_low_fill_color:
+            legend_table[caption] = {
+                "type": "solid",
+                "fill": skew_high_fill_color,
+                "stroke": skew_stroke_color,
+                "width": skew_stroke_width,
+            }
+        else:
+            legend_table[f"{caption} (+)"] = {
+                "type": "solid",
+                "fill": skew_high_fill_color,
+                "stroke": skew_stroke_color,
+                "width": skew_stroke_width,
+            }
+            legend_table[f"{caption} (-)"] = {
+                "type": "solid",
+                "fill": skew_low_fill_color,
+                "stroke": skew_stroke_color,
+                "width": skew_stroke_width,
+            }
+    return legend_table
+
+
+__all__ = ["append_analysis_track_legend_entries", "prepare_legend_table"]
 
 

@@ -41,13 +41,22 @@ from gbdraw.configurators import (  # type: ignore[reportMissingImports]
 )
 from gbdraw.core.sequence import create_dict_for_sequence_lengths, check_feature_presence  # type: ignore[reportMissingImports]
 from gbdraw.diagrams.circular import assemble_circular_diagram  # type: ignore[reportMissingImports]
+from gbdraw.diagrams.circular.track_manager import (  # type: ignore[reportMissingImports]
+    build_analysis_track_entries,
+    build_ordered_annular_track_specs,
+)
 from gbdraw.diagrams.circular.positioning import place_definition_group_on_size  # type: ignore[reportMissingImports]
 from gbdraw.diagrams.linear import assemble_linear_diagram  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
 from gbdraw.features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
-from gbdraw.legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
+from gbdraw.legend.table import append_analysis_track_legend_entries, prepare_legend_table  # type: ignore[reportMissingImports]
 from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup  # type: ignore[reportMissingImports]
-from gbdraw.tracks import TrackSpec, parse_track_specs  # type: ignore[reportMissingImports]
+from gbdraw.tracks import (  # type: ignore[reportMissingImports]
+    TrackSpec,
+    get_circular_feature_type_union,
+    normalize_circular_track_specs,
+    parse_track_specs,
+)
 
 DEFAULT_SELECTED_FEATURES = (
     "CDS",
@@ -65,6 +74,8 @@ _SUPPORTED_CIRCULAR_TRACK_KINDS = {
     "features",
     "gc_content",
     "gc_skew",
+    "analysis",
+    "custom",
     "definition",
     "ticks",
     "axis",
@@ -129,6 +140,32 @@ def _resolve_circular_window_step(
             resolved_step = cfg.objects.sliding_window.up10m[1]
 
     return int(resolved_window), int(resolved_step)
+
+
+def _parse_and_normalize_circular_track_specs(
+    track_specs: Sequence[str | TrackSpec] | None,
+) -> list[TrackSpec] | None:
+    if track_specs is None:
+        return None
+
+    parsed: list[TrackSpec] = []
+    raw: list[str] = []
+    for item in track_specs:
+        if isinstance(item, TrackSpec):
+            parsed.append(item)
+        else:
+            raw.append(str(item))
+    if raw:
+        parsed.extend(parse_track_specs(raw, mode="circular"))
+
+    normalized = normalize_circular_track_specs(parsed)
+    for track_spec in normalized:
+        if str(track_spec.kind) not in _SUPPORTED_CIRCULAR_TRACK_KINDS:
+            logger.warning(
+                "TrackSpec kind '%s' is not supported for circular diagrams yet; it will be ignored.",
+                track_spec.kind,
+            )
+    return normalized
 
 
 def _parse_svg_length_px(value: object, *, default: float = 0.0) -> float:
@@ -1319,30 +1356,12 @@ def assemble_circular_diagram_from_record(
         else:
             effective_definition_profile = "full"
 
-    parsed_track_specs: list[TrackSpec] | None = None
-    if track_specs is not None:
-        parsed: list[TrackSpec] = []
-        raw: list[str] = []
-        for item in track_specs:
-            if isinstance(item, TrackSpec):
-                parsed.append(item)
-            else:
-                raw.append(str(item))
-        if raw:
-            parsed.extend(parse_track_specs(raw, mode="circular"))
-        parsed_track_specs = parsed
+    parsed_track_specs = _parse_and_normalize_circular_track_specs(track_specs)
 
-    if parsed_track_specs:
-        for ts in parsed_track_specs:
-            if ts.mode != "circular":
-                raise ValidationError(
-                    f"TrackSpec mode '{ts.mode}' is not supported for circular diagrams."
-                )
-            if str(ts.kind) not in _SUPPORTED_CIRCULAR_TRACK_KINDS:
-                logger.warning(
-                    "TrackSpec kind '%s' is not supported for circular diagrams yet; it will be ignored.",
-                    ts.kind,
-                )
+    effective_selected_features = get_circular_feature_type_union(
+        parsed_track_specs,
+        fallback_feature_types=list(selected_features_set),
+    )
 
     ts_by_kind = {str(ts.kind): ts for ts in (parsed_track_specs or [])}
     legend_ts = ts_by_kind.get("legend")
@@ -1354,6 +1373,15 @@ def assemble_circular_diagram_from_record(
     canvas_cfg = cfg.canvas
     canvas_cfg = replace(canvas_cfg, show_gc=bool(show_gc), show_skew=bool(show_skew))
     cfg = replace(cfg, canvas=canvas_cfg)
+    annular_track_specs = build_ordered_annular_track_specs(
+        parsed_track_specs,
+        show_gc=bool(cfg.canvas.show_gc),
+        show_skew=bool(cfg.canvas.show_skew),
+    )
+    analysis_track_entries = build_analysis_track_entries(
+        annular_track_specs,
+        default_dinucleotide=dinucleotide,
+    )
 
     seq_length = len(gb_record.seq)
 
@@ -1392,7 +1420,11 @@ def assemble_circular_diagram_from_record(
     )
 
     # Circular drawing expects the precomputed GC/skew dataframe, but only when needed.
-    gc_df = skew_df(gb_record, window, step, dinucleotide) if (cfg.canvas.show_gc or cfg.canvas.show_skew) else DataFrame()
+    gc_df = (
+        skew_df(gb_record, window, step, dinucleotide)
+        if (cfg.canvas.show_gc or cfg.canvas.show_skew or any(entry.show for entry in analysis_track_entries))
+        else DataFrame()
+    )
 
     canvas_config = CircularCanvasConfigurator(
         output_prefix=output_prefix, config_dict=config_dict, legend=legend_effective, gb_record=gb_record, cfg=cfg
@@ -1400,7 +1432,7 @@ def assemble_circular_diagram_from_record(
     feature_config = FeatureDrawingConfigurator(
         color_table=color_table,
         default_colors=default_colors,
-        selected_features_set=list(selected_features_set),
+        selected_features_set=effective_selected_features,
         feature_table=feature_table,
         feature_shapes=feature_shapes,
         config_dict=config_dict,
@@ -1410,7 +1442,7 @@ def assemble_circular_diagram_from_record(
     legend_config = LegendDrawingConfigurator(
         color_table=color_table,
         default_colors=default_colors,
-        selected_features_set=list(selected_features_set),
+        selected_features_set=effective_selected_features,
         config_dict=config_dict,
         gc_config=gc_config,
         skew_config=skew_config,
@@ -1437,6 +1469,7 @@ def assemble_circular_diagram_from_record(
         legend_config=legend_config,
         cfg=cfg,
         track_specs=parsed_track_specs,
+        analysis_track_entries=analysis_track_entries,
         definition_position="center",
         definition_profile=effective_definition_profile,
         _tick_track_channel_override=_tick_track_channel_override,
@@ -1580,30 +1613,12 @@ def assemble_circular_diagram_from_records(
     )
     records = [records[idx] for idx in ordered_indices]
 
-    parsed_track_specs: list[TrackSpec] | None = None
-    if track_specs is not None:
-        parsed: list[TrackSpec] = []
-        raw: list[str] = []
-        for item in track_specs:
-            if isinstance(item, TrackSpec):
-                parsed.append(item)
-            else:
-                raw.append(str(item))
-        if raw:
-            parsed.extend(parse_track_specs(raw, mode="circular"))
-        parsed_track_specs = parsed
+    parsed_track_specs = _parse_and_normalize_circular_track_specs(track_specs)
 
-    if parsed_track_specs:
-        for ts in parsed_track_specs:
-            if ts.mode != "circular":
-                raise ValidationError(
-                    f"TrackSpec mode '{ts.mode}' is not supported for circular diagrams."
-                )
-            if str(ts.kind) not in _SUPPORTED_CIRCULAR_TRACK_KINDS:
-                logger.warning(
-                    "TrackSpec kind '%s' is not supported for circular diagrams yet; it will be ignored.",
-                    ts.kind,
-                )
+    effective_selected_features = get_circular_feature_type_union(
+        parsed_track_specs,
+        fallback_feature_types=list(selected_features_set),
+    )
 
     ts_by_kind = {str(ts.kind): ts for ts in (parsed_track_specs or [])}
     legend_ts = ts_by_kind.get("legend")
@@ -1613,6 +1628,15 @@ def assemble_circular_diagram_from_records(
     show_skew = ts_by_kind.get("gc_skew").show if "gc_skew" in ts_by_kind else cfg.canvas.show_skew
     canvas_cfg = replace(cfg.canvas, show_gc=bool(show_gc), show_skew=bool(show_skew))
     cfg = replace(cfg, canvas=canvas_cfg)
+    annular_track_specs = build_ordered_annular_track_specs(
+        parsed_track_specs,
+        show_gc=bool(cfg.canvas.show_gc),
+        show_skew=bool(cfg.canvas.show_skew),
+    )
+    analysis_track_entries = build_analysis_track_entries(
+        annular_track_specs,
+        default_dinucleotide=dinucleotide,
+    )
     show_plot_title = normalized_plot_title_position != "none"
     record_definition_profile: Literal["full", "record_summary"] = "record_summary"
     if show_plot_title and keep_full_definition_with_plot_title:
@@ -1644,7 +1668,7 @@ def assemble_circular_diagram_from_records(
             config_dict=config_dict,
             color_table=color_table,
             default_colors=default_colors,
-            selected_features_set=list(selected_features_set),
+            selected_features_set=effective_selected_features,
             feature_table=feature_table,
             feature_shapes=feature_shapes,
             output_prefix=output_prefix,
@@ -1933,6 +1957,18 @@ def assemble_circular_diagram_from_records(
             used_color_rules=used_color_rules,
             default_used_features=default_used_features,
         )
+        extra_analysis_legend_tracks = [
+            {"metric": entry.metric, "caption": entry.caption}
+            for entry in analysis_track_entries
+            if entry.show and entry.kind == "analysis"
+        ]
+        if extra_analysis_legend_tracks:
+            legend_table = append_analysis_track_legend_entries(
+                legend_table,
+                extra_analysis_legend_tracks,
+                gc_config,
+                skew_config,
+            )
         if legend_table:
             legend_config = LegendDrawingConfigurator(
                 color_table=color_table,

@@ -34,6 +34,11 @@ from .positioning import (
 )
 
 
+def _allow_group_data_attributes(group: Group) -> Group:
+    group._parameter.debug = False
+    return group
+
+
 def add_gc_skew_group_on_canvas(
     canvas: Drawing,
     gb_record: SeqRecord,
@@ -44,6 +49,9 @@ def add_gc_skew_group_on_canvas(
     *,
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
+    group_id: str | None = None,
+    track_id_override: str | int | None = None,
+    extra_attribs: dict[str, str] | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -72,10 +80,15 @@ def add_gc_skew_group_on_canvas(
         skew_track_width,
         skew_config,
         config_dict,
-        canvas_config.track_ids["skew_track"],
+        track_id_override if track_id_override is not None else canvas_config.track_ids["skew_track"],
         norm_factor_override=norm_factor_override,
         cfg=cfg,
     ).get_group()
+    if group_id:
+        gc_skew_group.attribs["id"] = str(group_id)
+    if extra_attribs:
+        gc_skew_group = _allow_group_data_attributes(gc_skew_group)
+        gc_skew_group.attribs.update({str(key): str(value) for key, value in extra_attribs.items()})
     gc_skew_group = center_group_on_canvas(gc_skew_group, canvas_config)
     canvas.add(gc_skew_group)
     return canvas
@@ -91,6 +104,9 @@ def add_gc_content_group_on_canvas(
     *,
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
+    group_id: str | None = None,
+    track_id_override: str | int | None = None,
+    extra_attribs: dict[str, str] | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -120,10 +136,15 @@ def add_gc_content_group_on_canvas(
         gc_content_track_width,
         gc_config,
         config_dict,
-        canvas_config.track_ids["gc_track"],
+        track_id_override if track_id_override is not None else canvas_config.track_ids["gc_track"],
         norm_factor_override=norm_factor_override,
         cfg=cfg,
     ).get_group()
+    if group_id:
+        gc_content_group.attribs["id"] = str(group_id)
+    if extra_attribs:
+        gc_content_group = _allow_group_data_attributes(gc_content_group)
+        gc_content_group.attribs.update({str(key): str(value) for key, value in extra_attribs.items()})
     gc_content_group = center_group_on_canvas(gc_content_group, canvas_config)
     canvas.add(gc_content_group)
     return canvas
@@ -173,6 +194,8 @@ def add_record_definition_group_on_canvas(
         canvas_config,
         position=definition_position,
     )
+    if str(definition_position).strip().lower() != "center":
+        definition_group.attribs.pop("data-definition-max-radius", None)
     canvas.add(definition_group)
     return canvas
 
@@ -188,6 +211,9 @@ def add_record_group_on_canvas(
     precomputed_feature_dict: dict | None = None,
     precalculated_labels: list[dict] | None = None,
     feature_track_ratio_factor_override: float | None = None,
+    group_id: str | None = None,
+    radius_override: float | None = None,
+    extra_attribs: dict[str, str] | None = None,
 ) -> Drawing:
     """
     Adds the record group to the canvas.
@@ -212,10 +238,15 @@ def add_record_group_on_canvas(
         precomputed_feature_dict=precomputed_feature_dict,
         precalculated_labels=precalculated_labels,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+        group_id=group_id,
+        radius_override=radius_override,
     ).get_group()
     # Calculate start and end points for the 60-degree arc
 
     record_group = center_group_on_canvas(record_group, canvas_config)
+    if extra_attribs:
+        record_group = _allow_group_data_attributes(record_group)
+        record_group.attribs.update({str(key): str(value) for key, value in extra_attribs.items()})
     canvas.add(record_group)
 
     return canvas

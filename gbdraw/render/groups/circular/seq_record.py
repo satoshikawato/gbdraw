@@ -35,6 +35,8 @@ class SeqRecordGroup:
         precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = None,
         precalculated_labels: Optional[list[dict]] = None,
         feature_track_ratio_factor_override: float | None = None,
+        group_id: str | None = None,
+        radius_override: float | None = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
@@ -68,6 +70,8 @@ class SeqRecordGroup:
         self.precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = precomputed_feature_dict
         self.precalculated_labels: Optional[list[dict]] = precalculated_labels
         self.feature_track_ratio_factor_override = feature_track_ratio_factor_override
+        self.group_id = str(group_id or gb_record.id)
+        self.radius = float(radius_override) if radius_override is not None else float(self.canvas_config.radius)
         self.record_group: Group = self.setup_record_group()
 
     def draw_record(self, feature_dict: Dict[str, FeatureObject], record_length: int, group: Group) -> Group:
@@ -75,12 +79,17 @@ class SeqRecordGroup:
         if self.show_labels is True:
             # Reuse pre-calculated labels when available to avoid repeating heavy placement work.
             if self.precalculated_labels is not None:
-                label_list = self.precalculated_labels
+                feature_ids = set(feature_dict.keys())
+                label_list = [
+                    label
+                    for label in self.precalculated_labels
+                    if str(label.get("feature_id") or "") in feature_ids
+                ]
             else:
                 label_list = prepare_label_list(
                     feature_dict,
                     record_length,
-                    self.canvas_config.radius,
+                    self.radius,
                     self.track_ratio,
                     self.config_dict,
                     cfg=self._cfg,
@@ -96,7 +105,7 @@ class SeqRecordGroup:
                 feature_object,
                 group,
                 record_length,
-                self.canvas_config.radius,
+                self.radius,
                 self.canvas_config.track_ratio,
                 feature_track_ratio_factor,
                 self.track_type,
@@ -111,7 +120,7 @@ class SeqRecordGroup:
                         label,
                         group,
                         record_length,
-                        self.canvas_config.radius,
+                        self.radius,
                         self.canvas_config.track_ratio,
                         feature_track_ratio_factor_override=self.feature_track_ratio_factor_override,
                     )
@@ -138,7 +147,7 @@ class SeqRecordGroup:
                 directional_feature_types=self.feature_config.directional_feature_types,
                 feature_visibility_rules=self.feature_config.feature_visibility_rules,
             )
-        track_id: str = self.gb_record.id
+        track_id: str = self.group_id
         record_group = Group(id=track_id)
         record_length: int = len(self.gb_record.seq)
 

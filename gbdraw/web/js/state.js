@@ -1,3 +1,5 @@
+import { createDefaultCircularTracksFromLegacy } from './utils/circular-tracks.js';
+
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
 
@@ -47,6 +49,15 @@ const svgContent = computed(() => {
         'data-label-feature-id',
         'data-label-source-text',
         'data-label-editable',
+        'data-track-id',
+        'data-track-kind',
+        'data-track-metric',
+        'data-track-center-radius',
+        'data-track-center-factor',
+        'data-track-inner-radius',
+        'data-track-outer-radius',
+        'data-track-width',
+        'data-definition-max-radius',
         'fill',
         'fill-opacity',
         'stroke',
@@ -229,6 +240,8 @@ const adv = reactive({
   inner_label_x_offset: null,
   inner_label_y_offset: null
 });
+
+const circularTracks = ref(createDefaultCircularTracksFromLegacy({ adv, form }));
 
 const losat = reactive({
   outfmt: '6',
@@ -569,6 +582,7 @@ export const state = {
   linearSeqs,
   form,
   adv,
+  circularTracks,
   losat,
   losatCacheInfo,
   losatCache,

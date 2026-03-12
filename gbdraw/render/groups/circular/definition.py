@@ -108,7 +108,8 @@ class DefinitionGroup:
         self.definition_group_id: str = (
             str(definition_group_id) if definition_group_id else f"{self.track_id}_definition"
         )
-        self.definition_group = Group(id=self.definition_group_id)
+        self.definition_group = Group(id=self.definition_group_id, debug=False)
+        self.definition_max_radius: float = 0.0
         self.radius: float = self.canvas_config.radius
         self.calculate_coordinates()
         self.find_organism_name()
@@ -196,8 +197,28 @@ class DefinitionGroup:
             self.plot_title_font_size if self.definition_profile == "shared_common" else self.font_size
         )
         active_name_font_weight = "normal" if self.definition_profile == "shared_common" else "bold"
+        drawer = DefinitionDrawer(self.config_dict, cfg=self._cfg)
+        lines = drawer.build_lines(
+            species_parts,
+            strain_parts,
+            organelle_parts,
+            replicon_parts,
+            accession,
+            record_length,
+            gc_percent,
+            show_accession=show_accession,
+            show_length=show_length,
+            show_gc=show_gc,
+        )
+        self.definition_max_radius = drawer.measure_max_radius(
+            lines,
+            self.title_x,
+            self.title_y,
+            font_size=float(active_font_size),
+            dpi=int(self.canvas_config.dpi),
+        )
 
-        self.definition_group: Group = DefinitionDrawer(self.config_dict, cfg=self._cfg).draw(
+        self.definition_group: Group = drawer.draw(
             self.definition_group,
             self.title_x,
             self.title_y,
@@ -212,7 +233,9 @@ class DefinitionGroup:
             show_length=show_length,
             show_gc=show_gc,
             font_size=active_font_size,
+            dpi=int(self.canvas_config.dpi),
             name_font_weight=active_name_font_weight,
+            lines=lines,
         )
 
     def get_group(self) -> Group:
@@ -220,4 +243,3 @@ class DefinitionGroup:
 
 
 __all__ = ["CircularDefinitionProfile", "DefinitionGroup"]
-

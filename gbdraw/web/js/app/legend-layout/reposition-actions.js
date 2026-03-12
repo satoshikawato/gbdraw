@@ -832,6 +832,14 @@ export const createLegendRepositionActions = ({
     };
     const resolveLegendColor = (legendKey, palette) => {
       if (!legendKey) return null;
+      const lowerKey = legendKey.toLowerCase();
+      if (lowerKey.includes(' content')) {
+        return palette.gc_content || null;
+      }
+      if (lowerKey.includes(' skew')) {
+        if (lowerKey.endsWith('(+)')) return palette.skew_high || null;
+        if (lowerKey.endsWith('(-)')) return palette.skew_low || null;
+      }
       const colorKey = keyToColorKey[legendKey];
       if (colorKey && palette[colorKey]) return palette[colorKey];
       if (palette[legendKey]) return palette[legendKey];

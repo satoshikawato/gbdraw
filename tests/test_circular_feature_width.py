@@ -113,7 +113,7 @@ def _annulus_overlaps_band(
 
 def _extract_group_translate(svg_text: str, group_id: str) -> tuple[float, float] | None:
     pattern = (
-        rf'<g id="{re.escape(group_id)}"[^>]*\btransform="translate\(\s*'
+        rf'<g\b(?=[^>]*\bid="{re.escape(group_id)}")[^>]*\btransform="translate\(\s*'
         r'([-+0-9.eE]+)\s*,\s*([-+0-9.eE]+)\s*\)"'
     )
     match = re.search(pattern, svg_text)
@@ -238,6 +238,9 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
+        track_id_override=None,
+        extra_attribs=None,
         cfg=None,
     ):
         captured["gc_width"] = track_width_override
@@ -254,6 +257,9 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
+        track_id_override=None,
+        extra_attribs=None,
         cfg=None,
     ):
         captured["skew_width"] = track_width_override
@@ -288,6 +294,9 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         precomputed_feature_dict=None,
         precalculated_labels=None,
         feature_track_ratio_factor_override=None,
+        group_id=None,
+        radius_override=None,
+        extra_attribs=None,
     ):
         captured["record_feature_ratio"] = feature_track_ratio_factor_override
         return canvas
@@ -354,6 +363,9 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
+        track_id_override=None,
+        extra_attribs=None,
         cfg=None,
     ):
         captured["gc_width"] = track_width_override
@@ -370,6 +382,9 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
+        track_id_override=None,
+        extra_attribs=None,
         cfg=None,
     ):
         captured["skew_width"] = track_width_override
@@ -446,17 +461,14 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
         "features@ro=0.94,w=48px",
     ],
 )
-def test_features_center_placement_warns_and_is_ignored(spec: str, caplog: pytest.LogCaptureFixture) -> None:
-    caplog.clear()
+def test_features_center_placement_keeps_width_override(spec: str) -> None:
     ts = parse_track_specs([spec], mode="circular")[0]
-    with caplog.at_level("WARNING"):
-        ratio = circular_assemble_module._resolve_feature_track_ratio_factor_override(
-            ts,
-            base_radius_px=400.0,
-            base_track_ratio=0.2,
-        )
+    ratio = circular_assemble_module._resolve_feature_track_ratio_factor_override(
+        ts,
+        base_radius_px=400.0,
+        base_track_ratio=0.2,
+    )
     assert ratio == pytest.approx(0.6)
-    assert any("supports width only" in message for message in caplog.messages)
 
 
 def test_cli_feature_width_must_be_positive() -> None:
@@ -986,6 +998,9 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
+        track_id_override=None,
+        extra_attribs=None,
         cfg=None,
     ):
         captured["gc_norm"] = norm_factor_override
@@ -1002,6 +1017,9 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
+        track_id_override=None,
+        extra_attribs=None,
         cfg=None,
     ):
         captured["skew_norm"] = norm_factor_override
@@ -1128,6 +1146,9 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
+        track_id_override=None,
+        extra_attribs=None,
         cfg=None,
     ):
         captured["gc_norm"] = norm_factor_override
@@ -1144,6 +1165,9 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
+        track_id_override=None,
+        extra_attribs=None,
         cfg=None,
     ):
         captured["skew_norm"] = norm_factor_override
@@ -1275,6 +1299,9 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
+        track_id_override=None,
+        extra_attribs=None,
         cfg=None,
     ):
         captured["gc_norm"] = norm_factor_override
@@ -1291,6 +1318,9 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
+        track_id_override=None,
+        extra_attribs=None,
         cfg=None,
     ):
         captured["skew_norm"] = norm_factor_override
@@ -1410,6 +1440,9 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
+        track_id_override=None,
+        extra_attribs=None,
         cfg=None,
     ):
         captured["gc_norm"] = norm_factor_override
@@ -1426,6 +1459,9 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
+        track_id_override=None,
+        extra_attribs=None,
         cfg=None,
     ):
         captured["skew_norm"] = norm_factor_override
@@ -1500,6 +1536,9 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
             *,
             track_width_override=None,
             norm_factor_override=None,
+            group_id=None,
+            track_id_override=None,
+            extra_attribs=None,
             cfg=None,
         ):
             captured["gc_norm"] = norm_factor_override
@@ -1515,6 +1554,9 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
             *,
             track_width_override=None,
             norm_factor_override=None,
+            group_id=None,
+            track_id_override=None,
+            extra_attribs=None,
             cfg=None,
         ):
             captured["skew_norm"] = norm_factor_override
@@ -1607,7 +1649,7 @@ def test_feature_width_keeps_axis_concentric_with_rendered_tracks(track_type: st
     svg_text = canvas.tostring()
 
     axis_transform = _extract_group_translate(svg_text, "Axis")
-    record_transform = _extract_group_translate(svg_text, record.id)
+    record_transform = _extract_group_translate(svg_text, "track_features") or _extract_group_translate(svg_text, record.id)
     assert axis_transform is not None
     assert record_transform is not None
     assert axis_transform == pytest.approx(record_transform, abs=1e-6)

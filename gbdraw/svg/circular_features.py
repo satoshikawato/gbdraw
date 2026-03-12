@@ -18,6 +18,7 @@ def generate_circular_intron_path(
     track_type: str,
     strandedness: bool,
     track_id: int = 0,
+    base_factor: float = 1.0,
 ) -> list[str]:
     """
     Generates the SVG path description for an intron feature on a circular canvas.
@@ -50,7 +51,15 @@ def generate_circular_intron_path(
     sweep_flag = 1
 
     factors: list[float] = calculate_feature_position_factors_circular(
-        total_length, coord_strand, track_ratio, cds_ratio, offset, track_type, strandedness, track_id
+        total_length,
+        coord_strand,
+        track_ratio,
+        cds_ratio,
+        offset,
+        track_type,
+        strandedness,
+        track_id,
+        base_factor=base_factor,
     )
     intron_radius: float = radius * factors[1]
     start_x_1: float = intron_radius * math.cos(
@@ -111,6 +120,7 @@ def generate_circular_arrowhead_path(
     track_type: str,
     strandedness: bool,
     track_id: int = 0,
+    base_factor: float = 1.0,
 ) -> list[str]:
     """
     Generates the SVG path description for an arrowhead feature on a circular canvas.
@@ -132,7 +142,15 @@ def generate_circular_arrowhead_path(
     """
     coord_strand: str = str(coord_dict["coord_strand"])
     factors: list[float] = calculate_feature_position_factors_circular(
-        total_length, coord_strand, track_ratio, cds_ratio, offset, track_type, strandedness, track_id
+        total_length,
+        coord_strand,
+        track_ratio,
+        cds_ratio,
+        offset,
+        track_type,
+        strandedness,
+        track_id,
+        base_factor=base_factor,
     )
     coord_start = int(coord_dict["coord_start"]) % total_length
     coord_end = int(coord_dict["coord_end"]) % total_length
@@ -304,6 +322,7 @@ def generate_circular_rectangle_path(
     track_type: str,
     strandedness: bool,
     track_id: int = 0,
+    base_factor: float = 1.0,
 ) -> list[str]:
     """
     Generates the SVG path description for a rectangular feature on a circular canvas.
@@ -324,7 +343,15 @@ def generate_circular_rectangle_path(
     """
     coord_strand: str = str(coord_dict["coord_strand"])
     factors: list[float] = calculate_feature_position_factors_circular(
-        total_length, coord_strand, track_ratio, cds_ratio, offset, track_type, strandedness, track_id
+        total_length,
+        coord_strand,
+        track_ratio,
+        cds_ratio,
+        offset,
+        track_type,
+        strandedness,
+        track_id,
+        base_factor=base_factor,
     )
     coord_start: int = int(coord_dict["coord_start"])
     coord_end: int = int(coord_dict["coord_end"])

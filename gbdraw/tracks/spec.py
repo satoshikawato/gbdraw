@@ -59,6 +59,7 @@ TrackKind = Literal[
     "features",
     "gc_content",
     "gc_skew",
+    "analysis",
     "ticks",
     "axis",
     "legend",
