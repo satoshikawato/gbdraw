@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 import pytest
 from Bio import SeqIO
@@ -98,6 +100,7 @@ def _capture_annular_annuli(track_specs: list[TrackSpec]) -> dict[str, tuple[flo
         feature_track_ratio_factor_override=None,
         group_id=None,
         radius_override=None,
+        extra_attribs=None,
     ):
         if precomputed_feature_dict:
             feature_ratio_factor = (
@@ -250,6 +253,51 @@ def _order_annuli_outer_to_inner(annuli: dict[str, tuple[float, float]]) -> list
             key=lambda item: float(item[1][1]),
             reverse=True,
         )
+    ]
+
+
+_SVG_NS = {"svg": "http://www.w3.org/2000/svg"}
+
+
+def _get_group_attr_float(group: ET.Element | None, attr_name: str) -> float | None:
+    if group is None:
+        return None
+    raw = str(group.attrib.get(attr_name, "")).strip()
+    if not raw:
+        return None
+    return float(raw)
+
+
+def _make_definition_clearance_track_specs(width_px: float | None = None) -> list[TrackSpec]:
+    placement_kwargs: dict[str, ScalarSpec] = {
+        "radius": ScalarSpec(0.345, "factor"),
+    }
+    if width_px is not None:
+        placement_kwargs["width"] = ScalarSpec(float(width_px), "px")
+
+    return [
+        TrackSpec(
+            id="inner_custom",
+            kind="custom",
+            mode="circular",
+            show=True,
+            placement=CircularTrackPlacement(**placement_kwargs),
+            params={
+                "caption": "Positive CDS",
+                "feature_types": ["CDS"],
+                "strand_mode": "positive",
+                "rules": [],
+            },
+        ),
+        TrackSpec(
+            id="features",
+            kind="features",
+            mode="circular",
+            show=False,
+            params={"feature_types": SELECTED_FEATURES},
+        ),
+        TrackSpec(id="gc_content", kind="gc_content", mode="circular", show=False),
+        TrackSpec(id="gc_skew", kind="gc_skew", mode="circular", show=False),
     ]
 
 
@@ -882,3 +930,128 @@ def test_ordered_annular_layout_moves_gc_inside_multiple_feature_annuli(
     assert captured_gc_norms[0] is not None
     assert captured_gc_norms[1] is not None
     assert float(captured_gc_norms[1]) < float(captured_gc_norms[0])
+
+
+def test_auto_width_custom_track_shrinks_to_clear_center_definition() -> None:
+    record = _load_record()
+    config_dict = _make_config_dict(show_labels=False)
+    cfg = GbdrawConfig.from_dict(config_dict)
+    base_radius = float(cfg.canvas.circular.radius)
+    default_width = (
+        base_radius
+        * float(cfg.canvas.circular.track_ratio)
+        * float(cfg.canvas.circular.track_ratio_factors["short"][0])
+    )
+    track_gap_px = max(4.0, min(16.0, default_width * 0.15))
+
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        track_specs=_make_definition_clearance_track_specs(),
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    track_group = root.find(".//svg:g[@id='track_inner_custom']", _SVG_NS)
+    definition_group = root.find(f".//svg:g[@id='{record.id}_definition']", _SVG_NS)
+
+    assert track_group is not None
+    assert definition_group is not None
+
+    center_radius = _get_group_attr_float(track_group, "data-track-center-radius")
+    inner_radius = _get_group_attr_float(track_group, "data-track-inner-radius")
+    width_px = _get_group_attr_float(track_group, "data-track-width")
+    definition_max_radius = _get_group_attr_float(definition_group, "data-definition-max-radius")
+
+    assert center_radius is not None
+    assert inner_radius is not None
+    assert width_px is not None
+    assert definition_max_radius is not None
+    assert math.isclose(center_radius, 0.345 * base_radius, rel_tol=1e-6, abs_tol=1e-6)
+    assert width_px < default_width
+    assert inner_radius >= (definition_max_radius + track_gap_px - 1e-3)
+
+
+def test_explicit_custom_track_width_is_not_shrunk_for_definition_clearance() -> None:
+    record = _load_record()
+    config_dict = _make_config_dict(show_labels=False)
+    cfg = GbdrawConfig.from_dict(config_dict)
+    base_radius = float(cfg.canvas.circular.radius)
+    explicit_width = (
+        base_radius
+        * float(cfg.canvas.circular.track_ratio)
+        * float(cfg.canvas.circular.track_ratio_factors["short"][0])
+    )
+    track_gap_px = max(4.0, min(16.0, explicit_width * 0.15))
+
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        track_specs=_make_definition_clearance_track_specs(width_px=explicit_width),
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    track_group = root.find(".//svg:g[@id='track_inner_custom']", _SVG_NS)
+    definition_group = root.find(f".//svg:g[@id='{record.id}_definition']", _SVG_NS)
+
+    assert track_group is not None
+    assert definition_group is not None
+
+    width_px = _get_group_attr_float(track_group, "data-track-width")
+    inner_radius = _get_group_attr_float(track_group, "data-track-inner-radius")
+    definition_max_radius = _get_group_attr_float(definition_group, "data-definition-max-radius")
+
+    assert width_px is not None
+    assert inner_radius is not None
+    assert definition_max_radius is not None
+    assert math.isclose(width_px, explicit_width, rel_tol=1e-6, abs_tol=1e-6)
+    assert inner_radius < (definition_max_radius + track_gap_px)
+
+
+def test_track_and_definition_groups_emit_geometry_metadata() -> None:
+    record = _load_record()
+    config_dict = _make_config_dict(show_labels=False)
+
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        selected_features_set=SELECTED_FEATURES,
+        legend="right",
+        track_specs=[
+            TrackSpec(id="features", kind="features", mode="circular", show=True),
+            TrackSpec(
+                id="at_content",
+                kind="analysis",
+                mode="circular",
+                show=True,
+                placement=CircularTrackPlacement(
+                    radius=ScalarSpec(0.72, "factor"),
+                    width=ScalarSpec(18.0, "px"),
+                ),
+                params={"caption": "AT content", "metric": "content", "dinucleotide": "AT"},
+            ),
+        ],
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    feature_group = root.find(".//svg:g[@data-track-id='features']", _SVG_NS)
+    analysis_group = root.find(".//svg:g[@id='track_at_content']", _SVG_NS)
+    definition_group = root.find(f".//svg:g[@id='{record.id}_definition']", _SVG_NS)
+
+    assert feature_group is not None
+    assert analysis_group is not None
+    assert definition_group is not None
+    assert feature_group.attrib["data-track-id"] == "features"
+    assert feature_group.attrib["data-track-kind"] == "features"
+    assert "data-track-center-radius" in feature_group.attrib
+    assert "data-track-inner-radius" in feature_group.attrib
+    assert "data-track-outer-radius" in feature_group.attrib
+    assert "data-track-width" in feature_group.attrib
+    assert analysis_group.attrib["data-track-id"] == "at_content"
+    assert analysis_group.attrib["data-track-kind"] == "analysis"
+    assert analysis_group.attrib["data-track-metric"] == "content"
+    assert "data-track-center-factor" in analysis_group.attrib
+    assert "data-definition-max-radius" in definition_group.attrib

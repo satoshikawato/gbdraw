@@ -9,6 +9,7 @@ import {
   normalizeCircularTracks,
   syncLegacyCircularTrackControls
 } from '../utils/circular-tracks.js';
+import { extractCircularTrackLayoutMetricsFromSvg } from '../utils/circular-track-layout.js';
 
 const { computed, reactive, ref } = window.Vue;
 
@@ -52,8 +53,20 @@ const toPlacementInputValue = (placement, field) => {
   return raw.endsWith('px') ? raw.slice(0, -2) : raw;
 };
 
+const formatPx = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '';
+  return `${numeric.toFixed(numeric >= 100 ? 0 : numeric >= 10 ? 1 : 2).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')} px`;
+};
+
+const formatFactor = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '';
+  return `${numeric.toFixed(3).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')}x`;
+};
+
 export const createCircularTrackEditor = ({ state }) => {
-  const { circularTracks, featureKeys, form, adv } = state;
+  const { circularTracks, featureKeys, form, adv, mode, results, selectedResultIndex } = state;
 
   const pendingFeatureTypeByTrackId = reactive({});
   const pendingRuleQualifierByTrackId = reactive({});
@@ -83,6 +96,14 @@ export const createCircularTrackEditor = ({ state }) => {
   };
 
   const circularFeatureShapeTypes = computed(() => getDeclaredCircularFeatureTypes(circularTracks.value));
+  const resolvedCircularTrackLayout = computed(() => {
+    if (mode.value !== 'circular') {
+      return extractCircularTrackLayoutMetricsFromSvg('', { tracks: [] });
+    }
+    const selectedResult = Array.isArray(results.value) ? results.value[selectedResultIndex.value] : null;
+    const svgMarkup = typeof selectedResult?.content === 'string' ? selectedResult.content : '';
+    return extractCircularTrackLayoutMetricsFromSvg(svgMarkup, { tracks: circularTracks.value });
+  });
 
   const getCircularTrackKindLabel = (track) => {
     const kind = String(track?.kind || '').trim().toLowerCase();
@@ -409,6 +430,53 @@ export const createCircularTrackEditor = ({ state }) => {
     });
   };
 
+  const getCircularTrackResolvedMetrics = (trackId) => {
+    const normalizedTrackId = String(trackId || '').trim();
+    if (!normalizedTrackId) return null;
+    return resolvedCircularTrackLayout.value?.tracksById?.[normalizedTrackId] || null;
+  };
+
+  const getCircularTrackResolvedWidthLabel = (trackId) => {
+    const metrics = getCircularTrackResolvedMetrics(trackId);
+    if (!metrics) return 'Resolved after preview';
+    return formatPx(metrics.width);
+  };
+
+  const getCircularTrackResolvedCenterLabel = (trackId) => {
+    const metrics = getCircularTrackResolvedMetrics(trackId);
+    if (!metrics) return 'Resolved after preview';
+    const pxLabel = formatPx(metrics.centerRadius);
+    const factorLabel = formatFactor(metrics.centerFactor);
+    return factorLabel ? `${pxLabel} (${factorLabel})` : pxLabel;
+  };
+
+  const getCircularTrackResolvedBoundsLabel = (trackId) => {
+    const metrics = getCircularTrackResolvedMetrics(trackId);
+    if (!metrics) return 'Resolved after preview';
+    return `${formatPx(metrics.innerRadius)} - ${formatPx(metrics.outerRadius)}`;
+  };
+
+  const getCircularTrackResolvedGapLabel = (trackId) => {
+    const metrics = getCircularTrackResolvedMetrics(trackId);
+    if (!metrics) return 'Resolved after preview';
+    if (metrics.gapPx === null || metrics.gapPx === undefined) return 'N/A';
+    const prefix = metrics.gapKind === 'definition' ? 'Definition clearance' : 'Gap';
+    return `${prefix}: ${formatPx(metrics.gapPx)}`;
+  };
+
+  const getCircularTrackResolvedGapKindLabel = (trackId) => {
+    const metrics = getCircularTrackResolvedMetrics(trackId);
+    if (!metrics) return 'Gap';
+    return metrics.gapKind === 'definition' ? 'Definition clearance' : 'Gap';
+  };
+
+  const getCircularTrackResolvedGapValueLabel = (trackId) => {
+    const metrics = getCircularTrackResolvedMetrics(trackId);
+    if (!metrics) return 'Resolved after preview';
+    if (metrics.gapPx === null || metrics.gapPx === undefined) return 'N/A';
+    return formatPx(metrics.gapPx);
+  };
+
   commitTracks(circularTracks.value);
 
   return {
@@ -442,6 +510,13 @@ export const createCircularTrackEditor = ({ state }) => {
     setPendingCircularTrackRulePattern,
     addCircularTrackRule,
     updateCircularTrackRule,
-    removeCircularTrackRule
+    removeCircularTrackRule,
+    getCircularTrackResolvedMetrics,
+    getCircularTrackResolvedWidthLabel,
+    getCircularTrackResolvedCenterLabel,
+    getCircularTrackResolvedBoundsLabel,
+    getCircularTrackResolvedGapLabel,
+    getCircularTrackResolvedGapKindLabel,
+    getCircularTrackResolvedGapValueLabel
   };
 };

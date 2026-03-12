@@ -272,7 +272,14 @@ export const createAppSetup = () => {
     setPendingCircularTrackRulePattern,
     addCircularTrackRule,
     updateCircularTrackRule,
-    removeCircularTrackRule
+    removeCircularTrackRule,
+    getCircularTrackResolvedMetrics,
+    getCircularTrackResolvedWidthLabel,
+    getCircularTrackResolvedCenterLabel,
+    getCircularTrackResolvedBoundsLabel,
+    getCircularTrackResolvedGapLabel,
+    getCircularTrackResolvedGapKindLabel,
+    getCircularTrackResolvedGapValueLabel
   } = circularTrackEditor;
 
   const { updatePalette, resetColors } = resultsManager;
@@ -629,6 +636,13 @@ export const createAppSetup = () => {
     addCircularTrackRule,
     updateCircularTrackRule,
     removeCircularTrackRule,
+    getCircularTrackResolvedMetrics,
+    getCircularTrackResolvedWidthLabel,
+    getCircularTrackResolvedCenterLabel,
+    getCircularTrackResolvedBoundsLabel,
+    getCircularTrackResolvedGapLabel,
+    getCircularTrackResolvedGapKindLabel,
+    getCircularTrackResolvedGapValueLabel,
     manualSpecificRules,
     newSpecRule,
     specificRulePresets,

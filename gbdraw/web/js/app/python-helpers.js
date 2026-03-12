@@ -274,6 +274,7 @@ def regenerate_definition_svgs(
                 definition_profile="shared_common",
                 definition_group_id="plot_title",
             )
+            shared_group.get_group().attribs.pop("data-definition-max-radius", None)
             definitions.append(
                 {
                     "svg": shared_group.get_group().tostring(),

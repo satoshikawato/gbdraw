@@ -433,6 +433,30 @@
                                             </div>
                                         </div>
 
+                                        <div class="mt-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[9px] text-slate-600">
+                                            <template v-if="getCircularTrackResolvedMetrics(track.id)">
+                                                <div class="flex items-center justify-between gap-2">
+                                                    <span class="font-semibold text-slate-500">Resolved width</span>
+                                                    <span class="text-right text-slate-700">{{ getCircularTrackResolvedWidthLabel(track.id) }}</span>
+                                                </div>
+                                                <div class="mt-1 flex items-center justify-between gap-2">
+                                                    <span class="font-semibold text-slate-500">Center radius</span>
+                                                    <span class="text-right text-slate-700">{{ getCircularTrackResolvedCenterLabel(track.id) }}</span>
+                                                </div>
+                                                <div class="mt-1 flex items-center justify-between gap-2">
+                                                    <span class="font-semibold text-slate-500">Inner / outer</span>
+                                                    <span class="text-right text-slate-700">{{ getCircularTrackResolvedBoundsLabel(track.id) }}</span>
+                                                </div>
+                                                <div class="mt-1 flex items-center justify-between gap-2">
+                                                    <span class="font-semibold text-slate-500">{{ getCircularTrackResolvedGapKindLabel(track.id) }}</span>
+                                                    <span class="text-right text-slate-700">{{ getCircularTrackResolvedGapValueLabel(track.id) }}</span>
+                                                </div>
+                                            </template>
+                                            <div v-else class="italic text-slate-400">
+                                                Resolved after preview
+                                            </div>
+                                        </div>
+
                                         <div v-if="track.kind === 'features' || track.kind === 'custom'" class="mt-2">
                                             <label class="text-[9px] font-semibold block mb-1">
                                                 {{ track.kind === 'features' ? 'Feature Types' : 'Feature Types' }}
