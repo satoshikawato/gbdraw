@@ -446,17 +446,14 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
         "features@ro=0.94,w=48px",
     ],
 )
-def test_features_center_placement_warns_and_is_ignored(spec: str, caplog: pytest.LogCaptureFixture) -> None:
-    caplog.clear()
+def test_features_center_placement_keeps_width_override(spec: str) -> None:
     ts = parse_track_specs([spec], mode="circular")[0]
-    with caplog.at_level("WARNING"):
-        ratio = circular_assemble_module._resolve_feature_track_ratio_factor_override(
-            ts,
-            base_radius_px=400.0,
-            base_track_ratio=0.2,
-        )
+    ratio = circular_assemble_module._resolve_feature_track_ratio_factor_override(
+        ts,
+        base_radius_px=400.0,
+        base_track_ratio=0.2,
+    )
     assert ratio == pytest.approx(0.6)
-    assert any("supports width only" in message for message in caplog.messages)
 
 
 def test_cli_feature_width_must_be_positive() -> None:

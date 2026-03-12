@@ -110,13 +110,25 @@ class FeatureDrawer:
         Returns:
             Updated SVG group with the feature added
         """
-        cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
+        effective_track_ratio_factor = float(
+            getattr(feature_object, "circular_track_width_factor", track_ratio_factor) or track_ratio_factor
+        )
+        cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, effective_track_ratio_factor)
         
         # Get the track_id from the feature for overlap resolution
         track_id = getattr(feature_object, 'feature_track_id', 0)
-        
+        base_factor = float(getattr(feature_object, "circular_track_center_factor", 1.0) or 1.0)
+
         gene_paths = FeaturePathGenerator(
-            radius, total_length, track_ratio, cds_ratio, offset, track_type, strandedness, track_id
+            radius,
+            total_length,
+            track_ratio,
+            cds_ratio,
+            offset,
+            track_type,
+            strandedness,
+            track_id,
+            base_factor=base_factor,
         ).generate_circular_gene_path(feature_object)
 
         # Get feature identifier for instant preview support
@@ -163,6 +175,7 @@ class FeaturePathGenerator:
         track_type: str,
         strandedness: bool,
         track_id: int = 0,
+        base_factor: float = 1.0,
     ) -> None:
         """
         Initialize the path generator.
@@ -185,6 +198,7 @@ class FeaturePathGenerator:
         self.track_type = track_type
         self.strandedness = strandedness
         self.track_id = track_id
+        self.base_factor = float(base_factor)
         self.set_arrow_length()
 
     def set_arrow_length(self) -> None:
@@ -254,6 +268,7 @@ class FeaturePathGenerator:
                     self.track_type,
                     self.strandedness,
                     self.track_id,
+                    self.base_factor,
                 )
             else:
                 # Fallback to rectangle for undefined strand to avoid arrow path errors.
@@ -267,6 +282,7 @@ class FeaturePathGenerator:
                     self.track_type,
                     self.strandedness,
                     self.track_id,
+                    self.base_factor,
                 )
             return [merged_path]
 
@@ -291,6 +307,7 @@ class FeaturePathGenerator:
                     self.track_type,
                     self.strandedness,
                     self.track_id,
+                    self.base_factor,
                 )
             elif coord_type == "block":
                 if coord.is_last and feature_object.is_directional is True:
@@ -305,6 +322,7 @@ class FeaturePathGenerator:
                         self.track_type,
                         self.strandedness,
                         self.track_id,
+                        self.base_factor,
                     )
                 else:
                     coord_path = generate_circular_rectangle_path(
@@ -317,6 +335,7 @@ class FeaturePathGenerator:
                         self.track_type,
                         self.strandedness,
                         self.track_id,
+                        self.base_factor,
                     )
             else:
                 coord_path = []

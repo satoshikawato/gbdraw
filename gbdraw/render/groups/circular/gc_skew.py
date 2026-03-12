@@ -36,7 +36,7 @@ class GcSkewGroup:
         self.track_width: float = track_width
         self.skew_config: GcSkewConfigurator = skew_config
         self.record_len: int = len(self.gb_record.seq)
-        self.skew_group = Group(id="skew")
+        self.skew_group = Group(id="skew", debug=False)
         self.config_dict = config_dict
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self.track_type = cfg.canvas.circular.track_type

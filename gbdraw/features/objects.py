@@ -72,6 +72,10 @@ class FeatureObject:
         self.qualifiers: dict = qualifiers
         self.record_id: Optional[str] = record_id
         self.feature_track_id: int = 0
+        self.circular_track_id: str | None = None
+        self.circular_track_center_factor: float = 1.0
+        self.circular_track_width_factor: float = 1.0
+        self.color_caption: str | None = None
         self._feature_type: str = type
         # Frequently used derived attribute (historically added dynamically elsewhere)
         self.strand: Strand = self.location[0].strand if self.location else "undefined"

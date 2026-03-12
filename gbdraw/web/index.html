@@ -297,9 +297,232 @@
                             </div>
                         </div>
                        
-                        <div v-if="mode === 'circular'">
-                            <label class="input-label">Track Layout <help-tip text="Choose how features are displayed. 'Tuckin' is default and compact. 'Middle' aligns to center, 'Spreadout' separates them."></help-tip></label>
-                            <select v-model="form.track_type" class="form-input"><option value="tuckin">Tuckin</option><option value="middle">Middle</option><option value="spreadout">Spreadout</option></select>
+                        <div v-if="mode === 'circular'" class="space-y-2">
+                            <div>
+                                <label class="input-label">Track Layout <help-tip text="Choose how features are displayed. 'Tuckin' is default and compact. 'Middle' aligns to center, 'Spreadout' separates them."></help-tip></label>
+                                <select v-model="form.track_type" class="form-input"><option value="tuckin">Tuckin</option><option value="middle">Middle</option><option value="spreadout">Spreadout</option></select>
+                            </div>
+
+                            <div>
+                                <div class="flex items-center justify-between mb-1">
+                                    <label class="input-label mb-0">Tracks <help-tip text="Ordered circular annular tracks. List order controls outer-to-inner auto packing when a built-in row has no explicit radius."></help-tip></label>
+                                    <div class="flex items-center gap-1">
+                                        <select v-model="newCircularTrackKind" class="form-input h-7 w-32 px-2 py-0.5 text-xs">
+                                            <option value="custom">Feature Track</option>
+                                            <option value="analysis">Analysis Track</option>
+                                        </select>
+                                        <button type="button" class="btn btn-secondary h-7 px-2 text-xs" @click.prevent="addCircularTrack">
+                                            <i class="ph ph-plus"></i> Add Track
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="space-y-2">
+                                    <div
+                                        v-for="(track, idx) in circularTracks"
+                                        :key="track.id"
+                                        class="rounded-lg border border-slate-200 bg-slate-50 p-2"
+                                    >
+                                        <div class="flex items-start justify-between gap-2">
+                                            <label class="flex items-center gap-2 min-w-0">
+                                                <input
+                                                    type="checkbox"
+                                                    :checked="track.show === true"
+                                                    @change="setCircularTrackShow(track.id, $event.target.checked)"
+                                                    class="form-checkbox"
+                                                >
+                                                <span class="min-w-0">
+                                                    <span class="block text-[11px] font-semibold text-slate-700 truncate">
+                                                        {{ track.kind === 'custom' || track.kind === 'analysis' ? (track.params?.caption || getCircularTrackKindLabel(track)) : getCircularTrackKindLabel(track) }}
+                                                    </span>
+                                                    <span class="block text-[9px] uppercase tracking-wide text-slate-400">
+                                                        {{ getCircularTrackKindLabel(track) }}
+                                                    </span>
+                                                </span>
+                                            </label>
+                                            <div class="flex items-center gap-1 shrink-0">
+                                                <button type="button" class="btn btn-secondary text-[10px] py-0.5 px-1.5" @click="moveCircularTrack(idx, -1)" :disabled="!canMoveCircularTrackUp(idx)">Up</button>
+                                                <button type="button" class="btn btn-secondary text-[10px] py-0.5 px-1.5" @click="moveCircularTrack(idx, 1)" :disabled="!canMoveCircularTrackDown(idx)">Down</button>
+                                                <button
+                                                    v-if="!isBuiltinCircularTrack(track)"
+                                                    type="button"
+                                                    class="btn btn-danger text-[10px] py-0.5 px-1.5"
+                                                    @click="deleteCircularTrack(track.id)"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="track.kind === 'custom' || track.kind === 'analysis'" class="mt-2 grid grid-cols-2 gap-1.5">
+                                            <div class="col-span-2">
+                                                <label class="text-[9px] block mb-1">{{ track.kind === 'analysis' ? 'Caption' : 'Track Name' }}</label>
+                                                <input
+                                                    type="text"
+                                                    :value="track.params?.caption || ''"
+                                                    @input="setCircularTrackCaption(track.id, $event.target.value)"
+                                                    class="form-input py-1 text-xs"
+                                                    :placeholder="track.kind === 'analysis' ? 'Optional caption' : 'Custom Track'"
+                                                >
+                                            </div>
+                                            <div v-if="track.kind === 'custom'">
+                                                <label class="text-[9px] block mb-1">Strand</label>
+                                                <select
+                                                    :value="track.params?.strand_mode || 'all'"
+                                                    @change="setCircularTrackStrandMode(track.id, $event.target.value)"
+                                                    class="form-input py-1 text-xs"
+                                                >
+                                                    <option value="all">All</option>
+                                                    <option value="positive">Positive</option>
+                                                    <option value="negative">Negative</option>
+                                                </select>
+                                            </div>
+                                            <div v-if="track.kind === 'custom'" class="flex items-end">
+                                                <div class="text-[9px] text-slate-500 leading-tight">
+                                                    Match is AND across all rules. First enabled custom row that matches claims the feature.
+                                                </div>
+                                            </div>
+                                            <div v-if="track.kind === 'analysis'">
+                                                <label class="text-[9px] block mb-1">Metric</label>
+                                                <select
+                                                    :value="track.params?.metric || 'content'"
+                                                    @change="setCircularTrackAnalysisMetric(track.id, $event.target.value)"
+                                                    class="form-input py-1 text-xs"
+                                                >
+                                                    <option value="content">Content</option>
+                                                    <option value="skew">Skew</option>
+                                                </select>
+                                            </div>
+                                            <div v-if="track.kind === 'analysis'">
+                                                <label class="text-[9px] block mb-1">Dinucleotide</label>
+                                                <input
+                                                    type="text"
+                                                    maxlength="2"
+                                                    :value="getCircularTrackDinucleotideInputValue(track.id)"
+                                                    @input="setCircularTrackDinucleotide(track.id, $event.target.value)"
+                                                    @blur="finalizeCircularTrackDinucleotide(track.id)"
+                                                    class="form-input py-1 text-xs uppercase"
+                                                    placeholder="AT"
+                                                >
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-2 grid grid-cols-2 gap-1.5">
+                                            <div>
+                                                <label class="text-[9px] block mb-1">Track Width</label>
+                                                <input
+                                                    type="number"
+                                                    min="0.01"
+                                                    step="0.5"
+                                                    :value="getCircularTrackPlacementValue(track.id, 'width')"
+                                                    @input="setCircularTrackPlacementValue(track.id, 'width', $event.target.value)"
+                                                    class="form-input py-1 text-xs"
+                                                    placeholder="Auto"
+                                                >
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] block mb-1">Center Radius</label>
+                                                <input
+                                                    type="number"
+                                                    min="0.01"
+                                                    step="0.01"
+                                                    :value="getCircularTrackPlacementValue(track.id, 'radius')"
+                                                    @input="setCircularTrackPlacementValue(track.id, 'radius', $event.target.value)"
+                                                    class="form-input py-1 text-xs"
+                                                    placeholder="Auto"
+                                                >
+                                            </div>
+                                        </div>
+
+                                        <div v-if="track.kind === 'features' || track.kind === 'custom'" class="mt-2">
+                                            <label class="text-[9px] font-semibold block mb-1">
+                                                {{ track.kind === 'features' ? 'Feature Types' : 'Feature Types' }}
+                                            </label>
+                                            <div class="flex flex-wrap gap-1.5 mb-1.5 min-h-[28px]">
+                                                <span
+                                                    v-for="featureType in (track.params?.feature_types || [])"
+                                                    :key="`${track.id}-${featureType}`"
+                                                    class="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-1 text-[10px] text-blue-700 shadow-sm"
+                                                >
+                                                    <span class="font-medium">{{ featureType }}</span>
+                                                    <button
+                                                        type="button"
+                                                        class="flex h-4 w-4 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                                                        @click="removeCircularTrackFeatureType(track.id, featureType)"
+                                                    >
+                                                        <i class="ph ph-x"></i>
+                                                    </button>
+                                                </span>
+                                                <span v-if="(track.params?.feature_types || []).length === 0" class="py-1 text-[10px] italic text-slate-400">
+                                                    No feature types selected
+                                                </span>
+                                            </div>
+                                            <div class="flex gap-2">
+                                                <select
+                                                    :value="getPendingCircularTrackFeatureType(track.id)"
+                                                    @change="setPendingCircularTrackFeatureType(track.id, $event.target.value)"
+                                                    class="form-input h-7 flex-grow px-2 py-0.5 text-xs"
+                                                >
+                                                    <option v-for="k in featureKeys" :key="`${track.id}-feature-option-${k}`" :value="k">{{ k }}</option>
+                                                </select>
+                                                <button type="button" class="btn btn-secondary h-7 shrink-0 text-xs" @click.prevent="addCircularTrackFeatureType(track.id)">
+                                                    <i class="ph ph-plus"></i> Add
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="track.kind === 'custom'" class="mt-2">
+                                            <label class="text-[9px] font-semibold block mb-1">Qualifier Regex Rules</label>
+                                            <div v-if="(track.params?.rules || []).length === 0" class="rounded border border-dashed border-slate-200 bg-white px-2 py-2 text-[10px] italic text-slate-400">
+                                                No rules. Type and strand filters only.
+                                            </div>
+                                            <div v-else class="space-y-1.5">
+                                                <div
+                                                    v-for="(rule, ruleIdx) in (track.params?.rules || [])"
+                                                    :key="`${track.id}-rule-${ruleIdx}`"
+                                                    class="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)_auto] gap-1.5"
+                                                >
+                                                    <input
+                                                        type="text"
+                                                        :value="rule.qualifier || ''"
+                                                        @input="updateCircularTrackRule(track.id, ruleIdx, 'qualifier', $event.target.value)"
+                                                        class="form-input py-1 text-xs"
+                                                        placeholder="Qualifier"
+                                                    >
+                                                    <input
+                                                        type="text"
+                                                        :value="rule.pattern || ''"
+                                                        @input="updateCircularTrackRule(track.id, ruleIdx, 'pattern', $event.target.value)"
+                                                        class="form-input py-1 text-xs"
+                                                        placeholder="Regex pattern"
+                                                    >
+                                                    <button type="button" class="btn btn-danger px-2 py-1 text-[10px]" @click="removeCircularTrackRule(track.id, ruleIdx)">
+                                                        Remove
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="mt-1.5 grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)_auto] gap-1.5">
+                                                <input
+                                                    type="text"
+                                                    :value="getPendingCircularTrackRuleQualifier(track.id)"
+                                                    @input="setPendingCircularTrackRuleQualifier(track.id, $event.target.value)"
+                                                    class="form-input py-1 text-xs"
+                                                    placeholder="Qualifier"
+                                                >
+                                                <input
+                                                    type="text"
+                                                    :value="getPendingCircularTrackRulePattern(track.id)"
+                                                    @input="setPendingCircularTrackRulePattern(track.id, $event.target.value)"
+                                                    class="form-input py-1 text-xs"
+                                                    placeholder="Regex pattern"
+                                                >
+                                                <button type="button" class="btn btn-secondary px-2 py-1 text-[10px]" @click.prevent="addCircularTrackRule(track.id)">
+                                                    Add Rule
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <div v-if="mode === 'linear'">
@@ -543,14 +766,6 @@
                                         </div>
                                     </div>
                                 </div>
-                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input type="checkbox" v-model="form.suppress_gc" class="form-checkbox">
-                                    <span class="inline-flex items-center gap-1">Hide GC <help-tip text="Suppress the GC content track."></help-tip></span>
-                                </label>
-                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input type="checkbox" v-model="form.suppress_skew" class="form-checkbox">
-                                    <span class="inline-flex items-center gap-1">Hide Skew <help-tip text="Suppress the GC skew track."></help-tip></span>
-                                </label>
                                 <div v-if="adv.resolve_overlaps && form.separate_strands" class="col-span-2 text-[10px] text-amber-700 leading-tight">
                                     Resolve Overlaps is ignored when Separate Strands is enabled.
                                 </div>
@@ -868,43 +1083,8 @@
                             </div>
 
                             <div v-if="mode === 'circular'">
-                                <label class="input-label adv-section-title">Circular Label Offsets <help-tip text="Adjust radius offset factors for labels."></help-tip></label>
+                                <label class="input-label adv-section-title">Circular Label Offsets <help-tip text="Adjust label offsets and tick spacing. Track width/radius now live in the Tracks list."></help-tip></label>
                                 <div class="bg-slate-50 p-1.5 rounded border border-slate-200 grid grid-cols-2 gap-1.5 text-xs">
-                                    <div>
-                                        <label class="text-[9px] block">
-                                            Feature Width
-                                            <help-tip text="Feature band width in px. When set, circular tracks and label arena auto-relayout around the new feature thickness."></help-tip>
-                                        </label>
-                                        <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" class="form-input py-0.5" placeholder="Auto">
-                                    </div>
-                                    <div>
-                                        <label class="text-[9px] block">
-                                            GC Content Width
-                                            <help-tip text="GC content track width in px."></help-tip>
-                                        </label>
-                                        <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_width_circular" class="form-input py-0.5" placeholder="Auto">
-                                    </div>
-                                    <div>
-                                        <label class="text-[9px] block">
-                                            GC Content Radius
-                                            <help-tip text="GC content center radius as a ratio of the base circular radius (1.0 = base radius)."></help-tip>
-                                        </label>
-                                        <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_content_radius_circular" class="form-input py-0.5" placeholder="Auto">
-                                    </div>
-                                    <div>
-                                        <label class="text-[9px] block">
-                                            GC Skew Width
-                                            <help-tip text="GC skew track width in px."></help-tip>
-                                        </label>
-                                        <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_skew_width_circular" class="form-input py-0.5" placeholder="Auto">
-                                    </div>
-                                    <div>
-                                        <label class="text-[9px] block">
-                                            GC Skew Radius
-                                            <help-tip text="GC skew center radius as a ratio of the base circular radius (1.0 = base radius)."></help-tip>
-                                        </label>
-                                        <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_skew_radius_circular" class="form-input py-0.5" placeholder="Auto">
-                                    </div>
                                     <div><label class="text-[9px] block">Outer X Offset</label><input type="number" step="0.1" v-model.number="adv.outer_label_x_offset" class="form-input py-0.5"></div>
                                     <div><label class="text-[9px] block">Outer Y Offset</label><input type="number" step="0.1" v-model.number="adv.outer_label_y_offset" class="form-input py-0.5"></div>
                                     <div><label class="text-[9px] block">Inner X Offset</label><input type="number" step="0.1" v-model.number="adv.inner_label_x_offset" class="form-input py-0.5"></div>
@@ -913,7 +1093,25 @@
                                 </div>
                             </div>
 
-                            <div>
+                            <div v-if="mode === 'circular'">
+                                <label class="input-label adv-section-title">Feature Shapes <help-tip text="Circular feature types come from the Tracks list. Shapes still apply per feature type."></help-tip></label>
+                                <div class="flex flex-wrap gap-1.5 mb-1.5 p-1.5 bg-slate-50 rounded border border-slate-200 min-h-[30px]">
+                                    <span v-for="f in circularFeatureShapeTypes" :key="f" class="inline-flex items-center gap-1 text-[10px] bg-white text-blue-700 px-2 py-1 rounded border border-blue-200 shadow-sm">
+                                        <span class="font-medium">{{ f }}</span>
+                                        <select
+                                            :value="getFeatureShape(f)"
+                                            @change="setFeatureShape(f, $event.target.value)"
+                                            class="border border-blue-200 rounded px-1 py-0 text-[9px] bg-white text-slate-700"
+                                            title="Feature shape"
+                                        >
+                                            <option value="arrow">Arrow</option>
+                                            <option value="rectangle">Rectangle</option>
+                                        </select>
+                                    </span>
+                                    <span v-if="circularFeatureShapeTypes.length === 0" class="text-[10px] text-slate-400 italic py-1">No circular feature tracks declare feature types</span>
+                                </div>
+                            </div>
+                            <div v-else>
                                 <label class="input-label adv-section-title">Include Features <help-tip text="Select which feature types to draw."></help-tip></label>
                                 <div class="flex flex-wrap gap-1.5 mb-1.5 p-1.5 bg-slate-50 rounded border border-slate-200 min-h-[30px]">
                                     <span v-for="f in adv.features" :key="f" class="inline-flex items-center gap-1 text-[10px] bg-white text-blue-700 px-2 py-1 rounded border border-blue-200 shadow-sm">

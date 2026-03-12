@@ -16,6 +16,13 @@ from .parser import (  # type: ignore[reportMissingImports]
     parse_track_spec,
     parse_track_specs,
 )
+from .circular import (  # type: ignore[reportMissingImports]
+    CircularCustomRule,
+    get_circular_feature_type_union,
+    iter_compiled_custom_rules,
+    load_circular_track_specs,
+    normalize_circular_track_specs,
+)
 
 __all__ = [
     "CircularTrackPlacement",
@@ -25,6 +32,11 @@ __all__ = [
     "TrackSpecParseError",
     "parse_track_spec",
     "parse_track_specs",
+    "CircularCustomRule",
+    "get_circular_feature_type_union",
+    "iter_compiled_custom_rules",
+    "load_circular_track_specs",
+    "normalize_circular_track_specs",
 ]
 
 

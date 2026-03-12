@@ -1,7 +1,8 @@
 import { state } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
+import { normalizeCircularTracks, syncLegacyCircularTrackControls } from '../utils/circular-tracks.js';
 
-const SESSION_VERSION = 5;
+const SESSION_VERSION = 6;
 
 const safeDeepMerge = (target, source) => {
   if (!source || typeof source !== 'object') return;
@@ -88,6 +89,7 @@ let lastSessionFilename = null;
 const buildConfigData = () => ({
   form: state.form,
   adv: state.adv,
+  circularTracks: JSON.parse(JSON.stringify(state.circularTracks.value)),
   losat: state.losat,
   colors: state.currentColors.value,
   palette: state.selectedPalette.value,
@@ -205,6 +207,14 @@ const applyConfigData = (data) => {
   }
   state.adv.keep_full_definition_with_plot_title =
     state.adv.keep_full_definition_with_plot_title === true;
+  state.circularTracks.value = normalizeCircularTracks(data.circularTracks, {
+    adv: state.adv,
+    form: state.form
+  });
+  syncLegacyCircularTrackControls(state.circularTracks.value, {
+    adv: state.adv,
+    form: state.form
+  });
   if (data.losat) safeDeepMerge(state.losat, data.losat);
   if (data.colors) {
     const normalized = {};

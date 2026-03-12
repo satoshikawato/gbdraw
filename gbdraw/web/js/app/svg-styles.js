@@ -1,5 +1,6 @@
 import { estimateColorFactor, interpolateColor } from './color-utils.js';
 import { ruleMatchesFeature } from './feature-utils.js';
+import { normalizeCircularTracks } from '../utils/circular-tracks.js';
 
 export const createSvgStyles = ({ state, watch, legendActions }) => {
   const {
@@ -16,7 +17,8 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     svgContainer,
     adv,
     mode,
-    form
+    form,
+    circularTracks
   } = state;
 
   const { getAllFeatureLegendGroups } = legendActions;
@@ -37,10 +39,75 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     return groups;
   };
 
+  const escapeSelectorValue = (value) => {
+    const raw = String(value || '');
+    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+      return CSS.escape(raw);
+    }
+    return raw.replace(/["\\]/g, '\\$&');
+  };
+
+  const getTrackGroups = (svg, trackId) => {
+    if (!svg || !trackId) return [];
+    const normalizedTrackId = String(trackId || '').trim();
+    if (!normalizedTrackId) return [];
+
+    const selectors = [
+      `g[data-track-id="${escapeSelectorValue(normalizedTrackId)}"]`,
+      `g[id="${escapeSelectorValue(`track_${normalizedTrackId}`)}"]`
+    ];
+    if (normalizedTrackId === 'gc_content') {
+      selectors.push('g[id="gc_content"]');
+    } else if (normalizedTrackId === 'gc_skew') {
+      selectors.push('g[id="gc_skew"]', 'g[id="skew"]');
+    }
+
+    const seen = new Set();
+    const groups = [];
+    selectors.forEach((selector) => {
+      svg.querySelectorAll(selector).forEach((group) => {
+        if (seen.has(group)) return;
+        seen.add(group);
+        groups.push(group);
+      });
+    });
+    return groups;
+  };
+
+  const getAnalysisGroupsByMetric = (svg, metric) => {
+    if (!svg) return [];
+    const normalizedMetric = String(metric || '').trim().toLowerCase();
+    const selectors = normalizedMetric
+      ? [`g[data-track-kind="analysis"][data-track-metric="${escapeSelectorValue(normalizedMetric)}"]`]
+      : [];
+    const seen = new Set();
+    const groups = [];
+
+    selectors.forEach((selector) => {
+      svg.querySelectorAll(selector).forEach((group) => {
+        if (seen.has(group)) return;
+        seen.add(group);
+        groups.push(group);
+      });
+    });
+
+    const fallbackIds = normalizedMetric === 'content'
+      ? ['gc_content']
+      : normalizedMetric === 'skew'
+        ? ['skew', 'gc_skew']
+        : [];
+    getGroupsByBaseIds(svg, fallbackIds).forEach((group) => {
+      if (seen.has(group)) return;
+      seen.add(group);
+      groups.push(group);
+    });
+    return groups;
+  };
+
   const ensureUniqueSkewClipPathIds = (svg) => {
     if (!svg) return;
 
-    const skewGroups = getGroupsByBaseIds(svg, ['skew', 'gc_skew']);
+    const skewGroups = getAnalysisGroupsByMetric(svg, 'skew');
     if (skewGroups.length === 0) return;
 
     const idCounts = new Map();
@@ -165,7 +232,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       }
     });
 
-    const gcContentGroups = getGroupsByBaseIds(svg, ['gc_content']);
+    const gcContentGroups = getAnalysisGroupsByMetric(svg, 'content');
     if (gcContentGroups.length > 0 && colors.gc_content) {
       gcContentGroups.forEach((gcContentGroup) => {
         const gcPaths = gcContentGroup.querySelectorAll('path');
@@ -176,7 +243,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       });
     }
 
-    const skewGroups = getGroupsByBaseIds(svg, ['skew', 'gc_skew']);
+    const skewGroups = getAnalysisGroupsByMetric(svg, 'skew');
     if (skewGroups.length > 0) {
       skewGroups.forEach((skewGroup) => {
         const skewPaths = skewGroup.querySelectorAll('path');
@@ -253,6 +320,14 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     };
     const resolveLegendColor = (legendKey, palette) => {
       if (!legendKey) return null;
+      const lowerKey = legendKey.toLowerCase();
+      if (lowerKey.includes(' content')) {
+        return palette.gc_content || null;
+      }
+      if (lowerKey.includes(' skew')) {
+        if (lowerKey.endsWith('(+)')) return palette.skew_high || null;
+        if (lowerKey.endsWith('(-)')) return palette.skew_low || null;
+      }
       const colorKey = keyToColorKey[legendKey];
       if (colorKey && palette[colorKey]) return palette[colorKey];
       if (palette[legendKey]) return palette[legendKey];
@@ -558,31 +633,50 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     if (!svg) return;
 
     let updated = false;
+    const normalizedCircularTracks = mode.value === 'circular'
+      ? normalizeCircularTracks(circularTracks.value, { adv, form })
+      : [];
+    if (mode.value === 'circular') {
+      normalizedCircularTracks.forEach((track) => {
+        const kind = String(track?.kind || '').trim().toLowerCase();
+        const groups = getTrackGroups(svg, track?.id);
+        if (groups.length === 0) return;
 
-    const gcContentGroups = getGroupsByBaseIds(svg, ['gc_content']);
-    if (gcContentGroups.length > 0) {
-      const shouldHide = mode.value === 'circular' ? form.suppress_gc : !form.show_gc;
+        const shouldHide = kind === 'gc_content' || kind === 'gc_skew' || kind === 'analysis'
+          ? form.labels_mode === 'both' || track?.show === false
+          : track?.show === false;
+
+        groups.forEach((group) => {
+          const currentDisplay = group.getAttribute('display');
+          if (shouldHide && currentDisplay !== 'none') {
+            group.setAttribute('display', 'none');
+            updated = true;
+          } else if (!shouldHide && currentDisplay === 'none') {
+            group.removeAttribute('display');
+            updated = true;
+          }
+        });
+      });
+    } else {
+      const gcContentGroups = getGroupsByBaseIds(svg, ['gc_content']);
       gcContentGroups.forEach((gcContentGroup) => {
         const currentDisplay = gcContentGroup.getAttribute('display');
-        if (shouldHide && currentDisplay !== 'none') {
+        if (!form.show_gc && currentDisplay !== 'none') {
           gcContentGroup.setAttribute('display', 'none');
           updated = true;
-        } else if (!shouldHide && currentDisplay === 'none') {
+        } else if (form.show_gc && currentDisplay === 'none') {
           gcContentGroup.removeAttribute('display');
           updated = true;
         }
       });
-    }
 
-    const skewGroups = getGroupsByBaseIds(svg, ['skew', 'gc_skew']);
-    if (skewGroups.length > 0) {
-      const shouldHide = mode.value === 'circular' ? form.suppress_skew : !form.show_skew;
+      const skewGroups = getGroupsByBaseIds(svg, ['skew', 'gc_skew']);
       skewGroups.forEach((skewGroup) => {
         const currentDisplay = skewGroup.getAttribute('display');
-        if (shouldHide && currentDisplay !== 'none') {
+        if (!form.show_skew && currentDisplay !== 'none') {
           skewGroup.setAttribute('display', 'none');
           updated = true;
-        } else if (!shouldHide && currentDisplay === 'none') {
+        } else if (form.show_skew && currentDisplay === 'none') {
           skewGroup.removeAttribute('display');
           updated = true;
         }
@@ -626,7 +720,12 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
   );
 
   watch(
-    () => [form.suppress_gc, form.suppress_skew, form.show_gc, form.show_skew],
+    () => [
+      form.labels_mode,
+      form.show_gc,
+      form.show_skew,
+      ...circularTracks.value.map((track) => `${track.id}:${track.show}`)
+    ],
     () => {
       applyTrackVisibility();
     }

@@ -1,5 +1,10 @@
 import { runLosatPair } from '../services/losat.js';
 import { buildLabelOverrideTsv } from './feature-editor/label-override-table.js';
+import {
+  getDeclaredCircularFeatureTypes,
+  getEnabledCircularFeatureTypes,
+  normalizeCircularTracks
+} from '../utils/circular-tracks.js';
 
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
@@ -187,6 +192,7 @@ export const createRunAnalysis = ({
     manualPriorityRules,
     form,
     adv,
+    circularTracks,
     mode,
     cInputType,
     lInputType,
@@ -217,6 +223,7 @@ export const createRunAnalysis = ({
   let linearLabelSupportCache = null;
   let featureShapeSupportCache = null;
   let circularMultiRecordCanvasSupportCache = null;
+  let circularTrackFileSupportCache = null;
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
   let pendingReflowReason = 'label-edit';
@@ -437,6 +444,29 @@ json.dumps({
     return circularMultiRecordCanvasSupportCache;
   };
 
+  const getCircularTrackFileOptionSupport = () => {
+    if (circularTrackFileSupportCache) return circularTrackFileSupportCache;
+    const pyodide = getPyodide();
+    if (!pyodide) {
+      circularTrackFileSupportCache = { track_file: false };
+      return circularTrackFileSupportCache;
+    }
+    try {
+      const raw = pyodide.runPython(`
+import inspect, json
+import gbdraw.circular as _gbdraw_circular
+_source = inspect.getsource(_gbdraw_circular._get_args)
+json.dumps({
+  "track_file": "--track_file" in _source,
+})
+      `);
+      circularTrackFileSupportCache = JSON.parse(String(raw));
+    } catch (_err) {
+      circularTrackFileSupportCache = { track_file: false };
+    }
+    return circularTrackFileSupportCache;
+  };
+
   const downloadLosatPair = async (pairIndex, customName) => {
     const entry = losatCacheInfo.value?.[pairIndex];
     const cacheMap = losatCache.value;
@@ -581,13 +611,22 @@ json.dumps({
       let regionSpecs = [];
       let recordSelectors = [];
       let reverseFlags = [];
+      const normalizedCircularTracks = mode.value === 'circular'
+        ? normalizeCircularTracks(circularTracks.value, { adv, form })
+        : [];
+      const selectedFeatureTypes = mode.value === 'circular'
+        ? getEnabledCircularFeatureTypes(normalizedCircularTracks)
+        : (Array.isArray(adv.features) ? adv.features : []);
+      const featureShapeTypes = mode.value === 'circular'
+        ? getDeclaredCircularFeatureTypes(normalizedCircularTracks)
+        : (Array.isArray(adv.features) ? adv.features : []);
 
       if (form.prefix && form.prefix.trim() !== '') args.push('-o', form.prefix.trim());
       if (form.species) args.push('--species', form.species);
       if (form.strain) args.push('--strain', form.strain);
       if (form.separate_strands) args.push('--separate_strands');
 
-      if (adv.features.length) args.push('-k', adv.features.join(','));
+      if (selectedFeatureTypes.length) args.push('-k', selectedFeatureTypes.join(','));
       if (adv.window_size) args.push('--window', adv.window_size);
       if (adv.step_size) args.push('--step', adv.step_size);
       if (adv.nt && adv.nt !== 'GC') args.push('--nt', adv.nt);
@@ -674,19 +713,18 @@ json.dumps({
         editableLabels.value = [];
       }
 
-      const selectedFeatureShapes = Array.isArray(adv.features)
-        ? adv.features
-            .map((featureTypeRaw) => {
-              const featureType = String(featureTypeRaw || '').trim();
-              if (!featureType) return null;
-              const shape = normalizeFeatureShape(adv.feature_shapes?.[featureType]);
-              return `${featureType}=${shape}`;
-            })
-            .filter((assignment) => typeof assignment === 'string' && assignment.length > 0)
-        : [];
+      const selectedFeatureShapes = featureShapeTypes
+        .map((featureTypeRaw) => {
+          const featureType = String(featureTypeRaw || '').trim();
+          if (!featureType) return null;
+          const shape = normalizeFeatureShape(adv.feature_shapes?.[featureType]);
+          return `${featureType}=${shape}`;
+        })
+        .filter((assignment) => typeof assignment === 'string' && assignment.length > 0);
 
       if (mode.value === 'circular') {
         const multiCanvasSupport = getCircularMultiRecordCanvasOptionSupport();
+        const trackFileSupport = getCircularTrackFileOptionSupport();
         const normalizedCircularPlotTitle = String(form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(adv.plot_title_position);
         const hasPlotTitleFontSize =
@@ -719,6 +757,13 @@ json.dumps({
             args.push('--feature_shape', assignment);
           });
         }
+        if (!trackFileSupport.track_file) {
+          throw new Error(
+            'Current gbdraw wheel does not support --track_file for circular diagrams. Rebuild and redeploy the web wheel.'
+          );
+        }
+        pyodide.FS.writeFile('/web_tracks.json', JSON.stringify(normalizedCircularTracks, null, 2));
+        args.push('--track_file', '/web_tracks.json');
         args.push('--track_type', form.track_type, '-l', form.legend);
         const wantsCircularPlotTitleOption = normalizedCircularPlotTitle.length > 0;
         if (wantsCircularPlotTitleOption) {
@@ -762,8 +807,6 @@ json.dumps({
         const labelsMode = String(labelsModeRaw || 'none').trim().toLowerCase();
         if (labelsMode === 'out') args.push('--labels');
         if (labelsMode === 'both') args.push('--labels', 'both');
-        if (form.suppress_gc) args.push('--suppress_gc');
-        if (form.suppress_skew) args.push('--suppress_skew');
         if (form.multi_record_canvas) {
           if (!multiCanvasSupport.circular) {
             throw new Error(
@@ -828,50 +871,6 @@ json.dumps({
         if (adv.outer_label_y_offset) args.push('--outer_label_y_radius_offset', adv.outer_label_y_offset);
         if (adv.inner_label_x_offset) args.push('--inner_label_x_radius_offset', adv.inner_label_x_offset);
         if (adv.inner_label_y_offset) args.push('--inner_label_y_radius_offset', adv.inner_label_y_offset);
-        if (
-          adv.feature_width_circular !== null &&
-          adv.feature_width_circular !== undefined &&
-          adv.feature_width_circular !== '' &&
-          Number(adv.feature_width_circular) > 0
-        ) {
-          args.push('--feature_width', adv.feature_width_circular);
-        }
-        if (!form.suppress_gc) {
-          if (
-            adv.gc_content_width_circular !== null &&
-            adv.gc_content_width_circular !== undefined &&
-            adv.gc_content_width_circular !== '' &&
-            Number(adv.gc_content_width_circular) > 0
-          ) {
-            args.push('--gc_content_width', adv.gc_content_width_circular);
-          }
-          if (
-            adv.gc_content_radius_circular !== null &&
-            adv.gc_content_radius_circular !== undefined &&
-            adv.gc_content_radius_circular !== '' &&
-            Number(adv.gc_content_radius_circular) > 0
-          ) {
-            args.push('--gc_content_radius', adv.gc_content_radius_circular);
-          }
-        }
-        if (!form.suppress_skew) {
-          if (
-            adv.gc_skew_width_circular !== null &&
-            adv.gc_skew_width_circular !== undefined &&
-            adv.gc_skew_width_circular !== '' &&
-            Number(adv.gc_skew_width_circular) > 0
-          ) {
-            args.push('--gc_skew_width', adv.gc_skew_width_circular);
-          }
-          if (
-            adv.gc_skew_radius_circular !== null &&
-            adv.gc_skew_radius_circular !== undefined &&
-            adv.gc_skew_radius_circular !== '' &&
-            Number(adv.gc_skew_radius_circular) > 0
-          ) {
-            args.push('--gc_skew_radius', adv.gc_skew_radius_circular);
-          }
-        }
         if (adv.scale_interval) args.push('--scale_interval', adv.scale_interval);
 
         if (cInputType.value === 'gb') {

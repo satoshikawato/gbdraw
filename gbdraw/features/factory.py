@@ -10,7 +10,7 @@ from Bio.SeqFeature import SeqFeature, SimpleLocation
 from .objects import GeneObject, RepeatObject, FeatureObject
 from .visibility import should_render_feature
 from ..labels.filtering import get_label_text
-from .colors import get_color, get_color_with_info
+from .colors import get_color_with_info
 from .coordinates import get_exon_and_intron_coordinates
 from .shapes import DEFAULT_DIRECTIONAL_FEATURE_TYPES
 from .tracks import arrange_feature_tracks
@@ -34,7 +34,12 @@ def create_repeat_object(
     rpt_type: str = feature.qualifiers.get("rpt_type", ["undefined"])[0]
     note: str = feature.qualifiers.get("note", [""])[0]
     location = get_exon_and_intron_coordinates(coordinates, genome_length)
-    color: str = get_color(feature, color_table, default_colors, record_id=record_id)
+    color, color_caption = get_color_with_info(
+        feature,
+        color_table,
+        default_colors,
+        record_id=record_id,
+    )
     feature_type = feature.type
     label_text = get_label_text(feature, label_filtering, record_id=record_id)
 
@@ -52,6 +57,7 @@ def create_repeat_object(
         qualifiers=feature.qualifiers,
         record_id=record_id,
     )
+    repeat_object.color_caption = color_caption
     return repeat_object
 
 
@@ -71,7 +77,12 @@ def create_feature_object(
     coordinates = feature.location.parts
     note: str = feature.qualifiers.get("note", [""])[0]
     location = get_exon_and_intron_coordinates(coordinates, genome_length)
-    color: str = get_color(feature, color_table, default_colors, record_id=record_id)
+    color, color_caption = get_color_with_info(
+        feature,
+        color_table,
+        default_colors,
+        record_id=record_id,
+    )
     feature_type = feature.type
     label_text = get_label_text(feature, label_filtering, record_id=record_id)
 
@@ -87,6 +98,7 @@ def create_feature_object(
         qualifiers=feature.qualifiers,
         record_id=record_id,
     )
+    feature_object.color_caption = color_caption
     return feature_object
 
 
@@ -110,7 +122,12 @@ def create_gene_object(
     is_trans_spliced = "trans_splicing" in feature.qualifiers
     feature_type = feature.type
     location = get_exon_and_intron_coordinates(coordinates, genome_length, is_trans_spliced)
-    color: str = get_color(feature, color_table, default_colors, record_id=record_id)
+    color, color_caption = get_color_with_info(
+        feature,
+        color_table,
+        default_colors,
+        record_id=record_id,
+    )
     label_text = get_label_text(feature, label_filtering, record_id=record_id)
 
     gene_object = GeneObject(
@@ -128,6 +145,7 @@ def create_gene_object(
         qualifiers=feature.qualifiers,
         record_id=record_id,
     )
+    gene_object.color_caption = color_caption
     return gene_object
 
 
@@ -142,6 +160,7 @@ def create_feature_dict(
     split_overlaps_by_strand: bool = False,
     directional_feature_types: Optional[Set[str]] = None,
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
+    arrange_tracks: bool = True,
 ) -> Tuple[Dict[str, FeatureObject], Set[Tuple[str, str]]]:
     """
     Creates a dictionary mapping feature IDs to FeatureObjects from a GenBank record.
@@ -223,13 +242,14 @@ def create_feature_dict(
             )
             feature_dict[feature_id] = feature_object
 
-    feature_dict = arrange_feature_tracks(
-        feature_dict,
-        separate_strands,
-        resolve_overlaps,
-        split_overlaps_by_strand=split_overlaps_by_strand,
-        genome_length=genome_length,
-    )
+    if arrange_tracks:
+        feature_dict = arrange_feature_tracks(
+            feature_dict,
+            separate_strands,
+            resolve_overlaps,
+            split_overlaps_by_strand=split_overlaps_by_strand,
+            genome_length=genome_length,
+        )
     return feature_dict, used_color_rules
 
 

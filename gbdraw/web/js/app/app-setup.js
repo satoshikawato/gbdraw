@@ -4,6 +4,7 @@ import { downloadSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import { exportConfig, exportSession, importConfig, importSession } from '../services/config.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { createFeatureEditor } from './feature-editor.js';
+import { createCircularTrackEditor } from './circular-track-editor.js';
 import { createSvgStyles } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPyodideManager } from './pyodide.js';
@@ -41,6 +42,7 @@ export const createAppSetup = () => {
     linearSeqs,
     form,
     adv,
+    circularTracks,
     losat,
     losatCacheInfo,
     circularRecordList,
@@ -144,6 +146,7 @@ export const createAppSetup = () => {
     legendActions,
     svgActions
   });
+  const circularTrackEditor = createCircularTrackEditor({ state });
 
   setupGlobalUiEvents({ state, onMounted, onUnmounted });
 
@@ -239,6 +242,38 @@ export const createAppSetup = () => {
     requestLabelTextChangeByKey,
     resetAllLabelTextOverrides
   } = featureActions;
+
+  const {
+    newCircularTrackKind,
+    circularFeatureShapeTypes,
+    getCircularTrackKindLabel,
+    isBuiltinCircularTrack,
+    canMoveCircularTrackUp,
+    canMoveCircularTrackDown,
+    moveCircularTrack,
+    addCircularTrack,
+    deleteCircularTrack,
+    setCircularTrackShow,
+    getCircularTrackPlacementValue,
+    setCircularTrackPlacementValue,
+    setCircularTrackCaption,
+    setCircularTrackAnalysisMetric,
+    getCircularTrackDinucleotideInputValue,
+    setCircularTrackDinucleotide,
+    finalizeCircularTrackDinucleotide,
+    setCircularTrackStrandMode,
+    getPendingCircularTrackFeatureType,
+    setPendingCircularTrackFeatureType,
+    addCircularTrackFeatureType,
+    removeCircularTrackFeatureType,
+    getPendingCircularTrackRuleQualifier,
+    setPendingCircularTrackRuleQualifier,
+    getPendingCircularTrackRulePattern,
+    setPendingCircularTrackRulePattern,
+    addCircularTrackRule,
+    updateCircularTrackRule,
+    removeCircularTrackRule
+  } = circularTrackEditor;
 
   const { updatePalette, resetColors } = resultsManager;
 
@@ -529,6 +564,7 @@ export const createAppSetup = () => {
     linearSeqs,
     form,
     adv,
+    circularTracks,
     losat,
     losatCacheInfo,
     circularRecordList,
@@ -562,8 +598,37 @@ export const createAppSetup = () => {
     newFeatureToAdd,
     addFeature,
     removeFeature,
+    circularFeatureShapeTypes,
     getFeatureShape,
     setFeatureShape,
+    getCircularTrackKindLabel,
+    isBuiltinCircularTrack,
+    canMoveCircularTrackUp,
+    canMoveCircularTrackDown,
+    moveCircularTrack,
+    newCircularTrackKind,
+    addCircularTrack,
+    deleteCircularTrack,
+    setCircularTrackShow,
+    getCircularTrackPlacementValue,
+    setCircularTrackPlacementValue,
+    setCircularTrackCaption,
+    setCircularTrackAnalysisMetric,
+    getCircularTrackDinucleotideInputValue,
+    setCircularTrackDinucleotide,
+    finalizeCircularTrackDinucleotide,
+    setCircularTrackStrandMode,
+    getPendingCircularTrackFeatureType,
+    setPendingCircularTrackFeatureType,
+    addCircularTrackFeatureType,
+    removeCircularTrackFeatureType,
+    getPendingCircularTrackRuleQualifier,
+    setPendingCircularTrackRuleQualifier,
+    getPendingCircularTrackRulePattern,
+    setPendingCircularTrackRulePattern,
+    addCircularTrackRule,
+    updateCircularTrackRule,
+    removeCircularTrackRule,
     manualSpecificRules,
     newSpecRule,
     specificRulePresets,

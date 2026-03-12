@@ -11,6 +11,7 @@ def calculate_feature_position_factors_circular(
     track_type: str = "tuckin",
     strandedness: bool = True,
     track_id: int = 0,
+    base_factor: float = 1.0,
 ) -> list[float]:
     """
     Calculates position factors for a feature based on its strand orientation on a circular canvas.
@@ -36,7 +37,7 @@ def calculate_feature_position_factors_circular(
         List of three floats [inner_factor, middle_factor, outer_factor] used to calculate
         the actual radii by multiplying with the base radius.
     """
-    BASE: float = 1.0
+    BASE: float = float(base_factor)
     cds_ratio = float(cds_ratio)
     offset = float(offset)
     

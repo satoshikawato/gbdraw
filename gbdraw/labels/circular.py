@@ -1153,12 +1153,11 @@ def _build_feature_radius_intervals(
         return []
 
     length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
-    track_ratio_factor = (
+    default_track_ratio_factor = (
         float(feature_track_ratio_factor_override)
         if feature_track_ratio_factor_override is not None
         else float(cfg.canvas.circular.track_ratio_factors[length_param][0])
     )
-    cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
     track_type = cfg.canvas.circular.track_type
     strandedness = cfg.canvas.strandedness
 
@@ -1188,6 +1187,12 @@ def _build_feature_radius_intervals(
                 coordinate_end = float(coordinate_end_raw)
 
             coordinate_strand = get_strand(coordinate.strand)
+            track_ratio_factor = float(
+                getattr(feature_object, "circular_track_width_factor", default_track_ratio_factor)
+                or default_track_ratio_factor
+            )
+            cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
+            base_factor = float(getattr(feature_object, "circular_track_center_factor", 1.0) or 1.0)
             factors = calculate_feature_position_factors_circular(
                 total_length,
                 coordinate_strand,
@@ -1197,6 +1202,7 @@ def _build_feature_radius_intervals(
                 track_type,
                 strandedness,
                 track_id,
+                base_factor=base_factor,
             )
             factor_inner = min(float(factors[0]), float(factors[2]))
             factor_outer = max(float(factors[0]), float(factors[2]))
@@ -4442,12 +4448,18 @@ def prepare_label_list(
     font_size: float = cfg.labels.font_size.for_length_param(length_param)
     interval = cfg.canvas.dpi
 
-    track_ratio_factor = (
+    default_track_ratio_factor = (
         float(feature_track_ratio_factor_override)
         if feature_track_ratio_factor_override is not None
         else float(cfg.canvas.circular.track_ratio_factors[length_param][0])
     )
-    cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
+    max_track_ratio_factor = max(
+        [
+            float(getattr(feature_object, "circular_track_width_factor", default_track_ratio_factor) or default_track_ratio_factor)
+            for feature_object in feature_dict.values()
+        ] or [float(default_track_ratio_factor)]
+    )
+    cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, max_track_ratio_factor)
     feature_band_width_px = float(radius) * float(cds_ratio)
     effective_anchor_clearance_px = _effective_outer_middle_anchor_clearance_px(
         resolve_overlaps=bool(cfg.canvas.resolve_overlaps),
@@ -4501,11 +4513,29 @@ def prepare_label_list(
 
             # Get track_id for overlap resolution
             track_id = getattr(feature_object, 'feature_track_id', 0)
+            feature_track_ratio_factor = float(
+                getattr(feature_object, "circular_track_width_factor", default_track_ratio_factor)
+                or default_track_ratio_factor
+            )
+            cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, feature_track_ratio_factor)
+            base_factor = float(getattr(feature_object, "circular_track_center_factor", 1.0) or 1.0)
             factors: list[float] = calculate_feature_position_factors_circular(
-                total_length, coordinate_strand, track_ratio, cds_ratio, offset, track_type, strandedness, track_id
+                total_length,
+                coordinate_strand,
+                track_ratio,
+                cds_ratio,
+                offset,
+                track_type,
+                strandedness,
+                track_id,
+                base_factor=base_factor,
             )
             # Store track_id in label entry for embedded label drawing
             label_entry["track_id"] = track_id
+            label_entry["feature_id"] = getattr(feature_object, "feature_id", "")
+            label_entry["circular_track_id"] = getattr(feature_object, "circular_track_id", None)
+            label_entry["base_factor"] = base_factor
+            label_entry["track_ratio_factor"] = float(feature_track_ratio_factor)
             bbox_width_px, bbox_height_px = calculate_bbox_dimensions(feature_label_text, font_family, font_size, interval)
             label_middle = longeset_segment_middle
             label_as_feature_length = total_length * (1.1 * bbox_width_px) / (2 * math.pi * radius)

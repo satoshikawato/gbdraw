@@ -28,7 +28,7 @@ class GcContentGroup:
         norm_factor_override: float | None = None,
         cfg: GbdrawConfig | None = None,
     ) -> None:
-        self.gc_group = Group(id="gc_content")
+        self.gc_group = Group(id="gc_content", debug=False)
         self.radius: float = radius
         self.gc_config: GcContentConfigurator = gc_config
         self.gb_record: SeqRecord = gb_record
