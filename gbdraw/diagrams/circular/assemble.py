@@ -1562,6 +1562,113 @@ def _shrink_fixed_width_annulus_to_avoid_forbidden_bands(
     return float(shrunk_width)
 
 
+def _resolve_track_target_for_definition_clearance(
+    *,
+    current_center_px: float,
+    current_inner_px: float,
+    current_outer_px: float,
+    has_explicit_center: bool,
+    definition_clearance_limit_px: float | None,
+) -> tuple[float, float]:
+    """Adjust a track target so auto-width tracks preserve center definition clearance."""
+    current_center = float(current_center_px)
+    current_inner = float(current_inner_px)
+    current_outer = float(current_outer_px)
+    current_width = max(0.0, current_outer - current_inner)
+    if definition_clearance_limit_px is None or current_inner >= float(definition_clearance_limit_px):
+        return current_center, current_width
+
+    if has_explicit_center:
+        target_width = max(
+            0.0,
+            min(
+                current_width,
+                2.0 * (current_center - float(definition_clearance_limit_px)),
+            ),
+        )
+        return current_center, target_width
+
+    target_inner = max(current_inner, float(definition_clearance_limit_px))
+    target_width = max(0.0, current_outer - target_inner)
+    target_center = 0.5 * (current_outer + target_inner)
+    return float(target_center), float(target_width)
+
+
+def _resolve_feature_track_bounds_for_target(
+    feature_subset: dict[str, Any] | None,
+    *,
+    target_center_px: float,
+    target_width_px: float,
+    base_width_px: float,
+    current_track_ratio_factor: float,
+    template_midpoint_px: float,
+    total_length: int,
+    base_radius_px: float,
+    track_ratio: float,
+    length_param: str,
+    cfg: GbdrawConfig,
+) -> tuple[float, float, float, float] | None:
+    """Apply a target width/center to a feature track and return final bounds."""
+    if feature_subset is None:
+        return None
+
+    if max(0.0, float(target_width_px)) <= FEATURE_BAND_EPSILON:
+        feature_track_ratio_factor = 0.0
+    elif max(0.0, float(base_width_px)) <= FEATURE_BAND_EPSILON:
+        feature_track_ratio_factor = float(current_track_ratio_factor)
+    else:
+        feature_track_ratio_factor = max(
+            0.0,
+            float(current_track_ratio_factor) * (float(target_width_px) / float(base_width_px)),
+        )
+    _set_feature_track_width_factor(
+        feature_subset,
+        track_ratio_factor=float(feature_track_ratio_factor),
+    )
+    _set_feature_track_center_factor(
+        feature_subset,
+        center_px=float(template_midpoint_px),
+        template_midpoint_px=float(template_midpoint_px),
+        base_radius_px=base_radius_px,
+    )
+    updated_template_bounds = _feature_track_template_bounds_px(
+        feature_subset,
+        total_length,
+        base_radius_px=base_radius_px,
+        track_ratio=track_ratio,
+        length_param=length_param,
+        track_ratio_factor=float(feature_track_ratio_factor),
+        cfg=cfg,
+    )
+    updated_template_midpoint = (
+        float(updated_template_bounds[2])
+        if updated_template_bounds is not None
+        else float(template_midpoint_px)
+    )
+    _set_feature_track_center_factor(
+        feature_subset,
+        center_px=float(target_center_px),
+        template_midpoint_px=float(updated_template_midpoint),
+        base_radius_px=base_radius_px,
+    )
+    final_bounds = _compute_feature_band_bounds_px(
+        feature_subset,
+        total_length,
+        base_radius_px=base_radius_px,
+        track_ratio=track_ratio,
+        length_param=length_param,
+        track_ratio_factor=float(feature_track_ratio_factor),
+        cfg=cfg,
+    )
+    if final_bounds is None:
+        collapsed_center = float(target_center_px)
+        return collapsed_center, collapsed_center, collapsed_center, float(feature_track_ratio_factor)
+
+    inner_px, outer_px = final_bounds
+    center_px = 0.5 * (float(inner_px) + float(outer_px))
+    return center_px, float(inner_px), float(outer_px), float(feature_track_ratio_factor)
+
+
 def _resolve_ordered_annular_track_layout(
     annular_track_specs: Sequence[TrackSpec],
     *,
@@ -1627,15 +1734,13 @@ def _resolve_ordered_annular_track_layout(
                 {
                     "id": track_id,
                     "kind": kind,
-                    "track_spec": track_spec,
                     "feature_dict": feature_subset,
-                    "template_inner": float(template_inner),
-                    "template_outer": float(template_outer),
+                    "base_feature_track_ratio_factor": float(feature_track_ratio_factor),
                     "template_midpoint": float(template_midpoint),
                     "has_explicit_center": has_explicit_center,
                     "has_explicit_width": has_explicit_width,
                     "center_px": float(explicit_center_px) if explicit_center_px is not None else None,
-                    "width_px": float(template_outer) - float(template_inner),
+                    "base_width_px": float(template_outer) - float(template_inner),
                 }
             )
             widths_for_gap.append(float(template_outer) - float(template_inner))
@@ -1679,18 +1784,16 @@ def _resolve_ordered_annular_track_layout(
             resolved_width_px,
         )
         layout_candidates.append(
-            {
-                "id": track_id,
-                "kind": kind,
-                "track_spec": track_spec,
-                "feature_dict": None,
-                "template_inner": float(template_inner),
-                "template_outer": float(template_outer),
-                "template_midpoint": float(template_center_px),
-                "has_explicit_center": has_explicit_center,
-                "has_explicit_width": has_explicit_width,
-                "center_px": float(template_center_px),
-                "width_px": float(resolved_width_px),
+                {
+                    "id": track_id,
+                    "kind": kind,
+                    "feature_dict": None,
+                    "base_feature_track_ratio_factor": None,
+                    "template_midpoint": float(template_center_px),
+                    "has_explicit_center": has_explicit_center,
+                    "has_explicit_width": has_explicit_width,
+                    "center_px": float(template_center_px),
+                    "base_width_px": float(resolved_width_px),
             }
         )
         widths_for_gap.append(float(resolved_width_px))
@@ -1708,138 +1811,141 @@ def _resolve_ordered_annular_track_layout(
         else None
     )
     auto_outer_anchor_px = max(auto_outer_edges) if auto_outer_edges else None
-    cursor_inner_edge_px: float | None = None
+    auto_stack_candidates = [
+        layout
+        for layout in layout_candidates
+        if not bool(layout["has_explicit_center"])
+    ]
+
+    for layout in layout_candidates:
+        layout["target_width_px"] = float(layout["base_width_px"])
+
+    if (
+        auto_stack_candidates
+        and auto_outer_anchor_px is not None
+        and definition_clearance_limit_px is not None
+    ):
+        total_gap_px = float(track_gap_px) * max(0, len(auto_stack_candidates) - 1)
+        available_width_px = max(
+            0.0,
+            float(auto_outer_anchor_px) - float(definition_clearance_limit_px) - total_gap_px,
+        )
+        fixed_width_px = sum(
+            float(layout["base_width_px"])
+            for layout in auto_stack_candidates
+            if bool(layout["has_explicit_width"])
+        )
+        auto_width_px = sum(
+            float(layout["base_width_px"])
+            for layout in auto_stack_candidates
+            if not bool(layout["has_explicit_width"])
+        )
+        auto_scale = 1.0
+        if auto_width_px > FEATURE_BAND_EPSILON:
+            auto_scale = min(
+                1.0,
+                max(0.0, available_width_px - fixed_width_px) / float(auto_width_px),
+            )
+        for layout in auto_stack_candidates:
+            if bool(layout["has_explicit_width"]):
+                continue
+            layout["target_width_px"] = float(layout["base_width_px"]) * float(auto_scale)
+
+    if auto_stack_candidates and auto_outer_anchor_px is not None:
+        cursor_outer_edge_px = float(auto_outer_anchor_px)
+        for layout in auto_stack_candidates:
+            target_width_px = max(0.0, float(layout["target_width_px"]))
+            target_outer_px = float(cursor_outer_edge_px)
+            target_inner_px = float(target_outer_px - target_width_px)
+            layout["target_center_px"] = 0.5 * (target_outer_px + target_inner_px)
+            layout["target_inner_px"] = target_inner_px
+            layout["target_outer_px"] = target_outer_px
+            cursor_outer_edge_px = float(target_inner_px - track_gap_px)
+
     resolved_layouts: dict[str, _ResolvedAnnularTrackLayout] = {}
 
     for layout in layout_candidates:
         template_midpoint = float(layout["template_midpoint"])
-        template_outer = float(layout["template_outer"])
-        center_px = float(layout["center_px"]) if layout["center_px"] is not None else template_midpoint
         has_explicit_center = bool(layout["has_explicit_center"])
+        has_explicit_width = bool(layout["has_explicit_width"])
+        target_width_px = max(0.0, float(layout["target_width_px"]))
 
-        if not has_explicit_center:
-            if cursor_inner_edge_px is None:
-                target_outer_px = (
-                    float(auto_outer_anchor_px)
-                    if auto_outer_anchor_px is not None
-                    else template_outer
-                )
-                center_px = template_midpoint + (target_outer_px - template_outer)
-            else:
-                center_px = template_midpoint + (
-                    (float(cursor_inner_edge_px) - float(track_gap_px))
-                    - template_outer
-                )
+        if has_explicit_center:
+            center_px = float(layout["center_px"]) if layout["center_px"] is not None else template_midpoint
+            current_inner_px, current_outer_px = _annulus_from_center_and_width(center_px, target_width_px)
+        else:
+            center_px = float(layout.get("target_center_px", template_midpoint))
+            current_inner_px = float(layout.get("target_inner_px", center_px - (0.5 * target_width_px)))
+            current_outer_px = float(layout.get("target_outer_px", center_px + (0.5 * target_width_px)))
+
+        if definition_clearance_limit_px is not None and not has_explicit_width:
+            center_px, target_width_px = _resolve_track_target_for_definition_clearance(
+                current_center_px=center_px,
+                current_inner_px=current_inner_px,
+                current_outer_px=current_outer_px,
+                has_explicit_center=has_explicit_center,
+                definition_clearance_limit_px=definition_clearance_limit_px,
+            )
 
         if layout["kind"] in {"features", "custom"}:
             feature_subset = layout["feature_dict"]
-            feature_track_ratio_factor = float(
-                (feature_track_ratio_factors_by_id or {}).get(str(layout["id"]), default_feature_track_ratio_factor)
-            )
-            _set_feature_track_center_factor(
+            resolved_bounds = _resolve_feature_track_bounds_for_target(
                 feature_subset,
-                center_px=center_px,
+                target_center_px=center_px,
+                target_width_px=target_width_px,
+                base_width_px=float(layout["base_width_px"]),
+                current_track_ratio_factor=float(layout["base_feature_track_ratio_factor"]),
                 template_midpoint_px=template_midpoint,
-                base_radius_px=base_radius_px,
-            )
-            final_bounds = _compute_feature_band_bounds_px(
-                feature_subset,
-                total_length,
+                total_length=total_length,
                 base_radius_px=base_radius_px,
                 track_ratio=track_ratio,
                 length_param=length_param,
-                track_ratio_factor=feature_track_ratio_factor,
                 cfg=cfg,
             )
-            if final_bounds is None:
+            if resolved_bounds is None:
                 continue
-            inner_px, outer_px = final_bounds
-            center_px = 0.5 * (float(inner_px) + float(outer_px))
-
-            if (
-                str(layout["kind"]) == "custom"
-                and (not bool(layout["has_explicit_width"]))
-                and definition_clearance_limit_px is not None
-            ):
-                current_inner_px = float(inner_px)
-                current_outer_px = float(outer_px)
-                current_width_px = max(0.0, current_outer_px - current_inner_px)
-                target_center_px = float(center_px)
-                target_width_px = current_width_px
-
-                if current_inner_px < float(definition_clearance_limit_px):
-                    if bool(layout["has_explicit_center"]):
-                        target_width_px = max(
-                            0.0,
-                            min(
-                                current_width_px,
-                                2.0 * (float(center_px) - float(definition_clearance_limit_px)),
-                            ),
-                        )
-                    else:
-                        target_inner_px = max(
-                            current_inner_px,
-                            float(definition_clearance_limit_px),
-                        )
-                        target_width_px = max(0.0, current_outer_px - target_inner_px)
-                        target_center_px = 0.5 * (current_outer_px + target_inner_px)
-
-                if target_width_px <= FEATURE_BAND_EPSILON:
-                    center_px = float(target_center_px)
-                    inner_px = float(target_center_px)
-                    outer_px = float(target_center_px)
-                elif target_width_px + FEATURE_BAND_EPSILON < current_width_px:
-                    feature_track_ratio_factor = _resolve_feature_track_ratio_factor_for_width_px(
-                        target_width_px,
-                        base_radius_px=base_radius_px,
-                        base_track_ratio=track_ratio,
+            center_px, inner_px, outer_px, feature_track_ratio_factor = resolved_bounds
+            if definition_clearance_limit_px is not None and not has_explicit_width:
+                adjusted_center_px, adjusted_width_px = _resolve_track_target_for_definition_clearance(
+                    current_center_px=center_px,
+                    current_inner_px=inner_px,
+                    current_outer_px=outer_px,
+                    has_explicit_center=has_explicit_center,
+                    definition_clearance_limit_px=definition_clearance_limit_px,
+                )
+                if (
+                    not math.isclose(
+                        adjusted_center_px,
+                        center_px,
+                        rel_tol=1e-9,
+                        abs_tol=1e-9,
                     )
-                    _set_feature_track_width_factor(
-                        feature_subset,
-                        track_ratio_factor=float(feature_track_ratio_factor),
+                    or not math.isclose(
+                        adjusted_width_px,
+                        max(0.0, float(outer_px) - float(inner_px)),
+                        rel_tol=1e-9,
+                        abs_tol=1e-9,
                     )
-                    _set_feature_track_center_factor(
+                ):
+                    adjusted_bounds = _resolve_feature_track_bounds_for_target(
                         feature_subset,
-                        center_px=float(template_midpoint),
-                        template_midpoint_px=float(template_midpoint),
-                        base_radius_px=base_radius_px,
-                    )
-                    updated_template_bounds = _feature_track_template_bounds_px(
-                        feature_subset,
-                        total_length,
+                        target_center_px=adjusted_center_px,
+                        target_width_px=adjusted_width_px,
+                        base_width_px=float(layout["base_width_px"]),
+                        current_track_ratio_factor=float(layout["base_feature_track_ratio_factor"]),
+                        template_midpoint_px=template_midpoint,
+                        total_length=total_length,
                         base_radius_px=base_radius_px,
                         track_ratio=track_ratio,
                         length_param=length_param,
-                        track_ratio_factor=float(feature_track_ratio_factor),
                         cfg=cfg,
                     )
-                    if updated_template_bounds is not None:
-                        updated_template_midpoint = float(updated_template_bounds[2])
-                        _set_feature_track_center_factor(
-                            feature_subset,
-                            center_px=float(target_center_px),
-                            template_midpoint_px=float(updated_template_midpoint),
-                            base_radius_px=base_radius_px,
-                        )
-                        updated_bounds = _compute_feature_band_bounds_px(
-                            feature_subset,
-                            total_length,
-                            base_radius_px=base_radius_px,
-                            track_ratio=track_ratio,
-                            length_param=length_param,
-                            track_ratio_factor=float(feature_track_ratio_factor),
-                            cfg=cfg,
-                        )
-                        if updated_bounds is not None:
-                            inner_px, outer_px = updated_bounds
-                            center_px = 0.5 * (float(inner_px) + float(outer_px))
-                    if feature_track_ratio_factors_by_id is not None:
-                        feature_track_ratio_factors_by_id[str(layout["id"])] = float(feature_track_ratio_factor)
+                    if adjusted_bounds is not None:
+                        center_px, inner_px, outer_px, feature_track_ratio_factor = adjusted_bounds
+            if feature_track_ratio_factors_by_id is not None:
+                feature_track_ratio_factors_by_id[str(layout["id"])] = float(feature_track_ratio_factor)
         else:
-            width_px = float(layout["width_px"])
-            inner_px, outer_px = _annulus_from_center_and_width(center_px, width_px)
-
-        cursor_inner_edge_px = float(inner_px)
+            inner_px, outer_px = _annulus_from_center_and_width(center_px, target_width_px)
         resolved_layouts[str(layout["id"])] = _ResolvedAnnularTrackLayout(
             id=str(layout["id"]),
             kind=str(layout["kind"]),
@@ -2187,6 +2293,7 @@ def add_record_on_circular_canvas(
             base_radius_px=float(canvas_config.radius),
         )
         has_explicit_center = _track_spec_has_explicit_center(ts)
+        has_explicit_width = _track_spec_has_explicit_width(ts)
         ordered_layout = resolved_annular_track_layouts.get(str(track_id))
         if (
             center_px is None
@@ -2194,6 +2301,15 @@ def add_record_on_circular_canvas(
             and not has_explicit_center
         ):
             center_px = float(ordered_layout.center_px)
+        if (
+            width_px is None
+            and ordered_layout is not None
+            and not has_explicit_width
+        ):
+            width_px = max(
+                0.0,
+                float(ordered_layout.outer_px) - float(ordered_layout.inner_px),
+            )
         should_resolve_default_center = (
             center_px is None
             and (auto_relayout_active or (width_px is not None and not has_explicit_center))

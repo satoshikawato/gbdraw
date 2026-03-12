@@ -268,6 +268,13 @@ def _get_group_attr_float(group: ET.Element | None, attr_name: str) -> float | N
     return float(raw)
 
 
+def _find_track_group(root: ET.Element, track_id: str) -> ET.Element | None:
+    return (
+        root.find(f".//svg:g[@data-track-id='{track_id}']", _SVG_NS)
+        or root.find(f".//svg:g[@id='track_{track_id}']", _SVG_NS)
+    )
+
+
 def _make_definition_clearance_track_specs(width_px: float | None = None) -> list[TrackSpec]:
     placement_kwargs: dict[str, ScalarSpec] = {
         "radius": ScalarSpec(0.345, "factor"),
@@ -299,6 +306,41 @@ def _make_definition_clearance_track_specs(width_px: float | None = None) -> lis
         TrackSpec(id="gc_content", kind="gc_content", mode="circular", show=False),
         TrackSpec(id="gc_skew", kind="gc_skew", mode="circular", show=False),
     ]
+
+
+def _make_center_definition_autofit_track_specs(
+    *,
+    include_analysis: bool = False,
+    analysis_width_px: float | None = None,
+) -> list[TrackSpec]:
+    track_specs = [
+        TrackSpec(
+            id="features",
+            kind="features",
+            mode="circular",
+            show=True,
+            params={"feature_types": SELECTED_FEATURES},
+        ),
+        TrackSpec(id="gc_content", kind="gc_content", mode="circular", show=True),
+        TrackSpec(id="gc_skew", kind="gc_skew", mode="circular", show=True),
+    ]
+    if include_analysis:
+        analysis_placement = (
+            CircularTrackPlacement(width=ScalarSpec(float(analysis_width_px), "px"))
+            if analysis_width_px is not None
+            else None
+        )
+        track_specs.append(
+            TrackSpec(
+                id="at_skew",
+                kind="analysis",
+                mode="circular",
+                show=True,
+                placement=analysis_placement,
+                params={"caption": "AT skew", "metric": "skew", "dinucleotide": "AT"},
+            )
+        )
+    return track_specs
 
 
 def test_load_circular_track_specs_accepts_valid_config(tmp_path: Path) -> None:
@@ -851,7 +893,6 @@ def test_ordered_annular_layout_skips_hidden_builtin_rows() -> None:
 
 
 def test_ordered_annular_layout_moves_gc_inside_multiple_feature_annuli(
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     record = _load_record()
     config_dict = load_config_toml("gbdraw.data", "config.toml")
@@ -863,41 +904,8 @@ def test_ordered_annular_layout_moves_gc_inside_multiple_feature_annuli(
         strandedness=False,
         track_type="tuckin",
     )
-    captured_gc_norms: list[float | None] = []
 
-    def fake_add_gc_content_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        gc_config,
-        config_dict,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        radius_override=None,
-        group_id=None,
-        track_id_override=None,
-        extra_attribs=None,
-        cfg=None,
-    ):
-        captured_gc_norms.append(norm_factor_override)
-        return canvas
-
-    monkeypatch.setattr(
-        circular_assemble_module,
-        "add_gc_content_group_on_canvas",
-        fake_add_gc_content_group_on_canvas,
-    )
-
-    assemble_circular_diagram_from_record(
-        record,
-        config_dict=config_dict,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        track_specs=["features@w=96px"],
-    )
-    assemble_circular_diagram_from_record(
+    canvas = assemble_circular_diagram_from_record(
         record,
         config_dict=config_dict,
         selected_features_set=SELECTED_FEATURES,
@@ -925,11 +933,58 @@ def test_ordered_annular_layout_moves_gc_inside_multiple_feature_annuli(
             ),
         ],
     )
+    root = ET.fromstring(canvas.tostring())
 
-    assert len(captured_gc_norms) == 2
-    assert captured_gc_norms[0] is not None
-    assert captured_gc_norms[1] is not None
-    assert float(captured_gc_norms[1]) < float(captured_gc_norms[0])
+    protein_group = _find_track_group(root, "protein_track")
+    feature_group = _find_track_group(root, "features")
+    gc_group = _find_track_group(root, "gc_content")
+    skew_group = _find_track_group(root, "gc_skew")
+
+    assert protein_group is not None
+    assert feature_group is not None
+    assert gc_group is not None
+    assert skew_group is not None
+
+    protein_inner = _get_group_attr_float(protein_group, "data-track-inner-radius")
+    protein_outer = _get_group_attr_float(protein_group, "data-track-outer-radius")
+    feature_inner = _get_group_attr_float(feature_group, "data-track-inner-radius")
+    feature_outer = _get_group_attr_float(feature_group, "data-track-outer-radius")
+    gc_inner = _get_group_attr_float(gc_group, "data-track-inner-radius")
+    gc_outer = _get_group_attr_float(gc_group, "data-track-outer-radius")
+    skew_outer = _get_group_attr_float(skew_group, "data-track-outer-radius")
+
+    assert protein_inner is not None
+    assert protein_outer is not None
+    assert feature_inner is not None
+    assert feature_outer is not None
+    assert gc_inner is not None
+    assert gc_outer is not None
+    assert skew_outer is not None
+    assert protein_outer > feature_outer > gc_outer > skew_outer
+    assert protein_inner > feature_outer
+    assert feature_inner > gc_outer
+    assert gc_inner > skew_outer
+
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        track_specs=["features@w=96px"],
+    )
+    root = ET.fromstring(canvas.tostring())
+    single_feature_group = _find_track_group(root, "features")
+    single_gc_group = _find_track_group(root, "gc_content")
+
+    assert single_feature_group is not None
+    assert single_gc_group is not None
+
+    single_feature_inner = _get_group_attr_float(single_feature_group, "data-track-inner-radius")
+    single_gc_outer = _get_group_attr_float(single_gc_group, "data-track-outer-radius")
+
+    assert single_feature_inner is not None
+    assert single_gc_outer is not None
+    assert single_feature_inner > single_gc_outer
 
 
 def test_auto_width_custom_track_shrinks_to_clear_center_definition() -> None:
@@ -971,6 +1026,223 @@ def test_auto_width_custom_track_shrinks_to_clear_center_definition() -> None:
     assert math.isclose(center_radius, 0.345 * base_radius, rel_tol=1e-6, abs_tol=1e-6)
     assert width_px < default_width
     assert inner_radius >= (definition_max_radius + track_gap_px - 1e-3)
+
+
+def test_auto_width_builtin_tracks_shrink_to_clear_center_definition() -> None:
+    record = _load_record()
+    config_dict = _make_config_dict(show_labels=False)
+    cfg = GbdrawConfig.from_dict(config_dict)
+    feature_default_bounds = _capture_annular_annuli(
+        [
+            TrackSpec(
+                id="features",
+                kind="features",
+                mode="circular",
+                show=True,
+                params={"feature_types": SELECTED_FEATURES},
+            )
+        ]
+    )["features"]
+    default_feature_width = float(feature_default_bounds[1]) - float(feature_default_bounds[0])
+    base_radius = float(cfg.canvas.circular.radius)
+    default_gc_width = (
+        base_radius
+        * float(cfg.canvas.circular.track_ratio)
+        * float(cfg.canvas.circular.track_ratio_factors["short"][1])
+    )
+    default_skew_width = (
+        base_radius
+        * float(cfg.canvas.circular.track_ratio)
+        * float(cfg.canvas.circular.track_ratio_factors["short"][2])
+    )
+    track_gap_px = max(4.0, min(16.0, max(default_feature_width, default_gc_width, default_skew_width) * 0.15))
+
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        track_specs=_make_center_definition_autofit_track_specs(),
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    feature_group = _find_track_group(root, "features")
+    gc_group = _find_track_group(root, "gc_content")
+    skew_group = _find_track_group(root, "gc_skew")
+    definition_group = root.find(f".//svg:g[@id='{record.id}_definition']", _SVG_NS)
+
+    assert feature_group is not None
+    assert gc_group is not None
+    assert skew_group is not None
+    assert definition_group is not None
+
+    feature_width = _get_group_attr_float(feature_group, "data-track-width")
+    gc_width = _get_group_attr_float(gc_group, "data-track-width")
+    skew_width = _get_group_attr_float(skew_group, "data-track-width")
+    skew_inner = _get_group_attr_float(skew_group, "data-track-inner-radius")
+    definition_max_radius = _get_group_attr_float(definition_group, "data-definition-max-radius")
+
+    assert feature_width is not None
+    assert gc_width is not None
+    assert skew_width is not None
+    assert skew_inner is not None
+    assert definition_max_radius is not None
+    assert feature_width < default_feature_width
+    assert gc_width < default_gc_width
+    assert skew_width < default_skew_width
+    assert skew_inner >= (definition_max_radius + track_gap_px - 1e-3)
+
+
+def test_auto_width_analysis_track_shares_width_budget_and_clears_definition() -> None:
+    record = _load_record()
+    config_dict = _make_config_dict(show_labels=False)
+    cfg = GbdrawConfig.from_dict(config_dict)
+    feature_default_bounds = _capture_annular_annuli(
+        [
+            TrackSpec(
+                id="features",
+                kind="features",
+                mode="circular",
+                show=True,
+                params={"feature_types": SELECTED_FEATURES},
+            )
+        ]
+    )["features"]
+    default_feature_width = float(feature_default_bounds[1]) - float(feature_default_bounds[0])
+    base_radius = float(cfg.canvas.circular.radius)
+    default_gc_width = (
+        base_radius
+        * float(cfg.canvas.circular.track_ratio)
+        * float(cfg.canvas.circular.track_ratio_factors["short"][1])
+    )
+    default_skew_width = (
+        base_radius
+        * float(cfg.canvas.circular.track_ratio)
+        * float(cfg.canvas.circular.track_ratio_factors["short"][2])
+    )
+    default_analysis_width = default_skew_width
+    track_gap_px = max(
+        4.0,
+        min(16.0, max(default_feature_width, default_gc_width, default_skew_width, default_analysis_width) * 0.15),
+    )
+
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        track_specs=_make_center_definition_autofit_track_specs(include_analysis=True),
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    feature_group = _find_track_group(root, "features")
+    gc_group = _find_track_group(root, "gc_content")
+    skew_group = _find_track_group(root, "gc_skew")
+    analysis_group = _find_track_group(root, "at_skew")
+    definition_group = root.find(f".//svg:g[@id='{record.id}_definition']", _SVG_NS)
+
+    assert feature_group is not None
+    assert gc_group is not None
+    assert skew_group is not None
+    assert analysis_group is not None
+    assert definition_group is not None
+
+    feature_width = _get_group_attr_float(feature_group, "data-track-width")
+    gc_width = _get_group_attr_float(gc_group, "data-track-width")
+    skew_width = _get_group_attr_float(skew_group, "data-track-width")
+    analysis_width = _get_group_attr_float(analysis_group, "data-track-width")
+    analysis_inner = _get_group_attr_float(analysis_group, "data-track-inner-radius")
+    definition_max_radius = _get_group_attr_float(definition_group, "data-definition-max-radius")
+
+    assert feature_width is not None
+    assert gc_width is not None
+    assert skew_width is not None
+    assert analysis_width is not None
+    assert analysis_inner is not None
+    assert definition_max_radius is not None
+    assert feature_width < default_feature_width
+    assert gc_width < default_gc_width
+    assert skew_width < default_skew_width
+    assert analysis_width < default_analysis_width
+    assert analysis_inner >= (definition_max_radius + track_gap_px - 1e-3)
+    assert math.isclose(analysis_width, skew_width, rel_tol=1e-6, abs_tol=1e-3)
+
+
+def test_explicit_analysis_width_is_preserved_while_auto_tracks_shrink() -> None:
+    record = _load_record()
+    config_dict = _make_config_dict(show_labels=False)
+    cfg = GbdrawConfig.from_dict(config_dict)
+    feature_default_bounds = _capture_annular_annuli(
+        [
+            TrackSpec(
+                id="features",
+                kind="features",
+                mode="circular",
+                show=True,
+                params={"feature_types": SELECTED_FEATURES},
+            )
+        ]
+    )["features"]
+    default_feature_width = float(feature_default_bounds[1]) - float(feature_default_bounds[0])
+    base_radius = float(cfg.canvas.circular.radius)
+    default_gc_width = (
+        base_radius
+        * float(cfg.canvas.circular.track_ratio)
+        * float(cfg.canvas.circular.track_ratio_factors["short"][1])
+    )
+    default_skew_width = (
+        base_radius
+        * float(cfg.canvas.circular.track_ratio)
+        * float(cfg.canvas.circular.track_ratio_factors["short"][2])
+    )
+    explicit_width = 60.0
+    track_gap_px = max(
+        4.0,
+        min(16.0, max(default_feature_width, default_gc_width, default_skew_width, explicit_width) * 0.15),
+    )
+
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        track_specs=_make_center_definition_autofit_track_specs(
+            include_analysis=True,
+            analysis_width_px=explicit_width,
+        ),
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    feature_group = _find_track_group(root, "features")
+    gc_group = _find_track_group(root, "gc_content")
+    skew_group = _find_track_group(root, "gc_skew")
+    analysis_group = _find_track_group(root, "at_skew")
+    definition_group = root.find(f".//svg:g[@id='{record.id}_definition']", _SVG_NS)
+
+    assert feature_group is not None
+    assert gc_group is not None
+    assert skew_group is not None
+    assert analysis_group is not None
+    assert definition_group is not None
+
+    feature_width = _get_group_attr_float(feature_group, "data-track-width")
+    gc_width = _get_group_attr_float(gc_group, "data-track-width")
+    skew_width = _get_group_attr_float(skew_group, "data-track-width")
+    analysis_width = _get_group_attr_float(analysis_group, "data-track-width")
+    analysis_inner = _get_group_attr_float(analysis_group, "data-track-inner-radius")
+    definition_max_radius = _get_group_attr_float(definition_group, "data-definition-max-radius")
+
+    assert feature_width is not None
+    assert gc_width is not None
+    assert skew_width is not None
+    assert analysis_width is not None
+    assert analysis_inner is not None
+    assert definition_max_radius is not None
+    assert feature_width < default_feature_width
+    assert gc_width < default_gc_width
+    assert skew_width < default_skew_width
+    assert math.isclose(analysis_width, explicit_width, rel_tol=1e-6, abs_tol=1e-3)
+    assert analysis_inner >= (definition_max_radius + track_gap_px - 1e-3)
 
 
 def test_explicit_custom_track_width_is_not_shrunk_for_definition_clearance() -> None:
