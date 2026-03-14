@@ -1,199 +1,159 @@
-[Home](../README.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [**Tutorials**](../TUTORIALS/TUTORIALS.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [ABOUT](../ABOUT.md)
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to the Index of Tutorials](./TUTORIALS.md)
-[< Back to Tutorial 2: Comparative Genomics with BLAST](./2_Comparative_Genomics.md)
+[< Back to the Tutorials Index](./TUTORIALS.md)
+[< Back to Tutorial 2](./2_Comparative_Genomics.md)
 
 # Tutorial 3: Advanced Customization
 
-
-**Goal**: Go beyond the basics to gain fine-grained control over plot aesthetics using configuration files for colors and labels.
-
----
+**Goal:** use tables and styling options for fine-grained control over colors, labels, and plot appearance.
 
 ## Part 1: Advanced Color Control
 
-While `--palette` is great for general styling, you often need to highlight specific features. `gbdraw` has two complementary mechanisms for overriding the default colours:
+`gbdraw` supports two complementary table formats:
 
-| Method | Purpose |
-| ------ | ------- |
-| **Default-override table** (`-d`) | Replace colors for *entire* feature classes |
-| **Feature-specific table** (`-t`) | Color *individual* features that match user-defined rules |
+| Method | Option | Use case |
+| --- | --- | --- |
+| Default override table | `-d` | Replace the default color for an entire feature type |
+| Feature-specific table | `-t` | Highlight selected features based on qualifier matches |
 
-Both tables are tab separated. Colours may be given as any of the [147 color names defined by the SVG specification](https://johndecember.com/html/spec/colorsvg.html) or in [hexadecimal format](https://htmlcolorcodes.com/) (`#RRGGBB`).
+### 1. Override Default Colors
 
-### Method 1: Override Default Colors (`-d`)
+Create `modified_default_colors.tsv`:
 
-This method replaces the default color for an entire feature type (e.g., make all `CDS` features gray). Other features remain the same as default:
+```tsv
+CDS	#d3d3d3
+```
 
-1.  **Create a default-override TSV file.** Let's call it `modified_default_colors.tsv`. This file has two columns: `feature type` and `color`.
+```bash
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738868.1&rettype=gbwithparts&retmode=text" -O MjeNMV.gbk
+```
 
-    ```tsv
-    CDS	#d3d3d3
-    ```
-    | feature type | color |
-    | ------ | ------- |
-    | CDS | #d3d3d3 |
+```bash
+gbdraw circular \
+  --gbk MjeNMV.gbk \
+  --separate_strands \
+  --track_type middle \
+  -f svg \
+  --block_stroke_width 1 \
+  -d modified_default_colors.tsv \
+  -o MjeNMV_modified_default_colors
+```
 
+![MjeNMV_modified_default_colors.svg](../../examples/MjeNMV_modified_default_colors.svg)
 
-2.  **Use it in your command.**
+### 2. Highlight Specific Features
 
-    ```bash
-    # MAG: Marsupenaeus japonicus endogenous nimavirus Ginoza2017 (LC738868.1)
-    wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738868.1&rettype=gbwithparts&retmode=text" -O MjeNMV.gbk
-    ```
-    ```bash
-    gbdraw circular \
-      --gbk MjeNMV.gbk \
-      --separate_strands \
-      --track_type middle \
-      -f svg \
-      --block_stroke_width 1 \
-      -d modified_default_colors.tsv \
-      -o MjeNMV_modified_default_colors
-    ```
-    In the output, all CDS features will be gray.
-    ![MjeNMV_modified_default_colors.svg](../../examples/MjeNMV_modified_default_colors.svg)
-    
+Create `feature_specific_colors.tsv`:
 
-### Method 2: Feature-Specific Colors (`-t`)
+```tsv
+CDS	product	wsv.*-like protein	#47b8f8	WSSV-like proteins
+CDS	product	baculoviral IAP repeat-containing protein	yellow	BIRP
+CDS	product	tyrosine recombinase	red	tyrosine recombinase
+```
 
-This method colors individual features that match a specific rule, such as a gene's product name. This is perfect for highlighting genes of interest.
+Then combine `-d` and `-t`:
 
-1.  **Create a feature-specific color TSV file.** Let's call it `feature_specifc_colors.tsv`. The file has 5 columns: `FeatureType`, `Qualifier`, `RegexPattern`, `Color`, and `LegendLabel`. This `custom_color_table.tsv` color only those CDS whose `product` qualifier matches the given regex:
+```bash
+gbdraw circular \
+  --gbk MjeNMV.gbk \
+  --separate_strands \
+  --track_type middle \
+  -f svg \
+  --block_stroke_width 1 \
+  -d modified_default_colors.tsv \
+  -t feature_specific_colors.tsv \
+  --labels \
+  -o MjeNMV_feature_specific_colors_with_labels
+```
 
-    ```tsv
-    CDS	product	wsv.*-like protein	#47b8f8	WSSV-like proteins
-    CDS	product	baculoviral IAP repeat-containing protein	yellow	BIRP
-    CDS	product	tyrosine recombinase	red	tyrosine recombinase
-    ```
-    | feature type | target qualifier | qualifier value regex (Python) | color | legend text |
-    | ------ | ------- | ------- | ------- | ------- |
-    | CDS | product | wsv.*-like protein | #47b8f8 | WSSV-like proteins |
-    | CDS | product | baculoviral IAP repeat-containing protein | yellow | BIRP |
-    | CDS | product | tyrosine recombinase | red | tyrosine recombinase |
-
-2.  **Combine both methods for maximum control.** Let's make all CDS features gray *except* for the specific ones we want to highlight.
-
-    ```bash
-    gbdraw circular \
-      --gbk MjeNMV.gbk \
-      --separate_strands \
-      --track_type middle \
-      -f svg \
-      --block_stroke_width 1 \
-      -d modified_default_colors.tsv \
-      -t feature_specifc_colors.tsv \
-      --labels \
-      -o MjeNMV_feature_specifc_colors_with_labels
-    ```
-The result is a plot where most genes are gray, but specific genes of interest are colored and labeled in the legend.
-
-![MjeNMV_feature_specifc_colors_with_labels](../../examples/MjeNMV_feature_specifc_colors_with_labels.svg)
----
+![MjeNMV_feature_specifc_colors_with_labels.svg](../../examples/MjeNMV_feature_specifc_colors_with_labels.svg)
 
 ## Part 2: Advanced Label Control
 
-When using `--labels`, you can prevent visual clutter using whitelists and blacklists.
+### 1. Blacklist Uninformative Labels
 
-### Blacklisting Labels (`--label_blacklist`)
+```bash
+gbdraw circular \
+  --gbk MjeNMV.gbk \
+  --separate_strands \
+  --track_type middle \
+  -f svg \
+  --block_stroke_width 1 \
+  -d modified_default_colors.tsv \
+  -t feature_specific_colors.tsv \
+  --labels \
+  --label_blacklist "hypothetical" \
+  -o MjeNMV_feature_specific_colors_with_labels_blacklist
+```
 
-This is the most common use case: hiding uninformative labels like "hypothetical protein".
-
-* **As a command-line argument:**
-    ```bash
-    gbdraw circular \
-      --gbk MjeNMV.gbk \
-      --separate_strands \
-      --track_type middle \
-      -f svg \
-      --block_stroke_width 1 \
-      -d modified_default_colors.tsv \
-      -t feature_specifc_colors.tsv \
-      --labels \
-      --label_blacklist "hypothetical" \
-      -o MjeNMV_feature_specifc_colors_with_labels_blacklist
-    ```
 ![MjeNMV_feature_specifc_colors_with_labels_blacklist.svg](../../examples/MjeNMV_feature_specifc_colors_with_labels_blacklist.svg)
 
+You can also pass a file to `--label_blacklist`, with one term per line.
 
+### 2. Whitelist Only the Labels You Need
 
-* **As a file:** Create a file `blacklist.txt` with one term per line, then use `--label_blacklist blacklist.txt`.
-
-### Whitelisting Labels (`--label_whitelist`)
-
-This is the opposite: you specify exactly which genes should be labeled, and all others will be hidden. This is useful for showing only a few key genes in a large genome.
-
-1.  **Create a whitelist TSV file.** The format is `FeatureType`, `Qualifier`, `RegexPattern`.
-    ```tsv
-    CDS	gene	stx1A
-    CDS	gene	stx1B
-    CDS	gene	stx2A
-    CDS	gene	stx2B
-    ```
-2.  **Use it in your command.**
-    ```bash
-    gbdraw circular \
-      --gbk O157_H7.gbk \
-      -o O157_H7_stx_whitelist \
-      --labels \
-      --separate_strands \
-      --species "<i>Escherichia coli</i> O157_H7" \
-      --strain "Sakai" \
-      --label_whitelist stx_whitelist.tsv \
-      --label_font_size 16 \
-      -f svg
-    ```
-![O157_H7_stx_whitelist.svg](../../examples/O157_H7_stx_whitelist.svg)
-
-### Changing Label Content (`--qualifier_priority`)
-
-By default, `gbdraw` uses the `product` qualifier for labels. If you prefer to use the `gene` name or `locus_tag`, you can specify a new priority.
-
-
-1.  **Create a priority file.**
-    `qualifier_priority.tsv` specifies the 'gene' qualifier first for CDS features.
-    ```tsv
-    CDS	gene
-    ```
-2.  **Use it in your command.**
-    ```bash
-    gbdraw circular \
-    --gbk HmmtDNA.gbk \
-    -f svg --track_type middle \
-    --species "<i>Homo sapiens</i>" \
-    --block_stroke_width 2 \
-    --axis_stroke_width 5 \
-    --labels both \
-    --palette soft_pastels \
-    --definition_font_size 28 \
-    --label_font_size 18 \
-    --qualifier_priority qualifier_priority.tsv \
-    -o HmmtDNA_qualifier_priority_soft_pastels
-    ```
-![HmmtDNA_qualifier_priority_soft_pastels.svg](../../examples/HmmtDNA_qualifier_priority_soft_pastels.svg)
-
-
-### Manual Label Text Overrides (`--label_table`)
-
-`--label_table` applies manual label replacements **after** whitelist/blacklist/priority filtering.
-This means hidden labels stay hidden.
-
-The table format is TSV (no header) with 5 columns:
-
-1. `record_id` (`record_id`, or `*`)
-2. `feature_type` (`CDS`, `repeat_region`, or `*`)
-3. `qualifier` (normal qualifier key, or pseudo key: `record_location`, `hash`, `location`, `label`)
-4. `value` (Python regex, case-insensitive, `re.search`)
-5. `label_text` (replacement text)
-
-Example:
+Create `stx_whitelist.tsv`:
 
 ```tsv
-NC_010162.1	CDS	label	^ATP synthase subunit alpha$	ATP synthase subunit alpha
+CDS	gene	stx1A
+CDS	gene	stx1B
+CDS	gene	stx2A
+CDS	gene	stx2B
+```
+
+```bash
+gbdraw circular \
+  --gbk O157_H7.gbk \
+  -o O157_H7_stx_whitelist \
+  --labels \
+  --separate_strands \
+  --species "<i>Escherichia coli</i> O157:H7" \
+  --strain "Sakai" \
+  --label_whitelist stx_whitelist.tsv \
+  --label_font_size 16 \
+  -f svg
+```
+
+![O157_H7_stx_whitelist.svg](../../examples/O157_H7_stx_whitelist.svg)
+
+### 3. Change Which Qualifier Supplies the Label
+
+Create `qualifier_priority.tsv`:
+
+```tsv
+CDS	gene
+```
+
+```bash
+gbdraw circular \
+  --gbk HmmtDNA.gbk \
+  -f svg \
+  --track_type middle \
+  --species "<i>Homo sapiens</i>" \
+  --block_stroke_width 2 \
+  --axis_stroke_width 5 \
+  --labels both \
+  --palette soft_pastels \
+  --definition_font_size 28 \
+  --label_font_size 18 \
+  --qualifier_priority qualifier_priority.tsv \
+  -o HmmtDNA_qualifier_priority_soft_pastels
+```
+
+![HmmtDNA_qualifier_priority_soft_pastels.svg](../../examples/HmmtDNA_qualifier_priority_soft_pastels.svg)
+
+### 4. Override Label Text After Filtering
+
+`--label_table` runs after whitelist, blacklist, and qualifier-priority processing.
+
+Example table:
+
+```tsv
+NC_010162.1	CDS	label	^ATP synthase subunit alpha$	ATP synthase alpha
 *	*	label	^hypothetical protein$	HP
 ```
 
-Use it in circular mode:
+Circular mode:
 
 ```bash
 gbdraw circular \
@@ -203,7 +163,7 @@ gbdraw circular \
   -o MjeNMV_label_override
 ```
 
-Use it in linear mode:
+Linear mode:
 
 ```bash
 gbdraw linear \
@@ -213,44 +173,55 @@ gbdraw linear \
   -o MjeNMV_linear_label_override
 ```
 
-Tip: The web UI `Feature Editor > Labels` panel can export and load this table (`Export Label TSV` / `Load Label TSV`) for CLI reuse.
+## Part 3: Fine-Tune Plot Appearance
 
+Use the current stroke and text options for publication-oriented styling:
 
+- `--block_stroke_color` and `--block_stroke_width`
+- `--axis_stroke_color` and `--axis_stroke_width`
+- `--line_stroke_color` and `--line_stroke_width`
+- `--definition_font_size` and `--label_font_size`
+- `--outer_label_x_radius_offset`, `--outer_label_y_radius_offset`
+- `--inner_label_x_radius_offset`, `--inner_label_y_radius_offset`
 
-## Part 3: Fine-Tuning Plot Aesthetics
-Beyond colors and labels, gbdraw provides command-line options to control nearly every visual aspect of your plot for publication-quality results.
+Example:
 
-### Adjusting Line Styles
-You can change the color and thickness of feature borders (`--block_stroke`), the circular axis (`--axis_stroke`), and other lines (`--line_stroke`). Let's make the axis thicker and add a thin border to our features.
 ```bash
+gbdraw circular \
+  --gbk MjeNMV.gbk \
+  --separate_strands \
+  --track_type middle \
+  --labels both \
+  --block_stroke_color black \
+  --block_stroke_width 1 \
+  --axis_stroke_width 5 \
+  --line_stroke_color gray \
+  --line_stroke_width 1 \
+  --definition_font_size 24 \
+  --label_font_size 12 \
+  --outer_label_x_radius_offset 1.05 \
+  --outer_label_y_radius_offset 1.05 \
+  -o MjeNMV_tuned \
+  -f svg
 ```
-### Tweaking Fonts and Label Positions
 
-You can adjust the font size of the title (`--definition_font_size`) and feature labels (`--label_font_size`).
+Reference images:
 
-#### Definition font size (`--definition_font_size`)
-![definition_font_size_comparison.png](../../examples/definition_font_size_comparison.png)
-#### Label font size (`--label_font_size`)
-![label_font_size_comparison.png](../../examples/label_font_size_comparison.png)
+- ![definition_font_size_comparison.png](../../examples/definition_font_size_comparison.png)
+- ![label_font_size_comparison.png](../../examples/label_font_size_comparison.png)
+- ![outer_label_offset_comparison.png](../../examples/outer_label_offset_comparison.png)
 
-If labels are still slightly overlapping even after adjusting font size, you can manually nudge their positions using the `--*_label_*_radius_offset` options. These values are multipliers, so a value like 1.05 pushes the label slightly further out.
+## Part 4: Linear Mode Input Selectors
 
-![outer_label_offset_comparison.png](../../examples/outer_label_offset_comparison.png)
+For linear plots, the main selectors are:
 
-## Part 4: Linear Mode Input Selectors (Recap)
+- `--record_id`
+- `--reverse_complement`
+- `--region`
 
-If you are working in linear mode, you can target specific records or regions:
+See [Tutorial 2](./2_Comparative_Genomics.md) and the [CLI Reference](../CLI_Reference.md) for the full syntax.
 
-- `--record_id` (select by ID or `#index`, repeatable per input file)
-- `--reverse_complement` (repeatable per input file)
-- `--region` (crop via `record_id:start-end[:rc]`)
+[< Back to the Tutorials Index](./TUTORIALS.md)
+[< Back to Tutorial 2](./2_Comparative_Genomics.md)
 
-See [Tutorial 2](./2_Comparative_Genomics.md) and the
-[CLI Reference](../CLI_Reference.md) for full details.
-
-
-[< Back to the Index of Tutorials](./TUTORIALS.md)
-[< Back to Tutorial 2: Comparative Genomics with BLAST](./2_Comparative_Genomics.md)
-
-
-[Home](../README.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [**Tutorials**](../TUTORIALS/TUTORIALS.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [ABOUT](../ABOUT.md)
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

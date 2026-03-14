@@ -1,50 +1,34 @@
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+
 # gbdraw Documentation
 
-This page is the official documentation for `gbdraw`.
-Here you will find all the information you need to make the most of `gbdraw`, from installation and basic usage to advanced techniques.
+`gbdraw` is available as a hosted web app, a local browser-based GUI, and a command-line tool for circular and linear genome diagrams.
 
-Prefer the browser-based GUI? Use [https://gbdraw.app/](https://gbdraw.app/) or run `gbdraw gui` after installing `gbdraw` locally.
+Use [https://gbdraw.app/](https://gbdraw.app/) if you want the fastest path to a plot, or install `gbdraw` locally if you need pipeline integration, non-SVG export, or offline use.
 
----
+## Start Here
 
-### **🔰 Getting Started**
+- [Installation](./INSTALL.md): choose between the hosted web app, Bioconda, or a local development install.
+- [Quickstart](./QUICKSTART.md): create a first circular plot in a few minutes.
+- [Recipes](./RECIPES.md): copy-paste command patterns for common tasks.
 
-Start here! This section will guide you through installing `gbdraw` and creating your first plot.
+## Tutorials
 
-* **[1. Installation](./INSTALL.md)**: How to install `gbdraw`.
-* **[2. Quickstart](./QUICKSTART.md)**: Create your first plot in 5 minutes.
+- [Tutorial 1: Customizing Your Plot](./TUTORIALS/1_Customizing_Plots.md)
+- [Tutorial 2: Comparative Genomics](./TUTORIALS/2_Comparative_Genomics.md)
+- [Tutorial 3: Advanced Customization](./TUTORIALS/3_Advanced_Customization.md)
 
----
+## Reference
 
-### **📚 Tutorials**
+- [CLI Reference](./CLI_Reference.md): current command help for `gbdraw`, `gbdraw circular`, and `gbdraw linear`.
+- [Gallery](./GALLERY.md): example plots and the commands used to generate them.
+- [FAQ](./FAQ.md): common questions, limitations, and workarounds.
+- [About](./ABOUT.md): citation information and project background.
 
-Learn how to use `gbdraw`'s features step-by-step, from basic customization to advanced comparative genomics.
+## Interface Guide
 
-* **[Tutorial 1: Customizing Your Plot](./TUTORIALS/1_Customizing_Plots.md)**
-* **[Tutorial 2: Comparative Genomics](./TUTORIALS/2_Comparative_Genomics.md)**
-* **[Tutorial 3: Advanced Customization](./TUTORIALS/3_Advanced_Customization.md)**
+- Hosted web app: [https://gbdraw.app/](https://gbdraw.app/)
+- Local GUI: `gbdraw gui`
+- CLI entry point: `gbdraw circular ...` and `gbdraw linear ...`
 
----
-
-### **🔧 Reference**
-
-Look here for detailed information, examples, and answers to specific questions.
-
-* **[Command-Line Reference](./CLI_Reference.md)**: A complete list of all command-line options.
-* **[Gallery](./GALLERY.md)**: A gallery of examples created with `gbdraw`.
-* **[FAQ](./FAQ.md)**: Frequently Asked Questions and solutions to known issues.
-* **[About](./ABOUT.md)**: Information on how to cite `gbdraw`.
-* **[Preprint Readiness](./PREPRINT_READINESS.md)**: Checklist for preprint preparation.
-* **[Reproducibility](./REPRODUCIBILITY.md)**: Environment and command capture for the preprint.
-* **[Library Usage](./LIBRARY_USAGE.md)**: Using gbdraw as a Python library.
-
----
-
-### **🧱 Design / Refactoring**
-
-Planning documents and migration guides for the codebase restructuring.
-
-* **[Migration Guide](./REFACTORING_MIGRATION_GUIDE.md)**: Comprehensive guide for developers - what moved where, new import paths, backwards compatibility.
-* **[Refactoring Proposal](./REFACTORING_PROPOSAL.md)**: Library-ization, multi-track (circular/linear), custom tracks, and interactivity.
-* **[Refactoring Daily Log (2026-01-09)](./REFACTORING_LOG_2026-01-09.md)**: Package restructuring, render consolidation, diagrams/circular.
-* **[Refactoring Daily Log (2026-01-02)](./REFACTORING_LOG_2026-01-02.md)**: API layer, diagrams/linear, track specs.
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

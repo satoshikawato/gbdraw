@@ -1,36 +1,33 @@
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | **About**
+
 # About `gbdraw`
 
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | **ABOUT**
+## Citation
 
----
+If you use `gbdraw` in research, cite the project using the metadata in `CITATION.cff` at the repository root.
 
-### Citation
+Project links:
 
-If you use `gbdraw` in your research, please use the citation metadata in `CITATION.cff`:
+- GitHub: https://github.com/satoshikawato/gbdraw/
+- Web app: https://gbdraw.app/
 
-- `CITATION.cff` (repository root)
-- https://github.com/satoshikawato/gbdraw/
+If a DOI-backed paper or preprint is published later, `CITATION.cff` should be updated to include it.
 
-If a preprint/paper DOI becomes available, it should be added to `CITATION.cff`.
+## Acknowledgments and Inspiration
 
----
+`gbdraw` draws inspiration from a number of genome visualization tools and related projects:
 
-### Acknowledgments & Inspiration
+- [CGView](https://cgview.ca/)
+- [Artemis Comparison Tool (ACT)](https://www.sanger.ac.uk/tool/artemis-comparison-tool-act/)
+- [SnapGene Viewer](https://www.snapgene.com/snapgene-viewer)
+- [DnaFeaturesViewer](https://github.com/Edinburgh-Genome-Foundry/DnaFeaturesViewer)
+- [pyGenomeViz](https://github.com/moshi4/pyGenomeViz)
+- [Circos](https://www.circos.ca/)
+- [GenomeMatcher](https://www.ige.tohoku.ac.jp/joho/gmProject/gmhomeJP.html)
+- [GenomeDiagram (Biopython)](https://biopython-tutorial.readthedocs.io/en/latest/notebooks/17%20-%20Graphics%20including%20GenomeDiagram.html)
+- [GenoVi](https://github.com/robotoD/GenoVi)
+- [OrganellarGenomeDRAW (OGDRAW)](https://chlorobox.mpimp-golm.mpg.de/OGDraw.html)
 
-The development of `gbdraw` was inspired by many excellent tools in the bioinformatics field. We acknowledge their influence in shaping our approach to genome visualization.
+The current project grew out of earlier plotting scripts published in [satoshikawato/bio_small_scripts](https://github.com/satoshikawato/bio_small_scripts/).
 
-* [CGView](https://cgview.ca/)
-* [Artemis Comparison Tool (ACT)](https://www.sanger.ac.uk/tool/artemis-comparison-tool-act/)
-* [SnapGene Viewer](https://www.snapgene.com/snapgene-viewer)
-* [DnaFeaturesViewer](https://github.com/Edinburgh-Genome-Foundry/DnaFeaturesViewer)
-* [pyGenomeViz](https://github.com/moshi4/pyGenomeViz)
-* [Circos](https://www.circos.ca/)
-* [GenomeMatcher](https://www.ige.tohoku.ac.jp/joho/gmProject/gmhomeJP.html)
-* [GenomeDiagram (Biopython)](https://biopython-tutorial.readthedocs.io/en/latest/notebooks/17%20-%20Graphics%20including%20GenomeDiagram.html)
-* [GenoVi](https://github.com/robotoD/GenoVi)
-* [OrganellarGenomeDRAW (OGDRAW)](https://chlorobox.mpimp-golm.mpg.de/OGDraw.html)
-
-The core functionality of `gbdraw` evolved from a set of Python scripts originally written in 2022, which can be found at [satoshikawato/bio_small_scripts](https://github.com/satoshikawato/bio_small_scripts/).
-
-
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | **ABOUT**
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | **About**
