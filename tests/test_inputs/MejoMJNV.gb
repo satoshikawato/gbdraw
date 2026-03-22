@@ -1,4 +1,4 @@
-LOCUS       LC738878              401182 bp    DNA     linear   ENV 10-NOV-2022
+LOCUS       LC738878              401182 bp    DNA     linear   ENV 16-DEC-2023
 DEFINITION  MAG: Metapenaeus joyneri majanivirus Tokushima2020 DNA, complete
             genome.
 ACCESSION   LC738878
@@ -9,11 +9,14 @@ DBLINK      BioProject: PRJDB13888
 KEYWORDS    ENV; Metagenome Assembled Genome; MAG.
 SOURCE      Metapenaeus joyneri majanivirus (crustacean metagenome)
   ORGANISM  Metapenaeus joyneri majanivirus
-            Viruses; Naldaviricetes; Nimaviridae.
+            Viruses; Viruses incertae sedis; Naldaviricetes; Nimaviridae.
 REFERENCE   1
   AUTHORS   Kawato,S., Nozaki,R., Kondo,H. and Hirono,I.
-  TITLE     Genome sequences of endogenous nimaviruses in decapod crustaceans
-  JOURNAL   Unpublished
+  TITLE     Integrase-associated niche differentiation of endogenous large DNA
+            viruses in crustaceans
+  JOURNAL   Microbiol Spectr e00559-23 (2023)
+  REMARK    DOI:10.1128/spectrum.00559-23
+            Publication Status: Online-Only
 REFERENCE   2  (bases 1 to 401182)
   AUTHORS   Kawato,S., Nozaki,R., Kondo,H. and Hirono,I.
   TITLE     Direct Submission
@@ -41,7 +44,7 @@ FEATURES             Location/Qualifiers
                      /host="Metapenaeus joyneri"
                      /db_xref="taxon:2984280"
                      /environmental_sample
-                     /country="Japan: Tokushima"
+                     /geo_loc_name="Japan: Tokushima"
                      /collection_date="2020"
                      /metagenome_source="crustacean metagenome"
                      /note="metagenomic"
