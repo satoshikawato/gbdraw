@@ -43,7 +43,13 @@ export const createLegendRepositionActions = ({
     adv
   } = state;
 
-  const { getAllFeatureLegendGroups, reflowDualLegendLayout, reflowSingleLegendLayout } = legendActions;
+  const {
+    getAllFeatureLegendGroups,
+    getLegendLayoutLocalBounds,
+    recenterCurrentLegendRoot,
+    reflowDualLegendLayout,
+    reflowSingleLegendLayout
+  } = legendActions;
   const { ensureUniquePairwiseGradientIds, ensureUniqueSkewClipPathIds } = svgActions;
   const { applyDiagramShift, clearPlotTitleState, setPlotTitleAutoTransform } = diagramActions;
 
@@ -583,12 +589,14 @@ export const createLegendRepositionActions = ({
             }
           }
 
-          const padding = 20;
-          const availableHorizontalWidth = vbW - padding * 2;
-          const wideHorizontalLegend =
-            nowHorizontal && availableHorizontalWidth > 0 && legendWidth > availableHorizontalWidth * 0.9;
-          const centeredHorizontalX = vbX + (vbW - legendWidth) / 2;
-          const leftAlignedHorizontalX = vbX + padding;
+          const activeLegendBounds = getLegendLayoutLocalBounds(
+            svg,
+            nowHorizontal ? 'horizontal' : 'vertical'
+          );
+          if (activeLegendBounds) {
+            legendWidth = activeLegendBounds.width || legendWidth;
+            legendHeight = activeLegendBounds.height || legendHeight;
+          }
 
           if (nowHorizontal) {
             linearBaseConfig.value.horizontalLegendWidth = legendWidth;
@@ -623,52 +631,9 @@ export const createLegendRepositionActions = ({
             linearBaseConfig.value.verticalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
           }
 
-          const computeVerticalLegendY = () => {
-            const ignoredIds = new Set(['length_bar', 'tick', 'labels', 'Axis']);
-            const legendElements = diagramElements.value.filter((el) => !ignoredIds.has(el.id));
-            const bounds = getElementsBounds(legendElements.length > 0 ? legendElements : diagramElements.value);
-            if (!bounds) {
-              return vbY + (vbH - legendHeight) / 2;
-            }
-
-            const centerY = bounds.y + bounds.height / 2;
-            let legendY = centerY - legendHeight / 2;
-            const viewportBottom = vbY + vbH;
-
-            if (legendY < vbY || legendY + legendHeight > viewportBottom) {
-              legendY = Math.max(vbY + (vbH - legendHeight) / 2, vbY + padding);
-            }
-
-            return legendY;
-          };
-
-          let finalX;
-          let finalY;
-
-          switch (newPosition) {
-            case 'top':
-              finalX = wideHorizontalLegend ? leftAlignedHorizontalX : centeredHorizontalX;
-              finalY = vbY + padding;
-              break;
-            case 'bottom':
-              finalX = wideHorizontalLegend ? leftAlignedHorizontalX : centeredHorizontalX;
-              finalY = vbY + vbH - legendHeight - padding;
-              break;
-            case 'left':
-              finalX = vbX + padding;
-              finalY = computeVerticalLegendY();
-              break;
-            case 'right':
-            default:
-              finalX = vbX + vbW - legendWidth - padding;
-              finalY = computeVerticalLegendY();
-              break;
-          }
-
-          legendGroup.setAttribute('transform', `translate(${finalX}, ${finalY})`);
-          legendInitialTransform.value = { x: finalX, y: finalY };
           legendCurrentOffset.x = 0;
           legendCurrentOffset.y = 0;
+          recenterCurrentLegendRoot(svg);
         }
       }
 
@@ -760,12 +725,9 @@ export const createLegendRepositionActions = ({
                 svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
                 svg.setAttribute('data-horizontal-viewbox', `${vbX} ${vbY} ${vbW} ${vbH}`);
                 linearBaseConfig.value.horizontalViewBox = { x: vbX, y: vbY, w: vbW, h: vbH };
-                const finalX = vbX + (vbW - legendWidth) / 2;
-                const finalY = vbY + vbH - legendHeight - overlapPadding;
-                legendGroup.setAttribute('transform', `translate(${finalX}, ${finalY})`);
-                legendInitialTransform.value = { x: finalX, y: finalY };
                 legendCurrentOffset.x = 0;
                 legendCurrentOffset.y = 0;
+                recenterCurrentLegendRoot(svg);
               }
             }
           }

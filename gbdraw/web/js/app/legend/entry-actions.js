@@ -24,7 +24,8 @@ export const createLegendEntryActions = ({ state, getPyodide, layoutActions }) =
     skipCaptureBaseConfig
   } = state;
 
-  const { updatePairwiseLegendPositions, reflowDualLegendLayout, compactLegendEntries } = layoutActions;
+  const { updatePairwiseLegendPositions, reflowDualLegendLayout, compactLegendEntries, recenterCurrentLegendRoot } =
+    layoutActions;
 
   const addLegendEntry = async (caption, color) => {
     console.log(`addLegendEntry called with caption="${caption}", color="${color}"`);
@@ -332,6 +333,7 @@ json.dumps({"width": width})
       } else {
         updatePairwiseLegendPositions(svg);
       }
+      recenterCurrentLegendRoot(svg);
 
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
@@ -422,6 +424,7 @@ json.dumps({"width": width})
 
     if (removed) {
       compactLegendEntries(svg);
+      recenterCurrentLegendRoot(svg);
 
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
@@ -657,6 +660,7 @@ json.dumps({"width": width})
     }
 
     entry.caption = caption;
+    recenterCurrentLegendRoot(svg);
 
     skipCaptureBaseConfig.value = true;
     const resultIdx = selectedResultIndex.value;
