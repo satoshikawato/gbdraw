@@ -5,9 +5,10 @@ import {
   parseTransform,
   parseTransformXY
 } from './utils.js';
+import { getElementsBounds } from '../legend-layout/transform-utils.js';
 
 export const createLegendLayoutActions = ({ state }) => {
-  const { mode, form, linearBaseConfig } = state;
+  const { mode, form, linearBaseConfig, legendInitialTransform, legendCurrentOffset, diagramElements } = state;
   const horizontalLegendPadding = 20;
 
   const getHorizontalWrapWidth = (svg) => {
@@ -72,6 +73,122 @@ export const createLegendLayoutActions = ({ state }) => {
         }
       });
     });
+  };
+
+  const getLegendLayoutRoot = (svg, layoutOverride = null) => {
+    const legendGroup = svg?.getElementById?.('legend');
+    if (!legendGroup) return null;
+
+    const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
+    const verticalLegend = legendGroup.querySelector('#legend_vertical');
+    const hasDualLegends = !!(horizontalLegend && verticalLegend);
+
+    if (!hasDualLegends) {
+      return legendGroup;
+    }
+
+    const requestedLayout =
+      layoutOverride === 'horizontal' || layoutOverride === 'vertical'
+        ? layoutOverride
+        : isCurrentLegendHorizontal(svg)
+          ? 'horizontal'
+          : 'vertical';
+
+    return requestedLayout === 'horizontal' ? horizontalLegend : verticalLegend;
+  };
+
+  const getLegendLayoutLocalBounds = (svg, layoutOverride = null) => {
+    const root = getLegendLayoutRoot(svg, layoutOverride);
+    if (!root) return null;
+
+    const displayAttr = root.getAttribute('display');
+    const styleDisplay = root.style?.display || '';
+    const restoreDisplayAttr = displayAttr;
+    const restoreStyleDisplay = styleDisplay;
+
+    if (displayAttr === 'none') {
+      root.removeAttribute('display');
+    }
+    if (styleDisplay === 'none') {
+      root.style.display = '';
+    }
+
+    let bounds = null;
+    try {
+      const bbox = root.getBBox();
+      bounds = {
+        root,
+        x: Number.isFinite(bbox.x) ? bbox.x : 0,
+        y: Number.isFinite(bbox.y) ? bbox.y : 0,
+        width: Number.isFinite(bbox.width) ? bbox.width : 0,
+        height: Number.isFinite(bbox.height) ? bbox.height : 0
+      };
+    } finally {
+      if (restoreDisplayAttr === 'none') {
+        root.setAttribute('display', 'none');
+      } else if (restoreDisplayAttr === null) {
+        root.removeAttribute('display');
+      }
+
+      if (restoreStyleDisplay === 'none') {
+        root.style.display = 'none';
+      } else if (restoreStyleDisplay === '') {
+        root.style.removeProperty('display');
+      } else {
+        root.style.display = restoreStyleDisplay;
+      }
+    }
+
+    return bounds;
+  };
+
+  const computeLinearVerticalLegendTop = (vbY, vbH, legendHeight, padding) => {
+    const ignoredIds = new Set(['length_bar', 'tick', 'labels', 'Axis']);
+    const legendElements = diagramElements.value.filter((el) => !ignoredIds.has(el.id));
+    const bounds = getElementsBounds(legendElements.length > 0 ? legendElements : diagramElements.value);
+    if (!bounds) {
+      return vbY + (vbH - legendHeight) / 2;
+    }
+
+    const centerY = bounds.y + bounds.height / 2;
+    let legendTop = centerY - legendHeight / 2;
+    const viewportBottom = vbY + vbH;
+
+    if (legendTop < vbY || legendTop + legendHeight > viewportBottom) {
+      legendTop = Math.max(vbY + (vbH - legendHeight) / 2, vbY + padding);
+    }
+
+    return legendTop;
+  };
+
+  const getLinearLegendAnchor = (svg, position = form.legend, bounds = null) => {
+    if (!svg || mode.value !== 'linear') return null;
+    if (position === 'none') return null;
+
+    const viewBox = svg.getAttribute('viewBox');
+    if (!viewBox) return null;
+    const parts = viewBox.split(/\s+/).map(parseFloat);
+    if (parts.length !== 4 || parts.some((value) => !Number.isFinite(value))) return null;
+
+    const [vbX, vbY, vbW, vbH] = parts;
+    const activeBounds = bounds || getLegendLayoutLocalBounds(svg);
+    if (!activeBounds) return null;
+
+    const padding = 20;
+    if (position === 'top' || position === 'bottom') {
+      const availableHorizontalWidth = vbW - padding * 2;
+      const wideHorizontalLegend =
+        availableHorizontalWidth > 0 && activeBounds.width > availableHorizontalWidth * 0.9;
+      return {
+        left: wideHorizontalLegend ? vbX + padding : vbX + (vbW - activeBounds.width) / 2,
+        top: position === 'top' ? vbY + padding : vbY + vbH - activeBounds.height - padding
+      };
+    }
+
+    return {
+      left: position === 'left' ? vbX + padding : vbX + vbW - activeBounds.width - padding,
+      top: computeLinearVerticalLegendTop(vbY, vbH, activeBounds.height, padding)
+    };
   };
 
   const expandCanvasForVerticalLegend = (svg) => {
@@ -798,10 +915,35 @@ export const createLegendLayoutActions = ({ state }) => {
     return { legendWidth: bbox.width, legendHeight: bbox.height };
   };
 
+  const recenterCurrentLegendRoot = (svg) => {
+    if (!svg || mode.value !== 'linear') return false;
+    if (form.legend === 'none') return false;
+
+    const legendGroup = svg.getElementById('legend');
+    if (!legendGroup || legendGroup.getAttribute('display') === 'none') return false;
+
+    const bounds = getLegendLayoutLocalBounds(svg);
+    if (!bounds) return false;
+    const anchor = getLinearLegendAnchor(svg, form.legend, bounds);
+    if (!anchor) return false;
+
+    const offsetX = Number(legendCurrentOffset?.x) || 0;
+    const offsetY = Number(legendCurrentOffset?.y) || 0;
+    const baseX = anchor.left - bounds.x;
+    const baseY = anchor.top - bounds.y;
+
+    legendInitialTransform.value = { x: baseX, y: baseY };
+    legendGroup.setAttribute('transform', `translate(${baseX + offsetX}, ${baseY + offsetY})`);
+    return true;
+  };
+
   return {
     compactLegendEntries,
     expandCanvasForHorizontalLegend,
     expandCanvasForVerticalLegend,
+    getLegendLayoutLocalBounds,
+    getLinearLegendAnchor,
+    recenterCurrentLegendRoot,
     reflowDualLegendLayout,
     reflowSingleLegendLayout,
     updatePairwiseLegendPositions

@@ -1,7 +1,12 @@
 import { resolveColorToHex } from '../color-utils.js';
 import { getFeatureCaption } from '../feature-utils.js';
 
-export const createFeatureSvgActions = ({ state, getFeatureColor, onFeaturePopupOpened = null }) => {
+export const createFeatureSvgActions = ({
+  state,
+  getFeatureColor,
+  getEffectiveLegendCaption,
+  onFeaturePopupOpened = null
+}) => {
   const {
     results,
     selectedResultIndex,
@@ -46,7 +51,7 @@ export const createFeatureSvgActions = ({ state, getFeatureColor, onFeaturePopup
   const buildClickedFeaturePayload = (feat, featureElement = null) => {
     const defaultLabel = getFeatureCaption(feat);
     const existingOverride = featureColorOverrides[feat.id];
-    const existingCaption = existingOverride?.caption || '';
+    const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || defaultLabel || '').trim();
 
     const currentColor = resolveColorToHex(
       featureElement?.getAttribute('fill') || getFeatureColor(feat)
@@ -63,7 +68,8 @@ export const createFeatureSvgActions = ({ state, getFeatureColor, onFeaturePopup
       location: buildFeatureLocation(feat),
       color: currentColor,
       feat,
-      legendName: existingCaption,
+      legendName: effectiveCaption,
+      appliedLegendName: effectiveCaption,
       strokeColor: currentStrokeColor,
       strokeWidth: currentStrokeWidth,
       originalStrokeColor: currentStrokeColor,

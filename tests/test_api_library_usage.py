@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from Bio import SeqIO
 
@@ -42,6 +43,40 @@ def test_api_circular_minimal(examples_dir: Path, temp_output_dir: Path) -> None
         color_table=color_table,
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
+        output_prefix=str(output_prefix),
+        legend="right",
+    )
+
+    save_figure(canvas, ["svg"])
+    output_svg = output_prefix.with_suffix(".svg")
+
+    assert output_svg.exists()
+    assert output_svg.stat().st_size > 0
+
+
+@pytest.mark.linear
+def test_api_linear_gene_specific_rule_uses_default_fallback_for_legend(
+    test_inputs_dir: Path,
+    temp_output_dir: Path,
+) -> None:
+    record_path = test_inputs_dir / "HmmtDNA.gbk"
+    record = next(SeqIO.parse(str(record_path), "genbank"))
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    default_colors = load_default_colors("", palette="default", load_comparison=False)
+    color_table = pd.DataFrame(
+        [["gene", "gene", "^TRNF$", "#b56576", "TRNF gene"]],
+        columns=["feature_type", "qualifier_key", "value", "color", "caption"],
+    )
+
+    output_prefix = temp_output_dir / "api_linear_gene_legend_fallback"
+    canvas = assemble_linear_diagram_from_records(
+        [record],
+        blast_files=None,
+        config_dict=config_dict,
+        color_table=color_table,
+        default_colors=default_colors,
+        selected_features_set=["gene"],
         output_prefix=str(output_prefix),
         legend="right",
     )
