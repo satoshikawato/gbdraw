@@ -170,6 +170,8 @@ export const clearLinearSeqGapData = (seq) => ({
   losat_filename: ''
 });
 
+const getLinearPairKey = (leftUid, rightUid) => `${String(leftUid || '').trim()}->${String(rightUid || '').trim()}`;
+
 export const normalizeLinearSeqList = (items) => {
   const baseItems = Array.isArray(items) && items.length > 0 ? items : [null];
   const seenUids = new Set();
@@ -183,6 +185,61 @@ export const normalizeLinearSeqList = (items) => {
   });
   const lastIndex = normalized.length - 1;
   return normalized.map((seq, index) => (index === lastIndex ? clearLinearSeqGapData(seq) : seq));
+};
+
+export const reconcileLinearSeqPairData = (previousItems, nextItems) => {
+  const previous = normalizeLinearSeqList(previousItems);
+  const next = normalizeLinearSeqList(nextItems);
+  const previousPairs = new Map();
+
+  for (let index = 0; index < previous.length - 1; index += 1) {
+    const left = previous[index];
+    const right = previous[index + 1];
+    previousPairs.set(getLinearPairKey(left.uid, right.uid), {
+      blast: left.blast ?? null,
+      losatFilename: String(left.losat_filename ?? '')
+    });
+  }
+
+  for (let index = 0; index < next.length; index += 1) {
+    next[index] = clearLinearSeqGapData(next[index]);
+  }
+
+  const restoredPairKeys = new Set();
+  for (let index = 0; index < next.length - 1; index += 1) {
+    const left = next[index];
+    const right = next[index + 1];
+    const pairKey = getLinearPairKey(left.uid, right.uid);
+    const previousPair = previousPairs.get(pairKey);
+    if (!previousPair) continue;
+    restoredPairKeys.add(pairKey);
+    left.blast = previousPair.blast ?? null;
+    left.losat_filename = String(previousPair.losatFilename ?? '');
+  }
+
+  let clearedBlastSlots = 0;
+  let clearedLosatNames = 0;
+  previousPairs.forEach((previousPair, pairKey) => {
+    if (restoredPairKeys.has(pairKey)) return;
+    if (previousPair.blast) clearedBlastSlots += 1;
+    if (String(previousPair.losatFilename || '').trim()) clearedLosatNames += 1;
+  });
+
+  return {
+    linearSeqs: next,
+    clearedBlastSlots,
+    clearedLosatNames
+  };
+};
+
+const hasLinearSeqPrimaryInput = (seq) => Boolean(seq?.gb || seq?.gff || seq?.fasta);
+
+export const collapseEmptyLinearSeqList = (items) => {
+  const previous = normalizeLinearSeqList(items);
+  if (previous.length <= 1) return previous;
+  const collapsed = previous.filter((seq) => hasLinearSeqPrimaryInput(seq));
+  if (collapsed.length === previous.length) return previous;
+  return reconcileLinearSeqPairData(previous, collapsed).linearSeqs;
 };
 
 const linearSeqs = reactive(normalizeLinearSeqList([]));

@@ -1,4 +1,4 @@
-import { state, createLinearSeq, clearLinearSeqGapData, normalizeLinearSeqList } from '../state.js';
+import { state, createLinearSeq, reconcileLinearSeqPairData } from '../state.js';
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import { exportConfig, exportSession, importConfig, importSession } from '../services/config.js';
@@ -502,14 +502,12 @@ export const createAppSetup = () => {
     adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...defaults);
   };
 
-  const getLinearPairKey = (leftUid, rightUid) => `${String(leftUid || '').trim()}->${String(rightUid || '').trim()}`;
-
   const formatLinearReorderCount = (count, label) => {
     const numeric = Number(count);
     return `${numeric} ${label}${numeric === 1 ? '' : 's'}`;
   };
 
-  const buildLinearReorderNotice = ({ clearedBlastSlots = 0, clearedLosatNames = 0 } = {}) => {
+  const buildLinearReorderNotice = ({ clearedBlastSlots = 0, clearedLosatNames = 0, actionLabel = 'Reordering' } = {}) => {
     const parts = [];
     if (clearedBlastSlots > 0) {
       parts.push(formatLinearReorderCount(clearedBlastSlots, 'BLAST TSV slot'));
@@ -518,20 +516,59 @@ export const createAppSetup = () => {
       parts.push(formatLinearReorderCount(clearedLosatNames, 'LOSAT filename'));
     }
     if (parts.length === 0) return '';
-    return `Reordering cleared ${parts.join(' and ')} because adjacent pairs changed.`;
+    return `${actionLabel} cleared ${parts.join(' and ')} because adjacent pairs changed.`;
+  };
+
+  const applyLinearSeqMutation = (items, { actionLabel = 'Updating sequences' } = {}) => {
+    const { linearSeqs: next, clearedBlastSlots, clearedLosatNames } = reconcileLinearSeqPairData(Array.from(linearSeqs), items);
+    linearSeqs.splice(0, linearSeqs.length, ...next);
+    losatCacheInfo.value = [];
+    linearReorderNotice.value = buildLinearReorderNotice({ clearedBlastSlots, clearedLosatNames, actionLabel });
   };
 
   const addLinearSeq = () => {
-    const next = normalizeLinearSeqList([...linearSeqs, createLinearSeq()]);
-    linearSeqs.splice(0, linearSeqs.length, ...next);
-    losatCacheInfo.value = [];
-    linearReorderNotice.value = '';
+    applyLinearSeqMutation([...linearSeqs, createLinearSeq()], { actionLabel: 'Adding a sequence' });
+  };
+
+  const removeLinearSeqAt = (index) => {
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= linearSeqs.length) return;
+    const current = Array.from(linearSeqs);
+    const next = current.filter((_, currentIndex) => currentIndex !== idx);
+    applyLinearSeqMutation(next, { actionLabel: 'Removing a sequence' });
   };
 
   const removeLastLinearSeq = () => {
     if (linearSeqs.length <= 1) return;
-    const next = normalizeLinearSeqList(Array.from(linearSeqs).slice(0, -1));
-    linearSeqs.splice(0, linearSeqs.length, ...next);
+    removeLinearSeqAt(linearSeqs.length - 1);
+  };
+
+  const setLinearSeqPrimaryFile = (index, field, value) => {
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= linearSeqs.length) return;
+    if (!['gb', 'gff', 'fasta'].includes(field)) return;
+
+    const nextValue = value ?? null;
+    const seq = linearSeqs[idx];
+
+    if (field === 'gb') {
+      if (!nextValue) {
+        removeLinearSeqAt(idx);
+        return;
+      }
+      seq.gb = nextValue;
+      losatCacheInfo.value = [];
+      linearReorderNotice.value = '';
+      return;
+    }
+
+    const otherField = field === 'gff' ? 'fasta' : 'gff';
+    if (!nextValue && !seq[otherField]) {
+      removeLinearSeqAt(idx);
+      return;
+    }
+
+    seq[field] = nextValue;
     losatCacheInfo.value = [];
     linearReorderNotice.value = '';
   };
@@ -552,49 +589,10 @@ export const createAppSetup = () => {
     if (!Number.isInteger(from) || !Number.isInteger(to)) return;
     if (from < 0 || to < 0 || from >= linearSeqs.length || to >= linearSeqs.length || from === to) return;
 
-    const current = normalizeLinearSeqList(Array.from(linearSeqs));
-    const previousPairs = new Map();
-
-    for (let index = 0; index < current.length - 1; index += 1) {
-      const left = current[index];
-      const right = current[index + 1];
-      previousPairs.set(getLinearPairKey(left.uid, right.uid), {
-        blast: left.blast ?? null,
-        losatFilename: String(left.losat_filename ?? '')
-      });
-    }
-
+    const current = Array.from(linearSeqs);
     const [moved] = current.splice(from, 1);
     current.splice(to, 0, moved);
-
-    for (let index = 0; index < current.length; index += 1) {
-      current[index] = clearLinearSeqGapData(current[index]);
-    }
-
-    const restoredPairKeys = new Set();
-    for (let index = 0; index < current.length - 1; index += 1) {
-      const left = current[index];
-      const right = current[index + 1];
-      const pairKey = getLinearPairKey(left.uid, right.uid);
-      const previous = previousPairs.get(pairKey);
-      if (!previous) continue;
-      restoredPairKeys.add(pairKey);
-      left.blast = previous.blast ?? null;
-      left.losat_filename = String(previous.losatFilename ?? '');
-    }
-
-    let clearedBlastSlots = 0;
-    let clearedLosatNames = 0;
-    previousPairs.forEach((previous, pairKey) => {
-      if (restoredPairKeys.has(pairKey)) return;
-      if (previous.blast) clearedBlastSlots += 1;
-      if (String(previous.losatFilename || '').trim()) clearedLosatNames += 1;
-    });
-
-    const next = normalizeLinearSeqList(current);
-    linearSeqs.splice(0, linearSeqs.length, ...next);
-    losatCacheInfo.value = [];
-    linearReorderNotice.value = buildLinearReorderNotice({ clearedBlastSlots, clearedLosatNames });
+    applyLinearSeqMutation(current, { actionLabel: 'Reordering' });
   };
 
   const moveLinearSeqUp = (index) => {
@@ -638,6 +636,7 @@ export const createAppSetup = () => {
     linearReorderNotice,
     addLinearSeq,
     removeLastLinearSeq,
+    setLinearSeqPrimaryFile,
     canMoveLinearSeqUp,
     canMoveLinearSeqDown,
     moveLinearSeqUp,

@@ -236,11 +236,23 @@
                                 </div>
                             </div>
                             <div v-if="lInputType === 'gb'" class="space-y-2">
-                                <file-uploader label="GenBank File" v-model="seq.gb"></file-uploader>
+                                <file-uploader
+                                    label="GenBank File"
+                                    :model-value="seq.gb"
+                                    @update:model-value="setLinearSeqPrimaryFile(idx, 'gb', $event)"
+                                ></file-uploader>
                             </div>
                             <div v-else class="space-y-2 mb-2">
-                                <file-uploader label="GFF3" v-model="seq.gff"></file-uploader>
-                                <file-uploader label="FASTA" v-model="seq.fasta"></file-uploader>
+                                <file-uploader
+                                    label="GFF3"
+                                    :model-value="seq.gff"
+                                    @update:model-value="setLinearSeqPrimaryFile(idx, 'gff', $event)"
+                                ></file-uploader>
+                                <file-uploader
+                                    label="FASTA"
+                                    :model-value="seq.fasta"
+                                    @update:model-value="setLinearSeqPrimaryFile(idx, 'fasta', $event)"
+                                ></file-uploader>
                             </div>
                             <div class="mt-2">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1">Definition (optional)</div>

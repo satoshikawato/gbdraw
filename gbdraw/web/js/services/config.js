@@ -1,4 +1,4 @@
-import { state, normalizeLinearSeqList } from '../state.js';
+import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
 const SESSION_VERSION = 5;
@@ -392,7 +392,7 @@ const applyFiles = (filesData) => {
 
   if (!filesData) {
     state.linearSeqs.splice(0, state.linearSeqs.length, ...normalizeLinearSeqList([]));
-    return;
+    return { collapsedLinearSeqs: false };
   }
 
   state.files.c_gb = deserializeFile(filesData.c_gb);
@@ -405,26 +405,29 @@ const applyFiles = (filesData) => {
   state.files.qualifier_priority = deserializeFile(filesData.qualifier_priority);
 
   if (Array.isArray(filesData.linearSeqs)) {
-    const normalized = normalizeLinearSeqList(
-      filesData.linearSeqs.map((seq) => ({
-        uid: seq.uid,
-        gb: deserializeFile(seq.gb),
-        gff: deserializeFile(seq.gff),
-        fasta: deserializeFile(seq.fasta),
-        blast: deserializeFile(seq.blast),
-        losat_gencode: seq.losat_gencode ?? 1,
-        losat_filename: seq.losat_filename ?? '',
-        definition: seq.definition ?? '',
-        region_record_id: seq.region_record_id ?? '',
-        region_start: seq.region_start ?? null,
-        region_end: seq.region_end ?? null,
-        region_reverse: !!seq.region_reverse
-      }))
-    );
-    state.linearSeqs.splice(0, state.linearSeqs.length, ...normalized);
-  } else {
-    state.linearSeqs.splice(0, state.linearSeqs.length, ...normalizeLinearSeqList([]));
+    const loadedLinearSeqs = filesData.linearSeqs.map((seq) => ({
+      uid: seq.uid,
+      gb: deserializeFile(seq.gb),
+      gff: deserializeFile(seq.gff),
+      fasta: deserializeFile(seq.fasta),
+      blast: deserializeFile(seq.blast),
+      losat_gencode: seq.losat_gencode ?? 1,
+      losat_filename: seq.losat_filename ?? '',
+      definition: seq.definition ?? '',
+      region_record_id: seq.region_record_id ?? '',
+      region_start: seq.region_start ?? null,
+      region_end: seq.region_end ?? null,
+      region_reverse: !!seq.region_reverse
+    }));
+    const normalized = normalizeLinearSeqList(loadedLinearSeqs);
+    const collapsed = collapseEmptyLinearSeqList(loadedLinearSeqs);
+    const collapsedLinearSeqs = collapsed.length !== normalized.length;
+    state.linearSeqs.splice(0, state.linearSeqs.length, ...collapsed);
+    return { collapsedLinearSeqs };
   }
+
+  state.linearSeqs.splice(0, state.linearSeqs.length, ...normalizeLinearSeqList([]));
+  return { collapsedLinearSeqs: false };
 };
 
 export const exportConfig = () => {
@@ -599,8 +602,11 @@ export const importSession = async (e) => {
       applyConfigData(data.config);
     }
 
-    applyFiles(data.files);
+    const { collapsedLinearSeqs } = applyFiles(data.files);
     applyLosatCache(data.losatCache?.entries);
+    if (collapsedLinearSeqs) {
+      state.losatCacheInfo.value = [];
+    }
 
     state.skipCaptureBaseConfig.value = false;
     state.skipPositionReapply.value = false;
