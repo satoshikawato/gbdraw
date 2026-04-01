@@ -1,4 +1,4 @@
-import { state } from '../state.js';
+import { state, normalizeLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
 const SESSION_VERSION = 5;
@@ -347,23 +347,11 @@ const applyLosatCache = (entries) => {
   state.losatCacheInfo.value = info;
 };
 
-const createEmptyLinearSeq = () => ({
-  gb: null,
-  gff: null,
-  fasta: null,
-  blast: null,
-  losat_gencode: 1,
-  losat_filename: '',
-  definition: '',
-  region_record_id: '',
-  region_start: null,
-  region_end: null,
-  region_reverse: false
-});
-
 const serializeFiles = async () => {
+  const normalizedLinearSeqs = normalizeLinearSeqList(state.linearSeqs);
   const linearSeqs = await Promise.all(
-    state.linearSeqs.map(async (seq) => ({
+    normalizedLinearSeqs.map(async (seq) => ({
+      uid: seq.uid,
       gb: await serializeFile(seq.gb),
       gff: await serializeFile(seq.gff),
       fasta: await serializeFile(seq.fasta),
@@ -400,9 +388,10 @@ const applyFiles = (filesData) => {
   state.files.blacklist = null;
   state.files.whitelist = null;
   state.files.qualifier_priority = null;
+  state.linearReorderNotice.value = '';
 
   if (!filesData) {
-    state.linearSeqs.splice(0, state.linearSeqs.length, createEmptyLinearSeq());
+    state.linearSeqs.splice(0, state.linearSeqs.length, ...normalizeLinearSeqList([]));
     return;
   }
 
@@ -416,26 +405,25 @@ const applyFiles = (filesData) => {
   state.files.qualifier_priority = deserializeFile(filesData.qualifier_priority);
 
   if (Array.isArray(filesData.linearSeqs)) {
-    const normalized = filesData.linearSeqs.map((seq) => ({
-      gb: deserializeFile(seq.gb),
-      gff: deserializeFile(seq.gff),
-      fasta: deserializeFile(seq.fasta),
-      blast: deserializeFile(seq.blast),
-      losat_gencode: seq.losat_gencode ?? 1,
-      losat_filename: seq.losat_filename ?? '',
-      definition: seq.definition ?? '',
-      region_record_id: seq.region_record_id ?? '',
-      region_start: seq.region_start ?? null,
-      region_end: seq.region_end ?? null,
-      region_reverse: !!seq.region_reverse
-    }));
-    if (normalized.length > 0) {
-      state.linearSeqs.splice(0, state.linearSeqs.length, ...normalized);
-    } else {
-      state.linearSeqs.splice(0, state.linearSeqs.length, createEmptyLinearSeq());
-    }
+    const normalized = normalizeLinearSeqList(
+      filesData.linearSeqs.map((seq) => ({
+        uid: seq.uid,
+        gb: deserializeFile(seq.gb),
+        gff: deserializeFile(seq.gff),
+        fasta: deserializeFile(seq.fasta),
+        blast: deserializeFile(seq.blast),
+        losat_gencode: seq.losat_gencode ?? 1,
+        losat_filename: seq.losat_filename ?? '',
+        definition: seq.definition ?? '',
+        region_record_id: seq.region_record_id ?? '',
+        region_start: seq.region_start ?? null,
+        region_end: seq.region_end ?? null,
+        region_reverse: !!seq.region_reverse
+      }))
+    );
+    state.linearSeqs.splice(0, state.linearSeqs.length, ...normalized);
   } else {
-    state.linearSeqs.splice(0, state.linearSeqs.length, createEmptyLinearSeq());
+    state.linearSeqs.splice(0, state.linearSeqs.length, ...normalizeLinearSeqList([]));
   }
 };
 

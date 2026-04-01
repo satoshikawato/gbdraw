@@ -127,21 +127,65 @@ const files = reactive({
   whitelist: null,
   qualifier_priority: null
 });
-const linearSeqs = reactive([
-  {
-    gb: null,
-    gff: null,
-    fasta: null,
-    blast: null,
-    losat_gencode: 1,
-    losat_filename: '',
-    definition: '',
-    region_record_id: '',
-    region_start: null,
-    region_end: null,
-    region_reverse: false
+
+let linearSeqUidCounter = 0;
+
+const generateLinearSeqUid = () => {
+  linearSeqUidCounter += 1;
+  if (globalThis.crypto?.randomUUID) {
+    return `linear-seq-${globalThis.crypto.randomUUID()}`;
   }
-]);
+  return `linear-seq-${Date.now()}-${linearSeqUidCounter}`;
+};
+
+const normalizeLinearSeqNumber = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+export const createLinearSeq = (overrides = {}) => {
+  const source = overrides && typeof overrides === 'object' && !Array.isArray(overrides) ? overrides : {};
+  const rawUid = String(source.uid ?? '').trim();
+  const rawLosatGencode = Number(source.losat_gencode);
+  return {
+    uid: rawUid || generateLinearSeqUid(),
+    gb: source.gb ?? null,
+    gff: source.gff ?? null,
+    fasta: source.fasta ?? null,
+    blast: source.blast ?? null,
+    losat_gencode: Number.isFinite(rawLosatGencode) && rawLosatGencode > 0 ? rawLosatGencode : 1,
+    losat_filename: String(source.losat_filename ?? ''),
+    definition: String(source.definition ?? ''),
+    region_record_id: String(source.region_record_id ?? ''),
+    region_start: normalizeLinearSeqNumber(source.region_start),
+    region_end: normalizeLinearSeqNumber(source.region_end),
+    region_reverse: Boolean(source.region_reverse)
+  };
+};
+
+export const clearLinearSeqGapData = (seq) => ({
+  ...createLinearSeq(seq),
+  blast: null,
+  losat_filename: ''
+});
+
+export const normalizeLinearSeqList = (items) => {
+  const baseItems = Array.isArray(items) && items.length > 0 ? items : [null];
+  const seenUids = new Set();
+  const normalized = baseItems.map((item) => {
+    const next = createLinearSeq(item);
+    if (!next.uid || seenUids.has(next.uid)) {
+      next.uid = generateLinearSeqUid();
+    }
+    seenUids.add(next.uid);
+    return next;
+  });
+  const lastIndex = normalized.length - 1;
+  return normalized.map((seq, index) => (index === lastIndex ? clearLinearSeqGapData(seq) : seq));
+};
+
+const linearSeqs = reactive(normalizeLinearSeqList([]));
 
 const defaultDirectionalFeatureTypes = ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA'];
 const defaultFeatureShapes = Object.fromEntries(defaultDirectionalFeatureTypes.map((featureType) => [featureType, 'arrow']));
@@ -239,6 +283,7 @@ const losat = reactive({
 
 const losatCacheInfo = ref([]);
 const losatCache = ref(new Map());
+const linearReorderNotice = ref('');
 const circularRecordList = ref([]); // [{ selector: '#1', record_id: 'NC_xxx' }]
 
 // Color & Filter State
@@ -584,6 +629,7 @@ export const state = {
   losat,
   losatCacheInfo,
   losatCache,
+  linearReorderNotice,
   circularRecordList,
   paletteNames,
   selectedPalette,

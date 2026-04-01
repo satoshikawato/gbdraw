@@ -1,4 +1,4 @@
-import { state } from '../state.js';
+import { state, createLinearSeq, clearLinearSeqGapData, normalizeLinearSeqList } from '../state.js';
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import { exportConfig, exportSession, importConfig, importSession } from '../services/config.js';
@@ -43,6 +43,7 @@ export const createAppSetup = () => {
     adv,
     losat,
     losatCacheInfo,
+    linearReorderNotice,
     circularRecordList,
     paletteNames,
     selectedPalette,
@@ -501,6 +502,111 @@ export const createAppSetup = () => {
     adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...defaults);
   };
 
+  const getLinearPairKey = (leftUid, rightUid) => `${String(leftUid || '').trim()}->${String(rightUid || '').trim()}`;
+
+  const formatLinearReorderCount = (count, label) => {
+    const numeric = Number(count);
+    return `${numeric} ${label}${numeric === 1 ? '' : 's'}`;
+  };
+
+  const buildLinearReorderNotice = ({ clearedBlastSlots = 0, clearedLosatNames = 0 } = {}) => {
+    const parts = [];
+    if (clearedBlastSlots > 0) {
+      parts.push(formatLinearReorderCount(clearedBlastSlots, 'BLAST TSV slot'));
+    }
+    if (clearedLosatNames > 0) {
+      parts.push(formatLinearReorderCount(clearedLosatNames, 'LOSAT filename'));
+    }
+    if (parts.length === 0) return '';
+    return `Reordering cleared ${parts.join(' and ')} because adjacent pairs changed.`;
+  };
+
+  const addLinearSeq = () => {
+    const next = normalizeLinearSeqList([...linearSeqs, createLinearSeq()]);
+    linearSeqs.splice(0, linearSeqs.length, ...next);
+    losatCacheInfo.value = [];
+    linearReorderNotice.value = '';
+  };
+
+  const removeLastLinearSeq = () => {
+    if (linearSeqs.length <= 1) return;
+    const next = normalizeLinearSeqList(Array.from(linearSeqs).slice(0, -1));
+    linearSeqs.splice(0, linearSeqs.length, ...next);
+    losatCacheInfo.value = [];
+    linearReorderNotice.value = '';
+  };
+
+  const canMoveLinearSeqUp = (index) => {
+    const idx = Number(index);
+    return Number.isInteger(idx) && idx > 0 && idx < linearSeqs.length;
+  };
+
+  const canMoveLinearSeqDown = (index) => {
+    const idx = Number(index);
+    return Number.isInteger(idx) && idx >= 0 && idx < linearSeqs.length - 1;
+  };
+
+  const reorderLinearSeqs = (fromIndex, toIndex) => {
+    const from = Number(fromIndex);
+    const to = Number(toIndex);
+    if (!Number.isInteger(from) || !Number.isInteger(to)) return;
+    if (from < 0 || to < 0 || from >= linearSeqs.length || to >= linearSeqs.length || from === to) return;
+
+    const current = normalizeLinearSeqList(Array.from(linearSeqs));
+    const previousPairs = new Map();
+
+    for (let index = 0; index < current.length - 1; index += 1) {
+      const left = current[index];
+      const right = current[index + 1];
+      previousPairs.set(getLinearPairKey(left.uid, right.uid), {
+        blast: left.blast ?? null,
+        losatFilename: String(left.losat_filename ?? '')
+      });
+    }
+
+    const [moved] = current.splice(from, 1);
+    current.splice(to, 0, moved);
+
+    for (let index = 0; index < current.length; index += 1) {
+      current[index] = clearLinearSeqGapData(current[index]);
+    }
+
+    const restoredPairKeys = new Set();
+    for (let index = 0; index < current.length - 1; index += 1) {
+      const left = current[index];
+      const right = current[index + 1];
+      const pairKey = getLinearPairKey(left.uid, right.uid);
+      const previous = previousPairs.get(pairKey);
+      if (!previous) continue;
+      restoredPairKeys.add(pairKey);
+      left.blast = previous.blast ?? null;
+      left.losat_filename = String(previous.losatFilename ?? '');
+    }
+
+    let clearedBlastSlots = 0;
+    let clearedLosatNames = 0;
+    previousPairs.forEach((previous, pairKey) => {
+      if (restoredPairKeys.has(pairKey)) return;
+      if (previous.blast) clearedBlastSlots += 1;
+      if (String(previous.losatFilename || '').trim()) clearedLosatNames += 1;
+    });
+
+    const next = normalizeLinearSeqList(current);
+    linearSeqs.splice(0, linearSeqs.length, ...next);
+    losatCacheInfo.value = [];
+    linearReorderNotice.value = buildLinearReorderNotice({ clearedBlastSlots, clearedLosatNames });
+  };
+
+  const moveLinearSeqUp = (index) => {
+    if (!canMoveLinearSeqUp(index)) return;
+    reorderLinearSeqs(index, Number(index) - 1);
+  };
+
+  const moveLinearSeqDown = (index) => {
+    if (!canMoveLinearSeqDown(index)) return;
+    reorderLinearSeqs(index, Number(index) + 1);
+  };
+
   return {
     pyodideReady,
     processing,
@@ -529,6 +635,13 @@ export const createAppSetup = () => {
     losatProgram,
     files,
     linearSeqs,
+    linearReorderNotice,
+    addLinearSeq,
+    removeLastLinearSeq,
+    canMoveLinearSeqUp,
+    canMoveLinearSeqDown,
+    moveLinearSeqUp,
+    moveLinearSeqDown,
     form,
     adv,
     losat,
