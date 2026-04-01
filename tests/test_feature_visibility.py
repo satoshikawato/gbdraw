@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pandas as pd
@@ -23,6 +24,7 @@ from gbdraw.features.visibility import (
     should_render_feature,
 )
 from gbdraw.io.colors import load_default_colors
+from gbdraw.legend.table import prepare_legend_table
 from gbdraw.labels.filtering import preprocess_label_filtering
 
 
@@ -63,6 +65,34 @@ def _base_label_filtering() -> dict[str, Any]:
         "whitelist_df": None,
         "qualifier_priority_df": None,
     }
+
+
+def _legend_config_stubs(
+    default_colors: pd.DataFrame,
+    color_table: pd.DataFrame | None = None,
+) -> tuple[SimpleNamespace, SimpleNamespace, SimpleNamespace]:
+    gc_config = SimpleNamespace(
+        show_gc=False,
+        stroke_color="#000000",
+        stroke_width=1.0,
+        high_fill_color="#aaaaaa",
+        low_fill_color="#bbbbbb",
+        dinucleotide="GC",
+    )
+    skew_config = SimpleNamespace(
+        show_skew=False,
+        high_fill_color="#cccccc",
+        low_fill_color="#dddddd",
+        stroke_color="#000000",
+        stroke_width=1.0,
+    )
+    feature_config = SimpleNamespace(
+        color_table=color_table,
+        default_colors=default_colors,
+        block_stroke_color="#111111",
+        block_stroke_width=0.5,
+    )
+    return gc_config, skew_config, feature_config
 
 
 def _make_origin_spanning_seq_feature() -> SeqFeature:
@@ -330,6 +360,64 @@ def test_legend_presence_and_color_usage_follow_visibility_rules() -> None:
     assert "CDS" not in default_used_features
     assert "misc_feature" in default_used_features
     assert used_rules == set()
+
+
+def test_prepare_legend_table_falls_back_to_default_color_for_gene_other_entry() -> None:
+    default_colors = pd.DataFrame([["default", "#d3d3d3"]], columns=["feature_type", "color"])
+    color_table = pd.DataFrame(
+        [["gene", "hash", "^fgene1234$", "#b56576", "Gene A"]],
+        columns=["feature_type", "qualifier_key", "value", "color", "caption"],
+    )
+    gc_config, skew_config, feature_config = _legend_config_stubs(default_colors, color_table)
+
+    legend_table = prepare_legend_table(
+        gc_config,
+        skew_config,
+        feature_config,
+        ["gene"],
+        used_color_rules={("Gene A", "#b56576")},
+        default_used_features={"gene"},
+    )
+
+    assert legend_table["Gene A"]["fill"] == "#b56576"
+    assert legend_table["other genes"]["fill"] == "#d3d3d3"
+
+
+def test_prepare_legend_table_skips_gene_other_entry_without_default_usage() -> None:
+    default_colors = pd.DataFrame([["default", "#d3d3d3"]], columns=["feature_type", "color"])
+    color_table = pd.DataFrame(
+        [["gene", "hash", "^fgene1234$", "#b56576", "Gene A"]],
+        columns=["feature_type", "qualifier_key", "value", "color", "caption"],
+    )
+    gc_config, skew_config, feature_config = _legend_config_stubs(default_colors, color_table)
+
+    legend_table = prepare_legend_table(
+        gc_config,
+        skew_config,
+        feature_config,
+        ["gene"],
+        used_color_rules={("Gene A", "#b56576")},
+        default_used_features=set(),
+    )
+
+    assert legend_table["Gene A"]["fill"] == "#b56576"
+    assert "other genes" not in legend_table
+
+
+def test_prepare_legend_table_plain_gene_entry_uses_default_fallback_color() -> None:
+    default_colors = pd.DataFrame([["default", "#d3d3d3"]], columns=["feature_type", "color"])
+    gc_config, skew_config, feature_config = _legend_config_stubs(default_colors, None)
+
+    legend_table = prepare_legend_table(
+        gc_config,
+        skew_config,
+        feature_config,
+        ["gene"],
+        used_color_rules=set(),
+        default_used_features={"gene"},
+    )
+
+    assert legend_table["gene"]["fill"] == "#d3d3d3"
 
 
 def test_circular_cli_feature_table_is_forwarded(

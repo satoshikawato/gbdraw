@@ -6,6 +6,18 @@ from typing import List, Optional, Set, Tuple
 from pandas import DataFrame
 
 
+def _resolve_legend_feature_color(default_colors: DataFrame, feature_type: str) -> str:
+    matching_rows = default_colors[default_colors["feature_type"] == feature_type]
+    if not matching_rows.empty:
+        return str(matching_rows["color"].values[0])
+
+    default_rows = default_colors[default_colors["feature_type"] == "default"]
+    if not default_rows.empty:
+        return str(default_rows["color"].values[0])
+
+    return "#d3d3d3"
+
+
 def prepare_legend_table(
     gc_config,
     skew_config,
@@ -79,10 +91,8 @@ def prepare_legend_table(
                     new_selected_key_name = "other proteins"
                 else:
                     new_selected_key_name = f"other {selected_feature}s"
-                feature_fill_color = default_colors[default_colors["feature_type"] == selected_feature][
-                    "color"
-                ].values[0]
                 if allow_other_entry:
+                    feature_fill_color = _resolve_legend_feature_color(default_colors, selected_feature)
                     legend_table[new_selected_key_name] = {
                         "type": "solid",
                         "fill": feature_fill_color,
@@ -95,9 +105,7 @@ def prepare_legend_table(
                     new_selected_key_name = "other proteins"
                 else:
                     new_selected_key_name = f"other {selected_feature}s"
-                feature_fill_color = default_colors[default_colors["feature_type"] == selected_feature][
-                    "color"
-                ].values[0]
+                feature_fill_color = _resolve_legend_feature_color(default_colors, selected_feature)
                 legend_table[new_selected_key_name] = {
                     "type": "solid",
                     "fill": feature_fill_color,
@@ -107,11 +115,7 @@ def prepare_legend_table(
             else:
                 # used_color_rules is provided but no specific rules matched
                 # Just add the feature type with default color
-                matching_rows = default_colors[default_colors["feature_type"] == selected_feature]
-                if not matching_rows.empty:
-                    feature_fill_color = matching_rows["color"].values[0]
-                else:
-                    feature_fill_color = default_colors[default_colors["feature_type"] == "default"]["color"].values[0]
+                feature_fill_color = _resolve_legend_feature_color(default_colors, selected_feature)
                 legend_table[selected_feature] = {
                     "type": "solid",
                     "fill": feature_fill_color,
@@ -119,15 +123,7 @@ def prepare_legend_table(
                     "width": block_stroke_width,
                 }
         else:
-            matching_rows = default_colors[default_colors["feature_type"] == selected_feature]
-            if not matching_rows.empty:
-                feature_fill_color = default_colors[default_colors["feature_type"] == selected_feature][
-                    "color"
-                ].values[0]
-            else:
-                feature_fill_color = default_colors[default_colors["feature_type"] == "default"][
-                    "color"
-                ].values[0]
+            feature_fill_color = _resolve_legend_feature_color(default_colors, selected_feature)
             legend_table[selected_feature] = {
                 "type": "solid",
                 "fill": feature_fill_color,
