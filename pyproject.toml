@@ -36,6 +36,7 @@ dependencies = [
 [project.optional-dependencies]
 export = ["cairosvg"]
 dev = [
+    "cairosvg",
     "Pillow",
     "pytest>=7.0",
     "pytest-cov>=4.0",
