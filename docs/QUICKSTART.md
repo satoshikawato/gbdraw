@@ -1,62 +1,85 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
 
-[< Back to Installation](./INSTALL.md)　　　　　　[Go to Tutorials >](./TUTORIALS/TUTORIALS.md)
-# Quickstart: Your First Plot in 5 Minutes
+[< Back to Installation](./INSTALL.md) | [Go to Tutorials >](./TUTORIALS/TUTORIALS.md)
 
-This tutorial will guide you from a fresh installation to generating your first circular genome plot.
+# Quickstart
 
-If you prefer a GUI, you can use the web app at [https://gbdraw.app/](https://gbdraw.app/) or run `gbdraw gui` locally after installation. This quickstart focuses on the CLI.
+This guide walks through a first circular plot with the CLI. If you prefer a GUI, use [https://gbdraw.app/](https://gbdraw.app/) or run `gbdraw gui` locally after installation.
 
-### 1. Prerequisites
+## 1. Confirm the Installation
 
-Ensure you have `gbdraw` installed locally via one of the methods described on the **[Installation](./INSTALL.md)** page. Make sure your conda environment is activated.
-
-### 2. Get Sample Data
-
-For this tutorial, we will use the GenBank file for [*Escherichia coli* K-12](https://www.ncbi.nlm.nih.gov/nuccore/NC_000913.3/). Download and decompress it with the following commands:
+Make sure `gbdraw` is available in your environment:
 
 ```bash
-# Escherichia coli str. K-12 substr. MG1655 (NC_000913.3)
+gbdraw -h
+```
+
+## 2. Download a Sample GenBank File
+
+This example uses the *Escherichia coli* K-12 reference genome.
+
+```bash
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_000913.3&rettype=gbwithparts&retmode=text" -O NC_000913.gbk
 ```
 
-This will give you the file `NC_000913.gbk`.
+## 3. Generate a Circular Plot
 
-
-### 3. Generate the Plot
-In the same directory as the downloaded file, run the following command:
 ```bash
-gbdraw circular --gbk NC_000913.gbk -o ecoli_k12_plot -f svg --separate_strands
+gbdraw circular \
+  --gbk NC_000913.gbk \
+  -o ecoli_k12_plot \
+  -f svg \
+  --separate_strands
 ```
 
-This command tells gbdraw to:
+This command:
 
-- `circular`: Create a circular diagram.
+- reads `NC_000913.gbk`
+- writes `ecoli_k12_plot.svg`
+- draws a circular plot
+- separates forward and reverse strands into different feature tracks
 
-- `--gbk ...`: Use the specified GenBank file as input.
+## 4. Inspect the Output
 
-- `-o ecoli_k12_plot`: Set the prefix for the output filename.
-
-- `-f svg`: Set the output format to SVG (a scalable vector format).
-- `--separate_strands`: Place forward and reverse-oriented features on different strands.
-
-### 4. Check Your Output
-
-A new file named `ecoli_k12_plot.svg` will appear in your directory. Open it in a web browser or vector graphics editor (like Inkscape or Illustrator). You should see a complete genome map of *E. coli*!
+Open the resulting SVG in a browser or vector editor.
 
 ![ecoli_k12_plot.svg](../examples/ecoli_k12_plot.svg)
 
+## 5. Optional: Add Labels or a Centered Definition
 
-### 5. (Optional) Linear mode selectors
+Show labels on smaller genomes:
 
-If your GenBank/GFF files contain multiple records, or you want to focus on a
-specific region, linear mode supports targeted selection:
+```bash
+gbdraw circular \
+  --gbk NC_000913.gbk \
+  -o ecoli_k12_labeled \
+  -f svg \
+  --track_type middle \
+  --labels
+```
 
-- `--record_id`: Select a record by ID or `#index` (repeatable per input file).
-- `--reverse_complement`: Reverse-complement each input record (repeatable).
-- `--region`: Crop a region using `record_id:start-end[:rc]`.
+Add centered organism text:
+
+```bash
+gbdraw circular \
+  --gbk NC_000913.gbk \
+  -o ecoli_with_title \
+  -f svg \
+  --separate_strands \
+  --species "<i>Escherichia coli</i>" \
+  --strain "K-12"
+```
+
+## 6. Optional: Linear Mode Selectors
+
+Linear mode can target specific records or regions:
+
+- `--record_id`: select a record by ID or `#index`
+- `--reverse_complement`: reverse-complement per input file
+- `--region`: crop a region with `record_id:start-end[:rc]`
 
 Example:
+
 ```bash
 gbdraw linear \
   --gbk NC_000913.gbk \
@@ -66,26 +89,24 @@ gbdraw linear \
   -f svg
 ```
 
-Multi-file example (per-file selectors must align with input order):
+If you need an index selector in the shell, quote it:
+
 ```bash
 gbdraw linear \
   --gbk Genome1.gbk Genome2.gbk \
-  --record_id Genome1_Chr1 #0 \
+  --record_id Genome1_Chr1 '#0' \
   --reverse_complement false true \
-  -o Genome1_Genome2_selected \
+  -o genome_pair_selected \
   -f svg
 ```
 
-For details, see the [Command-Line Reference](./CLI_Reference.md).
+## Next Steps
 
-### 6. Next Steps
+- Continue to [Tutorial 1: Customizing Your Plot](./TUTORIALS/1_Customizing_Plots.md)
+- Browse [Recipes](./RECIPES.md) for common command patterns
+- Use the [CLI Reference](./CLI_Reference.md) for the full option list
+- Explore more figures in the [Gallery](./GALLERY.md)
 
-Congratulations on creating your first plot!
+[< Back to Installation](./INSTALL.md) | [Go to Tutorials >](./TUTORIALS/TUTORIALS.md)
 
-To learn how to change colors, add titles, and show labels, continue to [Tutorial 1: Customizing Your Plot](./TUTORIALS/1_Customizing_Plots.md).
-
-To see more examples of what `gbdraw` can do, check out the [Gallery](./GALLERY.md).
-
-[< Back to Installation](./INSTALL.md)　　　　　　[Go to Tutorials >](./TUTORIALS/TUTORIALS.md)
-
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

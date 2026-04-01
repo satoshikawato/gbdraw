@@ -8,51 +8,70 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/satoshikawato/gbdraw)
 
 # gbdraw
-![gbdraw](https://github.com/satoshikawato/gbdraw/blob/main/examples/gbdraw_social_preview.png)
-`gbdraw` is a command-line/GUI tool designed for creating detailed diagrams of microbial genomes. 
-`gbdraw` accepts GenBank/DDBJ-format annotated genomes or GFF3+FASTA file pairs as input and outputs a visual representation of the genomes in SVG/PNG/PDF/EPS/PS formats.
 
-**Try gbdraw Web App!** [![Static Badge](https://img.shields.io/badge/gbdraw%20webapp-8A2BE2)](https://gbdraw.app/)
+![gbdraw](https://github.com/satoshikawato/gbdraw/blob/main/examples/gbdraw_social_preview.png)
+
+`gbdraw` is a command-line and browser-based tool for publication-quality genome diagrams. It accepts GenBank/DDBJ flatfiles or GFF3 + FASTA pairs and produces circular or linear plots in SVG, PNG, PDF, EPS, or PS.
 
 ## Features
-- **Circular and linear diagrams:** Generates both circular and linear representations of genome structures.
-- **Multiple Input Formats:** Supports standard GenBank/DDBJ files as well as GFF3 + FASTA file pairs.
-- **Dual Interface:** Available as a powerful command-line tool and an interactive local/web GUI.
-- **Various output formats:** Vector and raster graphics suitable for publication and further editing.
-- **Flexible Label Control:** Provides advanced control over feature labels, including priority rules, blacklists, and whitelists.
-- **Comparative genomics:** Visualizes sequence similarity between genomes using BLAST results.
-- **Accurate text metrics:** CLI uses kerning-aware font measurements for improved label placement and legend sizing.
 
-## 📖 Documentation & Tutorials
+- Circular and linear genome diagrams from annotated sequence files
+- Comparative genomics tracks from BLAST outfmt 6 or 7
+- Browser-based GUI at [gbdraw.app](https://gbdraw.app/) and local GUI via `gbdraw gui`
+- Fine-grained control over colors, labels, legends, and track layout
+- SVG-first workflow with optional CairoSVG-based export to PNG, PDF, EPS, and PS
 
-For detailed instructions on how to use `gbdraw`, please visit our main documentation page. You'll find step-by-step guides covering everything from installation to advanced customization.
+## Documentation
 
-**[➡️ Go to Full Documentation](./docs/DOCS.md)**
+| Guide | Description |
+| --- | --- |
+| [Full documentation](./docs/DOCS.md) | Main entry point for the published docs set. |
+| [Installation](./docs/INSTALL.md) | Hosted app, Bioconda, and local development installation. |
+| [Quickstart](./docs/QUICKSTART.md) | First circular plot in a few minutes. |
+| [Tutorials](./docs/TUTORIALS/TUTORIALS.md) | Step-by-step guides for styling, comparisons, and advanced customization. |
+| [Recipes](./docs/RECIPES.md) | Copy-paste command patterns for common tasks. |
+| [CLI Reference](./docs/CLI_Reference.md) | Current command help for the CLI. |
+| [Gallery](./docs/GALLERY.md) | Example plots and commands. |
+| [FAQ](./docs/FAQ.md) | Common questions and known limitations. |
+| [About](./docs/ABOUT.md) | Citation information and project background. |
 
-| Section | Description |
-| :--- | :--- |
-| **[Installation](./docs/INSTALL.md)** | Get started instantly with the web app or a full local installation. |
-| **[Quickstart](./docs/QUICKSTART.md)** | Create your first plot in under 5 minutes. |
-| **[Tutorials](./docs/TUTORIALS/TUTORIALS.md)** | Learn everything from basic customization to comparative genomics. |
-| **[Gallery](./docs/GALLERY.md)** | See example plots and the commands used to create them. |
-| **[FAQ](./docs/FAQ.md)** | Find answers to common questions. |
+## Use Without Local Installation
 
-## Use without local installation
-### Web App
-A browser-based GUI for `gbdraw` is available without any local installation:
+The hosted web app runs entirely in your browser:
 
-[![Static Badge](https://img.shields.io/badge/gbdraw%20webapp-8A2BE2)](https://gbdraw.app/)
+[https://gbdraw.app/](https://gbdraw.app/)
 
-The web app runs entirely in your browser (serverless), which means your data never leaves your machine.
+Your data stays on your machine, and no build step or Streamlit install is required.
 
+## Local Installation
 
-## Bug reports and suggestions
-Please feel free to submit a new issue if you find a bug or have a suggestion:
+For regular use, Bioconda is the main installation path:
+
+```bash
+mamba create -n gbdraw -c conda-forge -c bioconda gbdraw
+conda activate gbdraw
+gbdraw -h
+gbdraw gui
+```
+
+For development from source:
+
+```bash
+git clone https://github.com/satoshikawato/gbdraw.git
+cd gbdraw
+python -m pip install -e ".[dev]"
+```
+
+If you need PNG/PDF/EPS/PS export from a source install, add the optional export dependency:
+
+```bash
+python -m pip install -e ".[dev,export]"
+```
+
+See [Installation](./docs/INSTALL.md) for details and platform notes.
+
+## Bug Reports and Suggestions
+
+Please open an issue if you find a bug or want to propose an improvement:
+
 https://github.com/satoshikawato/gbdraw/issues
-
-
-
-
-
-
-

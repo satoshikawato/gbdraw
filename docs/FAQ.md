@@ -1,108 +1,89 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | **FAQ** | [ABOUT](./ABOUT.md)
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | **FAQ** | [About](./ABOUT.md)
 
+# Frequently Asked Questions
 
-# Frequently Asked Questions (FAQ)
+## Is there a web GUI? Do I need Streamlit?
 
-Here are answers to some common questions about `gbdraw`.
+Use [https://gbdraw.app/](https://gbdraw.app/) for the hosted app, or run `gbdraw gui` locally after installation. Streamlit is not required.
 
----
+## Why do my CLI and browser renders differ slightly?
 
-## Known issues
-- **Trans-introns** are not currently visualized.
-- **Mixed-format text** (e.g., combining italic and block elements like `<i>Ca.</i> Tyloplasma litorale`) cannot be reliably converted from SVG to PDF/PNG/EPS/PS.  
-  → As a workaround, export to **SVG format** and convert to other formats using external tools like [**Inkscape**](https://inkscape.org/).
+Small differences in label placement and legend sizing are expected. The CLI uses kerning-aware font metrics, while the web UI uses browser text metrics.
 
----
+## Can I use a GFF3 file by itself?
 
-### Q: Is there a web GUI? Do I need Streamlit?
-**A:** Use [https://gbdraw.app/](https://gbdraw.app/) for the hosted web app, or run `gbdraw gui` locally after installing `gbdraw`. The `gbdraw gui` command starts a local HTTP server on a free port and opens the web UI in your browser. Streamlit is not required.
+No. `gbdraw` requires both annotation and sequence data. When using GFF3 input, provide the matching FASTA file with `--fasta`.
 
----
-
-### Q: My labels or legend spacing changed after upgrading. Is that expected?
-
-**A:** Yes. The CLI now uses kerning-aware font metrics for bounding box calculations, which can slightly change label placement and legend sizing. The web UI uses browser text metrics, so small differences between CLI and browser renders are expected.
-
----
-
-### Q: Can I generate a plot if I only have a GFF3 file containing the genome sequence?
-**A:** No. The genome sequence must be provided in a separate file. gbdraw cannot read the embedded sequence from the `##FASTA` section of a GFF3 file.
-To generate a diagram, you must provide the GFF3 annotation with `--gff` and the corresponding sequence in a FASTA file with `--fasta`.
 ```bash
 gbdraw circular --gff my_genome.gff --fasta my_genome.fasta -o my_plot
 ```
 
----
+## My labels overlap. What should I do?
 
-### Q: My feature labels are overlapping and unreadable. How can I fix this?
+Common fixes:
 
-**A:** You have several options to deal with label clutter:
+1. Reduce `--label_font_size`
+2. Hide noisy labels with `--label_blacklist`
+3. Keep only important labels with `--label_whitelist`
+4. Switch to `--track_type middle` for circular plots or reduce the number of displayed labels
 
-1.  **Reduce Font Size**: The simplest fix is to make the labels smaller using `--label_font_size`.
-    ```bash
-    gbdraw circular --labels --label_font_size 6 ...
-    ```
-2.  **Blacklist Common Labels**: Use `--label_blacklist` to hide non-informative labels like "hypothetical protein". This often cleans up the plot significantly.
-    ```bash
-    gbdraw circular --labels --label_blacklist "hypothetical protein" ...
-    ```
-3.  **Whitelist Key Labels**: If you only care about a few specific genes, use `--label_whitelist` to show *only* those labels.
+See [Tutorial 3](./TUTORIALS/3_Advanced_Customization.md) for examples.
 
-For more details, see the **[Advanced Customization Tutorial](./TUTORIALS/3_Advanced_Customization.md)**.
+## How do I change the color of one specific gene?
 
----
+Use a feature-specific color table with `-t`. This matches selected features by qualifier values and assigns a color and legend label.
 
-### Q: How can I change the color of just one specific gene?
+See [Tutorial 3](./TUTORIALS/3_Advanced_Customization.md) and [Recipes](./RECIPES.md).
 
-**A:** Use a feature-specific color table with the `-t` option. This lets you create rules to color individual features based on their annotations (like product name or locus tag).
+## My comparative plot has no ribbons. What is usually wrong?
 
-For a complete guide, see the "Feature-Specific Colors" section in the **[Advanced Customization Tutorial](./TUTORIALS/3_Advanced_Customization.md)**.
+The most common causes are:
 
----
+1. The BLAST file is not in outfmt 6 or 7
+2. The BLAST file order does not match the genome input order
+3. Filtering thresholds such as `--evalue`, `--bitscore`, or `--identity` are too strict
 
-### Q: My comparative plot (using `-b`) isn't showing any similarity ribbons. What's wrong?
+See [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
 
-**A:** This is almost always due to one of two issues:
+## Can I use gene names instead of product descriptions for labels?
 
-1.  **Incorrect BLAST Format**: `gbdraw` requires BLAST tabular output in **`outfmt 6`** or **`outfmt 7`** format. Both formats work correctly. Re-run your BLAST search with the `-outfmt 6` or `-outfmt 7` flag.
-2.  **Incorrect File Order**: The order of genome files (`--gbk`) and BLAST files (`-b`) must correspond. For `gbdraw linear --gbk A B C -b A_vs_B B_vs_C`, the first BLAST file must be the comparison between A and B, and the second between B and C.
+Yes. Use `--qualifier_priority` to prefer `gene`, `locus_tag`, or other qualifiers.
 
-See the **[Comparative Genomics Tutorial](./TUTORIALS/2_Comparative_Genomics.md)** for a working example.
-
----
-
-### Q: Can I use the gene name (e.g., *dnaA*) for labels instead of the full product description?
-
-**A:** Yes. By default, `gbdraw` prefers the `product` qualifier. You can change this behavior with the `--qualifier_priority` option.
-
-Create a simple TSV file (e.g., `priority.tsv`) that tells `gbdraw` to look for the `gene` qualifier first for CDS features:
 ```tsv
-# priority.tsv
 CDS	gene
 ```
-Then, use it in your command:
+
 ```bash
-gbdraw circular --labels --qualifier_priority priority.tsv ...
+gbdraw circular --gbk genome.gb --labels --qualifier_priority priority.tsv -o output -f svg
 ```
 
----
+## How do I make the GC curve smoother?
 
-### Q: How can I make the GC content graph smoother/finer?
-**A:** You can control the graph's resolution with the `--window (-w)` and `--step (-s)` options. A larger window size will produce a smoother plot, while a smaller size will show more detail.
+Increase the window and step sizes:
+
 ```bash
-gbdraw circular --window 10000 --step 1000 ...
+gbdraw circular --gbk genome.gb --window 10000 --step 1000 -o output -f svg
 ```
+
 ![window_step_comparison.png](../examples/window_step_comparison.png)
 
----
+## Can I plot AT instead of GC?
 
-### Q: Can I plot the AT content instead of GC content?
-**A:** Yes. Use the --nt option to switch from the default GC to AT or any other dinucleotide.
+Yes. Use `--nt AT`.
+
 ```bash
-gbdraw circular --nt AT ...
+gbdraw circular --gbk genome.gb --nt AT -o output -f svg
 ```
+
 ![skew_comparison.png](../examples/skew_comparison.png)
 
----
+## Why does SVG export work but PNG/PDF/EPS/PS export fail?
 
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) |[Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | **FAQ** | [ABOUT](./ABOUT.md)
+Non-SVG export requires CairoSVG. Install the optional export dependency and, if needed on your platform, the system Cairo/Pango libraries.
+
+## Are there known visualization limitations?
+
+- Trans-introns are not currently visualized.
+- Mixed-format text such as `<i>Ca.</i> Tyloplasma litorale` does not reliably survive SVG-to-PNG/PDF/EPS/PS conversion. Use SVG if you need exact mixed formatting.
+
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | **FAQ** | [About](./ABOUT.md)

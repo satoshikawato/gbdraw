@@ -1,6 +1,6 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | **Gallery** | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | **Gallery** | [FAQ](./FAQ.md) | [About](./ABOUT.md)
 # Gallery
-This gallery showcases a variety of plots created with `gbdraw` and the commands used to generate them.
+This gallery showcases representative `gbdraw` outputs and the commands used to generate them. For shorter copy-paste examples, see [Recipes](./RECIPES.md).
 
 
 #### Majaniviruses Multi-Genome Comparison
@@ -29,7 +29,7 @@ gbdraw linear \
 ./in_gbk/PemoMJNVB.gb \
 ./in_gbk/LvMJNV.gb \
 ./in_gbk/TrcuMJNV.gb \
-./in_gbk/MetlamMJNV.gb \
+./in_gbk/MellatMJNV.gb \
 ./in_gbk/MeenMJNV.gb \
 ./in_gbk/MejoMJNV.gb \
 -b \
@@ -39,8 +39,8 @@ gbdraw linear \
 ./in_fna/PeseMJNV.PemoMJNVB.tblastx.out \
 ./in_fna/PemoMJNVB.LvMJNV.tblastx.out \
 ./in_fna/LvMJNV.TrcuMJNV.tblastx.out \
-./in_fna/TrcuMJNV.MetlamMJNV.tblastx.out \
-./in_fna/MetlamMJNV.MeenMJNV.tblastx.out \
+./in_fna/TrcuMJNV.MellatMJNV.tblastx.out \
+./in_fna/MellatMJNV.MeenMJNV.tblastx.out \
 ./in_fna/MeenMJNV.MejoMJNV.tblastx.out \
 -t majani_custom_color_table.tsv \
 -d modified_default_colors.tsv \
@@ -68,7 +68,6 @@ gbdraw circular \
 --separate_strands \
 -t NC_010162.feature-specific_table.tsv \
 --label_whitelist NC_010162.whitelist.tsv \
--t NC_010162.feature-specific_table.tsv \
 --species "<i>Sorangium cellulosum</i>" \
 --strain "So ce56"
 ```
@@ -148,7 +147,7 @@ gbdraw circular \
 -f svg \
 -o NC_001879_color \
 -k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin \
--t 2025-09-19_chloroplast.tsv \
+-t chloroplast_specific_table.tsv \
 --block_stroke_width 1 \
 --block_stroke_color black \
 --axis_stroke_width 3 \
@@ -181,7 +180,7 @@ gbdraw linear \
 --gbk NC_001416.gb \
 -o NC_001416 \
 -f svg \
---show_labels \
+--show_labels all \
 --separate_strands \
 --legend left \
 -d cds_white.tsv \
@@ -365,4 +364,4 @@ gbdraw circular \
 ![NC_000962_psyche.svg](https://github.com/satoshikawato/gbdraw/blob/main/examples/NC_000962_psyche.svg)
 
 
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | **Gallery** | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | **Gallery** | [FAQ](./FAQ.md) | [About](./ABOUT.md)

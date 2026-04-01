@@ -1,20 +1,16 @@
-[Home](../README.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [**Tutorials**](../TUTORIALS/TUTORIALS.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [ABOUT](../ABOUT.md)
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to Quickstart](../QUICKSTART.md)
+[< Back to Quickstart](../QUICKSTART.md) | [Go to Tutorial 2 >](./2_Comparative_Genomics.md)
 
-　　　　　　[Go to Tutorial 2: Comparative Genomics with BLAST >](./2_Comparative_Genomics.md) 
-
-[< Back to the Index of Tutorials](./TUTORIALS.md)
+[< Back to the Tutorials Index](./TUTORIALS.md)
 
 # Tutorial 1: Customizing Your Plot
 
-**Goal**: Learn the basics of customizing plot appearance, including colors, titles, and labels, using the plot from the Quickstart.
+**Goal:** learn the basic styling controls for circular plots: palettes, track layout, centered definition text, titles, and labels.
 
----
+## 1. Change the Color Scheme
 
-### 1. Changing the Color Scheme
-
-`gbdraw` comes with [55 built-in color palettes](../../examples/color_palette_examples.md). You can specify one using the `-p` or `--palette` option. Let's try the [`orchid`](../../examples/color_palette_examples.md#orchid) palette.
+`gbdraw` ships with many built-in palettes. Use `-p` or `--palette` to select one.
 
 ```bash
 gbdraw circular \
@@ -25,25 +21,24 @@ gbdraw circular \
   -p orchid
 ```
 
-The new file `ecoli_orchid.svg` will be generated with a different color scheme. 
 ![ecoli_orchid.svg](../../examples/ecoli_orchid.svg)
 
+See [color_palette_examples.md](../../examples/color_palette_examples.md) for the full palette list.
 
-You can see examples of all available palettes [here](../../examples/color_palette_examples.md).
+## 2. Choose a Circular Layout
 
-### 2. Changing the track layout
-You have precise control over how genomic features are arranged in the plot. The two main options for this are `--track_type` and `--separate_strands`.
+Two options control the overall look of a circular plot:
+
+- `--track_type`: `tuckin`, `middle`, or `spreadout`
+- `--separate_strands`: split forward and reverse features into different tracks
+
+`tuckin` is the default and most compact. `middle` is often easier to label. `spreadout` gives the most visual separation.
+
 ![track_layout_separate_strands.png](../../examples/track_layout_separate_strands.png)
-#### Track layout style (`--track_type`)
-You can choose how features are displayed in the circular track. `tuckin` is the default and most compact, `middle` places features along the middle of the circle, and `spreadout` spreads them around the circle.
-#### Strand separation (`--separate_strands`)
-By default, features from both the forward (+) and reverse (-) strands are drawn on a single, combined track. For genomes with many genes, this can look crowded. Using the `--separate_strands` flag tells gbdraw to place features on two distinct tracks: an outer track for the forward strand and an inner track for the reverse strand. This separation is recommended for relatively large genomes (e.g. bacteria) as it makes it easier to distinguish features.
 
+## 3. Add Centered Organism Text or a Plot Title
 
-### 3. Adding a Title
-Use the `--species` and `--strain` options to add a title to the center of your plot. You can use HTML `<i>` tags for *italics*.
-> [!CAUTION]
-> Mixed-format text (e.g., combining italic and block elements like <i>Ca.</i> Tyloplasma litorale) cannot be reliably converted from SVG to PDF/PNG/EPS/PS.
+Use `--species` and `--strain` to control the centered definition text:
 
 ```bash
 gbdraw circular \
@@ -51,72 +46,73 @@ gbdraw circular \
   -o ecoli_with_title \
   -f svg \
   --separate_strands \
-  -p orchid \
   --species "<i>Escherichia coli</i>" \
   --strain "K-12"
 ```
-The plot will now have a formatted title in the center.
+
 ![ecoli_with_title.svg](../../examples/ecoli_with_title.svg)
 
-### 4. Showing Feature Labels
-By default, gene labels are hidden. Use the `--labels` option to display them.
-As the *E.coli* genome is a little bit too large for this purpose, we will use the genome of white spot syndrome virus, a large DNA virus infecting crustaceans.
-> [!WARNING]
-> Do not use `--labels` (or `--labels both`) for genomes with more than a few hundred genes unless you downsample labels with `--label_blacklist` or `--label_whitelist`.
+If you want a title above or below the plot, use `--plot_title` together with `--plot_title_position top` or `bottom`.
+
+> [!CAUTION]
+> Mixed-format text such as `<i>Ca.</i> Tyloplasma litorale` does not reliably survive SVG-to-PNG/PDF/EPS/PS conversion. Use SVG when exact formatting matters.
+
+## 4. Show Feature Labels
+
+Circular labels are hidden by default. Use `--labels` to show outer labels, or `--labels both` to show outer and inner labels.
+
+For a label-focused example, use the white spot syndrome virus genome rather than a crowded bacterial chromosome:
 
 ```bash
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027280.1&rettype=gbwithparts&retmode=text" -O AP027280.gb
 ```
-Alternatively, download the genbank file from [the NCBI website](https://www.ncbi.nlm.nih.gov/nuccore/AP027280) manually and rename it from something like `sequence.gb` to `AP027280.gb`.
-> [!TIP]
-> To prevent clutters, you can adjust label text size with `--label_font_size` or use advanced filtering techniques covered in [a later tutorial](./3_Advanced_Customization.md).
+
 ```bash
 gbdraw circular \
- --gbk AP027280.gb \
- -o WSSV_with_labels \
- -f svg \
- --block_stroke_width 1 \
- --track_type middle \
- --labels
+  --gbk AP027280.gb \
+  -o WSSV_with_labels \
+  -f svg \
+  --block_stroke_width 1 \
+  --track_type middle \
+  --labels
 ```
+
 ![WSSV_with_labels.svg](../../examples/WSSV_with_labels.svg)
 
+> [!WARNING]
+> Avoid `--labels` or `--labels both` on feature-dense genomes unless you also filter labels with `--label_blacklist` or `--label_whitelist`.
 
-### 5. Filtering Plot Elements
-You can simplify the plot by showing only the elements you are interested in.
+## 5. Simplify the Plot
 
-Select Feature Types: Use the `--features` (or `-k`) option to specify a comma-separated list of features to draw.
-
-**Hide Tracks & Legend**: You can hide the GC content track with `--suppress_gc`,`--suppress_skew` and the legend with `--legend none`.
-
-Let's re-draw the WSSV genome, but this time hiding the GC tracks and the legend.
+You can reduce clutter by hiding tracks or legends, or by drawing only selected feature types.
 
 ```bash
 gbdraw circular \
- --gbk AP027280.gb \
- -o WSSV_filtered \
- -f svg \
- --block_stroke_width 1 \
- --suppress_gc \
- --suppress_skew \
- --separate_strands \
- --labels \
- --legend none
+  --gbk AP027280.gb \
+  -o WSSV_filtered \
+  -f svg \
+  --block_stroke_width 1 \
+  --suppress_gc \
+  --suppress_skew \
+  --separate_strands \
+  --labels \
+  --legend none
 ```
+
 ![WSSV_filtered.svg](../../examples/WSSV_filtered.svg)
 
-### Linear mode input selectors (quick note)
-If you switch to linear mode, you can target specific records or regions using:
-`--record_id`, `--reverse_complement`, and `--region`. See
-[Tutorial 2](./2_Comparative_Genomics.md) or the
-[CLI Reference](../CLI_Reference.md) for details.
+## 6. When You Move to Linear Mode
 
+Linear mode has its own input selectors:
 
-[< Back to Quickstart](../QUICKSTART.md)
+- `--record_id`
+- `--reverse_complement`
+- `--region`
 
-　　　　　　[Go to Tutorial 2: Comparative Genomics with BLAST >](./2_Comparative_Genomics.md) 
+See [Tutorial 2](./2_Comparative_Genomics.md) and the [CLI Reference](../CLI_Reference.md) for details.
 
-[< Back to the Index of Tutorials](./TUTORIALS.md)
+[< Back to Quickstart](../QUICKSTART.md) | [Go to Tutorial 2 >](./2_Comparative_Genomics.md)
 
+[< Back to the Tutorials Index](./TUTORIALS.md)
 
-[Home](../README.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [**Tutorials**](../TUTORIALS/TUTORIALS.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [ABOUT](../ABOUT.md)
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

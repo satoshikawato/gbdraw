@@ -1,268 +1,268 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | **Recipes** | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | **Recipes** | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
 
 # Recipes
 
-Quick copy-paste solutions for common tasks. For detailed explanations, see the [Tutorials](./TUTORIALS/TUTORIALS.md).
-
----
+Quick copy-paste solutions for common tasks. For explanations and screenshots, see the [Tutorials](./TUTORIALS/TUTORIALS.md).
 
 ## Circular Diagrams
 
-### Basic Circular Plot
+### Basic circular plot
+
 ```bash
 gbdraw circular --gbk genome.gb -o output -f svg
 ```
 
-### Circular Plot with Separated Strands
+### Separate forward and reverse strands
+
 ```bash
 gbdraw circular --gbk genome.gb -o output -f svg --separate_strands
 ```
 
-### Circular Plot with Custom Color Palette
+### Use a built-in palette
+
 ```bash
 gbdraw circular --gbk genome.gb -o output -f svg --separate_strands -p orchid
 ```
 
-See [color_palette_examples.md](../examples/color_palette_examples.md) for all 55+ available palettes.
+See [color_palette_examples.md](../examples/color_palette_examples.md) for the available palettes.
 
-### Circular Plot with Title
+### Add centered organism text
+
 ```bash
-gbdraw circular --gbk genome.gb -o output -f svg --separate_strands \
-  --species "<i>Escherichia coli</i>" --strain "K-12"
+gbdraw circular \
+  --gbk genome.gb \
+  -o output \
+  -f svg \
+  --species "<i>Escherichia coli</i>" \
+  --strain "K-12"
 ```
 
-### Circular Plot with Labels (Small Genomes)
+### Add a top or bottom plot title
+
+```bash
+gbdraw circular \
+  --gbk genome.gb \
+  -o output \
+  -f svg \
+  --plot_title "Comparison overview" \
+  --plot_title_position top
+```
+
+### Show labels
+
 ```bash
 gbdraw circular --gbk genome.gb -o output -f svg --track_type middle --labels
 ```
 
-### Circular Plot with Inner Labels (Mitochondria/Plasmids)
+### Show outer and inner labels
+
 ```bash
-gbdraw circular --gbk genome.gb -o output -f svg --track_type middle \
-  --labels both
+gbdraw circular --gbk genome.gb -o output -f svg --track_type middle --labels both
 ```
 
-### Minimal Circular Plot (No GC/Skew/Legend)
+### Hide GC, skew, and legend
+
 ```bash
-gbdraw circular --gbk genome.gb -o output -f svg \
-  --suppress_gc --suppress_skew -l none
+gbdraw circular --gbk genome.gb -o output -f svg --suppress_gc --suppress_skew --legend none
 ```
 
-### Resolve Overlapping Features (Plasmids)
+### Resolve overlapping features
+
 ```bash
 gbdraw circular --gbk plasmid.gb -o output -f svg --resolve_overlaps
 ```
 
----
+### Place multiple records on one shared canvas
+
+```bash
+gbdraw circular \
+  --gbk file_with_multiple_records.gb \
+  -o output \
+  -f svg \
+  --multi_record_canvas \
+  --multi_record_size_mode auto
+```
 
 ## Linear Diagrams
 
-### Basic Linear Plot
+### Basic linear plot
+
 ```bash
 gbdraw linear --gbk genome.gb -o output -f svg
 ```
 
-### Linear Plot with Separated Strands
+### Show labels for all records
+
 ```bash
-gbdraw linear --gbk genome.gb -o output -f svg --separate_strands
+gbdraw linear --gbk genome.gb -o output -f svg --show_labels all
 ```
 
-### Linear Plot with Tracks Above Axis
+### Show labels only on the first record
+
 ```bash
-gbdraw linear --gbk genome.gb -o output -f svg --track_layout above
+gbdraw linear --gbk genome1.gb genome2.gb -o output -f svg --show_labels first
 ```
 
-### Linear Plot with Tracks Below Axis
+### Put tracks below the axis
+
 ```bash
 gbdraw linear --gbk genome.gb -o output -f svg --track_layout below
 ```
 
-### Linear Plot with Custom Axis Gap (Above/Below)
+### Use a ruler on the axis
+
 ```bash
-gbdraw linear --gbk genome.gb -o output -f svg --track_layout below --track_axis_gap 12
+gbdraw linear \
+  --gbk genome.gb \
+  -o output \
+  -f svg \
+  --track_layout below \
+  --scale_style ruler \
+  --ruler_on_axis
 ```
 
-### Linear Plot with GC Content
+### Crop a region
+
 ```bash
-gbdraw linear --gbk genome.gb -o output -f svg --show_gc
+gbdraw linear \
+  --gbk genome.gb \
+  --region Record1:101-300 \
+  -o output \
+  -f svg
 ```
 
-### Linear Plot with GC Content and Skew
-```bash
-gbdraw linear --gbk genome.gb -o output -f svg --show_gc --show_skew
-```
+### Reverse-complement selected inputs
 
-### Linear Plot with Ruler Scale
 ```bash
-gbdraw linear --gbk genome.gb -o output -f svg --scale_style ruler
+gbdraw linear \
+  --gbk genome1.gb genome2.gb \
+  --reverse_complement false true \
+  -o output \
+  -f svg
 ```
-
-### Linear Axis Ruler (Above/Below Tracks)
-```bash
-gbdraw linear --gbk genome.gb -o output -f svg \
-  --track_layout above --scale_style ruler --ruler_on_axis
-```
-
-### Linear Region with Absolute Axis Coordinates
-```bash
-gbdraw linear --gbk genome.gb -o output -f svg \
-  --track_layout below --scale_style ruler --ruler_on_axis \
-  --region RecA:101-300
-```
-
-### Linear Region Reverse-Complement Coordinates (Descending Left→Right)
-```bash
-gbdraw linear --gbk genome.gb -o output -f svg \
-  --track_layout below --scale_style ruler --ruler_on_axis \
-  --region RecA:101-300:rc
-```
-
----
 
 ## Comparative Genomics
 
-### Two-Genome Comparison
-```bash
-# Step 1: Run BLAST
-blastn -query genome1.fasta -subject genome2.fasta -outfmt 6 -out blast.out
+### Two-genome comparison
 
-# Step 2: Generate comparison plot
-gbdraw linear --gbk genome1.gb genome2.gb -b blast.out -o comparison -f svg \
-  --align_center --separate_strands
+```bash
+blastn -query genome1.fasta -subject genome2.fasta -outfmt 7 -out blast.out
+
+gbdraw linear \
+  --gbk genome1.gb genome2.gb \
+  -b blast.out \
+  --align_center \
+  --separate_strands \
+  -o comparison \
+  -f svg
 ```
 
-### Multi-Genome Comparison
+### Multi-genome comparison
+
 ```bash
-# For genomes A, B, C - need BLAST for consecutive pairs: A-B and B-C
-gbdraw linear --gbk A.gb B.gb C.gb \
+gbdraw linear \
+  --gbk A.gb B.gb C.gb \
   -b A_vs_B.blast.out B_vs_C.blast.out \
-  -o multi_comparison -f svg --align_center --separate_strands
+  --align_center \
+  --separate_strands \
+  -o multi_comparison \
+  -f svg
 ```
 
-### Filter BLAST Matches
+### Filter BLAST ribbons
+
 ```bash
-gbdraw linear --gbk genome1.gb genome2.gb -b blast.out -o filtered -f svg \
-  --evalue 1e-99 --bitscore 5000 --identity 90
+gbdraw linear \
+  --gbk genome1.gb genome2.gb \
+  -b blast.out \
+  --evalue 1e-99 \
+  --bitscore 5000 \
+  --identity 90 \
+  -o filtered \
+  -f svg
 ```
 
----
+## Color and Label Tables
 
-## Color Customization
+### Override default feature colors
 
-### Override Default CDS Color
 Create `modified_colors.tsv`:
-```
+
+```tsv
 CDS	#d3d3d3
 ```
+
 Then:
+
 ```bash
 gbdraw circular --gbk genome.gb -d modified_colors.tsv -o output -f svg
 ```
 
-### Highlight Specific Genes
+### Highlight specific genes
+
 Create `highlight.tsv`:
-```
+
+```tsv
 CDS	product	polymerase	red	Polymerase
 CDS	product	helicase	blue	Helicase
 ```
+
 Then:
+
 ```bash
 gbdraw circular --gbk genome.gb -t highlight.tsv -o output -f svg
 ```
 
----
+### Prefer gene names over product labels
 
-## Label Control
-
-### Hide "Hypothetical Protein" Labels
-```bash
-gbdraw circular --gbk genome.gb --labels \
-  --label_blacklist "hypothetical protein" -o output -f svg
-```
-
-### Show Only Specific Genes
-Create `whitelist.tsv`:
-```
-CDS	gene	dnaA
-CDS	gene	dnaB
-CDS	product	DNA polymerase
-```
-Then:
-```bash
-gbdraw circular --gbk genome.gb --labels \
-  --label_whitelist whitelist.tsv -o output -f svg
-```
-
-### Use Gene Names Instead of Product
 Create `priority.tsv`:
-```
+
+```tsv
 CDS	gene
 ```
+
 Then:
+
 ```bash
-gbdraw circular --gbk genome.gb --labels \
-  --qualifier_priority priority.tsv -o output -f svg
+gbdraw circular --gbk genome.gb --labels --qualifier_priority priority.tsv -o output -f svg
 ```
 
----
+### Override label text after filtering
 
-## Output Formats
+Create `label_override.tsv`:
 
-### Export to Multiple Formats
-```bash
-gbdraw circular --gbk genome.gb -o output -f svg,png,pdf
+```tsv
+*	*	label	^hypothetical protein$	HP
 ```
 
-> **Note:** PNG, PDF, EPS, and PS formats require CairoSVG to be installed.
+Then:
 
----
+```bash
+gbdraw circular --gbk genome.gb --labels --label_table label_override.tsv -o output -f svg
+```
 
 ## GFF3 Input
 
-### Using GFF3 Instead of GenBank
+### Circular plot from GFF3 + FASTA
+
 ```bash
 gbdraw circular --gff annotations.gff --fasta sequence.fasta -o output -f svg
 ```
 
----
+### Linear plot from GFF3 + FASTA
 
-## Track Layout Options
-
-### Tuckin (Default)
-Features inside the axis circle, GC/skew tracks in the center.
 ```bash
-gbdraw circular --gbk genome.gb --track_type tuckin -o output -f svg
+gbdraw linear --gff annotations.gff --fasta sequence.fasta -o output -f svg
 ```
 
-### Middle
-Features on the axis circle (ideal for labels).
+## Output Formats
+
+### Export to multiple formats
+
 ```bash
-gbdraw circular --gbk genome.gb --track_type middle -o output -f svg
+gbdraw circular --gbk genome.gb -o output -f svg,png,pdf
 ```
 
-### Spreadout
-Features outside the axis circle.
-```bash
-gbdraw circular --gbk genome.gb --track_type spreadout -o output -f svg
-```
+PNG, PDF, EPS, and PS require CairoSVG to be installed.
 
----
-
-## Large Genomes
-
-### Bacterial Genome (1-10 Mb)
-Window/step sizes auto-adjust. Override if needed:
-```bash
-gbdraw circular --gbk bacteria.gb -o output -f svg \
-  -w 10000 -s 1000
-```
-
-### Large Genome (>10 Mb)
-```bash
-gbdraw circular --gbk large.gb -o output -f svg \
-  -w 100000 -s 10000
-```
-
----
-
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Gallery](./GALLERY.md) | **Recipes** | [FAQ](./FAQ.md) | [ABOUT](./ABOUT.md)
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | **Recipes** | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
