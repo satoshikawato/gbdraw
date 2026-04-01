@@ -12,6 +12,13 @@ setup(
         'bcbio-gff'
     ],
     extras_require={
+        'dev': [
+            'cairosvg',
+            'Pillow',
+            'pytest>=7.0',
+            'pytest-cov>=4.0',
+            'pytest-timeout>=2.0',
+        ],
         'export': ['cairosvg'],
     },
     package_data={
