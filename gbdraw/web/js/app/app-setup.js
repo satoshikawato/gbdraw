@@ -1,4 +1,4 @@
-import { state } from '../state.js';
+import { state, createLinearSeq, reconcileLinearSeqPairData } from '../state.js';
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import { exportConfig, exportSession, importConfig, importSession } from '../services/config.js';
@@ -43,6 +43,7 @@ export const createAppSetup = () => {
     adv,
     losat,
     losatCacheInfo,
+    linearReorderNotice,
     circularRecordList,
     paletteNames,
     selectedPalette,
@@ -501,6 +502,109 @@ export const createAppSetup = () => {
     adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...defaults);
   };
 
+  const formatLinearReorderCount = (count, label) => {
+    const numeric = Number(count);
+    return `${numeric} ${label}${numeric === 1 ? '' : 's'}`;
+  };
+
+  const buildLinearReorderNotice = ({ clearedBlastSlots = 0, clearedLosatNames = 0, actionLabel = 'Reordering' } = {}) => {
+    const parts = [];
+    if (clearedBlastSlots > 0) {
+      parts.push(formatLinearReorderCount(clearedBlastSlots, 'BLAST TSV slot'));
+    }
+    if (clearedLosatNames > 0) {
+      parts.push(formatLinearReorderCount(clearedLosatNames, 'LOSAT filename'));
+    }
+    if (parts.length === 0) return '';
+    return `${actionLabel} cleared ${parts.join(' and ')} because adjacent pairs changed.`;
+  };
+
+  const applyLinearSeqMutation = (items, { actionLabel = 'Updating sequences' } = {}) => {
+    const { linearSeqs: next, clearedBlastSlots, clearedLosatNames } = reconcileLinearSeqPairData(Array.from(linearSeqs), items);
+    linearSeqs.splice(0, linearSeqs.length, ...next);
+    losatCacheInfo.value = [];
+    linearReorderNotice.value = buildLinearReorderNotice({ clearedBlastSlots, clearedLosatNames, actionLabel });
+  };
+
+  const addLinearSeq = () => {
+    applyLinearSeqMutation([...linearSeqs, createLinearSeq()], { actionLabel: 'Adding a sequence' });
+  };
+
+  const removeLinearSeqAt = (index) => {
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= linearSeqs.length) return;
+    const current = Array.from(linearSeqs);
+    const next = current.filter((_, currentIndex) => currentIndex !== idx);
+    applyLinearSeqMutation(next, { actionLabel: 'Removing a sequence' });
+  };
+
+  const removeLastLinearSeq = () => {
+    if (linearSeqs.length <= 1) return;
+    removeLinearSeqAt(linearSeqs.length - 1);
+  };
+
+  const setLinearSeqPrimaryFile = (index, field, value) => {
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= linearSeqs.length) return;
+    if (!['gb', 'gff', 'fasta'].includes(field)) return;
+
+    const nextValue = value ?? null;
+    const seq = linearSeqs[idx];
+
+    if (field === 'gb') {
+      if (!nextValue) {
+        removeLinearSeqAt(idx);
+        return;
+      }
+      seq.gb = nextValue;
+      losatCacheInfo.value = [];
+      linearReorderNotice.value = '';
+      return;
+    }
+
+    const otherField = field === 'gff' ? 'fasta' : 'gff';
+    if (!nextValue && !seq[otherField]) {
+      removeLinearSeqAt(idx);
+      return;
+    }
+
+    seq[field] = nextValue;
+    losatCacheInfo.value = [];
+    linearReorderNotice.value = '';
+  };
+
+  const canMoveLinearSeqUp = (index) => {
+    const idx = Number(index);
+    return Number.isInteger(idx) && idx > 0 && idx < linearSeqs.length;
+  };
+
+  const canMoveLinearSeqDown = (index) => {
+    const idx = Number(index);
+    return Number.isInteger(idx) && idx >= 0 && idx < linearSeqs.length - 1;
+  };
+
+  const reorderLinearSeqs = (fromIndex, toIndex) => {
+    const from = Number(fromIndex);
+    const to = Number(toIndex);
+    if (!Number.isInteger(from) || !Number.isInteger(to)) return;
+    if (from < 0 || to < 0 || from >= linearSeqs.length || to >= linearSeqs.length || from === to) return;
+
+    const current = Array.from(linearSeqs);
+    const [moved] = current.splice(from, 1);
+    current.splice(to, 0, moved);
+    applyLinearSeqMutation(current, { actionLabel: 'Reordering' });
+  };
+
+  const moveLinearSeqUp = (index) => {
+    if (!canMoveLinearSeqUp(index)) return;
+    reorderLinearSeqs(index, Number(index) - 1);
+  };
+
+  const moveLinearSeqDown = (index) => {
+    if (!canMoveLinearSeqDown(index)) return;
+    reorderLinearSeqs(index, Number(index) + 1);
+  };
+
   return {
     pyodideReady,
     processing,
@@ -529,6 +633,14 @@ export const createAppSetup = () => {
     losatProgram,
     files,
     linearSeqs,
+    linearReorderNotice,
+    addLinearSeq,
+    removeLastLinearSeq,
+    setLinearSeqPrimaryFile,
+    canMoveLinearSeqUp,
+    canMoveLinearSeqDown,
+    moveLinearSeqUp,
+    moveLinearSeqDown,
     form,
     adv,
     losat,

@@ -209,14 +209,50 @@
                                     <p class="text-[10px] text-slate-500 mt-1">Cached results are reused when inputs and settings match.</p>
                                 </div>
                         </div>
-                        <div v-for="(seq, idx) in linearSeqs" :key="idx" class="p-3 bg-slate-50 rounded-lg border border-slate-200 relative group text-sm transition-all hover:border-blue-300">
-                            <div class="absolute top-2 right-2 text-[10px] font-bold text-white bg-slate-400 px-1.5 py-0.5 rounded-full">#{{ idx + 1 }}</div>
+                        <div v-if="linearReorderNotice" class="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 flex items-start gap-1.5">
+                            <i class="ph ph-warning-circle text-sm mt-0.5"></i>
+                            <span>{{ linearReorderNotice }}</span>
+                        </div>
+                        <div v-for="(seq, idx) in linearSeqs" :key="seq.uid" class="p-3 bg-slate-50 rounded-lg border border-slate-200 group text-sm transition-all hover:border-blue-300">
+                            <div class="mb-2 flex items-center justify-between gap-2">
+                                <div class="text-[10px] font-bold text-white bg-slate-400 px-1.5 py-0.5 rounded-full shrink-0">#{{ idx + 1 }}</div>
+                                <div class="flex items-center gap-1 shrink-0">
+                                    <button
+                                        type="button"
+                                        class="btn btn-secondary text-[10px] py-0.5 px-1.5"
+                                        @click="moveLinearSeqUp(idx)"
+                                        :disabled="!canMoveLinearSeqUp(idx)"
+                                    >
+                                        Up
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-secondary text-[10px] py-0.5 px-1.5"
+                                        @click="moveLinearSeqDown(idx)"
+                                        :disabled="!canMoveLinearSeqDown(idx)"
+                                    >
+                                        Down
+                                    </button>
+                                </div>
+                            </div>
                             <div v-if="lInputType === 'gb'" class="space-y-2">
-                                <file-uploader label="GenBank File" v-model="seq.gb"></file-uploader>
+                                <file-uploader
+                                    label="GenBank File"
+                                    :model-value="seq.gb"
+                                    @update:model-value="setLinearSeqPrimaryFile(idx, 'gb', $event)"
+                                ></file-uploader>
                             </div>
                             <div v-else class="space-y-2 mb-2">
-                                <file-uploader label="GFF3" v-model="seq.gff"></file-uploader>
-                                <file-uploader label="FASTA" v-model="seq.fasta"></file-uploader>
+                                <file-uploader
+                                    label="GFF3"
+                                    :model-value="seq.gff"
+                                    @update:model-value="setLinearSeqPrimaryFile(idx, 'gff', $event)"
+                                ></file-uploader>
+                                <file-uploader
+                                    label="FASTA"
+                                    :model-value="seq.fasta"
+                                    @update:model-value="setLinearSeqPrimaryFile(idx, 'fasta', $event)"
+                                ></file-uploader>
                             </div>
                             <div class="mt-2">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1">Definition (optional)</div>
@@ -272,8 +308,8 @@
                             </div>
                         </div>
                         <div class="flex gap-2">
-                            <button @click="linearSeqs.push({gb:null, gff:null, fasta:null, blast:null, losat_gencode: 1, losat_filename: '', definition: '', region_record_id: '', region_start: null, region_end: null, region_reverse: false})" class="btn btn-secondary text-xs w-full"><i class="ph ph-plus"></i> Add Seq</button>
-                            <button v-if="linearSeqs.length > 1" @click="linearSeqs.pop()" class="btn btn-danger text-xs w-full"><i class="ph ph-minus"></i> Remove</button>
+                            <button @click="addLinearSeq()" class="btn btn-secondary text-xs w-full"><i class="ph ph-plus"></i> Add Seq</button>
+                            <button v-if="linearSeqs.length > 1" @click="removeLastLinearSeq()" class="btn btn-danger text-xs w-full"><i class="ph ph-minus"></i> Remove</button>
                         </div>
                     </div>
                 </div>

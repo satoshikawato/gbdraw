@@ -70,6 +70,7 @@ export const setupWatchers = ({
     manualWhitelist,
     manualBlacklist,
     linearSeqs,
+    linearReorderNotice,
     autoLabelReflowEnabled,
     labelReflowRequestSeq,
     labelReflowRequestReason,
@@ -347,6 +348,7 @@ export const setupWatchers = ({
       globalLabelModeDialog.featureType = '';
       globalLabelModeDialog.resolve = null;
       showFeaturePanel.value = false;
+      linearReorderNotice.value = '';
     }
   );
 
