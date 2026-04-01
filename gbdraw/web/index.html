@@ -1420,6 +1420,67 @@
                         </div>
                     </div>
 
+                    <!-- Legend Rename Dialog -->
+                    <div v-if="legendRenameDialog.show"
+                         class="fixed inset-0 bg-black/50 z-[65] flex items-center justify-center">
+                        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">
+                                {{ legendRenameDialog.mode === 'scope' ? 'Legend Name Scope' : 'Legend Name Conflict' }}
+                            </h3>
+                            <p v-if="legendRenameDialog.mode === 'scope'" class="text-sm text-slate-600 mb-4">
+                                Legend item "<span class="font-bold text-blue-600">{{ legendRenameDialog.oldCaption }}</span>" is currently shared by
+                                {{ legendRenameDialog.siblingCount + 1 }} features.
+                                <br>Apply the rename to "<span class="font-bold text-emerald-600">{{ legendRenameDialog.newCaption }}</span>" for this feature only, or for all current uses?
+                            </p>
+                            <p v-else class="text-sm text-slate-600 mb-4">
+                                "<span class="font-bold text-blue-600">{{ legendRenameDialog.newCaption }}</span>" already exists with a different color.
+                                <br>Existing color:
+                                <span class="inline-flex items-center gap-2 font-mono text-slate-700">
+                                    <span class="w-4 h-4 rounded border border-slate-300 inline-block"
+                                          :style="{ backgroundColor: legendRenameDialog.targetColor }"></span>
+                                    {{ legendRenameDialog.targetColor }}
+                                </span>
+                                <br>Current color:
+                                <span class="inline-flex items-center gap-2 font-mono text-slate-700">
+                                    <span class="w-4 h-4 rounded border border-slate-300 inline-block"
+                                          :style="{ backgroundColor: legendRenameDialog.currentColor }"></span>
+                                    {{ legendRenameDialog.currentColor }}
+                                </span>
+                            </p>
+
+                            <div v-if="legendRenameDialog.mode === 'scope'" class="flex flex-col gap-2">
+                                <button @click="handleLegendRenameChoice('single')"
+                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-user text-lg"></i>
+                                    <span>This feature only</span>
+                                </button>
+                                <button @click="handleLegendRenameChoice('group')"
+                                        class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-users-three text-lg"></i>
+                                    <span>All current "{{ legendRenameDialog.oldCaption }}"</span>
+                                </button>
+                            </div>
+
+                            <div v-else class="flex flex-col gap-2">
+                                <button @click="handleLegendRenameChoice('merge')"
+                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-arrows-merge text-lg"></i>
+                                    <span>Merge into existing "{{ legendRenameDialog.targetCaption }}" and adopt its color</span>
+                                </button>
+                                <button @click="handleLegendRenameChoice('suffix')"
+                                        class="w-full px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
+                                    <i class="ph ph-text-t text-lg"></i>
+                                    <span>Keep current color and add a suffix</span>
+                                </button>
+                            </div>
+
+                            <button @click="handleLegendRenameChoice('cancel')"
+                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Reset Color Dialog -->
                     <div v-if="resetColorDialog.show"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
@@ -1544,7 +1605,7 @@
                                      :title="entry.color"></div>
                                 <input type="text"
                                        :value="entry.caption"
-                                       @change="updateLegendEntryCaption(idx, $event.target.value)"
+                                       @change="renameLegendEntry(idx, $event.target.value)"
                                        class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0">
                                 <!-- Expand/Collapse stroke options -->
                                 <button @click="entry.showStroke = !entry.showStroke"

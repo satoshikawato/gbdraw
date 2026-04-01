@@ -10,6 +10,7 @@ export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions
   const featureSvgActions = createFeatureSvgActions({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
+    getEffectiveLegendCaption: ruleActions.getEffectiveLegendCaption,
     onFeaturePopupOpened: labelActions.syncClickedFeatureLabelState
   });
   const colorActions = createFeatureColorActions({
@@ -47,7 +48,9 @@ export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions
     updateClickedFeatureColor: colorActions.updateClickedFeatureColor,
     handleColorScopeChoice: colorActions.handleColorScopeChoice,
     handleLegendNameCommit: colorActions.handleLegendNameCommit,
+    handleLegendRenameChoice: colorActions.handleLegendRenameChoice,
     selectLegendNameOption: colorActions.selectLegendNameOption,
+    renameLegendEntry: colorActions.renameLegendEntry,
     handleResetColorChoice: colorActions.handleResetColorChoice,
     resetClickedFeatureFillColor: colorActions.resetClickedFeatureFillColor,
     updateClickedFeatureStroke: colorActions.updateClickedFeatureStroke,

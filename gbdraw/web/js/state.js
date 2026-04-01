@@ -335,6 +335,18 @@ const resetColorDialog = reactive({
   siblingCount: 0
 });
 
+const legendRenameDialog = reactive({
+  show: false,
+  mode: 'scope', // 'scope' | 'target'
+  oldCaption: '',
+  newCaption: '',
+  targetCaption: '',
+  targetColor: '',
+  currentColor: '',
+  siblingCount: 0,
+  pendingRequest: null
+});
+
 // Label text scope dialog state
 const labelTextScopeDialog = reactive({
   show: false,
@@ -617,6 +629,7 @@ export const state = {
   clickedLabelPos,
   colorScopeDialog,
   resetColorDialog,
+  legendRenameDialog,
   labelTextScopeDialog,
   globalLabelModeDialog,
   sidebarWidth,
