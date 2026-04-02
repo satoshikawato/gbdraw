@@ -256,7 +256,8 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT] [-n NT] [-w WINDOW]
               [-s STEP] [--separate_strands] [--show_gc] [--show_skew]
               [--align_center] [--evalue EVALUE] [--bitscore BITSCORE]
-              [--identity IDENTITY] [-k FEATURES] [--feature_shape TYPE=SHAPE]
+              [--identity IDENTITY] [--alignment_length ALIGNMENT_LENGTH]
+              [-k FEATURES] [--feature_shape TYPE=SHAPE]
               [--block_stroke_color BLOCK_STROKE_COLOR]
               [--block_stroke_width BLOCK_STROKE_WIDTH]
               [--axis_stroke_color AXIS_STROKE_COLOR]
@@ -324,6 +325,8 @@ options:
   --evalue EVALUE       evalue threshold (default=1e-2)
   --bitscore BITSCORE   bitscore threshold (default=50)
   --identity IDENTITY   identity threshold (default=0)
+  --alignment_length ALIGNMENT_LENGTH
+                        minimum BLAST alignment length threshold (default=0)
   -k, --features FEATURES
                         Comma-separated list of feature keys to draw (default:
                         CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)

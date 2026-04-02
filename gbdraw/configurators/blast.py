@@ -13,12 +13,13 @@ class BlastMatchConfigurator:
     Configurator for BLAST match visualization parameters.
 
     Manages the settings for visualizing BLAST match results, such as thresholds for e-value, bitscore,
-    and identity, along with a dictionary of sequence lengths.
+    identity, and alignment length, along with a dictionary of sequence lengths.
 
     Attributes:
         evalue (float): E-value threshold for filtering BLAST matches.
         bitscore (float): Bitscore threshold for filtering BLAST matches.
         identity (float): Identity percentage threshold for filtering BLAST matches.
+        alignment_length (int): Minimum alignment length threshold for filtering BLAST matches.
         sequence_length_dict (Dict[str, int]): Dictionary containing the length of each sequence.
     """
 
@@ -27,6 +28,7 @@ class BlastMatchConfigurator:
         evalue: float,
         bitscore: float,
         identity: float,
+        alignment_length: int,
         sequence_length_dict: Dict[str, int],
         config_dict: Dict,
         default_colors_df: DataFrame,
@@ -39,12 +41,14 @@ class BlastMatchConfigurator:
             evalue (float): E-value threshold for BLAST matches.
             bitscore (float): Bitscore threshold for BLAST matches.
             identity (float): Identity percentage threshold for BLAST matches.
+            alignment_length (int): Minimum alignment length threshold for BLAST matches.
             sequence_length_dict (Dict[str, int]): Lengths of the sequences involved in BLAST matches.
         """
 
         self.evalue: float = evalue
         self.bitscore: float = bitscore
         self.identity: float = identity
+        self.alignment_length: int = alignment_length
         self.sequence_length_dict: dict = sequence_length_dict
         self.min_color: str = default_colors_df[default_colors_df["feature_type"] == "pairwise_match_min"][
             "color"

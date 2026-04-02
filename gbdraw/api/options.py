@@ -67,6 +67,7 @@ class DiagramOptions:
     evalue: float = 1e-5
     bitscore: float = 50.0
     identity: float = 70.0
+    alignment_length: int = 0
 
 
 __all__ = [

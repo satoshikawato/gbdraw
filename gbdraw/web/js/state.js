@@ -305,6 +305,7 @@ const adv = reactive({
   min_bitscore: 50,
   evalue: '1e-2',
   identity: 0,
+  alignment_length: 0,
   scale_interval: null,
   scale_font_size: null,
   scale_stroke_width: null,

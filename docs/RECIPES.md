@@ -178,6 +178,7 @@ gbdraw linear \
   --evalue 1e-99 \
   --bitscore 5000 \
   --identity 90 \
+  --alignment_length 1000 \
   -o filtered \
   -f svg
 ```

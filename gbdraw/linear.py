@@ -203,6 +203,11 @@ def _get_args(args) -> argparse.Namespace:
         type=float,
         default="0")
     parser.add_argument(
+        '--alignment_length',
+        help='minimum BLAST alignment length threshold (default=0)',
+        type=int,
+        default=0)
+    parser.add_argument(
         '-k',
         '--features',
         help='Comma-separated list of feature keys to draw (default: CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)',
@@ -499,6 +504,7 @@ def linear_main(cmd_args) -> None:
     show_skew: bool = args.show_skew
     bitscore: float = args.bitscore
     identity: float = args.identity
+    alignment_length: int = args.alignment_length
     show_labels: str = args.show_labels
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
@@ -526,6 +532,8 @@ def linear_main(cmd_args) -> None:
     legend_box_size: Optional[float] = args.legend_box_size
     legend_font_size: Optional[float] = args.legend_font_size
     normalize_length = args.normalize_length
+    if alignment_length < 0:
+        raise ValidationError("alignment_length must be >= 0")
     if blast_files:
         load_comparison = True
     else:
@@ -726,6 +734,7 @@ def linear_main(cmd_args) -> None:
         evalue=evalue,
         bitscore=bitscore,
         identity=identity,
+        alignment_length=alignment_length,
         cfg=cfg,
     )
     save_figure(canvas, out_formats)
