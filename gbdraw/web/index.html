@@ -880,15 +880,28 @@
                                     <div class="pt-1 border-t border-slate-200">
                                         <label class="text-[9px] font-bold block mb-1">SCALE / RULER</label>
                                         <div class="grid grid-cols-3 gap-1">
-                                            <input type="number" v-model.number="adv.scale_interval" placeholder="Interval" class="form-input px-1 py-0.5 text-xs" title="Manual tick interval">
-                                            <input type="number" v-model.number="adv.scale_font_size" placeholder="Ruler Label Font" class="form-input px-1 py-0.5 text-xs" title="Ruler label font size">
-                                            <input type="number" v-model.number="adv.scale_stroke_width" placeholder="Width" class="form-input px-1 py-0.5 text-xs" title="Scale bar width">
+                                            <div>
+                                                <label class="text-[9px] block">Interval <help-tip text="Manual tick interval for Ruler scale style in bp. Leave blank to calculate automatically."></help-tip></label>
+                                                <input type="number" v-model.number="adv.scale_interval" placeholder="Interval" class="form-input px-1 py-0.5 text-xs" title="Manual tick interval">
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] block">Label Font <help-tip text="Font size for ruler labels. Leave blank to use the default size."></help-tip></label>
+                                                <input type="number" v-model.number="adv.scale_font_size" placeholder="Ruler Label Font" class="form-input px-1 py-0.5 text-xs" title="Ruler label font size">
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] block">Line Width <help-tip text="Line width of the scale bar or ruler."></help-tip></label>
+                                                <input type="number" v-model.number="adv.scale_stroke_width" placeholder="Width" class="form-input px-1 py-0.5 text-xs" title="Scale bar width">
+                                            </div>
                                         </div>
-                                        <div class="mt-1 flex items-center gap-2">
-                                            <label class="text-[9px]">Scale Line:</label>
-                                            <input type="color" v-model="adv.scale_stroke_color" class="h-5 w-8 p-0 border rounded" title="Scale bar/ruler line color">
-                                            <label class="text-[9px]">Ruler Label:</label>
-                                            <input type="color" v-model="adv.ruler_label_color" class="h-5 w-8 p-0 border rounded" title="Ruler label color">
+                                        <div class="mt-1 grid grid-cols-2 gap-1">
+                                            <div>
+                                                <label class="text-[9px] block">Scale Line <help-tip text="Color of the scale bar or ruler line."></help-tip></label>
+                                                <input type="color" v-model="adv.scale_stroke_color" class="h-5 w-full p-0 border rounded" title="Scale bar/ruler line color">
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] block">Ruler Label <help-tip text="Color of ruler tick labels."></help-tip></label>
+                                                <input type="color" v-model="adv.ruler_label_color" class="h-5 w-full p-0 border rounded" title="Ruler label color">
+                                            </div>
                                         </div>
                                     </div>
 
