@@ -625,8 +625,8 @@
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <template v-if="mode === 'linear'">
                                 <div>
-                                    <label class="input-label">Track Layout <help-tip text="Set linear feature placement: Above keeps tracks above the axis, Middle keeps legacy placement, Below places tracks below the axis."></help-tip></label>
-                                    <select v-model="form.linear_track_layout" class="form-input">
+                                    <label class="input-label text-[10px] mb-1">Track Layout <help-tip text="Set linear feature placement: Above keeps tracks above the axis, Middle keeps legacy placement, Below places tracks below the axis."></help-tip></label>
+                                    <select v-model="form.linear_track_layout" class="form-input text-xs py-1">
                                         <option value="above">Above</option>
                                         <option value="middle">Middle</option>
                                         <option value="below">Below</option>
@@ -662,8 +662,8 @@
 
                             <template v-else>
                                 <div>
-                                    <label class="input-label">Track Layout <help-tip text="Choose how features are displayed. 'Tuckin' is default and compact. 'Middle' aligns to center, 'Spreadout' separates them."></help-tip></label>
-                                    <select v-model="form.track_type" class="form-input">
+                                    <label class="input-label text-[10px] mb-1">Track Layout <help-tip text="Choose how features are displayed. 'Tuckin' is default and compact. 'Middle' aligns to center, 'Spreadout' separates them."></help-tip></label>
+                                    <select v-model="form.track_type" class="form-input text-xs py-1">
                                         <option value="tuckin">Tuckin</option>
                                         <option value="middle">Middle</option>
                                         <option value="spreadout">Spreadout</option>
@@ -774,8 +774,8 @@
                         <summary><i class="ph ph-textbox"></i> Text &amp; Legend <help-tip text="Adjust plot title, definition text, and legend settings."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
-                                <label class="input-label">Legend Position <help-tip text="Position of the legend. 'None' hides the legend."></help-tip></label>
-                                <select v-model="form.legend" class="form-input">
+                                <label class="input-label text-[10px] mb-1">Legend Position <help-tip text="Position of the legend. 'None' hides the legend."></help-tip></label>
+                                <select v-model="form.legend" class="form-input text-xs py-1">
                                     <option value="right">Right</option>
                                     <option value="left">Left</option>
                                     <option value="top">Top</option>
@@ -788,11 +788,11 @@
 
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
-                                    <label class="input-label">
+                                    <label class="input-label text-[10px] mb-1">
                                         Plot Title Position
                                         <help-tip :text="mode === 'circular' ? 'Placement of the shared circular plot title. Per-record definitions stay centered.' : 'Placement of the linear plot title.'"></help-tip>
                                     </label>
-                                    <select v-model="adv.plot_title_position" class="form-input">
+                                    <select v-model="adv.plot_title_position" class="form-input text-xs py-1">
                                         <option v-if="mode === 'circular'" value="none">None (Default)</option>
                                         <option v-if="mode === 'linear'" value="center">Center</option>
                                         <option value="top">Top</option>
@@ -800,7 +800,7 @@
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="input-label">
+                                    <label class="input-label text-[10px] mb-0">
                                         Plot Title Font Size
                                         <help-tip :text="mode === 'circular' ? 'Font size for the circular shared plot title. Only used when the title position is Top or Bottom.' : 'Font size for the linear plot title.'"></help-tip>
                                     </label>
@@ -808,12 +808,12 @@
                                         type="number"
                                         :value="adv.plot_title_font_size ?? ''"
                                         @input="adv.plot_title_font_size = $event.target.value === '' ? null : Number($event.target.value)"
-                                        class="form-input"
+                                        class="form-input form-input-compact"
                                         placeholder="Auto (32)"
                                     >
                                 </div>
                                 <div>
-                                    <label class="input-label">
+                                    <label class="input-label text-[10px] mb-0">
                                         Definition Font Size
                                         <help-tip text="Font size for the definition text (species/strain in circular, record name in linear)."></help-tip>
                                     </label>
@@ -821,7 +821,7 @@
                                         type="number"
                                         :value="adv.def_font_size ?? ''"
                                         @input="adv.def_font_size = $event.target.value === '' ? null : Number($event.target.value)"
-                                        class="form-input"
+                                        class="form-input form-input-compact"
                                         placeholder="Auto"
                                     >
                                 </div>
@@ -932,8 +932,8 @@
                         <summary><i class="ph ph-ruler"></i> Scale <help-tip text="Adjust the scale bar or ruler style in linear mode."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
-                                <label class="input-label">Scale Style <help-tip text="'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels."></help-tip></label>
-                                <select v-model="form.scale_style" class="form-input">
+                                <label class="input-label text-[10px] mb-1">Scale Style <help-tip text="'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels."></help-tip></label>
+                                <select v-model="form.scale_style" class="form-input text-xs py-1">
                                     <option value="bar">Bar (Simple)</option>
                                     <option value="ruler">Ruler (Ticks)</option>
                                 </select>
