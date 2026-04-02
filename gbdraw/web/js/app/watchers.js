@@ -45,6 +45,8 @@ export const setupWatchers = ({
     linearBaseConfig,
     circularLegendPosition,
     linearLegendPosition,
+    circularPlotTitlePosition,
+    linearPlotTitlePosition,
     suppressCircularMultiRecordDefaults,
     featureRecordIds,
     selectedFeatureRecordIdx,
@@ -97,6 +99,16 @@ export const setupWatchers = ({
   } = legendLayout;
   const { scheduleDefinitionUpdate } = resultsManager;
 
+  const normalizeCircularPlotTitlePosition = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    return ['none', 'top', 'bottom'].includes(normalized) ? normalized : 'none';
+  };
+
+  const normalizeLinearPlotTitlePosition = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'bottom';
+  };
+
   const applyCircularMultiRecordSmartDefaults = () => {
     if (mode.value !== 'circular' || !form.multi_record_canvas) return;
 
@@ -107,6 +119,7 @@ export const setupWatchers = ({
 
     if (String(state.adv.plot_title_position || '').trim().toLowerCase() === 'none') {
       state.adv.plot_title_position = 'bottom';
+      circularPlotTitlePosition.value = 'bottom';
     }
   };
 
@@ -322,14 +335,18 @@ export const setupWatchers = ({
     (newMode, oldMode) => {
       if (oldMode === 'circular') {
         circularLegendPosition.value = form.legend;
+        circularPlotTitlePosition.value = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
       } else if (oldMode === 'linear') {
         linearLegendPosition.value = form.legend;
+        linearPlotTitlePosition.value = normalizeLinearPlotTitlePosition(state.adv.plot_title_position);
       }
 
       if (newMode === 'circular') {
         form.legend = circularLegendPosition.value;
+        state.adv.plot_title_position = circularPlotTitlePosition.value;
       } else if (newMode === 'linear') {
         form.legend = linearLegendPosition.value;
+        state.adv.plot_title_position = linearPlotTitlePosition.value;
       }
 
       if (typeof resetPreviewViewport === 'function') {

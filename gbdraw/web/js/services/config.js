@@ -1,7 +1,7 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
-const SESSION_VERSION = 5;
+const SESSION_VERSION = 6;
 
 const safeDeepMerge = (target, source) => {
   if (!source || typeof source !== 'object') return;
@@ -68,6 +68,16 @@ const buildSessionFilename = (title) => {
   return `${safe}.gbdraw-session.json`;
 };
 
+const normalizeCircularPlotTitlePosition = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['none', 'top', 'bottom'].includes(normalized) ? normalized : 'none';
+};
+
+const normalizeLinearPlotTitlePosition = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'bottom';
+};
+
 const normalizeFeatureShape = (value) => (String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle');
 
 const normalizeFeatureShapes = (featureShapes) => {
@@ -104,6 +114,44 @@ const shouldSuppressCircularMultiRecordDefaults = (incomingForm) => {
   if (!incomingForm || typeof incomingForm !== 'object' || Array.isArray(incomingForm)) return false;
   if (!Object.prototype.hasOwnProperty.call(incomingForm, 'multi_record_canvas')) return false;
   return state.form.multi_record_canvas === false && incomingForm.multi_record_canvas === true;
+};
+
+const syncActiveModePlotTitlePosition = () => {
+  if (state.mode.value === 'linear') {
+    state.linearPlotTitlePosition.value = normalizeLinearPlotTitlePosition(state.adv.plot_title_position);
+    state.adv.plot_title_position = state.linearPlotTitlePosition.value;
+    return;
+  }
+
+  state.circularPlotTitlePosition.value = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
+  state.adv.plot_title_position = state.circularPlotTitlePosition.value;
+};
+
+const restoreSessionPlotTitlePositions = (ui = {}) => {
+  const activeMode = state.mode.value === 'linear' ? 'linear' : 'circular';
+  const activePosition =
+    activeMode === 'linear'
+      ? normalizeLinearPlotTitlePosition(state.adv.plot_title_position)
+      : normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
+  const hasCircularPlotTitlePosition =
+    typeof ui.circularPlotTitlePosition === 'string' && ui.circularPlotTitlePosition.trim() !== '';
+  const hasLinearPlotTitlePosition =
+    typeof ui.linearPlotTitlePosition === 'string' && ui.linearPlotTitlePosition.trim() !== '';
+
+  state.circularPlotTitlePosition.value = hasCircularPlotTitlePosition
+    ? normalizeCircularPlotTitlePosition(ui.circularPlotTitlePosition)
+    : activeMode === 'circular'
+      ? activePosition
+      : 'none';
+  state.linearPlotTitlePosition.value = hasLinearPlotTitlePosition
+    ? normalizeLinearPlotTitlePosition(ui.linearPlotTitlePosition)
+    : activeMode === 'linear'
+      ? activePosition
+      : 'bottom';
+  state.adv.plot_title_position =
+    activeMode === 'linear'
+      ? state.linearPlotTitlePosition.value
+      : state.circularPlotTitlePosition.value;
 };
 
 const applyConfigData = (data) => {
@@ -179,16 +227,12 @@ const applyConfigData = (data) => {
       return left.__index - right.__index;
     })
     .map(({ __index, ...entry }) => entry);
-  const normalizedPlotTitlePosition = String(state.adv.plot_title_position || '').trim().toLowerCase();
   if (state.mode.value === 'linear') {
-    state.adv.plot_title_position = ['center', 'top', 'bottom'].includes(normalizedPlotTitlePosition)
-      ? normalizedPlotTitlePosition
-      : 'bottom';
+    state.adv.plot_title_position = normalizeLinearPlotTitlePosition(state.adv.plot_title_position);
   } else {
-    state.adv.plot_title_position = ['none', 'top', 'bottom'].includes(normalizedPlotTitlePosition)
-      ? normalizedPlotTitlePosition
-      : 'none';
+    state.adv.plot_title_position = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
   }
+  syncActiveModePlotTitlePosition();
   const rawPlotTitleFontSize = state.adv.plot_title_font_size;
   if (
     rawPlotTitleFontSize === null ||
@@ -442,6 +486,13 @@ export const exportSession = async (titleOverride = null) => {
   const isLinear = state.mode.value === 'linear';
   const savedCircularLegend = isLinear ? state.circularLegendPosition.value : currentLegend;
   const savedLinearLegend = isLinear ? currentLegend : state.linearLegendPosition.value;
+  const currentPlotTitlePosition = state.adv.plot_title_position;
+  const savedCircularPlotTitlePosition = isLinear
+    ? normalizeCircularPlotTitlePosition(state.circularPlotTitlePosition.value)
+    : normalizeCircularPlotTitlePosition(currentPlotTitlePosition);
+  const savedLinearPlotTitlePosition = isLinear
+    ? normalizeLinearPlotTitlePosition(currentPlotTitlePosition)
+    : normalizeLinearPlotTitlePosition(state.linearPlotTitlePosition.value);
   const resolvedTitle =
     typeof titleOverride === 'string'
       ? titleOverride.trim()
@@ -494,6 +545,8 @@ export const exportSession = async (titleOverride = null) => {
       legend: currentLegend,
       circularLegendPosition: savedCircularLegend,
       linearLegendPosition: savedLinearLegend,
+      circularPlotTitlePosition: savedCircularPlotTitlePosition,
+      linearPlotTitlePosition: savedLinearPlotTitlePosition,
       featurePanelTab: state.featurePanelTab.value,
       cInputType: state.cInputType.value,
       lInputType: state.lInputType.value,
@@ -601,6 +654,7 @@ export const importSession = async (e) => {
       state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.config.form);
       applyConfigData(data.config);
     }
+    restoreSessionPlotTitlePositions(ui);
 
     const { collapsedLinearSeqs } = applyFiles(data.files);
     applyLosatCache(data.losatCache?.entries);
