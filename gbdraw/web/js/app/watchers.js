@@ -110,6 +110,18 @@ export const setupWatchers = ({
     }
   };
 
+  const hasLabelOverrides = () =>
+    Object.keys(labelTextFeatureOverrides).length > 0 ||
+    Object.keys(labelTextBulkOverrides).length > 0 ||
+    Object.keys(labelVisibilityOverrides).length > 0;
+
+  const shouldSyncLabelEditor = () =>
+    showFeaturePanel.value ||
+    Boolean(clickedFeature.value) ||
+    labelTextScopeDialog.show ||
+    globalLabelModeDialog.show ||
+    hasLabelOverrides();
+
   watch(
     () => [...manualSpecificRules],
     async (newRules, oldRules) => {
@@ -208,7 +220,9 @@ export const setupWatchers = ({
       setupLegendDrag();
       setupDiagramDrag(isIncrementalEdit);
       attachSvgFeatureHandlers();
-      syncLabelEditor();
+      if (shouldSyncLabelEditor()) {
+        syncLabelEditor();
+      }
 
       if (!isIncrementalEdit) {
         captureBaseConfig();
@@ -456,6 +470,16 @@ export const setupWatchers = ({
       alert('Failed to load blacklist file.');
     }
   });
+
+  watch(
+    () => showFeaturePanel.value,
+    (visible) => {
+      if (!visible) return;
+      nextTick(() => {
+        syncLabelEditor();
+      });
+    }
+  );
 
   watch(() => form.species, scheduleDefinitionUpdate);
   watch(() => form.strain, scheduleDefinitionUpdate);

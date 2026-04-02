@@ -11,7 +11,7 @@ export const createFeatureEditor = ({ state, nextTick, legendActions, svgActions
     state,
     getFeatureColor: ruleActions.getFeatureColor,
     getEffectiveLegendCaption: ruleActions.getEffectiveLegendCaption,
-    onFeaturePopupOpened: labelActions.syncClickedFeatureLabelState
+    onFeaturePopupOpened: labelActions.syncLabelEditor
   });
   const colorActions = createFeatureColorActions({
     state,
