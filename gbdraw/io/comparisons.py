@@ -19,9 +19,13 @@ def load_comparisons(
     evalue_threshold: float = blast_config.evalue
     bitscore_threshold: float = blast_config.bitscore
     identity_threshold: float = blast_config.identity
+    alignment_length_threshold: int = blast_config.alignment_length
     logger.info(
-        "INFO: BLAST output visualization settings: e-value threshold: {}; bitscore threshold: {}; identity threshold: {}".format(
-            evalue_threshold, bitscore_threshold, identity_threshold
+        "INFO: BLAST output visualization settings: e-value threshold: {}; bitscore threshold: {}; identity threshold: {}; alignment length threshold: {}".format(
+            evalue_threshold,
+            bitscore_threshold,
+            identity_threshold,
+            alignment_length_threshold,
         )
     )
     comparison_list: list[DataFrame] = []
@@ -57,6 +61,7 @@ def load_comparisons(
                 (df["evalue"] <= evalue_threshold)
                 & (df["bitscore"] >= bitscore_threshold)
                 & (df["identity"] >= identity_threshold)
+                & (df["alignment_length"] >= alignment_length_threshold)
             ]
             comparison_list.append(df)
         except ValueError as e:  # Catching common exception when parsing comparison files

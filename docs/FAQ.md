@@ -41,7 +41,7 @@ The most common causes are:
 
 1. The BLAST file is not in outfmt 6 or 7
 2. The BLAST file order does not match the genome input order
-3. Filtering thresholds such as `--evalue`, `--bitscore`, or `--identity` are too strict
+3. Filtering thresholds such as `--evalue`, `--bitscore`, `--identity`, or `--alignment_length` are too strict
 
 See [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
 

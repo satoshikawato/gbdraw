@@ -53,6 +53,23 @@ const normalizeMultiRecordRowGapRatio = (value) => {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0.05;
 };
+const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze({
+  bitscore: 50,
+  evalue: '1e-2',
+  identity: 0,
+  alignment_length: 0
+});
+const normalizeBlastThresholdNumber = (value, defaultValue, { integer = false } = {}) => {
+  if (value === null || value === undefined || value === '') return defaultValue;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return defaultValue;
+  if (integer && !Number.isInteger(numeric)) return defaultValue;
+  return numeric;
+};
+const normalizeBlastThresholdText = (value, defaultValue) => {
+  const normalized = String(value ?? '').trim();
+  return normalized === '' ? defaultValue : normalized;
+};
 const normalizeMultiRecordPositions = (value, { maxRow = Number.POSITIVE_INFINITY } = {}) => {
   if (!Array.isArray(value)) return [];
   const deduped = [];
@@ -908,7 +925,30 @@ json.dumps({
         if (form.show_skew) args.push('--show_skew');
         if (form.normalize_length) args.push('--normalize_length');
         if (form.legend !== 'right') args.push('-l', form.legend);
-        args.push('--bitscore', adv.min_bitscore, '--evalue', adv.evalue, '--identity', adv.identity);
+        adv.min_bitscore = normalizeBlastThresholdNumber(
+          adv.min_bitscore,
+          DEFAULT_LINEAR_BLAST_FILTERS.bitscore
+        );
+        adv.evalue = normalizeBlastThresholdText(adv.evalue, DEFAULT_LINEAR_BLAST_FILTERS.evalue);
+        adv.identity = normalizeBlastThresholdNumber(
+          adv.identity,
+          DEFAULT_LINEAR_BLAST_FILTERS.identity
+        );
+        adv.alignment_length = normalizeBlastThresholdNumber(
+          adv.alignment_length,
+          DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
+          { integer: true }
+        );
+        args.push(
+          '--bitscore',
+          adv.min_bitscore,
+          '--evalue',
+          adv.evalue,
+          '--identity',
+          adv.identity,
+          '--alignment_length',
+          adv.alignment_length
+        );
 
         const normalizedPlotTitle = String(form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeLinearPlotTitlePosition(adv.plot_title_position);

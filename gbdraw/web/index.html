@@ -907,10 +907,23 @@
 
                                     <div class="pt-1 border-t border-slate-200">
                                         <label class="text-[9px] font-bold block mb-1">BLAST FILTERS</label>
-                                        <div class="grid grid-cols-3 gap-1">
-                                            <input type="number" v-model.number="adv.min_bitscore" placeholder="Bitscore" class="form-input px-1 text-xs" title="Min bitscore">
-                                            <input type="text" v-model="adv.evalue" placeholder="E-value" class="form-input px-1 text-xs" title="Max E-value">
-                                            <input type="number" v-model.number="adv.identity" placeholder="Ident%" class="form-input px-1 text-xs" title="Min identity %">
+                                        <div class="grid grid-cols-2 gap-1">
+                                            <div>
+                                                <label class="text-[9px] block">Bitscore</label>
+                                                <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? 50 : Number($event.target.value)" placeholder="Bitscore" class="form-input px-1 py-0.5 text-xs" title="Min bitscore">
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] block">E-value</label>
+                                                <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? '1e-2' : String($event.target.value).trim()" placeholder="E-value" class="form-input px-1 py-0.5 text-xs" title="Max E-value">
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] block">Identity %</label>
+                                                <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? 0 : Number($event.target.value)" placeholder="Ident%" class="form-input px-1 py-0.5 text-xs" title="Min identity %">
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] block">Hit length</label>
+                                                <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? 0 : Number($event.target.value)" placeholder="Hit length" class="form-input px-1 py-0.5 text-xs" title="Min hit length (BLAST alignment length)">
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

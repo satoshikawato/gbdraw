@@ -108,9 +108,12 @@ gbdraw linear \
   --separate_strands \
   --evalue 1e-99 \
   --bitscore 5000 \
+  --alignment_length 1000 \
   -o Escherichia_Shigella_multi \
   -f svg
 ```
+
+Use `--alignment_length` when you want to hide very short BLAST hits and keep only longer ribbons.
 
 ![Escherichia_Shigella_multi.svg](../../examples/Escherichia_Shigella_multi.svg)
 

@@ -1095,6 +1095,7 @@ def assemble_linear_diagram_from_records(
     evalue: float = 1e-5,
     bitscore: float = 50.0,
     identity: float = 70.0,
+    alignment_length: int = 0,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Builds and assembles a linear diagram for the given records.
@@ -1109,6 +1110,8 @@ def assemble_linear_diagram_from_records(
     """
     if not records:
         raise ValidationError("records is empty")
+    if alignment_length < 0:
+        raise ValidationError("alignment_length must be >= 0")
     if color_table is None and color_table_file is not None:
         color_table = read_color_table(color_table_file)
     if feature_table is None and feature_table_file is not None:
@@ -1164,6 +1167,7 @@ def assemble_linear_diagram_from_records(
         evalue=evalue,
         bitscore=bitscore,
         identity=identity,
+        alignment_length=alignment_length,
         sequence_length_dict=seq_len_dict,
         config_dict=config_dict,
         default_colors_df=default_colors,
@@ -2183,6 +2187,7 @@ def build_linear_diagram(
         evalue=options.evalue,
         bitscore=options.bitscore,
         identity=options.identity,
+        alignment_length=options.alignment_length,
         cfg=cfg,
     )
 
