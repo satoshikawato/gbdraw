@@ -31,6 +31,15 @@ export const createDiagramDragActions = ({ state }) => {
   let activeDragMode = 'group'; // 'group' | 'record' | 'plot_title'
   let activeDragOriginalTransforms = new Map();
   let activePlotTitleOffsetStart = { x: 0, y: 0 };
+  let diagramDragFrameId = null;
+  let pendingDiagramPointer = null;
+
+  const cancelDiagramDragFrame = () => {
+    if (diagramDragFrameId !== null) {
+      cancelAnimationFrame(diagramDragFrameId);
+      diagramDragFrameId = null;
+    }
+  };
 
   const isMultiRecordCanvasSvg = (svg) => {
     return Array.from(svg.children).some((el) => {
@@ -219,6 +228,8 @@ export const createDiagramDragActions = ({ state }) => {
     if (!group) return;
 
     e.preventDefault();
+    cancelDiagramDragFrame();
+    pendingDiagramPointer = null;
     assignPlotTitleElement(group);
     diagramDragging.value = true;
     plotTitleDragging.value = true;
@@ -229,6 +240,7 @@ export const createDiagramDragActions = ({ state }) => {
     activeDragElements = [group];
     activeDragOriginalTransforms = new Map([[group, parseTransform(group.getAttribute('transform'))]]);
     group.style.opacity = '0.8';
+    group.style.willChange = 'transform';
 
     document.addEventListener('mousemove', onDiagramDrag);
     document.addEventListener('mouseup', endDiagramDrag);
@@ -276,6 +288,8 @@ export const createDiagramDragActions = ({ state }) => {
     }
 
     e.preventDefault();
+    cancelDiagramDragFrame();
+    pendingDiagramPointer = null;
     diagramDragging.value = true;
     plotTitleDragging.value = false;
     diagramDragStart.x = e.clientX;
@@ -293,6 +307,7 @@ export const createDiagramDragActions = ({ state }) => {
         activeDragOriginalTransforms.set(el, original);
       }
       el.style.opacity = '0.8';
+      el.style.willChange = 'transform';
     });
 
     document.addEventListener('mousemove', onDiagramDrag);
@@ -303,12 +318,12 @@ export const createDiagramDragActions = ({ state }) => {
     return activeDragMode === 'plot_title' ? plotTitleDragStart : diagramDragStart;
   };
 
-  const onDiagramDrag = (e) => {
+  const applyDiagramDragPosition = (clientX, clientY) => {
     if (!diagramDragging.value || activeDragElements.length === 0) return;
 
     const dragStart = getActiveDragStart();
-    const deltaX = (e.clientX - dragStart.x) / zoom.value;
-    const deltaY = (e.clientY - dragStart.y) / zoom.value;
+    const deltaX = (clientX - dragStart.x) / zoom.value;
+    const deltaY = (clientY - dragStart.y) / zoom.value;
 
     if (activeDragMode === 'plot_title') {
       plotTitleUserOffset.x = activePlotTitleOffsetStart.x + deltaX;
@@ -329,12 +344,25 @@ export const createDiagramDragActions = ({ state }) => {
     });
   };
 
+  const onDiagramDrag = (e) => {
+    if (!diagramDragging.value || activeDragElements.length === 0) return;
+    pendingDiagramPointer = { x: e.clientX, y: e.clientY };
+    if (diagramDragFrameId !== null) return;
+    diagramDragFrameId = requestAnimationFrame(() => {
+      diagramDragFrameId = null;
+      if (!pendingDiagramPointer) return;
+      applyDiagramDragPosition(pendingDiagramPointer.x, pendingDiagramPointer.y);
+    });
+  };
+
   const endDiagramDrag = (e) => {
     if (!diagramDragging.value) return;
 
     const dragStart = getActiveDragStart();
     const currentX = typeof e?.clientX === 'number' ? e.clientX : dragStart.x;
     const currentY = typeof e?.clientY === 'number' ? e.clientY : dragStart.y;
+    cancelDiagramDragFrame();
+    applyDiagramDragPosition(currentX, currentY);
     const deltaX = (currentX - dragStart.x) / zoom.value;
     const deltaY = (currentY - dragStart.y) / zoom.value;
     if (activeDragMode === 'group') {
@@ -349,11 +377,13 @@ export const createDiagramDragActions = ({ state }) => {
 
     activeDragElements.forEach((el) => {
       el.style.opacity = '1';
+      el.style.willChange = '';
     });
     activeDragElements = [];
     activeDragOriginalTransforms = new Map();
     activeDragMode = 'group';
     activePlotTitleOffsetStart = { x: plotTitleUserOffset.x, y: plotTitleUserOffset.y };
+    pendingDiagramPointer = null;
   };
 
   const resetDiagramPosition = () => {
