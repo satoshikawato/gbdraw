@@ -134,6 +134,9 @@ font_weight = 'normal'
 text_anchor = 'middle'
 dominant_baseline = 'middle'
 interval = 5
+show_replicon = false
+show_accession = true
+show_length = true
 [objects.definition.linear.font_size]
 long = 10
 short = 24
@@ -350,4 +353,3 @@ feature = ["note"]
 
 [png_output]
 dpi = 96
-

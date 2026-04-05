@@ -97,7 +97,7 @@ export const setupWatchers = ({
     repositionForLegendChange,
     setupDiagramDrag
   } = legendLayout;
-  const { scheduleDefinitionUpdate } = resultsManager;
+  const { scheduleDefinitionUpdate, cancelDefinitionUpdate } = resultsManager;
 
   const normalizeCircularPlotTitlePosition = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
@@ -134,6 +134,12 @@ export const setupWatchers = ({
     labelTextScopeDialog.show ||
     globalLabelModeDialog.show ||
     hasLabelOverrides();
+
+  const scheduleCircularDefinitionUpdate = () => {
+    if (mode.value !== 'circular') return;
+    if (generatedMode.value !== mode.value) return;
+    scheduleDefinitionUpdate();
+  };
 
   watch(
     () => [...manualSpecificRules],
@@ -333,6 +339,8 @@ export const setupWatchers = ({
   watch(
     () => mode.value,
     (newMode, oldMode) => {
+      cancelDefinitionUpdate();
+
       if (oldMode === 'circular') {
         circularLegendPosition.value = form.legend;
         circularPlotTitlePosition.value = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
@@ -498,14 +506,13 @@ export const setupWatchers = ({
     }
   );
 
-  watch(() => form.species, scheduleDefinitionUpdate);
-  watch(() => form.strain, scheduleDefinitionUpdate);
-  watch(() => form.plot_title, scheduleDefinitionUpdate);
-  watch(() => state.adv.def_font_size, scheduleDefinitionUpdate);
-  watch(() => state.adv.plot_title_position, scheduleDefinitionUpdate);
-  watch(() => state.adv.plot_title_font_size, scheduleDefinitionUpdate);
-  watch(() => state.adv.keep_full_definition_with_plot_title, scheduleDefinitionUpdate);
-  watch(() => linearSeqs.map((seq) => seq.definition), scheduleDefinitionUpdate);
+  watch(() => form.species, scheduleCircularDefinitionUpdate);
+  watch(() => form.strain, scheduleCircularDefinitionUpdate);
+  watch(() => form.plot_title, scheduleCircularDefinitionUpdate);
+  watch(() => state.adv.def_font_size, scheduleCircularDefinitionUpdate);
+  watch(() => state.adv.plot_title_position, scheduleCircularDefinitionUpdate);
+  watch(() => state.adv.plot_title_font_size, scheduleCircularDefinitionUpdate);
+  watch(() => state.adv.keep_full_definition_with_plot_title, scheduleCircularDefinitionUpdate);
   watch(
     () => [mode.value, cInputType.value, files.c_gb, pyodideReady.value],
     async () => {

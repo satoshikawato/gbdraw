@@ -1,7 +1,7 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
-const SESSION_VERSION = 6;
+const SESSION_VERSION = 7;
 
 const safeDeepMerge = (target, source) => {
   if (!source || typeof source !== 'object') return;
@@ -249,6 +249,9 @@ const applyConfigData = (data) => {
   }
   state.adv.keep_full_definition_with_plot_title =
     state.adv.keep_full_definition_with_plot_title === true;
+  state.adv.linear_show_replicon = state.adv.linear_show_replicon === true;
+  state.adv.linear_show_accession = state.adv.linear_show_accession !== false;
+  state.adv.linear_show_length = state.adv.linear_show_length !== false;
   if (data.losat) safeDeepMerge(state.losat, data.losat);
   if (data.colors) {
     const normalized = {};

@@ -12,6 +12,7 @@ from svgwrite.container import Group
 from ....analysis.gc import calculate_gc_percent
 from ....canvas import CircularCanvasConfigurator
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....core.record_metadata import infer_record_source_metadata
 from ...drawers.circular.definition import DefinitionDrawer
 from ....core.text import parse_mixed_content_text
 
@@ -123,25 +124,11 @@ class DefinitionGroup:
         self.title_y: float = (self.end_y_1 + self.end_y_2) / 2
 
     def find_organism_name(self) -> None:
-        strain_name: str = ""
-        record_name: str = ""
-
-        for feature in self.gb_record.features:
-            if feature.type == "source":
-                if "organism" in feature.qualifiers.keys():
-                    record_name = feature.qualifiers["organism"][0]
-                elif "organism" in self.gb_record.annotations.keys():
-                    record_name = str(self.gb_record.annotations["organism"])
-                if "isolate" in feature.qualifiers.keys():
-                    strain_name = feature.qualifiers["isolate"][0]
-                elif "strain" in feature.qualifiers.keys():
-                    strain_name = feature.qualifiers["strain"][0]
-                if "chromosome" in feature.qualifiers.keys():
-                    self.replicon = f"Chromosome {feature.qualifiers['chromosome'][0]}"
-                elif "plasmid" in feature.qualifiers.keys():
-                    self.replicon = feature.qualifiers["plasmid"][0]
-                if "organelle" in feature.qualifiers.keys():
-                    self.organelle = feature.qualifiers["organelle"][0]
+        metadata = infer_record_source_metadata(self.gb_record)
+        strain_name = metadata.strain
+        record_name = metadata.organism
+        self.replicon = metadata.replicon
+        self.organelle = metadata.organelle
 
         if self.species:
             self.species_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(self.species)

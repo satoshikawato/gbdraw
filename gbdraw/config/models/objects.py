@@ -187,6 +187,9 @@ class ObjectsDefinitionLinearConfig:
     text_anchor: str
     dominant_baseline: str
     interval: int
+    show_replicon: bool
+    show_accession: bool
+    show_length: bool
     font_size: ShortLongFloatConfig
 
     @classmethod
@@ -198,6 +201,9 @@ class ObjectsDefinitionLinearConfig:
             text_anchor=str(d["text_anchor"]),
             dominant_baseline=str(d["dominant_baseline"]),
             interval=int(d["interval"]),
+            show_replicon=bool(d.get("show_replicon", False)),
+            show_accession=bool(d.get("show_accession", True)),
+            show_length=bool(d.get("show_length", True)),
             font_size=ShortLongFloatConfig.from_dict(d["font_size"]),
         )
 
@@ -293,5 +299,4 @@ class ObjectsConfig:
 
 
 __all__ = ["ObjectsConfig"]
-
 

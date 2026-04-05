@@ -255,8 +255,8 @@
                                 ></file-uploader>
                             </div>
                             <div class="mt-2">
-                                <div class="text-[10px] text-slate-500 font-bold mb-1">Definition (optional)</div>
-                                <input type="text" v-model="seq.definition" placeholder="Custom label (e.g., E. coli O157:H7 Sakai)" class="form-input px-1 py-0.5 text-xs">
+                                <div class="text-[10px] text-slate-500 font-bold mb-1">Organism / strain (optional)</div>
+                                <input type="text" v-model="seq.definition" placeholder="e.g., <i>Escherichia coli</i> O157:H7 Sakai" class="form-input px-1 py-0.5 text-xs">
                             </div>
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
@@ -536,7 +536,7 @@
                                 <div>
                                     <label class="input-label text-[10px] mb-0">
                                         Definition Font Size
-                                        <help-tip text="Font size for the definition text (species/strain in circular, record name in linear)."></help-tip>
+                                        <help-tip text="Font size for definition text (species/strain in circular; organism/replicon/accession/length stack in linear)."></help-tip>
                                     </label>
                                     <input
                                         type="number"
@@ -546,6 +546,42 @@
                                         placeholder="Auto"
                                     >
                                 </div>
+                            </div>
+
+                            <div v-if="mode === 'linear'" class="grid grid-cols-1 gap-1.5">
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        v-model="adv.linear_show_replicon"
+                                        class="form-checkbox"
+                                    >
+                                    <span class="inline-flex items-center gap-1">
+                                        Show Replicon
+                                        <help-tip text="Linear only. Adds an inferred replicon line above the accession when source qualifiers include chromosome or plasmid. Default: off."></help-tip>
+                                    </span>
+                                </label>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        v-model="adv.linear_show_accession"
+                                        class="form-checkbox"
+                                    >
+                                    <span class="inline-flex items-center gap-1">
+                                        Show Accession
+                                        <help-tip text="Linear only. Shows the accession line in each record definition. Default: on."></help-tip>
+                                    </span>
+                                </label>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        v-model="adv.linear_show_length"
+                                        class="form-checkbox"
+                                    >
+                                    <span class="inline-flex items-center gap-1">
+                                        Show Length / Coordinates
+                                        <help-tip text="Linear only. Shows bp length, or coordinate span when a region crop is active. Default: on."></help-tip>
+                                    </span>
+                                </label>
                             </div>
 
                             <label

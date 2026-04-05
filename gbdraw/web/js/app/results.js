@@ -5,7 +5,7 @@ import {
   parseTransform
 } from './legend-layout/transform-utils.js';
 
-export const createResultsManager = ({ state, getPyodide, legendLayout }) => {
+export const createResultsManager = ({ state, getPyodide, legendLayout, rerenderLinearDefinitions = null }) => {
   const {
     pyodideReady,
     svgContent,
@@ -24,6 +24,13 @@ export const createResultsManager = ({ state, getPyodide, legendLayout }) => {
   const { clearPlotTitleState, setPlotTitleAutoTransform } = legendLayout;
 
   let definitionUpdateTimeout = null;
+
+  const cancelDefinitionUpdate = () => {
+    if (definitionUpdateTimeout) {
+      clearTimeout(definitionUpdateTimeout);
+      definitionUpdateTimeout = null;
+    }
+  };
 
   const updatePalette = () => {
     const pyodide = getPyodide();
@@ -312,6 +319,11 @@ export const createResultsManager = ({ state, getPyodide, legendLayout }) => {
     }
 
     if (mode.value === 'linear') {
+      if (typeof rerenderLinearDefinitions === 'function') {
+        await rerenderLinearDefinitions('definition-edit');
+        return;
+      }
+
       const plotTitleGroup = svg.getElementById('plot_title');
       const groups = Array.from(svg.querySelectorAll('g[id]'))
         .filter((group) => {
@@ -418,13 +430,17 @@ export const createResultsManager = ({ state, getPyodide, legendLayout }) => {
   };
 
   const scheduleDefinitionUpdate = () => {
-    if (definitionUpdateTimeout) clearTimeout(definitionUpdateTimeout);
-    definitionUpdateTimeout = setTimeout(updateDefinitionText, 500);
+    cancelDefinitionUpdate();
+    definitionUpdateTimeout = setTimeout(() => {
+      definitionUpdateTimeout = null;
+      void updateDefinitionText();
+    }, 500);
   };
 
   return {
     updatePalette,
     resetColors,
-    scheduleDefinitionUpdate
+    scheduleDefinitionUpdate,
+    cancelDefinitionUpdate
   };
 };
