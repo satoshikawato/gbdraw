@@ -218,6 +218,7 @@ export const createRunAnalysis = ({
     generatedLegendPosition,
     generatedMode,
     generatedMultiRecordCanvas,
+    generatedCircularPlotTitlePosition,
     shouldDeferCircularPreviewUpdates,
     extractedFeatures,
     featureRecordIds,
@@ -1349,6 +1350,9 @@ json.dumps({
       generatedLegendPosition.value = form.legend;
       generatedMode.value = mode.value;
       generatedMultiRecordCanvas.value = mode.value === 'circular' ? Boolean(form.multi_record_canvas) : false;
+      if (mode.value === 'circular') {
+        generatedCircularPlotTitlePosition.value = normalizeCircularPlotTitlePosition(adv.plot_title_position);
+      }
 
       extractedFeatures.value = [];
 

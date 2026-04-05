@@ -114,6 +114,10 @@ const circularLegendPosition = ref('left'); // Separate legend position for circ
 const linearLegendPosition = ref('bottom'); // Separate legend position for linear mode
 const circularPlotTitlePosition = ref('none'); // Separate plot title position for circular mode
 const linearPlotTitlePosition = ref('bottom'); // Separate plot title position for linear mode
+const circularSingleRecordLegendPosition = ref('left');
+const circularSingleRecordPlotTitlePosition = ref('none');
+const circularMultiRecordLegendPosition = ref(null);
+const circularMultiRecordPlotTitlePosition = ref(null);
 const suppressCircularMultiRecordDefaults = ref(false);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
@@ -522,11 +526,22 @@ const showCanvasControls = ref(false);
 const generatedLegendPosition = ref('left');
 const generatedMode = ref('circular');
 const generatedMultiRecordCanvas = ref(false);
+const generatedCircularPlotTitlePosition = ref('none');
+const normalizeCircularLegendPosition = (value) => String(value || '').trim().toLowerCase() || 'left';
+const normalizeCircularPlotTitlePosition = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['none', 'top', 'bottom'].includes(normalized) ? normalized : 'none';
+};
 const shouldDeferCircularPreviewUpdates = computed(
   () =>
     generatedMode.value === 'circular' &&
     mode.value === 'circular' &&
-    Boolean(form.multi_record_canvas) !== Boolean(generatedMultiRecordCanvas.value)
+    (
+      Boolean(form.multi_record_canvas) !== Boolean(generatedMultiRecordCanvas.value) ||
+      normalizeCircularLegendPosition(form.legend) !== normalizeCircularLegendPosition(generatedLegendPosition.value) ||
+      normalizeCircularPlotTitlePosition(adv.plot_title_position) !==
+        normalizeCircularPlotTitlePosition(generatedCircularPlotTitlePosition.value)
+    )
 );
 
 // Flag to skip captureBaseConfig when editing SVG (repositioning legend, adding legend entries, etc.)
@@ -689,6 +704,10 @@ export const state = {
   linearLegendPosition,
   circularPlotTitlePosition,
   linearPlotTitlePosition,
+  circularSingleRecordLegendPosition,
+  circularSingleRecordPlotTitlePosition,
+  circularMultiRecordLegendPosition,
+  circularMultiRecordPlotTitlePosition,
   suppressCircularMultiRecordDefaults,
   cInputType,
   lInputType,
@@ -783,6 +802,7 @@ export const state = {
   generatedLegendPosition,
   generatedMode,
   generatedMultiRecordCanvas,
+  generatedCircularPlotTitlePosition,
   shouldDeferCircularPreviewUpdates,
   skipCaptureBaseConfig,
   skipPositionReapply,
