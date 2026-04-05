@@ -28,6 +28,7 @@ setup(
             'data/*.ttf',
             'web/*.whl',
             'web/index.html',
+            'web/open-source-notices.html',
             'web/js/*.js',
             'web/js/app/*.js',
             'web/js/app/*/*.js',

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import http.server
+import re
 import shutil
 import socketserver
 import subprocess
@@ -65,6 +66,20 @@ REQUIRED_UI_FONT_FILES = tuple(
     for family, filenames in UI_FONT_ASSETS.items()
     for filename in filenames
 )
+
+
+def _parse_local_wheel_paths() -> tuple[Path, ...]:
+    config_text = (WEB_ROOT / "js" / "config.js").read_text(encoding="utf-8")
+    match = re.search(r"export const PYODIDE_LOCAL_WHEELS\s*=\s*\[(.*?)\];", config_text, re.DOTALL)
+    if match is None:
+        raise RuntimeError("Could not determine PYODIDE_LOCAL_WHEELS from gbdraw/web/js/config.js")
+    wheel_paths = tuple(
+        Path(raw.lstrip("./"))
+        for raw in re.findall(r"""["']([^"']+\.whl)["']""", match.group(1))
+    )
+    if not wheel_paths:
+        raise RuntimeError("PYODIDE_LOCAL_WHEELS is empty in gbdraw/web/js/config.js")
+    return wheel_paths
 
 
 def _download(url: str, target: Path) -> None:
@@ -242,6 +257,7 @@ def _assert_packaged_assets() -> None:
         WEB_ROOT / "vendor" / "phosphor-icons" / "regular" / "style.css",
         WEB_ROOT / "wasm" / "losat" / "losat.wasm",
         WEB_ROOT / _parse_wheel_name(),
+        *(WEB_ROOT / path for path in _parse_local_wheel_paths()),
     ]
     missing = [path for path in required if not path.exists()]
     if missing:
@@ -472,6 +488,7 @@ def inspect_wheel(wheel_path: Path) -> None:
         "gbdraw/web/vendor/phosphor-icons/regular/style.css",
     }
     required.update(f"gbdraw/web/{path.as_posix()}" for path in REQUIRED_UI_FONT_FILES)
+    required.update(f"gbdraw/web/{path.as_posix()}" for path in _parse_local_wheel_paths())
     missing = sorted(required - names)
     if missing:
         raise FileNotFoundError(
@@ -480,7 +497,14 @@ def inspect_wheel(wheel_path: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Vendor and verify offline gbdraw GUI assets.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Vendor and verify offline gbdraw GUI assets. "
+            "Run `vendor-assets` for third-party browser assets, keep the local Pyodide dependency "
+            "wheels under `gbdraw/web/vendor/pyodide-wheels/`, build the browser wheel into "
+            "`gbdraw/web/`, and keep `gbdraw/web/open-source-notices.html` committed."
+        )
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("vendor-assets", help="Download and vendor third-party browser assets.")

@@ -55,6 +55,7 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         build_root / "gbdraw" / "web" / "vendor" / "phosphor-icons" / "regular" / "style.css",
         build_root / "gbdraw" / "web" / "wasm" / "losat" / "losat.wasm",
         *(build_root / "gbdraw" / "web" / path for path in verify_module.REQUIRED_UI_FONT_FILES),
+        *(build_root / "gbdraw" / "web" / path for path in verify_module._parse_local_wheel_paths()),
     ]
     missing = [str(path.relative_to(build_root)) for path in required if not path.exists()]
     assert not missing, "build_py did not copy required offline GUI assets:\n" + "\n".join(missing)
