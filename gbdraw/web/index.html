@@ -464,7 +464,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-text-t"></i> Labels <help-tip text="Control label visibility, filtering, and text settings."></help-tip></summary>
+                        <summary><i class="ph ph-text-t"></i> Labels <help-tip text="Control label visibility, filtering, text settings, and circular label geometry."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div v-if="mode === 'linear'">
                                 <label class="input-label text-[10px] mb-1">Show Labels <help-tip text="Display feature labels on the map. 'First' shows labels only for the top track."></help-tip></label>
@@ -573,10 +573,34 @@
                                         </template>
                                     </div>
                                 </div>
+
+                                <div v-if="mode === 'circular'" class="pt-3 border-t border-slate-100">
+                                    <h4 class="text-[11px] font-bold text-slate-500 mb-2">LABEL GEOMETRY <help-tip text="Adjust radius offset factors for circular labels."></help-tip></h4>
+                                    <div class="grid grid-cols-2 gap-1.5">
+                                        <div>
+                                            <label class="input-label text-[10px]">Outer X Offset</label>
+                                            <input type="number" step="0.1" v-model.number="adv.outer_label_x_offset" class="form-input form-input-compact" placeholder="Auto">
+                                        </div>
+                                        <div>
+                                            <label class="input-label text-[10px]">Outer Y Offset</label>
+                                            <input type="number" step="0.1" v-model.number="adv.outer_label_y_offset" class="form-input form-input-compact" placeholder="Auto">
+                                        </div>
+                                        <template v-if="form.labels_mode === 'both'">
+                                            <div>
+                                                <label class="input-label text-[10px]">Inner X Offset</label>
+                                                <input type="number" step="0.1" v-model.number="adv.inner_label_x_offset" class="form-input form-input-compact" placeholder="Auto">
+                                            </div>
+                                            <div>
+                                                <label class="input-label text-[10px]">Inner Y Offset</label>
+                                                <input type="number" step="0.1" v-model.number="adv.inner_label_y_offset" class="form-input form-input-compact" placeholder="Auto">
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
                             </div>
 
                             <p v-else class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-2">
-                                Enable labels to configure filtering, qualifier priority, and text settings.
+                                Enable labels to configure filtering, qualifier priority, text settings, and circular label geometry.
                             </p>
                         </div>
                     </details>
@@ -584,7 +608,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-shapes"></i> Features <help-tip text="Select which feature types to draw and how they are shaped."></help-tip></summary>
+                        <summary><i class="ph ph-shapes"></i> Features <help-tip text="Select which feature types to draw, how they are shaped, and how feature blocks and lines are styled."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
                                 <label class="input-label adv-section-title">Feature Types <help-tip text="Select which feature types to draw."></help-tip></label>
@@ -613,6 +637,36 @@
                                     <button @click.prevent="addFeature" class="btn btn-secondary text-xs h-7 shrink-0">
                                         <i class="ph ph-plus"></i> Add
                                     </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="input-label adv-section-title">Feature Appearance <help-tip text="Adjust circular feature track width and the stroke color and width for feature blocks and intron lines."></help-tip></label>
+                                <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
+                                    <div v-if="mode === 'circular'">
+                                        <label class="input-label text-[10px]">Feature Track Width <help-tip text="Feature band width in px. When set, circular tracks and label arena auto-relayout around the new feature thickness."></help-tip></label>
+                                        <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-1.5">
+                                        <div>
+                                            <label class="input-label text-[10px]">Block Stroke Color <help-tip text="Color of the outline for feature blocks."></help-tip></label>
+                                            <input type="color" v-model="adv.block_stroke_color" class="h-8 w-full p-0 border rounded">
+                                        </div>
+                                        <div>
+                                            <label class="input-label text-[10px]">Block Stroke Width <help-tip text="Width of the outline for feature blocks."></help-tip></label>
+                                            <input type="number" v-model.number="adv.block_stroke_width" class="form-input form-input-compact" placeholder="Auto">
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-1.5">
+                                        <div>
+                                            <label class="input-label text-[10px]">Line Stroke Color <help-tip text="Color of the lines representing introns."></help-tip></label>
+                                            <input type="color" v-model="adv.line_stroke_color" class="h-8 w-full p-0 border rounded">
+                                        </div>
+                                        <div>
+                                            <label class="input-label text-[10px]">Line Stroke Width <help-tip text="Width of the lines representing introns."></help-tip></label>
+                                            <input type="number" v-model.number="adv.line_stroke_width" class="form-input form-input-compact" placeholder="Auto">
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -855,7 +909,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-waveform"></i> Tracks <help-tip text="Adjust feature, GC, and comparison track dimensions."></help-tip></summary>
+                        <summary><i class="ph ph-dna"></i> Dinucleotide content/skew <help-tip text="Adjust dinucleotide content/skew calculation parameters and GC/skew track sizing."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="grid grid-cols-3 gap-1.5">
                                 <div><label class="input-label text-[10px]">Window <help-tip text="Window size for GC content/skew. Default: 1kb (<1Mb), 10kb (<10Mb), 100kb (>=10Mb)."></help-tip></label><input type="number" v-model.number="adv.window_size" class="form-input form-input-compact" placeholder="Auto"></div>
@@ -864,43 +918,14 @@
                             </div>
 
                             <template v-if="mode === 'linear'">
-                                <div class="grid grid-cols-2 gap-1.5">
-                                    <div>
-                                        <label class="input-label text-[10px]">Feature Height <help-tip text="Height of the feature blocks."></help-tip></label>
-                                        <input type="number" v-model.number="adv.feature_height" class="form-input form-input-compact" placeholder="Auto">
-                                    </div>
-                                    <div>
-                                        <label class="input-label text-[10px]">Axis Gap <help-tip text="Gap between axis and nearest feature edge for Above/Below track layouts. Auto derives from feature height."></help-tip></label>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            :value="adv.track_axis_gap ?? ''"
-                                            @input="adv.track_axis_gap = $event.target.value === '' ? null : Number($event.target.value)"
-                                            class="form-input form-input-compact"
-                                            placeholder="Auto"
-                                        >
-                                    </div>
-                                    <div v-if="form.show_gc || form.show_skew">
-                                        <label class="input-label text-[10px]">GC Height <help-tip text="Height of the GC content and skew tracks."></help-tip></label>
-                                        <input type="number" v-model.number="adv.gc_height" class="form-input form-input-compact" placeholder="Auto">
-                                    </div>
-                                    <div>
-                                        <label class="input-label text-[10px]">Pairwise Match Height <help-tip text="Height of the comparison blocks."></help-tip></label>
-                                        <input type="number" v-model.number="adv.comparison_height" class="form-input form-input-compact" placeholder="Auto">
-                                    </div>
+                                <div v-if="form.show_gc || form.show_skew">
+                                    <label class="input-label text-[10px]">GC Height <help-tip text="Height of the GC content and skew tracks."></help-tip></label>
+                                    <input type="number" v-model.number="adv.gc_height" class="form-input form-input-compact" placeholder="Auto">
                                 </div>
                             </template>
 
                             <template v-else>
                                 <div class="grid grid-cols-2 gap-1.5">
-                                    <div>
-                                        <label class="input-label text-[10px]">Feature Track Width <help-tip text="Feature band width in px. When set, circular tracks and label arena auto-relayout around the new feature thickness."></help-tip></label>
-                                        <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" class="form-input form-input-compact" placeholder="Auto">
-                                    </div>
-                                    <div>
-                                        <label class="input-label text-[10px]">Scale Interval <help-tip text="Manual scale interval for circular mode (in bp). Overrides automatic calculation."></help-tip></label>
-                                        <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact" placeholder="Auto">
-                                    </div>
                                     <template v-if="!form.suppress_gc">
                                         <div>
                                             <label class="input-label text-[10px]">GC Content Width <help-tip text="GC content track width in px."></help-tip></label>
@@ -929,7 +954,36 @@
 
                 <div v-if="mode === 'linear'" class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-ruler"></i> Scale <help-tip text="Adjust the scale bar or ruler style in linear mode."></help-tip></summary>
+                        <summary><i class="ph ph-waveform"></i> Tracks <help-tip text="Adjust feature track dimensions, axis gap, and pairwise track height."></help-tip></summary>
+                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
+                            <div class="grid grid-cols-2 gap-1.5">
+                                <div>
+                                    <label class="input-label text-[10px]">Feature Height <help-tip text="Height of the feature blocks."></help-tip></label>
+                                    <input type="number" v-model.number="adv.feature_height" class="form-input form-input-compact" placeholder="Auto">
+                                </div>
+                                <div>
+                                    <label class="input-label text-[10px]">Axis Gap <help-tip text="Gap between axis and nearest feature edge for Above/Below track layouts. Auto derives from feature height."></help-tip></label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        :value="adv.track_axis_gap ?? ''"
+                                        @input="adv.track_axis_gap = $event.target.value === '' ? null : Number($event.target.value)"
+                                        class="form-input form-input-compact"
+                                        placeholder="Auto"
+                                    >
+                                </div>
+                                <div>
+                                    <label class="input-label text-[10px]">Pairwise Match Height <help-tip text="Height of the comparison blocks."></help-tip></label>
+                                    <input type="number" v-model.number="adv.comparison_height" class="form-input form-input-compact" placeholder="Auto">
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                <div v-if="mode === 'linear'" class="card bg-slate-50/50">
+                    <details>
+                        <summary><i class="ph ph-ruler"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
                                 <label class="input-label text-[10px] mb-1">Scale Style <help-tip text="'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels."></help-tip></label>
@@ -940,6 +994,14 @@
                             </div>
 
                             <div class="grid grid-cols-2 gap-1.5">
+                                <div>
+                                    <label class="input-label text-[10px]">Axis Stroke Color <help-tip text="Color of the main axis line."></help-tip></label>
+                                    <input type="color" v-model="adv.axis_stroke_color" class="h-8 w-full p-0 border rounded">
+                                </div>
+                                <div>
+                                    <label class="input-label text-[10px]">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label>
+                                    <input type="number" v-model.number="adv.axis_stroke_width" class="form-input form-input-compact" placeholder="Auto">
+                                </div>
                                 <div>
                                     <label class="input-label text-[10px]">Line Width <help-tip text="Line width of the scale bar or ruler."></help-tip></label>
                                     <input type="number" v-model.number="adv.scale_stroke_width" class="form-input form-input-compact" placeholder="Auto">
@@ -1005,59 +1067,12 @@
 
                 <div v-if="mode === 'circular'" class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-vector-three"></i> Label Geometry <help-tip text="Adjust radius offset factors for circular labels."></help-tip></summary>
-                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
-                            <div v-if="form.labels_mode !== 'none'" class="grid grid-cols-2 gap-1.5">
-                                <div>
-                                    <label class="input-label text-[10px]">Outer X Offset</label>
-                                    <input type="number" step="0.1" v-model.number="adv.outer_label_x_offset" class="form-input form-input-compact" placeholder="Auto">
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Outer Y Offset</label>
-                                    <input type="number" step="0.1" v-model.number="adv.outer_label_y_offset" class="form-input form-input-compact" placeholder="Auto">
-                                </div>
-                                <template v-if="form.labels_mode === 'both'">
-                                    <div>
-                                        <label class="input-label text-[10px]">Inner X Offset</label>
-                                        <input type="number" step="0.1" v-model.number="adv.inner_label_x_offset" class="form-input form-input-compact" placeholder="Auto">
-                                    </div>
-                                    <div>
-                                        <label class="input-label text-[10px]">Inner Y Offset</label>
-                                        <input type="number" step="0.1" v-model.number="adv.inner_label_y_offset" class="form-input form-input-compact" placeholder="Auto">
-                                    </div>
-                                </template>
-                            </div>
-                            <p v-else class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-2">
-                                Enable labels to adjust circular label geometry.
-                            </p>
-                        </div>
-                    </details>
-                </div>
-
-                <div class="card bg-slate-50/50">
-                    <details>
-                        <summary><i class="ph ph-paint-brush"></i> Styles <help-tip text="Adjust stroke colors and widths for blocks, lines, and axes."></help-tip></summary>
+                        <summary><i class="ph ph-paint-brush"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
-                                <div class="grid grid-cols-2 gap-1.5">
-                                    <div>
-                                        <label class="input-label text-[10px]">Block Stroke Color <help-tip text="Color of the outline for feature blocks."></help-tip></label>
-                                        <input type="color" v-model="adv.block_stroke_color" class="h-8 w-full p-0 border rounded">
-                                    </div>
-                                    <div>
-                                        <label class="input-label text-[10px]">Block Stroke Width <help-tip text="Width of the outline for feature blocks."></help-tip></label>
-                                        <input type="number" v-model.number="adv.block_stroke_width" class="form-input form-input-compact" placeholder="Auto">
-                                    </div>
-                                </div>
-                                <div class="grid grid-cols-2 gap-1.5">
-                                    <div>
-                                        <label class="input-label text-[10px]">Line Stroke Color <help-tip text="Color of the lines representing introns."></help-tip></label>
-                                        <input type="color" v-model="adv.line_stroke_color" class="h-8 w-full p-0 border rounded">
-                                    </div>
-                                    <div>
-                                        <label class="input-label text-[10px]">Line Stroke Width <help-tip text="Width of the lines representing introns."></help-tip></label>
-                                        <input type="number" v-model.number="adv.line_stroke_width" class="form-input form-input-compact" placeholder="Auto">
-                                    </div>
+                                <div>
+                                    <label class="input-label text-[10px]">Scale Interval <help-tip text="Manual scale interval for circular mode (in bp). Overrides automatic calculation."></help-tip></label>
+                                    <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact" placeholder="Auto">
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
