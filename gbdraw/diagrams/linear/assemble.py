@@ -43,7 +43,7 @@ from .builders import (
     add_record_definition_group,
     add_record_group,
 )
-from .precalc import _precalculate_definition_widths, _precalculate_label_dimensions
+from .precalc import _precalculate_definition_metrics, _precalculate_label_dimensions
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
@@ -304,6 +304,12 @@ def assemble_linear_diagram(
         records, feature_config, canvas_config, config_dict, cfg=cfg
     )
     record_label_heights_below = _precalculate_label_heights_below(all_labels)
+    max_def_width, _definition_heights, definition_half_heights = _precalculate_definition_metrics(
+        records,
+        config_dict,
+        canvas_config,
+        cfg=cfg,
+    )
     
     # Pre-calculate feature track heights for each record (needed for resolve_overlaps)
     (
@@ -340,6 +346,10 @@ def assemble_linear_diagram(
         else:
             minimum_axis_y_for_features = first_actual_extent + canvas_config.vertical_padding
             canvas_config.vertical_offset = max(base_axis_y, minimum_axis_y_for_features)
+        canvas_config.vertical_offset = max(
+            canvas_config.vertical_offset,
+            definition_half_heights.get(first_record_id, 0.0) + canvas_config.vertical_padding,
+        )
 
     normalize_length = cfg.canvas.linear.normalize_length
 
@@ -374,7 +384,6 @@ def assemble_linear_diagram(
     legend_group: Group = LegendGroup(config_dict, canvas_config, legend_config, legend_table, cfg=cfg)
     # Get the legend height
     required_legend_height = legend_group.legend_height
-    max_def_width = _precalculate_definition_widths(records, config_dict, canvas_config, cfg=cfg)
 
     canvas_config.recalculate_canvas_dimensions(legend_group, max_def_width)
     # Vertical shift: how much the records should be moved downward in order to place the records in the middle of the canvas
@@ -427,6 +436,18 @@ def assemble_linear_diagram(
             
             # Total inter-record space: below current + gap + above next
             inter_record_space = height_below_axis + min_gap + height_above_next_axis
+            inter_record_space = max(
+                inter_record_space,
+                definition_half_heights.get(current_record_id, 0.0)
+                + definition_half_heights.get(next_record_id, 0.0),
+            )
+            if definition_half_heights.get(current_record_id, 0.0) > 0.0 and definition_half_heights.get(next_record_id, 0.0) > 0.0:
+                inter_record_space = max(
+                    inter_record_space,
+                    definition_half_heights.get(current_record_id, 0.0)
+                    + definition_half_heights.get(next_record_id, 0.0)
+                    + max(1.0, 0.5 * float(canvas_config.vertical_padding)),
+                )
             current_y += inter_record_space
 
     length_bar_group: LengthBarGroup | None = None
@@ -454,13 +475,18 @@ def assemble_linear_diagram(
     final_label_height_below = (
         record_label_heights_below.get(final_record_id, 0.0)
     )
+    final_definition_height_below = definition_half_heights.get(final_record_id, 0.0)
+    final_record_height_below = max(
+        final_feature_height_below
+        + final_label_height_below
+        + canvas_config.gc_padding
+        + canvas_config.skew_padding,
+        final_definition_height_below,
+    )
 
     final_height = (
         current_y
-        + final_feature_height_below
-        + final_label_height_below
-        + canvas_config.gc_padding
-        + canvas_config.skew_padding
+        + final_record_height_below
         + length_bar_height
         + 4 * canvas_config.vertical_padding
         + canvas_config.original_vertical_offset
@@ -468,10 +494,7 @@ def assemble_linear_diagram(
     )
     canvas_config.height_below_final_record = (
         current_y
-        + final_feature_height_below
-        + final_label_height_below
-        + canvas_config.gc_padding
-        + canvas_config.skew_padding
+        + final_record_height_below
         + 4 * canvas_config.vertical_padding
     )
     if canvas_config.legend_position in ["top", "bottom"]:
@@ -664,5 +687,3 @@ __all__ = [
     "assemble_linear_diagram",
     "plot_linear_diagram",
 ]
-
-

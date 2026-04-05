@@ -31,6 +31,9 @@ def modify_config_dict(
     line_stroke_width=None,
     gc_stroke_color=None,
     linear_definition_font_size=None,
+    linear_definition_show_replicon=None,
+    linear_definition_show_accession=None,
+    linear_definition_show_length=None,
     circular_definition_font_size=None,
     plot_title_font_size=None,
     label_font_size=None,
@@ -228,6 +231,9 @@ def modify_config_dict(
         "label_rotation": "labels.linear.rotation",
         "linear_definition_font_size_short": "objects.definition.linear.font_size.short",
         "linear_definition_font_size_long": "objects.definition.linear.font_size.long",
+        "linear_definition_show_replicon": "objects.definition.linear.show_replicon",
+        "linear_definition_show_accession": "objects.definition.linear.show_accession",
+        "linear_definition_show_length": "objects.definition.linear.show_length",
         "circular_definition_font_size": "objects.definition.circular.font_size",
         "plot_title_font_size": "objects.definition.circular.plot_title_font_size",
         "circular_definition_font_interval": "objects.definition.circular.interval",
@@ -261,5 +267,4 @@ def modify_config_dict(
 
 
 __all__ = ["modify_config_dict", "suppress_gc_content_and_skew", "update_config_value"]
-
 

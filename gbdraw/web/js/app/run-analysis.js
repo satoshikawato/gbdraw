@@ -217,6 +217,9 @@ export const createRunAnalysis = ({
     linearSeqs,
     generatedLegendPosition,
     generatedMode,
+    generatedMultiRecordCanvas,
+    generatedCircularPlotTitlePosition,
+    shouldDeferCircularPreviewUpdates,
     extractedFeatures,
     featureRecordIds,
     selectedFeatureRecordIdx,
@@ -330,7 +333,10 @@ export const createRunAnalysis = ({
         ruler_label_color: false,
         plot_title: false,
         plot_title_position: false,
-        plot_title_font_size: false
+        plot_title_font_size: false,
+        show_replicon: false,
+        hide_accession: false,
+        hide_length: false
       };
       return linearLabelSupportCache;
     }
@@ -351,6 +357,9 @@ json.dumps({
   "plot_title": "--plot_title" in _source,
   "plot_title_position": "--plot_title_position" in _source,
   "plot_title_font_size": "--plot_title_font_size" in _source,
+  "show_replicon": "--show_replicon" in _source,
+  "hide_accession": "--hide_accession" in _source,
+  "hide_length": "--hide_length" in _source,
 })
       `);
       linearLabelSupportCache = JSON.parse(String(raw));
@@ -366,7 +375,10 @@ json.dumps({
         ruler_label_color: false,
         plot_title: false,
         plot_title_position: false,
-        plot_title_font_size: false
+        plot_title_font_size: false,
+        show_replicon: false,
+        hide_accession: false,
+        hide_length: false
       };
     }
     return linearLabelSupportCache;
@@ -543,6 +555,9 @@ json.dumps({
     if (!pyodide) return { status: 'skipped' };
 
     const isReflow = runMode === 'reflow';
+    if (isReflow && mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
+      return { status: 'skipped' };
+    }
     const previousSelectedResultIndex = selectedResultIndex.value;
     const editableLabelsSnapshot = Array.isArray(editableLabels.value)
       ? editableLabels.value.map((entry) => ({ ...entry }))
@@ -963,6 +978,9 @@ json.dumps({
           parsedPlotTitleFontSize > 0
             ? parsedPlotTitleFontSize
             : null;
+        adv.linear_show_replicon = adv.linear_show_replicon === true;
+        adv.linear_show_accession = adv.linear_show_accession !== false;
+        adv.linear_show_length = adv.linear_show_length !== false;
         form.plot_title = normalizedPlotTitle;
         adv.plot_title_position = normalizedPlotTitlePosition;
         adv.plot_title_font_size = normalizedPlotTitleFontSize;
@@ -986,6 +1004,9 @@ json.dumps({
         const wantsPlotTitleOption = normalizedPlotTitle !== '';
         const wantsPlotTitlePositionOption = normalizedPlotTitlePosition !== 'bottom';
         const wantsPlotTitleFontSizeOption = normalizedPlotTitleFontSize !== null;
+        const wantsShowRepliconOption = adv.linear_show_replicon === true;
+        const wantsHideAccessionOption = adv.linear_show_accession === false;
+        const wantsHideLengthOption = adv.linear_show_length === false;
         const wantsRulerOnAxisOption =
           Boolean(form.linear_ruler_on_axis) &&
           form.scale_style === 'ruler' &&
@@ -1000,7 +1021,10 @@ json.dumps({
           wantsRulerLabelColorOption ||
           wantsPlotTitleOption ||
           wantsPlotTitlePositionOption ||
-          wantsPlotTitleFontSizeOption
+          wantsPlotTitleFontSizeOption ||
+          wantsShowRepliconOption ||
+          wantsHideAccessionOption ||
+          wantsHideLengthOption
         ) {
           if (wantsPlacementOption && !linearLabelSupport.placement) {
             throw new Error("Current gbdraw wheel does not support --label_placement. Rebuild and redeploy the web wheel.");
@@ -1029,10 +1053,22 @@ json.dumps({
           if (wantsPlotTitleFontSizeOption && !linearLabelSupport.plot_title_font_size) {
             throw new Error("Current gbdraw wheel does not support --plot_title_font_size. Rebuild and redeploy the web wheel.");
           }
+          if (wantsShowRepliconOption && !linearLabelSupport.show_replicon) {
+            throw new Error("Current gbdraw wheel does not support --show_replicon. Rebuild and redeploy the web wheel.");
+          }
+          if (wantsHideAccessionOption && !linearLabelSupport.hide_accession) {
+            throw new Error("Current gbdraw wheel does not support --hide_accession. Rebuild and redeploy the web wheel.");
+          }
+          if (wantsHideLengthOption && !linearLabelSupport.hide_length) {
+            throw new Error("Current gbdraw wheel does not support --hide_length. Rebuild and redeploy the web wheel.");
+          }
         }
         if (wantsPlotTitleOption) args.push('--plot_title', normalizedPlotTitle);
         if (wantsPlotTitlePositionOption) args.push('--plot_title_position', normalizedPlotTitlePosition);
         if (wantsPlotTitleFontSizeOption) args.push('--plot_title_font_size', String(normalizedPlotTitleFontSize));
+        if (wantsShowRepliconOption) args.push('--show_replicon');
+        if (wantsHideAccessionOption) args.push('--hide_accession');
+        if (wantsHideLengthOption) args.push('--hide_length');
         if (normalizedLabelPlacement && normalizedLabelPlacement !== 'auto') {
           args.push('--label_placement', normalizedLabelPlacement);
         }
@@ -1313,6 +1349,10 @@ json.dumps({
 
       generatedLegendPosition.value = form.legend;
       generatedMode.value = mode.value;
+      generatedMultiRecordCanvas.value = mode.value === 'circular' ? Boolean(form.multi_record_canvas) : false;
+      if (mode.value === 'circular') {
+        generatedCircularPlotTitlePosition.value = normalizeCircularPlotTitlePosition(adv.plot_title_position);
+      }
 
       extractedFeatures.value = [];
 

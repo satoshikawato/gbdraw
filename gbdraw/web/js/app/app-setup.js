@@ -150,9 +150,8 @@ export const createAppSetup = () => {
   setupGlobalUiEvents({ state, onMounted, onUnmounted });
 
   const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions });
-  const resultsManager = createResultsManager({ state, getPyodide, legendLayout });
   const {
-    runAnalysis,
+    runAnalysis: runGeneratedDiagramAnalysis,
     runLabelReflow,
     refreshCircularRecordOrder,
     downloadLosatCache,
@@ -166,6 +165,12 @@ export const createAppSetup = () => {
     writeFileToFs: pyodideManager.writeFileToFs,
     refreshFeatureOverrides: featureActions.refreshFeatureOverrides,
     resetPreviewViewport
+  });
+  const resultsManager = createResultsManager({
+    state,
+    getPyodide,
+    legendLayout,
+    rerenderLinearDefinitions: runLabelReflow
   });
 
   setupWatchers({
@@ -243,7 +248,12 @@ export const createAppSetup = () => {
     resetAllLabelTextOverrides
   } = featureActions;
 
-  const { updatePalette, resetColors } = resultsManager;
+  const { updatePalette, resetColors, cancelDefinitionUpdate } = resultsManager;
+
+  const runAnalysis = async () => {
+    cancelDefinitionUpdate();
+    return runGeneratedDiagramAnalysis();
+  };
 
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
 

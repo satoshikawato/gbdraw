@@ -5,11 +5,12 @@ import {
   parseTransform
 } from './legend-layout/transform-utils.js';
 
-export const createResultsManager = ({ state, getPyodide, legendLayout }) => {
+export const createResultsManager = ({ state, getPyodide, legendLayout, rerenderLinearDefinitions = null }) => {
   const {
     pyodideReady,
     svgContent,
     mode,
+    shouldDeferCircularPreviewUpdates,
     svgContainer,
     cInputType,
     linearSeqs,
@@ -24,6 +25,13 @@ export const createResultsManager = ({ state, getPyodide, legendLayout }) => {
   const { clearPlotTitleState, setPlotTitleAutoTransform } = legendLayout;
 
   let definitionUpdateTimeout = null;
+
+  const cancelDefinitionUpdate = () => {
+    if (definitionUpdateTimeout) {
+      clearTimeout(definitionUpdateTimeout);
+      definitionUpdateTimeout = null;
+    }
+  };
 
   const updatePalette = () => {
     const pyodide = getPyodide();
@@ -141,6 +149,7 @@ export const createResultsManager = ({ state, getPyodide, legendLayout }) => {
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
+    if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
 
     if (mode.value === 'circular') {
       if (!pyodideReady.value) return;
@@ -312,6 +321,11 @@ export const createResultsManager = ({ state, getPyodide, legendLayout }) => {
     }
 
     if (mode.value === 'linear') {
+      if (typeof rerenderLinearDefinitions === 'function') {
+        await rerenderLinearDefinitions('definition-edit');
+        return;
+      }
+
       const plotTitleGroup = svg.getElementById('plot_title');
       const groups = Array.from(svg.querySelectorAll('g[id]'))
         .filter((group) => {
@@ -418,13 +432,18 @@ export const createResultsManager = ({ state, getPyodide, legendLayout }) => {
   };
 
   const scheduleDefinitionUpdate = () => {
-    if (definitionUpdateTimeout) clearTimeout(definitionUpdateTimeout);
-    definitionUpdateTimeout = setTimeout(updateDefinitionText, 500);
+    cancelDefinitionUpdate();
+    if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
+    definitionUpdateTimeout = setTimeout(() => {
+      definitionUpdateTimeout = null;
+      void updateDefinitionText();
+    }, 500);
   };
 
   return {
     updatePalette,
     resetColors,
-    scheduleDefinitionUpdate
+    scheduleDefinitionUpdate,
+    cancelDefinitionUpdate
   };
 };
