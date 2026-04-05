@@ -1485,7 +1485,12 @@ def add_record_on_circular_canvas(
         or core_track_overlap_relayout_enabled
     )
     if should_precompute_feature_dict:
-        label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+        compute_label_text = show_external_labels
+        label_filtering = (
+            preprocess_label_filtering(cfg.labels.filtering.as_dict())
+            if compute_label_text
+            else {}
+        )
         color_table, default_colors = preprocess_color_tables(
             feature_config.color_table, feature_config.default_colors
         )
@@ -1500,6 +1505,7 @@ def add_record_on_circular_canvas(
             split_overlaps_by_strand=split_overlaps_by_strand,
             directional_feature_types=feature_config.directional_feature_types,
             feature_visibility_rules=feature_config.feature_visibility_rules,
+            compute_label_text=compute_label_text,
         )
 
     rendered_feature_band_all_tracks: tuple[float, float] | None = None
@@ -2039,33 +2045,34 @@ def assemble_circular_diagram(
     # Prefer a pre-parsed config model when available to avoid repeated from_dict() calls.
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
 
-    features_present = check_feature_presence(
-        gb_record,
-        feature_config.selected_features_set,
-        feature_visibility_rules=feature_config.feature_visibility_rules,
-    )
+    legend_table: dict = {}
+    if canvas_config.legend_position != "none":
+        features_present = check_feature_presence(
+            gb_record,
+            feature_config.selected_features_set,
+            feature_visibility_rules=feature_config.feature_visibility_rules,
+        )
 
-    # Pre-compute which color rules are actually used for accurate legend
-    color_map, default_color_map = preprocess_color_tables(
-        feature_config.color_table, feature_config.default_colors
-    )
-    used_color_rules, default_used_features = precompute_used_color_rules(
-        gb_record,
-        color_map,
-        default_color_map,
-        set(feature_config.selected_features_set),
-        feature_visibility_rules=feature_config.feature_visibility_rules,
-    )
-    legend_table = prepare_legend_table(
-        gc_config,
-        skew_config,
-        feature_config,
-        features_present,
-        used_color_rules=used_color_rules,
-        default_used_features=default_used_features,
-    )
-    legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
-    canvas_config.recalculate_canvas_dimensions(legend_config)
+        color_map, default_color_map = preprocess_color_tables(
+            feature_config.color_table, feature_config.default_colors
+        )
+        used_color_rules, default_used_features = precompute_used_color_rules(
+            gb_record,
+            color_map,
+            default_color_map,
+            set(feature_config.selected_features_set),
+            feature_visibility_rules=feature_config.feature_visibility_rules,
+        )
+        legend_table = prepare_legend_table(
+            gc_config,
+            skew_config,
+            feature_config,
+            features_present,
+            used_color_rules=used_color_rules,
+            default_used_features=default_used_features,
+        )
+        legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
+        canvas_config.recalculate_canvas_dimensions(legend_config)
     canvas: Drawing = canvas_config.create_svg_canvas()
     canvas = add_record_on_circular_canvas(
         canvas,

@@ -124,7 +124,12 @@ class SeqRecordGroup:
         if self.precomputed_feature_dict is not None:
             feature_dict = self.precomputed_feature_dict
         else:
-            label_filtering = preprocess_label_filtering(self.label_filtering)
+            compute_label_text = self.show_labels and self.precalculated_labels is None
+            label_filtering = (
+                preprocess_label_filtering(self.label_filtering)
+                if compute_label_text
+                else {}
+            )
             color_table, default_colors = preprocess_color_tables(color_table, default_colors)
             feature_dict, _ = create_feature_dict(
                 self.gb_record,
@@ -137,6 +142,7 @@ class SeqRecordGroup:
                 split_overlaps_by_strand=self.split_overlaps_by_strand,
                 directional_feature_types=self.feature_config.directional_feature_types,
                 feature_visibility_rules=self.feature_config.feature_visibility_rules,
+                compute_label_text=compute_label_text,
             )
         track_id: str = self.gb_record.id
         record_group = Group(id=track_id)

@@ -25,6 +25,7 @@ def create_repeat_object(
     label_filtering,
     is_directional: bool,
     record_id: Optional[str] = None,
+    compute_label_text: bool = True,
 ) -> RepeatObject:
     """
     Creates a RepeatObject representing a repeat region in a genome.
@@ -36,7 +37,7 @@ def create_repeat_object(
     location = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id)
     feature_type = feature.type
-    label_text = get_label_text(feature, label_filtering, record_id=record_id)
+    label_text = get_label_text(feature, label_filtering, record_id=record_id) if compute_label_text else ""
 
     repeat_object = RepeatObject(
         repeat_id,
@@ -64,6 +65,7 @@ def create_feature_object(
     label_filtering,
     is_directional: bool,
     record_id: Optional[str] = None,
+    compute_label_text: bool = True,
 ) -> FeatureObject:
     """
     Creates a FeatureObject representing a generic genomic feature.
@@ -73,7 +75,7 @@ def create_feature_object(
     location = get_exon_and_intron_coordinates(coordinates, genome_length)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id)
     feature_type = feature.type
-    label_text = get_label_text(feature, label_filtering, record_id=record_id)
+    label_text = get_label_text(feature, label_filtering, record_id=record_id) if compute_label_text else ""
 
     feature_object = FeatureObject(
         feature_id,
@@ -99,6 +101,7 @@ def create_gene_object(
     label_filtering,
     is_directional: bool,
     record_id: Optional[str] = None,
+    compute_label_text: bool = True,
 ) -> GeneObject:
     """
     Creates a GeneObject representing a gene in a genome.
@@ -111,7 +114,7 @@ def create_gene_object(
     feature_type = feature.type
     location = get_exon_and_intron_coordinates(coordinates, genome_length, is_trans_spliced)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id)
-    label_text = get_label_text(feature, label_filtering, record_id=record_id)
+    label_text = get_label_text(feature, label_filtering, record_id=record_id) if compute_label_text else ""
 
     gene_object = GeneObject(
         feature_id,
@@ -142,6 +145,7 @@ def create_feature_dict(
     split_overlaps_by_strand: bool = False,
     directional_feature_types: Optional[Set[str]] = None,
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
+    compute_label_text: bool = True,
 ) -> Tuple[Dict[str, FeatureObject], Set[Tuple[str, str]]]:
     """
     Creates a dictionary mapping feature IDs to FeatureObjects from a GenBank record.
@@ -192,6 +196,7 @@ def create_feature_dict(
                 label_filtering,
                 is_directional,
                 record_id=gb_record.id,
+                compute_label_text=compute_label_text,
             )
             feature_dict[locus_id] = gene_object
         elif feature.type == "repeat_region":
@@ -206,6 +211,7 @@ def create_feature_dict(
                 label_filtering,
                 is_directional,
                 record_id=gb_record.id,
+                compute_label_text=compute_label_text,
             )
             feature_dict[repeat_id] = repeat_object
         else:
@@ -220,6 +226,7 @@ def create_feature_dict(
                 label_filtering,
                 is_directional,
                 record_id=gb_record.id,
+                compute_label_text=compute_label_text,
             )
             feature_dict[feature_id] = feature_object
 

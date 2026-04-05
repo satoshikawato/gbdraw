@@ -28,6 +28,7 @@ class GcSkewGroup:
         start_x: float = 0,
         start_y: float = 0,
         cfg: GbdrawConfig | None = None,
+        gc_df: DataFrame | None = None,
     ) -> None:
         """
         Initializes the GcSkewGroup with the given parameters and configurations.
@@ -46,7 +47,7 @@ class GcSkewGroup:
         self._cfg = cfg
         self.bool_normalize_length = cfg.canvas.linear.normalize_length
         self.alignment_width: float = alignment_width
-        self.generate_gc_df()
+        self.generate_gc_df(gc_df)
         self.normalize_length()
         self.add_elements_to_group()
 
@@ -60,8 +61,11 @@ class GcSkewGroup:
         else:
             self.genome_size_normalization_factor: float = self.record_len / self.longest_record_len
 
-    def generate_gc_df(self) -> None:
-        self.skew_df: DataFrame = skew_df(self.gb_record, self.window, self.step, self.dinucleotide)
+    def generate_gc_df(self, gc_df: DataFrame | None = None) -> None:
+        if gc_df is not None:
+            self.skew_df = gc_df
+            return
+        self.skew_df = skew_df(self.gb_record, self.window, self.step, self.dinucleotide)
 
     def add_elements_to_group(self) -> None:
         """

@@ -104,7 +104,9 @@ def save_figure_to(
         logger.info("Running in WebAssembly: Image conversion will be handled by the browser.")
         return output_paths
 
-    if not _export.CAIROSVG_AVAILABLE:
+    try:
+        cairosvg_module = _export.get_cairosvg()
+    except ImportError:
         missing_formats = ", ".join([f.upper() for f in formats_to_process])
         logger.warning(
             "Skipping generation of: %s\n   CairoSVG is not installed.\n   To enable PNG/PDF support, run: pip install gbdraw[export]",
@@ -113,17 +115,17 @@ def save_figure_to(
         return output_paths
 
     try:
-        svg_string = canvas.tostring()
+        svg_bytes = canvas.tostring().encode("utf-8")
         for fmt in formats_to_process:
             out_file = f"{base_prefix}.{fmt}"
             if fmt == "png":
-                _export.cairosvg.svg2png(bytestring=svg_string.encode("utf-8"), write_to=out_file)
+                cairosvg_module.svg2png(bytestring=svg_bytes, write_to=out_file)
             elif fmt == "pdf":
-                _export.cairosvg.svg2pdf(bytestring=svg_string.encode("utf-8"), write_to=out_file)
+                cairosvg_module.svg2pdf(bytestring=svg_bytes, write_to=out_file)
             elif fmt == "ps":
-                _export.cairosvg.svg2ps(bytestring=svg_string.encode("utf-8"), write_to=out_file)
+                cairosvg_module.svg2ps(bytestring=svg_bytes, write_to=out_file)
             elif fmt == "eps":
-                _export.cairosvg.svg2ps(bytestring=svg_string.encode("utf-8"), write_to=out_file)
+                cairosvg_module.svg2ps(bytestring=svg_bytes, write_to=out_file)
             logger.info("Generated %s: %s", fmt.upper(), out_file)
     except Exception as exc:
         logger.error("Failed to generate images using CairoSVG: %s", exc)
@@ -144,18 +146,20 @@ def render_to_bytes(canvas: Drawing, fmt: str) -> bytes:
     if "pyodide" in sys.modules:
         raise ValidationError("Binary export is not available under WebAssembly (pyodide).")
 
-    if not _export.CAIROSVG_AVAILABLE:
+    try:
+        cairosvg_module = _export.get_cairosvg()
+    except ImportError as exc:
         raise ValidationError(
             "CairoSVG is not installed. Install with: pip install gbdraw[export]"
-        )
+        ) from exc
 
     svg_string = canvas.tostring().encode("utf-8")
     if fmt_norm == "png":
-        return _export.cairosvg.svg2png(bytestring=svg_string)
+        return cairosvg_module.svg2png(bytestring=svg_string)
     if fmt_norm == "pdf":
-        return _export.cairosvg.svg2pdf(bytestring=svg_string)
+        return cairosvg_module.svg2pdf(bytestring=svg_string)
     if fmt_norm in {"ps", "eps"}:
-        return _export.cairosvg.svg2ps(bytestring=svg_string)
+        return cairosvg_module.svg2ps(bytestring=svg_string)
 
     raise ValidationError(f"Unsupported format: {fmt}")
 
