@@ -10,6 +10,7 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
     pyodideReady,
     svgContent,
     mode,
+    shouldDeferCircularPreviewUpdates,
     svgContainer,
     cInputType,
     linearSeqs,
@@ -148,6 +149,7 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
+    if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
 
     if (mode.value === 'circular') {
       if (!pyodideReady.value) return;
@@ -431,6 +433,7 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
 
   const scheduleDefinitionUpdate = () => {
     cancelDefinitionUpdate();
+    if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
     definitionUpdateTimeout = setTimeout(() => {
       definitionUpdateTimeout = null;
       void updateDefinitionText();

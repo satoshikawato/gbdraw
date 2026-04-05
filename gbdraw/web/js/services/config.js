@@ -545,6 +545,7 @@ export const exportSession = async (titleOverride = null) => {
       canvasPadding: { ...state.canvasPadding },
       selectedResultIndex: state.selectedResultIndex.value,
       generatedLegendPosition: state.generatedLegendPosition.value,
+      generatedMultiRecordCanvas: Boolean(state.generatedMultiRecordCanvas.value),
       legend: currentLegend,
       circularLegendPosition: savedCircularLegend,
       linearLegendPosition: savedLinearLegend,
@@ -652,6 +653,7 @@ export const importSession = async (e) => {
     if (ui.circularLegendPosition) state.circularLegendPosition.value = ui.circularLegendPosition;
     if (ui.linearLegendPosition) state.linearLegendPosition.value = ui.linearLegendPosition;
     if (ui.generatedLegendPosition) state.generatedLegendPosition.value = ui.generatedLegendPosition;
+    state.generatedMultiRecordCanvas.value = Boolean(ui.generatedMultiRecordCanvas);
 
     if (data.config) {
       state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.config.form);

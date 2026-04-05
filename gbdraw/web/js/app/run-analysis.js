@@ -217,6 +217,8 @@ export const createRunAnalysis = ({
     linearSeqs,
     generatedLegendPosition,
     generatedMode,
+    generatedMultiRecordCanvas,
+    shouldDeferCircularPreviewUpdates,
     extractedFeatures,
     featureRecordIds,
     selectedFeatureRecordIdx,
@@ -552,6 +554,9 @@ json.dumps({
     if (!pyodide) return { status: 'skipped' };
 
     const isReflow = runMode === 'reflow';
+    if (isReflow && mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
+      return { status: 'skipped' };
+    }
     const previousSelectedResultIndex = selectedResultIndex.value;
     const editableLabelsSnapshot = Array.isArray(editableLabels.value)
       ? editableLabels.value.map((entry) => ({ ...entry }))
@@ -1343,6 +1348,7 @@ json.dumps({
 
       generatedLegendPosition.value = form.legend;
       generatedMode.value = mode.value;
+      generatedMultiRecordCanvas.value = mode.value === 'circular' ? Boolean(form.multi_record_canvas) : false;
 
       extractedFeatures.value = [];
 

@@ -31,6 +31,7 @@ export const setupWatchers = ({
     form,
     generatedLegendPosition,
     generatedMode,
+    shouldDeferCircularPreviewUpdates,
     mode,
     cInputType,
     canvasPadding,
@@ -138,6 +139,10 @@ export const setupWatchers = ({
   const scheduleCircularDefinitionUpdate = () => {
     if (mode.value !== 'circular') return;
     if (generatedMode.value !== mode.value) return;
+    if (shouldDeferCircularPreviewUpdates.value) {
+      cancelDefinitionUpdate();
+      return;
+    }
     scheduleDefinitionUpdate();
   };
 
@@ -177,6 +182,7 @@ export const setupWatchers = ({
     () => form.legend,
     (newPos, oldPos) => {
       if (generatedMode.value !== mode.value) return;
+      if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
       if (
         svgContent.value &&
         oldPos !== undefined &&
@@ -184,6 +190,7 @@ export const setupWatchers = ({
         newPos !== generatedLegendPosition.value
       ) {
         nextTick(() => {
+          if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
           repositionForLegendChange(newPos, generatedLegendPosition.value);
         });
       }
@@ -193,6 +200,7 @@ export const setupWatchers = ({
   watch(
     () => form.multi_record_canvas,
     (enabled, previousEnabled) => {
+      cancelDefinitionUpdate();
       if (enabled !== true || previousEnabled !== false) return;
       if (suppressCircularMultiRecordDefaults.value) {
         suppressCircularMultiRecordDefaults.value = false;
@@ -322,6 +330,7 @@ export const setupWatchers = ({
     async (nextSeq, prevSeq) => {
       if (nextSeq === prevSeq) return;
       if (!autoLabelReflowEnabled.value) return;
+      if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
       if (typeof runLabelReflow !== 'function') return;
       await runLabelReflow(labelReflowRequestReason.value || 'label-edit');
     }
@@ -331,6 +340,7 @@ export const setupWatchers = ({
     () => labelReflowForceRequestSeq.value,
     async (nextSeq, prevSeq) => {
       if (nextSeq === prevSeq) return;
+      if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
       if (typeof runLabelReflow !== 'function') return;
       await runLabelReflow(labelReflowForceRequestReason.value || 'label-edit');
     }
