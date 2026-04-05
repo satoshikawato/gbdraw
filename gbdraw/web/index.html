@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;
-    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net;
-    font-src 'self' https://fonts.gstatic.com https://unpkg.com https://cdn.jsdelivr.net data:;
+    script-src 'self' 'unsafe-inline' 'unsafe-eval';
+    style-src 'self' 'unsafe-inline';
+    font-src 'self' data:;
     img-src 'self' data: blob:;
-    connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://cdn.tailwindcss.com https://pypi.org https://files.pythonhosted.org https://cdnjs.cloudflare.com;
+    connect-src 'self';
     worker-src 'self' blob:;
     object-src 'none';
     base-uri 'self';
@@ -17,21 +17,77 @@
     ">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>gbdraw Web App</title>
-    <script src="https://unpkg.com/vue@3.5.25/dist/vue.global.js" integrity="sha384-E8hqvY4j8uyv6njj1udAOIuT4tsPt3lJET321mQPDQ29OMiTOYMuG/UDD6o52yW4" crossorigin="anonymous"></script>
-    <!--
-        SECURITY NOTE: TailwindCSS Play CDN uses JIT compilation, so Subresource Integrity (SRI)
-        cannot be applied. This CDN dynamically generates CSS based on the page content.
-        For production with stricter security requirements, consider using a static Tailwind build.
-        See: https://tailwindcss.com/docs/installation
-    -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js" integrity="sha384-l95tshxQlbjf4kdyWZf10uUL5Dw8/iN9q16SQ+ttOEWA8SN0cLG6BGDGY17GxToh" crossorigin="anonymous"></script>
-    <script src="https://unpkg.com/@phosphor-icons/web@2.1.2/src/index.js" integrity="sha384-J7cw2fbG1T4C5MirTVUxsZGaMfw2m0XsCgOQEqUvB1OF9VIsHWuZF1GmyVRzs7eu" crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/3.0.3/jspdf.umd.min.js" integrity="sha384-GwHhSt8QjC7J+v0zZ0Flfho/T76YHEcCL9w4rvjTIUHauh6gWJeBSIi3vWXxNhtA" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.6.0/dist/svg2pdf.umd.min.js" integrity="sha384-UMdplNeJF/mRqnsNO/vfK5po5eKyTMGCymHkdARQ9NFscA4DX3buGxfhUJcPLbWj" crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.7/purify.min.js" integrity="sha384-qJNkHwhlYywDHfyoEe1np+1lYvX/8x+3gHCKFhSSBMQyCFlvFnn+zXmaebXl21rV" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="./vendor/phosphor-icons/regular/style.css">
+    <script src="./vendor/vue/vue.global.js"></script>
+    <script src="./vendor/tailwindcss/tailwindcss-play.js"></script>
+    <script src="./vendor/pyodide/v0.29.0/full/pyodide.js"></script>
+    <script src="./vendor/jspdf/jspdf.umd.min.js"></script>
+    <script src="./vendor/svg2pdf.js/svg2pdf.umd.min.js"></script>
+    <script src="./vendor/dompurify/purify.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+        @font-face {
+            font-family: 'Inter';
+            src: url('./vendor/fonts/inter/inter-latin-300-normal.woff2') format('woff2');
+            font-style: normal;
+            font-weight: 300;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Inter';
+            src: url('./vendor/fonts/inter/inter-latin-400-normal.woff2') format('woff2');
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Inter';
+            src: url('./vendor/fonts/inter/inter-latin-500-normal.woff2') format('woff2');
+            font-style: normal;
+            font-weight: 500;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Inter';
+            src: url('./vendor/fonts/inter/inter-latin-600-normal.woff2') format('woff2');
+            font-style: normal;
+            font-weight: 600;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Inter';
+            src: url('./vendor/fonts/inter/inter-latin-700-normal.woff2') format('woff2');
+            font-style: normal;
+            font-weight: 700;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Noto Sans JP';
+            src: url('./vendor/fonts/noto-sans-jp/noto-sans-jp-japanese-300-normal.woff2') format('woff2');
+            font-style: normal;
+            font-weight: 300;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Noto Sans JP';
+            src: url('./vendor/fonts/noto-sans-jp/noto-sans-jp-japanese-400-normal.woff2') format('woff2');
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Noto Sans JP';
+            src: url('./vendor/fonts/noto-sans-jp/noto-sans-jp-japanese-500-normal.woff2') format('woff2');
+            font-style: normal;
+            font-weight: 500;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Noto Sans JP';
+            src: url('./vendor/fonts/noto-sans-jp/noto-sans-jp-japanese-700-normal.woff2') format('woff2');
+            font-style: normal;
+            font-weight: 700;
+            font-display: swap;
+        }
         body { font-family: 'Inter', 'Noto Sans JP', sans-serif; background-color: #f8fafc; color: #334155; }
         
         /* Custom Scrollbar */
@@ -1148,6 +1204,22 @@
                                 </div>
                             </div>
 
+                            <div>
+                                <strong class="block mb-1 text-slate-700 flex items-center gap-1"><i class="ph ph-scroll"></i> License & Notices</strong>
+                                <p class="mb-2 text-[11px]">
+                                    gbdraw is released under the MIT License. Open source notices for the hosted app,
+                                    vendored browser assets, and bundled fonts are available on a local static page.
+                                </p>
+                                <div class="flex gap-2">
+                                    <a href="./open-source-notices.html" class="btn btn-secondary btn-sm justify-center flex-1">
+                                        <i class="ph ph-book-open-text text-lg"></i> Open Source Notices
+                                    </a>
+                                    <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
+                                        <i class="ph ph-file-text text-lg"></i> MIT on GitHub
+                                    </a>
+                                </div>
+                            </div>
+
                             <div class="flex gap-2">
                                 <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
                                     <i class="ph ph-github-logo text-lg"></i> GitHub
@@ -2007,7 +2079,8 @@
             <strong>Disclaimer:</strong> This tool is provided "as is" without warranty of any kind.
         </span>
         <span>
-            License: <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">MIT</a> |
+            License: <a href="./open-source-notices.html" class="hover:underline hover:text-slate-700">Open Source Notices</a> |
+            <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">MIT on GitHub</a> |
             Author: <a href="https://researchmap.jp/satoshi_kawato?lang=en" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">Satoshi Kawato</a>
         </span>
     </footer>

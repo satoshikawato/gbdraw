@@ -2,6 +2,9 @@ include gbdraw/data/color_palettes.toml
 include gbdraw/data/config.toml
 include gbdraw/data/*.ttf
 include gbdraw/web/index.html
+include gbdraw/web/*.whl
 recursive-include gbdraw/web/js *.js
 recursive-include gbdraw/web/presets *.txt *.tsv
+recursive-include gbdraw/web/vendor *
+recursive-include gbdraw/web/wasm *
 
