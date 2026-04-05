@@ -3,7 +3,10 @@ import { createAppSetup } from './app/app-setup.js';
 
 const { createApp } = window.Vue;
 
-createApp({
+const app = createApp({
   components: { FileUploader, HelpTip },
   setup: createAppSetup
-}).mount('#app');
+});
+
+const mountedApp = app.mount('#app');
+window.__GBDRAW_APP__ = mountedApp;

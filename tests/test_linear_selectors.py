@@ -38,6 +38,39 @@ def _extract_group_font_sizes(root: ET.Element, group_id: str) -> list[float]:
     return sizes
 
 
+def _extract_group_texts(root: ET.Element, group_id: str) -> list[str]:
+    group = root.find(f".//svg:g[@id='{group_id}']", SVG_NS)
+    assert group is not None
+    texts: list[str] = []
+    for text in group.findall(".//svg:text", SVG_NS):
+        rendered = "".join(text.itertext()).strip()
+        if rendered:
+            texts.append(rendered)
+    return texts
+
+
+def _extract_definition_vertical_bounds(root: ET.Element, group_id: str) -> tuple[float, float]:
+    group = root.find(f".//svg:g[@id='{group_id}']", SVG_NS)
+    assert group is not None
+    group_y = _extract_group_translate_y(root, group_id)
+    min_top: float | None = None
+    max_bottom: float | None = None
+    for text in group.findall(".//svg:text", SVG_NS):
+        raw_y = text.attrib.get("y")
+        raw_font_size = text.attrib.get("font-size")
+        assert raw_y is not None
+        assert raw_font_size is not None
+        y_pos = float(raw_y)
+        font_size = float(raw_font_size)
+        top = y_pos - (0.5 * font_size)
+        bottom = y_pos + (0.5 * font_size)
+        min_top = top if min_top is None else min(min_top, top)
+        max_bottom = bottom if max_bottom is None else max(max_bottom, bottom)
+    assert min_top is not None
+    assert max_bottom is not None
+    return group_y + min_top, group_y + max_bottom
+
+
 def _extract_group_italic_tspan_texts(root: ET.Element, group_id: str) -> list[str]:
     group = root.find(f".//svg:g[@id='{group_id}']", SVG_NS)
     assert group is not None
@@ -59,7 +92,18 @@ def _write_multi_record_gbk(path: Path) -> dict[str, int]:
         description="Record A",
     )
     rec_a.annotations["molecule_type"] = "DNA"
-    rec_a.features = [SeqFeature(FeatureLocation(0, 120), type="CDS")]
+    rec_a.features = [
+        SeqFeature(
+            FeatureLocation(0, rec_a_len),
+            type="source",
+            qualifiers={
+                "organism": ["Organism alpha"],
+                "strain": ["Strain A"],
+                "chromosome": ["1"],
+            },
+        ),
+        SeqFeature(FeatureLocation(0, 120), type="CDS"),
+    ]
 
     rec_b = SeqRecord(
         Seq("T" * rec_b_len),
@@ -68,7 +112,18 @@ def _write_multi_record_gbk(path: Path) -> dict[str, int]:
         description="Record B",
     )
     rec_b.annotations["molecule_type"] = "DNA"
-    rec_b.features = [SeqFeature(FeatureLocation(0, 80), type="CDS")]
+    rec_b.features = [
+        SeqFeature(
+            FeatureLocation(0, rec_b_len),
+            type="source",
+            qualifiers={
+                "organism": ["Organism beta"],
+                "strain": ["Strain B"],
+                "plasmid": ["pRecB"],
+            },
+        ),
+        SeqFeature(FeatureLocation(0, 80), type="CDS"),
+    ]
 
     SeqIO.write([rec_a, rec_b], path, "genbank")
     return {"RecA": rec_a_len, "RecB": rec_b_len}
@@ -343,6 +398,135 @@ def test_linear_plot_title_position_changes_vertical_location(
         y_positions[position] = _extract_group_translate_y(root, "plot_title")
 
     assert y_positions["top"] < y_positions["center"] < y_positions["bottom"]
+
+
+@pytest.mark.linear
+def test_linear_record_label_adds_top_line_without_hiding_accession(
+    temp_output_dir: Path,
+    gbdraw_runner,
+) -> None:
+    gbk_path = temp_output_dir / "multi_records_definition_stack.gbk"
+    lengths = _write_multi_record_gbk(gbk_path)
+
+    returncode, output, svg_path = gbdraw_runner.run_linear(
+        [gbk_path],
+        "linear_definition_record_label_stack",
+        temp_output_dir,
+        extra_args=["--record_id", "RecB", "--record_label", "CustomLabel", "--legend", "none"],
+    )
+
+    assert returncode == 0, f"gbdraw failed: {output}"
+    root = ET.fromstring(svg_path.read_text(encoding="utf-8"))
+    assert root.find(".//svg:g[@id='RecB']", SVG_NS) is not None
+    assert root.find(".//svg:g[@id='RecB_definition']", SVG_NS) is not None
+    assert _extract_group_texts(root, "RecB_definition") == ["CustomLabel", "RecB", f"{lengths['RecB']:,} bp"]
+
+
+@pytest.mark.linear
+def test_linear_definition_replicon_hidden_by_default_and_shown_on_request(
+    temp_output_dir: Path,
+    gbdraw_runner,
+) -> None:
+    gbk_path = temp_output_dir / "multi_records_replicon.gbk"
+    lengths = _write_multi_record_gbk(gbk_path)
+
+    default_returncode, default_output, default_svg = gbdraw_runner.run_linear(
+        [gbk_path],
+        "linear_definition_replicon_default",
+        temp_output_dir,
+        extra_args=["--legend", "none"],
+    )
+    assert default_returncode == 0, f"gbdraw failed: {default_output}"
+    default_root = ET.fromstring(default_svg.read_text(encoding="utf-8"))
+    assert _extract_group_texts(default_root, "RecA_definition") == ["RecA", f"{lengths['RecA']:,} bp"]
+    assert _extract_group_texts(default_root, "RecB_definition") == ["RecB", f"{lengths['RecB']:,} bp"]
+
+    show_returncode, show_output, show_svg = gbdraw_runner.run_linear(
+        [gbk_path],
+        "linear_definition_replicon_shown",
+        temp_output_dir,
+        extra_args=["--show_replicon", "--legend", "none"],
+    )
+    assert show_returncode == 0, f"gbdraw failed: {show_output}"
+    show_root = ET.fromstring(show_svg.read_text(encoding="utf-8"))
+    assert _extract_group_texts(show_root, "RecA_definition") == ["Chromosome 1", "RecA", f"{lengths['RecA']:,} bp"]
+    assert _extract_group_texts(show_root, "RecB_definition") == ["pRecB", "RecB", f"{lengths['RecB']:,} bp"]
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    ("extra_args", "expected_texts"),
+    [
+        (["--hide_accession"], ["Top Label", "101-200"]),
+        (["--hide_length"], ["Top Label", "RecA"]),
+    ],
+)
+def test_linear_definition_hide_flags_preserve_other_lines_and_region_coordinates(
+    temp_output_dir: Path,
+    gbdraw_runner,
+    extra_args: list[str],
+    expected_texts: list[str],
+) -> None:
+    gbk_path = temp_output_dir / "multi_records_hide_flags.gbk"
+    _write_multi_record_gbk(gbk_path)
+
+    returncode, output, svg_path = gbdraw_runner.run_linear(
+        [gbk_path],
+        "linear_definition_hide_flags",
+        temp_output_dir,
+        extra_args=[
+            "--record_id",
+            "RecA",
+            "--record_label",
+            "Top Label",
+            "--region",
+            "RecA:101-200",
+            "--legend",
+            "none",
+            *extra_args,
+        ],
+    )
+
+    assert returncode == 0, f"gbdraw failed: {output}"
+    root = ET.fromstring(svg_path.read_text(encoding="utf-8"))
+    assert _extract_group_texts(root, "RecA_definition") == expected_texts
+
+
+@pytest.mark.linear
+def test_linear_definition_group_ids_are_unique_and_multi_line_blocks_do_not_overlap(
+    temp_output_dir: Path,
+    gbdraw_runner,
+) -> None:
+    gbk_path = temp_output_dir / "multi_records_definition_spacing.gbk"
+    lengths = _write_multi_record_gbk(gbk_path)
+
+    returncode, output, svg_path = gbdraw_runner.run_linear(
+        [gbk_path],
+        "linear_definition_spacing",
+        temp_output_dir,
+        extra_args=[
+            "--record_label",
+            "Label A",
+            "--record_label",
+            "Label B",
+            "--show_replicon",
+            "--legend",
+            "none",
+        ],
+    )
+
+    assert returncode == 0, f"gbdraw failed: {output}"
+    root = ET.fromstring(svg_path.read_text(encoding="utf-8"))
+    assert root.find(".//svg:g[@id='RecA']", SVG_NS) is not None
+    assert root.find(".//svg:g[@id='RecB']", SVG_NS) is not None
+    assert root.find(".//svg:g[@id='RecA_definition']", SVG_NS) is not None
+    assert root.find(".//svg:g[@id='RecB_definition']", SVG_NS) is not None
+    assert _extract_group_texts(root, "RecA_definition") == ["Label A", "Chromosome 1", "RecA", f"{lengths['RecA']:,} bp"]
+    assert _extract_group_texts(root, "RecB_definition") == ["Label B", "pRecB", "RecB", f"{lengths['RecB']:,} bp"]
+
+    rec_a_top, rec_a_bottom = _extract_definition_vertical_bounds(root, "RecA_definition")
+    rec_b_top, _rec_b_bottom = _extract_definition_vertical_bounds(root, "RecB_definition")
+    assert rec_a_bottom < rec_b_top
 
 
 @pytest.mark.linear

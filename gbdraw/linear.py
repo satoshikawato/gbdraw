@@ -267,10 +267,22 @@ def _get_args(args) -> argparse.Namespace:
         type=float)
     parser.add_argument(
         '--record_label',
-        help='Override record definition label (repeatable; order matches input records)',
+        help='Optional top definition line (for example organism/strain; repeatable; order matches input records)',
         type=str,
         action='append',
         default=[])
+    parser.add_argument(
+        '--show_replicon',
+        help='Show inferred replicon labels in linear record definitions (default: False).',
+        action='store_true')
+    parser.add_argument(
+        '--hide_accession',
+        help='Hide accession labels in linear record definitions (default: False).',
+        action='store_true')
+    parser.add_argument(
+        '--hide_length',
+        help='Hide length/coordinate labels in linear record definitions (default: False).',
+        action='store_true')
     parser.add_argument(
         '--label_font_size',
         help='Label font size (optional; default: 24 pt for genomes <= 50 kb, 5 pt for genomes >= 50 kb)',
@@ -562,6 +574,9 @@ def linear_main(cmd_args) -> None:
     block_stroke_color: Optional[str] = args.block_stroke_color
     block_stroke_width: Optional[float] = args.block_stroke_width
     definition_font_size: Optional[float] = args.definition_font_size
+    definition_show_replicon: bool = bool(args.show_replicon)
+    definition_show_accession: bool = not bool(args.hide_accession)
+    definition_show_length: bool = not bool(args.hide_length)
     plot_title: str = str(args.plot_title or "").strip()
     plot_title_position: str = str(args.plot_title_position or "bottom").strip().lower()
     plot_title_font_size: Optional[float] = args.plot_title_font_size
@@ -597,6 +612,9 @@ def linear_main(cmd_args) -> None:
         linear_axis_stroke_color=axis_stroke_color, 
         linear_axis_stroke_width=axis_stroke_width, 
         linear_definition_font_size=definition_font_size,
+        linear_definition_show_replicon=definition_show_replicon,
+        linear_definition_show_accession=definition_show_accession,
+        linear_definition_show_length=definition_show_length,
         label_font_size=label_font_size,
         label_placement=label_placement,
         label_rotation=label_rotation,

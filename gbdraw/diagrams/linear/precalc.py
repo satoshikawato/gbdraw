@@ -21,24 +21,44 @@ from ...labels.filtering import preprocess_label_filtering  # type: ignore[repor
 from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear  # type: ignore[reportMissingImports]
 
 
-def _precalculate_definition_widths(
+def _precalculate_definition_metrics(
     records: list[SeqRecord],
     config_dict: dict,
     canvas_config,
     cfg: GbdrawConfig | None = None,
-) -> float:
+) -> tuple[float, dict[str, float], dict[str, float]]:
     """
-    Pre-calculates the maximum definition width among all records.
+    Pre-calculate definition widths and heights for all records.
     """
     max_definition_width = 0
+    definition_heights: dict[str, float] = {}
+    definition_half_heights: dict[str, float] = {}
     if not records:
-        return 0
+        return 0.0, definition_heights, definition_half_heights
 
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
     for record in records:
         def_group = DefinitionGroup(record, config_dict, canvas_config, cfg=cfg)
         if def_group.definition_bounding_box_width > max_definition_width:
             max_definition_width = def_group.definition_bounding_box_width
+        definition_height = float(def_group.definition_bounding_box_height)
+        definition_heights[record.id] = definition_height
+        definition_half_heights[record.id] = 0.5 * definition_height
+    return max_definition_width, definition_heights, definition_half_heights
+
+
+def _precalculate_definition_widths(
+    records: list[SeqRecord],
+    config_dict: dict,
+    canvas_config,
+    cfg: GbdrawConfig | None = None,
+) -> float:
+    max_definition_width, _definition_heights, _definition_half_heights = _precalculate_definition_metrics(
+        records,
+        config_dict,
+        canvas_config,
+        cfg=cfg,
+    )
     return max_definition_width
 
 
@@ -125,6 +145,7 @@ def _precalculate_label_dimensions(
 
 
 __all__ = [
+    "_precalculate_definition_metrics",
     "_precalculate_definition_widths",
     "_precalculate_label_dimensions",
 ]

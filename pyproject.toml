@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gbdraw"
-version = "0.9.0b0"
+version = "0.9.0"
 description = "A genome diagram generator for microbes and organelles"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
     {name = "Satoshi Kawato", email = "kawato@kaiyodai.ac.jp"}
 ]
@@ -15,7 +15,6 @@ requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -60,14 +59,45 @@ gbdraw = [
     "data/color_palettes.toml",
     "data/config.toml",
     "data/*.ttf",
+    "web/*.whl",
     "web/index.html",
+    "web/open-source-notices.html",
     "web/js/*.js",
     "web/js/app/*.js",
     "web/js/app/*/*.js",
+    "web/js/workers/*.js",
     "web/js/services/*.js",
     "web/js/utils/*.js",
     "web/presets/*.txt",
     "web/presets/*.tsv",
+    "web/vendor/fonts/*.ttf",
+    "web/vendor/*/*.css",
+    "web/vendor/*/*.js",
+    "web/vendor/*/*.json",
+    "web/vendor/*/*.svg",
+    "web/vendor/*/*.ttf",
+    "web/vendor/*/*.whl",
+    "web/vendor/*/*.woff",
+    "web/vendor/*/*.woff2",
+    "web/vendor/*/*/*.css",
+    "web/vendor/*/*/*.js",
+    "web/vendor/*/*/*.json",
+    "web/vendor/*/*/*.mjs",
+    "web/vendor/*/*/*.svg",
+    "web/vendor/*/*/*.ttf",
+    "web/vendor/*/*/*.whl",
+    "web/vendor/*/*/*.woff",
+    "web/vendor/*/*/*.woff2",
+    "web/vendor/*/*/*.zip",
+    "web/vendor/*/*/*.wasm",
+    "web/vendor/*/*/*/*.js",
+    "web/vendor/*/*/*/*.json",
+    "web/vendor/*/*/*/*.mjs",
+    "web/vendor/*/*/*/*.whl",
+    "web/vendor/*/*/*/*.zip",
+    "web/vendor/*/*/*/*.wasm",
+    "web/wasm/*/*.md",
+    "web/wasm/*/*.wasm",
 ]
 
 [tool.pytest.ini_options]

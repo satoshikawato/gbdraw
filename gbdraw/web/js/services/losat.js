@@ -1,13 +1,20 @@
+import { WASI_SHIM_URL } from '../config.js';
+
 const DEFAULT_WASM_PATH = './wasm/losat/losat.wasm';
 
 let wasiShimPromise = null;
 let wasmModulePromise = null;
 
+const resolveAssetUrl = (path) => new URL(path, window.location.href).toString();
+
 const loadWasiShim = async () => {
   if (!wasiShimPromise) {
-    wasiShimPromise = import(
-      'https://unpkg.com/@bjorn3/browser_wasi_shim@0.4.2/dist/index.js'
-    );
+    const wasiShimUrl = resolveAssetUrl(WASI_SHIM_URL);
+    wasiShimPromise = import(wasiShimUrl).catch((error) => {
+      throw new Error(
+        `Missing packaged asset: browser_wasi_shim module at ${wasiShimUrl}. ${error.message}`
+      );
+    });
   }
   return wasiShimPromise;
 };
@@ -15,9 +22,10 @@ const loadWasiShim = async () => {
 const loadLosatModule = async (wasmPath = DEFAULT_WASM_PATH) => {
   if (!wasmModulePromise) {
     wasmModulePromise = (async () => {
-      const response = await fetch(wasmPath);
+      const resolvedWasmPath = resolveAssetUrl(wasmPath);
+      const response = await fetch(resolvedWasmPath, { cache: 'no-store' });
       if (!response.ok) {
-        throw new Error(`LOSAT wasm not found at ${wasmPath}`);
+        throw new Error(`Missing packaged asset: LOSAT wasm not found at ${resolvedWasmPath}`);
       }
       const bytes = await response.arrayBuffer();
       return WebAssembly.compile(bytes);

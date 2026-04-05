@@ -1,9 +1,24 @@
-import { GBDRAW_WHEEL_NAME, GBDRAW_WHEEL_CACHE_BUST } from '../config.js';
+import {
+  GBDRAW_WHEEL_NAME,
+  GBDRAW_WHEEL_CACHE_BUST,
+  PYODIDE_INDEX_URL,
+  PYODIDE_LOCAL_WHEELS
+} from '../config.js';
 import { PYTHON_HELPERS } from './python-helpers.js';
 
 export const createPyodideManager = ({ state }) => {
   const { pyodideReady, loadingStatus, paletteNames, currentColors } = state;
   const pyodideRef = { current: null };
+
+  const resolveAssetUrl = (path) => new URL(path, window.location.href).toString();
+
+  const ensureLocalAsset = async (url, label) => {
+    const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`Missing packaged asset: ${label} (${response.status}) at ${url}`);
+    }
+    return url;
+  };
 
   const getPyodide = () => pyodideRef.current;
   const setPyodide = (value) => {
@@ -23,32 +38,34 @@ export const createPyodideManager = ({ state }) => {
       wheelBaseUrl.searchParams.set('v', GBDRAW_WHEEL_CACHE_BUST);
     }
     const wheelUrl = wheelBaseUrl.toString();
-    const response = await fetch(wheelUrl, { cache: 'no-store' });
-    if (!response.ok) {
-      throw new Error(
-        `Wheel not found (${response.status}). Expected ${GBDRAW_WHEEL_NAME} at the site root. ` +
-        'Build the wheel and copy it into gbdraw/web, or update gbdraw/web/js/config.js.'
-      );
-    }
-    const buffer = await response.arrayBuffer();
-    const bytes = new Uint8Array(buffer.slice(0, 2));
-    if (bytes.length < 2 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
-      throw new Error(
-        `Wheel file is not a valid zip: ${GBDRAW_WHEEL_NAME}. ` +
-        'Ensure the file is a .whl built from this version and is served correctly.'
-      );
-    }
-    return wheelUrl;
+    return ensureLocalAsset(wheelUrl, `gbdraw browser wheel ${GBDRAW_WHEEL_NAME}`);
+  };
+
+  const ensureLocalDependencyWheels = async () => {
+    const wheelUrls = PYODIDE_LOCAL_WHEELS.map((path) => resolveAssetUrl(path));
+    await Promise.all(
+      wheelUrls.map((url, index) =>
+        ensureLocalAsset(url, `Pyodide dependency wheel ${PYODIDE_LOCAL_WHEELS[index]}`)
+      )
+    );
+    return wheelUrls;
   };
 
   const initPyodide = async () => {
     try {
-      const pyodide = await loadPyodide();
+      const pyodideIndexUrl = resolveAssetUrl(PYODIDE_INDEX_URL);
+      loadingStatus.value = 'Loading local Pyodide runtime...';
+      const pyodide = await loadPyodide({
+        indexURL: pyodideIndexUrl,
+        packageBaseUrl: pyodideIndexUrl
+      });
       setPyodide(pyodide);
-      loadingStatus.value = 'Installing dependencies...';
+      loadingStatus.value = 'Loading local micropip...';
       await pyodide.loadPackage('micropip');
       const micropip = pyodide.pyimport('micropip');
-      await micropip.install(['biopython', 'svgwrite', 'pandas', 'fonttools', 'bcbio-gff']);
+      loadingStatus.value = 'Installing local Python dependencies...';
+      const localWheelUrls = await ensureLocalDependencyWheels();
+      await micropip.install(localWheelUrls);
       loadingStatus.value = 'Installing gbdraw...';
       const wheelUrl = await ensureWheelAvailable();
       await micropip.install(wheelUrl);
@@ -61,7 +78,8 @@ export const createPyodideManager = ({ state }) => {
       }
       pyodideReady.value = true;
     } catch (e) {
-      loadingStatus.value = 'Startup Error: ' + e.message;
+      const message = e instanceof Error ? e.message : String(e);
+      loadingStatus.value = 'Startup Error: ' + message;
       console.error(e);
     }
   };
