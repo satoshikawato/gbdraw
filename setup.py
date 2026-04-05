@@ -18,6 +18,8 @@ setup(
             'pytest>=7.0',
             'pytest-cov>=4.0',
             'pytest-timeout>=2.0',
+            'setuptools>=61.0',
+            'wheel',
         ],
         'export': ['cairosvg'],
     },

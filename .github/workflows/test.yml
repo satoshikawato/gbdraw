@@ -35,7 +35,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           pip install -e ".[dev]"
 
       - name: Run fast tests
@@ -65,7 +65,7 @@ jobs:
 
       - name: Install dependencies with export extras
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           pip install -e ".[dev,export]"
 
       - name: Run tests with CairoSVG
