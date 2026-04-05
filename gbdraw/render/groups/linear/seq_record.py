@@ -296,7 +296,12 @@ class SeqRecordGroup:
         selected_features_set: str = self.feature_config.selected_features_set
 
         default_colors: DataFrame | None = self.feature_config.default_colors
-        label_filtering = preprocess_label_filtering(self.label_filtering)
+        compute_label_text = self.show_labels and self.precalculated_labels is None
+        label_filtering = (
+            preprocess_label_filtering(self.label_filtering)
+            if compute_label_text
+            else {}
+        )
         color_table, default_colors = preprocess_color_tables(color_table, default_colors)
         feature_dict, _ = create_feature_dict(
             self.gb_record,
@@ -308,21 +313,25 @@ class SeqRecordGroup:
             label_filtering,
             directional_feature_types=self.feature_config.directional_feature_types,
             feature_visibility_rules=self.feature_config.feature_visibility_rules,
+            compute_label_text=compute_label_text,
         )
         label_list = []
         if self.show_labels:
-            label_list = prepare_label_list_linear(
-                feature_dict,
-                record_length,
-                alignment_width,
-                genome_size_normalization_factor,
-                cds_height,
-                separate_strands,
-                self.canvas_config.track_layout,
-                self.canvas_config.track_axis_gap,
-                self.config_dict,
-                cfg=self._cfg,
-            )
+            if self.precalculated_labels is not None:
+                label_list = self.precalculated_labels
+            else:
+                label_list = prepare_label_list_linear(
+                    feature_dict,
+                    record_length,
+                    alignment_width,
+                    genome_size_normalization_factor,
+                    cds_height,
+                    separate_strands,
+                    self.canvas_config.track_layout,
+                    self.canvas_config.track_axis_gap,
+                    self.config_dict,
+                    cfg=self._cfg,
+                )
 
         record_group: Group = self.draw_record(
             feature_dict,

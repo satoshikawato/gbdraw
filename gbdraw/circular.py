@@ -29,7 +29,6 @@ from .features.visibility import read_feature_visibility_file
 from .exceptions import ValidationError
 
 from .cli_utils.common import (
-    CAIROSVG_AVAILABLE,
     setup_logging,
     validate_input_args,
     validate_label_args,
@@ -228,20 +227,12 @@ def _get_args(args) -> argparse.Namespace:
         '--label_font_size',
         help='Label font size (optional; default: 14 (pt) for genomes <= 50 kb, 8 for genomes >= 50 kb)',
         type=float)
-    if CAIROSVG_AVAILABLE:
-        parser.add_argument(
-            '-f',
-            '--format',
-            help='Comma-separated list of output file formats (svg, png, pdf, eps, ps; default: svg).',
-            type=str,
-            default="svg")
-    else:
-        parser.add_argument(
-            '-f',
-            '--format',
-            help='Comma-separated list of output file formats (svg; install CairoSVG to enable png, pdf, eps, ps output).',
-            type=str,
-            default="svg")
+    parser.add_argument(
+        '-f',
+        '--format',
+        help='Comma-separated list of output file formats (svg, png, pdf, eps, ps; default: svg; non-SVG requires CairoSVG).',
+        type=str,
+        default="svg")
     parser.add_argument(
         '--suppress_gc',
         help='Suppress GC content track (default: False).',

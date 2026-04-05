@@ -11,9 +11,11 @@ from __future__ import annotations
 from dataclasses import replace
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
+from ...analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...configurators import (  # type: ignore[reportMissingImports]
@@ -46,7 +48,6 @@ from .builders import (
 from .precalc import _precalculate_definition_metrics, _precalculate_label_dimensions
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
-from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
 
 
 def _is_axis_ruler_enabled(canvas_config: LinearCanvasConfigurator, cfg: GbdrawConfig) -> bool:
@@ -119,7 +120,6 @@ def _precalculate_feature_track_heights(
     color_table, default_colors = preprocess_color_tables(
         feature_config.color_table, feature_config.default_colors
     )
-    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
     
     for record in records:
         feature_dict, _ = create_feature_dict(
@@ -129,9 +129,10 @@ def _precalculate_feature_track_heights(
             default_colors,
             canvas_config.strandedness,
             canvas_config.resolve_overlaps,
-            label_filtering,
+            {},
             directional_feature_types=feature_config.directional_feature_types,
             feature_visibility_rules=feature_config.feature_visibility_rules,
+            compute_label_text=False,
         )
         min_top_y = 0.0
         max_bottom_y = 0.0
@@ -233,6 +234,20 @@ def _precalculate_feature_track_heights(
         record_top_guard_undisplaced,
         record_top_guard_middle_undisplaced,
     )
+
+
+def _precalculate_gc_dataframes(
+    records: list[SeqRecord],
+    *,
+    window: int,
+    step: int,
+    dinucleotide: str,
+    enabled: bool,
+) -> list[DataFrame | None]:
+    """Build GC/skew data once per record and share it across linear groups."""
+    if not enabled:
+        return [None for _ in records]
+    return [skew_df(record, window, step, dinucleotide) for record in records]
 
 
 def _precalculate_label_heights_below(all_labels_by_record: dict[str, list[dict]]) -> dict[str, float]:
@@ -352,40 +367,54 @@ def assemble_linear_diagram(
         )
 
     normalize_length = cfg.canvas.linear.normalize_length
+    record_gc_dfs = _precalculate_gc_dataframes(
+        records,
+        window=int(gc_config.window),
+        step=int(gc_config.step),
+        dinucleotide=str(gc_config.dinucleotide),
+        enabled=bool(canvas_config.show_gc or canvas_config.show_skew),
+    )
 
     # Prepare legend group
     has_blast = bool(blast_files)
-    # Determine which features should be displayed in the legend
-    features_present = check_feature_presence(
-        records,
-        feature_config.selected_features_set,
-        feature_visibility_rules=feature_config.feature_visibility_rules,
-    )
-    # Pre-compute which color rules are actually used for accurate legend
-    color_map, default_color_map = preprocess_color_tables(
-        feature_config.color_table, feature_config.default_colors
-    )
-    used_color_rules, default_used_features = precompute_used_color_rules(
-        records,
-        color_map,
-        default_color_map,
-        set(feature_config.selected_features_set),
-        feature_visibility_rules=feature_config.feature_visibility_rules,
-    )
-    # Prepare legend table
-    legend_table = prepare_legend_table(
-        gc_config, skew_config, feature_config, features_present, blast_config, has_blast,
-        used_color_rules=used_color_rules,
-        default_used_features=default_used_features,
-    )
-    # Predetermine legend dimensions (number of columns etc.)
-    legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
-    # Draw legend group to determine the actual dimensions
-    legend_group: Group = LegendGroup(config_dict, canvas_config, legend_config, legend_table, cfg=cfg)
-    # Get the legend height
-    required_legend_height = legend_group.legend_height
-
-    canvas_config.recalculate_canvas_dimensions(legend_group, max_def_width)
+    legend_table: dict = {}
+    legend_group: LegendGroup | None = None
+    required_legend_height = 0.0
+    if canvas_config.legend_position != "none":
+        features_present = check_feature_presence(
+            records,
+            feature_config.selected_features_set,
+            feature_visibility_rules=feature_config.feature_visibility_rules,
+        )
+        color_map, default_color_map = preprocess_color_tables(
+            feature_config.color_table, feature_config.default_colors
+        )
+        used_color_rules, default_used_features = precompute_used_color_rules(
+            records,
+            color_map,
+            default_color_map,
+            set(feature_config.selected_features_set),
+            feature_visibility_rules=feature_config.feature_visibility_rules,
+        )
+        legend_table = prepare_legend_table(
+            gc_config, skew_config, feature_config, features_present, blast_config, has_blast,
+            used_color_rules=used_color_rules,
+            default_used_features=default_used_features,
+        )
+        legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
+        legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table, cfg=cfg)
+        required_legend_height = float(legend_group.legend_height)
+        canvas_config.recalculate_canvas_dimensions(legend_group, max_def_width)
+    else:
+        canvas_config.alignment_width = canvas_config.fig_width
+        canvas_config.horizontal_offset = 2 * canvas_config.canvas_padding + max_def_width
+        canvas_config.total_width = (
+            canvas_config.horizontal_offset
+            + canvas_config.alignment_width
+            + 2 * canvas_config.canvas_padding
+        )
+        canvas_config.legend_offset_x = 0
+        canvas_config.legend_offset_y = 0
     # Vertical shift: how much the records should be moved downward in order to place the records in the middle of the canvas
     vertical_shift = 0
     if canvas_config.legend_position in ["top", "bottom"]:
@@ -401,7 +430,7 @@ def assemble_linear_diagram(
     record_offsets = []
 
     if canvas_config.legend_position == "top":
-        current_y = canvas_config.original_vertical_offset + legend_group.legend_height + canvas_config.vertical_offset
+        current_y = canvas_config.original_vertical_offset + required_legend_height + canvas_config.vertical_offset
     else:
         if canvas_config.vertical_offset > vertical_shift:
             current_y = canvas_config.vertical_offset
@@ -501,29 +530,27 @@ def assemble_linear_diagram(
         final_height += int(required_legend_height)
     canvas_config.total_height = max(final_height, canvas_config.total_height)
 
-    canvas_config.recalculate_canvas_dimensions(legend_group, max_def_width)
+    if legend_group is not None:
+        canvas_config.recalculate_canvas_dimensions(legend_group, max_def_width)
     canvas: Drawing = canvas_config.create_svg_canvas()
 
     # Embed both viewBox configurations as data attributes for JavaScript repositioning
     # This allows switching between horizontal and vertical legend layouts without accumulation errors
-    h_legend_width, h_legend_height = legend_group.get_horizontal_dimensions()
-    v_legend_width, v_legend_height = legend_group.get_vertical_dimensions()
-
-    # Calculate viewBox for vertical layout (left/right legend positions)
     vertical_vb_width = canvas_config.total_width
     vertical_vb_height = canvas_config.total_height
-    if canvas_config.legend_position in ["top", "bottom"]:
-        # Current dimensions are for horizontal layout, calculate vertical
-        vertical_vb_width = canvas_config.total_width - h_legend_width + v_legend_width
-        vertical_vb_height = canvas_config.total_height - h_legend_height
-
-    # Calculate viewBox for horizontal layout (top/bottom legend positions)
     horizontal_vb_width = canvas_config.total_width
     horizontal_vb_height = canvas_config.total_height
-    if canvas_config.legend_position in ["left", "right"]:
-        # Current dimensions are for vertical layout, calculate horizontal
-        horizontal_vb_width = canvas_config.total_width - v_legend_width
-        horizontal_vb_height = canvas_config.total_height + h_legend_height
+    if legend_group is not None:
+        h_legend_width, h_legend_height = legend_group.get_horizontal_dimensions()
+        v_legend_width, v_legend_height = legend_group.get_vertical_dimensions()
+
+        if canvas_config.legend_position in ["top", "bottom"]:
+            vertical_vb_width = canvas_config.total_width - h_legend_width + v_legend_width
+            vertical_vb_height = canvas_config.total_height - h_legend_height
+
+        if canvas_config.legend_position in ["left", "right"]:
+            horizontal_vb_width = canvas_config.total_width - v_legend_width
+            horizontal_vb_height = canvas_config.total_height + h_legend_height
 
     canvas.attribs["data-vertical-viewbox"] = f"0 0 {vertical_vb_width} {vertical_vb_height}"
     canvas.attribs["data-horizontal-viewbox"] = f"0 0 {horizontal_vb_width} {horizontal_vb_height}"
@@ -615,6 +642,7 @@ def assemble_linear_diagram(
             current_feature_height_below = record_heights_below.get(record.id, canvas_config.cds_padding)
             gc_offset_y = offset_y + (current_feature_height_below - canvas_config.cds_padding)
         gc_offset_y += record_label_heights_below.get(record.id, 0.0)
+        shared_gc_df = record_gc_dfs[count - 1] if (count - 1) < len(record_gc_dfs) else None
 
         if canvas_config.show_gc:
             add_gc_content_group(
@@ -626,6 +654,7 @@ def assemble_linear_diagram(
                 gc_config,
                 config_dict,
                 cfg=record_cfg,
+                gc_df=shared_gc_df,
             )
         if canvas_config.show_skew:
             add_gc_skew_group(
@@ -637,6 +666,7 @@ def assemble_linear_diagram(
                 skew_config,
                 config_dict,
                 cfg=record_cfg,
+                gc_df=shared_gc_df,
             )
 
     if plot_title_obj is not None:

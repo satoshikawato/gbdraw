@@ -12,14 +12,14 @@ import logging
 import sys
 from typing import Optional
 
-try:
-    import cairosvg  # type: ignore[reportMissingImports]
-    CAIROSVG_AVAILABLE = True
-except (ImportError, OSError):
-    CAIROSVG_AVAILABLE = False
-
+from gbdraw.render.export import CAIROSVG_AVAILABLE, has_cairosvg
 
 logger = logging.getLogger(__name__)
+
+_OUTPUT_FORMAT_HELP = (
+    "Comma-separated list of output file formats "
+    "(svg, png, pdf, eps, ps; default: svg; non-SVG requires CairoSVG)."
+)
 
 
 def setup_logging() -> None:
@@ -63,20 +63,12 @@ def add_output_args(parser: argparse.ArgumentParser, default_output: Optional[st
         type=str,
         default=default_output)
 
-    if CAIROSVG_AVAILABLE:
-        parser.add_argument(
-            '-f',
-            '--format',
-            help='Comma-separated list of output file formats (svg, png, pdf, eps, ps; default: svg).',
-            type=str,
-            default="svg")
-    else:
-        parser.add_argument(
-            '-f',
-            '--format',
-            help='Comma-separated list of output file formats (svg; install CairoSVG to enable png, pdf, eps, ps output).',
-            type=str,
-            default="svg")
+    parser.add_argument(
+        '-f',
+        '--format',
+        help=_OUTPUT_FORMAT_HELP,
+        type=str,
+        default="svg")
 
 
 def add_color_args(parser: argparse.ArgumentParser) -> None:
@@ -213,9 +205,9 @@ def handle_output_formats(out_formats: list[str]) -> list[str]:
         if any(f != 'svg' for f in out_formats):
             logger.info("Running in WebAssembly mode: Output format constrained to SVG. (Image conversion is handled by the browser)")
             return ['svg']
-    elif not CAIROSVG_AVAILABLE:
+    else:
         non_svg_formats = [f for f in out_formats if f != 'svg']
-        if non_svg_formats:
+        if non_svg_formats and not has_cairosvg():
             logger.warning(
                 f"CairoSVG is not installed. Cannot generate: {', '.join(non_svg_formats).upper()}\n"
                 f"   Output restricted to SVG only.\n"

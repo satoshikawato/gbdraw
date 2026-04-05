@@ -37,6 +37,7 @@ class GcContentGroup:
         start_x: float = 0,
         start_y: float = 0,
         cfg: GbdrawConfig | None = None,
+        gc_df: DataFrame | None = None,
     ) -> None:
         """
         Initializes the GcContentGroup with the given parameters and configurations.
@@ -66,7 +67,7 @@ class GcContentGroup:
         self._cfg = cfg
         self.bool_normalize_length = cfg.canvas.linear.normalize_length
         self.normalize_length()
-        self.generate_gc_df()
+        self.generate_gc_df(gc_df)
         self.add_elements_to_group()
 
     def normalize_length(self) -> None:
@@ -83,14 +84,17 @@ class GcContentGroup:
         else:
             self.genome_size_normalization_factor: float = self.record_len / self.longest_record_len
 
-    def generate_gc_df(self) -> None:
+    def generate_gc_df(self, gc_df: DataFrame | None = None) -> None:
         """
         Generates a DataFrame for GC content based on the genomic record.
 
         This method uses the `skew_df` function to calculate the GC content of the genomic record.
         The resulting DataFrame is used for visualizing the GC content.
         """
-        self.gc_df: DataFrame = skew_df(self.gb_record, self.window, self.step, self.dinucleotide)
+        if gc_df is not None:
+            self.gc_df = gc_df
+            return
+        self.gc_df = skew_df(self.gb_record, self.window, self.step, self.dinucleotide)
 
     def add_elements_to_group(self) -> None:
         """

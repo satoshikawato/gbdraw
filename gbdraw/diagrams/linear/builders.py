@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Optional
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
@@ -67,6 +68,7 @@ def add_gc_content_group(
     gc_config: GcContentConfigurator,
     config_dict: dict,
     cfg: GbdrawConfig | None = None,
+    gc_df: DataFrame | None = None,
 ) -> Drawing:
     """Adds a GC content group to the linear canvas."""
     gc_content_group: Group = GcContentGroup(
@@ -77,6 +79,7 @@ def add_gc_content_group(
         gc_config=gc_config,
         config_dict=config_dict,
         cfg=cfg,
+        gc_df=gc_df,
     ).get_group()
     position_gc_content_group(gc_content_group, offset_y, offset_x, canvas_config)
     canvas.add(gc_content_group)
@@ -92,6 +95,7 @@ def add_gc_skew_group(
     skew_config: GcSkewConfigurator,
     config_dict: dict,
     cfg: GbdrawConfig | None = None,
+    gc_df: DataFrame | None = None,
 ) -> Drawing:
     """Adds a GC skew group to the linear canvas."""
     gc_skew_group: Group = GcSkewGroup(
@@ -102,6 +106,7 @@ def add_gc_skew_group(
         skew_config=skew_config,
         config_dict=config_dict,
         cfg=cfg,
+        gc_df=gc_df,
     ).get_group()
     position_gc_skew_group(gc_skew_group, offset, offset_x, canvas_config)
     canvas.add(gc_skew_group)

@@ -1,21 +1,55 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from __future__ import annotations
+
+import importlib
 import os
 import sys
 import logging
+from types import ModuleType
 from typing import List
 
 from svgwrite import Drawing
 
-try:
-    import cairosvg
-
-    CAIROSVG_AVAILABLE = True
-except (ImportError, OSError):
-    CAIROSVG_AVAILABLE = False
-
 logger = logging.getLogger(__name__)
+
+_cairosvg_module: ModuleType | None = None
+
+
+class _LazyCairoSvgAvailability:
+    """Bool-like compatibility proxy that resolves CairoSVG only on demand."""
+
+    def __bool__(self) -> bool:
+        return has_cairosvg()
+
+    def __repr__(self) -> str:
+        return str(has_cairosvg())
+
+
+def _load_cairosvg() -> ModuleType | None:
+    global _cairosvg_module
+    if _cairosvg_module is not None:
+        return _cairosvg_module
+    try:
+        _cairosvg_module = importlib.import_module("cairosvg")
+    except (ImportError, OSError):
+        return None
+    return _cairosvg_module
+
+
+def has_cairosvg() -> bool:
+    return _load_cairosvg() is not None
+
+
+def get_cairosvg() -> ModuleType:
+    cairosvg_module = _load_cairosvg()
+    if cairosvg_module is None:
+        raise ImportError("CairoSVG is not installed. Install with: pip install gbdraw[export]")
+    return cairosvg_module
+
+
+CAIROSVG_AVAILABLE = _LazyCairoSvgAvailability()
 
 
 def parse_formats(out_formats: str) -> list[str]:
@@ -72,33 +106,9 @@ def save_figure(canvas: Drawing, list_of_formats: List[str]) -> None:
         return
 
     # --- CLI Conversion Logic (CairoSVG Only) ---
-    if CAIROSVG_AVAILABLE:
-        try:
-            svg_string = canvas.tostring()
-            for fmt in formats_to_process:
-                out_file = f"{base_filename}.{fmt}"
-
-                if fmt == "png":
-                    cairosvg.svg2png(
-                        bytestring=svg_string.encode("utf-8"), write_to=out_file
-                    )
-                elif fmt == "pdf":
-                    cairosvg.svg2pdf(
-                        bytestring=svg_string.encode("utf-8"), write_to=out_file
-                    )
-                elif fmt == "ps":
-                    cairosvg.svg2ps(
-                        bytestring=svg_string.encode("utf-8"), write_to=out_file
-                    )
-                elif fmt == "eps":
-                    cairosvg.svg2ps(
-                        bytestring=svg_string.encode("utf-8"), write_to=out_file
-                    )
-
-                logger.info(f"Generated {fmt.upper()}: {out_file}")
-        except Exception as e:
-            logger.error(f"Failed to generate images using CairoSVG: {e}")
-    else:
+    try:
+        cairosvg_module = get_cairosvg()
+    except ImportError:
         # CairoSVG not available; warn user about skipped formats
         missing_formats = ", ".join([f.upper() for f in formats_to_process])
         logger.warning(
@@ -106,8 +116,33 @@ def save_figure(canvas: Drawing, list_of_formats: List[str]) -> None:
             f"   CairoSVG is not installed.\n"
             f"   To enable PNG/PDF support, run: pip install gbdraw[export]\n"
         )
+        return
+
+    try:
+        svg_bytes = canvas.tostring().encode("utf-8")
+        for fmt in formats_to_process:
+            out_file = f"{base_filename}.{fmt}"
+
+            if fmt == "png":
+                cairosvg_module.svg2png(bytestring=svg_bytes, write_to=out_file)
+            elif fmt == "pdf":
+                cairosvg_module.svg2pdf(bytestring=svg_bytes, write_to=out_file)
+            elif fmt == "ps":
+                cairosvg_module.svg2ps(bytestring=svg_bytes, write_to=out_file)
+            elif fmt == "eps":
+                cairosvg_module.svg2ps(bytestring=svg_bytes, write_to=out_file)
+
+            logger.info(f"Generated {fmt.upper()}: {out_file}")
+    except Exception as e:
+        logger.error(f"Failed to generate images using CairoSVG: {e}")
 
 
-__all__ = ["parse_formats", "save_figure"]
+__all__ = [
+    "CAIROSVG_AVAILABLE",
+    "get_cairosvg",
+    "has_cairosvg",
+    "parse_formats",
+    "save_figure",
+]
 
 
