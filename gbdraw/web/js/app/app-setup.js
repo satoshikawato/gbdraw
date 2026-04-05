@@ -340,6 +340,10 @@ export const createAppSetup = () => {
     return title || 'Untitled session';
   });
 
+  const canUseLinearRulerOnAxis = computed(
+    () => form.scale_style === 'ruler' && ['above', 'below'].includes(form.linear_track_layout)
+  );
+
   const clickedFeatureLocation = computed(() => {
     const cf = clickedFeature.value;
     if (!cf) return '';
@@ -643,6 +647,7 @@ export const createAppSetup = () => {
     moveLinearSeqDown,
     form,
     adv,
+    canUseLinearRulerOnAxis,
     losat,
     losatCacheInfo,
     circularRecordList,

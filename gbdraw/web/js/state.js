@@ -112,6 +112,8 @@ const canvasContainerRef = ref(null);
 const mode = ref('circular');
 const circularLegendPosition = ref('left'); // Separate legend position for circular mode
 const linearLegendPosition = ref('bottom'); // Separate legend position for linear mode
+const circularPlotTitlePosition = ref('none'); // Separate plot title position for circular mode
+const linearPlotTitlePosition = ref('bottom'); // Separate plot title position for linear mode
 const suppressCircularMultiRecordDefaults = ref(false);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
@@ -675,6 +677,8 @@ export const state = {
   mode,
   circularLegendPosition,
   linearLegendPosition,
+  circularPlotTitlePosition,
+  linearPlotTitlePosition,
   suppressCircularMultiRecordDefaults,
   cInputType,
   lInputType,

@@ -77,9 +77,10 @@ index.html
 │   │   ├── Header (mode toggle, config save/load)
 │   │   ├── Left Panel (4 columns)
 │   │   │   ├── Input Genomes card
-│   │   │   ├── Basic Settings card
-│   │   │   ├── Colors & Filters (collapsible)
-│   │   │   ├── Advanced Options (collapsible)
+│   │   │   ├── Basic card
+│   │   │   ├── Colors / Labels / Features (collapsible)
+│   │   │   ├── Mode-specific Layout / Title&Legend / Axis & Scale / Pairwise Match cards
+│   │   │   ├── Styles (collapsible)
 │   │   │   ├── About & Citation (collapsible)
 │   │   │   └── Generate button
 │   │   └── Right Panel (8 columns)

@@ -13,6 +13,35 @@ export const createLegendDragActions = ({ state, extractLegendEntries }) => {
     zoom,
     skipCaptureBaseConfig
   } = state;
+  let legendDragFrameId = null;
+  let pendingLegendPointer = null;
+
+  const cancelLegendDragFrame = () => {
+    if (legendDragFrameId !== null) {
+      cancelAnimationFrame(legendDragFrameId);
+      legendDragFrameId = null;
+    }
+  };
+
+  const applyLegendDragPosition = (clientX, clientY) => {
+    if (!legendDragging.value) return;
+    if (!svgContainer.value) return;
+
+    const svg = svgContainer.value.querySelector('svg');
+    if (!svg) return;
+    const legendGroup = svg.getElementById('legend');
+    if (!legendGroup) return;
+
+    const deltaX = (clientX - legendDragStart.x) / zoom.value;
+    const deltaY = (clientY - legendDragStart.y) / zoom.value;
+
+    const newX = legendOriginalTransform.value.x + deltaX;
+    const newY = legendOriginalTransform.value.y + deltaY;
+
+    legendGroup.setAttribute('transform', `translate(${newX}, ${newY})`);
+    legendCurrentOffset.x = deltaX;
+    legendCurrentOffset.y = deltaY;
+  };
 
   const startLegendDrag = (e) => {
     if (!svgContainer.value) return;
@@ -24,37 +53,48 @@ export const createLegendDragActions = ({ state, extractLegendEntries }) => {
     e.preventDefault();
     e.stopPropagation();
 
+    cancelLegendDragFrame();
+    pendingLegendPointer = null;
     legendDragging.value = true;
     legendDragStart.x = e.clientX;
     legendDragStart.y = e.clientY;
 
     const currentTransform = parseTransform(legendGroup.getAttribute('transform'));
     legendOriginalTransform.value = { ...currentTransform };
+    legendGroup.style.willChange = 'transform';
   };
 
   const onLegendDrag = (e) => {
     if (!legendDragging.value) return;
-    if (!svgContainer.value) return;
-
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-    const legendGroup = svg.getElementById('legend');
-    if (!legendGroup) return;
-
-    const deltaX = (e.clientX - legendDragStart.x) / zoom.value;
-    const deltaY = (e.clientY - legendDragStart.y) / zoom.value;
-
-    const newX = legendOriginalTransform.value.x + deltaX;
-    const newY = legendOriginalTransform.value.y + deltaY;
-
-    legendGroup.setAttribute('transform', `translate(${newX}, ${newY})`);
-    legendCurrentOffset.x = deltaX;
-    legendCurrentOffset.y = deltaY;
+    pendingLegendPointer = { x: e.clientX, y: e.clientY };
+    if (legendDragFrameId !== null) return;
+    legendDragFrameId = requestAnimationFrame(() => {
+      legendDragFrameId = null;
+      if (!pendingLegendPointer) return;
+      applyLegendDragPosition(pendingLegendPointer.x, pendingLegendPointer.y);
+    });
   };
 
-  const endLegendDrag = () => {
+  const endLegendDrag = (e) => {
     if (!legendDragging.value) return;
+    const finalPointer =
+      typeof e?.clientX === 'number' && typeof e?.clientY === 'number'
+        ? { x: e.clientX, y: e.clientY }
+        : pendingLegendPointer;
+    cancelLegendDragFrame();
+    if (finalPointer) {
+      applyLegendDragPosition(finalPointer.x, finalPointer.y);
+    }
 
+    if (svgContainer.value) {
+      const svg = svgContainer.value.querySelector('svg');
+      const legendGroup = svg?.getElementById('legend');
+      if (legendGroup) {
+        legendGroup.style.willChange = '';
+      }
+    }
+
+    pendingLegendPointer = null;
     legendDragging.value = false;
   };
 
