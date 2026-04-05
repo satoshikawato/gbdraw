@@ -335,21 +335,259 @@
                             </div>
                         </template>
 
-                        <div>
-                            <label class="input-label">
-                                Plot Title
-                                <help-tip :text="mode === 'circular'
-                                    ? 'Optional circular plot title used when the title position is Top or Bottom. Leave blank to use the default species + strain title.'
-                                    : 'Global title shown once for the whole linear plot.'"></help-tip>
-                            </label>
-                            <input
-                                type="text"
-                                v-model="form.plot_title"
-                                class="form-input"
-                                :placeholder="mode === 'circular' ? 'Optional shared plot title' : 'Optional plot title'"
-                            >
-                        </div>
                     </div>
+                </div>
+
+                <div class="card bg-slate-50/50">
+                    <details open>
+                        <summary><i class="ph ph-layout"></i> Layout <help-tip text="Control track placement and layout-related options."></help-tip></summary>
+                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
+                            <template v-if="mode === 'linear'">
+                                <div>
+                                    <label class="input-label text-[10px] mb-1">Track Layout <help-tip text="Set linear feature placement: Above keeps tracks above the axis, Middle keeps legacy placement, Below places tracks below the axis."></help-tip></label>
+                                    <select v-model="form.linear_track_layout" class="form-input text-xs py-1">
+                                        <option value="above">Above</option>
+                                        <option value="middle">Middle</option>
+                                        <option value="below">Below</option>
+                                    </select>
+                                </div>
+                                <div class="grid grid-cols-2 gap-y-1 gap-x-1 p-1 bg-slate-50 rounded-lg">
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="form.separate_strands" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Separate Strands <help-tip text="Display features on separate strands for better distinction."></help-tip></span>
+                                    </label>
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Shift features vertically to avoid overlap. Overlap direction follows Track Layout (Above: upward, Below: downward). (Experimental)"></help-tip></span>
+                                    </label>
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="form.align_center" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Align to Center <help-tip text="Align the linear map to the center of the page."></help-tip></span>
+                                    </label>
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="form.normalize_length" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Normalize Record Lengths <help-tip text="Normalize sequence lengths to be equal. Suppresses the length bar."></help-tip></span>
+                                    </label>
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="form.show_gc" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Show GC Content <help-tip text="Display GC content track."></help-tip></span>
+                                    </label>
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="form.show_skew" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Show GC Skew <help-tip text="Display GC skew track."></help-tip></span>
+                                    </label>
+                                </div>
+                            </template>
+
+                            <template v-else>
+                                <div>
+                                    <label class="input-label text-[10px] mb-1">Track Layout <help-tip text="Choose how features are displayed. 'Tuckin' is default and compact. 'Middle' aligns to center, 'Spreadout' separates them."></help-tip></label>
+                                    <select v-model="form.track_type" class="form-input text-xs py-1">
+                                        <option value="tuckin">Tuckin</option>
+                                        <option value="middle">Middle</option>
+                                        <option value="spreadout">Spreadout</option>
+                                    </select>
+                                </div>
+                                <div class="grid grid-cols-2 gap-y-1 gap-x-1 p-1 bg-slate-50 rounded-lg">
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="form.separate_strands" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Separate Strands <help-tip text="Display features on separate strands for better distinction."></help-tip></span>
+                                    </label>
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Circular mode: effective only when Separate Strands is OFF. If Separate Strands is ON, this option is ignored. Track Layout still applies: Tuckin shifts overlap tracks inward, Middle/Spreadout shift them outward."></help-tip></span>
+                                    </label>
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="form.multi_record_canvas" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Multi-Record Canvas <help-tip text="When multiple records are loaded, place them on one shared circular canvas as an automatic grid (opt-in)."></help-tip></span>
+                                    </label>
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="form.suppress_gc" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Hide GC Content <help-tip text="Suppress the GC content track."></help-tip></span>
+                                    </label>
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="form.suppress_skew" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Hide GC Skew <help-tip text="Suppress the GC skew track."></help-tip></span>
+                                    </label>
+                                </div>
+
+                                <div v-if="form.multi_record_canvas" class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-50 p-2 rounded border border-slate-200">
+                                    <div>
+                                        <label class="input-label text-[10px] mb-1">Record Size Mode <help-tip text="Scale circles by record length on multi-record canvas."></help-tip></label>
+                                        <select v-model="adv.multi_record_size_mode" class="form-input py-1 text-xs">
+                                            <option value="auto">Auto (Default)</option>
+                                            <option value="linear">Linear</option>
+                                            <option value="equal">Equal</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px] mb-1">Min Radius Ratio <help-tip text="Lower bound for short records (0-1)."></help-tip></label>
+                                        <input type="number" min="0.01" max="1" step="0.01" v-model.number="adv.multi_record_min_radius_ratio" class="form-input py-1 text-xs">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px] mb-1">Column Gap Ratio <help-tip text="Additional horizontal gap ratio between visible content bounds in each row on multi-record canvas. 0 makes row content touch. Default: 0.10 (horizontal only)."></help-tip></label>
+                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_column_gap_ratio" class="form-input py-1 text-xs">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px] mb-1">Row Gap Ratio <help-tip text="Additional visible gap ratio between row content bounds in multi-record canvas. 0 makes rows touch by content bounds. Default: 0.05 (vertical only)."></help-tip></label>
+                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_row_gap_ratio" class="form-input py-1 text-xs">
+                                    </div>
+                                    <div class="col-span-2">
+                                        <div class="flex items-center justify-between mb-1">
+                                            <label class="input-label text-[10px] mb-0">Record Order <help-tip text="Manual order and row assignment for multi-record canvas. Use Up/Down for left-to-right order within each row."></help-tip></label>
+                                            <button
+                                                type="button"
+                                                class="btn btn-secondary text-[10px] py-1 px-2"
+                                                @click="refreshCircularRecordOrder"
+                                                :disabled="cInputType !== 'gb'"
+                                            >
+                                                Reload Records
+                                            </button>
+                                        </div>
+                                        <div v-if="cInputType !== 'gb'" class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-1.5">
+                                            Record Order is available for GenBank input.
+                                        </div>
+                                        <div v-else-if="adv.multi_record_positions.length === 0" class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-1.5">
+                                            Upload a GenBank file to load records.
+                                        </div>
+                                        <div v-else class="space-y-1 bg-slate-50 border border-slate-200 rounded p-1.5">
+                                            <div
+                                                v-for="(position, idx) in adv.multi_record_positions"
+                                                :key="`record-order-${position.selector}-${idx}`"
+                                                class="grid grid-cols-[minmax(0,1fr)_3rem_auto] items-center gap-1.5"
+                                            >
+                                                <span class="truncate text-[10px] text-slate-700">{{ getCircularRecordOrderLabel(position.selector) }}</span>
+                                                <select
+                                                    class="form-input py-0.5 px-1 text-[10px]"
+                                                    :value="getCircularRecordRow(position)"
+                                                    @change="setCircularRecordRow(idx, $event.target.value)"
+                                                >
+                                                    <option v-for="rowOption in getCircularRecordRowOptions()" :key="`record-row-${idx}-${rowOption}`" :value="rowOption">
+                                                        {{ rowOption }}
+                                                    </option>
+                                                </select>
+                                                <div class="flex items-center gap-1 shrink-0">
+                                                    <button type="button" class="btn btn-secondary text-[10px] py-0.5 px-1.5" @click="moveCircularRecordOrderUp(idx)" :disabled="!canMoveCircularRecordOrderUp(idx)">Up</button>
+                                                    <button type="button" class="btn btn-secondary text-[10px] py-0.5 px-1.5" @click="moveCircularRecordOrderDown(idx)" :disabled="!canMoveCircularRecordOrderDown(idx)">Down</button>
+                                                </div>
+                                            </div>
+                                            <div class="pt-1 border-t border-slate-200 flex justify-end">
+                                                <button type="button" class="btn btn-secondary text-[10px] py-0.5 px-2" @click="resetCircularRecordOrder">
+                                                    Reset Order
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div v-if="adv.resolve_overlaps && form.separate_strands" class="text-[10px] text-amber-700 leading-tight">
+                                    Resolve Overlaps is ignored when Separate Strands is enabled.
+                                </div>
+                            </template>
+                        </div>
+                    </details>
+                </div>
+
+                <div class="card bg-slate-50/50">
+                    <details>
+                        <summary><i class="ph ph-textbox"></i> Title &amp; Legend <help-tip text="Adjust plot title, definition text, and legend settings."></help-tip></summary>
+                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
+                            <div>
+                                <label class="input-label text-[10px] mb-1">
+                                    Plot Title
+                                    <help-tip :text="mode === 'circular'
+                                        ? 'Optional circular plot title used when the title position is Top or Bottom. Leave blank to use the default species + strain title.'
+                                        : 'Global title shown once for the whole linear plot.'"></help-tip>
+                                </label>
+                                <input
+                                    type="text"
+                                    v-model="form.plot_title"
+                                    class="form-input form-input-compact"
+                                    :placeholder="mode === 'circular' ? 'Optional shared plot title' : 'Optional plot title'"
+                                >
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-1.5">
+                                <div>
+                                    <label class="input-label text-[10px] mb-1">
+                                        Plot Title Position
+                                        <help-tip :text="mode === 'circular' ? 'Placement of the shared circular plot title. Per-record definitions stay centered.' : 'Placement of the linear plot title.'"></help-tip>
+                                    </label>
+                                    <select v-model="adv.plot_title_position" class="form-input text-xs py-1">
+                                        <option v-if="mode === 'circular'" value="none">None (Default)</option>
+                                        <option v-if="mode === 'linear'" value="center">Center</option>
+                                        <option value="top">Top</option>
+                                        <option :value="mode === 'linear' ? 'bottom' : 'bottom'">{{ mode === 'linear' ? 'Bottom (Default)' : 'Bottom' }}</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="input-label text-[10px] mb-0">
+                                        Plot Title Font Size
+                                        <help-tip :text="mode === 'circular' ? 'Font size for the circular shared plot title. Only used when the title position is Top or Bottom.' : 'Font size for the linear plot title.'"></help-tip>
+                                    </label>
+                                    <input
+                                        type="number"
+                                        :value="adv.plot_title_font_size ?? ''"
+                                        @input="adv.plot_title_font_size = $event.target.value === '' ? null : Number($event.target.value)"
+                                        class="form-input form-input-compact"
+                                        placeholder="Auto (32)"
+                                    >
+                                </div>
+                                <div>
+                                    <label class="input-label text-[10px] mb-0">
+                                        Definition Font Size
+                                        <help-tip text="Font size for the definition text (species/strain in circular, record name in linear)."></help-tip>
+                                    </label>
+                                    <input
+                                        type="number"
+                                        :value="adv.def_font_size ?? ''"
+                                        @input="adv.def_font_size = $event.target.value === '' ? null : Number($event.target.value)"
+                                        class="form-input form-input-compact"
+                                        placeholder="Auto"
+                                    >
+                                </div>
+                            </div>
+
+                            <label
+                                v-if="mode === 'circular' && adv.plot_title_position !== 'none'"
+                                class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none"
+                            >
+                                <input
+                                    type="checkbox"
+                                    v-model="adv.keep_full_definition_with_plot_title"
+                                    class="form-checkbox"
+                                >
+                                <span class="inline-flex items-center gap-1">
+                                    Keep Full Definition with Plot Title
+                                    <help-tip text="Circular only. Keeps species and strain in the centered record definitions when a plot title is shown, including shared multi-record canvases."></help-tip>
+                                </span>
+                            </label>
+
+                            <div>
+                                <label class="input-label text-[10px] mb-1">Legend Position <help-tip text="Position of the legend. 'None' hides the legend."></help-tip></label>
+                                <select v-model="form.legend" class="form-input text-xs py-1">
+                                    <option value="right">Right</option>
+                                    <option value="left">Left</option>
+                                    <option value="top">Top</option>
+                                    <option value="bottom">Bottom</option>
+                                    <option value="upper_left" v-if="mode === 'circular'">Upper Left</option>
+                                    <option value="upper_right" v-if="mode === 'circular'">Upper Right</option>
+                                    <option value="none">None</option>
+                                </select>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-1.5">
+                                <div>
+                                    <label class="input-label text-[10px]">Legend Box Size <help-tip text="Size of the color boxes in the legend."></help-tip></label>
+                                    <input type="number" v-model.number="adv.legend_box_size" class="form-input form-input-compact" placeholder="Auto">
+                                </div>
+                                <div>
+                                    <label class="input-label text-[10px]">Legend Font Size <help-tip text="Font size for the legend text."></help-tip></label>
+                                    <input type="number" v-model.number="adv.legend_font_size" class="form-input form-input-compact" placeholder="Auto">
+                                </div>
+                            </div>
+                        </div>
+                    </details>
                 </div>
 
                 <div class="card bg-slate-50/50">
@@ -455,6 +693,90 @@
                                     <div class="text-[9px] text-slate-400 mt-1">
                                         <help-tip text="TSV file that overrides the color palette for specific features based on qualifiers."></help-tip>
                                         Override colors for specific features.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                <div class="card bg-slate-50/50">
+                    <details>
+                        <summary><i class="ph ph-shapes"></i> Features <help-tip text="Select which feature types to draw, how they are shaped, and how feature geometry, blocks, and lines are styled."></help-tip></summary>
+                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
+                            <div>
+                                <label class="input-label adv-section-title">Feature Types <help-tip text="Select which feature types to draw."></help-tip></label>
+                                <div class="flex flex-wrap gap-1.5 mb-1.5 p-1.5 bg-slate-50 rounded border border-slate-200 min-h-[30px]">
+                                    <span v-for="f in adv.features" :key="f" class="inline-flex items-center gap-1 text-[10px] bg-white text-blue-700 px-2 py-1 rounded border border-blue-200 shadow-sm">
+                                        <span class="font-medium">{{ f }}</span>
+                                        <select
+                                            :value="getFeatureShape(f)"
+                                            @change="setFeatureShape(f, $event.target.value)"
+                                            class="border border-blue-200 rounded px-1 py-0 text-[9px] bg-white text-slate-700"
+                                            title="Feature shape"
+                                        >
+                                            <option value="arrow">Arrow</option>
+                                            <option value="rectangle">Rectangle</option>
+                                        </select>
+                                        <button @click="removeFeature(f)" class="text-slate-400 hover:text-red-500 flex items-center justify-center w-4 h-4 rounded-full hover:bg-red-50 transition-colors">
+                                            <i class="ph ph-x"></i>
+                                        </button>
+                                    </span>
+                                    <span v-if="adv.features.length === 0" class="text-[10px] text-slate-400 italic py-1">No features selected</span>
+                                </div>
+                                <div class="flex gap-2">
+                                    <select v-model="newFeatureToAdd" class="form-input text-xs py-0.5 px-2 h-7">
+                                        <option v-for="k in featureKeys" :value="k">{{ k }}</option>
+                                    </select>
+                                    <button @click.prevent="addFeature" class="btn btn-secondary text-xs h-7 shrink-0">
+                                        <i class="ph ph-plus"></i> Add
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="input-label adv-section-title">Feature Appearance <help-tip text="Adjust feature dimensions and the stroke color and width for feature blocks and intron lines."></help-tip></label>
+                                <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
+                                    <div v-if="mode === 'linear'" class="grid grid-cols-2 gap-1.5">
+                                        <div>
+                                            <label class="input-label text-[10px]">Feature Height <help-tip text="Height of the feature blocks."></help-tip></label>
+                                            <input type="number" v-model.number="adv.feature_height" class="form-input form-input-compact" placeholder="Auto">
+                                        </div>
+                                        <div>
+                                            <label class="input-label text-[10px]">Axis Gap <help-tip text="Gap between axis and nearest feature edge for Above/Below track layouts. Auto derives from feature height."></help-tip></label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                :value="adv.track_axis_gap ?? ''"
+                                                @input="adv.track_axis_gap = $event.target.value === '' ? null : Number($event.target.value)"
+                                                class="form-input form-input-compact"
+                                                placeholder="Auto"
+                                            >
+                                        </div>
+                                    </div>
+                                    <div v-if="mode === 'circular'">
+                                        <label class="input-label text-[10px]">Feature Track Width <help-tip text="Feature band width in px. When set, circular tracks and label arena auto-relayout around the new feature thickness."></help-tip></label>
+                                        <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-1.5">
+                                        <div>
+                                            <label class="input-label text-[10px]">Block Stroke Color <help-tip text="Color of the outline for feature blocks."></help-tip></label>
+                                            <input type="color" v-model="adv.block_stroke_color" class="h-8 w-full p-0 border rounded">
+                                        </div>
+                                        <div>
+                                            <label class="input-label text-[10px]">Block Stroke Width <help-tip text="Width of the outline for feature blocks."></help-tip></label>
+                                            <input type="number" v-model.number="adv.block_stroke_width" class="form-input form-input-compact" placeholder="Auto">
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-1.5">
+                                        <div>
+                                            <label class="input-label text-[10px]">Line Stroke Color <help-tip text="Color of the lines representing introns."></help-tip></label>
+                                            <input type="color" v-model="adv.line_stroke_color" class="h-8 w-full p-0 border rounded">
+                                        </div>
+                                        <div>
+                                            <label class="input-label text-[10px]">Line Stroke Width <help-tip text="Width of the lines representing introns."></help-tip></label>
+                                            <input type="number" v-model.number="adv.line_stroke_width" class="form-input form-input-compact" placeholder="Auto">
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -606,303 +928,90 @@
                     </details>
                 </div>
 
-                <div class="card bg-slate-50/50">
+                <div v-if="mode === 'linear'" class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-shapes"></i> Features <help-tip text="Select which feature types to draw, how they are shaped, and how feature blocks and lines are styled."></help-tip></summary>
+                        <summary><i class="ph ph-ruler"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
-                                <label class="input-label adv-section-title">Feature Types <help-tip text="Select which feature types to draw."></help-tip></label>
-                                <div class="flex flex-wrap gap-1.5 mb-1.5 p-1.5 bg-slate-50 rounded border border-slate-200 min-h-[30px]">
-                                    <span v-for="f in adv.features" :key="f" class="inline-flex items-center gap-1 text-[10px] bg-white text-blue-700 px-2 py-1 rounded border border-blue-200 shadow-sm">
-                                        <span class="font-medium">{{ f }}</span>
-                                        <select
-                                            :value="getFeatureShape(f)"
-                                            @change="setFeatureShape(f, $event.target.value)"
-                                            class="border border-blue-200 rounded px-1 py-0 text-[9px] bg-white text-slate-700"
-                                            title="Feature shape"
-                                        >
-                                            <option value="arrow">Arrow</option>
-                                            <option value="rectangle">Rectangle</option>
-                                        </select>
-                                        <button @click="removeFeature(f)" class="text-slate-400 hover:text-red-500 flex items-center justify-center w-4 h-4 rounded-full hover:bg-red-50 transition-colors">
-                                            <i class="ph ph-x"></i>
-                                        </button>
-                                    </span>
-                                    <span v-if="adv.features.length === 0" class="text-[10px] text-slate-400 italic py-1">No features selected</span>
-                                </div>
-                                <div class="flex gap-2">
-                                    <select v-model="newFeatureToAdd" class="form-input text-xs py-0.5 px-2 h-7">
-                                        <option v-for="k in featureKeys" :value="k">{{ k }}</option>
-                                    </select>
-                                    <button @click.prevent="addFeature" class="btn btn-secondary text-xs h-7 shrink-0">
-                                        <i class="ph ph-plus"></i> Add
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label class="input-label adv-section-title">Feature Appearance <help-tip text="Adjust circular feature track width and the stroke color and width for feature blocks and intron lines."></help-tip></label>
-                                <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
-                                    <div v-if="mode === 'circular'">
-                                        <label class="input-label text-[10px]">Feature Track Width <help-tip text="Feature band width in px. When set, circular tracks and label arena auto-relayout around the new feature thickness."></help-tip></label>
-                                        <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" class="form-input form-input-compact" placeholder="Auto">
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-1.5">
-                                        <div>
-                                            <label class="input-label text-[10px]">Block Stroke Color <help-tip text="Color of the outline for feature blocks."></help-tip></label>
-                                            <input type="color" v-model="adv.block_stroke_color" class="h-8 w-full p-0 border rounded">
-                                        </div>
-                                        <div>
-                                            <label class="input-label text-[10px]">Block Stroke Width <help-tip text="Width of the outline for feature blocks."></help-tip></label>
-                                            <input type="number" v-model.number="adv.block_stroke_width" class="form-input form-input-compact" placeholder="Auto">
-                                        </div>
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-1.5">
-                                        <div>
-                                            <label class="input-label text-[10px]">Line Stroke Color <help-tip text="Color of the lines representing introns."></help-tip></label>
-                                            <input type="color" v-model="adv.line_stroke_color" class="h-8 w-full p-0 border rounded">
-                                        </div>
-                                        <div>
-                                            <label class="input-label text-[10px]">Line Stroke Width <help-tip text="Width of the lines representing introns."></help-tip></label>
-                                            <input type="number" v-model.number="adv.line_stroke_width" class="form-input form-input-compact" placeholder="Auto">
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </details>
-                </div>
-
-                <div class="card bg-slate-50/50">
-                    <details>
-                        <summary><i class="ph ph-layout"></i> Layout <help-tip text="Control track placement and layout-related options."></help-tip></summary>
-                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
-                            <template v-if="mode === 'linear'">
-                                <div>
-                                    <label class="input-label text-[10px] mb-1">Track Layout <help-tip text="Set linear feature placement: Above keeps tracks above the axis, Middle keeps legacy placement, Below places tracks below the axis."></help-tip></label>
-                                    <select v-model="form.linear_track_layout" class="form-input text-xs py-1">
-                                        <option value="above">Above</option>
-                                        <option value="middle">Middle</option>
-                                        <option value="below">Below</option>
-                                    </select>
-                                </div>
-                                <div class="grid grid-cols-2 gap-y-1 gap-x-1 p-1 bg-slate-50 rounded-lg">
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.separate_strands" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Separate Strands <help-tip text="Display features on separate strands for better distinction."></help-tip></span>
-                                    </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Shift features vertically to avoid overlap. Overlap direction follows Track Layout (Above: upward, Below: downward). (Experimental)"></help-tip></span>
-                                    </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.align_center" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Align to Center <help-tip text="Align the linear map to the center of the page."></help-tip></span>
-                                    </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.normalize_length" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Normalize Record Lengths <help-tip text="Normalize sequence lengths to be equal. Suppresses the length bar."></help-tip></span>
-                                    </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.show_gc" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Show GC Content <help-tip text="Display GC content track."></help-tip></span>
-                                    </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.show_skew" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Show GC Skew <help-tip text="Display GC skew track."></help-tip></span>
-                                    </label>
-                                </div>
-                            </template>
-
-                            <template v-else>
-                                <div>
-                                    <label class="input-label text-[10px] mb-1">Track Layout <help-tip text="Choose how features are displayed. 'Tuckin' is default and compact. 'Middle' aligns to center, 'Spreadout' separates them."></help-tip></label>
-                                    <select v-model="form.track_type" class="form-input text-xs py-1">
-                                        <option value="tuckin">Tuckin</option>
-                                        <option value="middle">Middle</option>
-                                        <option value="spreadout">Spreadout</option>
-                                    </select>
-                                </div>
-                                <div class="grid grid-cols-2 gap-y-1 gap-x-1 p-1 bg-slate-50 rounded-lg">
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.separate_strands" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Separate Strands <help-tip text="Display features on separate strands for better distinction."></help-tip></span>
-                                    </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Circular mode: effective only when Separate Strands is OFF. If Separate Strands is ON, this option is ignored. Track Layout still applies: Tuckin shifts overlap tracks inward, Middle/Spreadout shift them outward."></help-tip></span>
-                                    </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.multi_record_canvas" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Multi-Record Canvas <help-tip text="When multiple records are loaded, place them on one shared circular canvas as an automatic grid (opt-in)."></help-tip></span>
-                                    </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.suppress_gc" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Hide GC Content <help-tip text="Suppress the GC content track."></help-tip></span>
-                                    </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.suppress_skew" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Hide GC Skew <help-tip text="Suppress the GC skew track."></help-tip></span>
-                                    </label>
-                                </div>
-
-                                <div v-if="form.multi_record_canvas" class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-50 p-2 rounded border border-slate-200">
-                                    <div>
-                                        <label class="input-label text-[10px] mb-1">Record Size Mode <help-tip text="Scale circles by record length on multi-record canvas."></help-tip></label>
-                                        <select v-model="adv.multi_record_size_mode" class="form-input py-1 text-xs">
-                                            <option value="auto">Auto (Default)</option>
-                                            <option value="linear">Linear</option>
-                                            <option value="equal">Equal</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="input-label text-[10px] mb-1">Min Radius Ratio <help-tip text="Lower bound for short records (0-1)."></help-tip></label>
-                                        <input type="number" min="0.01" max="1" step="0.01" v-model.number="adv.multi_record_min_radius_ratio" class="form-input py-1 text-xs">
-                                    </div>
-                                    <div>
-                                        <label class="input-label text-[10px] mb-1">Column Gap Ratio <help-tip text="Additional horizontal gap ratio between visible content bounds in each row on multi-record canvas. 0 makes row content touch. Default: 0.10 (horizontal only)."></help-tip></label>
-                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_column_gap_ratio" class="form-input py-1 text-xs">
-                                    </div>
-                                    <div>
-                                        <label class="input-label text-[10px] mb-1">Row Gap Ratio <help-tip text="Additional visible gap ratio between row content bounds in multi-record canvas. 0 makes rows touch by content bounds. Default: 0.05 (vertical only)."></help-tip></label>
-                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_row_gap_ratio" class="form-input py-1 text-xs">
-                                    </div>
-                                    <div class="col-span-2">
-                                        <div class="flex items-center justify-between mb-1">
-                                            <label class="input-label text-[10px] mb-0">Record Order <help-tip text="Manual order and row assignment for multi-record canvas. Use Up/Down for left-to-right order within each row."></help-tip></label>
-                                            <button
-                                                type="button"
-                                                class="btn btn-secondary text-[10px] py-1 px-2"
-                                                @click="refreshCircularRecordOrder"
-                                                :disabled="cInputType !== 'gb'"
-                                            >
-                                                Reload Records
-                                            </button>
-                                        </div>
-                                        <div v-if="cInputType !== 'gb'" class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-1.5">
-                                            Record Order is available for GenBank input.
-                                        </div>
-                                        <div v-else-if="adv.multi_record_positions.length === 0" class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-1.5">
-                                            Upload a GenBank file to load records.
-                                        </div>
-                                        <div v-else class="space-y-1 bg-slate-50 border border-slate-200 rounded p-1.5">
-                                            <div
-                                                v-for="(position, idx) in adv.multi_record_positions"
-                                                :key="`record-order-${position.selector}-${idx}`"
-                                                class="grid grid-cols-[minmax(0,1fr)_3rem_auto] items-center gap-1.5"
-                                            >
-                                                <span class="truncate text-[10px] text-slate-700">{{ getCircularRecordOrderLabel(position.selector) }}</span>
-                                                <select
-                                                    class="form-input py-0.5 px-1 text-[10px]"
-                                                    :value="getCircularRecordRow(position)"
-                                                    @change="setCircularRecordRow(idx, $event.target.value)"
-                                                >
-                                                    <option v-for="rowOption in getCircularRecordRowOptions()" :key="`record-row-${idx}-${rowOption}`" :value="rowOption">
-                                                        {{ rowOption }}
-                                                    </option>
-                                                </select>
-                                                <div class="flex items-center gap-1 shrink-0">
-                                                    <button type="button" class="btn btn-secondary text-[10px] py-0.5 px-1.5" @click="moveCircularRecordOrderUp(idx)" :disabled="!canMoveCircularRecordOrderUp(idx)">Up</button>
-                                                    <button type="button" class="btn btn-secondary text-[10px] py-0.5 px-1.5" @click="moveCircularRecordOrderDown(idx)" :disabled="!canMoveCircularRecordOrderDown(idx)">Down</button>
-                                                </div>
-                                            </div>
-                                            <div class="pt-1 border-t border-slate-200 flex justify-end">
-                                                <button type="button" class="btn btn-secondary text-[10px] py-0.5 px-2" @click="resetCircularRecordOrder">
-                                                    Reset Order
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div v-if="adv.resolve_overlaps && form.separate_strands" class="text-[10px] text-amber-700 leading-tight">
-                                    Resolve Overlaps is ignored when Separate Strands is enabled.
-                                </div>
-                            </template>
-                        </div>
-                    </details>
-                </div>
-
-                <div class="card bg-slate-50/50">
-                    <details>
-                        <summary><i class="ph ph-textbox"></i> Text &amp; Legend <help-tip text="Adjust plot title, definition text, and legend settings."></help-tip></summary>
-                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
-                            <div>
-                                <label class="input-label text-[10px] mb-1">Legend Position <help-tip text="Position of the legend. 'None' hides the legend."></help-tip></label>
-                                <select v-model="form.legend" class="form-input text-xs py-1">
-                                    <option value="right">Right</option>
-                                    <option value="left">Left</option>
-                                    <option value="top">Top</option>
-                                    <option value="bottom">Bottom</option>
-                                    <option value="upper_left" v-if="mode === 'circular'">Upper Left</option>
-                                    <option value="upper_right" v-if="mode === 'circular'">Upper Right</option>
-                                    <option value="none">None</option>
+                                <label class="input-label text-[10px] mb-1">Scale Style <help-tip text="'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels."></help-tip></label>
+                                <select v-model="form.scale_style" class="form-input text-xs py-1">
+                                    <option value="bar">Bar (Simple)</option>
+                                    <option value="ruler">Ruler (Ticks)</option>
                                 </select>
                             </div>
 
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
-                                    <label class="input-label text-[10px] mb-1">
-                                        Plot Title Position
-                                        <help-tip :text="mode === 'circular' ? 'Placement of the shared circular plot title. Per-record definitions stay centered.' : 'Placement of the linear plot title.'"></help-tip>
-                                    </label>
-                                    <select v-model="adv.plot_title_position" class="form-input text-xs py-1">
-                                        <option v-if="mode === 'circular'" value="none">None (Default)</option>
-                                        <option v-if="mode === 'linear'" value="center">Center</option>
-                                        <option value="top">Top</option>
-                                        <option :value="mode === 'linear' ? 'bottom' : 'bottom'">{{ mode === 'linear' ? 'Bottom (Default)' : 'Bottom' }}</option>
-                                    </select>
+                                    <label class="input-label text-[10px]">Axis Stroke Color <help-tip text="Color of the main axis line."></help-tip></label>
+                                    <input type="color" v-model="adv.axis_stroke_color" class="h-8 w-full p-0 border rounded">
                                 </div>
                                 <div>
-                                    <label class="input-label text-[10px] mb-0">
-                                        Plot Title Font Size
-                                        <help-tip :text="mode === 'circular' ? 'Font size for the circular shared plot title. Only used when the title position is Top or Bottom.' : 'Font size for the linear plot title.'"></help-tip>
-                                    </label>
-                                    <input
-                                        type="number"
-                                        :value="adv.plot_title_font_size ?? ''"
-                                        @input="adv.plot_title_font_size = $event.target.value === '' ? null : Number($event.target.value)"
-                                        class="form-input form-input-compact"
-                                        placeholder="Auto (32)"
-                                    >
+                                    <label class="input-label text-[10px]">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label>
+                                    <input type="number" v-model.number="adv.axis_stroke_width" class="form-input form-input-compact" placeholder="Auto">
                                 </div>
                                 <div>
-                                    <label class="input-label text-[10px] mb-0">
-                                        Definition Font Size
-                                        <help-tip text="Font size for the definition text (species/strain in circular, record name in linear)."></help-tip>
-                                    </label>
-                                    <input
-                                        type="number"
-                                        :value="adv.def_font_size ?? ''"
-                                        @input="adv.def_font_size = $event.target.value === '' ? null : Number($event.target.value)"
-                                        class="form-input form-input-compact"
-                                        placeholder="Auto"
-                                    >
+                                    <label class="input-label text-[10px]">Line Width <help-tip text="Line width of the scale bar or ruler."></help-tip></label>
+                                    <input type="number" v-model.number="adv.scale_stroke_width" class="form-input form-input-compact" placeholder="Auto">
                                 </div>
                                 <div>
-                                    <label class="input-label text-[10px]">Legend Box Size <help-tip text="Size of the color boxes in the legend."></help-tip></label>
-                                    <input type="number" v-model.number="adv.legend_box_size" class="form-input form-input-compact" placeholder="Auto">
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Legend Font Size <help-tip text="Font size for the legend text."></help-tip></label>
-                                    <input type="number" v-model.number="adv.legend_font_size" class="form-input form-input-compact" placeholder="Auto">
+                                    <label class="input-label text-[10px]">Scale Line Color <help-tip text="Color of the scale bar or ruler line."></help-tip></label>
+                                    <input type="color" v-model="adv.scale_stroke_color" class="h-8 w-full p-0 border rounded">
                                 </div>
                             </div>
 
-                            <label
-                                v-if="mode === 'circular' && adv.plot_title_position !== 'none'"
-                                class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none"
-                            >
-                                <input
-                                    type="checkbox"
-                                    v-model="adv.keep_full_definition_with_plot_title"
-                                    class="form-checkbox"
-                                >
-                                <span class="inline-flex items-center gap-1">
-                                    Keep Full Definition with Plot Title
-                                    <help-tip text="Circular only. Keeps species and strain in the centered record definitions when a plot title is shown, including shared multi-record canvases."></help-tip>
-                                </span>
-                            </label>
+                            <div class="space-y-3">
+                                <label
+                                    :class="[
+                                        'option-label flex items-center gap-2 text-xs select-none',
+                                        canUseLinearRulerOnAxis ? 'text-slate-700 cursor-pointer' : 'text-slate-400 cursor-not-allowed'
+                                    ]">
+                                    <input
+                                        type="checkbox"
+                                        v-model="form.linear_ruler_on_axis"
+                                        class="form-checkbox"
+                                        :disabled="!canUseLinearRulerOnAxis"
+                                        :class="canUseLinearRulerOnAxis ? '' : 'opacity-50'">
+                                    <span class="inline-flex items-center gap-1">Ruler on Axis <help-tip text="Use each record axis as the ruler and hide the bottom ruler. Effective when Track Layout is Above/Below and Scale Style is Ruler."></help-tip></span>
+                                </label>
+                                <div v-if="form.scale_style === 'ruler'" class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <label class="input-label text-[10px]">Interval <help-tip text="Manual tick interval for Ruler scale style in bp. Leave blank to calculate automatically."></help-tip></label>
+                                        <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Ruler Label Font Size <help-tip text="Font size for ruler labels. Leave blank to use the default size."></help-tip></label>
+                                        <input type="number" v-model.number="adv.scale_font_size" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Ruler Label Color <help-tip text="Color of ruler tick labels."></help-tip></label>
+                                        <input type="color" v-model="adv.ruler_label_color" class="h-8 w-full p-0 border rounded">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                <div v-if="mode === 'circular'" class="card bg-slate-50/50">
+                    <details>
+                        <summary><i class="ph ph-paint-brush"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
+                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
+                            <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
+                                <div>
+                                    <label class="input-label text-[10px]">Scale Interval <help-tip text="Manual scale interval for circular mode (in bp). Overrides automatic calculation."></help-tip></label>
+                                    <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact" placeholder="Auto">
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <label class="input-label text-[10px]">Axis Stroke Color <help-tip text="Color of the main axis line."></help-tip></label>
+                                        <input type="color" v-model="adv.axis_stroke_color" class="h-8 w-full p-0 border rounded">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label>
+                                        <input type="number" v-model.number="adv.axis_stroke_width" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </details>
                 </div>
@@ -918,8 +1027,8 @@
                             </div>
 
                             <template v-if="mode === 'linear'">
-                                <div v-if="form.show_gc || form.show_skew">
-                                    <label class="input-label text-[10px]">GC Height <help-tip text="Height of the GC content and skew tracks."></help-tip></label>
+                                <div>
+                                    <label class="input-label text-[10px]">GC Height <help-tip text="Height of the linear GC content and GC skew tracks. Applies to whichever of those tracks are enabled when the diagram is generated."></help-tip></label>
                                     <input type="number" v-model.number="adv.gc_height" class="form-input form-input-compact" placeholder="Auto">
                                 </div>
                             </template>
@@ -954,95 +1063,15 @@
 
                 <div v-if="mode === 'linear'" class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-waveform"></i> Tracks <help-tip text="Adjust feature track dimensions, axis gap, and pairwise track height."></help-tip></summary>
-                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
-                            <div class="grid grid-cols-2 gap-1.5">
-                                <div>
-                                    <label class="input-label text-[10px]">Feature Height <help-tip text="Height of the feature blocks."></help-tip></label>
-                                    <input type="number" v-model.number="adv.feature_height" class="form-input form-input-compact" placeholder="Auto">
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Axis Gap <help-tip text="Gap between axis and nearest feature edge for Above/Below track layouts. Auto derives from feature height."></help-tip></label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        :value="adv.track_axis_gap ?? ''"
-                                        @input="adv.track_axis_gap = $event.target.value === '' ? null : Number($event.target.value)"
-                                        class="form-input form-input-compact"
-                                        placeholder="Auto"
-                                    >
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Pairwise Match Height <help-tip text="Height of the comparison blocks."></help-tip></label>
-                                    <input type="number" v-model.number="adv.comparison_height" class="form-input form-input-compact" placeholder="Auto">
-                                </div>
-                            </div>
-                        </div>
-                    </details>
-                </div>
-
-                <div v-if="mode === 'linear'" class="card bg-slate-50/50">
-                    <details>
-                        <summary><i class="ph ph-ruler"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
-                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
-                            <div>
-                                <label class="input-label text-[10px] mb-1">Scale Style <help-tip text="'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels."></help-tip></label>
-                                <select v-model="form.scale_style" class="form-input text-xs py-1">
-                                    <option value="bar">Bar (Simple)</option>
-                                    <option value="ruler">Ruler (Ticks)</option>
-                                </select>
-                            </div>
-
-                            <div class="grid grid-cols-2 gap-1.5">
-                                <div>
-                                    <label class="input-label text-[10px]">Axis Stroke Color <help-tip text="Color of the main axis line."></help-tip></label>
-                                    <input type="color" v-model="adv.axis_stroke_color" class="h-8 w-full p-0 border rounded">
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label>
-                                    <input type="number" v-model.number="adv.axis_stroke_width" class="form-input form-input-compact" placeholder="Auto">
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Line Width <help-tip text="Line width of the scale bar or ruler."></help-tip></label>
-                                    <input type="number" v-model.number="adv.scale_stroke_width" class="form-input form-input-compact" placeholder="Auto">
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Scale Line Color <help-tip text="Color of the scale bar or ruler line."></help-tip></label>
-                                    <input type="color" v-model="adv.scale_stroke_color" class="h-8 w-full p-0 border rounded">
-                                </div>
-                            </div>
-
-                            <div v-if="form.scale_style === 'ruler'" class="space-y-3">
-                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input type="checkbox" v-model="form.linear_ruler_on_axis" class="form-checkbox">
-                                    <span class="inline-flex items-center gap-1">Ruler on Axis <help-tip text="Use each record axis as the ruler and hide the bottom ruler. Effective when Track Layout is Above/Below and Scale Style is Ruler."></help-tip></span>
-                                </label>
-                                <div class="grid grid-cols-2 gap-1.5">
-                                    <div>
-                                        <label class="input-label text-[10px]">Interval <help-tip text="Manual tick interval for Ruler scale style in bp. Leave blank to calculate automatically."></help-tip></label>
-                                        <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact" placeholder="Auto">
-                                    </div>
-                                    <div>
-                                        <label class="input-label text-[10px]">Ruler Label Font Size <help-tip text="Font size for ruler labels. Leave blank to use the default size."></help-tip></label>
-                                        <input type="number" v-model.number="adv.scale_font_size" class="form-input form-input-compact" placeholder="Auto">
-                                    </div>
-                                    <div>
-                                        <label class="input-label text-[10px]">Ruler Label Color <help-tip text="Color of ruler tick labels."></help-tip></label>
-                                        <input type="color" v-model="adv.ruler_label_color" class="h-8 w-full p-0 border rounded">
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </details>
-                </div>
-
-                <div v-if="mode === 'linear'" class="card bg-slate-50/50">
-                    <details>
-                        <summary><i class="ph ph-arrows-left-right"></i> Pairwise Match <help-tip text="Filter pairwise comparison tracks generated from BLAST or LOSAT results."></help-tip></summary>
+                        <summary><i class="ph ph-arrows-left-right"></i> Pairwise Match <help-tip text="Adjust pairwise comparison height and filter BLAST or LOSAT tracks."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <p class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-2">
                                 Applies to BLAST or LOSAT pairwise comparison tracks.
                             </p>
+                            <div>
+                                <label class="input-label text-[10px]">Pairwise Match Height <help-tip text="Height of the comparison blocks."></help-tip></label>
+                                <input type="number" v-model.number="adv.comparison_height" class="form-input form-input-compact" placeholder="Auto">
+                            </div>
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
                                     <label class="input-label text-[10px]">Bitscore</label>
@@ -1059,30 +1088,6 @@
                                 <div>
                                     <label class="input-label text-[10px]">Minimum Length</label>
                                     <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
-                                </div>
-                            </div>
-                        </div>
-                    </details>
-                </div>
-
-                <div v-if="mode === 'circular'" class="card bg-slate-50/50">
-                    <details>
-                        <summary><i class="ph ph-paint-brush"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
-                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
-                            <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
-                                <div>
-                                    <label class="input-label text-[10px]">Scale Interval <help-tip text="Manual scale interval for circular mode (in bp). Overrides automatic calculation."></help-tip></label>
-                                    <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact" placeholder="Auto">
-                                </div>
-                                <div class="grid grid-cols-2 gap-1.5">
-                                    <div>
-                                        <label class="input-label text-[10px]">Axis Stroke Color <help-tip text="Color of the main axis line."></help-tip></label>
-                                        <input type="color" v-model="adv.axis_stroke_color" class="h-8 w-full p-0 border rounded">
-                                    </div>
-                                    <div>
-                                        <label class="input-label text-[10px]">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label>
-                                        <input type="number" v-model.number="adv.axis_stroke_width" class="form-input form-input-compact" placeholder="Auto">
-                                    </div>
                                 </div>
                             </div>
                         </div>

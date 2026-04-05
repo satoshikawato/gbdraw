@@ -79,7 +79,7 @@ index.html
 │   │   │   ├── Input Genomes card
 │   │   │   ├── Basic card
 │   │   │   ├── Colors / Labels / Features (collapsible)
-│   │   │   ├── Mode-specific Layout / Text & Legend / Tracks / Axis & Scale / Pairwise Match cards
+│   │   │   ├── Mode-specific Layout / Title&Legend / Axis & Scale / Pairwise Match cards
 │   │   │   ├── Styles (collapsible)
 │   │   │   ├── About & Citation (collapsible)
 │   │   │   └── Generate button
