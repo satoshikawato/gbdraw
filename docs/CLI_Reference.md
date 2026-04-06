@@ -7,7 +7,7 @@ This reference mirrors the current command help from `python -m gbdraw.cli`. Use
 ## Main Command
 
 ```text
-gbdraw v. 0.9.0: A diagram generator for small genomes
+gbdraw v. 0.9.1: A diagram generator for small genomes
 
 Usage:
   gbdraw <subcommand> [options]
