@@ -182,7 +182,9 @@ class LinearCanvasConfigurator:
         self.set_gc_height_and_gc_padding()
         self.set_cds_height_and_cds_padding()
         self.add_margin: float | Literal[0] = 2 * self.cds_height if (self.show_gc and not self.strandedness) else 0
-        self.alignment_width: float = self.fig_width - self.horizontal_offset
+        # Keep the record axis width fixed to the configured figure width from the start.
+        # Horizontal offsets reposition the plotted record; they do not shorten its scale.
+        self.alignment_width: float = self.fig_width
         self.total_width = int(self.fig_width + 2 * self.canvas_padding)
         self.total_height = int(
             2 * self.vertical_offset

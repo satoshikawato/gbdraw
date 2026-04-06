@@ -253,6 +253,115 @@ def test_linear_precalc_includes_above_feature_rotated_embedded_labels() -> None
 
 
 @pytest.mark.linear
+def test_linear_canvas_alignment_width_starts_at_figure_width() -> None:
+    input_path = Path(__file__).parent / "test_inputs" / "MG1655.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_cfg = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=len(record.seq),
+        config_dict=config_dict,
+        legend="none",
+        cfg=cfg,
+    )
+
+    assert canvas_cfg.alignment_width == pytest.approx(canvas_cfg.fig_width)
+
+
+@pytest.mark.linear
+def test_linear_precalculated_labels_match_final_alignment_width_positions() -> None:
+    input_path = Path(__file__).parent / "test_inputs" / "MG1655.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        show_labels="all",
+        strandedness=False,
+        label_blacklist="",
+        linear_track_layout="middle",
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_cfg = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=len(record.seq),
+        config_dict=config_dict,
+        legend="none",
+        cfg=cfg,
+    )
+    feature_cfg = FeatureDrawingConfigurator(
+        color_table=None,
+        default_colors=load_default_colors("", "default"),
+        selected_features_set=cfg.objects.features.features_drawn,
+        config_dict=config_dict,
+        canvas_config=canvas_cfg,
+        cfg=cfg,
+    )
+
+    _, all_labels, _ = _precalculate_label_dimensions(
+        [record],
+        feature_cfg,
+        canvas_cfg,
+        config_dict,
+        cfg=cfg,
+    )
+    precalculated_tuples = sorted(
+        (
+            float(label["feature_start_x"]),
+            float(label["feature_end_x"]),
+            float(label["middle_x"]),
+        )
+        for label in all_labels.get(record.id, [])
+        if label["label_text"] == "tRNA-Phe"
+    )
+
+    color_table, default_colors = preprocess_color_tables(
+        feature_cfg.color_table,
+        feature_cfg.default_colors,
+    )
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    feature_dict, _ = create_feature_dict(
+        record,
+        color_table,
+        feature_cfg.selected_features_set,
+        default_colors,
+        canvas_cfg.strandedness,
+        canvas_cfg.resolve_overlaps,
+        label_filtering,
+        directional_feature_types=feature_cfg.directional_feature_types,
+        feature_visibility_rules=feature_cfg.feature_visibility_rules,
+    )
+
+    canvas_cfg.alignment_width = canvas_cfg.fig_width
+    expected_tuples = sorted(
+        (
+            float(label["feature_start_x"]),
+            float(label["feature_end_x"]),
+            float(label["middle_x"]),
+        )
+        for label in prepare_label_list_linear(
+            feature_dict,
+            len(record.seq),
+            canvas_cfg.alignment_width,
+            1.0,
+            canvas_cfg.cds_height,
+            canvas_cfg.strandedness,
+            canvas_cfg.track_layout,
+            canvas_cfg.track_axis_gap,
+            config_dict,
+            cfg=cfg,
+        )
+        if label["label_text"] == "tRNA-Phe"
+    )
+
+    assert precalculated_tuples
+    assert len(precalculated_tuples) == len(expected_tuples)
+    assert precalculated_tuples == pytest.approx(expected_tuples)
+
+
+@pytest.mark.linear
 def test_linear_auto_labels_in_below_layout_are_placed_below_features() -> None:
     labels = _prepare_linear_labels(
         label_placement="auto",
