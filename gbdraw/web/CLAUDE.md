@@ -16,9 +16,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 # Run locally
 gbdraw gui                    # Opens browser at http://localhost:<free port>
 
-# Build wheel for web deployment (version must match pyproject.toml)
-python -m build
-# Copy dist/gbdraw-X.X.X-py3-none-any.whl to web server
+# Refresh the checked-in browser wheel after Python changes used in Pyodide
+python -m build --wheel --no-isolation
+python tools/sync_browser_wheel.py dist/*.whl
+
+# Build wheel for web deployment
+python -m build --wheel --no-isolation
 
 # Test in browser
 # Open DevTools Console (F12) to see Pyodide output and errors
@@ -286,8 +289,14 @@ User-provided regex patterns are validated:
 ### Common Issues
 1. **"Pyodide not ready"**: Wait for initialization (~5-15 seconds on first load)
 2. **Memory errors**: Large genomes may exhaust browser memory
-3. **Wheel version mismatch**: Ensure wheel version matches `pyproject.toml`
+3. **Wheel version mismatch or stale Python sources**: Rebuild the outer wheel and run `python tools/sync_browser_wheel.py dist/*.whl` before committing
 4. **CSP errors**: Check CDN URLs in CSP header if adding new dependencies
+
+## Browser Wheel Workflow
+
+- `gbdraw/web/gbdraw-<version>-py3-none-any.whl` is a generated browser wheel committed to the repo for Pyodide and `gbdraw gui`.
+- Do not write a plain outer wheel directly into `gbdraw/web/`; regenerate the browser wheel via `tools/sync_browser_wheel.py`.
+- After changing any Python module that runs in the browser, run `python -m build --wheel --no-isolation` and `python tools/sync_browser_wheel.py dist/*.whl` before committing.
 
 ## File Dependencies
 

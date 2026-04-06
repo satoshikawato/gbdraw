@@ -296,6 +296,11 @@ def _assert_wheel_python_sources_match_source_tree(wheel_path: Path) -> None:
             details.append("Unexpected python sources in wheel:\n" + "\n".join(extra))
         if mismatched:
             details.append("Mismatched python sources in wheel:\n" + "\n".join(mismatched))
+        details.append(
+            "Refresh the checked-in browser wheel with:\n"
+            "python -m build --wheel --no-isolation\n"
+            "python tools/sync_browser_wheel.py dist/*.whl"
+        )
         raise RuntimeError("\n\n".join(details))
 
 

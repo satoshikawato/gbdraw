@@ -3,29 +3,30 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
-# --- 1. Build the wheel file for Pyodide (WebAssembly) ---
-echo "Building wheel for Pyodide..."
-# Build the wheel from the current directory and output it to gbdraw/web/
-$PYTHON -m pip wheel . --no-deps --no-build-isolation --wheel-dir gbdraw/web
+# --- 1. Build and sync the browser wheel artifact used by the web UI ---
+echo "Building outer wheel for browser-wheel sync..."
+WHEEL_BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/gbdraw-build-XXXXXX")
+trap 'rm -rf "$WHEEL_BUILD_DIR"' EXIT
 
-# --- 2. Dynamically retrieve the filename and update config.js ---
-# Find the generated wheel file (e.g., gbdraw-0.9.1-py3-none-any.whl)
-WHEEL_FILE=$(ls gbdraw/web/gbdraw-*.whl | head -n 1)
-WHEEL_NAME=$(basename $WHEEL_FILE)
-echo "Generated wheel name: $WHEEL_NAME"
+$PYTHON -m build --wheel --no-isolation --outdir "$WHEEL_BUILD_DIR"
 
-# Update config.js to use the correct wheel filename
-# This replaces 'const GBDRAW_WHEEL_NAME = "...";' with the actual filename
-sed -i "s/const GBDRAW_WHEEL_NAME = \".*\";/const GBDRAW_WHEEL_NAME = \"$WHEEL_NAME\";/" gbdraw/web/js/config.js
+OUTER_WHEEL=$(find "$WHEEL_BUILD_DIR" -maxdepth 1 -name 'gbdraw-*.whl' | head -n 1)
+if [ -z "$OUTER_WHEEL" ]; then
+    echo "Could not find built outer wheel in $WHEEL_BUILD_DIR" >&2
+    exit 1
+fi
 
-# --- 3. Standard installation (for CLI usage) ---
+echo "Synchronizing browser wheel from $OUTER_WHEEL..."
+$PYTHON tools/sync_browser_wheel.py "$OUTER_WHEEL"
+
+# --- 2. Standard installation (for CLI usage) ---
 $PYTHON -m pip install . --no-deps --ignore-installed -vv
 
-# --- 4. Copy font files ---
+# --- 3. Copy font files ---
 mkdir -p $PREFIX/fonts
 cp gbdraw/data/*.ttf $PREFIX/fonts/
 
-# --- 5. Force copy the web directory to site-packages ---
+# --- 4. Force copy the synced web directory to site-packages ---
 # Ensure the web directory (including index.html and the wheel) is copied to the installation path
 echo "Copying web directory to site-packages..."
 mkdir -p $SP_DIR/gbdraw/web
