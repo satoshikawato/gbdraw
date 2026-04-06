@@ -315,64 +315,11 @@ def assemble_linear_diagram(
         elif normalized_plot_title_position == "bottom":
             plot_title_bottom_reserve = reserve
 
-    required_label_height, all_labels, record_label_heights_above = _precalculate_label_dimensions(
-        records, feature_config, canvas_config, config_dict, cfg=cfg
-    )
-    record_label_heights_below = _precalculate_label_heights_below(all_labels)
     max_def_width, _definition_heights, definition_half_heights = _precalculate_definition_metrics(
         records,
         config_dict,
         canvas_config,
         cfg=cfg,
-    )
-    
-    # Pre-calculate feature track heights for each record (needed for resolve_overlaps)
-    (
-        record_heights_below,
-        record_heights_above,
-        record_top_guard_above,
-        record_top_guard_undisplaced,
-        record_top_guard_middle_undisplaced,
-    ) = _precalculate_feature_track_heights(records, feature_config, canvas_config, cfg)
-    
-    if required_label_height > 0:
-        if canvas_config.vertical_offset < required_label_height:
-            canvas_config.vertical_offset = (
-                required_label_height + canvas_config.original_vertical_offset + canvas_config.cds_padding
-            )
-    else:
-        canvas_config.vertical_offset = canvas_config.original_vertical_offset + canvas_config.cds_padding
-
-    if records:
-        first_record_id = records[0].id
-        base_axis_y = canvas_config.vertical_offset
-        first_actual_extent = record_top_guard_above.get(first_record_id, canvas_config.cds_padding)
-        first_normal_extent = record_top_guard_undisplaced.get(first_record_id, first_actual_extent)
-        normal_top_margin = max(canvas_config.vertical_padding, base_axis_y - first_normal_extent)
-        if track_layout == "above":
-            middle_floor_extent = record_top_guard_middle_undisplaced.get(first_record_id, first_actual_extent)
-            middle_floor_margin = max(canvas_config.vertical_padding, base_axis_y - middle_floor_extent)
-            normal_top_margin = max(normal_top_margin, middle_floor_margin)
-        if track_layout == "above" or (canvas_config.resolve_overlaps and track_layout == "middle"):
-            required_axis_y = first_actual_extent + normal_top_margin
-            # In above layout, keep at least the middle-layout top-margin floor so
-            # non-stranded tracks do not end up visually too close to the top edge.
-            canvas_config.vertical_offset = max(base_axis_y, required_axis_y)
-        else:
-            minimum_axis_y_for_features = first_actual_extent + canvas_config.vertical_padding
-            canvas_config.vertical_offset = max(base_axis_y, minimum_axis_y_for_features)
-        canvas_config.vertical_offset = max(
-            canvas_config.vertical_offset,
-            definition_half_heights.get(first_record_id, 0.0) + canvas_config.vertical_padding,
-        )
-
-    normalize_length = cfg.canvas.linear.normalize_length
-    record_gc_dfs = _precalculate_gc_dataframes(
-        records,
-        window=int(gc_config.window),
-        step=int(gc_config.step),
-        dinucleotide=str(gc_config.dinucleotide),
-        enabled=bool(canvas_config.show_gc or canvas_config.show_skew),
     )
 
     # Prepare legend group
@@ -415,6 +362,61 @@ def assemble_linear_diagram(
         )
         canvas_config.legend_offset_x = 0
         canvas_config.legend_offset_y = 0
+
+    # Finalize the horizontal layout first so label x positions use the same alignment width as features.
+    required_label_height, all_labels, record_label_heights_above = _precalculate_label_dimensions(
+        records, feature_config, canvas_config, config_dict, cfg=cfg
+    )
+    record_label_heights_below = _precalculate_label_heights_below(all_labels)
+
+    # Pre-calculate feature track heights for each record (needed for resolve_overlaps)
+    (
+        record_heights_below,
+        record_heights_above,
+        record_top_guard_above,
+        record_top_guard_undisplaced,
+        record_top_guard_middle_undisplaced,
+    ) = _precalculate_feature_track_heights(records, feature_config, canvas_config, cfg)
+
+    if required_label_height > 0:
+        if canvas_config.vertical_offset < required_label_height:
+            canvas_config.vertical_offset = (
+                required_label_height + canvas_config.original_vertical_offset + canvas_config.cds_padding
+            )
+    else:
+        canvas_config.vertical_offset = canvas_config.original_vertical_offset + canvas_config.cds_padding
+
+    if records:
+        first_record_id = records[0].id
+        base_axis_y = canvas_config.vertical_offset
+        first_actual_extent = record_top_guard_above.get(first_record_id, canvas_config.cds_padding)
+        first_normal_extent = record_top_guard_undisplaced.get(first_record_id, first_actual_extent)
+        normal_top_margin = max(canvas_config.vertical_padding, base_axis_y - first_normal_extent)
+        if track_layout == "above":
+            middle_floor_extent = record_top_guard_middle_undisplaced.get(first_record_id, first_actual_extent)
+            middle_floor_margin = max(canvas_config.vertical_padding, base_axis_y - middle_floor_extent)
+            normal_top_margin = max(normal_top_margin, middle_floor_margin)
+        if track_layout == "above" or (canvas_config.resolve_overlaps and track_layout == "middle"):
+            required_axis_y = first_actual_extent + normal_top_margin
+            # In above layout, keep at least the middle-layout top-margin floor so
+            # non-stranded tracks do not end up visually too close to the top edge.
+            canvas_config.vertical_offset = max(base_axis_y, required_axis_y)
+        else:
+            minimum_axis_y_for_features = first_actual_extent + canvas_config.vertical_padding
+            canvas_config.vertical_offset = max(base_axis_y, minimum_axis_y_for_features)
+        canvas_config.vertical_offset = max(
+            canvas_config.vertical_offset,
+            definition_half_heights.get(first_record_id, 0.0) + canvas_config.vertical_padding,
+        )
+
+    normalize_length = cfg.canvas.linear.normalize_length
+    record_gc_dfs = _precalculate_gc_dataframes(
+        records,
+        window=int(gc_config.window),
+        step=int(gc_config.step),
+        dinucleotide=str(gc_config.dinucleotide),
+        enabled=bool(canvas_config.show_gc or canvas_config.show_skew),
+    )
     # Vertical shift: how much the records should be moved downward in order to place the records in the middle of the canvas
     vertical_shift = 0
     if canvas_config.legend_position in ["top", "bottom"]:

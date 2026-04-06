@@ -21,6 +21,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
 VENDOR_ROOT = WEB_ROOT / "vendor"
+CONFIG_PATH = WEB_ROOT / "js" / "config.js"
 
 ASSET_URLS = {
     "vue": "https://unpkg.com/vue@3.5.25/dist/vue.global.js",
@@ -66,10 +67,11 @@ REQUIRED_UI_FONT_FILES = tuple(
     for family, filenames in UI_FONT_ASSETS.items()
     for filename in filenames
 )
+TOP_LEVEL_BROWSER_WHEEL_RE = re.compile(r"^gbdraw/web/[^/]+\.whl$")
 
 
 def _parse_local_wheel_paths() -> tuple[Path, ...]:
-    config_text = (WEB_ROOT / "js" / "config.js").read_text(encoding="utf-8")
+    config_text = CONFIG_PATH.read_text(encoding="utf-8")
     match = re.search(r"export const PYODIDE_LOCAL_WHEELS\s*=\s*\[(.*?)\];", config_text, re.DOTALL)
     if match is None:
         raise RuntimeError("Could not determine PYODIDE_LOCAL_WHEELS from gbdraw/web/js/config.js")
@@ -224,7 +226,7 @@ def vendor_assets() -> None:
 
 
 def _parse_wheel_name() -> str:
-    config_text = (WEB_ROOT / "js" / "config.js").read_text(encoding="utf-8")
+    config_text = CONFIG_PATH.read_text(encoding="utf-8")
     for line in config_text.splitlines():
         line = line.strip()
         if not line.startswith("export const GBDRAW_WHEEL_NAME"):
@@ -234,7 +236,118 @@ def _parse_wheel_name() -> str:
     raise RuntimeError("Could not determine GBDRAW_WHEEL_NAME from gbdraw/web/js/config.js")
 
 
+def _source_top_level_browser_wheels() -> tuple[Path, ...]:
+    return tuple(sorted(path for path in WEB_ROOT.glob("*.whl") if path.is_file()))
+
+
+def _assert_source_browser_wheel_state() -> Path:
+    expected_name = _parse_wheel_name()
+    top_level_wheels = _source_top_level_browser_wheels()
+    expected_path = WEB_ROOT / expected_name
+    if expected_path not in top_level_wheels:
+        raise FileNotFoundError(f"Configured browser wheel is missing: {expected_path.relative_to(REPO_ROOT)}")
+    extras = [path for path in top_level_wheels if path.name != expected_name]
+    if extras:
+        raise RuntimeError(
+            "Unreferenced top-level browser wheels remain in gbdraw/web:\n"
+            + "\n".join(str(path.relative_to(REPO_ROOT)) for path in extras)
+        )
+    return expected_path
+
+
+def _read_wheel_file_bytes(wheel_path: Path) -> dict[str, bytes]:
+    with zipfile.ZipFile(wheel_path) as zf:
+        return {
+            info.filename: zf.read(info.filename)
+            for info in zf.infolist()
+            if not info.is_dir()
+        }
+
+
+def _repo_python_sources() -> dict[str, bytes]:
+    return {
+        str(path.relative_to(REPO_ROOT)).replace("\\", "/"): path.read_bytes()
+        for path in sorted((REPO_ROOT / "gbdraw").rglob("*.py"))
+        if "__pycache__" not in path.parts
+    }
+
+
+def _assert_wheel_python_sources_match_source_tree(wheel_path: Path) -> None:
+    wheel_entries = _read_wheel_file_bytes(wheel_path)
+    wheel_python_sources = {
+        name: data
+        for name, data in wheel_entries.items()
+        if name.startswith("gbdraw/") and name.endswith(".py")
+    }
+    repo_python_sources = _repo_python_sources()
+
+    missing = sorted(set(repo_python_sources) - set(wheel_python_sources))
+    extra = sorted(set(wheel_python_sources) - set(repo_python_sources))
+    mismatched = sorted(
+        name
+        for name in repo_python_sources
+        if name in wheel_python_sources and repo_python_sources[name] != wheel_python_sources[name]
+    )
+    if missing or extra or mismatched:
+        details: list[str] = []
+        if missing:
+            details.append("Missing python sources in wheel:\n" + "\n".join(missing))
+        if extra:
+            details.append("Unexpected python sources in wheel:\n" + "\n".join(extra))
+        if mismatched:
+            details.append("Mismatched python sources in wheel:\n" + "\n".join(mismatched))
+        raise RuntimeError("\n\n".join(details))
+
+
+def _outer_wheel_top_level_browser_entries(wheel_path: Path) -> tuple[str, ...]:
+    entries = _read_wheel_file_bytes(wheel_path)
+    return tuple(sorted(name for name in entries if TOP_LEVEL_BROWSER_WHEEL_RE.match(name)))
+
+
+def _extract_embedded_browser_wheel(outer_wheel_path: Path) -> bytes:
+    browser_wheel_name = _parse_wheel_name()
+    entry_name = f"gbdraw/web/{browser_wheel_name}"
+    entries = _read_wheel_file_bytes(outer_wheel_path)
+    if entry_name not in entries:
+        raise FileNotFoundError(f"Embedded browser wheel missing from {outer_wheel_path}: {entry_name}")
+    return entries[entry_name]
+
+
+def _assert_outer_wheel_embeds_source_browser_wheel(outer_wheel_path: Path) -> None:
+    source_browser_wheel = _assert_source_browser_wheel_state()
+    expected_entries = (f"gbdraw/web/{source_browser_wheel.name}",)
+    actual_entries = _outer_wheel_top_level_browser_entries(outer_wheel_path)
+    if actual_entries != expected_entries:
+        raise RuntimeError(
+            "Outer wheel contains unexpected top-level browser wheels:\n"
+            + "\n".join(actual_entries or ["(none)"])
+        )
+    embedded_browser_wheel = _extract_embedded_browser_wheel(outer_wheel_path)
+    source_browser_wheel_bytes = source_browser_wheel.read_bytes()
+    if embedded_browser_wheel != source_browser_wheel_bytes:
+        raise RuntimeError(
+            "Embedded browser wheel does not match gbdraw/web browser wheel:\n"
+            f"outer={outer_wheel_path}\n"
+            f"source={source_browser_wheel}"
+        )
+
+
+def _assert_outer_wheel_config_matches_source(outer_wheel_path: Path) -> None:
+    entries = _read_wheel_file_bytes(outer_wheel_path)
+    entry_name = "gbdraw/web/js/config.js"
+    if entry_name not in entries:
+        raise FileNotFoundError(f"Outer wheel is missing {entry_name}")
+    source_config = CONFIG_PATH.read_bytes()
+    if entries[entry_name] != source_config:
+        raise RuntimeError(
+            "Outer wheel config.js does not match gbdraw/web/js/config.js:\n"
+            f"outer={outer_wheel_path}\n"
+            f"source={CONFIG_PATH}"
+        )
+
+
 def _assert_packaged_assets() -> None:
+    _assert_source_browser_wheel_state()
     required = [
         WEB_ROOT / "index.html",
         WEB_ROOT / "open-source-notices.html",
@@ -467,6 +580,10 @@ def smoke_test() -> None:
 def inspect_wheel(wheel_path: Path) -> None:
     if not wheel_path.exists():
         raise FileNotFoundError(wheel_path)
+    source_browser_wheel = _assert_source_browser_wheel_state()
+    _assert_wheel_python_sources_match_source_tree(source_browser_wheel)
+    _assert_outer_wheel_embeds_source_browser_wheel(wheel_path)
+    _assert_outer_wheel_config_matches_source(wheel_path)
     with zipfile.ZipFile(wheel_path) as zf:
         names = set(zf.namelist())
     required = {
@@ -501,8 +618,8 @@ def main() -> int:
         description=(
             "Vendor and verify offline gbdraw GUI assets. "
             "Run `vendor-assets` for third-party browser assets, keep the local Pyodide dependency "
-            "wheels under `gbdraw/web/vendor/pyodide-wheels/`, build the browser wheel into "
-            "`gbdraw/web/`, and keep `gbdraw/web/open-source-notices.html` committed."
+            "wheels under `gbdraw/web/vendor/pyodide-wheels/`, refresh the browser wheel with "
+            "`python tools/sync_browser_wheel.py`, and keep `gbdraw/web/open-source-notices.html` committed."
         )
     )
     subparsers = parser.add_subparsers(dest="command", required=True)

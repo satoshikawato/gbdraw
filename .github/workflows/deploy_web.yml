@@ -34,6 +34,12 @@ jobs:
       - name: Build Wheel
         run: python -m build --wheel
 
+      - name: Sync Browser Wheel
+        run: python tools/sync_browser_wheel.py dist/*.whl
+
+      - name: Verify Synced Wheel
+        run: python tools/verify_gui_offline.py inspect-wheel dist/*.whl
+
       - name: Prepare Web Directory
         run: |
           mkdir public
@@ -46,14 +52,31 @@ jobs:
           # Create CNAME file for custom domain
           echo "gbdraw.app" > public/CNAME
 
-      - name: Update index.html with Wheel filename
+      - name: Update deployed config with outer wheel filename and cache bust
         run: |
-          # Get the generated wheel filename
-          WHEEL_NAME=$(basename dist/*.whl)
-          echo "Generated Wheel: $WHEEL_NAME"
-          
-          # Update the wheel filename in the JS config
-          sed -i "s/const GBDRAW_WHEEL_NAME = \".*\";/const GBDRAW_WHEEL_NAME = \"$WHEEL_NAME\";/" public/js/config.js
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import re
+
+          wheel_path = next(Path("dist").glob("*.whl"))
+          config_path = Path("public/js/config.js")
+          config_text = config_path.read_text(encoding="utf-8")
+          cache_bust = hashlib.sha256(wheel_path.read_bytes()).hexdigest()[:12]
+          config_text = re.sub(
+              r'export const GBDRAW_WHEEL_NAME = ".*?";',
+              f'export const GBDRAW_WHEEL_NAME = "{wheel_path.name}";',
+              config_text,
+              count=1,
+          )
+          config_text = re.sub(
+              r'export const GBDRAW_WHEEL_CACHE_BUST = ".*?";',
+              f'export const GBDRAW_WHEEL_CACHE_BUST = "{cache_bust}";',
+              config_text,
+              count=1,
+          )
+          config_path.write_text(config_text, encoding="utf-8")
+          PY
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

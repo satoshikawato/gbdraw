@@ -20,6 +20,13 @@ from gbdraw.labels.filtering import preprocess_label_filtering
 from gbdraw.labels.linear import prepare_label_list_linear
 from gbdraw.render.drawers.linear.labels import LabelDrawer
 
+HMMTDNA_SHORT_TRNA_COORDS = {
+    "tRNA-Phe": (576, 647),
+    "tRNA-Val": (1601, 1670),
+    "tRNA-Ile": (4262, 4331),
+    "tRNA-Trp": (5511, 5579),
+}
+
 
 def _prepare_linear_labels(
     *,
@@ -250,6 +257,62 @@ def test_linear_precalc_includes_above_feature_rotated_embedded_labels() -> None
     assert required_label_height > 0
     assert required_label_height > canvas_cfg.original_vertical_offset
     assert record_label_heights[record.id] == pytest.approx(required_label_height)
+
+
+@pytest.mark.linear
+def test_linear_precalc_uses_final_alignment_width_for_short_hmmtdna_trna_labels() -> None:
+    input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+    record = SeqIO.read(str(input_path), "genbank")
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        show_labels="all",
+        strandedness=False,
+        label_blacklist="",
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_cfg = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=len(record.seq),
+        config_dict=config_dict,
+        legend="none",
+        cfg=cfg,
+    )
+    canvas_cfg.alignment_width = canvas_cfg.fig_width
+    feature_cfg = FeatureDrawingConfigurator(
+        color_table=None,
+        default_colors=load_default_colors("", "default"),
+        selected_features_set=cfg.objects.features.features_drawn,
+        config_dict=config_dict,
+        canvas_config=canvas_cfg,
+        cfg=cfg,
+    )
+
+    _, all_labels, _ = _precalculate_label_dimensions(
+        [record],
+        feature_cfg,
+        canvas_cfg,
+        config_dict,
+        cfg=cfg,
+    )
+
+    labels_by_text = {
+        label["label_text"]: label
+        for label in all_labels[record.id]
+        if label["label_text"] in HMMTDNA_SHORT_TRNA_COORDS
+    }
+
+    assert labels_by_text.keys() == HMMTDNA_SHORT_TRNA_COORDS.keys()
+
+    for label_text, (start, end) in HMMTDNA_SHORT_TRNA_COORDS.items():
+        expected_start_x = canvas_cfg.alignment_width * (start / len(record.seq))
+        expected_end_x = canvas_cfg.alignment_width * (end / len(record.seq))
+        expected_middle_x = (expected_start_x + expected_end_x) / 2.0
+        label = labels_by_text[label_text]
+        assert float(label["feature_start_x"]) == pytest.approx(expected_start_x)
+        assert float(label["feature_end_x"]) == pytest.approx(expected_end_x)
+        assert float(label["middle_x"]) == pytest.approx(expected_middle_x)
 
 
 @pytest.mark.linear

@@ -27,6 +27,21 @@ def test_web_offline_assets_exist_in_source_tree() -> None:
     verify_module._assert_packaged_assets()
 
 
+def test_web_config_references_single_top_level_browser_wheel() -> None:
+    verify_module = _load_verify_module()
+    browser_wheel = verify_module._assert_source_browser_wheel_state()
+
+    assert browser_wheel.name == verify_module._parse_wheel_name()
+    assert tuple(path.name for path in verify_module._source_top_level_browser_wheels()) == (browser_wheel.name,)
+
+
+def test_source_browser_wheel_matches_repo_python_sources() -> None:
+    verify_module = _load_verify_module()
+    browser_wheel = verify_module._assert_source_browser_wheel_state()
+
+    verify_module._assert_wheel_python_sources_match_source_tree(browser_wheel)
+
+
 def test_index_links_to_open_source_notices() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert "./open-source-notices.html" in index_html
@@ -81,3 +96,23 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
         cwd=REPO_ROOT,
         check=True,
     )
+
+
+@pytest.mark.slow
+def test_built_wheel_embeds_synced_browser_wheel_and_config(tmp_path: Path) -> None:
+    if importlib.util.find_spec("build") is None:
+        pytest.skip("python -m build is not available in this environment")
+    if importlib.util.find_spec("wheel") is None:
+        pytest.skip("wheel is not available in this environment")
+
+    dist_dir = tmp_path / "dist"
+    subprocess.run(
+        [sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", str(dist_dir)],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+
+    verify_module = _load_verify_module()
+    wheel_path = next(dist_dir.glob("gbdraw-*.whl"))
+    verify_module._assert_outer_wheel_embeds_source_browser_wheel(wheel_path)
+    verify_module._assert_outer_wheel_config_matches_source(wheel_path)

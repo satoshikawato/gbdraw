@@ -29,6 +29,13 @@ INPUT_MELA_GBK = Path(__file__).parent / "test_inputs" / "MelaMJNV.gb"
 INPUT_MG1655 = Path(__file__).parent / "test_inputs" / "MG1655.gbk"
 INPUT_HMMTDNA = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
 INPUT_MJE_MELA_BLAST = Path(__file__).parent / "test_inputs" / "MjeNMV.MelaMJNV.tblastx.out"
+HMMTDNA_RECORD_ID = "NC_012920.1"
+HMMTDNA_SHORT_TRNA_COORDS = {
+    "tRNA-Phe": (576, 647),
+    "tRNA-Val": (1601, 1670),
+    "tRNA-Ile": (4262, 4331),
+    "tRNA-Trp": (5511, 5579),
+}
 
 
 def _run_linear_with_gbks(
@@ -166,6 +173,53 @@ def _extract_viewbox_bottom(svg_content: str) -> float:
     parts = [float(value) for value in view_box_raw.split()]
     assert len(parts) == 4
     return parts[1] + parts[3]
+
+
+def _extract_record_text_x_positions(
+    svg_content: str,
+    record_id: str,
+    expected_texts: set[str],
+) -> dict[str, float]:
+    root = ET.fromstring(svg_content)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+
+    for group in root.findall("svg:g", namespace):
+        if group.attrib.get("id") != record_id:
+            continue
+        positions: dict[str, float] = {}
+        for text in group.findall("svg:text", namespace):
+            label_text = "".join(text.itertext()).strip()
+            if label_text not in expected_texts:
+                continue
+            x_value = text.attrib.get("x")
+            assert x_value is not None
+            positions[label_text] = float(x_value)
+        return positions
+
+    raise AssertionError(f"Record group {record_id!r} not found in SVG")
+
+
+@lru_cache(maxsize=1)
+def _expected_hmmtdna_short_trna_midpoints() -> dict[str, float]:
+    record = SeqIO.read(str(INPUT_HMMTDNA), "genbank")
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(config_dict, show_labels="all")
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=len(record.seq),
+        config_dict=config_dict,
+        legend="none",
+        cfg=cfg,
+    )
+    canvas_config.alignment_width = canvas_config.fig_width
+
+    expected_positions: dict[str, float] = {}
+    for label_text, (start, end) in HMMTDNA_SHORT_TRNA_COORDS.items():
+        start_x = canvas_config.alignment_width * (start / len(record.seq))
+        end_x = canvas_config.alignment_width * (end / len(record.seq))
+        expected_positions[label_text] = (start_x + end_x) / 2.0
+    return expected_positions
 
 
 @lru_cache(maxsize=1)
@@ -682,6 +736,33 @@ def test_linear_middle_rotated_labels_fit_viewbox_without_legend(tmp_path: Path)
     expected_label_bottom = axis_y + _expected_middle_rotated_label_bottom_relative_y()
     overflow = expected_label_bottom - viewbox_bottom
     assert max(0.0, overflow) == pytest.approx(0.0, abs=1e-6)
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("legend_position", ["none", "bottom"])
+def test_linear_short_trna_label_x_matches_final_feature_midpoint(
+    tmp_path: Path,
+    legend_position: str,
+) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_HMMTDNA],
+        ["--show_labels", "all", "--legend", legend_position],
+        output_name=f"linear_hmmtdna_trna_midpoint_{legend_position}",
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+
+    svg_content = output_svg.read_text(encoding="utf-8")
+    label_positions = _extract_record_text_x_positions(
+        svg_content,
+        HMMTDNA_RECORD_ID,
+        set(HMMTDNA_SHORT_TRNA_COORDS),
+    )
+    expected_positions = _expected_hmmtdna_short_trna_midpoints()
+
+    assert label_positions.keys() == expected_positions.keys()
+    for label_text, expected_x in expected_positions.items():
+        assert label_positions[label_text] == pytest.approx(expected_x)
 
 
 @pytest.mark.linear
