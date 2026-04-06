@@ -178,6 +178,7 @@ def _patch_outer_wheel(
 def sync_browser_wheel(outer_wheel: Path) -> dict[str, str]:
     if not outer_wheel.exists():
         raise FileNotFoundError(outer_wheel)
+    outer_wheel = outer_wheel.resolve()
 
     browser_wheel_name = _canonical_browser_wheel_name()
     browser_wheel_bytes = _build_browser_wheel_bytes(outer_wheel)
