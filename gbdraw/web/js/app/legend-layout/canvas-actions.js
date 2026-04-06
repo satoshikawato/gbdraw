@@ -8,6 +8,7 @@ export const createLegendCanvasActions = ({ state }) => {
     mode,
     linearBaseConfig,
     circularBaseConfig,
+    diagramElements,
     diagramElementOriginalTransforms,
     diagramElementBaseTransforms,
     form
@@ -243,6 +244,18 @@ export const createLegendCanvasActions = ({ state }) => {
         legendHeight: legendHeight,
         generatedPosition: legendPos
       };
+      const generatedShiftX = legendPos === 'left' ? Math.max(0, vbW - baseVbW) : 0;
+      const generatedShiftY = legendPos === 'top' ? Math.max(0, vbH - baseVbH) : 0;
+      const normalizedBaseTransforms = new Map();
+
+      diagramElementOriginalTransforms.value.forEach((transform, el) => {
+        normalizedBaseTransforms.set(el, {
+          x: transform.x - generatedShiftX,
+          y: transform.y - generatedShiftY
+        });
+      });
+      diagramElementBaseTransforms.value = normalizedBaseTransforms;
+      return;
     }
 
     diagramElementBaseTransforms.value = new Map(diagramElementOriginalTransforms.value);

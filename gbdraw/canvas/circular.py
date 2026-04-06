@@ -9,6 +9,19 @@ from ..config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ..core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
 
 
+def resolve_circular_side_legend_geometry(
+    *,
+    canvas_height: float,
+    legend_width: float,
+    color_rect_size: float,
+) -> tuple[float, float, float]:
+    """Return (inner_gap, edge_margin, reserved_width) for circular side legends."""
+    side_inner_gap_px = 0.05 * float(legend_width)
+    side_edge_margin_px = max(0.0, (0.05 * float(canvas_height)) - (0.5 * float(color_rect_size)))
+    side_reserved_width_px = float(legend_width) + side_inner_gap_px + side_edge_margin_px
+    return side_inner_gap_px, side_edge_margin_px, side_reserved_width_px
+
+
 class CircularCanvasConfigurator:
     """
     Configures the settings for a circular canvas used for genomic data visualization.
@@ -110,15 +123,20 @@ class CircularCanvasConfigurator:
         top_bottom_reserved_height = (
             float(legend_config.legend_height) + legend_edge_margin + legend_content_gap
         )
+        side_inner_gap, side_edge_margin, side_reserved_width = resolve_circular_side_legend_geometry(
+            canvas_height=float(self.total_height),
+            legend_width=float(legend_config.legend_width),
+            color_rect_size=float(legend_config.color_rect_size),
+        )
 
         if self.legend_position == "right":
-            self.total_width = self.default_width + (legend_config.legend_width * 1.1)
-            self.legend_offset_x = self.default_width + (legend_config.legend_width * 0.05)
+            self.total_width = self.default_width + side_reserved_width
+            self.legend_offset_x = self.default_width + side_inner_gap
             self.legend_offset_y = (self.total_height - legend_config.legend_height) / 2
         elif self.legend_position == "left":
-            self.total_width = self.default_width + (legend_config.legend_width * 1.1)
-            self.legend_offset_x = legend_config.legend_width * 0.05
-            self.offset_x: float = (self.default_width * 0.5) + (legend_config.legend_width * 1.1)
+            self.total_width = self.default_width + side_reserved_width
+            self.legend_offset_x = side_edge_margin
+            self.offset_x: float = (self.default_width * 0.5) + side_reserved_width
             self.legend_offset_y = (self.total_height - legend_config.legend_height) / 2
         elif self.legend_position == "top":
             self.total_height = self.default_height + top_bottom_reserved_height
@@ -178,7 +196,6 @@ class CircularCanvasConfigurator:
         if skew_track_id is not None:
             self.track_ids["skew_track"] = skew_track_id
 
-
-__all__ = ["CircularCanvasConfigurator"]
+__all__ = ["CircularCanvasConfigurator", "resolve_circular_side_legend_geometry"]
 
 

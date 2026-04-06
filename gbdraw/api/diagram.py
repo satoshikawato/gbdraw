@@ -26,6 +26,7 @@ from gbdraw.analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from gbdraw.api.config import apply_config_overrides  # type: ignore[reportMissingImports]
 from gbdraw.api.options import DiagramOptions  # type: ignore[reportMissingImports]
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator  # type: ignore[reportMissingImports]
+from gbdraw.canvas.circular import resolve_circular_side_legend_geometry  # type: ignore[reportMissingImports]
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from gbdraw.config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from gbdraw.config.toml import load_config_toml  # type: ignore[reportMissingImports]
@@ -1954,15 +1955,26 @@ def assemble_circular_diagram_from_records(
             )
             legend_local_top = -0.5 * float(legend_config.color_rect_size)
             legend_local_bottom = legend_local_top + float(legend_config.legend_height)
+            side_inner_gap = 0.0
+            side_edge_margin = 0.0
+            side_reserved_width = 0.0
+            if legend_effective in {"left", "right"}:
+                side_inner_gap, side_edge_margin, side_reserved_width = (
+                    resolve_circular_side_legend_geometry(
+                        canvas_height=float(total_height),
+                        legend_width=float(legend_config.legend_width),
+                        color_rect_size=float(legend_config.color_rect_size),
+                    )
+                )
 
             if legend_effective == "right":
-                total_width = grid_width + (legend_config.legend_width * 1.1)
-                legend_offset_x = grid_width + (legend_config.legend_width * 0.05)
+                total_width = grid_width + side_reserved_width
+                legend_offset_x = grid_width + side_inner_gap
                 legend_offset_y = (total_height - legend_config.legend_height) / 2.0
             elif legend_effective == "left":
-                total_width = grid_width + (legend_config.legend_width * 1.1)
-                grid_origin_x = legend_config.legend_width * 1.1
-                legend_offset_x = legend_config.legend_width * 0.05
+                total_width = grid_width + side_reserved_width
+                grid_origin_x = side_reserved_width
+                legend_offset_x = side_edge_margin
                 legend_offset_y = (total_height - legend_config.legend_height) / 2.0
             elif legend_effective == "top":
                 legend_offset_y = _MULTI_RECORD_LEGEND_TOP_EDGE_PADDING_PX - legend_local_top
