@@ -112,6 +112,7 @@ def _precalculate_label_dimensions(
         else:
             genome_size_normalization_factor = record_length / canvas_config.longest_genome
 
+        # Label x-positions must use the same final axis width as record rendering.
         label_list = prepare_label_list_linear(
             feature_dict,
             record_length,
