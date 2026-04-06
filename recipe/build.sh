@@ -5,12 +5,15 @@ set -e
 
 # --- 1. Build the wheel file for Pyodide (WebAssembly) ---
 echo "Building wheel for Pyodide..."
+# Remove any existing bundled wheels so config.js always points at the fresh build.
+rm -f gbdraw/web/gbdraw-*.whl
+
 # Build the wheel from the current directory and output it to gbdraw/web/
 $PYTHON -m pip wheel . --no-deps --no-build-isolation --wheel-dir gbdraw/web
 
 # --- 2. Dynamically retrieve the filename and update config.js ---
-# Find the generated wheel file (e.g., gbdraw-0.9.0-py3-none-any.whl)
-WHEEL_FILE=$(ls gbdraw/web/gbdraw-*.whl | head -n 1)
+# Find the generated wheel file (e.g., gbdraw-0.9.1-py3-none-any.whl)
+WHEEL_FILE=$(ls gbdraw/web/gbdraw-*.whl)
 WHEEL_NAME=$(basename $WHEEL_FILE)
 echo "Generated wheel name: $WHEEL_NAME"
 
