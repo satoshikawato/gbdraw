@@ -9,7 +9,7 @@ echo "Building wheel for Pyodide..."
 $PYTHON -m pip wheel . --no-deps --no-build-isolation --wheel-dir gbdraw/web
 
 # --- 2. Dynamically retrieve the filename and update config.js ---
-# Find the generated wheel file (e.g., gbdraw-0.9.0-py3-none-any.whl)
+# Find the generated wheel file (e.g., gbdraw-0.9.1-py3-none-any.whl)
 WHEEL_FILE=$(ls gbdraw/web/gbdraw-*.whl | head -n 1)
 WHEEL_NAME=$(basename $WHEEL_FILE)
 echo "Generated wheel name: $WHEEL_NAME"

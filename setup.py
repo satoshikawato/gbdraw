@@ -1,8 +1,25 @@
-from setuptools import setup, find_packages
+from pathlib import Path
+
+from setuptools import find_packages, setup
+from setuptools.command.build_py import build_py as _build_py
+
+
+class build_py(_build_py):
+    def run(self):
+        super().run()
+
+        # Keep build/lib in sync with the source tree so removed browser wheels
+        # do not linger in subsequent wheel builds.
+        source_web_root = Path("gbdraw") / "web"
+        build_web_root = Path(self.build_lib) / "gbdraw" / "web"
+        source_wheels = {path.name for path in source_web_root.glob("*.whl")}
+        for wheel_path in build_web_root.glob("*.whl"):
+            if wheel_path.name not in source_wheels:
+                wheel_path.unlink()
 
 setup(
     name='gbdraw',
-    version='0.9.0',
+    version='0.9.1',
     packages=find_packages(),
     install_requires=[
         'pandas',
@@ -82,4 +99,5 @@ setup(
         "Source": "https://github.com/satoshikawato/gbdraw/",
     },
     entry_points={'console_scripts': ['gbdraw = gbdraw.cli:main',] },
+    cmdclass={"build_py": build_py},
 )
