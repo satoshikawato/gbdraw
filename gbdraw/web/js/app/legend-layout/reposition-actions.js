@@ -53,10 +53,34 @@ export const createLegendRepositionActions = ({
   const { ensureUniquePairwiseGradientIds, ensureUniqueSkewClipPathIds } = svgActions;
   const { applyDiagramShift, clearPlotTitleState, setPlotTitleAutoTransform } = diagramActions;
 
-  const getCircularAbsoluteConfig = (position, baseConfig) => {
+  const getCircularSideLegendSpacing = (canvasHeight, legendLocalBounds) => {
+    const localTop = Number.isFinite(legendLocalBounds?.y) ? legendLocalBounds.y : 0;
+    const legendWidth = Number.isFinite(legendLocalBounds?.width) ? legendLocalBounds.width : 0;
+    const inferredColorRectSize = localTop < 0 ? (-2 * localTop) : 0;
+    const sideInnerGapPx = legendWidth * 0.05;
+    const sideEdgeMarginPx = Math.max(0, canvasHeight * 0.05 - inferredColorRectSize * 0.5);
+    const sideReservedWidthPx = legendWidth + sideInnerGapPx + sideEdgeMarginPx;
+    return { sideInnerGapPx, sideEdgeMarginPx, sideReservedWidthPx };
+  };
+
+  const getCircularAbsoluteConfig = (position, baseConfig, legendLocalBounds = null) => {
     const { viewBoxWidth, viewBoxHeight, legendWidth, legendHeight } = baseConfig;
     const genVbW = baseConfig.generatedViewBoxWidth || viewBoxWidth;
     const genVbH = baseConfig.generatedViewBoxHeight || viewBoxHeight;
+    const resolvedLegendBounds = {
+      x: Number.isFinite(legendLocalBounds?.x) ? legendLocalBounds.x : 0,
+      y: Number.isFinite(legendLocalBounds?.y) ? legendLocalBounds.y : 0,
+      width: Number.isFinite(legendLocalBounds?.width) && legendLocalBounds.width > 0
+        ? legendLocalBounds.width
+        : legendWidth,
+      height: Number.isFinite(legendLocalBounds?.height) && legendLocalBounds.height > 0
+        ? legendLocalBounds.height
+        : legendHeight
+    };
+    const { sideInnerGapPx, sideEdgeMarginPx, sideReservedWidthPx } = getCircularSideLegendSpacing(
+      viewBoxHeight,
+      resolvedLegendBounds
+    );
     console.log(
       `[DEBUG] getCircularAbsoluteConfig called with position="${position}" (type: ${typeof position}, length: ${position.length})`
     );
@@ -67,22 +91,25 @@ export const createLegendRepositionActions = ({
       case 'left':
         debugLog('Matched case: left');
         return {
-          vbWidth: viewBoxWidth + legendWidth * 1.1,
+          vbWidth: viewBoxWidth + sideReservedWidthPx,
           vbHeight: viewBoxHeight,
-          diagramShiftX: legendWidth * 0.55,
+          diagramShiftX: sideReservedWidthPx,
           diagramShiftY: 0,
-          legendX: 10,
-          legendY: (viewBoxHeight - legendHeight) / 2
+          legendX: sideEdgeMarginPx - resolvedLegendBounds.x,
+          legendY: (viewBoxHeight - resolvedLegendBounds.height) / 2
         };
       case 'right':
         debugLog('Matched case: right');
         return {
-          vbWidth: viewBoxWidth + legendWidth * 1.1,
+          vbWidth: viewBoxWidth + sideReservedWidthPx,
           vbHeight: viewBoxHeight,
           diagramShiftX: 0,
           diagramShiftY: 0,
-          legendX: viewBoxWidth + legendWidth * 0.05,
-          legendY: (viewBoxHeight - legendHeight) / 2
+          legendX:
+            viewBoxWidth
+            + sideInnerGapPx
+            - resolvedLegendBounds.x,
+          legendY: (viewBoxHeight - resolvedLegendBounds.height) / 2
         };
       case 'top':
         return {
@@ -195,6 +222,20 @@ export const createLegendRepositionActions = ({
         }
       }
 
+      const legendLocalBounds = legendGroup
+        ? (
+            getLegendLayoutLocalBounds(
+              svg,
+              newPosition === 'top' || newPosition === 'bottom' ? 'horizontal' : 'vertical'
+            ) || {
+              x: 0,
+              y: 0,
+              width: legendWidth,
+              height: legendHeight
+            }
+          )
+        : null;
+
       const baseConfig = {
         ...circularBaseConfig.value,
         legendWidth: legendWidth,
@@ -216,7 +257,7 @@ export const createLegendRepositionActions = ({
       }
       debugLog('baseConfig:', baseConfig);
 
-      const config = getCircularAbsoluteConfig(newPosition, baseConfig);
+      const config = getCircularAbsoluteConfig(newPosition, baseConfig, legendLocalBounds);
       debugLog('calculated config:', config);
 
       svg.setAttribute('viewBox', `0 0 ${config.vbWidth} ${config.vbHeight}`);

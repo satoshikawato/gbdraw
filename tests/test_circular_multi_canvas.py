@@ -500,6 +500,30 @@ def _extract_legend_vertical_bounds(root: ET.Element) -> tuple[float, float]:
     return min_y, max_y
 
 
+def _extract_legend_horizontal_bounds(root: ET.Element) -> tuple[float, float]:
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    legend = root.find(".//svg:g[@id='legend']", ns)
+    assert legend is not None
+    legend_x, _ = _parse_translate(legend.attrib.get("transform", ""))
+
+    min_x = float("inf")
+    max_x = float("-inf")
+    for path in legend.findall(".//svg:path", ns):
+        path_x, _ = _parse_translate(path.attrib.get("transform", ""))
+        d_attr = path.attrib.get("d", "")
+        for match in re.finditer(
+            r"[ML]\s*([-+0-9.eE]+)\s*,\s*[-+0-9.eE]+",
+            d_attr,
+        ):
+            x_value = legend_x + path_x + float(match.group(1))
+            min_x = min(min_x, x_value)
+            max_x = max(max_x, x_value)
+
+    assert min_x != float("inf")
+    assert max_x != float("-inf")
+    return min_x, max_x
+
+
 def _extract_definition_top_y(root: ET.Element, group_id: str) -> float:
     ns = {"svg": "http://www.w3.org/2000/svg"}
     group = root.find(f".//svg:g[@id='{group_id}']", ns)
@@ -3212,6 +3236,96 @@ def test_multi_record_left_right_plot_title_bottom_keeps_margins(
 
     assert shared_top >= baseline_height + 20.0 - 1e-6
     assert bottom_height - shared_bottom >= 24.0 - 1e-6
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize(
+    ("side_position", "corner_position"),
+    [("left", "upper_left"), ("right", "upper_right")],
+)
+def test_single_record_side_legend_matches_upper_corner_edge_margin(
+    side_position: str,
+    corner_position: str,
+) -> None:
+    record = _build_multi_feature_record_with_source(
+        f"single_side_margin_{side_position}",
+        organism="Single side legend organism",
+        strain="Single side legend strain",
+        length=2600,
+    )
+    selected_features = ["CDS", "tRNA", "rRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+
+    side_canvas = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=selected_features,
+        legend=side_position,
+    )
+    corner_canvas = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        selected_features_set=selected_features,
+        legend=corner_position,
+    )
+
+    side_root = ET.fromstring(side_canvas.tostring())
+    corner_root = ET.fromstring(corner_canvas.tostring())
+
+    viewbox_width = _extract_viewbox_width(side_root)
+    legend_left, legend_right = _extract_legend_horizontal_bounds(side_root)
+    corner_top, _corner_bottom = _extract_legend_vertical_bounds(corner_root)
+
+    side_edge_margin = legend_left if side_position == "left" else viewbox_width - legend_right
+    assert side_edge_margin == pytest.approx(corner_top, abs=1e-6)
+    assert legend_left >= -1e-6
+    assert legend_right <= viewbox_width + 1e-6
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize(
+    ("side_position", "corner_position"),
+    [("left", "upper_left"), ("right", "upper_right")],
+)
+def test_multi_record_side_legend_matches_upper_corner_edge_margin(
+    side_position: str,
+    corner_position: str,
+) -> None:
+    records = [
+        _build_multi_feature_record_with_source(
+            f"multi_side_margin_{side_position}_a",
+            organism="Multi side legend A",
+            strain="Strain A",
+            length=2600,
+        ),
+        _build_multi_feature_record_with_source(
+            f"multi_side_margin_{side_position}_b",
+            organism="Multi side legend B",
+            strain="Strain B",
+            length=2100,
+        ),
+    ]
+    selected_features = ["CDS", "tRNA", "rRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+
+    side_canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=selected_features,
+        legend=side_position,
+    )
+    corner_canvas = assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=selected_features,
+        legend=corner_position,
+    )
+
+    side_root = ET.fromstring(side_canvas.tostring())
+    corner_root = ET.fromstring(corner_canvas.tostring())
+
+    viewbox_width = _extract_viewbox_width(side_root)
+    legend_left, legend_right = _extract_legend_horizontal_bounds(side_root)
+    corner_top, _corner_bottom = _extract_legend_vertical_bounds(corner_root)
+
+    side_edge_margin = legend_left if side_position == "left" else viewbox_width - legend_right
+    assert side_edge_margin == pytest.approx(corner_top, abs=1e-6)
+    assert legend_left >= -1e-6
+    assert legend_right <= viewbox_width + 1e-6
 
 
 @pytest.mark.circular
