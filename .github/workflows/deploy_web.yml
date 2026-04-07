@@ -41,19 +41,10 @@ jobs:
           cp -r gbdraw/web/* public/
           # Remove any prebundled wheels from the repo copy
           rm -f public/*.whl
-          # Copy the built wheel file
+          # Copy the built package wheel to the site root
           cp dist/*.whl public/
           # Create CNAME file for custom domain
           echo "gbdraw.app" > public/CNAME
-
-      - name: Update index.html with Wheel filename
-        run: |
-          # Get the generated wheel filename
-          WHEEL_NAME=$(basename dist/*.whl)
-          echo "Generated Wheel: $WHEEL_NAME"
-          
-          # Update the wheel filename in the JS config
-          sed -i "s/const GBDRAW_WHEEL_NAME = \".*\";/const GBDRAW_WHEEL_NAME = \"$WHEEL_NAME\";/" public/js/config.js
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import http.server
+import io
 import re
 import shutil
 import socketserver
@@ -380,6 +381,168 @@ def smoke_test() -> None:
         if circular_state["resultCount"] < 1:
             raise RuntimeError("Circular offline generation produced no SVG results.")
 
+        deferred_palette_state = page.evaluate(
+            """
+            async () => {
+              const app = window.__GBDRAW_APP__;
+              const svg = app.svgContainer?.querySelector('svg');
+              if (!svg) {
+                return { error: 'SVG preview not found after circular generation.' };
+              }
+
+              const getFeatureFill = (svgId) => {
+                if (!svgId) return null;
+                const element = svg.querySelector(`#${CSS.escape(svgId)}`);
+                return element ? element.getAttribute('fill') : null;
+              };
+              const findFeatureFillByType = (featureType, preferredSvgId = '') => {
+                const currentSvg = app.svgContainer?.querySelector('svg');
+                if (!currentSvg) return null;
+                if (preferredSvgId) {
+                  const preferred = currentSvg.querySelector(`#${CSS.escape(preferredSvgId)}`);
+                  if (preferred) {
+                    return preferred.getAttribute('fill');
+                  }
+                }
+                for (const feat of app.extractedFeatures || []) {
+                  if (feat?.type !== featureType || !feat?.svg_id) continue;
+                  const element = currentSvg.querySelector(`#${CSS.escape(feat.svg_id)}`);
+                  if (element) return element.getAttribute('fill');
+                }
+                return null;
+              };
+
+              const pickFeatureForPaletteCheck = () => {
+                for (const feat of app.extractedFeatures || []) {
+                  if (!feat?.svg_id || !feat?.type) continue;
+                  const fill = getFeatureFill(feat.svg_id);
+                  if (!fill) continue;
+                  const baseColor = app.currentColors?.[feat.type];
+                  if (!baseColor) continue;
+                  return { svgId: feat.svg_id, type: feat.type, beforeFill: fill };
+                }
+                return null;
+              };
+
+              const chosenFeature = pickFeatureForPaletteCheck();
+              if (!chosenFeature) {
+                return { error: 'Could not find a rendered feature for palette verification.' };
+              }
+
+              const originalPalette = String(app.selectedPalette || 'default');
+              const originalDraftColor = String(app.currentColors?.[chosenFeature.type] || '');
+              app.paletteInstantPreviewEnabled = false;
+
+              let pendingPalette = '';
+              let pendingDraftColor = '';
+              for (const paletteName of app.paletteNames || []) {
+                if (paletteName === originalPalette) continue;
+                app.selectedPalette = paletteName;
+                app.updatePalette();
+                const candidateColor = String(app.currentColors?.[chosenFeature.type] || '');
+                if (!candidateColor || candidateColor === originalDraftColor) continue;
+                pendingPalette = paletteName;
+                pendingDraftColor = candidateColor;
+                break;
+              }
+
+              if (!pendingPalette) {
+                return {
+                  error: `Could not find a palette with a different ${chosenFeature.type} color for deferred-preview verification.`
+                };
+              }
+
+              await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+              const afterPaletteFill = getFeatureFill(chosenFeature.svgId);
+              const pendingName = String(app.pendingPaletteName || '');
+              const appliedColorAfterPalette = String(app.appliedPaletteColors?.[chosenFeature.type] || '');
+              const pendingColorAfterPalette = String(app.pendingPaletteColors?.[chosenFeature.type] || '');
+
+              const manualDraftColor = [pendingDraftColor, originalDraftColor].includes('#123456') ? '#654321' : '#123456';
+              app.currentColors[chosenFeature.type] = manualDraftColor;
+              await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+              const afterDraftEditFill = getFeatureFill(chosenFeature.svgId);
+
+              await app.runAnalysis();
+              const afterGenerateFill = findFeatureFillByType(chosenFeature.type, chosenFeature.svgId);
+              const pendingAfterGenerate = String(app.pendingPaletteName || '');
+              const appliedAfterGenerate = String(app.appliedPaletteColors?.[chosenFeature.type] || '');
+
+              let immediatePalette = '';
+              let immediateColor = '';
+              for (const paletteName of app.paletteNames || []) {
+                if (paletteName === String(app.selectedPalette || '')) continue;
+                app.selectedPalette = paletteName;
+                app.paletteInstantPreviewEnabled = true;
+                app.updatePalette();
+                const candidateColor = String(app.currentColors?.[chosenFeature.type] || '');
+                if (!candidateColor || candidateColor === appliedAfterGenerate) continue;
+                immediatePalette = paletteName;
+                immediateColor = candidateColor;
+                break;
+              }
+
+              if (!immediatePalette) {
+                return {
+                  error: `Could not find a second palette with a different ${chosenFeature.type} color for instant-preview verification.`
+                };
+              }
+
+              await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+              const afterImmediateFill = findFeatureFillByType(chosenFeature.type, chosenFeature.svgId);
+
+              return {
+                featureType: chosenFeature.type,
+                beforeFill: chosenFeature.beforeFill,
+                afterPaletteFill,
+                afterDraftEditFill,
+                afterGenerateFill,
+                afterImmediateFill,
+                pendingName,
+                pendingAfterGenerate,
+                appliedColorAfterPalette,
+                pendingColorAfterPalette,
+                appliedAfterGenerate,
+                manualDraftColor,
+                pendingPalette,
+                pendingDraftColor,
+                immediatePalette,
+                immediateColor
+              };
+            }
+            """
+        )
+        if deferred_palette_state.get("error"):
+            raise RuntimeError(deferred_palette_state["error"])
+        if deferred_palette_state["afterPaletteFill"] != deferred_palette_state["beforeFill"]:
+            raise RuntimeError(
+                "Palette change updated the SVG even though palette instant preview was disabled."
+            )
+        if deferred_palette_state["afterDraftEditFill"] != deferred_palette_state["beforeFill"]:
+            raise RuntimeError(
+                "Manual -d edit updated the SVG before Generate Diagram while a palette draft was pending."
+            )
+        if deferred_palette_state["pendingName"] != deferred_palette_state["pendingPalette"]:
+            raise RuntimeError(
+                "Pending palette state did not record the deferred palette selection."
+            )
+        if deferred_palette_state["pendingColorAfterPalette"] != deferred_palette_state["pendingDraftColor"]:
+            raise RuntimeError(
+                "Pending palette colors were not updated after selecting a deferred palette."
+            )
+        if deferred_palette_state["afterGenerateFill"] != deferred_palette_state["manualDraftColor"]:
+            raise RuntimeError(
+                "Generate Diagram did not apply the deferred palette draft color to the SVG."
+            )
+        if deferred_palette_state["pendingAfterGenerate"]:
+            raise RuntimeError("Pending palette state was not cleared after Generate Diagram.")
+        if deferred_palette_state["appliedAfterGenerate"] != deferred_palette_state["manualDraftColor"]:
+            raise RuntimeError("Applied palette colors were not promoted after Generate Diagram.")
+        if deferred_palette_state["afterImmediateFill"] != deferred_palette_state["immediateColor"]:
+            raise RuntimeError(
+                "Palette instant preview did not update the SVG immediately after being re-enabled."
+            )
+
         download_dir = Path(tempfile.mkdtemp(prefix="gbdraw-offline-downloads-"))
         try:
             for method_name, extension in [
@@ -469,13 +632,21 @@ def inspect_wheel(wheel_path: Path) -> None:
         raise FileNotFoundError(wheel_path)
     with zipfile.ZipFile(wheel_path) as zf:
         names = set(zf.namelist())
+    expected_browser_wheel = f"gbdraw/web/{_parse_wheel_name()}"
+    browser_wheels = sorted(
+        name for name in names if name.startswith("gbdraw/web/gbdraw-") and name.endswith(".whl")
+    )
+    if browser_wheels != [expected_browser_wheel]:
+        raise RuntimeError(
+            "Wheel contains unexpected embedded browser wheels:\n" + "\n".join(browser_wheels)
+        )
     required = {
         "gbdraw/web/index.html",
         "gbdraw/web/open-source-notices.html",
         "gbdraw/web/js/app.js",
         "gbdraw/web/js/services/losat.js",
         "gbdraw/web/wasm/losat/losat.wasm",
-        f"gbdraw/web/{_parse_wheel_name()}",
+        expected_browser_wheel,
         "gbdraw/web/vendor/vue/vue.global.js",
         "gbdraw/web/vendor/tailwindcss/tailwindcss-play.js",
         "gbdraw/web/vendor/pyodide/v0.29.0/full/pyodide.js",
@@ -493,6 +664,36 @@ def inspect_wheel(wheel_path: Path) -> None:
     if missing:
         raise FileNotFoundError(
             "Wheel is missing required offline assets:\n" + "\n".join(missing)
+        )
+    assert_embedded_browser_wheel_is_not_recursive(wheel_path)
+
+
+def assert_browser_wheel_is_not_recursive(wheel_path: Path) -> None:
+    browser_wheel_member = f"gbdraw/web/{_parse_wheel_name()}"
+    with zipfile.ZipFile(wheel_path) as browser_wheel:
+        nested_names = set(browser_wheel.namelist())
+    _assert_browser_wheel_names_not_recursive(nested_names, browser_wheel_member)
+
+
+def assert_embedded_browser_wheel_is_not_recursive(wheel_path: Path) -> None:
+    browser_wheel_member = f"gbdraw/web/{_parse_wheel_name()}"
+    with zipfile.ZipFile(wheel_path) as zf:
+        try:
+            browser_wheel_bytes = zf.read(browser_wheel_member)
+        except KeyError as exc:
+            raise FileNotFoundError(
+                f"Wheel is missing embedded browser wheel: {browser_wheel_member}"
+            ) from exc
+
+    with zipfile.ZipFile(io.BytesIO(browser_wheel_bytes)) as browser_wheel:
+        nested_names = set(browser_wheel.namelist())
+    _assert_browser_wheel_names_not_recursive(nested_names, browser_wheel_member)
+
+
+def _assert_browser_wheel_names_not_recursive(nested_names: set[str], browser_wheel_member: str) -> None:
+    if browser_wheel_member in nested_names:
+        raise RuntimeError(
+            f"Browser wheel recursively contains itself: {browser_wheel_member}"
         )
 
 

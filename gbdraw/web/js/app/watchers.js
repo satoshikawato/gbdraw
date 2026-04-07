@@ -72,6 +72,8 @@ export const setupWatchers = ({
     globalLabelModeDialog,
     files,
     currentColors,
+    paletteInstantPreviewEnabled,
+    pendingPaletteName,
     pyodideReady,
     fileLegendCaptions,
     manualPriorityRules,
@@ -103,7 +105,12 @@ export const setupWatchers = ({
     repositionForLegendChange,
     setupDiagramDrag
   } = legendLayout;
-  const { scheduleDefinitionUpdate, cancelDefinitionUpdate } = resultsManager;
+  const {
+    applyPaletteDraftToPreview,
+    scheduleDefinitionUpdate,
+    cancelDefinitionUpdate,
+    syncPaletteDraftState
+  } = resultsManager;
 
   const normalizeCircularPlotTitlePosition = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
@@ -233,6 +240,23 @@ export const setupWatchers = ({
       }
     },
     { deep: true }
+  );
+
+  watch(
+    currentColors,
+    () => {
+      syncPaletteDraftState();
+    },
+    { deep: true }
+  );
+
+  watch(
+    () => paletteInstantPreviewEnabled.value,
+    (enabled) => {
+      if (!enabled) return;
+      if (String(pendingPaletteName.value || '').trim() === '') return;
+      applyPaletteDraftToPreview();
+    }
   );
 
   watch(

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gbdraw"
-version = "0.9.1"
+version = "0.9.2"
 description = "A genome diagram generator for microbes and organelles"
 readme = "README.md"
 license = "MIT"
@@ -55,52 +55,6 @@ gbdraw = "gbdraw.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["gbdraw*"]
-
-[tool.setuptools.package-data]
-gbdraw = [
-    "data/color_palettes.toml",
-    "data/config.toml",
-    "data/*.ttf",
-    "web/*.whl",
-    "web/index.html",
-    "web/open-source-notices.html",
-    "web/js/*.js",
-    "web/js/app/*.js",
-    "web/js/app/*/*.js",
-    "web/js/workers/*.js",
-    "web/js/services/*.js",
-    "web/js/utils/*.js",
-    "web/presets/*.txt",
-    "web/presets/*.tsv",
-    "web/vendor/fonts/*.ttf",
-    "web/vendor/*/*.css",
-    "web/vendor/*/*.js",
-    "web/vendor/*/*.json",
-    "web/vendor/*/*.svg",
-    "web/vendor/*/*.ttf",
-    "web/vendor/*/*.whl",
-    "web/vendor/*/*.woff",
-    "web/vendor/*/*.woff2",
-    "web/vendor/*/*/*.css",
-    "web/vendor/*/*/*.js",
-    "web/vendor/*/*/*.json",
-    "web/vendor/*/*/*.mjs",
-    "web/vendor/*/*/*.svg",
-    "web/vendor/*/*/*.ttf",
-    "web/vendor/*/*/*.whl",
-    "web/vendor/*/*/*.woff",
-    "web/vendor/*/*/*.woff2",
-    "web/vendor/*/*/*.zip",
-    "web/vendor/*/*/*.wasm",
-    "web/vendor/*/*/*/*.js",
-    "web/vendor/*/*/*/*.json",
-    "web/vendor/*/*/*/*.mjs",
-    "web/vendor/*/*/*/*.whl",
-    "web/vendor/*/*/*/*.zip",
-    "web/vendor/*/*/*/*.wasm",
-    "web/wasm/*/*.md",
-    "web/wasm/*/*.wasm",
-]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

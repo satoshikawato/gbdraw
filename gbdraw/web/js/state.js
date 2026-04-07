@@ -354,9 +354,18 @@ const linearReorderNotice = ref('');
 const circularRecordList = ref([]); // [{ selector: '#1', record_id: 'NC_xxx' }]
 
 // Color & Filter State
+const paletteDefinitions = ref({});
 const paletteNames = ref(['default']);
 const selectedPalette = ref('default');
 const currentColors = ref({});
+const paletteInstantPreviewEnabled = ref(false);
+const appliedPaletteName = ref('default');
+const appliedPaletteColors = ref({});
+const pendingPaletteName = ref('');
+const pendingPaletteColors = ref({});
+const hasPendingPaletteDraft = computed(
+  () => !paletteInstantPreviewEnabled.value && String(pendingPaletteName.value || '').trim() !== ''
+);
 const filterMode = ref('None');
 const manualBlacklist = ref('hypothetical, uncharacterized, putative, unknown');
 const manualWhitelist = reactive([]);
@@ -722,9 +731,16 @@ export const state = {
   losatCache,
   linearReorderNotice,
   circularRecordList,
+  paletteDefinitions,
   paletteNames,
   selectedPalette,
   currentColors,
+  paletteInstantPreviewEnabled,
+  appliedPaletteName,
+  appliedPaletteColors,
+  pendingPaletteName,
+  pendingPaletteColors,
+  hasPendingPaletteDraft,
   filterMode,
   manualBlacklist,
   manualWhitelist,

@@ -5,7 +5,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
   const {
     svgContent,
     extractedFeatures,
-    currentColors,
+    appliedPaletteColors,
     manualSpecificRules,
     featureColorOverrides,
     legendColorOverrides,
@@ -142,7 +142,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     ensureUniqueSkewClipPathIds(svg);
     ensureUniquePairwiseGradientIds(svg);
 
-    const colors = currentColors.value;
+    const colors = appliedPaletteColors.value;
     const featurePaths = svg.querySelectorAll('path[id^="f"]');
     let updatedCount = 0;
 
@@ -383,7 +383,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
 
       const elements = svg.querySelectorAll(`#${CSS.escape(feat.svg_id)}`);
       if (elements.length > 0) {
-        const newColor = matchingRule ? matchingRule.color : currentColors.value[feat.type] || '#cccccc';
+        const newColor = matchingRule ? matchingRule.color : appliedPaletteColors.value[feat.type] || '#cccccc';
         elements.forEach((el) => {
           if (el.getAttribute('fill') !== newColor) {
             el.setAttribute('fill', newColor);
@@ -601,7 +601,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
   };
 
   watch(
-    currentColors,
+    appliedPaletteColors,
     () => {
       applyPaletteToSvg();
       applySpecificRulesToSvg();

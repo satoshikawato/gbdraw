@@ -196,7 +196,12 @@ export const createRunAnalysis = ({
     legendColorOverrides,
     originalLegendOrder,
     originalLegendColors,
+    selectedPalette,
     currentColors,
+    appliedPaletteName,
+    appliedPaletteColors,
+    pendingPaletteName,
+    pendingPaletteColors,
     filterMode,
     manualSpecificRules,
     manualWhitelist,
@@ -574,6 +579,7 @@ json.dumps({
         String(modeValue || '')
       ])
     );
+    const activeRunColors = isReflow ? appliedPaletteColors.value : currentColors.value;
 
     if (isReflow) {
       labelReflowProcessing.value = true;
@@ -603,8 +609,8 @@ json.dumps({
       Object.keys(legendColorOverrides).forEach((k) => delete legendColorOverrides[k]);
       originalLegendOrder.value = [];
       originalLegendColors.value = {};
-      window._origPairwiseMin = currentColors.value.pairwise_match_min || '#FFE7E7';
-      window._origPairwiseMax = currentColors.value.pairwise_match_max || '#FF7272';
+      window._origPairwiseMin = activeRunColors.pairwise_match_min || '#FFE7E7';
+      window._origPairwiseMax = activeRunColors.pairwise_match_max || '#FF7272';
     }
     labelOverrideBuildWarning.value = '';
 
@@ -639,7 +645,7 @@ json.dumps({
       if (adv.resolve_overlaps) args.push('--resolve_overlaps');
 
       let dContent = '';
-      for (const [k, v] of Object.entries(currentColors.value)) dContent += `${k}\t${v}\n`;
+      for (const [k, v] of Object.entries(activeRunColors)) dContent += `${k}\t${v}\n`;
       pyodide.FS.writeFile('/combined_d.tsv', dContent);
       args.push('-d', '/combined_d.tsv');
 
@@ -1420,6 +1426,12 @@ json.dumps({
         } catch (e) {
           console.log('Could not extract features:', e);
         }
+      }
+      if (!isReflow) {
+        appliedPaletteName.value = String(selectedPalette?.value || appliedPaletteName.value || 'default');
+        appliedPaletteColors.value = { ...currentColors.value };
+        pendingPaletteName.value = '';
+        pendingPaletteColors.value = {};
       }
       return { status: 'ok' };
     } catch (e) {

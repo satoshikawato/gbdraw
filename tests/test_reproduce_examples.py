@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from tools.reproduce_examples import PROJECT_ROOT, Reproducer
-from tools.reproduce_examples_manifest import build_figure_specs, load_palette_names
+from tools.reproduce_examples_manifest import CliRecipe, FigureSpec, build_figure_specs, load_palette_names
 
 
 def test_manifest_counts_and_unique_paths() -> None:
@@ -65,13 +65,24 @@ def test_alias_resolution_and_support_asset_materialization(tmp_path: Path) -> N
 
 
 def test_missing_report_structure_for_missing_figure(tmp_path: Path) -> None:
+    figure_id = "missing_figure"
+    missing_filename = "definitely_missing.gb"
+    figures = dict(build_figure_specs())
+    figures[figure_id] = FigureSpec(
+        figure_id=figure_id,
+        output_path="examples/missing_figure.svg",
+        groups=("docs",),
+        required_inputs=(missing_filename,),
+        recipe=CliRecipe(subcommand="linear", gbk_files=(missing_filename,)),
+        description="Synthetic missing-input figure for report validation.",
+    )
     reproducer = Reproducer(
         project_root=PROJECT_ROOT,
         output_root=tmp_path / "out",
-        figures=build_figure_specs(),
+        figures=figures,
     )
     try:
-        assert reproducer.render_figure("NC_001416") is False
+        assert reproducer.render_figure(figure_id) is False
         report_path = tmp_path / "missing_inputs.json"
         reproducer.write_report(report_path)
 
@@ -84,9 +95,9 @@ def test_missing_report_structure_for_missing_figure(tmp_path: Path) -> None:
             "missing_inputs",
         }
         assert payload["generated"] == []
-        assert payload["skipped_missing_inputs"] == ["NC_001416"]
-        missing_entry = next(entry for entry in payload["missing_inputs"] if entry["filename"] == "NC_001416.gb")
-        assert missing_entry["figures"] == ["NC_001416"]
+        assert payload["skipped_missing_inputs"] == [figure_id]
+        missing_entry = next(entry for entry in payload["missing_inputs"] if entry["filename"] == missing_filename)
+        assert missing_entry["figures"] == [figure_id]
         assert missing_entry["could_derive_if_base_inputs_present"] is False
     finally:
         reproducer.close()

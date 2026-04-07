@@ -6,6 +6,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   const {
     pyodideReady,
     currentColors,
+    appliedPaletteColors,
     newColorFeat,
     newColorVal,
     manualSpecificRules,
@@ -276,7 +277,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     if (override) {
       return resolveColorToHex(override.color || override);
     }
-    return resolveColorToHex(currentColors.value[feat.type]) || '#cccccc';
+    return resolveColorToHex(appliedPaletteColors.value[feat.type]) || '#cccccc';
   };
 
   const canEditFeatureColor = () => true;

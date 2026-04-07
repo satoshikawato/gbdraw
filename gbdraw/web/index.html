@@ -710,6 +710,16 @@
                                     <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS (-d) <help-tip text="Base colors for features. Acts as the -d override table."></help-tip></h4>
                                     <button @click="resetColors" class="text-[10px] text-blue-600 hover:underline">Reset</button>
                                 </div>
+                                <div class="mb-2 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
+                                    <label class="flex items-center gap-2 text-[10px] font-medium text-slate-600 cursor-pointer">
+                                        <input v-model="paletteInstantPreviewEnabled" type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                        <span>Palette instant preview</span>
+                                        <help-tip text="When off, changing the palette only updates the swatches. The preview keeps the current palette until you click Generate Diagram."></help-tip>
+                                    </label>
+                                    <div v-if="hasPendingPaletteDraft" class="text-[9px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                                        Palette <span class="font-semibold">{{ pendingPaletteName }}</span> is queued and will apply on the next Generate Diagram.
+                                    </div>
+                                </div>
                                 <select v-model="selectedPalette" @change="updatePalette" class="form-input form-input-compact mb-2">
                                     <option v-for="p in paletteNames" :value="p">{{ p }}</option>
                                 </select>

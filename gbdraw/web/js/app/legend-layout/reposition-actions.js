@@ -33,7 +33,7 @@ export const createLegendRepositionActions = ({
     legendCurrentOffset,
     plotTitleAutoTransform,
     pairwiseMatchFactors,
-    currentColors,
+    appliedPaletteColors,
     legendColorOverrides,
     selectedResultIndex,
     results,
@@ -512,7 +512,7 @@ export const createLegendRepositionActions = ({
             ensureUniqueSkewClipPathIds(svg);
             ensureUniquePairwiseGradientIds(svg);
 
-            if (currentColors.value.pairwise_match_min && currentColors.value.pairwise_match_max) {
+            if (appliedPaletteColors.value.pairwise_match_min && appliedPaletteColors.value.pairwise_match_max) {
               [horizontalLegend, verticalLegend].forEach((legend, idx) => {
                 if (!legend) return;
                 const pairwiseLegend = legend.querySelector('#pairwise_legend');
@@ -521,13 +521,13 @@ export const createLegendRepositionActions = ({
                   if (gradient) {
                     const stops = gradient.querySelectorAll('stop');
                     if (stops.length >= 2) {
-                      stops[0].setAttribute('stop-color', currentColors.value.pairwise_match_min);
-                      stops[1].setAttribute('stop-color', currentColors.value.pairwise_match_max);
+                      stops[0].setAttribute('stop-color', appliedPaletteColors.value.pairwise_match_min);
+                      stops[1].setAttribute('stop-color', appliedPaletteColors.value.pairwise_match_max);
                       console.log(
                         `[DEBUG] Updated ${idx === 0 ? 'horizontal' : 'vertical'} pairwise gradient:`,
-                        currentColors.value.pairwise_match_min,
+                        appliedPaletteColors.value.pairwise_match_min,
                         '->',
-                        currentColors.value.pairwise_match_max
+                        appliedPaletteColors.value.pairwise_match_max
                       );
                     }
                   }
@@ -778,7 +778,7 @@ export const createLegendRepositionActions = ({
 
     generatedLegendPosition.value = newPosition;
 
-    const colors = currentColors.value;
+    const colors = appliedPaletteColors.value;
 
     if (colors.pairwise_match_min && colors.pairwise_match_max) {
       let compIdx = 1;
