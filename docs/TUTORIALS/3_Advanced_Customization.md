@@ -95,11 +95,14 @@ You can also pass a file to `--label_blacklist`, with one term per line.
 Create `stx_whitelist.tsv`:
 
 ```tsv
-CDS	gene	stx1A
-CDS	gene	stx1B
-CDS	gene	stx2A
-CDS	gene	stx2B
+CDS	gene	^stx1A$
+CDS	gene	^stx1B$
+CDS	gene	^stx2A$
+CDS	gene	^stx2B$
 ```
+
+Whitelist patterns use the same case-insensitive Python regex `search(...)` matching as `-t`.
+Use `^...$` for exact matches, or broader patterns such as `wsv.*-like protein` when you want to keep a label family.
 
 ```bash
 gbdraw circular \

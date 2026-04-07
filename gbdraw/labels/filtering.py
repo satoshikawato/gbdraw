@@ -521,6 +521,39 @@ def _build_label_override_rules(label_override_df: Optional[DataFrame]) -> Optio
     return compiled_rules or None
 
 
+def _build_whitelist_map(whitelist_df: Optional[DataFrame]) -> Optional[dict[str, dict[str, list[re.Pattern[str]]]]]:
+    if whitelist_df is None or whitelist_df.empty:
+        return None
+
+    whitelist_map: dict[str, dict[str, list[re.Pattern[str]]]] = {}
+    for idx, row in enumerate(whitelist_df.itertuples(index=False), start=1):
+        feature_type = str(getattr(row, "feature_type", "") or "").strip()
+        qualifier = str(getattr(row, "qualifier", "") or "").strip().lower()
+        value_pattern = str(getattr(row, "keyword", "") or "").strip()
+        if not feature_type or not qualifier:
+            continue
+
+        try:
+            pattern = re.compile(value_pattern, re.IGNORECASE)
+        except re.error as e:
+            logger.error(
+                f"ERROR: Invalid regex in label whitelist table at row {idx}: '{value_pattern}' ({e})"
+            )
+            raise ParseError(
+                f"Invalid regex in label whitelist table at row {idx}: '{value_pattern}' ({e})"
+            ) from e
+
+        whitelist_map.setdefault(feature_type, {}).setdefault(qualifier, []).append(pattern)
+
+    return whitelist_map or None
+
+
+def _matches_any_pattern(candidate: Optional[str], patterns: list[re.Pattern[str]]) -> bool:
+    if candidate is None:
+        return False
+    return any(pattern.search(candidate) for pattern in patterns)
+
+
 def _matches_constraint(rule_token: str, actual_value: Optional[str]) -> bool:
     if str(rule_token) == "*":
         return True
@@ -598,17 +631,7 @@ def preprocess_label_filtering(label_filtering: dict):
     # This can happen if modify_config_dict overwrote a DataFrame with a string
     if isinstance(whitelist_df, str):
         whitelist_df = None
-    if whitelist_df is not None and not whitelist_df.empty:
-        whitelist_map = {}
-        for row in whitelist_df.itertuples(index=False):
-            feature_type = str(getattr(row, "feature_type", "") or "").strip()
-            qualifier = str(getattr(row, "qualifier", "") or "").strip().lower()
-            keyword = str(getattr(row, "keyword", "") or "").strip()
-            if not feature_type or not qualifier:
-                continue
-            whitelist_map.setdefault(feature_type, {}).setdefault(qualifier, set()).add(keyword)
-    else:
-        whitelist_map = None
+    whitelist_map = _build_whitelist_map(whitelist_df)
 
     priority_df = label_filtering.get("qualifier_priority_df")
     # Handle case where priority_df is a string (should be DataFrame or None)
@@ -669,37 +692,32 @@ def get_label_text(feature: Any, label_filtering: dict, record_id: Optional[str]
         if not isinstance(rules, dict):
             rules = {}
 
-        hash_keywords = rules.get("hash", set())
-        if hash_keywords:
+        hash_patterns = rules.get("hash", [])
+        if hash_patterns:
             feature_hash = _get_feature_hash(feature, record_id)
-            if feature_hash and any(feature_hash == str(keyword) for keyword in hash_keywords):
+            if _matches_any_pattern(feature_hash, hash_patterns):
                 is_eligible = True
 
         if not is_eligible:
-            record_location_keywords = rules.get("record_location", set())
-            if record_location_keywords:
+            record_location_patterns = rules.get("record_location", [])
+            if record_location_patterns:
                 feature_record_location = _get_feature_record_location_str(feature, record_id)
-                if feature_record_location and any(
-                    feature_record_location == str(keyword)
-                    for keyword in record_location_keywords
-                ):
+                if _matches_any_pattern(feature_record_location, record_location_patterns):
                     is_eligible = True
 
         if not is_eligible:
-            location_keywords = rules.get("location", set())
-            if location_keywords:
+            location_patterns = rules.get("location", [])
+            if location_patterns:
                 feature_location = _get_feature_location_str(feature)
-                if feature_location and any(
-                    feature_location == str(keyword)
-                    for keyword in location_keywords
-                ):
+                if _matches_any_pattern(feature_location, location_patterns):
                     is_eligible = True
 
         if not is_eligible:
             for key, values in qualifiers.items():
                 normalized_values = _normalize_qualifier_values(values)
                 qualifier_key = str(key).lower()
-                if qualifier_key in rules and any(v in rules[qualifier_key] for v in normalized_values):
+                patterns = rules.get(qualifier_key, [])
+                if patterns and any(_matches_any_pattern(value, patterns) for value in normalized_values):
                     is_eligible = True
                     break
         if not is_eligible:

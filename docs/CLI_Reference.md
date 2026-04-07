@@ -194,8 +194,9 @@ options:
                         "both" (outside+inside), or "none" (hidden). Default:
                         "none".
   --label_whitelist LABEL_WHITELIST
-                        path to a file for label whitelisting (optional);
-                        mutually exclusive with --label_blacklist
+                        Path to a TSV file for label whitelisting by regex
+                        pattern (optional); mutually exclusive with
+                        --label_blacklist
   --label_blacklist LABEL_BLACKLIST
                         Comma-separated keywords or path to a file for label
                         blacklisting (optional); mutually exclusive with
@@ -397,8 +398,9 @@ options:
                         Default: 'none'
   --resolve_overlaps    Resolve overlaps (experimental; default: False).
   --label_whitelist LABEL_WHITELIST
-                        path to a file for label whitelisting (optional);
-                        mutually exclusive with --label_blacklist
+                        Path to a TSV file for label whitelisting by regex
+                        pattern (optional); mutually exclusive with
+                        --label_blacklist
   --label_blacklist LABEL_BLACKLIST
                         Comma-separated keywords or path to a file for label
                         blacklisting (optional); mutually exclusive with

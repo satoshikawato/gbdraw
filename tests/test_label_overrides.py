@@ -57,15 +57,21 @@ def _base_filtering(
     }
 
 
-def _make_seq_feature() -> SeqFeature:
+def _make_seq_feature(
+    *,
+    product: str = "enzyme alpha",
+    gene: str = "geneA",
+    locus_tag: str = "LT0001",
+    protein_id: str = "WP_000001",
+) -> SeqFeature:
     return SeqFeature(
         FeatureLocation(10, 90, strand=1),
         type="CDS",
         qualifiers={
-            "product": ["enzyme alpha"],
-            "gene": ["geneA"],
-            "locus_tag": ["LT0001"],
-            "protein_id": ["WP_000001"],
+            "product": [product],
+            "gene": [gene],
+            "locus_tag": [locus_tag],
+            "protein_id": [protein_id],
         },
     )
 
@@ -286,23 +292,77 @@ def test_get_label_text_hash_override_bypasses_whitelist() -> None:
     assert get_label_text(feature, filtering, record_id="rec1") == "Whitelist bypass label"
 
 
-def test_get_label_text_whitelist_hash_rule_matches_feature_hash() -> None:
-    feature = _make_seq_feature()
-    feature_hash = compute_feature_hash(feature, record_id="rec1")
+def test_get_label_text_whitelist_regex_matches_product() -> None:
+    feature = _make_seq_feature(product="wsv360-like protein")
     filtering = preprocess_label_filtering(
         _base_filtering(
-            whitelist_df=_whitelist_df([["CDS", "hash", feature_hash]]),
+            whitelist_df=_whitelist_df([["CDS", "product", "wsv.+-like protein"]]),
+        )
+    )
+
+    assert get_label_text(feature, filtering, record_id="rec1") == "wsv360-like protein"
+
+
+def test_get_label_text_whitelist_regex_is_case_insensitive() -> None:
+    feature = _make_seq_feature(product="WSV514-like protein")
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            whitelist_df=_whitelist_df([["CDS", "product", "wsv.+-like protein"]]),
+        )
+    )
+
+    assert get_label_text(feature, filtering, record_id="rec1") == "WSV514-like protein"
+
+
+def test_get_label_text_whitelist_anchored_regex_matches_exact_label() -> None:
+    feature = _make_seq_feature()
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            whitelist_df=_whitelist_df([["CDS", "product", "^enzyme alpha$"]]),
         )
     )
 
     assert get_label_text(feature, filtering, record_id="rec1") == "enzyme alpha"
 
 
-def test_get_label_text_whitelist_record_location_rule_matches_feature() -> None:
+def test_get_label_text_whitelist_literal_pattern_still_matches() -> None:
     feature = _make_seq_feature()
     filtering = preprocess_label_filtering(
         _base_filtering(
-            whitelist_df=_whitelist_df([["CDS", "record_location", "rec1:10..90:+"]]),
+            whitelist_df=_whitelist_df([["CDS", "product", "enzyme alpha"]]),
+        )
+    )
+
+    assert get_label_text(feature, filtering, record_id="rec1") == "enzyme alpha"
+
+
+def test_get_label_text_whitelist_hash_rule_matches_feature_hash_regex() -> None:
+    feature = _make_seq_feature()
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            whitelist_df=_whitelist_df([["CDS", "hash", "^f[0-9a-f]{8}$"]]),
+        )
+    )
+
+    assert get_label_text(feature, filtering, record_id="rec1") == "enzyme alpha"
+
+
+def test_get_label_text_whitelist_location_rule_matches_feature_regex() -> None:
+    feature = _make_seq_feature()
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            whitelist_df=_whitelist_df([["CDS", "location", "^10\\.\\.9\\d$"]]),
+        )
+    )
+
+    assert get_label_text(feature, filtering, record_id="rec1") == "enzyme alpha"
+
+
+def test_get_label_text_whitelist_record_location_rule_matches_feature_regex() -> None:
+    feature = _make_seq_feature()
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            whitelist_df=_whitelist_df([["CDS", "record_location", "^rec1:10\\.\\.9\\d:\\+$"]]),
         )
     )
 
@@ -520,6 +580,19 @@ def test_get_label_text_invalid_override_regex_raises_parse_error() -> None:
 
     baseline = preprocess_label_filtering(_base_filtering())
     assert get_label_text(feature, baseline, record_id="rec1") == "enzyme alpha"
+
+
+def test_get_label_text_invalid_whitelist_regex_raises_parse_error() -> None:
+    with pytest.raises(ParseError):
+        preprocess_label_filtering(
+            _base_filtering(
+                whitelist_df=_whitelist_df(
+                    [
+                        ["CDS", "product", "["],
+                    ]
+                )
+            )
+        )
 
 
 def test_get_label_text_location_override_works() -> None:
