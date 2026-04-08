@@ -84,6 +84,29 @@ def _sum_leader_length(labels: list[dict]) -> float:
     )
 
 
+def _bbox_clearance_between_labels(label1: dict, label2: dict, total_length: int) -> float:
+    min_x1, max_x1 = circular_labels_module._label_x_bounds(label1, minimum_margin=0.0)
+    min_y1, max_y1 = circular_labels_module._label_y_bounds(label1, total_length, minimum_margin=0.0)
+    min_x2, max_x2 = circular_labels_module._label_x_bounds(label2, minimum_margin=0.0)
+    min_y2, max_y2 = circular_labels_module._label_y_bounds(label2, total_length, minimum_margin=0.0)
+    gap_x = max(0.0, min_x2 - max_x1, min_x1 - max_x2)
+    gap_y = max(0.0, min_y2 - max_y1, min_y1 - max_y2)
+    if gap_x > 0.0 and gap_y > 0.0:
+        return math.hypot(gap_x, gap_y)
+    return max(gap_x, gap_y)
+
+
+def _minimum_pair_bbox_clearance(labels: list[dict], total_length: int) -> float:
+    min_clearance = float("inf")
+    for idx in range(len(labels)):
+        for jdx in range(idx + 1, len(labels)):
+            min_clearance = min(
+                min_clearance,
+                _bbox_clearance_between_labels(labels[idx], labels[jdx], total_length),
+            )
+    return min_clearance
+
+
 def _label_bbox_min_radius(label: dict, total_length: int) -> float:
     min_x, max_x = circular_labels_module._label_x_bounds(label, minimum_margin=0.0)
     min_y, max_y = circular_labels_module._label_y_bounds(label, total_length, minimum_margin=0.0)
@@ -784,6 +807,141 @@ def test_improved_label_placement_resolves_dense_cluster_overlaps() -> None:
     )
 
     assert _count_overlaps(improved, total_length) == 0
+
+
+def test_circular_label_spacing_override_increases_bbox_clearance() -> None:
+    total_length = 16569
+    label_radius = 430.0
+    feature_radius = 390.0
+    labels = [_make_label(3600 + i * 85, width_px=82.0) for i in range(7)]
+
+    for label in labels:
+        angle = angle_from_middle(label["middle"], total_length)
+        label["feature_middle_x"] = feature_radius * math.cos(math.radians(angle))
+        label["feature_middle_y"] = feature_radius * math.sin(math.radians(angle))
+
+    placed_default = place_labels_on_arc_fc(
+        copy.deepcopy(labels),
+        center_x=0.0,
+        center_y=0.0,
+        x_radius=label_radius,
+        y_radius=label_radius,
+        start_angle=0.0,
+        end_angle=360.0,
+        total_length=total_length,
+        spacing_px=3.0,
+    )
+    improved_default = improved_label_placement_fc(
+        placed_default,
+        center_x=0.0,
+        center_y=0.0,
+        x_radius=label_radius,
+        y_radius=label_radius,
+        feature_radius=feature_radius,
+        total_length=total_length,
+        start_angle=0.0,
+        end_angle=360.0,
+        spacing_px=3.0,
+    )
+
+    placed_wide = place_labels_on_arc_fc(
+        copy.deepcopy(labels),
+        center_x=0.0,
+        center_y=0.0,
+        x_radius=label_radius,
+        y_radius=label_radius,
+        start_angle=0.0,
+        end_angle=360.0,
+        total_length=total_length,
+        spacing_px=12.0,
+    )
+    improved_wide = improved_label_placement_fc(
+        placed_wide,
+        center_x=0.0,
+        center_y=0.0,
+        x_radius=label_radius,
+        y_radius=label_radius,
+        feature_radius=feature_radius,
+        total_length=total_length,
+        start_angle=0.0,
+        end_angle=360.0,
+        spacing_px=12.0,
+    )
+
+    assert _count_overlaps(improved_default, total_length) == 0
+    assert _count_overlaps(improved_wide, total_length) == 0
+    assert _minimum_pair_bbox_clearance(improved_wide, total_length) >= _minimum_pair_bbox_clearance(
+        improved_default,
+        total_length,
+    )
+
+
+def test_circular_inner_label_spacing_override_increases_bbox_clearance() -> None:
+    total_length = 16569
+    label_radius = 320.0
+    feature_radius = 360.0
+    labels = [_make_label(3600 + i * 85, width_px=82.0) for i in range(7)]
+
+    for label in labels:
+        label["is_inner"] = True
+        angle = angle_from_middle(label["middle"], total_length)
+        label["feature_middle_x"] = feature_radius * math.cos(math.radians(angle))
+        label["feature_middle_y"] = feature_radius * math.sin(math.radians(angle))
+
+    placed_default = place_labels_on_arc_fc(
+        copy.deepcopy(labels),
+        center_x=0.0,
+        center_y=0.0,
+        x_radius=label_radius,
+        y_radius=label_radius,
+        start_angle=0.0,
+        end_angle=360.0,
+        total_length=total_length,
+        spacing_px=3.0,
+    )
+    improved_default = improved_label_placement_fc(
+        placed_default,
+        center_x=0.0,
+        center_y=0.0,
+        x_radius=label_radius,
+        y_radius=label_radius,
+        feature_radius=feature_radius,
+        total_length=total_length,
+        start_angle=0.0,
+        end_angle=360.0,
+        spacing_px=3.0,
+    )
+
+    placed_wide = place_labels_on_arc_fc(
+        copy.deepcopy(labels),
+        center_x=0.0,
+        center_y=0.0,
+        x_radius=label_radius,
+        y_radius=label_radius,
+        start_angle=0.0,
+        end_angle=360.0,
+        total_length=total_length,
+        spacing_px=12.0,
+    )
+    improved_wide = improved_label_placement_fc(
+        placed_wide,
+        center_x=0.0,
+        center_y=0.0,
+        x_radius=label_radius,
+        y_radius=label_radius,
+        feature_radius=feature_radius,
+        total_length=total_length,
+        start_angle=0.0,
+        end_angle=360.0,
+        spacing_px=12.0,
+    )
+
+    assert _count_overlaps(improved_default, total_length) == 0
+    assert _count_overlaps(improved_wide, total_length) == 0
+    assert _minimum_pair_bbox_clearance(improved_wide, total_length) >= _minimum_pair_bbox_clearance(
+        improved_default,
+        total_length,
+    )
 
 
 def test_improved_label_placement_preserves_feature_order() -> None:

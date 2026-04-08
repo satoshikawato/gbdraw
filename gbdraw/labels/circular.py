@@ -41,8 +41,6 @@ MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX = 6.0
 MIN_OUTER_LABEL_TEXT_CLEARANCE_PX = 13.0
 OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX = 3.0
 OUTER_LABEL_FEATURE_CLEARANCE_SAMPLE_CAP_DEG = 18.0
-PLACE_LABELS_BASE_MARGIN_PX = 2.0
-IMPROVED_LABELS_BASE_MARGIN_PX = 1.5
 RESOLVE_OVERLAP_MARGIN_EXTRA_PX = 4.2
 LEADER_LABEL_COLLISION_MARGIN_PX = 0.8
 LEADER_LABEL_SHIFT_STEP_DEG = 0.25
@@ -85,15 +83,50 @@ def _effective_outer_text_clearance_px(
     return base_clearance + adaptive_extra
 
 
-def minimum_bbox_gap_px(label1: dict, label2: dict, base_margin_px: float = 0.0) -> float:
+def _resolve_label_spacing_px(
+    label1: dict | None = None,
+    label2: dict | None = None,
+    *,
+    base_margin_px: float | None = None,
+) -> float:
+    """Return the configured circular label spacing for a label pair."""
+    if base_margin_px is not None:
+        return max(0.0, float(base_margin_px))
+    for label in (label1, label2):
+        if label is None:
+            continue
+        if not bool(label.get("_enforce_spacing_px", False)):
+            continue
+        spacing_px = label.get("_spacing_px")
+        if spacing_px is None:
+            continue
+        return max(0.0, float(spacing_px))
+    return 0.0
+
+
+def _effective_group_spacing_px(
+    requested_spacing_px: float,
+    *,
+    legacy_spacing_px: float,
+) -> float:
+    """Apply spacing conservatively so legacy circular placement stays stable."""
+    requested_spacing_px = max(0.0, float(requested_spacing_px))
+    legacy_spacing_px = max(0.0, float(legacy_spacing_px))
+    if requested_spacing_px <= legacy_spacing_px:
+        return requested_spacing_px
+    return legacy_spacing_px + ((requested_spacing_px - legacy_spacing_px) * 0.25)
+
+
+def minimum_bbox_gap_px(label1: dict, label2: dict, base_margin_px: float | None = None) -> float:
     """Return a minimum spacing margin in pixels derived from label bbox size."""
+    resolved_base_margin_px = _resolve_label_spacing_px(label1, label2, base_margin_px=base_margin_px)
     width_scale = max(float(label1.get("width_px", 0.0)), float(label2.get("width_px", 0.0)))
     height_scale = max(float(label1.get("height_px", 0.0)), float(label2.get("height_px", 0.0)))
     ratio_gap = MIN_BBOX_GAP_RATIO * max(width_scale, height_scale)
     resolve_extra = 0.0
     if ("min_outer_start_radius_px" in label1) or ("min_outer_start_radius_px" in label2):
         resolve_extra = RESOLVE_OVERLAP_MARGIN_EXTRA_PX
-    return max(float(base_margin_px) + resolve_extra, MIN_BBOX_GAP_FLOOR_PX, ratio_gap)
+    return max(resolved_base_margin_px + resolve_extra, MIN_BBOX_GAP_FLOOR_PX, ratio_gap)
 
 
 def _count_label_overlaps(labels: list[dict], total_length: int, use_min_gap: bool) -> int:
@@ -104,7 +137,7 @@ def _count_label_overlaps(labels: list[dict], total_length: int, use_min_gap: bo
             label1 = labels[idx]
             label2 = labels[jdx]
             if use_min_gap:
-                margin = minimum_bbox_gap_px(label1, label2, base_margin_px=0.0)
+                margin = minimum_bbox_gap_px(label1, label2)
                 y_margin = margin
                 x_margin = margin
             else:
@@ -861,7 +894,7 @@ def _resolve_label_leader_line_collisions(
             if other_idx == label_idx:
                 continue
             if use_min_gap:
-                min_gap_px = minimum_bbox_gap_px(candidate_label, other_label, base_margin_px=0.0)
+                min_gap_px = minimum_bbox_gap_px(candidate_label, other_label)
                 y_margin = min_gap_px
                 x_margin = min_gap_px
             else:
@@ -1788,11 +1821,7 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
     pair_margins = [[0.0 for _ in range(label_count)] for _ in range(label_count)]
     for idx in range(label_count):
         for jdx in range(idx + 1, label_count):
-            pair_margins[idx][jdx] = minimum_bbox_gap_px(
-                labels[idx],
-                labels[jdx],
-                base_margin_px=0.0,
-            )
+            pair_margins[idx][jdx] = minimum_bbox_gap_px(labels[idx], labels[jdx])
 
     min_order_gap_deg = 0.05
     max_pair_steps = max(1, int(max_angle_shift_deg / max(step_deg, 1e-6)))
@@ -2193,15 +2222,26 @@ def place_labels_on_arc_fc(
     start_angle: float,
     end_angle: float,
     total_length: int,
+    spacing_px: float | None = None,
 ) -> list[dict]:
+    requested_spacing_px = 2.0 if spacing_px is None else max(0.0, float(spacing_px))
+    resolved_spacing_px = _effective_group_spacing_px(
+        requested_spacing_px,
+        legacy_spacing_px=2.0,
+    )
+
     def check_overlap(label1, label2, total_length, margin):
-        effective_margin = minimum_bbox_gap_px(label1, label2, base_margin_px=max(margin, PLACE_LABELS_BASE_MARGIN_PX))
+        effective_margin = minimum_bbox_gap_px(label1, label2, base_margin_px=max(margin, resolved_spacing_px))
         return y_overlap(label1, label2, total_length, effective_margin) and x_overlap(
             label1, label2, minimum_margin=effective_margin
         )
 
     if not labels:
         return []
+
+    for label in labels:
+        label["_spacing_px"] = resolved_spacing_px
+        label["_enforce_spacing_px"] = True
 
     rearranged_labels: list[dict] = []
     labels = sort_labels(labels)
@@ -2520,10 +2560,20 @@ def improved_label_placement_fc(
     y_margin=0.3,
     max_angle_shift_deg=25.0,
     max_iterations=60,
+    spacing_px: float | None = None,
 ):
     labels = sort_labels(labels)
     if not labels:
         return []
+
+    requested_spacing_px = 1.5 if spacing_px is None else max(0.0, float(spacing_px))
+    resolved_spacing_px = _effective_group_spacing_px(
+        requested_spacing_px,
+        legacy_spacing_px=1.5,
+    )
+    for label in labels:
+        label["_spacing_px"] = resolved_spacing_px
+        label["_enforce_spacing_px"] = True
 
     # Preserve original sorted order; optimization may rotate labels to avoid
     # placing a dense cluster across the 0/360-degree seam.
@@ -3033,7 +3083,7 @@ def improved_label_placement_fc(
 
     n_labels = len(labels)
     pair_margins = [[0.0 for _ in range(n_labels)] for _ in range(n_labels)]
-    base_margin = max(y_margin, IMPROVED_LABELS_BASE_MARGIN_PX)
+    base_margin = max(float(y_margin), resolved_spacing_px)
     for i in range(n_labels):
         for j in range(i + 1, n_labels):
             pair_margins[i][j] = minimum_bbox_gap_px(labels[i], labels[j], base_margin_px=base_margin)
@@ -3210,7 +3260,7 @@ def _neighbor_min_gap_overlap_count(
         if neighbor_idx < 0 or neighbor_idx >= len(labels):
             continue
         neighbor_label = labels[neighbor_idx]
-        min_gap_px = minimum_bbox_gap_px(candidate_label, neighbor_label, base_margin_px=0.0)
+        min_gap_px = minimum_bbox_gap_px(candidate_label, neighbor_label)
         if y_overlap(candidate_label, neighbor_label, total_length, min_gap_px) and x_overlap(
             candidate_label,
             neighbor_label,
@@ -3963,7 +4013,7 @@ def _polish_total_leader_distance(
 
     def _labels_overlap(label_a: dict, label_b: dict, *, use_min_gap: bool) -> bool:
         if use_min_gap:
-            margin = minimum_bbox_gap_px(label_a, label_b, base_margin_px=0.0)
+            margin = minimum_bbox_gap_px(label_a, label_b)
             y_margin = margin
             x_margin = margin
         else:
@@ -4151,6 +4201,7 @@ def rearrange_labels_fc(
     strands,
     is_outer,
     arena_outer_radius: float | None = None,
+    spacing_px: float | None = None,
     cfg: GbdrawConfig | None = None,
 ):
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
@@ -4198,6 +4249,7 @@ def rearrange_labels_fc(
     sorted_labels = sorted(labels, key=lambda x: x["middle"])
     if not sorted_labels:
         return []
+    label_spacing_px = _resolve_label_spacing_px(sorted_labels[0], base_margin_px=spacing_px)
 
     def _build_legacy_candidate() -> list[dict]:
         candidate_legacy = [label.copy() for label in sorted_labels]
@@ -4265,7 +4317,15 @@ def rearrange_labels_fc(
     # Candidate A: current placement pipeline.
     candidate_current = [label.copy() for label in sorted_labels]
     candidate_current = place_labels_on_arc_fc(
-        candidate_current, center_x, center_y, x_radius, y_radius, start_angle, end_angle, total_length
+        candidate_current,
+        center_x,
+        center_y,
+        x_radius,
+        y_radius,
+        start_angle,
+        end_angle,
+        total_length,
+        spacing_px=label_spacing_px,
     )
     candidate_current = improved_label_placement_fc(
         candidate_current,
@@ -4277,6 +4337,7 @@ def rearrange_labels_fc(
         total_length,
         start_angle,
         end_angle,
+        spacing_px=label_spacing_px,
     )
     candidate_current = _refine_labels_to_preferred_hemisphere(
         candidate_current,
@@ -4441,6 +4502,7 @@ def prepare_label_list(
     font_family = cfg.objects.text.font_family
     font_size: float = cfg.labels.font_size.for_length_param(length_param)
     interval = cfg.canvas.dpi
+    label_spacing_px = float(cfg.labels.spacing.circular)
 
     track_ratio_factor = (
         float(feature_track_ratio_factor_override)
@@ -4649,6 +4711,7 @@ def prepare_label_list(
         strands,
         is_outer=True,
         arena_outer_radius=(float(outer_arena[1]) if outer_arena is not None else None),
+        spacing_px=label_spacing_px,
         cfg=cfg,
     )
     feature_outer_radius_intervals: list[tuple[float, float, float]] | None = None
@@ -4754,6 +4817,7 @@ def prepare_label_list(
             config_dict,
             strands,
             is_outer=False,
+            spacing_px=label_spacing_px,
             cfg=cfg,
         )
         if (not cfg.canvas.resolve_overlaps) and len(inner_labels_rearranged) >= 2:

@@ -358,6 +358,10 @@ def _get_args(args) -> argparse.Namespace:
         help='Tick label font size for circular mode (optional; float; default: 14 (pt)).',
         type=float)
     parser.add_argument(
+        '--circular_label_spacing',
+        help='Circular label-to-label vertical spacing in px (optional; float; must be > 0).',
+        type=float)
+    parser.add_argument(
         '--feature_width',
         help='Feature track width for circular mode (in px; must be > 0).',
         type=float)
@@ -401,6 +405,8 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--gc_skew_radius must be > 0")
     if args.tick_label_font_size is not None and args.tick_label_font_size <= 0:
         parser.error("--tick_label_font_size must be > 0")
+    if args.circular_label_spacing is not None and args.circular_label_spacing <= 0:
+        parser.error("--circular_label_spacing must be > 0")
     if args.multi_record_min_radius_ratio <= 0 or args.multi_record_min_radius_ratio > 1:
         parser.error("--multi_record_min_radius_ratio must be > 0 and <= 1")
     if not math.isfinite(args.multi_record_column_gap_ratio) or args.multi_record_column_gap_ratio < 0:
@@ -465,6 +471,7 @@ def circular_main(cmd_args) -> None:
     feature_table_path: str = args.feature_table
     scale_interval: Optional[int] = args.scale_interval
     tick_label_font_size: Optional[float] = args.tick_label_font_size
+    circular_label_spacing: Optional[float] = args.circular_label_spacing
     legend_box_size = args.legend_box_size
     legend_font_size = args.legend_font_size
     feature_width: Optional[float] = args.feature_width
@@ -575,6 +582,7 @@ def circular_main(cmd_args) -> None:
         inner_label_y_radius_offset=inner_label_y_radius_offset,
         scale_interval=scale_interval,
         tick_label_font_size=tick_label_font_size,
+        circular_label_spacing=circular_label_spacing,
         legend_box_size=legend_box_size,
         legend_font_size=legend_font_size
     )    

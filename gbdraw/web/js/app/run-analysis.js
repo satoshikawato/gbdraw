@@ -330,6 +330,7 @@ export const createRunAnalysis = ({
       linearLabelSupportCache = {
         placement: false,
         rotation: false,
+        linear_label_spacing: false,
         track_layout: false,
         track_axis_gap: false,
         ruler_on_axis: false,
@@ -353,6 +354,7 @@ _source = inspect.getsource(_gbdraw_linear._get_args)
 json.dumps({
   "placement": "--label_placement" in _source,
   "rotation": "--label_rotation" in _source,
+  "linear_label_spacing": "--linear_label_spacing" in _source,
   "track_layout": "--track_layout" in _source,
   "track_axis_gap": "--track_axis_gap" in _source,
   "ruler_on_axis": "--ruler_on_axis" in _source,
@@ -372,6 +374,7 @@ json.dumps({
       linearLabelSupportCache = {
         placement: false,
         rotation: false,
+        linear_label_spacing: false,
         track_layout: false,
         track_axis_gap: false,
         ruler_on_axis: false,
@@ -432,7 +435,8 @@ json.dumps({
         plot_title_position: false,
         plot_title_font_size: false,
         keep_full_definition_with_plot_title: false,
-        tick_label_font_size: false
+        tick_label_font_size: false,
+        circular_label_spacing: false
       };
       return circularMultiRecordCanvasSupportCache;
     }
@@ -453,6 +457,7 @@ json.dumps({
   "plot_title_font_size": "--plot_title_font_size" in _source,
   "keep_full_definition_with_plot_title": "--keep_full_definition_with_plot_title" in _source,
   "tick_label_font_size": "--tick_label_font_size" in _source,
+  "circular_label_spacing": "--circular_label_spacing" in _source,
 })
       `);
       circularMultiRecordCanvasSupportCache = JSON.parse(String(raw));
@@ -468,7 +473,8 @@ json.dumps({
         plot_title_position: false,
         plot_title_font_size: false,
         keep_full_definition_with_plot_title: false,
-        tick_label_font_size: false
+        tick_label_font_size: false,
+        circular_label_spacing: false
       };
     }
     return circularMultiRecordCanvasSupportCache;
@@ -870,6 +876,18 @@ json.dumps({
         if (adv.inner_label_x_offset) args.push('--inner_label_x_radius_offset', adv.inner_label_x_offset);
         if (adv.inner_label_y_offset) args.push('--inner_label_y_radius_offset', adv.inner_label_y_offset);
         if (
+          adv.circular_label_spacing !== null &&
+          adv.circular_label_spacing !== undefined &&
+          adv.circular_label_spacing !== ''
+        ) {
+          if (!multiCanvasSupport.circular_label_spacing) {
+            throw new Error(
+              'Current gbdraw wheel does not support --circular_label_spacing. Rebuild and redeploy the web wheel.'
+            );
+          }
+          args.push('--circular_label_spacing', adv.circular_label_spacing);
+        }
+        if (
           adv.feature_width_circular !== null &&
           adv.feature_width_circular !== undefined &&
           adv.feature_width_circular !== '' &&
@@ -1013,6 +1031,8 @@ json.dumps({
         const normalizedLabelPlacement = adv.label_placement === 'on_feature' ? 'above_feature' : adv.label_placement;
         const wantsPlacementOption = normalizedLabelPlacement && normalizedLabelPlacement !== 'auto';
         const wantsRotationOption = adv.label_rotation !== null && adv.label_rotation !== undefined && adv.label_rotation !== '';
+        const wantsLinearLabelSpacingOption =
+          adv.linear_label_spacing !== null && adv.linear_label_spacing !== undefined && adv.linear_label_spacing !== '';
         const wantsTrackLayoutOption = normalizedTrackLayout !== 'middle';
         const wantsTrackAxisGapOption =
           adv.track_axis_gap !== null && adv.track_axis_gap !== undefined && adv.track_axis_gap !== '';
@@ -1036,6 +1056,7 @@ json.dumps({
         if (
           wantsPlacementOption ||
           wantsRotationOption ||
+          wantsLinearLabelSpacingOption ||
           wantsTrackLayoutOption ||
           wantsTrackAxisGapOption ||
           wantsRulerOnAxisOption ||
@@ -1052,6 +1073,9 @@ json.dumps({
           }
           if (wantsRotationOption && !linearLabelSupport.rotation) {
             throw new Error("Current gbdraw wheel does not support --label_rotation. Rebuild and redeploy the web wheel.");
+          }
+          if (wantsLinearLabelSpacingOption && !linearLabelSupport.linear_label_spacing) {
+            throw new Error("Current gbdraw wheel does not support --linear_label_spacing. Rebuild and redeploy the web wheel.");
           }
           if (wantsTrackLayoutOption && !linearLabelSupport.track_layout) {
             throw new Error("Current gbdraw wheel does not support --track_layout. Rebuild and redeploy the web wheel.");
@@ -1095,6 +1119,9 @@ json.dumps({
         }
         if (adv.label_rotation !== null && adv.label_rotation !== undefined && adv.label_rotation !== '') {
           args.push('--label_rotation', adv.label_rotation);
+        }
+        if (adv.linear_label_spacing !== null && adv.linear_label_spacing !== undefined && adv.linear_label_spacing !== '') {
+          args.push('--linear_label_spacing', adv.linear_label_spacing);
         }
         if (normalizedTrackLayout !== 'middle') {
           args.push('--track_layout', normalizedTrackLayout);

@@ -298,6 +298,11 @@ def _get_args(args) -> argparse.Namespace:
         type=float,
     )
     parser.add_argument(
+        '--linear_label_spacing',
+        help='Linear label-to-label vertical spacing in px (optional; float; must be > 0).',
+        type=float,
+    )
+    parser.add_argument(
         '--track_layout',
         help=(
             'Linear track layout mode ("above", "middle", or "below"; default: "middle"). '
@@ -596,6 +601,8 @@ def linear_main(cmd_args) -> None:
     line_stroke_width: Optional[float] = args.line_stroke_width       
     if plot_title_font_size is not None and float(plot_title_font_size) <= 0:
         raise ValidationError("plot_title_font_size must be > 0")
+    if args.linear_label_spacing is not None and float(args.linear_label_spacing) <= 0:
+        raise ValidationError("linear_label_spacing must be > 0")
     config_dict = modify_config_dict(
         config_dict, 
         block_stroke_color=block_stroke_color, 
@@ -607,6 +614,7 @@ def linear_main(cmd_args) -> None:
         linear_definition_show_accession=definition_show_accession,
         linear_definition_show_length=definition_show_length,
         label_font_size=label_font_size,
+        linear_label_spacing=args.linear_label_spacing,
         label_placement=label_placement,
         label_rotation=label_rotation,
         line_stroke_color=line_stroke_color, 

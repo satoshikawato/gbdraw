@@ -285,6 +285,8 @@ const adv = reactive({
   nt: 'GC',
   def_font_size: null,
   label_font_size: null,
+  circular_label_spacing: null,
+  linear_label_spacing: null,
   label_placement: 'auto',
   label_rotation: null,
 

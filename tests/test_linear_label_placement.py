@@ -26,6 +26,7 @@ def _prepare_linear_labels(
     label_placement: str,
     label_rotation: float = 0.0,
     label_font_size: float = 14.0,
+    linear_label_spacing: float | None = None,
     separate_strands: bool = False,
     track_layout: str = "middle",
     input_filename: str = "MjeNMV.gb",
@@ -40,6 +41,7 @@ def _prepare_linear_labels(
         strandedness=separate_strands,
         label_blacklist="",
         label_font_size=label_font_size,
+        linear_label_spacing=linear_label_spacing,
         label_placement=label_placement,
         label_rotation=label_rotation,
         linear_track_layout=track_layout,
@@ -372,3 +374,67 @@ def test_linear_auto_labels_in_below_layout_are_placed_below_features() -> None:
     assert external_labels
     for label in external_labels:
         assert float(label["middle_y"]) > float(label["feature_bottom_y"])
+
+
+@pytest.mark.linear
+def test_label_spacing_config_defaults_and_overrides() -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    cfg = GbdrawConfig.from_dict(config_dict)
+    assert cfg.labels.spacing.circular == pytest.approx(3.0)
+    assert cfg.labels.spacing.linear == pytest.approx(3.0)
+
+    modified = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        circular_label_spacing=7.5,
+        linear_label_spacing=9.0,
+    )
+    modified_cfg = GbdrawConfig.from_dict(modified)
+    assert modified_cfg.labels.spacing.circular == pytest.approx(7.5)
+    assert modified_cfg.labels.spacing.linear == pytest.approx(9.0)
+
+
+@pytest.mark.linear
+def test_linear_external_label_spacing_override_increases_track_gap() -> None:
+    default_labels = _prepare_linear_labels(
+        label_placement="auto",
+        track_layout="below",
+        linear_label_spacing=3.0,
+    )
+    wider_labels = _prepare_linear_labels(
+        label_placement="auto",
+        track_layout="below",
+        linear_label_spacing=12.0,
+    )
+
+    default_track_positions = sorted(
+        {float(label["middle_y"]) for label in default_labels if not label["is_embedded"]}
+    )
+    wider_track_positions = sorted(
+        {float(label["middle_y"]) for label in wider_labels if not label["is_embedded"]}
+    )
+
+    assert len(default_track_positions) >= 2
+    assert len(default_track_positions) == len(wider_track_positions)
+    assert (default_track_positions[1] - default_track_positions[0]) < (
+        wider_track_positions[1] - wider_track_positions[0]
+    )
+
+
+@pytest.mark.linear
+def test_linear_above_feature_spacing_override_does_not_move_embedded_labels() -> None:
+    default_labels = _prepare_linear_labels(
+        label_placement="above_feature",
+        label_rotation=45.0,
+        linear_label_spacing=3.0,
+    )
+    wider_labels = _prepare_linear_labels(
+        label_placement="above_feature",
+        label_rotation=45.0,
+        linear_label_spacing=12.0,
+    )
+
+    default_positions = sorted((label["label_text"], float(label["middle_y"])) for label in default_labels)
+    wider_positions = sorted((label["label_text"], float(label["middle_y"])) for label in wider_labels)
+
+    assert [item[0] for item in default_positions] == [item[0] for item in wider_positions]
+    assert [item[1] for item in default_positions] == pytest.approx([item[1] for item in wider_positions])
