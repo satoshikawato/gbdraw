@@ -16,6 +16,7 @@ import threading
 import urllib.error
 import urllib.request
 import zipfile
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
 
@@ -67,6 +68,20 @@ REQUIRED_UI_FONT_FILES = tuple(
     for family, filenames in UI_FONT_ASSETS.items()
     for filename in filenames
 )
+
+
+def _load_build_support_module():
+    build_support_path = REPO_ROOT / "gbdraw" / "_build_support.py"
+    spec = spec_from_file_location("gbdraw_build_support", build_support_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load build support module from {build_support_path}")
+
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+BUILD_SUPPORT = _load_build_support_module()
 
 
 def _parse_local_wheel_paths() -> tuple[Path, ...]:
@@ -225,17 +240,16 @@ def vendor_assets() -> None:
 
 
 def _parse_wheel_name() -> str:
-    config_text = (WEB_ROOT / "js" / "config.js").read_text(encoding="utf-8")
-    for line in config_text.splitlines():
-        line = line.strip()
-        if not line.startswith("export const GBDRAW_WHEEL_NAME"):
-            continue
-        _, value = line.split("=", 1)
-        return value.strip().strip(";").strip().strip('"').strip("'")
-    raise RuntimeError("Could not determine GBDRAW_WHEEL_NAME from gbdraw/web/js/config.js")
+    return BUILD_SUPPORT.read_browser_wheel_name_from_config()
+
+
+def check_assets() -> None:
+    BUILD_SUPPORT.validate_browser_wheel_prepared()
+    _assert_packaged_assets()
 
 
 def _assert_packaged_assets() -> None:
+    browser_wheel_path = BUILD_SUPPORT.validate_browser_wheel_prepared()
     required = [
         WEB_ROOT / "index.html",
         WEB_ROOT / "open-source-notices.html",
@@ -257,7 +271,7 @@ def _assert_packaged_assets() -> None:
         WEB_ROOT / "vendor" / "dompurify" / "purify.min.js",
         WEB_ROOT / "vendor" / "phosphor-icons" / "regular" / "style.css",
         WEB_ROOT / "wasm" / "losat" / "losat.wasm",
-        WEB_ROOT / _parse_wheel_name(),
+        browser_wheel_path,
         *(WEB_ROOT / path for path in _parse_local_wheel_paths()),
     ]
     missing = [path for path in required if not path.exists()]
@@ -702,13 +716,14 @@ def main() -> int:
         description=(
             "Vendor and verify offline gbdraw GUI assets. "
             "Run `vendor-assets` for third-party browser assets, keep the local Pyodide dependency "
-            "wheels under `gbdraw/web/vendor/pyodide-wheels/`, build the browser wheel into "
-            "`gbdraw/web/`, and keep `gbdraw/web/open-source-notices.html` committed."
+            "wheels under `gbdraw/web/vendor/pyodide-wheels/`, run `python tools/prepare_browser_wheel.py` "
+            "for the local browser wheel, and keep `gbdraw/web/open-source-notices.html` committed."
         )
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("vendor-assets", help="Download and vendor third-party browser assets.")
+    subparsers.add_parser("check-assets", help="Validate the prepared browser wheel and required offline assets.")
     subparsers.add_parser("smoke-test", help="Run an offline GUI startup smoke test with Playwright.")
 
     inspect_parser = subparsers.add_parser("inspect-wheel", help="Inspect a built wheel for offline GUI assets.")
@@ -719,6 +734,8 @@ def main() -> int:
     try:
         if args.command == "vendor-assets":
             vendor_assets()
+        elif args.command == "check-assets":
+            check_assets()
         elif args.command == "smoke-test":
             smoke_test()
         elif args.command == "inspect-wheel":

@@ -110,6 +110,7 @@ def prepare_label_list_linear(
     font_family = cfg.objects.text.font_family
     font_size = cfg.labels.font_size.linear.for_length_param(length_param)
     linear_label_cfg = cfg.labels.linear
+    label_spacing_px = float(cfg.labels.spacing.linear)
     force_above_feature = linear_label_cfg.placement == "above_feature"
     base_rotation_deg = linear_label_cfg.rotation
     interval = cfg.canvas.dpi
@@ -283,7 +284,7 @@ def prepare_label_list_linear(
         for label in track_dict["track_0"]:
             embedded_labels.append(label)
 
-    track_height = max_bbox_height * 1.1  # Reduced height for separate strands mode
+    track_height = max_bbox_height + label_spacing_px
     for track_id in sorted(track_dict.keys()):
         if track_id == "track_0":
             continue

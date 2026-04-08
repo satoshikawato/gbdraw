@@ -285,6 +285,8 @@ const adv = reactive({
   nt: 'GC',
   def_font_size: null,
   label_font_size: null,
+  circular_label_spacing: null,
+  linear_label_spacing: null,
   label_placement: 'auto',
   label_rotation: null,
 
@@ -327,6 +329,7 @@ const adv = reactive({
   multi_record_column_gap_ratio: 0.10,
   multi_record_row_gap_ratio: 0.05,
   multi_record_positions: [],
+  tick_label_font_size: null,
   plot_title_position: 'none',
   plot_title_font_size: null,
   keep_full_definition_with_plot_title: false,

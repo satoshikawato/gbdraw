@@ -16,9 +16,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 # Run locally
 gbdraw gui                    # Opens browser at http://localhost:<free port>
 
-# Build wheel for web deployment (version must match pyproject.toml)
+# Prepare the local browser wheel (version must match pyproject.toml)
+python tools/prepare_browser_wheel.py
+
+# Build distributions after the browser wheel is prepared
 python -m build
-# Copy dist/gbdraw-X.X.X-py3-none-any.whl to web server
 
 # Test in browser
 # Open DevTools Console (F12) to see Pyodide output and errors

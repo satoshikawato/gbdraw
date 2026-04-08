@@ -37,6 +37,8 @@ def modify_config_dict(
     circular_definition_font_size=None,
     plot_title_font_size=None,
     label_font_size=None,
+    circular_label_spacing=None,
+    linear_label_spacing=None,
     label_placement=None,
     label_rotation=None,
     show_gc=None,
@@ -71,6 +73,7 @@ def modify_config_dict(
     scale_font_size=None,
     ruler_label_font_size=None,
     scale_interval=None,
+    tick_label_font_size=None,
     blast_color_min=None,
     blast_color_max=None,
     legend_box_size=None,
@@ -217,6 +220,7 @@ def modify_config_dict(
         "ruler_label_font_size_short": "objects.scale.ruler_label_font_size.short",
         "ruler_label_font_size_long": "objects.scale.ruler_label_font_size.long",
         "scale_interval": "objects.scale.interval",
+        "tick_label_font_size": "objects.ticks.tick_labels.font_size",
         "blast_color_min": "objects.blast_match.min_color",
         "blast_color_max": "objects.blast_match.max_color",
         "legend_box_size_short": "objects.legends.color_rect_size.short",
@@ -227,6 +231,8 @@ def modify_config_dict(
         "label_font_size_circular_long": "labels.font_size.long",
         "label_font_size_linear_short": "labels.font_size.linear.short",
         "label_font_size_linear_long": "labels.font_size.linear.long",
+        "circular_label_spacing": "labels.spacing.circular",
+        "linear_label_spacing": "labels.spacing.linear",
         "label_placement": "labels.linear.placement",
         "label_rotation": "labels.linear.rotation",
         "linear_definition_font_size_short": "objects.definition.linear.font_size.short",
@@ -267,4 +273,3 @@ def modify_config_dict(
 
 
 __all__ = ["modify_config_dict", "suppress_gc_content_and_skew", "update_config_value"]
-

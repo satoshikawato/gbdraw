@@ -49,6 +49,16 @@ def test_index_links_to_open_source_notices() -> None:
     assert "Open Source Notices" in index_html
 
 
+def test_web_run_analysis_wires_scale_and_tick_font_size_options() -> None:
+    source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    assert "tick_label_font_size" in source
+    assert '"tick_label_font_size": "--tick_label_font_size" in _source' in source
+    assert "args.push('--tick_label_font_size', adv.tick_label_font_size);" in source
+    assert "if (form.scale_style === 'ruler')" in source
+    assert "args.push('--ruler_label_font_size', adv.scale_font_size);" in source
+    assert "args.push('--scale_font_size', adv.scale_font_size);" in source
+
+
 @pytest.mark.slow
 def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
     build_root = tmp_path / "build_lib"

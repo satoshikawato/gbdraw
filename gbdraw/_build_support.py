@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
-import subprocess
-import sys
-import tempfile
+from datetime import datetime
 from pathlib import Path
 
 
@@ -18,7 +15,7 @@ BROWSER_WHEEL_BUILD_ENV = "GBDRAW_BUILDING_BROWSER_WHEEL"
 
 _PROJECT_VERSION_RE = re.compile(r'^version\s*=\s*"([^"]+)"\s*$', re.MULTILINE)
 _WHEEL_NAME_RE = re.compile(r'^(export const GBDRAW_WHEEL_NAME\s*=\s*")[^"]+(";\s*)$', re.MULTILINE)
-_SYNCED = False
+_WHEEL_CACHE_BUST_RE = re.compile(r'^(export const GBDRAW_WHEEL_CACHE_BUST\s*=\s*")[^"]+(";\s*)$', re.MULTILINE)
 
 _BASE_PACKAGE_DATA = [
     "data/color_palettes.toml",
@@ -72,7 +69,7 @@ def is_browser_wheel_build() -> bool:
 def get_package_data_patterns(*, include_browser_wheel: bool) -> list[str]:
     patterns = list(_BASE_PACKAGE_DATA)
     if include_browser_wheel:
-        patterns.insert(3, "web/*.whl")
+        patterns.insert(3, f"web/{expected_browser_wheel_name()}")
     return patterns
 
 
@@ -96,15 +93,20 @@ def expected_browser_wheel_name(version: str | None = None) -> str:
     return f"gbdraw-{version}-py3-none-any.whl"
 
 
-def remove_browser_wheels_from_build_dir(build_lib: str | Path) -> None:
-    build_web_root = Path(build_lib) / "gbdraw" / "web"
-    if not build_web_root.exists():
-        return
-    for wheel_path in build_web_root.glob("gbdraw-*.whl"):
-        wheel_path.unlink()
+def read_browser_wheel_name_from_config() -> str:
+    config_text = CONFIG_PATH.read_text(encoding="utf-8")
+    match = _WHEEL_NAME_RE.search(config_text)
+    if match is None:
+        raise RuntimeError(f"Could not determine GBDRAW_WHEEL_NAME from {CONFIG_PATH}")
+    _, value = match.group(0).split("=", 1)
+    return value.strip().strip(";").strip().strip('"').strip("'")
 
 
-def _update_config_wheel_name(wheel_name: str) -> None:
+def generate_cache_bust_token() -> str:
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def update_browser_wheel_config(*, wheel_name: str, cache_bust: str | None = None) -> None:
     config_text = CONFIG_PATH.read_text(encoding="utf-8")
     updated_text, replacements = _WHEEL_NAME_RE.subn(
         lambda match: f'{match.group(1)}{wheel_name}{match.group(2)}',
@@ -113,72 +115,41 @@ def _update_config_wheel_name(wheel_name: str) -> None:
     )
     if replacements != 1:
         raise RuntimeError(f"Could not update GBDRAW_WHEEL_NAME in {CONFIG_PATH}")
+    if cache_bust is not None:
+        updated_text, cache_bust_replacements = _WHEEL_CACHE_BUST_RE.subn(
+            lambda match: f'{match.group(1)}{cache_bust}{match.group(2)}',
+            updated_text,
+            count=1,
+        )
+        if cache_bust_replacements != 1:
+            raise RuntimeError(f"Could not update GBDRAW_WHEEL_CACHE_BUST in {CONFIG_PATH}")
     if updated_text != config_text:
         CONFIG_PATH.write_text(updated_text, encoding="utf-8")
 
 
-def sync_browser_wheel() -> Path | None:
-    global _SYNCED
-    if _SYNCED or is_browser_wheel_build():
-        return None
+def validate_browser_wheel_prepared() -> Path:
+    expected_name = expected_browser_wheel_name()
+    expected_path = WEB_ROOT / expected_name
+    existing_wheels = sorted(WEB_ROOT.glob("gbdraw-*.whl"))
 
-    version = read_project_version()
-    wheel_name = expected_browser_wheel_name(version)
-
-    with tempfile.TemporaryDirectory(prefix="gbdraw-browser-wheel-") as tmpdir:
-        tmpdir_path = Path(tmpdir)
-        staging_root = tmpdir_path / "source-tree"
-        wheelhouse = tmpdir_path / "wheelhouse"
-        shutil.copytree(
-            REPO_ROOT,
-            staging_root,
-            ignore=shutil.ignore_patterns(
-                ".git",
-                ".agents",
-                ".codex",
-                ".pytest_cache",
-                ".ruff_cache",
-                "__pycache__",
-                "*.egg-info",
-                "build",
-                "dist",
-            ),
-        )
-        for staged_wheel in (staging_root / "gbdraw" / "web").glob("gbdraw-*.whl"):
-            staged_wheel.unlink()
-
-        env = os.environ.copy()
-        env[BROWSER_WHEEL_BUILD_ENV] = "1"
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pip",
-                "wheel",
-                ".",
-                "--no-deps",
-                "--no-build-isolation",
-                "--wheel-dir",
-                str(wheelhouse),
-            ],
-            cwd=staging_root,
-            env=env,
-            check=True,
+    if not expected_path.exists():
+        raise FileNotFoundError(
+            f"Missing browser wheel {expected_path.relative_to(REPO_ROOT)}. "
+            "Run `python tools/prepare_browser_wheel.py`."
         )
 
-        built_wheel_path = wheelhouse / wheel_name
-        if not built_wheel_path.exists():
-            available = ", ".join(path.name for path in sorted(wheelhouse.glob("gbdraw-*.whl")))
-            raise FileNotFoundError(
-                f"Expected browser wheel {wheel_name} was not produced. Available wheels: {available or 'none'}"
-            )
+    unexpected_wheels = [path.name for path in existing_wheels if path.name != expected_name]
+    if unexpected_wheels:
+        raise RuntimeError(
+            "Unexpected browser wheel files in gbdraw/web: "
+            f"{', '.join(unexpected_wheels)}. Run `python tools/prepare_browser_wheel.py` to refresh them."
+        )
 
-        for existing_wheel in WEB_ROOT.glob("gbdraw-*.whl"):
-            existing_wheel.unlink()
+    configured_name = read_browser_wheel_name_from_config()
+    if configured_name != expected_name:
+        raise RuntimeError(
+            f"gbdraw/web/js/config.js points to {configured_name}, expected {expected_name}. "
+            "Run `python tools/prepare_browser_wheel.py`."
+        )
 
-        target_path = WEB_ROOT / wheel_name
-        shutil.copy2(built_wheel_path, target_path)
-
-    _update_config_wheel_name(wheel_name)
-    _SYNCED = True
-    return WEB_ROOT / wheel_name
+    return expected_path

@@ -6,7 +6,13 @@ opt into these models for clearer typing and separation.
 """
 
 from .canvas import CanvasConfig, CircularCanvasConfig, LinearCanvasConfig
-from .labels import LabelsConfig, LabelsFilteringConfig, LabelsLengthThresholdConfig, LabelsLinearConfig
+from .labels import (
+    LabelsConfig,
+    LabelsFilteringConfig,
+    LabelsLengthThresholdConfig,
+    LabelsLinearConfig,
+    LabelsSpacingConfig,
+)
 from .objects import ObjectsConfig
 from .root import GbdrawConfig
 
@@ -18,6 +24,7 @@ __all__ = [
     "LabelsFilteringConfig",
     "LabelsLengthThresholdConfig",
     "LabelsLinearConfig",
+    "LabelsSpacingConfig",
     "ObjectsConfig",
     "GbdrawConfig",
 ]

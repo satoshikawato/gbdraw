@@ -107,6 +107,20 @@ class LabelsLinearConfig:
 
 
 @dataclass(frozen=True)
+class LabelsSpacingConfig:
+    circular: float
+    linear: float
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> "LabelsSpacingConfig":
+        raw = d if isinstance(d, dict) else dict(d)
+        return cls(
+            circular=float(raw.get("circular", 3.0)),
+            linear=float(raw.get("linear", 3.0)),
+        )
+
+
+@dataclass(frozen=True)
 class LabelsConfig:
     filtering: LabelsFilteringConfig
     length_threshold: LabelsLengthThresholdConfig
@@ -125,6 +139,7 @@ class LabelsConfig:
     inner_arc_angle: dict[str, dict[str, float]]
     unified_adjustment: LabelsUnifiedAdjustmentConfig
     linear: LabelsLinearConfig
+    spacing: LabelsSpacingConfig
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LabelsConfig":
@@ -160,6 +175,7 @@ class LabelsConfig:
             inner_arc_angle=_factor_2level(d.get("inner_arc_angle", {})),
             unified_adjustment=LabelsUnifiedAdjustmentConfig.from_dict(d.get("unified_adjustment", {})),
             linear=LabelsLinearConfig.from_dict(d.get("linear", {})),
+            spacing=LabelsSpacingConfig.from_dict(d.get("spacing", {})),
         )
 
 
@@ -171,6 +187,7 @@ __all__ = [
     "LabelsStrokeColorConfig",
     "LabelsUnifiedAdjustmentConfig",
     "LabelsLinearConfig",
+    "LabelsSpacingConfig",
 ]
 
 

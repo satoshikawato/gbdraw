@@ -1,7 +1,7 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
-const SESSION_VERSION = 9;
+const SESSION_VERSION = 10;
 
 const cloneColors = (colors) => ({ ...(colors || {}) });
 
@@ -83,6 +83,19 @@ const normalizeLinearPlotTitlePosition = (value) => {
 const normalizeLegendPosition = (value, fallback = 'left') => {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized || fallback;
+};
+
+const normalizePositiveNumberOrNull = (value) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === '' ||
+    String(value).trim().toLowerCase() === 'auto'
+  ) {
+    return null;
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 };
 
 const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
@@ -233,6 +246,8 @@ const applyConfigData = (data) => {
   if (state.adv.label_placement === 'on_feature') {
     state.adv.label_placement = 'above_feature';
   }
+  state.adv.circular_label_spacing = normalizePositiveNumberOrNull(state.adv.circular_label_spacing);
+  state.adv.linear_label_spacing = normalizePositiveNumberOrNull(state.adv.linear_label_spacing);
   const rawTrackAxisGap = state.adv.track_axis_gap;
   if (
     rawTrackAxisGap === null ||

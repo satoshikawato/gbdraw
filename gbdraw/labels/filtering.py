@@ -723,7 +723,7 @@ def get_label_text(feature: Any, label_filtering: dict, record_id: Optional[str]
         if not is_eligible:
             return ""
 
-    if not whitelist_map and any(bl in final_label.lower() for bl in blacklist):
+    if not whitelist_map and any(str(bl).lower() in final_label.lower() for bl in blacklist):
         return ""
 
     if non_hash_rules:

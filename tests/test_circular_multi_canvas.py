@@ -877,6 +877,51 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
 
 
 @pytest.mark.circular
+def test_circular_tick_label_font_size_reaches_tick_label_generator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [_build_record("tick_font", 30, length=20_000)]
+    captured_font_sizes: dict[int, float] = {}
+
+    def fake_generate_tick_labels(
+        radius: float,
+        total_len: int,
+        size: str,
+        ticks: list[int],
+        stroke: str,
+        fill: str,
+        font_size: float,
+        font_weight: str,
+        font_family: str,
+        track_type: str,
+        strandedness: bool,
+        dpi: int,
+        tick_track_channel_override: str | None = None,
+    ) -> list[Any]:
+        captured_font_sizes[int(total_len)] = font_size
+        return []
+
+    monkeypatch.setattr(
+        circular_ticks_group_module,
+        "generate_circular_tick_labels",
+        fake_generate_tick_labels,
+    )
+
+    assemble_circular_diagram_from_records(
+        records,
+        selected_features_set=["CDS"],
+        legend="none",
+        config_overrides={
+            "show_gc": False,
+            "show_skew": False,
+            "tick_label_font_size": 19.0,
+        },
+    )
+
+    assert captured_font_sizes[20_000] == pytest.approx(19.0)
+
+
+@pytest.mark.circular
 def test_multi_record_mixed_lengths_keep_gc_window_step_per_record_defaults(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2398,6 +2443,23 @@ def test_circular_cli_parses_keep_full_definition_option() -> None:
         ["--gbk", "dummy.gb", "--keep_full_definition_with_plot_title"]
     )
     assert args.keep_full_definition_with_plot_title is True
+
+
+@pytest.mark.circular
+def test_circular_cli_parses_tick_label_font_size_option() -> None:
+    args = circular_cli_module._get_args(
+        ["--gbk", "dummy.gb", "--tick_label_font_size", "18"]
+    )
+    assert args.tick_label_font_size == pytest.approx(18.0)
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_circular_cli_rejects_invalid_tick_label_font_size(value: str) -> None:
+    with pytest.raises(SystemExit):
+        circular_cli_module._get_args(
+            ["--gbk", "dummy.gb", "--tick_label_font_size", value]
+        )
 
 
 @pytest.mark.circular

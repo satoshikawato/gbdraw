@@ -316,7 +316,7 @@ def _label_overlaps_other_labels(candidate: dict[str, Any], labels: list[dict[st
     for peer_idx, peer in enumerate(labels):
         if peer_idx == idx or peer.get("is_embedded"):
             continue
-        min_gap_px = minimum_bbox_gap_px(candidate, peer, base_margin_px=0.0)
+        min_gap_px = minimum_bbox_gap_px(candidate, peer)
         if y_overlap(candidate, peer, total_length, min_gap_px) and x_overlap(candidate, peer, minimum_margin=min_gap_px):
             return True
     return False
@@ -490,7 +490,7 @@ def _try_shift_labels_away_from_legend(
                             if peer_idx == block_idx or peer_label.get("is_embedded"):
                                 continue
                             peer = candidate_labels.get(peer_idx, peer_label)
-                            min_gap_px = minimum_bbox_gap_px(candidate, peer, base_margin_px=0.0)
+                            min_gap_px = minimum_bbox_gap_px(candidate, peer)
                             if y_overlap(candidate, peer, total_length, min_gap_px) and x_overlap(
                                 candidate, peer, minimum_margin=min_gap_px
                             ):

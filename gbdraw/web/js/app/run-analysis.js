@@ -330,6 +330,7 @@ export const createRunAnalysis = ({
       linearLabelSupportCache = {
         placement: false,
         rotation: false,
+        linear_label_spacing: false,
         track_layout: false,
         track_axis_gap: false,
         ruler_on_axis: false,
@@ -353,6 +354,7 @@ _source = inspect.getsource(_gbdraw_linear._get_args)
 json.dumps({
   "placement": "--label_placement" in _source,
   "rotation": "--label_rotation" in _source,
+  "linear_label_spacing": "--linear_label_spacing" in _source,
   "track_layout": "--track_layout" in _source,
   "track_axis_gap": "--track_axis_gap" in _source,
   "ruler_on_axis": "--ruler_on_axis" in _source,
@@ -372,6 +374,7 @@ json.dumps({
       linearLabelSupportCache = {
         placement: false,
         rotation: false,
+        linear_label_spacing: false,
         track_layout: false,
         track_axis_gap: false,
         ruler_on_axis: false,
@@ -431,7 +434,9 @@ json.dumps({
         plot_title: false,
         plot_title_position: false,
         plot_title_font_size: false,
-        keep_full_definition_with_plot_title: false
+        keep_full_definition_with_plot_title: false,
+        tick_label_font_size: false,
+        circular_label_spacing: false
       };
       return circularMultiRecordCanvasSupportCache;
     }
@@ -451,6 +456,8 @@ json.dumps({
   "plot_title_position": "--plot_title_position" in _source,
   "plot_title_font_size": "--plot_title_font_size" in _source,
   "keep_full_definition_with_plot_title": "--keep_full_definition_with_plot_title" in _source,
+  "tick_label_font_size": "--tick_label_font_size" in _source,
+  "circular_label_spacing": "--circular_label_spacing" in _source,
 })
       `);
       circularMultiRecordCanvasSupportCache = JSON.parse(String(raw));
@@ -465,7 +472,9 @@ json.dumps({
         plot_title: false,
         plot_title_position: false,
         plot_title_font_size: false,
-        keep_full_definition_with_plot_title: false
+        keep_full_definition_with_plot_title: false,
+        tick_label_font_size: false,
+        circular_label_spacing: false
       };
     }
     return circularMultiRecordCanvasSupportCache;
@@ -867,6 +876,18 @@ json.dumps({
         if (adv.inner_label_x_offset) args.push('--inner_label_x_radius_offset', adv.inner_label_x_offset);
         if (adv.inner_label_y_offset) args.push('--inner_label_y_radius_offset', adv.inner_label_y_offset);
         if (
+          adv.circular_label_spacing !== null &&
+          adv.circular_label_spacing !== undefined &&
+          adv.circular_label_spacing !== ''
+        ) {
+          if (!multiCanvasSupport.circular_label_spacing) {
+            throw new Error(
+              'Current gbdraw wheel does not support --circular_label_spacing. Rebuild and redeploy the web wheel.'
+            );
+          }
+          args.push('--circular_label_spacing', adv.circular_label_spacing);
+        }
+        if (
           adv.feature_width_circular !== null &&
           adv.feature_width_circular !== undefined &&
           adv.feature_width_circular !== '' &&
@@ -911,6 +932,18 @@ json.dumps({
           }
         }
         if (adv.scale_interval) args.push('--scale_interval', adv.scale_interval);
+        if (
+          adv.tick_label_font_size !== null &&
+          adv.tick_label_font_size !== undefined &&
+          adv.tick_label_font_size !== ''
+        ) {
+          if (!multiCanvasSupport.tick_label_font_size) {
+            throw new Error(
+              'Current gbdraw wheel does not support --tick_label_font_size. Rebuild and redeploy the web wheel.'
+            );
+          }
+          args.push('--tick_label_font_size', adv.tick_label_font_size);
+        }
 
         if (cInputType.value === 'gb') {
           if (!files.c_gb) throw new Error('Please upload a GenBank file.');
@@ -998,6 +1031,8 @@ json.dumps({
         const normalizedLabelPlacement = adv.label_placement === 'on_feature' ? 'above_feature' : adv.label_placement;
         const wantsPlacementOption = normalizedLabelPlacement && normalizedLabelPlacement !== 'auto';
         const wantsRotationOption = adv.label_rotation !== null && adv.label_rotation !== undefined && adv.label_rotation !== '';
+        const wantsLinearLabelSpacingOption =
+          adv.linear_label_spacing !== null && adv.linear_label_spacing !== undefined && adv.linear_label_spacing !== '';
         const wantsTrackLayoutOption = normalizedTrackLayout !== 'middle';
         const wantsTrackAxisGapOption =
           adv.track_axis_gap !== null && adv.track_axis_gap !== undefined && adv.track_axis_gap !== '';
@@ -1021,6 +1056,7 @@ json.dumps({
         if (
           wantsPlacementOption ||
           wantsRotationOption ||
+          wantsLinearLabelSpacingOption ||
           wantsTrackLayoutOption ||
           wantsTrackAxisGapOption ||
           wantsRulerOnAxisOption ||
@@ -1037,6 +1073,9 @@ json.dumps({
           }
           if (wantsRotationOption && !linearLabelSupport.rotation) {
             throw new Error("Current gbdraw wheel does not support --label_rotation. Rebuild and redeploy the web wheel.");
+          }
+          if (wantsLinearLabelSpacingOption && !linearLabelSupport.linear_label_spacing) {
+            throw new Error("Current gbdraw wheel does not support --linear_label_spacing. Rebuild and redeploy the web wheel.");
           }
           if (wantsTrackLayoutOption && !linearLabelSupport.track_layout) {
             throw new Error("Current gbdraw wheel does not support --track_layout. Rebuild and redeploy the web wheel.");
@@ -1081,6 +1120,9 @@ json.dumps({
         if (adv.label_rotation !== null && adv.label_rotation !== undefined && adv.label_rotation !== '') {
           args.push('--label_rotation', adv.label_rotation);
         }
+        if (adv.linear_label_spacing !== null && adv.linear_label_spacing !== undefined && adv.linear_label_spacing !== '') {
+          args.push('--linear_label_spacing', adv.linear_label_spacing);
+        }
         if (normalizedTrackLayout !== 'middle') {
           args.push('--track_layout', normalizedTrackLayout);
         }
@@ -1101,12 +1143,18 @@ json.dumps({
 
         if (adv.scale_interval) args.push('--scale_interval', adv.scale_interval);
         if (wantsRulerLabelFontOption) {
-          if (linearLabelSupport.ruler_label_font_size) {
-            args.push('--ruler_label_font_size', adv.scale_font_size);
+          if (form.scale_style === 'ruler') {
+            if (linearLabelSupport.ruler_label_font_size) {
+              args.push('--ruler_label_font_size', adv.scale_font_size);
+            } else if (linearLabelSupport.scale_font_size) {
+              args.push('--scale_font_size', adv.scale_font_size);
+            } else {
+              throw new Error("Current gbdraw wheel does not support ruler label font options. Rebuild and redeploy the web wheel.");
+            }
           } else if (linearLabelSupport.scale_font_size) {
             args.push('--scale_font_size', adv.scale_font_size);
           } else {
-            throw new Error("Current gbdraw wheel does not support ruler label font options. Rebuild and redeploy the web wheel.");
+            throw new Error("Current gbdraw wheel does not support --scale_font_size. Rebuild and redeploy the web wheel.");
           }
         }
         if (wantsRulerLabelColorOption) args.push('--ruler_label_color', adv.ruler_label_color);
