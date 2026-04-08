@@ -69,7 +69,7 @@ def is_browser_wheel_build() -> bool:
 def get_package_data_patterns(*, include_browser_wheel: bool) -> list[str]:
     patterns = list(_BASE_PACKAGE_DATA)
     if include_browser_wheel:
-        patterns.insert(3, "web/*.whl")
+        patterns.insert(3, f"web/{expected_browser_wheel_name()}")
     return patterns
 
 
