@@ -860,6 +860,24 @@ def test_linear_ruler_uses_scale_font_size_when_ruler_size_unset(tmp_path: Path)
 
 
 @pytest.mark.linear
+def test_linear_bar_uses_scale_font_size_for_length_bar_label(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear(
+        tmp_path,
+        [
+            "--scale_style",
+            "bar",
+            "--scale_font_size",
+            "23",
+        ],
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    length_bar_match = re.search(r'<g id="length_bar"[^>]*>(.*?)</g>', svg_content)
+    assert length_bar_match is not None
+    assert 'font-size="23.0"' in length_bar_match.group(1)
+
+
+@pytest.mark.linear
 def test_linear_ruler_label_options_apply_to_axis_ruler(tmp_path: Path) -> None:
     returncode, stdout, stderr, output_svg = _run_linear(
         tmp_path,

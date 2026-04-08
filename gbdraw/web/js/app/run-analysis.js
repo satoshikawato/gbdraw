@@ -431,7 +431,8 @@ json.dumps({
         plot_title: false,
         plot_title_position: false,
         plot_title_font_size: false,
-        keep_full_definition_with_plot_title: false
+        keep_full_definition_with_plot_title: false,
+        tick_label_font_size: false
       };
       return circularMultiRecordCanvasSupportCache;
     }
@@ -451,6 +452,7 @@ json.dumps({
   "plot_title_position": "--plot_title_position" in _source,
   "plot_title_font_size": "--plot_title_font_size" in _source,
   "keep_full_definition_with_plot_title": "--keep_full_definition_with_plot_title" in _source,
+  "tick_label_font_size": "--tick_label_font_size" in _source,
 })
       `);
       circularMultiRecordCanvasSupportCache = JSON.parse(String(raw));
@@ -465,7 +467,8 @@ json.dumps({
         plot_title: false,
         plot_title_position: false,
         plot_title_font_size: false,
-        keep_full_definition_with_plot_title: false
+        keep_full_definition_with_plot_title: false,
+        tick_label_font_size: false
       };
     }
     return circularMultiRecordCanvasSupportCache;
@@ -911,6 +914,18 @@ json.dumps({
           }
         }
         if (adv.scale_interval) args.push('--scale_interval', adv.scale_interval);
+        if (
+          adv.tick_label_font_size !== null &&
+          adv.tick_label_font_size !== undefined &&
+          adv.tick_label_font_size !== ''
+        ) {
+          if (!multiCanvasSupport.tick_label_font_size) {
+            throw new Error(
+              'Current gbdraw wheel does not support --tick_label_font_size. Rebuild and redeploy the web wheel.'
+            );
+          }
+          args.push('--tick_label_font_size', adv.tick_label_font_size);
+        }
 
         if (cInputType.value === 'gb') {
           if (!files.c_gb) throw new Error('Please upload a GenBank file.');
@@ -1101,12 +1116,18 @@ json.dumps({
 
         if (adv.scale_interval) args.push('--scale_interval', adv.scale_interval);
         if (wantsRulerLabelFontOption) {
-          if (linearLabelSupport.ruler_label_font_size) {
-            args.push('--ruler_label_font_size', adv.scale_font_size);
+          if (form.scale_style === 'ruler') {
+            if (linearLabelSupport.ruler_label_font_size) {
+              args.push('--ruler_label_font_size', adv.scale_font_size);
+            } else if (linearLabelSupport.scale_font_size) {
+              args.push('--scale_font_size', adv.scale_font_size);
+            } else {
+              throw new Error("Current gbdraw wheel does not support ruler label font options. Rebuild and redeploy the web wheel.");
+            }
           } else if (linearLabelSupport.scale_font_size) {
             args.push('--scale_font_size', adv.scale_font_size);
           } else {
-            throw new Error("Current gbdraw wheel does not support ruler label font options. Rebuild and redeploy the web wheel.");
+            throw new Error("Current gbdraw wheel does not support --scale_font_size. Rebuild and redeploy the web wheel.");
           }
         }
         if (wantsRulerLabelColorOption) args.push('--ruler_label_color', adv.ruler_label_color);

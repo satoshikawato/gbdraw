@@ -1075,16 +1075,16 @@
                                         :class="canUseLinearRulerOnAxis ? '' : 'opacity-50'">
                                     <span class="inline-flex items-center gap-1">Ruler on Axis <help-tip text="Use each record axis as the ruler and hide the bottom ruler. Effective when Track Layout is Above/Below and Scale Style is Ruler."></help-tip></span>
                                 </label>
-                                <div v-if="form.scale_style === 'ruler'" class="grid grid-cols-2 gap-1.5">
+                                <div class="grid grid-cols-2 gap-1.5">
                                     <div>
+                                        <label class="input-label text-[10px]">Scale Font Size <help-tip text="Font size for the scale label text. Used by bar style and by ruler labels unless the CLI-only ruler override is used."></help-tip></label>
+                                        <input type="number" v-model.number="adv.scale_font_size" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                    <div v-if="form.scale_style === 'ruler'">
                                         <label class="input-label text-[10px]">Interval <help-tip text="Manual tick interval for Ruler scale style in bp. Leave blank to calculate automatically."></help-tip></label>
                                         <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact" placeholder="Auto">
                                     </div>
-                                    <div>
-                                        <label class="input-label text-[10px]">Ruler Label Font Size <help-tip text="Font size for ruler labels. Leave blank to use the default size."></help-tip></label>
-                                        <input type="number" v-model.number="adv.scale_font_size" class="form-input form-input-compact" placeholder="Auto">
-                                    </div>
-                                    <div>
+                                    <div v-if="form.scale_style === 'ruler'">
                                         <label class="input-label text-[10px]">Ruler Label Color <help-tip text="Color of ruler tick labels."></help-tip></label>
                                         <input type="color" v-model="adv.ruler_label_color" class="h-8 w-full p-0 border rounded">
                                     </div>
@@ -1102,6 +1102,10 @@
                                 <div>
                                     <label class="input-label text-[10px]">Scale Interval <help-tip text="Manual scale interval for circular mode (in bp). Overrides automatic calculation."></help-tip></label>
                                     <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact" placeholder="Auto">
+                                </div>
+                                <div>
+                                    <label class="input-label text-[10px]">Tick Label Font Size <help-tip text="Font size for circular tick labels. Leave blank to use the default size."></help-tip></label>
+                                    <input type="number" v-model.number="adv.tick_label_font_size" class="form-input form-input-compact" placeholder="Auto">
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>

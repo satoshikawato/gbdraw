@@ -71,6 +71,7 @@ def modify_config_dict(
     scale_font_size=None,
     ruler_label_font_size=None,
     scale_interval=None,
+    tick_label_font_size=None,
     blast_color_min=None,
     blast_color_max=None,
     legend_box_size=None,
@@ -217,6 +218,7 @@ def modify_config_dict(
         "ruler_label_font_size_short": "objects.scale.ruler_label_font_size.short",
         "ruler_label_font_size_long": "objects.scale.ruler_label_font_size.long",
         "scale_interval": "objects.scale.interval",
+        "tick_label_font_size": "objects.ticks.tick_labels.font_size",
         "blast_color_min": "objects.blast_match.min_color",
         "blast_color_max": "objects.blast_match.max_color",
         "legend_box_size_short": "objects.legends.color_rect_size.short",
@@ -267,4 +269,3 @@ def modify_config_dict(
 
 
 __all__ = ["modify_config_dict", "suppress_gc_content_and_skew", "update_config_value"]
-
