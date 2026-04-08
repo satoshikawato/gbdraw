@@ -31,6 +31,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install build
 
+      - name: Prepare browser wheel
+        run: python tools/prepare_browser_wheel.py --refresh-cache-bust
+
       - name: Build Wheel
         run: python -m build --wheel
 

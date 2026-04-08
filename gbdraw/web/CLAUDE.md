@@ -16,8 +16,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 # Run locally
 gbdraw gui                    # Opens browser at http://localhost:<free port>
 
-# Prepare the local browser wheel (version must match pyproject.toml)
+# Prepare the generated local browser wheel (version must match pyproject.toml)
 python tools/prepare_browser_wheel.py
+
+# Refresh the cache-bust token when preparing a deployable web bundle
+python tools/prepare_browser_wheel.py --refresh-cache-bust
 
 # Build distributions after the browser wheel is prepared
 python -m build
@@ -103,6 +106,7 @@ index.html
 - gbdraw wheel is installed dynamically (version must match `pyproject.toml`)
 - All processing (genome parsing, SVG generation) runs locally
 - **Privacy:** Genomic data never leaves the user's device
+- The browser wheel under `gbdraw/web/` is generated and gitignored; prepare it before wheel-dependent tests or packaging, and refresh the cache-bust token only for deploy-style builds
 
 ### 2. Dual Mode Support
 - **Circular mode:** Single genome with track type options (tuckin/middle/spreadout)
