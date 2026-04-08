@@ -27,13 +27,14 @@ gbdraw/web/*.whl
 *.html
 *.tar.gz
 !gbdraw/web/open-source-notices.html
-!gbdraw/web/*.whl
+gbdraw/web/*.whl
 !gbdraw/web/vendor/browser_wasi_shim/
 !gbdraw/web/vendor/browser_wasi_shim/dist/
 !gbdraw/web/vendor/browser_wasi_shim/dist/**
 !gbdraw/web/vendor/pyodide/v0.29.0/full/*.whl
 !gbdraw/web/vendor/pyodide-wheels/
 !gbdraw/web/vendor/pyodide-wheels/*.whl
+
 # --- Virtual Environments ---
 .env
 .venv
