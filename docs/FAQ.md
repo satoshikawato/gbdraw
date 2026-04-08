@@ -24,7 +24,7 @@ Common fixes:
 
 1. Reduce `--label_font_size`
 2. Hide noisy labels with `--label_blacklist`
-3. Keep only important labels with `--label_whitelist`
+3. Keep only important labels with `--label_whitelist` regex patterns
 4. Switch to `--track_type middle` for circular plots or reduce the number of displayed labels
 
 See [Tutorial 3](./TUTORIALS/3_Advanced_Customization.md) for examples.

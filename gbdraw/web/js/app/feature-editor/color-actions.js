@@ -13,7 +13,7 @@ export const createFeatureColorActions = ({
     pyodideReady,
     results,
     selectedResultIndex,
-    currentColors,
+    appliedPaletteColors,
     manualSpecificRules,
     extractedFeatures,
     featureColorOverrides,
@@ -266,7 +266,7 @@ export const createFeatureColorActions = ({
       return resolveColorToHex(overrideColor) || overrideColor;
     }
 
-    const fallbackColor = currentColors.value[feat.type] || '#cccccc';
+    const fallbackColor = appliedPaletteColors.value[feat.type] || '#cccccc';
     return resolveColorToHex(fallbackColor) || fallbackColor;
   };
 
@@ -1131,7 +1131,7 @@ export const createFeatureColorActions = ({
     const feat = clickedFeature.value.feat;
     if (!feat) return;
 
-    const defaultColor = currentColors.value[feat.type];
+    const defaultColor = appliedPaletteColors.value[feat.type];
     if (!defaultColor) {
       console.warn('No default color found for feature type:', feat.type);
       return;
@@ -1168,7 +1168,7 @@ export const createFeatureColorActions = ({
     const feat = clickedFeature.value.feat;
     if (!feat) return;
 
-    const defaultColor = resetColorDialog.defaultColor || currentColors.value[feat.type];
+    const defaultColor = resetColorDialog.defaultColor || appliedPaletteColors.value[feat.type];
     const caption =
       resetColorDialog.caption ||
       feat.product ||

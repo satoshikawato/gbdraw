@@ -1,7 +1,9 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
-const SESSION_VERSION = 8;
+const SESSION_VERSION = 9;
+
+const cloneColors = (colors) => ({ ...(colors || {}) });
 
 const safeDeepMerge = (target, source) => {
   if (!source || typeof source !== 'object') return;
@@ -108,6 +110,7 @@ const buildConfigData = () => ({
   losat: state.losat,
   colors: state.currentColors.value,
   palette: state.selectedPalette.value,
+  paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
   rules: state.manualSpecificRules,
   filterMode: state.filterMode.value,
   whitelist: state.manualWhitelist,
@@ -324,6 +327,9 @@ const applyConfigData = (data) => {
   state.adv.linear_show_accession = state.adv.linear_show_accession !== false;
   state.adv.linear_show_length = state.adv.linear_show_length !== false;
   if (data.losat) safeDeepMerge(state.losat, data.losat);
+  if (typeof data.paletteInstantPreviewEnabled === 'boolean') {
+    state.paletteInstantPreviewEnabled.value = data.paletteInstantPreviewEnabled;
+  }
   if (data.colors) {
     const normalized = {};
     Object.entries(data.colors).forEach(([key, value]) => {
@@ -360,6 +366,63 @@ const applyConfigData = (data) => {
   if (data.blacklistText !== undefined) state.manualBlacklist.value = String(data.blacklistText || '');
   if (data.blastSource) state.blastSource.value = String(data.blastSource);
   if (data.losatProgram) state.losatProgram.value = String(data.losatProgram);
+};
+
+const restorePaletteStateAfterConfigImport = () => {
+  const draftPaletteName = String(state.selectedPalette.value || state.appliedPaletteName.value || 'default');
+  const draftColors = cloneColors(state.currentColors.value);
+  const hasPreviewResults = Array.isArray(state.results.value) && state.results.value.length > 0;
+
+  if (
+    !hasPreviewResults ||
+    state.paletteInstantPreviewEnabled.value ||
+    draftPaletteName === String(state.appliedPaletteName.value || '')
+  ) {
+    state.appliedPaletteName.value = draftPaletteName;
+    state.appliedPaletteColors.value = draftColors;
+    state.pendingPaletteName.value = '';
+    state.pendingPaletteColors.value = {};
+    return;
+  }
+
+  state.pendingPaletteName.value = draftPaletteName;
+  state.pendingPaletteColors.value = draftColors;
+};
+
+const restorePaletteStateFromSession = (ui = {}) => {
+  const draftPaletteName = String(state.selectedPalette.value || state.appliedPaletteName.value || 'default');
+  const draftColors = cloneColors(state.currentColors.value);
+  const savedAppliedPaletteName = String(ui.appliedPaletteName || draftPaletteName || 'default');
+  const savedAppliedPaletteColors =
+    ui.appliedPaletteColors && typeof ui.appliedPaletteColors === 'object'
+      ? Object.fromEntries(
+          Object.entries(ui.appliedPaletteColors).map(([key, value]) => [
+            key,
+            resolveColorToHex(String(value || '').trim())
+          ])
+        )
+      : draftColors;
+  const savedPendingPaletteName = String(ui.pendingPaletteName || '').trim();
+  const savedPendingPaletteColors =
+    ui.pendingPaletteColors && typeof ui.pendingPaletteColors === 'object'
+      ? Object.fromEntries(
+          Object.entries(ui.pendingPaletteColors).map(([key, value]) => [
+            key,
+            resolveColorToHex(String(value || '').trim())
+          ])
+        )
+      : draftColors;
+
+  state.appliedPaletteName.value = savedAppliedPaletteName;
+  state.appliedPaletteColors.value = cloneColors(savedAppliedPaletteColors);
+
+  if (!state.paletteInstantPreviewEnabled.value && savedPendingPaletteName) {
+    state.pendingPaletteName.value = savedPendingPaletteName;
+    state.pendingPaletteColors.value = cloneColors(savedPendingPaletteColors);
+  } else {
+    state.pendingPaletteName.value = '';
+    state.pendingPaletteColors.value = {};
+  }
 };
 
 const bufferToBase64 = (buffer) => {
@@ -659,7 +722,12 @@ export const exportSession = async (titleOverride = null) => {
       cInputType: state.cInputType.value,
       lInputType: state.lInputType.value,
       downloadDpi: state.downloadDpi.value,
-      autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value)
+      autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
+      paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
+      appliedPaletteName: state.appliedPaletteName.value,
+      appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
+      pendingPaletteName: state.pendingPaletteName.value,
+      pendingPaletteColors: cloneColors(state.pendingPaletteColors.value)
     },
     files: await serializeFiles(),
     results: serializeResults(),
@@ -707,6 +775,7 @@ export const importConfig = async (e) => {
     });
     state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.form);
     applyConfigData(data);
+    restorePaletteStateAfterConfigImport();
     alert('Configuration loaded successfully!');
   } catch (err) {
     console.error(err);
@@ -747,6 +816,7 @@ export const importSession = async (e) => {
     if (ui.lInputType) state.lInputType.value = ui.lInputType;
     if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
     state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
+    state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
     state.labelOverrideBuildWarning.value = '';
     if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
       state.featurePanelTab.value = ui.featurePanelTab;
@@ -772,6 +842,7 @@ export const importSession = async (e) => {
       state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.config.form);
       applyConfigData(data.config);
     }
+    restorePaletteStateFromSession(ui);
     restoreSessionCircularLayoutCaches(ui);
     restoreSessionPlotTitlePositions(ui);
 

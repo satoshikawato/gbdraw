@@ -17,6 +17,7 @@ const toNumber = (value, fallback = 0) => {
 };
 
 const normalizeKeyToken = (value) => String(value ?? '').trim().toLowerCase();
+const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const normalizePositionToken = (value) => {
   const token = String(value ?? '').trim();
   if (!token || token === '*') return '*';
@@ -443,7 +444,7 @@ export const createFeatureLabelActions = ({ state }) => {
     );
     const ruleFeatureType = String(metadata?.featureType || featureType).trim();
     const ruleQualifier = String(selector?.qualifier || 'hash').trim().toLowerCase();
-    const ruleKey = String(selector?.value || featureId).trim();
+    const ruleKey = `^${escapeRegexLiteral(String(selector?.value || featureId).trim())}$`;
     if (!ruleFeatureType || !ruleQualifier || !ruleKey) return;
     const exists = manualWhitelist.some((rule) => {
       return (

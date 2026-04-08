@@ -19,12 +19,67 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
     selectedResultIndex,
     results,
     skipCaptureBaseConfig,
+    paletteDefinitions,
     selectedPalette,
-    currentColors
+    currentColors,
+    paletteInstantPreviewEnabled,
+    appliedPaletteName,
+    appliedPaletteColors,
+    pendingPaletteName,
+    pendingPaletteColors
   } = state;
   const { clearPlotTitleState, setPlotTitleAutoTransform } = legendLayout;
 
   let definitionUpdateTimeout = null;
+  const cloneColors = (colors) => ({ ...(colors || {}) });
+  const getPaletteMap = () => {
+    if (paletteDefinitions.value && Object.keys(paletteDefinitions.value).length > 0) {
+      return paletteDefinitions.value;
+    }
+
+    const pyodide = getPyodide();
+    if (!pyodide) return {};
+
+    const paletteJson = pyodide.runPython('get_palettes_json()');
+    const all = JSON.parse(paletteJson);
+    const normalized = { ...(all || {}) };
+    delete normalized.title;
+    paletteDefinitions.value = normalized;
+    return normalized;
+  };
+  const getPaletteBaseColors = (paletteName) => {
+    const allPalettes = getPaletteMap();
+    return cloneColors(allPalettes[paletteName] || {});
+  };
+  const setAppliedPaletteState = (paletteName, colors = currentColors.value) => {
+    appliedPaletteName.value = String(paletteName || selectedPalette.value || 'default');
+    appliedPaletteColors.value = cloneColors(colors);
+  };
+  const setPendingPaletteState = (paletteName, colors = currentColors.value) => {
+    pendingPaletteName.value = String(paletteName || selectedPalette.value || '');
+    pendingPaletteColors.value = cloneColors(colors);
+  };
+  const clearPendingPaletteDraft = () => {
+    pendingPaletteName.value = '';
+    pendingPaletteColors.value = {};
+  };
+  const applyPaletteDraftToPreview = () => {
+    setAppliedPaletteState(selectedPalette.value, currentColors.value);
+    clearPendingPaletteDraft();
+  };
+  const syncPaletteDraftState = () => {
+    if (paletteInstantPreviewEnabled.value) {
+      applyPaletteDraftToPreview();
+      return;
+    }
+
+    if (String(pendingPaletteName.value || '').trim() !== '') {
+      setPendingPaletteState(selectedPalette.value, currentColors.value);
+      return;
+    }
+
+    setAppliedPaletteState(selectedPalette.value, currentColors.value);
+  };
 
   const cancelDefinitionUpdate = () => {
     if (definitionUpdateTimeout) {
@@ -34,14 +89,38 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
   };
 
   const updatePalette = () => {
-    const pyodide = getPyodide();
-    if (!pyodide) return;
-    const paletteJson = pyodide.runPython('get_palettes_json()');
-    const all = JSON.parse(paletteJson);
-    currentColors.value = { ...(all[selectedPalette.value] || {}) };
+    const selectedName = String(selectedPalette.value || '').trim() || 'default';
+
+    if (!paletteInstantPreviewEnabled.value && selectedName === appliedPaletteName.value) {
+      currentColors.value = cloneColors(appliedPaletteColors.value);
+      clearPendingPaletteDraft();
+      return;
+    }
+
+    currentColors.value = getPaletteBaseColors(selectedName);
+    if (paletteInstantPreviewEnabled.value) {
+      applyPaletteDraftToPreview();
+      return;
+    }
+
+    setPendingPaletteState(selectedName, currentColors.value);
   };
 
-  const resetColors = () => updatePalette();
+  const resetColors = () => {
+    const selectedName = String(selectedPalette.value || '').trim() || 'default';
+    currentColors.value = getPaletteBaseColors(selectedName);
+    if (paletteInstantPreviewEnabled.value) {
+      applyPaletteDraftToPreview();
+      return;
+    }
+
+    if (String(pendingPaletteName.value || '').trim() !== '') {
+      setPendingPaletteState(selectedName, currentColors.value);
+      return;
+    }
+
+    setAppliedPaletteState(selectedName, currentColors.value);
+  };
 
   const parseMixedContentText = (inputText) => {
     const parts = [];
@@ -443,6 +522,11 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
   return {
     updatePalette,
     resetColors,
+    applyPaletteDraftToPreview,
+    clearPendingPaletteDraft,
+    setAppliedPaletteState,
+    setPendingPaletteState,
+    syncPaletteDraftState,
     scheduleDefinitionUpdate,
     cancelDefinitionUpdate
   };

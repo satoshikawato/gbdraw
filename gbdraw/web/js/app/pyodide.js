@@ -7,7 +7,18 @@ import {
 import { PYTHON_HELPERS } from './python-helpers.js';
 
 export const createPyodideManager = ({ state }) => {
-  const { pyodideReady, loadingStatus, paletteNames, currentColors } = state;
+  const {
+    pyodideReady,
+    loadingStatus,
+    paletteDefinitions,
+    paletteNames,
+    selectedPalette,
+    currentColors,
+    appliedPaletteName,
+    appliedPaletteColors,
+    pendingPaletteName,
+    pendingPaletteColors
+  } = state;
   const pyodideRef = { current: null };
 
   const resolveAssetUrl = (path) => new URL(path, window.location.href).toString();
@@ -73,8 +84,17 @@ export const createPyodideManager = ({ state }) => {
 
       const allPalettes = loadPalettes();
       if (allPalettes) {
+        const normalizedPalettes = { ...allPalettes };
+        delete normalizedPalettes.title;
+        paletteDefinitions.value = normalizedPalettes;
         paletteNames.value = Object.keys(allPalettes).filter((k) => k !== 'title').sort();
-        currentColors.value = allPalettes.default || {};
+        const defaultColors = { ...(allPalettes.default || {}) };
+        selectedPalette.value = 'default';
+        currentColors.value = defaultColors;
+        appliedPaletteName.value = 'default';
+        appliedPaletteColors.value = { ...defaultColors };
+        pendingPaletteName.value = '';
+        pendingPaletteColors.value = {};
       }
       pyodideReady.value = true;
     } catch (e) {

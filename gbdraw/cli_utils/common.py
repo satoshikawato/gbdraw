@@ -148,7 +148,7 @@ def add_label_args(parser: argparse.ArgumentParser) -> None:
     label_list_group = parser.add_mutually_exclusive_group()
     label_list_group.add_argument(
         '--label_whitelist',
-        help='path to a file for label whitelisting (optional); mutually exclusive with --label_blacklist',
+        help='Path to a TSV file for label whitelisting by regex pattern (optional); mutually exclusive with --label_blacklist',
         type=str,
         default="")
     label_list_group.add_argument(

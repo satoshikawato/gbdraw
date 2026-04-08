@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **gbdraw** is a Python bioinformatics tool for creating publication-quality genome diagrams from microbial genomes and organelles. It generates circular and linear visualizations of genomic features (CDS, tRNA, regulatory elements, etc.) with optional GC content/skew plots and BLAST comparison tracks.
 
-- **Version:** 0.9.1
+- **Version:** 0.9.2
 - **Python:** ≥3.10
 - **Output formats:** SVG, PNG, PDF, EPS, PS
 
