@@ -25,6 +25,9 @@ pytest tests/ -v
 # Lint
 ruff check gbdraw/ --select=E,F,W --ignore=E501,W503
 
+# Prepare browser wheel for offline web packaging
+python tools/prepare_browser_wheel.py
+
 # Build
 python -m build
 ```

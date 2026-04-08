@@ -269,6 +269,7 @@ def load_default_colors(
 
 def read_color_table(color_table_file: str) -> Optional[DataFrame]:
     required_cols = ["feature_type", "qualifier_key", "value", "color", "caption"]
+    mandatory_cols = ["feature_type", "qualifier_key", "value", "color"]
 
     # If user did not supply -t, just skip and return None
     if not color_table_file:
@@ -294,11 +295,13 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
         logger.error(f"ERROR: Failed to read '{color_table_file}': {e}")
         raise ParseError(f"Failed to read '{color_table_file}': {e}") from e
 
-    # Check for any rows with missing values and error out if found
-    null_rows = df[df.isnull().any(axis=1)]
+    df["caption"] = df["caption"].fillna("")
+
+    # Check for any rows with missing required values and error out if found
+    null_rows = df[df[mandatory_cols].isnull().any(axis=1)]
     if not null_rows.empty:
         for idx, row in null_rows.iterrows():
-            missing = [c for c in required_cols if pd.isna(row[c])]
+            missing = [c for c in mandatory_cols if pd.isna(row[c])]
             logger.error(
                 f"ERROR: Missing values in '{color_table_file}' at line {idx+1}. "
                 f"Missing columns: {missing}. Row data: {row.to_dict()}"

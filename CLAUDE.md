@@ -38,6 +38,9 @@ ruff check gbdraw/ --select=E,F,W --ignore=E501,W503
 # Install in development mode
 pip install -e ".[dev]"
 
+# Prepare browser wheel for offline web packaging
+python tools/prepare_browser_wheel.py
+
 # Build distribution
 python -m build
 
