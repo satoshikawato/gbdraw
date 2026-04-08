@@ -28,8 +28,7 @@ jobs:
 
       - name: Install build dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install build
+          python -m pip install --upgrade pip setuptools wheel build
 
       - name: Prepare browser wheel
         run: python tools/prepare_browser_wheel.py --refresh-cache-bust
