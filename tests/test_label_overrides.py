@@ -258,6 +258,17 @@ def test_get_label_text_does_not_override_hidden_label() -> None:
     assert get_label_text(feature, filtering, record_id="rec1") == ""
 
 
+def test_get_label_text_blacklist_matching_is_case_insensitive() -> None:
+    feature = _make_seq_feature(product="dUTPase")
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            blacklist_keywords=["dUTPase"],
+        )
+    )
+
+    assert get_label_text(feature, filtering, record_id="rec1") == ""
+
+
 def test_get_label_text_hash_override_bypasses_blacklist() -> None:
     feature = _make_seq_feature()
     feature_hash = compute_feature_hash(feature, record_id="rec1")
