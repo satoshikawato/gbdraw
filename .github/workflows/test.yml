@@ -35,8 +35,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade pip setuptools wheel build
           pip install -e ".[dev]"
+
+      - name: Prepare browser wheel
+        run: |
+          python tools/prepare_browser_wheel.py
 
       - name: Run fast tests
         run: |
@@ -65,8 +69,12 @@ jobs:
 
       - name: Install dependencies with export extras
         run: |
-          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade pip setuptools wheel build
           pip install -e ".[dev,export]"
+
+      - name: Prepare browser wheel
+        run: |
+          python tools/prepare_browser_wheel.py
 
       - name: Run tests with CairoSVG
         run: |

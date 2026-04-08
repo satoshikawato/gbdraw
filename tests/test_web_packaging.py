@@ -33,12 +33,32 @@ def _can_bind_loopback() -> bool:
     return True
 
 
-def test_web_offline_assets_exist_in_source_tree() -> None:
+def _run_prepare_browser_wheel(*args: str) -> None:
+    subprocess.run(
+        [sys.executable, "tools/prepare_browser_wheel.py", *args],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+
+
+def ensure_prepared_browser_wheel():
     verify_module = _load_verify_module()
+    if importlib.util.find_spec("build") is None:
+        pytest.skip("python -m build is not available in this environment")
+
+    try:
+        browser_wheel_path = verify_module.BUILD_SUPPORT.validate_browser_wheel_prepared()
+    except (FileNotFoundError, RuntimeError):
+        _run_prepare_browser_wheel()
+        browser_wheel_path = verify_module.BUILD_SUPPORT.validate_browser_wheel_prepared()
+    return verify_module, browser_wheel_path
+
+
+def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
+    verify_module, expected_wheel_path = ensure_prepared_browser_wheel()
     expected_wheel_name = "gbdraw-0.9.2-py3-none-any.whl"
-    expected_wheel_path = WEB_ROOT / expected_wheel_name
     assert verify_module._parse_wheel_name() == expected_wheel_name
-    assert expected_wheel_path.exists()
+    assert expected_wheel_path.name == expected_wheel_name
     verify_module.assert_browser_wheel_is_not_recursive(expected_wheel_path)
     verify_module._assert_packaged_assets()
 
@@ -61,6 +81,7 @@ def test_web_run_analysis_wires_scale_and_tick_font_size_options() -> None:
 
 @pytest.mark.slow
 def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
+    verify_module, _ = ensure_prepared_browser_wheel()
     build_root = tmp_path / "build_lib"
     subprocess.run(
         [sys.executable, "setup.py", "build_py", "--build-lib", str(build_root)],
@@ -68,7 +89,6 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         check=True,
     )
 
-    verify_module = _load_verify_module()
     required = [
         build_root / "gbdraw" / "web" / "index.html",
         build_root / "gbdraw" / "web" / "open-source-notices.html",
@@ -96,6 +116,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
     if importlib.util.find_spec("wheel") is None:
         pytest.skip("wheel is not available in this environment")
 
+    verify_module, _ = ensure_prepared_browser_wheel()
     dist_dir = tmp_path / "dist"
     subprocess.run(
         [sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", str(dist_dir)],
@@ -110,7 +131,6 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
         cwd=REPO_ROOT,
         check=True,
     )
-    verify_module = _load_verify_module()
     verify_module.assert_embedded_browser_wheel_is_not_recursive(wheel_path)
 
     with zipfile.ZipFile(wheel_path) as outer_wheel:
@@ -130,6 +150,7 @@ def test_offline_gui_smoke_test_covers_palette_preview_behavior() -> None:
     if not _can_bind_loopback():
         pytest.skip("loopback sockets are not permitted in this environment")
 
+    ensure_prepared_browser_wheel()
     subprocess.run(
         [sys.executable, "tools/verify_gui_offline.py", "smoke-test"],
         cwd=REPO_ROOT,

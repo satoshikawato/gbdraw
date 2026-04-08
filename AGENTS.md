@@ -25,8 +25,11 @@ pytest tests/ -v
 # Lint
 ruff check gbdraw/ --select=E,F,W --ignore=E501,W503
 
-# Prepare browser wheel for offline web packaging
+# Prepare the generated browser wheel for offline web packaging/tests
 python tools/prepare_browser_wheel.py
+
+# Refresh the cache-bust token when preparing a deployable web bundle
+python tools/prepare_browser_wheel.py --refresh-cache-bust
 
 # Build
 python -m build
@@ -39,3 +42,4 @@ python -m build
 - If adding CDN dependencies, update the CSP in `gbdraw/web/index.html`.
 - If diagram output changes, update reference SVGs in `tests/reference_outputs/`.
 - Do not manually edit generated artifacts under `dist/` or `gbdraw.egg-info/`.
+- Treat `gbdraw/web/gbdraw-<version>-py3-none-any.whl` as a generated, gitignored asset. Prepare it when tests or packaging need it, but do not commit it.

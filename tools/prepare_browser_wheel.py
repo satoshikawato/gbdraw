@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import os
 import shutil
 import subprocess
@@ -26,7 +27,7 @@ def _load_build_support_module():
     return module
 
 
-def main() -> int:
+def prepare_browser_wheel(*, refresh_cache_bust: bool = False) -> int:
     build_support = _load_build_support_module()
     expected_name = build_support.expected_browser_wheel_name()
 
@@ -81,14 +82,28 @@ def main() -> int:
                     shutil.move(stashed_path, original_path)
             raise
 
-    build_support.update_browser_wheel_config(
-        wheel_name=expected_name,
-        cache_bust=build_support.generate_cache_bust_token(),
-    )
+    cache_bust = build_support.generate_cache_bust_token() if refresh_cache_bust else None
+    build_support.update_browser_wheel_config(wheel_name=expected_name, cache_bust=cache_bust)
     build_support.validate_browser_wheel_prepared()
 
     print(f"Prepared browser wheel: {target_path.relative_to(REPO_ROOT)}")
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Build the browser wheel into gbdraw/web while preventing recursive self-inclusion. "
+            "By default this keeps the existing cache-bust token unchanged."
+        )
+    )
+    parser.add_argument(
+        "--refresh-cache-bust",
+        action="store_true",
+        help="Refresh GBDRAW_WHEEL_CACHE_BUST in gbdraw/web/js/config.js after preparing the wheel.",
+    )
+    args = parser.parse_args(argv)
+    return prepare_browser_wheel(refresh_cache_bust=args.refresh_cache_bust)
 
 
 if __name__ == "__main__":

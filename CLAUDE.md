@@ -38,8 +38,11 @@ ruff check gbdraw/ --select=E,F,W --ignore=E501,W503
 # Install in development mode
 pip install -e ".[dev]"
 
-# Prepare browser wheel for offline web packaging
+# Prepare the generated browser wheel for offline web packaging/tests
 python tools/prepare_browser_wheel.py
+
+# Refresh the cache-bust token when preparing a deployable web bundle
+python tools/prepare_browser_wheel.py --refresh-cache-bust
 
 # Build distribution
 python -m build
@@ -193,6 +196,7 @@ Tests compare generated SVG against `tests/reference_outputs/` files.
 4. **Genome size thresholds:** Window/step sizes auto-adjust (<1M, 1-10M, >10M bp)
 5. **Label filtering:** Supports priority files, blacklists, whitelists
 6. **BLAST comparison:** Linear diagrams only, requires outfmt 6/7
+7. **Browser wheel workflow:** `gbdraw/web/gbdraw-<version>-py3-none-any.whl` is a generated, gitignored asset. Prepare it before wheel-dependent web packaging checks or distribution builds.
 
 ## Updating Reference Outputs
 
