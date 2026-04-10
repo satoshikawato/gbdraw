@@ -8,6 +8,16 @@ repository-code: "https://github.com/satoshikawato/gbdraw"
 authors:
   - family-names: "Kawato"
     given-names: "Satoshi"
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Kawato"
+      given-names: "Satoshi"
+  title: "gbdraw: a genome diagram generator for microbes and organelles"
+  journal: "bioRxiv"
+  doi: "10.64898/2026.04.07.716863"
+  url: "https://doi.org/10.64898/2026.04.07.716863"
+  date-released: 2026-04-09
 keywords:
   - genome visualization
   - bioinformatics

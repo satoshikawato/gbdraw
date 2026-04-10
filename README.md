@@ -35,6 +35,16 @@
 | [FAQ](./docs/FAQ.md) | Common questions and known limitations. |
 | [About](./docs/ABOUT.md) | Citation information and project background. |
 
+## How to cite
+
+If you use `gbdraw` in your research, please cite the preprint:
+
+```text
+Kawato, S. (2026). gbdraw: a genome diagram generator for microbes and organelles. bioRxiv. https://doi.org/10.64898/2026.04.07.716863
+```
+
+DOI: [https://doi.org/10.64898/2026.04.07.716863](https://doi.org/10.64898/2026.04.07.716863)
+
 ## Use Without Local Installation
 
 The hosted web app runs entirely in your browser:

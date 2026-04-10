@@ -12,6 +12,12 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
+README_PATH = REPO_ROOT / "README.md"
+ABOUT_PATH = REPO_ROOT / "docs" / "ABOUT.md"
+CITATION_PATH = REPO_ROOT / "CITATION.cff"
+
+PREPRINT_TITLE = "gbdraw: a genome diagram generator for microbes and organelles"
+PREPRINT_DOI = "10.64898/2026.04.07.716863"
 
 
 def _load_verify_module():
@@ -67,6 +73,21 @@ def test_index_links_to_open_source_notices() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert "./open-source-notices.html" in index_html
     assert "Open Source Notices" in index_html
+
+
+def test_index_includes_preprint_citation() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    assert "How to cite" in index_html
+    assert PREPRINT_TITLE in index_html
+    assert PREPRINT_DOI in index_html
+
+
+def test_project_docs_and_citation_metadata_include_preprint_doi() -> None:
+    assert PREPRINT_DOI in README_PATH.read_text(encoding="utf-8")
+    assert PREPRINT_DOI in ABOUT_PATH.read_text(encoding="utf-8")
+    citation_cff = CITATION_PATH.read_text(encoding="utf-8")
+    assert PREPRINT_DOI in citation_cff
+    assert "preferred-citation:" in citation_cff
 
 
 def test_web_run_analysis_wires_scale_and_tick_font_size_options() -> None:

@@ -2,16 +2,20 @@
 
 # About `gbdraw`
 
-## Citation
+## How to cite
 
-If you use `gbdraw` in research, cite the project using the metadata in `CITATION.cff` at the repository root.
+If you use `gbdraw` in your research, please cite the preprint:
+
+```text
+Kawato, S. (2026). gbdraw: a genome diagram generator for microbes and organelles. bioRxiv. https://doi.org/10.64898/2026.04.07.716863
+```
+
+DOI: [https://doi.org/10.64898/2026.04.07.716863](https://doi.org/10.64898/2026.04.07.716863)
 
 Project links:
 
 - GitHub: https://github.com/satoshikawato/gbdraw/
 - Web app: https://gbdraw.app/
-
-If a DOI-backed paper or preprint is published later, `CITATION.cff` should be updated to include it.
 
 ## Acknowledgments and Inspiration
 
