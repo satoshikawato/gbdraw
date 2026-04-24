@@ -1348,6 +1348,24 @@
 
                     <!-- Zoom and Canvas controls -->
                     <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
+                        <div v-if="svgContent" class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">
+                            <button
+                                    @click="undo"
+                                    :disabled="!canUndo"
+                                    class="w-10 h-10 flex items-center justify-center rounded text-slate-600 disabled:text-slate-300 disabled:cursor-not-allowed hover:bg-slate-100"
+                                    title="Undo (Ctrl/Cmd+Z)"
+                                    aria-label="Undo">
+                                <i class="ph ph-arrow-arc-left"></i>
+                            </button>
+                            <button
+                                    @click="redo"
+                                    :disabled="!canRedo"
+                                    class="w-10 h-10 flex items-center justify-center rounded text-slate-600 disabled:text-slate-300 disabled:cursor-not-allowed hover:bg-slate-100"
+                                    title="Redo (Ctrl/Cmd+Shift+Z / Ctrl+Y)"
+                                    aria-label="Redo">
+                                <i class="ph ph-arrow-arc-right"></i>
+                            </button>
+                        </div>
                         <!-- Reset all positions button -->
                         <button v-if="svgContent" @click="resetAllPositions"
                                 class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
@@ -1391,24 +1409,24 @@
                             <div></div>
                             <div>
                                 <label class="text-[9px] text-slate-400 block">Top</label>
-                                <input type="number" v-model.number="canvasPadding.top" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
+                                <input type="number" :value="canvasPadding.top" @change="setCanvasPadding('top', $event.target.value)" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
                             </div>
                             <div></div>
                             <div>
                                 <label class="text-[9px] text-slate-400 block">Left</label>
-                                <input type="number" v-model.number="canvasPadding.left" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
+                                <input type="number" :value="canvasPadding.left" @change="setCanvasPadding('left', $event.target.value)" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
                             </div>
                             <div class="flex items-center justify-center">
                                 <i class="ph ph-selection-background text-slate-300 text-lg"></i>
                             </div>
                             <div>
                                 <label class="text-[9px] text-slate-400 block">Right</label>
-                                <input type="number" v-model.number="canvasPadding.right" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
+                                <input type="number" :value="canvasPadding.right" @change="setCanvasPadding('right', $event.target.value)" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
                             </div>
                             <div></div>
                             <div>
                                 <label class="text-[9px] text-slate-400 block">Bottom</label>
-                                <input type="number" v-model.number="canvasPadding.bottom" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
+                                <input type="number" :value="canvasPadding.bottom" @change="setCanvasPadding('bottom', $event.target.value)" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
                             </div>
                             <div></div>
                         </div>

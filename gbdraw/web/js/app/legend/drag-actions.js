@@ -1,6 +1,6 @@
 import { parseTransform } from './utils.js';
 
-export const createLegendDragActions = ({ state, extractLegendEntries }) => {
+export const createLegendDragActions = ({ state, extractLegendEntries, onLegendDragCommitted = null }) => {
   const {
     results,
     selectedResultIndex,
@@ -90,7 +90,14 @@ export const createLegendDragActions = ({ state, extractLegendEntries }) => {
       const svg = svgContainer.value.querySelector('svg');
       const legendGroup = svg?.getElementById('legend');
       if (legendGroup) {
+        const currentTransform = parseTransform(legendGroup.getAttribute('transform'));
+        const didMove =
+          Math.abs(currentTransform.x - legendOriginalTransform.value.x) > 1e-6 ||
+          Math.abs(currentTransform.y - legendOriginalTransform.value.y) > 1e-6;
         legendGroup.style.willChange = '';
+        if (didMove && typeof onLegendDragCommitted === 'function') {
+          onLegendDragCommitted();
+        }
       }
     }
 

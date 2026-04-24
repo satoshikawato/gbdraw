@@ -567,6 +567,7 @@ const skipPositionReapply = ref(false);
 // Flag to skip extractLegendEntries in watch(svgContent) when setFeatureColor is handling it
 // This prevents race condition where watcher overwrites correct legend state
 const skipExtractOnSvgChange = ref(false);
+const historyRestoring = ref(false);
 
 // Base configuration for circular mode (stored when SVG is generated)
 // Used to calculate absolute positions without accumulation
@@ -826,6 +827,7 @@ export const state = {
   skipCaptureBaseConfig,
   skipPositionReapply,
   skipExtractOnSvgChange,
+  historyRestoring,
   circularBaseConfig,
   linearBaseConfig,
   diagramElementBaseTransforms,

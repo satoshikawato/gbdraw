@@ -158,7 +158,7 @@ export const createSidebarResize = (state) => {
   return { startResizing };
 };
 
-export const setupGlobalUiEvents = ({ state, onMounted, onUnmounted }) => {
+export const setupGlobalUiEvents = ({ state, onMounted, onUnmounted, historyActions = null }) => {
   const {
     clickedFeature,
     clickedLabel,
@@ -184,13 +184,46 @@ export const setupGlobalUiEvents = ({ state, onMounted, onUnmounted }) => {
     }
   };
 
+  const isTextEditingTarget = (target) => {
+    if (!(target instanceof Element)) return false;
+    if (target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]')) {
+      return true;
+    }
+    return Boolean(target.closest('[role="textbox"]'));
+  };
+
+  const handleHistoryShortcut = (e) => {
+    if (!historyActions) return;
+    if (e.defaultPrevented) return;
+    if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+    if (isTextEditingTarget(e.target)) return;
+
+    const key = String(e.key || '').toLowerCase();
+    const wantsUndo = key === 'z' && !e.shiftKey;
+    const wantsRedo = (key === 'z' && e.shiftKey) || (key === 'y' && e.ctrlKey && !e.metaKey);
+    if (!wantsUndo && !wantsRedo) return;
+
+    if (wantsUndo) {
+      if (!historyActions.canUndo?.value) return;
+      e.preventDefault();
+      historyActions.undo();
+      return;
+    }
+
+    if (!historyActions.canRedo?.value) return;
+    e.preventDefault();
+    historyActions.redo();
+  };
+
   onMounted(() => {
     document.addEventListener('click', closeFeaturePopup);
     document.addEventListener('keydown', handleEscapeKey);
+    document.addEventListener('keydown', handleHistoryShortcut);
   });
 
   onUnmounted(() => {
     document.removeEventListener('click', closeFeaturePopup);
     document.removeEventListener('keydown', handleEscapeKey);
+    document.removeEventListener('keydown', handleHistoryShortcut);
   });
 };

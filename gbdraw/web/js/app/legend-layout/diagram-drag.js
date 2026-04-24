@@ -1,6 +1,6 @@
 import { parseTransform } from './transform-utils.js';
 
-export const createDiagramDragActions = ({ state }) => {
+export const createDiagramDragActions = ({ state, onDiagramDragCommitted = null }) => {
   const {
     svgContainer,
     mode,
@@ -365,6 +365,7 @@ export const createDiagramDragActions = ({ state }) => {
     applyDiagramDragPosition(currentX, currentY);
     const deltaX = (currentX - dragStart.x) / zoom.value;
     const deltaY = (currentY - dragStart.y) / zoom.value;
+    const didMove = Math.abs(deltaX) > 1e-6 || Math.abs(deltaY) > 1e-6;
     if (activeDragMode === 'group') {
       diagramOffset.x += deltaX;
       diagramOffset.y += deltaY;
@@ -384,6 +385,10 @@ export const createDiagramDragActions = ({ state }) => {
     activeDragMode = 'group';
     activePlotTitleOffsetStart = { x: plotTitleUserOffset.x, y: plotTitleUserOffset.y };
     pendingDiagramPointer = null;
+
+    if (didMove && typeof onDiagramDragCommitted === 'function') {
+      onDiagramDragCommitted();
+    }
   };
 
   const resetDiagramPosition = () => {

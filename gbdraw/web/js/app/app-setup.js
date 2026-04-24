@@ -9,6 +9,7 @@ import { createLegendManager } from './legend.js';
 import { createPyodideManager } from './pyodide.js';
 import { createRunAnalysis } from './run-analysis.js';
 import { createLegendLayout } from './legend-layout.js';
+import { createHistoryManager } from './history.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 
@@ -145,7 +146,51 @@ export const createAppSetup = () => {
   const { handleWheel, startPan, doPan, endPan, resetPreviewViewport } = createPanZoom(state);
   const { startResizing } = createSidebarResize(state);
 
-  const legendActions = createLegendManager({ state, getPyodide, debugLog });
+  const historyManager = createHistoryManager({ state, nextTick });
+  const settleForHistoryCapture = async ({ waitForLabelReflow = false } = {}) => {
+    await nextTick();
+    await Promise.resolve();
+
+    if (waitForLabelReflow) {
+      const deadline = Date.now() + 5000;
+      let sawActiveReflow = labelReflowProcessing.value;
+      while (Date.now() < deadline) {
+        if (labelReflowProcessing.value) {
+          sawActiveReflow = true;
+          await new Promise((resolve) => window.setTimeout(resolve, 25));
+          continue;
+        }
+        if (sawActiveReflow) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 25));
+        if (!labelReflowProcessing.value) break;
+      }
+    }
+
+    await nextTick();
+    await Promise.resolve();
+  };
+
+  const captureHistoryCheckpoint = async (label, options = {}) => {
+    await settleForHistoryCapture(options);
+    await historyManager.pushCheckpoint(label);
+  };
+
+  const wrapHistoryAction = (action, label, options = {}) => {
+    return async (...args) => {
+      const result = await action(...args);
+      await captureHistoryCheckpoint(label, options);
+      return result;
+    };
+  };
+
+  const legendActions = createLegendManager({
+    state,
+    getPyodide,
+    debugLog,
+    onLegendDragCommitted: () => {
+      captureHistoryCheckpoint('legend-drag');
+    }
+  });
   const svgActions = createSvgStyles({ state, watch, legendActions });
   const featureActions = createFeatureEditor({
     state,
@@ -154,9 +199,15 @@ export const createAppSetup = () => {
     svgActions
   });
 
-  setupGlobalUiEvents({ state, onMounted, onUnmounted });
-
-  const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions });
+  const legendLayout = createLegendLayout({
+    state,
+    debugLog,
+    legendActions,
+    svgActions,
+    onDiagramDragCommitted: () => {
+      captureHistoryCheckpoint('diagram-drag');
+    }
+  });
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
     runLabelReflow,
@@ -180,6 +231,13 @@ export const createAppSetup = () => {
     rerenderLinearDefinitions: runLabelReflow
   });
 
+  setupGlobalUiEvents({
+    state,
+    onMounted,
+    onUnmounted,
+    historyActions: historyManager
+  });
+
   setupWatchers({
     state,
     watch,
@@ -198,20 +256,20 @@ export const createAppSetup = () => {
   });
 
   const {
-    addNewLegendEntry,
-    updateLegendEntryColor,
-    deleteLegendEntry,
-    moveLegendEntryUp,
-    moveLegendEntryDown,
-    sortLegendEntries,
-    sortLegendEntriesByDefault,
-    resetLegendPosition,
+    addNewLegendEntry: addNewLegendEntryRaw,
+    updateLegendEntryColor: updateLegendEntryColorRaw,
+    deleteLegendEntry: deleteLegendEntryRaw,
+    moveLegendEntryUp: moveLegendEntryUpRaw,
+    moveLegendEntryDown: moveLegendEntryDownRaw,
+    sortLegendEntries: sortLegendEntriesRaw,
+    sortLegendEntriesByDefault: sortLegendEntriesByDefaultRaw,
+    resetLegendPosition: resetLegendPositionRaw,
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
-    updateLegendEntryStrokeColor,
-    updateLegendEntryStrokeWidth,
-    resetLegendEntryStroke,
-    resetAllStrokes
+    updateLegendEntryStrokeColor: updateLegendEntryStrokeColorRaw,
+    updateLegendEntryStrokeWidth: updateLegendEntryStrokeWidthRaw,
+    resetLegendEntryStroke: resetLegendEntryStrokeRaw,
+    resetAllStrokes: resetAllStrokesRaw
   } = legendActions;
 
   const {
@@ -227,42 +285,139 @@ export const createAppSetup = () => {
     getFeatureColor,
     canEditFeatureColor,
     getFeatureVisibility,
-    setFeatureVisibility,
-    updateClickedFeatureVisibility,
-    requestFeatureColorChange,
-    updateClickedFeatureColor,
-    handleColorScopeChoice,
-    handleLegendNameCommit,
-    handleLegendRenameChoice,
+    setFeatureVisibility: setFeatureVisibilityRaw,
+    updateClickedFeatureVisibility: updateClickedFeatureVisibilityRaw,
+    requestFeatureColorChange: requestFeatureColorChangeRaw,
+    updateClickedFeatureColor: updateClickedFeatureColorRaw,
+    handleColorScopeChoice: handleColorScopeChoiceRaw,
+    handleLegendNameCommit: handleLegendNameCommitRaw,
+    handleLegendRenameChoice: handleLegendRenameChoiceRaw,
     selectLegendNameOption,
-    renameLegendEntry,
-    handleResetColorChoice,
-    resetClickedFeatureFillColor,
-    updateClickedFeatureStroke,
-    resetClickedFeatureStroke,
-    applyStrokeToAllSiblings,
-    setFeatureColor,
+    renameLegendEntry: renameLegendEntryRaw,
+    handleResetColorChoice: handleResetColorChoiceRaw,
+    resetClickedFeatureFillColor: resetClickedFeatureFillColorRaw,
+    updateClickedFeatureStroke: updateClickedFeatureStrokeRaw,
+    resetClickedFeatureStroke: resetClickedFeatureStrokeRaw,
+    applyStrokeToAllSiblings: applyStrokeToAllSiblingsRaw,
+    setFeatureColor: setFeatureColorRaw,
     openFeatureEditorForFeature,
     getEditableLabelByFeatureId,
     syncLabelEditor,
     downloadLabelOverrideTable,
     loadLabelOverrideTable,
-    updateClickedFeatureLabelText,
-    handleLabelTextScopeChoice,
-    handleGlobalLabelModeChoice,
+    updateClickedFeatureLabelText: updateClickedFeatureLabelTextRaw,
+    handleLabelTextScopeChoice: handleLabelTextScopeChoiceRaw,
+    handleGlobalLabelModeChoice: handleGlobalLabelModeChoiceRaw,
     requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey,
-    resetAllLabelTextOverrides
+    resetAllLabelTextOverrides: resetAllLabelTextOverridesRaw
   } = featureActions;
 
   const { updatePalette, resetColors, cancelDefinitionUpdate } = resultsManager;
+  const { resetAllPositions: resetAllPositionsRaw, resetCanvasPadding: resetCanvasPaddingRaw } = legendLayout;
+
+  const addSpecificRuleWithHistory = wrapHistoryAction(addSpecificRule, 'specific-rule-add');
+  const applySpecificRulePresetWithHistory = wrapHistoryAction(
+    applySpecificRulePreset,
+    'specific-rule-preset'
+  );
+  const clearAllSpecificRulesWithHistory = wrapHistoryAction(
+    clearAllSpecificRules,
+    'specific-rule-clear'
+  );
+  const setFeatureVisibility = wrapHistoryAction(setFeatureVisibilityRaw, 'feature-visibility');
+  const updateClickedFeatureVisibility = wrapHistoryAction(
+    updateClickedFeatureVisibilityRaw,
+    'feature-visibility'
+  );
+  const requestFeatureColorChange = wrapHistoryAction(requestFeatureColorChangeRaw, 'feature-color');
+  const updateClickedFeatureColor = wrapHistoryAction(updateClickedFeatureColorRaw, 'feature-color');
+  const handleColorScopeChoice = wrapHistoryAction(handleColorScopeChoiceRaw, 'feature-color');
+  const handleLegendNameCommit = wrapHistoryAction(handleLegendNameCommitRaw, 'legend-name');
+  const handleLegendRenameChoice = wrapHistoryAction(handleLegendRenameChoiceRaw, 'legend-rename');
+  const renameLegendEntry = wrapHistoryAction(renameLegendEntryRaw, 'legend-rename');
+  const handleResetColorChoice = wrapHistoryAction(handleResetColorChoiceRaw, 'feature-color-reset');
+  const resetClickedFeatureFillColor = wrapHistoryAction(
+    resetClickedFeatureFillColorRaw,
+    'feature-color-reset'
+  );
+  const updateClickedFeatureStroke = wrapHistoryAction(updateClickedFeatureStrokeRaw, 'feature-stroke');
+  const resetClickedFeatureStroke = wrapHistoryAction(resetClickedFeatureStrokeRaw, 'feature-stroke-reset');
+  const applyStrokeToAllSiblings = wrapHistoryAction(applyStrokeToAllSiblingsRaw, 'feature-stroke');
+  const setFeatureColor = wrapHistoryAction(setFeatureColorRaw, 'feature-color');
+  const updateClickedFeatureLabelText = wrapHistoryAction(
+    updateClickedFeatureLabelTextRaw,
+    'label-edit',
+    { waitForLabelReflow: true }
+  );
+  const handleLabelTextScopeChoice = wrapHistoryAction(
+    handleLabelTextScopeChoiceRaw,
+    'label-edit',
+    { waitForLabelReflow: true }
+  );
+  const handleGlobalLabelModeChoice = wrapHistoryAction(
+    handleGlobalLabelModeChoiceRaw,
+    'label-visibility',
+    { waitForLabelReflow: true }
+  );
+  const resetAllLabelTextOverrides = wrapHistoryAction(
+    resetAllLabelTextOverridesRaw,
+    'label-reset',
+    { waitForLabelReflow: true }
+  );
+
+  const addNewLegendEntry = wrapHistoryAction(addNewLegendEntryRaw, 'legend-add');
+  const updateLegendEntryColor = wrapHistoryAction(updateLegendEntryColorRaw, 'legend-color');
+  const deleteLegendEntry = wrapHistoryAction(deleteLegendEntryRaw, 'legend-delete');
+  const moveLegendEntryUp = wrapHistoryAction(moveLegendEntryUpRaw, 'legend-reorder');
+  const moveLegendEntryDown = wrapHistoryAction(moveLegendEntryDownRaw, 'legend-reorder');
+  const sortLegendEntries = wrapHistoryAction(sortLegendEntriesRaw, 'legend-sort');
+  const sortLegendEntriesByDefault = wrapHistoryAction(sortLegendEntriesByDefaultRaw, 'legend-sort');
+  const resetLegendPosition = wrapHistoryAction(resetLegendPositionRaw, 'legend-reset');
+  const updateLegendEntryStrokeColor = wrapHistoryAction(
+    updateLegendEntryStrokeColorRaw,
+    'legend-stroke'
+  );
+  const updateLegendEntryStrokeWidth = wrapHistoryAction(
+    updateLegendEntryStrokeWidthRaw,
+    'legend-stroke'
+  );
+  const resetLegendEntryStroke = wrapHistoryAction(resetLegendEntryStrokeRaw, 'legend-stroke-reset');
+  const resetAllStrokes = wrapHistoryAction(resetAllStrokesRaw, 'legend-stroke-reset');
+  const resetAllPositions = wrapHistoryAction(resetAllPositionsRaw, 'position-reset');
+  const resetCanvasPadding = wrapHistoryAction(resetCanvasPaddingRaw, 'canvas-padding');
+
+  const setCanvasPadding = async (side, value) => {
+    if (!['top', 'right', 'bottom', 'left'].includes(side)) return;
+    const normalized = value === '' || value === null || value === undefined ? 0 : Number(value);
+    const nextValue = Number.isFinite(normalized) ? normalized : 0;
+    if (canvasPadding[side] === nextValue) return;
+    canvasPadding[side] = nextValue;
+    await captureHistoryCheckpoint('canvas-padding');
+  };
+
+  const undo = async () => historyManager.undo();
+  const redo = async () => historyManager.redo();
 
   const runAnalysis = async () => {
     cancelDefinitionUpdate();
-    return runGeneratedDiagramAnalysis();
+    historyManager.clearHistory();
+    const result = await runGeneratedDiagramAnalysis();
+    if (result?.status === 'ok') {
+      await historyManager.resetHistory('generate');
+    } else {
+      historyManager.clearHistory();
+    }
+    return result;
   };
 
-  const { resetAllPositions, resetCanvasPadding } = legendLayout;
+  const importSessionWithHistory = async (e) => {
+    historyManager.clearHistory();
+    await importSession(e);
+    if (results.value.length > 0) {
+      await historyManager.resetHistory('session-import');
+    }
+  };
 
   const isInteractiveTarget = (target) => {
     if (!target) return false;
@@ -712,9 +867,9 @@ export const createAppSetup = () => {
     specificRulePresets,
     selectedSpecificPreset,
     specificRulePresetLoading,
-    addSpecificRule,
-    applySpecificRulePreset,
-    clearAllSpecificRules,
+    addSpecificRule: addSpecificRuleWithHistory,
+    applySpecificRulePreset: applySpecificRulePresetWithHistory,
+    clearAllSpecificRules: clearAllSpecificRulesWithHistory,
     extractedFeatures,
     featureRecordIds,
     selectedFeatureRecordIdx,
@@ -739,6 +894,10 @@ export const createAppSetup = () => {
     getFeatureColor,
     getFeatureVisibility,
     setFeatureVisibility,
+    canUndo: historyManager.canUndo,
+    canRedo: historyManager.canRedo,
+    undo,
+    redo,
     requestFeatureColorChange,
     setFeatureColor,
     canEditFeatureColor,
@@ -799,6 +958,7 @@ export const createAppSetup = () => {
     resetAllStrokes,
     resetAllPositions,
     canvasPadding,
+    setCanvasPadding,
     showCanvasControls,
     resetCanvasPadding,
     downloadDpi,
@@ -810,7 +970,7 @@ export const createAppSetup = () => {
     saveSessionWithTitle,
     editSessionTitle,
     importConfig,
-    importSession,
+    importSession: importSessionWithHistory,
     manualPriorityRules,
     newPriorityRule,
     addPriorityRule

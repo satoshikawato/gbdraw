@@ -38,6 +38,7 @@ export const setupWatchers = ({
     skipCaptureBaseConfig,
     skipPositionReapply,
     skipExtractOnSvgChange,
+    historyRestoring,
     diagramElementBaseTransforms,
     svgContainer,
     results,
@@ -221,6 +222,7 @@ export const setupWatchers = ({
   watch(
     () => [...manualSpecificRules],
     async (newRules, oldRules) => {
+      if (historyRestoring.value) return;
       applySpecificRulesToSvg();
       if (extractedFeatures.value.length > 0) {
         refreshFeatureOverrides(extractedFeatures.value);

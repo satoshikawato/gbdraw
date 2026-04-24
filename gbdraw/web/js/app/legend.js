@@ -9,12 +9,16 @@ import {
   isCurrentLegendHorizontal
 } from './legend/utils.js';
 
-export const createLegendManager = ({ state, getPyodide, debugLog }) => {
+export const createLegendManager = ({ state, getPyodide, debugLog, onLegendDragCommitted = null }) => {
   const layoutActions = createLegendLayoutActions({ state });
   const entryActions = createLegendEntryActions({ state, getPyodide, layoutActions });
   const sortActions = createLegendSortActions({ state, extractLegendEntries: entryActions.extractLegendEntries });
   const strokeActions = createLegendStrokeActions({ state, debugLog });
-  const dragActions = createLegendDragActions({ state, extractLegendEntries: entryActions.extractLegendEntries });
+  const dragActions = createLegendDragActions({
+    state,
+    extractLegendEntries: entryActions.extractLegendEntries,
+    onLegendDragCommitted
+  });
 
   return {
     ...entryActions,
