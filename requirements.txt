@@ -3,3 +3,4 @@ numpy>=1.23
 svgwrite>=1.4.3
 bcbio-gff>=0.7.1
 fonttools
+build>=1.2
