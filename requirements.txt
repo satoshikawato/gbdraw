@@ -3,4 +3,6 @@ numpy>=1.23
 svgwrite>=1.4.3
 bcbio-gff>=0.7.1
 fonttools
+setuptools>=61.0
+wheel
 build>=1.2
