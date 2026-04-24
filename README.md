@@ -41,7 +41,7 @@ The hosted web app runs entirely in your browser:
 
 [https://gbdraw.app/](https://gbdraw.app/)
 
-Your data stays on your machine, and no build step or Streamlit install is required.
+Uploaded genomic data stays on your machine. The hosted site also uses Cloudflare Web Analytics for aggregate page and performance metrics.
 
 ## Local Installation
 
@@ -81,7 +81,6 @@ https://github.com/satoshikawato/gbdraw/issues
 If you use `gbdraw` in your research, please cite the preprint:
 
 ```text
-Kawato, S. (2026). gbdraw: a genome diagram generator for microbes and organelles. bioRxiv. https://doi.org/10.64898/2026.04.07.716863
+Kawato, S. (2026). gbdraw: a genome diagram generator for microbes and organelles. bioRxiv. [https://doi.org/10.64898/2026.04.07.716863](https://doi.org/10.64898/2026.04.07.716863)
 ```
 
-DOI: [https://doi.org/10.64898/2026.04.07.716863](https://doi.org/10.64898/2026.04.07.716863)

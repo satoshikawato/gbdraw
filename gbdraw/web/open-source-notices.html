@@ -267,7 +267,7 @@
                 <code>gbdraw gui</code>.
             </p>
             <p>
-                The hosted application is distributed as a static site on GitHub Pages behind the
+                The hosted application is distributed as a static site on Cloudflare Pages behind the
                 <code>gbdraw.app</code> custom domain. Pyodide and the browser-side assets listed below are vendored
                 and served from the same origin, so the app does not need to fetch those runtime assets from third-party
                 CDNs.
@@ -284,7 +284,7 @@
                 <h2>Distribution Notes</h2>
                 <ul>
                     <li>The web UI is a build-less single-page app loaded directly from <code>index.html</code>.</li>
-                    <li>The GitHub Pages deployment copies the contents of <code>gbdraw/web/</code> as static files.</li>
+                    <li>The Cloudflare Pages deployment is generated from <code>gbdraw/web/</code> as static files.</li>
                     <li>Pyodide, jsPDF, DOMPurify, browser_wasi_shim, icons, and font assets are vendored into the repository.</li>
                     <li>This notices page is included in the shipped wheel so the same attribution is available from <code>gbdraw gui</code>.</li>
                 </ul>

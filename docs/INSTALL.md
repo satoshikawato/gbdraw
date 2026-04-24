@@ -18,13 +18,15 @@ If you want the fastest path to a figure, open:
 
 [https://gbdraw.app/](https://gbdraw.app/)
 
-The hosted app is served as a static site on GitHub Pages behind the `gbdraw.app`
-custom domain. The same `gbdraw/web/` directory is also used by `gbdraw gui` for
-local browser launches.
+The hosted app is served as a static site on Cloudflare Pages behind the `gbdraw.app`
+custom domain.
 
 Pyodide and the main browser-side assets used by the hosted app are vendored and
 self-hosted from the repository, so the web UI does not need to fetch those runtime
 dependencies from third-party CDNs.
+
+Uploaded genomic data is processed locally in the browser. The hosted deployment also
+uses Cloudflare Web Analytics for aggregate page-visit and performance metrics.
 
 The same UI can also be launched locally after installation with:
 

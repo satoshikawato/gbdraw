@@ -30,6 +30,16 @@ def _load_verify_module():
     return module
 
 
+def _load_prepare_cloudflare_pages_module():
+    module_path = REPO_ROOT / "tools" / "prepare_cloudflare_pages.py"
+    spec = importlib.util.spec_from_file_location("prepare_cloudflare_pages", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load Cloudflare packaging module from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _can_bind_loopback() -> bool:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -80,6 +90,36 @@ def test_index_includes_preprint_citation() -> None:
     assert "How to cite" in index_html
     assert PREPRINT_TITLE in index_html
     assert PREPRINT_DOI in index_html
+
+
+def test_local_index_keeps_cloudflare_analytics_as_deploy_only() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    assert "static.cloudflareinsights.com" not in index_html
+    assert "CLOUDFLARE_WEB_ANALYTICS_SCRIPT" in index_html
+    assert "CLOUDFLARE_WEB_ANALYTICS_NOTICE" in index_html
+
+
+def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) -> None:
+    ensure_prepared_browser_wheel()
+    cloudflare_module = _load_prepare_cloudflare_pages_module()
+    output_root = tmp_path / "cloudflare-pages"
+    bundle_path = cloudflare_module.build_cloudflare_pages_bundle(output_root=output_root)
+
+    index_html = (bundle_path / "index.html").read_text(encoding="utf-8")
+    assert "https://static.cloudflareinsights.com/beacon.min.js" in index_html
+    assert 'data-cf-beacon=\'{"token": "e4dc2e66d09549868f5a5ac7d7a6e633"}\'' in index_html
+    assert "Hosted Site Analytics" in index_html
+    assert "Uploaded genome files are still processed locally in your browser" in index_html
+    assert "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com;" in index_html
+    assert "connect-src 'self' https://cloudflareinsights.com;" in index_html
+    assert "CLOUDFLARE_WEB_ANALYTICS_SCRIPT" not in index_html
+    assert "CLOUDFLARE_WEB_ANALYTICS_NOTICE" not in index_html
+
+
+def test_wrangler_uses_cloudflare_bundle_directory() -> None:
+    wrangler_toml = (REPO_ROOT / "wrangler.toml").read_text(encoding="utf-8")
+    assert 'directory = "./dist/cloudflare-pages"' in wrangler_toml
+    assert 'not_found_handling = "single-page-application"' in wrangler_toml
 
 
 def test_project_docs_and_citation_metadata_include_preprint_doi() -> None:

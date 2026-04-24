@@ -2,5 +2,5 @@ name = "gbdraw-web"
 compatibility_date = "2026-04-24"
 
 [assets]
-directory = "./gbdraw/web"
+directory = "./dist/cloudflare-pages"
 not_found_handling = "single-page-application"
