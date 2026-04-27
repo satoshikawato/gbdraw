@@ -40,8 +40,6 @@ export const setupWatchers = ({
     skipExtractOnSvgChange,
     diagramElementBaseTransforms,
     svgContainer,
-    results,
-    selectedResultIndex,
     diagramElements,
     linearBaseConfig,
     circularLegendPosition,
@@ -208,6 +206,23 @@ export const setupWatchers = ({
     globalLabelModeDialog.show ||
     hasLabelOverrides();
 
+  const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
+  const formatDuration = (ms) => `${ms.toFixed(1)}ms`;
+  const measureTiming = (entries, label, fn) => {
+    const startedAt = getNow();
+    const result = fn();
+    entries.push({ label, ms: getNow() - startedAt });
+    return result;
+  };
+  const logPostGbdrawTimings = (entries) => {
+    if (!entries || entries.length === 0) return;
+    console.groupCollapsed('post-gbdraw timing');
+    entries.forEach(({ label, ms, details }) => {
+      console.info(`${label}: ${formatDuration(ms)}${details ? ` (${details})` : ''}`);
+    });
+    console.groupEnd();
+  };
+
   const scheduleCircularDefinitionUpdate = () => {
     if (mode.value !== 'circular') return;
     if (generatedMode.value !== mode.value) return;
@@ -342,8 +357,10 @@ export const setupWatchers = ({
     }
 
     nextTick(() => {
+      const timingEntries = [];
+      const svg = svgContainer.value?.querySelector('svg') || null;
+
       if (svgContainer.value) {
-        const svg = svgContainer.value.querySelector('svg');
         if (svg) {
           const tickEl = svg.getElementById('tick');
           if (tickEl) {
@@ -352,19 +369,35 @@ export const setupWatchers = ({
         }
       }
 
-      if (!skipExtractOnSvgChange.value) {
-        extractLegendEntries();
+      if (svg && !isIncrementalEdit) {
+        const normalizedSvgChanged = measureTiming(timingEntries, 'watch(svgContent) normalize unique SVG ids', () => {
+          const skewChanged = ensureUniqueSkewClipPathIds(svg);
+          const gradientChanged = ensureUniquePairwiseGradientIds(svg);
+          return Boolean(skewChanged || gradientChanged);
+        });
+
+        if (normalizedSvgChanged) {
+          timingEntries.push({
+            label: 'watch(svgContent) persist normalized SVG',
+            ms: 0,
+            details: 'live DOM only'
+          });
+        }
       }
-      setupLegendDrag();
-      setupDiagramDrag(isIncrementalEdit);
-      attachSvgFeatureHandlers();
+
+      if (!skipExtractOnSvgChange.value) {
+        measureTiming(timingEntries, 'watch(svgContent) extractLegendEntries', extractLegendEntries);
+      }
+      measureTiming(timingEntries, 'watch(svgContent) setupLegendDrag', setupLegendDrag);
+      measureTiming(timingEntries, 'watch(svgContent) setupDiagramDrag', () => setupDiagramDrag(isIncrementalEdit));
+      measureTiming(timingEntries, 'watch(svgContent) attachSvgFeatureHandlers', attachSvgFeatureHandlers);
       if (shouldSyncLabelEditor()) {
-        syncLabelEditor();
+        measureTiming(timingEntries, 'watch(svgContent) syncLabelEditor', syncLabelEditor);
       }
 
       if (!isIncrementalEdit) {
-        captureBaseConfig();
-        captureOriginalStroke();
+        measureTiming(timingEntries, 'watch(svgContent) captureBaseConfig', captureBaseConfig);
+        measureTiming(timingEntries, 'watch(svgContent) captureOriginalStroke', captureOriginalStroke);
         debugLog('Full base config capture (fresh generation)');
 
         canvasPadding.top = 0;
@@ -372,21 +405,7 @@ export const setupWatchers = ({
         canvasPadding.bottom = 0;
         canvasPadding.left = 0;
 
-        reapplyStrokeOverrides();
-
-        if (svgContainer.value) {
-          const svgEl = svgContainer.value.querySelector('svg');
-          if (svgEl) {
-            ensureUniqueSkewClipPathIds(svgEl);
-            ensureUniquePairwiseGradientIds(svgEl);
-            skipCaptureBaseConfig.value = true;
-            const idx = selectedResultIndex.value;
-            if (idx >= 0 && results.value.length > idx) {
-              const serializer = new XMLSerializer();
-              results.value[idx] = { ...results.value[idx], content: serializer.serializeToString(svgEl) };
-            }
-          }
-        }
+        measureTiming(timingEntries, 'watch(svgContent) reapplyStrokeOverrides', reapplyStrokeOverrides);
       } else if (savedBaseTransformsById && savedBaseTransformsById.size > 0) {
         debugLog('Incremental edit - remapping base transforms');
 
@@ -433,6 +452,17 @@ export const setupWatchers = ({
       } else {
         debugLog('Incremental edit but no base transforms to remap');
       }
+
+      logPostGbdrawTimings(timingEntries);
+    });
+  });
+
+  watch(extractedFeatures, () => {
+    if (!svgContent.value) return;
+    nextTick(() => {
+      const timingEntries = [];
+      measureTiming(timingEntries, 'watch(extractedFeatures) refresh delegated feature handlers', attachSvgFeatureHandlers);
+      logPostGbdrawTimings(timingEntries);
     });
   });
 

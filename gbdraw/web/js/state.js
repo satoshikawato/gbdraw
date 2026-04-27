@@ -1,5 +1,7 @@
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
+const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
+const formatTimingMs = (ms) => `${ms.toFixed(1)}ms`;
 
 // System State
 const pyodideReady = ref(false);
@@ -17,7 +19,8 @@ const svgContent = computed(() => {
     const rawSvg = results.value[selectedResultIndex.value].content;
 
     // Sanitize the SVG output from svgwrite to ensure safety and prevent DOMXSS
-    return DOMPurify.sanitize(rawSvg, {
+    const sanitizeStartedAt = getNow();
+    const sanitizedSvg = DOMPurify.sanitize(rawSvg, {
       USE_PROFILES: { svg: true },
       // Only allow main tags used by svgwrite
       ADD_TAGS: [
@@ -96,6 +99,10 @@ const svgContent = computed(() => {
       ],
       FORBID_ATTR: ['name', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onerror']
     });
+    console.info(
+      `post-gbdraw timing: DOMPurify.sanitize SVG: ${formatTimingMs(getNow() - sanitizeStartedAt)} (${String(rawSvg || '').length} chars)`
+    );
+    return sanitizedSvg;
   }
   return null;
 });
@@ -398,6 +405,18 @@ const downloadDpi = ref(300);
 
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
+const featuresBySvgId = computed(() => {
+  const indexed = new Map();
+  const features = Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [];
+  for (const feat of features) {
+    const svgId = String(feat?.svg_id || '').trim();
+    if (!svgId || indexed.has(svgId)) continue;
+    indexed.set(svgId, feat);
+  }
+  return indexed;
+});
+const featureExtractionPending = ref(false);
+const featureExtractionError = ref(null);
 const featureRecordIds = ref([]); // Record IDs for multi-record files
 const selectedFeatureRecordIdx = ref(0); // Currently selected record index
 const showFeaturePanel = ref(false);
@@ -754,6 +773,9 @@ export const state = {
   specificRulePresetLoading,
   downloadDpi,
   extractedFeatures,
+  featuresBySvgId,
+  featureExtractionPending,
+  featureExtractionError,
   featureRecordIds,
   selectedFeatureRecordIdx,
   showFeaturePanel,
