@@ -9,9 +9,11 @@ from svgwrite import Drawing
 import gbdraw.cli_utils.common as cli_common_module
 import gbdraw.diagrams.circular.assemble as circular_assemble_module
 import gbdraw.diagrams.linear.assemble as linear_assemble_module
+import gbdraw.diagrams.linear.precalc as linear_precalc_module
 import gbdraw.features.factory as factory_module
 import gbdraw.render.groups.linear.gc_content as linear_gc_content_module
 import gbdraw.render.groups.linear.gc_skew as linear_gc_skew_module
+import gbdraw.render.groups.linear.seq_record as linear_seq_record_module
 import gbdraw.render.export as export_module
 from gbdraw.analysis.skew import skew_df as real_skew_df
 from gbdraw.api.diagram import (
@@ -124,6 +126,39 @@ def test_linear_no_labels_skips_label_text_lookup(
     )
 
     assert call_count == 0
+
+
+@pytest.mark.linear
+def test_linear_feature_dict_is_built_once_per_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [_make_record("rec1"), _make_record("rec2")]
+    call_count = 0
+    real_create_feature_dict = linear_precalc_module.create_feature_dict
+
+    def counting_create_feature_dict(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return real_create_feature_dict(*args, **kwargs)
+
+    def unexpected_create_feature_dict(*_args, **_kwargs):
+        raise AssertionError("Linear assembly should reuse precomputed feature dictionaries.")
+
+    monkeypatch.setattr(linear_precalc_module, "create_feature_dict", counting_create_feature_dict)
+    monkeypatch.setattr(linear_assemble_module, "create_feature_dict", unexpected_create_feature_dict)
+    monkeypatch.setattr(linear_seq_record_module, "create_feature_dict", unexpected_create_feature_dict)
+
+    assemble_linear_diagram_from_records(
+        records,
+        legend="none",
+        config_overrides={
+            "show_labels": "all",
+            "show_gc": False,
+            "show_skew": False,
+        },
+    )
+
+    assert call_count == len(records)
 
 
 @pytest.mark.circular

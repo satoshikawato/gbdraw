@@ -15,6 +15,7 @@ from ...drawers.linear.features import FeatureDrawer
 from ...drawers.linear.labels import LabelDrawer
 from ....labels.placement import prepare_label_list_linear
 from ....features.factory import create_feature_dict
+from ....features.objects import FeatureObject
 from ....features.colors import preprocess_color_tables
 from ....labels.filtering import preprocess_label_filtering
 from ....configurators import FeatureDrawingConfigurator
@@ -24,6 +25,9 @@ from .length_bar import (
     auto_linear_tick_interval,
     format_linear_tick_label,
 )
+
+
+FeatureDict = dict[str, FeatureObject]
 
 
 class SeqRecordGroup:
@@ -37,6 +41,7 @@ class SeqRecordGroup:
         config_dict: dict,
         precalculated_labels: Optional[list] = None,
         cfg: GbdrawConfig | None = None,
+        precomputed_feature_dict: FeatureDict | None = None,
     ) -> None:
         self.gb_record = gb_record
         self.canvas_config = canvas_config
@@ -44,6 +49,7 @@ class SeqRecordGroup:
         self.feature_config = feature_config
         self.config_dict = config_dict
         self.precalculated_labels = precalculated_labels
+        self.precomputed_feature_dict = precomputed_feature_dict
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
 
@@ -302,19 +308,22 @@ class SeqRecordGroup:
             if compute_label_text
             else {}
         )
-        color_table, default_colors = preprocess_color_tables(color_table, default_colors)
-        feature_dict, _ = create_feature_dict(
-            self.gb_record,
-            color_table,
-            selected_features_set,
-            default_colors,
-            separate_strands,
-            resolve_overlaps,
-            label_filtering,
-            directional_feature_types=self.feature_config.directional_feature_types,
-            feature_visibility_rules=self.feature_config.feature_visibility_rules,
-            compute_label_text=compute_label_text,
-        )
+        if self.precomputed_feature_dict is not None:
+            feature_dict = self.precomputed_feature_dict
+        else:
+            color_table, default_colors = preprocess_color_tables(color_table, default_colors)
+            feature_dict, _ = create_feature_dict(
+                self.gb_record,
+                color_table,
+                selected_features_set,
+                default_colors,
+                separate_strands,
+                resolve_overlaps,
+                label_filtering,
+                directional_feature_types=self.feature_config.directional_feature_types,
+                feature_visibility_rules=self.feature_config.feature_visibility_rules,
+                compute_label_text=compute_label_text,
+            )
         label_list = []
         if self.show_labels:
             if self.precalculated_labels is not None:

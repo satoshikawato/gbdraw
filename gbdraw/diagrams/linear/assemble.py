@@ -45,7 +45,12 @@ from .builders import (
     add_record_definition_group,
     add_record_group,
 )
-from .precalc import _precalculate_definition_metrics, _precalculate_label_dimensions
+from .precalc import (
+    FeatureDict,
+    _precalculate_definition_metrics,
+    _precalculate_feature_dicts,
+    _precalculate_label_dimensions,
+)
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
 
@@ -92,6 +97,7 @@ def _precalculate_feature_track_heights(
     feature_config: FeatureDrawingConfigurator,
     canvas_config: LinearCanvasConfigurator,
     cfg: GbdrawConfig,
+    precomputed_feature_dicts: list[FeatureDict] | None = None,
 ) -> tuple[dict[str, float], dict[str, float], dict[str, float], dict[str, float], dict[str, float]]:
     """
     Pre-calculates the height required for feature tracks for each record.
@@ -117,23 +123,27 @@ def _precalculate_feature_track_heights(
     )
     axis_ruler_above, axis_ruler_below = _axis_ruler_extents(canvas_config, cfg)
     
-    color_table, default_colors = preprocess_color_tables(
-        feature_config.color_table, feature_config.default_colors
-    )
-    
-    for record in records:
-        feature_dict, _ = create_feature_dict(
-            record,
-            color_table,
-            feature_config.selected_features_set,
-            default_colors,
-            canvas_config.strandedness,
-            canvas_config.resolve_overlaps,
-            {},
-            directional_feature_types=feature_config.directional_feature_types,
-            feature_visibility_rules=feature_config.feature_visibility_rules,
-            compute_label_text=False,
+    if precomputed_feature_dicts is None:
+        color_table, default_colors = preprocess_color_tables(
+            feature_config.color_table, feature_config.default_colors
         )
+    
+    for index, record in enumerate(records):
+        if precomputed_feature_dicts is not None:
+            feature_dict = precomputed_feature_dicts[index]
+        else:
+            feature_dict, _ = create_feature_dict(
+                record,
+                color_table,
+                feature_config.selected_features_set,
+                default_colors,
+                canvas_config.strandedness,
+                canvas_config.resolve_overlaps,
+                {},
+                directional_feature_types=feature_config.directional_feature_types,
+                feature_visibility_rules=feature_config.feature_visibility_rules,
+                compute_label_text=False,
+            )
         min_top_y = 0.0
         max_bottom_y = 0.0
         min_top_y_undisplaced = 0.0
@@ -315,8 +325,20 @@ def assemble_linear_diagram(
         elif normalized_plot_title_position == "bottom":
             plot_title_bottom_reserve = reserve
 
+    record_feature_dicts = _precalculate_feature_dicts(
+        records,
+        feature_config,
+        canvas_config,
+        config_dict,
+        cfg=cfg,
+    )
     required_label_height, all_labels, record_label_heights_above = _precalculate_label_dimensions(
-        records, feature_config, canvas_config, config_dict, cfg=cfg
+        records,
+        feature_config,
+        canvas_config,
+        config_dict,
+        cfg=cfg,
+        precomputed_feature_dicts=record_feature_dicts,
     )
     record_label_heights_below = _precalculate_label_heights_below(all_labels)
     max_def_width, _definition_heights, definition_half_heights = _precalculate_definition_metrics(
@@ -333,7 +355,13 @@ def assemble_linear_diagram(
         record_top_guard_above,
         record_top_guard_undisplaced,
         record_top_guard_middle_undisplaced,
-    ) = _precalculate_feature_track_heights(records, feature_config, canvas_config, cfg)
+    ) = _precalculate_feature_track_heights(
+        records,
+        feature_config,
+        canvas_config,
+        cfg,
+        precomputed_feature_dicts=record_feature_dicts,
+    )
     
     if required_label_height > 0:
         if canvas_config.vertical_offset < required_label_height:
@@ -626,6 +654,7 @@ def assemble_linear_diagram(
             config_dict,
             precalculated_labels=labels_for_record,
             cfg=record_cfg,
+            precomputed_feature_dict=record_feature_dicts[count - 1],
         )
         add_record_definition_group(
             canvas,

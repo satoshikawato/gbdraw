@@ -32,6 +32,7 @@ from .positioning import (
     position_record_definition_group,
     position_record_group,
 )
+from .precalc import FeatureDict
 
 
 def add_record_group(
@@ -44,6 +45,7 @@ def add_record_group(
     config_dict: dict,
     precalculated_labels: Optional[list],
     cfg: GbdrawConfig | None = None,
+    precomputed_feature_dict: FeatureDict | None = None,
 ) -> Drawing:
     """Adds a record group to the linear canvas."""
     record_group: Group = SeqRecordGroup(
@@ -53,6 +55,7 @@ def add_record_group(
         config_dict=config_dict,
         precalculated_labels=precalculated_labels,
         cfg=cfg,
+        precomputed_feature_dict=precomputed_feature_dict,
     ).get_group()
     position_record_group(record_group, offset_y, offset_x, canvas_config)
     canvas.add(record_group)
