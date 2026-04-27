@@ -11,6 +11,7 @@ export const createFeatureSvgActions = ({
     results,
     selectedResultIndex,
     extractedFeatures,
+    featuresBySvgId,
     featureColorOverrides,
     featureVisibilityOverrides,
     svgContainer,
@@ -18,6 +19,11 @@ export const createFeatureSvgActions = ({
     clickedFeaturePos,
     skipCaptureBaseConfig
   } = state;
+  const FEATURE_SELECTOR = 'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
+  const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
+  const formatDuration = (ms) => `${ms.toFixed(1)}ms`;
+  let delegatedFeatureHandlers = null;
+
   const normalizeVisibilityMode = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
     return normalized === 'on' || normalized === 'off' ? normalized : 'default';
@@ -46,6 +52,31 @@ export const createFeatureSvgActions = ({
   const getFeatureElements = (svg, svgId) => {
     if (!svg || !svgId) return [];
     return Array.from(svg.querySelectorAll(`#${CSS.escape(svgId)}`));
+  };
+
+  const buildFeatureLookup = () => {
+    if (featuresBySvgId?.value instanceof Map) return featuresBySvgId.value;
+    const indexed = new Map();
+    const features = Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [];
+    for (const feat of features) {
+      const svgId = String(feat?.svg_id || '').trim();
+      if (!svgId || indexed.has(svgId)) continue;
+      indexed.set(svgId, feat);
+    }
+    return indexed;
+  };
+
+  const getFeatureTarget = (target, svg) => {
+    if (!target || typeof target.closest !== 'function') return null;
+    const featureEl = target.closest(FEATURE_SELECTOR);
+    if (!featureEl || !svg.contains(featureEl)) return null;
+    return featureEl;
+  };
+
+  const cleanupDelegatedFeatureHandlers = () => {
+    if (!delegatedFeatureHandlers?.cleanup) return;
+    delegatedFeatureHandlers.cleanup();
+    delegatedFeatureHandlers = null;
   };
 
   const buildClickedFeaturePayload = (feat, featureElement = null) => {
@@ -178,45 +209,97 @@ export const createFeatureSvgActions = ({
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
-    const featurePaths = svg.querySelectorAll('path[id^="f"], polygon[id^="f"], rect[id^="f"]');
+    if (delegatedFeatureHandlers && delegatedFeatureHandlers.svg !== svg) {
+      cleanupDelegatedFeatureHandlers();
+    }
 
-    const pathsByIdMap = {};
+    const queryStartedAt = getNow();
+    const featurePaths = Array.from(svg.querySelectorAll(FEATURE_SELECTOR));
+    const queryDuration = getNow() - queryStartedAt;
+
+    const indexStartedAt = getNow();
+    const pathsByIdMap = new Map();
     featurePaths.forEach((path) => {
       const id = path.getAttribute('id');
       if (!id) return;
-      if (!pathsByIdMap[id]) pathsByIdMap[id] = [];
-      pathsByIdMap[id].push(path);
-    });
-
-    const highlightFeature = (svgId, highlight) => {
-      const paths = pathsByIdMap[svgId] || [];
-      paths.forEach((p) => {
-        p.style.opacity = highlight ? '0.7' : '1';
-        p.style.filter = highlight ? 'brightness(1.2)' : 'none';
-      });
-    };
-
-    featurePaths.forEach((path) => {
-      const svgId = path.getAttribute('id');
-      if (!svgId) return;
+      if (!pathsByIdMap.has(id)) pathsByIdMap.set(id, []);
+      pathsByIdMap.get(id).push(path);
       path.style.cursor = 'pointer';
+    });
+    const featureLookup = buildFeatureLookup();
+    const indexDuration = getNow() - indexStartedAt;
 
-      path.addEventListener('mouseenter', () => highlightFeature(svgId, true));
-      path.addEventListener('mouseleave', () => highlightFeature(svgId, false));
+    if (!delegatedFeatureHandlers) {
+      const handlerState = {
+        svg,
+        pathsByIdMap,
+        featureLookup,
+        activeHoverSvgId: null,
+        cleanup: null
+      };
 
-      path.addEventListener('click', (e) => {
+      const highlightFeature = (svgId, highlight) => {
+        const paths = handlerState.pathsByIdMap.get(svgId) || [];
+        paths.forEach((p) => {
+          p.style.opacity = highlight ? '0.7' : '1';
+          p.style.filter = highlight ? 'brightness(1.2)' : 'none';
+        });
+      };
+
+      const handleMouseOver = (e) => {
+        const featureEl = getFeatureTarget(e.target, svg);
+        const svgId = featureEl?.getAttribute('id');
+        if (!svgId || handlerState.activeHoverSvgId === svgId) return;
+        if (handlerState.activeHoverSvgId) {
+          highlightFeature(handlerState.activeHoverSvgId, false);
+        }
+        handlerState.activeHoverSvgId = svgId;
+        highlightFeature(svgId, true);
+      };
+
+      const handleMouseOut = (e) => {
+        const featureEl = getFeatureTarget(e.target, svg);
+        const svgId = featureEl?.getAttribute('id');
+        if (!svgId || handlerState.activeHoverSvgId !== svgId) return;
+        const relatedFeature = getFeatureTarget(e.relatedTarget, svg);
+        if (relatedFeature?.getAttribute('id') === svgId) return;
+        highlightFeature(svgId, false);
+        handlerState.activeHoverSvgId = null;
+      };
+
+      const handleClick = (e) => {
+        const featureEl = getFeatureTarget(e.target, svg);
+        const svgId = featureEl?.getAttribute('id');
+        if (!svgId) return;
         e.stopPropagation();
-        const feat = extractedFeatures.value.find((f) => f.svg_id === svgId);
+        const feat = handlerState.featureLookup.get(svgId);
         if (feat) {
           openFeatureEditorForFeature(feat, e);
         } else {
           console.log(`No feature found for svg_id: ${svgId}`);
         }
-      });
-    });
+      };
 
+      svg.addEventListener('mouseover', handleMouseOver);
+      svg.addEventListener('mouseout', handleMouseOut);
+      svg.addEventListener('click', handleClick);
+      handlerState.cleanup = () => {
+        svg.removeEventListener('mouseover', handleMouseOver);
+        svg.removeEventListener('mouseout', handleMouseOut);
+        svg.removeEventListener('click', handleClick);
+      };
+      delegatedFeatureHandlers = handlerState;
+    } else {
+      delegatedFeatureHandlers.pathsByIdMap = pathsByIdMap;
+      delegatedFeatureHandlers.featureLookup = featureLookup;
+    }
+
+    console.groupCollapsed('post-gbdraw timing');
+    console.info(`feature handler querySelectorAll: ${formatDuration(queryDuration)}`);
+    console.info(`feature handler index/delegation setup: ${formatDuration(indexDuration)}`);
+    console.groupEnd();
     console.log(
-      `Attached handlers to ${featurePaths.length} feature paths (${Object.keys(pathsByIdMap).length} unique features)`
+      `Delegated feature handlers for ${featurePaths.length} feature paths (${pathsByIdMap.size} unique features)`
     );
   };
 

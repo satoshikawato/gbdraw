@@ -5,6 +5,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
   const {
     svgContent,
     extractedFeatures,
+    featuresBySvgId,
     appliedPaletteColors,
     manualSpecificRules,
     featureColorOverrides,
@@ -38,10 +39,11 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
   };
 
   const ensureUniqueSkewClipPathIds = (svg) => {
-    if (!svg) return;
+    if (!svg) return false;
 
     const skewGroups = getGroupsByBaseIds(svg, ['skew', 'gc_skew']);
-    if (skewGroups.length === 0) return;
+    if (skewGroups.length === 0) return false;
+    let changed = false;
 
     const idCounts = new Map();
     svg.querySelectorAll('[id]').forEach((el) => {
@@ -79,31 +81,36 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
 
         clipPath.setAttribute('id', newId);
         usedIds.add(newId);
+        changed = true;
 
         const clipPathUrl = `url(#${oldId})`;
         const newClipPathUrl = `url(#${newId})`;
         skewGroup.querySelectorAll('[clip-path], [clipPath]').forEach((element) => {
           if (element.getAttribute('clip-path') === clipPathUrl) {
             element.setAttribute('clip-path', newClipPathUrl);
+            changed = true;
           }
           if (element.getAttribute('clipPath') === clipPathUrl) {
             element.setAttribute('clipPath', newClipPathUrl);
+            changed = true;
           }
         });
       });
     });
+    return changed;
   };
 
   const ensureUniquePairwiseGradientIds = (svg) => {
-    if (!svg) return;
+    if (!svg) return false;
 
     const legendGroup = svg.getElementById('legend');
-    if (!legendGroup) return;
+    if (!legendGroup) return false;
 
     const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
     const verticalLegend = legendGroup.querySelector('#legend_vertical');
 
-    if (!horizontalLegend || !verticalLegend) return;
+    if (!horizontalLegend || !verticalLegend) return false;
+    let changed = false;
 
     const fixGradientId = (legend, suffix) => {
       const pairwiseLegend = legend.querySelector('#pairwise_legend');
@@ -118,18 +125,21 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       const baseId = currentId.replace(/_[hv]$/, '');
       const newId = `${baseId}_${suffix}`;
       gradient.setAttribute('id', newId);
+      changed = true;
 
       const paths = pairwiseLegend.querySelectorAll('path');
       paths.forEach((path) => {
         const fill = path.getAttribute('fill');
         if (fill && fill.includes('url(#')) {
           path.setAttribute('fill', `url(#${newId})`);
+          changed = true;
         }
       });
     };
 
     fixGradientId(horizontalLegend, 'h');
     fixGradientId(verticalLegend, 'v');
+    return changed;
   };
 
   const applyPaletteToSvg = () => {
@@ -144,11 +154,12 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
 
     const colors = appliedPaletteColors.value;
     const featurePaths = svg.querySelectorAll('path[id^="f"]');
+    const featureLookup = featuresBySvgId?.value || new Map();
     let updatedCount = 0;
 
     featurePaths.forEach((path) => {
       const svgId = path.getAttribute('id');
-      const feat = extractedFeatures.value.find((f) => f.svg_id === svgId);
+      const feat = featureLookup.get(svgId);
       if (!feat) return;
 
       const paletteColor = colors[feat.type];

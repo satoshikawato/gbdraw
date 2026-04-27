@@ -1985,12 +1985,13 @@
                 </div>
 
                 <!-- Feature Editor Toggle Button (floating) -->
-                <button v-if="extractedFeatures.length > 0"
-                        @click="showFeaturePanel = !showFeaturePanel"
-                        class="absolute right-0 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-700 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
+                <button v-if="extractedFeatures.length > 0 || featureExtractionPending"
+                        @click="featureExtractionPending && extractedFeatures.length === 0 ? null : (showFeaturePanel = !showFeaturePanel)"
+                        :disabled="featureExtractionPending && extractedFeatures.length === 0"
+                        class="absolute right-0 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-wait text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
                         :class="{ 'translate-x-0': !showFeaturePanel, '-translate-x-80': showFeaturePanel }"
-                        :title="showFeaturePanel ? 'Close feature editor' : 'Open feature editor'">
-                    <i class="ph ph-paint-brush text-lg"></i>
+                        :title="featureExtractionPending && extractedFeatures.length === 0 ? 'Loading feature editor data' : (showFeaturePanel ? 'Close feature editor' : 'Open feature editor')">
+                    <i :class="featureExtractionPending && extractedFeatures.length === 0 ? 'ph ph-circle-notch animate-spin text-lg' : 'ph ph-paint-brush text-lg'"></i>
                 </button>
 
                 <!-- Feature Editor Drawer (slides from right) -->

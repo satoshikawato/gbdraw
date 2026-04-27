@@ -31,6 +31,8 @@ const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now
 const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
 const fastaExtractionCache = new WeakMap();
 const FASTA_EXTRACTION_CACHE_LIMIT = 12;
+const featureExtractionCache = new WeakMap();
+const FEATURE_EXTRACTION_CACHE_LIMIT = 16;
 
 const makeSafeFilename = (name) => {
   const cleaned = String(name || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
@@ -165,6 +167,53 @@ const setCachedFastaExtraction = (file, key, value) => {
   }
   if (byKey.size >= FASTA_EXTRACTION_CACHE_LIMIT) byKey.delete(byKey.keys().next().value);
   byKey.set(key, value);
+};
+const cloneFeatureExtractionData = (data) => ({
+  features: Array.isArray(data?.features)
+    ? data.features.map((feature) => ({
+        ...feature,
+        qualifiers:
+          feature?.qualifiers && typeof feature.qualifiers === 'object'
+            ? Object.fromEntries(
+                Object.entries(feature.qualifiers).map(([key, value]) => [
+                  key,
+                  Array.isArray(value) ? [...value] : value
+                ])
+              )
+            : feature?.qualifiers
+      }))
+    : [],
+  record_ids: Array.isArray(data?.record_ids) ? [...data.record_ids] : []
+});
+const getCachedFeatureExtraction = (file, key) => {
+  if (!file) return null;
+  const byKey = featureExtractionCache.get(file);
+  const cached = byKey?.get(key) || null;
+  return cached ? cloneFeatureExtractionData(cached) : null;
+};
+const setCachedFeatureExtraction = (file, key, value) => {
+  if (!file || value?.error) return;
+  let byKey = featureExtractionCache.get(file);
+  if (!byKey) {
+    byKey = new Map();
+    featureExtractionCache.set(file, byKey);
+  }
+  if (byKey.size >= FEATURE_EXTRACTION_CACHE_LIMIT) byKey.delete(byKey.keys().next().value);
+  byKey.set(key, cloneFeatureExtractionData(value));
+};
+const measureTiming = (entries, label, fn) => {
+  const startedAt = getNow();
+  const result = fn();
+  entries.push({ label, ms: getNow() - startedAt });
+  return result;
+};
+const logPostGbdrawTimings = (entries) => {
+  if (!entries || entries.length === 0) return;
+  console.groupCollapsed('post-gbdraw timing');
+  entries.forEach(({ label, ms, details }) => {
+    console.info(`${label}: ${formatDuration(ms)}${details ? ` (${details})` : ''}`);
+  });
+  console.groupEnd();
 };
 const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector, reverseFlag }) => {
   if (typeof text !== 'string' && !file?.text) {
@@ -374,6 +423,8 @@ export const createRunAnalysis = ({
     generatedCircularPlotTitlePosition,
     shouldDeferCircularPreviewUpdates,
     extractedFeatures,
+    featureExtractionPending,
+    featureExtractionError,
     featureRecordIds,
     selectedFeatureRecordIdx,
     editableLabels,
@@ -393,6 +444,7 @@ export const createRunAnalysis = ({
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
   let pendingReflowReason = 'label-edit';
+  let featureExtractionRequestId = 0;
 
   const getLastLine = (text) => {
     const trimmed = String(text || '').trim();
@@ -431,6 +483,170 @@ export const createRunAnalysis = ({
   const formatJsError = (err) => {
     const message = err?.message ? String(err.message) : String(err || 'Unknown error');
     return { summary: message, details: [] };
+  };
+
+  const buildFeatureExtractionCacheKey = ({ regionSpec, recordSelector, reverseFlag, selectedFeatures }) =>
+    JSON.stringify({
+      regionSpec: String(regionSpec || ''),
+      recordSelector: normalizeRecordSelectorText(recordSelector),
+      reverseFlag: reverseFlag ? '1' : '0',
+      selectedFeatures: Array.isArray(selectedFeatures) && selectedFeatures.length ? selectedFeatures : 'all'
+    });
+
+  const readFeatureExtractionData = ({
+    pyodide,
+    path,
+    file,
+    regionSpec,
+    recordSelector,
+    reverseFlag,
+    selectedFeatures = null,
+    timingEntries,
+    timingLabel
+  }) => {
+    const cacheKey = buildFeatureExtractionCacheKey({ regionSpec, recordSelector, reverseFlag, selectedFeatures });
+    const cached = getCachedFeatureExtraction(file, cacheKey);
+    if (cached) {
+      timingEntries.push({ label: timingLabel, ms: 0, details: 'cache hit' });
+      return cached;
+    }
+
+    const selectedFeaturesArg =
+      Array.isArray(selectedFeatures) && selectedFeatures.length ? JSON.stringify(selectedFeatures) : null;
+    const featData = measureTiming(timingEntries, timingLabel, () => {
+      const featJson = pyodide
+        .globals
+        .get('extract_features_from_genbank')(
+          path,
+          regionSpec || null,
+          recordSelector || null,
+          reverseFlag ? '1' : '0',
+          selectedFeaturesArg
+        );
+      return JSON.parse(featJson);
+    });
+    setCachedFeatureExtraction(file, cacheKey, featData);
+    return featData;
+  };
+
+  const isCurrentFeatureExtractionContext = (context) =>
+    Boolean(context) &&
+    context.requestId === featureExtractionRequestId &&
+    context.mode === mode.value &&
+    context.cInputType === cInputType.value &&
+    context.lInputType === lInputType.value;
+
+  const extractFeaturesForColorEditor = (context) => {
+    if (!context) return;
+    if (!isCurrentFeatureExtractionContext(context)) {
+      if (context.requestId === featureExtractionRequestId) {
+        featureExtractionPending.value = false;
+      }
+      return;
+    }
+    const pyodide = getPyodide();
+    if (!pyodide) {
+      featureExtractionPending.value = false;
+      return;
+    }
+
+    const timingEntries = [];
+    try {
+      if (context.mode === 'circular' && context.cInputType === 'gb') {
+        const featData = readFeatureExtractionData({
+          pyodide,
+          path: '/input.gb',
+          file: context.circularFile,
+          regionSpec: null,
+          recordSelector: null,
+          reverseFlag: false,
+          timingEntries,
+          timingLabel: 'feature extraction circular input'
+        });
+        if (!isCurrentFeatureExtractionContext(context)) return;
+        if (featData?.error) {
+          console.warn('Feature extraction failed for circular input:', featData.error);
+          featureExtractionError.value = { summary: String(featData.error), details: [] };
+        } else if (Array.isArray(featData?.features)) {
+          extractedFeatures.value = featData.features;
+          featureRecordIds.value = featData.record_ids || [];
+          selectedFeatureRecordIdx.value = 0;
+          refreshFeatureOverrides(featData.features);
+          console.log(
+            `Extracted ${featData.features.length} features from ${featData.record_ids.length} record(s) for color editor.`
+          );
+        } else {
+          console.warn('Feature extraction returned an unexpected payload for circular input.', featData);
+        }
+      } else if (context.mode === 'linear' && context.lInputType === 'gb' && context.linearSeqs.length > 0) {
+        let allFeatures = [];
+        const allRecordLabels = [];
+
+        for (let i = 0; i < context.linearSeqs.length; i++) {
+          if (!isCurrentFeatureExtractionContext(context)) return;
+          const seq = context.linearSeqs[i] || {};
+          const regionSpec = context.regionSpecs[i]?.file || null;
+          const recordSelector = context.recordSelectors[i] ?? '';
+          const reverseFlag = Boolean(context.reverseFlags[i]);
+          const featData = readFeatureExtractionData({
+            pyodide,
+            path: `/seq_${i}.gb`,
+            file: seq.gb || null,
+            regionSpec,
+            recordSelector,
+            reverseFlag,
+            timingEntries,
+            timingLabel: `feature extraction linear input #${i + 1}`
+          });
+          if (featData?.error) {
+            console.warn(`Feature extraction failed for linear input #${i + 1}:`, featData.error);
+          } else if (Array.isArray(featData?.features)) {
+            const features = featData.features.map((feature) => ({
+              ...feature,
+              fileIdx: i,
+              displayRecordId: `File ${i + 1}: ${feature.record_id}`,
+              id: `file${i}_${feature.id}`
+            }));
+            allFeatures = allFeatures.concat(features);
+            (featData.record_ids || []).forEach((rid, ridx) => {
+              allRecordLabels.push({ label: `File ${i + 1}: ${rid}`, fileIdx: i, recordIdx: ridx });
+            });
+          } else {
+            console.warn(`Feature extraction returned an unexpected payload for linear input #${i + 1}.`, featData);
+          }
+        }
+
+        if (!isCurrentFeatureExtractionContext(context)) return;
+        extractedFeatures.value = allFeatures;
+        featureRecordIds.value = allRecordLabels.map((r) => r.label);
+        selectedFeatureRecordIdx.value = 0;
+        refreshFeatureOverrides(allFeatures);
+        console.log(
+          `Extracted ${allFeatures.length} features from ${context.linearSeqs.length} file(s) for color editor.`
+        );
+      }
+    } catch (e) {
+      if (context.requestId === featureExtractionRequestId) {
+        featureExtractionError.value = formatJsError(e);
+      }
+      console.log('Could not extract features:', e);
+    } finally {
+      if (context.requestId === featureExtractionRequestId) {
+        featureExtractionPending.value = false;
+        logPostGbdrawTimings(timingEntries);
+      }
+    }
+  };
+
+  const scheduleFeatureExtraction = (context) => {
+    featureExtractionPending.value = true;
+    featureExtractionError.value = null;
+    const run = () => extractFeaturesForColorEditor(context);
+    if (typeof globalThis.requestIdleCallback === 'function') {
+      globalThis.requestIdleCallback(run, { timeout: 500 });
+    } else {
+      setTimeout(run, 0);
+    }
   };
 
   const getSeqLabel = (seq, fallback) => {
@@ -751,6 +967,9 @@ json.dumps({
       skipCaptureBaseConfig.value = true;
       skipPositionReapply.value = true;
     } else {
+      featureExtractionRequestId += 1;
+      featureExtractionPending.value = false;
+      featureExtractionError.value = null;
       processing.value = true;
       results.value = [];
       selectedResultIndex.value = 0;
@@ -1689,8 +1908,10 @@ json.dumps({
           virtualBlastFiles.length ? JSON.stringify(virtualBlastFiles) : null
         );
       console.info(`gbdraw ${mode.value} wrapper execution: ${formatDuration(getNow() - gbdrawStartedAt)}.`);
-      const res = JSON.parse(jsonResult);
+      const postGbdrawTimingEntries = [];
+      const res = measureTiming(postGbdrawTimingEntries, 'run-analysis JSON.parse result', () => JSON.parse(jsonResult));
       if (res.error) {
+        logPostGbdrawTimings(postGbdrawTimingEntries);
         if (isReflow) {
           labelReflowLastError.value = formatPythonError(res.error)?.summary || 'Auto reflow failed';
           return { status: 'error' };
@@ -1708,7 +1929,10 @@ json.dumps({
         skipPositionReapply.value = true;
       }
 
-      results.value = res;
+      measureTiming(postGbdrawTimingEntries, 'run-analysis assign results', () => {
+        results.value = res;
+      });
+      logPostGbdrawTimings(postGbdrawTimingEntries);
       if (isReflow) {
         if (res.length > 0) {
           const safeIndex = Math.max(0, Math.min(previousSelectedResultIndex, res.length - 1));
@@ -1723,71 +1947,30 @@ json.dumps({
         generatedCircularPlotTitlePosition.value = normalizeCircularPlotTitlePosition(adv.plot_title_position);
       }
 
-      extractedFeatures.value = [];
+      if (!isReflow) {
+        extractedFeatures.value = [];
+        featureRecordIds.value = [];
+        selectedFeatureRecordIdx.value = 0;
 
-      if (mode.value === 'circular' && cInputType.value === 'gb') {
-        try {
-          const featJson = pyodide.globals.get('extract_features_from_genbank')('/input.gb', null, null, null, null);
-          const featData = JSON.parse(featJson);
-          if (featData?.error) {
-            console.warn('Feature extraction failed for circular input:', featData.error);
-          } else if (Array.isArray(featData?.features)) {
-            extractedFeatures.value = featData.features;
-            featureRecordIds.value = featData.record_ids || [];
-            selectedFeatureRecordIdx.value = 0;
-            refreshFeatureOverrides(featData.features);
-            console.log(
-              `Extracted ${featData.features.length} features from ${featData.record_ids.length} record(s) for color editor.`
-            );
-          } else {
-            console.warn('Feature extraction returned an unexpected payload for circular input.', featData);
-          }
-        } catch (e) {
-          console.log('Could not extract features:', e);
-        }
-      } else if (mode.value === 'linear' && lInputType.value === 'gb' && linearSeqs.length > 0) {
-        try {
-          let allFeatures = [];
-          let allRecordLabels = [];
-          for (let i = 0; i < linearSeqs.length; i++) {
-            const regionSpec = regionSpecs[i]?.file || null;
-            const recordSelector = recordSelectors[i] ?? '';
-            const reverseFlag = reverseFlags[i] ? '1' : '0';
-            const featJson = pyodide
-              .globals
-              .get('extract_features_from_genbank')(
-                `/seq_${i}.gb`,
-                regionSpec,
-                recordSelector,
-                reverseFlag,
-                null
-              );
-            const featData = JSON.parse(featJson);
-            if (featData?.error) {
-              console.warn(`Feature extraction failed for linear input #${i + 1}:`, featData.error);
-            } else if (Array.isArray(featData?.features)) {
-              featData.features.forEach((f) => {
-                f.fileIdx = i;
-                f.displayRecordId = `File ${i + 1}: ${f.record_id}`;
-                f.id = `file${i}_${f.id}`;
-              });
-              allFeatures = allFeatures.concat(featData.features);
-              featData.record_ids.forEach((rid, ridx) => {
-                allRecordLabels.push({ label: `File ${i + 1}: ${rid}`, fileIdx: i, recordIdx: ridx });
-              });
-            } else {
-              console.warn(`Feature extraction returned an unexpected payload for linear input #${i + 1}.`, featData);
-            }
-          }
-          extractedFeatures.value = allFeatures;
-          featureRecordIds.value = allRecordLabels.map((r) => r.label);
-          selectedFeatureRecordIdx.value = 0;
-          refreshFeatureOverrides(allFeatures);
-          console.log(
-            `Extracted ${allFeatures.length} features from ${linearSeqs.length} file(s) for color editor.`
-          );
-        } catch (e) {
-          console.log('Could not extract features:', e);
+        const shouldExtractFeatures =
+          (mode.value === 'circular' && cInputType.value === 'gb') ||
+          (mode.value === 'linear' && lInputType.value === 'gb' && linearSeqs.length > 0);
+
+        if (shouldExtractFeatures) {
+          scheduleFeatureExtraction({
+            requestId: featureExtractionRequestId,
+            mode: mode.value,
+            cInputType: cInputType.value,
+            lInputType: lInputType.value,
+            circularFile: files.c_gb || null,
+            linearSeqs: linearSeqs.map((seq) => ({ gb: seq.gb || null })),
+            regionSpecs: regionSpecs.map((spec) => ({ file: spec?.file || null })),
+            recordSelectors: [...recordSelectors],
+            reverseFlags: [...reverseFlags]
+          });
+        } else {
+          featureExtractionPending.value = false;
+          featureExtractionError.value = null;
         }
       }
       if (!isReflow) {
