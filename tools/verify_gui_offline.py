@@ -255,6 +255,7 @@ def _assert_packaged_assets() -> None:
         WEB_ROOT / "open-source-notices.html",
         WEB_ROOT / "js" / "app.js",
         WEB_ROOT / "js" / "services" / "losat.js",
+        WEB_ROOT / "js" / "workers" / "losat-worker.js",
         WEB_ROOT / "vendor" / "vue" / "vue.global.js",
         WEB_ROOT / "vendor" / "tailwindcss" / "tailwindcss-play.js",
         *(WEB_ROOT / path for path in REQUIRED_UI_FONT_FILES),

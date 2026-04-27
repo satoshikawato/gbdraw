@@ -1,4 +1,4 @@
-import { runLosatPair } from '../services/losat.js';
+import { runLosatPairsParallel } from '../services/losat.js';
 import { buildLabelOverrideTsv } from './feature-editor/label-override-table.js';
 
 const downloadTextFile = (filename, text) => {
@@ -26,6 +26,9 @@ const hashText = async (text) => {
   }
   return `fnv1a-${(hash >>> 0).toString(16)}`;
 };
+
+const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
+const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
 
 const makeSafeFilename = (name) => {
   const cleaned = String(name || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
@@ -321,6 +324,13 @@ export const createRunAnalysis = ({
     const raw = String(name || '').trim() || String(fallback || '');
     const withExt = raw.toLowerCase().endsWith('.tsv') ? raw : `${raw}.tsv`;
     return makeSafeFilename(withExt);
+  };
+
+  const getLosatParallelWorkers = () => {
+    const raw = String(losat.parallelWorkers || 'auto').trim().toLowerCase();
+    if (raw === 'auto') return undefined;
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed >= 1 && parsed <= 4 ? parsed : undefined;
   };
 
   const getLinearLabelOptionSupport = () => {
@@ -1216,6 +1226,21 @@ json.dumps({
         let extractFirstFasta = null;
         let cacheInfo = [];
         const cacheMap = losatCache.value || new Map();
+        const losatTiming = useLosat
+          ? {
+              inputWriteMs: 0,
+              fastaExtractionMs: 0,
+              cacheHashMs: 0,
+              jobBuildMs: 0,
+              executionMs: 0,
+              blastWriteMs: 0,
+              totalFastaChars: 0,
+              cacheHits: 0,
+              cacheMisses: 0,
+              totalPairs: 0,
+              uniqueJobs: 0
+            }
+          : null;
 
         if (useLosat) {
           extractFirstFasta = pyodide.globals.get('extract_first_fasta');
@@ -1225,6 +1250,7 @@ json.dumps({
 
         const getSeqEntry = (idx) => {
           if (fastaCache.has(idx)) return fastaCache.get(idx);
+          const startedAt = getNow();
           const path = lInputType.value === 'gb' ? `/seq_${idx}.gb` : `/seq_${idx}.fasta`;
           const fmt = lInputType.value === 'gb' ? 'genbank' : 'fasta';
           const regionSpec = regionSpecs[idx]?.file || null;
@@ -1237,13 +1263,19 @@ json.dumps({
             recordId: res.record_id || `seq_${idx + 1}`
           };
           fastaCache.set(idx, entry);
+          if (losatTiming) {
+            losatTiming.fastaExtractionMs += getNow() - startedAt;
+            losatTiming.totalFastaChars += entry.fasta.length;
+          }
           return entry;
         };
 
         const getSeqHash = async (idx) => {
           if (fastaHashCache.has(idx)) return fastaHashCache.get(idx);
           const entry = getSeqEntry(idx);
+          const startedAt = getNow();
           const hash = await hashText(entry.fasta);
+          if (losatTiming) losatTiming.cacheHashMs += getNow() - startedAt;
           fastaHashCache.set(idx, hash);
           return hash;
         };
@@ -1294,17 +1326,21 @@ json.dumps({
           return args;
         };
 
-        for (let i = 0; i < linearSeqs.length; i++) {
-          const seq = linearSeqs[i];
-          if (lInputType.value === 'gb') {
-            if (!seq.gb) throw new Error(`Sequence #${i + 1}: Missing GenBank file.`);
-            await writeFileToFs(seq.gb, `/seq_${i}.gb`);
-            inputArgs.push(`/seq_${i}.gb`);
-          } else {
-            if (!seq.gff || !seq.fasta) throw new Error(`Sequence #${i + 1}: GFF3 and FASTA are required.`);
-            await writeFileToFs(seq.gff, `/seq_${i}.gff`);
-            await writeFileToFs(seq.fasta, `/seq_${i}.fasta`);
+        {
+          const inputWriteStartedAt = getNow();
+          for (let i = 0; i < linearSeqs.length; i++) {
+            const seq = linearSeqs[i];
+            if (lInputType.value === 'gb') {
+              if (!seq.gb) throw new Error(`Sequence #${i + 1}: Missing GenBank file.`);
+              await writeFileToFs(seq.gb, `/seq_${i}.gb`);
+              inputArgs.push(`/seq_${i}.gb`);
+            } else {
+              if (!seq.gff || !seq.fasta) throw new Error(`Sequence #${i + 1}: GFF3 and FASTA are required.`);
+              await writeFileToFs(seq.gff, `/seq_${i}.gff`);
+              await writeFileToFs(seq.fasta, `/seq_${i}.fasta`);
+            }
           }
+          if (losatTiming) losatTiming.inputWriteMs += getNow() - inputWriteStartedAt;
         }
 
         regionSpecs = linearSeqs.map((seq, idx) => buildRegionSpec(seq, idx));
@@ -1319,35 +1355,90 @@ json.dumps({
           args.push('--reverse_complement', flag ? '1' : '0');
         });
 
-        for (let i = 0; i < linearSeqs.length - 1; i++) {
-          const seq = linearSeqs[i];
-          if (useLosat) {
+        if (useLosat) {
+          const losatPairs = [];
+          const losatJobs = [];
+          const pendingJobKeys = new Set();
+          const jobBuildStartedAt = getNow();
+
+          for (let i = 0; i < linearSeqs.length - 1; i++) {
             const queryEntry = getSeqEntry(i);
             const subjectEntry = getSeqEntry(i + 1);
             const losatArgs = buildLosatArgs(i, i + 1);
             const cacheKey = await buildCacheKey(losatArgs, i, i + 1);
             const cached = cacheMap.get(cacheKey);
-            const blastText = cached
-              ? cached.text
-              : await runLosatPair({
-                  program: losatProgram.value,
-                  queryFasta: queryEntry.fasta,
-                  subjectFasta: subjectEntry.fasta,
-                  outfmt: losat.outfmt || '6',
-                  extraArgs: losatArgs
-                });
-            if (!cached) {
-              cacheMap.set(cacheKey, { text: blastText });
-            }
+            const hasCachedText = typeof cached?.text === 'string';
+            losatTiming.totalPairs += 1;
+            if (hasCachedText) losatTiming.cacheHits += 1;
+            else losatTiming.cacheMisses += 1;
+            const pair = {
+              pairIndex: i,
+              cacheKey,
+              filename: buildCacheFilename(i, queryEntry, subjectEntry)
+            };
+            losatPairs.push(pair);
             cacheInfo.push({
               key: cacheKey,
-              filename: buildCacheFilename(i, queryEntry, subjectEntry)
+              filename: pair.filename
             });
-            pyodide.FS.writeFile(`/blast_${i}.txt`, textEncoder.encode(blastText));
-            blastArgs.push(`/blast_${i}.txt`);
-          } else if (seq.blast) {
-            await writeFileToFs(seq.blast, `/blast_${i}.txt`);
-            blastArgs.push(`/blast_${i}.txt`);
+
+            if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
+              pendingJobKeys.add(cacheKey);
+              losatJobs.push({
+                pairIndex: i,
+                cacheKey,
+                program: losatProgram.value,
+                queryFasta: queryEntry.fasta,
+                subjectFasta: subjectEntry.fasta,
+                outfmt: losat.outfmt || '6',
+                extraArgs: losatArgs
+              });
+            }
+          }
+          losatTiming.uniqueJobs = losatJobs.length;
+          losatTiming.jobBuildMs += getNow() - jobBuildStartedAt;
+
+          if (losatJobs.length > 0) {
+            const executionStartedAt = getNow();
+            const losatResults = await runLosatPairsParallel(losatJobs, {
+              concurrency: getLosatParallelWorkers()
+            });
+            losatTiming.executionMs += getNow() - executionStartedAt;
+            losatResults.forEach((result) => {
+              cacheMap.set(result.cacheKey, { text: result.text });
+            });
+          }
+
+          const blastWriteStartedAt = getNow();
+          losatPairs.forEach((pair) => {
+            const cached = cacheMap.get(pair.cacheKey);
+            const blastText = typeof cached?.text === 'string' ? cached.text : '';
+            pyodide.FS.writeFile(`/blast_${pair.pairIndex}.txt`, textEncoder.encode(blastText));
+            blastArgs.push(`/blast_${pair.pairIndex}.txt`);
+          });
+          losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
+          console.info(
+            [
+              `LOSAT timing: pairs=${losatTiming.totalPairs}`,
+              `cache hits=${losatTiming.cacheHits}`,
+              `misses=${losatTiming.cacheMisses}`,
+              `unique jobs=${losatTiming.uniqueJobs}`,
+              `input FS write=${formatDuration(losatTiming.inputWriteMs)}`,
+              `FASTA extraction=${formatDuration(losatTiming.fastaExtractionMs)}`,
+              `cache hashing=${formatDuration(losatTiming.cacheHashMs)}`,
+              `job build=${formatDuration(losatTiming.jobBuildMs)}`,
+              `execution=${formatDuration(losatTiming.executionMs)}`,
+              `BLAST FS write=${formatDuration(losatTiming.blastWriteMs)}`,
+              `FASTA chars=${losatTiming.totalFastaChars.toLocaleString()}`
+            ].join(', ')
+          );
+        } else {
+          for (let i = 0; i < linearSeqs.length - 1; i++) {
+            const seq = linearSeqs[i];
+            if (seq.blast) {
+              await writeFileToFs(seq.blast, `/blast_${i}.txt`);
+              blastArgs.push(`/blast_${i}.txt`);
+            }
           }
         }
         if (extractFirstFasta) {
@@ -1371,9 +1462,11 @@ json.dumps({
       }
 
       console.log('CMD:', args.join(' '));
+      const gbdrawStartedAt = getNow();
       const jsonResult = pyodide
         .globals
         .get('run_gbdraw_wrapper')(mode.value, pyodide.toPy(args.map(String)));
+      console.info(`gbdraw ${mode.value} wrapper execution: ${formatDuration(getNow() - gbdrawStartedAt)}.`);
       const res = JSON.parse(jsonResult);
       if (res.error) {
         if (isReflow) {
