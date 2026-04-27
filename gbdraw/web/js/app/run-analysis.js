@@ -1,4 +1,4 @@
-import { runLosatPairsParallel } from '../services/losat.js';
+import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
 import { buildLabelOverrideTsv } from './feature-editor/label-override-table.js';
 
 const downloadTextFile = (filename, text) => {
@@ -29,10 +29,155 @@ const hashText = async (text) => {
 
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
 const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
+const fastaExtractionCache = new WeakMap();
+const FASTA_EXTRACTION_CACHE_LIMIT = 12;
 
 const makeSafeFilename = (name) => {
   const cleaned = String(name || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
   return cleaned || 'losat';
+};
+const normalizeRecordSelectorText = (value) => {
+  const normalized = String(value ?? '').trim();
+  if (!normalized || ['none', 'null', 'jsnull', 'undefined', 'jsundefined', '-'].includes(normalized.toLowerCase())) {
+    return '';
+  }
+  return normalized;
+};
+const parseRegionText = (value) => {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const match = text.match(/^(\d+)(?:\.\.|-)(\d+)(?::(rc|rev|reverse|minus|-))?$/i);
+  if (!match) throw new Error(`Invalid region spec for LOSAT FASTA extraction: ${text}`);
+  let start = Number(match[1]);
+  let end = Number(match[2]);
+  let reverse = Boolean(match[3]);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < 1) {
+    throw new Error(`Invalid region coordinates for LOSAT FASTA extraction: ${text}`);
+  }
+  if (start > end) {
+    [start, end] = [end, start];
+    reverse = true;
+  }
+  return { start, end, reverse };
+};
+const reverseComplementSequence = (sequence) => {
+  const complements = {
+    A: 'T',
+    C: 'G',
+    G: 'C',
+    T: 'A',
+    U: 'A',
+    R: 'Y',
+    Y: 'R',
+    S: 'S',
+    W: 'W',
+    K: 'M',
+    M: 'K',
+    B: 'V',
+    D: 'H',
+    H: 'D',
+    V: 'B',
+    N: 'N'
+  };
+  let out = '';
+  const upper = String(sequence || '').toUpperCase();
+  for (let i = upper.length - 1; i >= 0; i -= 1) {
+    out += complements[upper[i]] || 'N';
+  }
+  return out;
+};
+const wrapFastaSequence = (sequence) => {
+  const lines = [];
+  for (let i = 0; i < sequence.length; i += 60) lines.push(sequence.slice(i, i + 60));
+  return lines.join('\n');
+};
+const buildFastaText = (record) => `>${record.id}\n${wrapFastaSequence(record.sequence)}\n`;
+const selectParsedRecord = (records, selectorRaw) => {
+  if (!records.length) throw new Error('No records found');
+  const selector = normalizeRecordSelectorText(selectorRaw);
+  if (!selector) return records[0];
+  if (selector.startsWith('#')) {
+    const idx = Number(selector.slice(1).trim()) - 1;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= records.length) {
+      throw new Error(`Record selector ${selector} is out of range (loaded ${records.length} record(s)).`);
+    }
+    return records[idx];
+  }
+  const matches = records.filter((record) => record.id === selector);
+  if (matches.length === 0) throw new Error(`Record selector '${selector}' did not match any record ID.`);
+  if (matches.length > 1) throw new Error(`Record selector '${selector}' matched multiple records. Use #index to disambiguate.`);
+  return matches[0];
+};
+const parseFastaRecordsFast = (text) => {
+  const records = [];
+  let current = null;
+  String(text || '').split(/\r?\n/).forEach((line) => {
+    if (line.startsWith('>')) {
+      if (current) records.push({ ...current, sequence: current.parts.join('').toUpperCase() });
+      const header = line.slice(1).trim();
+      current = { id: header.split(/\s+/)[0] || `record_${records.length + 1}`, parts: [] };
+      return;
+    }
+    if (current && line.trim()) current.parts.push(line.replace(/\s+/g, ''));
+  });
+  if (current) records.push({ ...current, sequence: current.parts.join('').toUpperCase() });
+  return records;
+};
+const parseGenbankRecordsFast = (text) => {
+  const records = [];
+  const recordChunks = String(text || '').split(/^\/\/\s*$/m);
+  recordChunks.forEach((chunk) => {
+    const originMatch = chunk.match(/\nORIGIN\b([\s\S]*)$/i);
+    if (!originMatch) return;
+    const locusMatch = chunk.match(/^LOCUS\s+(\S+)/m);
+    const accessionMatch = chunk.match(/^ACCESSION\s+(\S+)/m);
+    const versionMatch = chunk.match(/^VERSION\s+(\S+)/m);
+    const id = versionMatch?.[1] || accessionMatch?.[1] || locusMatch?.[1] || `record_${records.length + 1}`;
+    const sequence = originMatch[1].replace(/[^A-Za-z]/g, '').toUpperCase();
+    if (sequence) records.push({ id, sequence });
+  });
+  return records;
+};
+const applyLosatSequenceTransforms = (record, regionSpec, reverseFlag) => {
+  const region = parseRegionText(regionSpec);
+  let sequence = record.sequence;
+  if (String(reverseFlag).trim().toLowerCase() === '1') sequence = reverseComplementSequence(sequence);
+  if (region) {
+    const start = Math.max(0, region.start - 1);
+    const end = Math.min(sequence.length, region.end);
+    if (start >= end && (region.start !== 1 || region.end !== sequence.length)) {
+      throw new Error(`Start position (${region.start}) must be less than end position (${region.end}).`);
+    }
+    sequence = sequence.slice(start, end);
+    if (region.reverse) sequence = reverseComplementSequence(sequence);
+  }
+  return { id: record.id, sequence };
+};
+const getCachedFastaExtraction = (file, key) => {
+  const byKey = fastaExtractionCache.get(file);
+  return byKey?.get(key) || null;
+};
+const setCachedFastaExtraction = (file, key, value) => {
+  let byKey = fastaExtractionCache.get(file);
+  if (!byKey) {
+    byKey = new Map();
+    fastaExtractionCache.set(file, byKey);
+  }
+  if (byKey.size >= FASTA_EXTRACTION_CACHE_LIMIT) byKey.delete(byKey.keys().next().value);
+  byKey.set(key, value);
+};
+const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector, reverseFlag }) => {
+  if (typeof text !== 'string' && !file?.text) {
+    throw new Error('Input file is not available for browser FASTA extraction.');
+  }
+  const sourceText = typeof text === 'string' ? text : await file.text();
+  const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
+  const selected = selectParsedRecord(records, recordSelector);
+  const transformed = applyLosatSequenceTransforms(selected, regionSpec, reverseFlag);
+  return {
+    fasta: buildFastaText(transformed),
+    recordId: transformed.id
+  };
 };
 const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const normalizeFeatureVisibilityMode = (value) => {
@@ -1223,6 +1368,7 @@ json.dumps({
         const useLosat = blastSource.value === 'losat';
         const fastaCache = new Map();
         const fastaHashCache = new Map();
+        const linearFileTextCache = new WeakMap();
         let extractFirstFasta = null;
         let cacheInfo = [];
         const cacheMap = losatCache.value || new Map();
@@ -1232,14 +1378,26 @@ json.dumps({
               fastaExtractionMs: 0,
               cacheHashMs: 0,
               jobBuildMs: 0,
+              jobBuildWallMs: 0,
+              runtimeWaitMs: 0,
               executionMs: 0,
               blastWriteMs: 0,
               totalFastaChars: 0,
+              fastaCacheHits: 0,
+              fastaJsExtractions: 0,
+              fastaPyodideFallbacks: 0,
+              cacheHashHits: 0,
               cacheHits: 0,
               cacheMisses: 0,
               totalPairs: 0,
               uniqueJobs: 0
             }
+          : null;
+        const losatRuntimeWarmup = useLosat
+          ? prepareLosatRuntime().catch((error) => {
+              console.warn('LOSAT runtime warmup failed; execution will report the error if LOSAT is used.', error);
+              return null;
+            })
           : null;
 
         if (useLosat) {
@@ -1248,7 +1406,7 @@ json.dumps({
           losatCacheInfo.value = [];
         }
 
-        const getSeqEntry = (idx) => {
+        const getSeqEntry = async (idx) => {
           if (fastaCache.has(idx)) return fastaCache.get(idx);
           const startedAt = getNow();
           const path = lInputType.value === 'gb' ? `/seq_${idx}.gb` : `/seq_${idx}.fasta`;
@@ -1256,12 +1414,39 @@ json.dumps({
           const regionSpec = regionSpecs[idx]?.file || null;
           const recordSelector = recordSelectors[idx] ?? '';
           const reverseFlag = reverseFlags[idx] ? '1' : '0';
-          const res = JSON.parse(extractFirstFasta(path, fmt, regionSpec, recordSelector, reverseFlag));
-          if (res.error) throw new Error(res.error);
-          const entry = {
-            fasta: res.fasta,
-            recordId: res.record_id || `seq_${idx + 1}`
-          };
+          const sourceFile = lInputType.value === 'gb' ? linearSeqs[idx]?.gb : linearSeqs[idx]?.fasta;
+          const sourceText = sourceFile ? linearFileTextCache.get(sourceFile) : null;
+          const persistentCacheKey = JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
+          const cachedEntry = sourceFile ? getCachedFastaExtraction(sourceFile, persistentCacheKey) : null;
+          let entry = cachedEntry;
+
+          if (entry) {
+            if (losatTiming) losatTiming.fastaCacheHits += 1;
+          } else {
+            try {
+              entry = await extractLosatFastaFast({
+                file: sourceFile,
+                text: sourceText,
+                fmt,
+                regionSpec,
+                recordSelector,
+                reverseFlag
+              });
+              if (losatTiming) losatTiming.fastaJsExtractions += 1;
+            } catch (fastError) {
+              const res = JSON.parse(extractFirstFasta(path, fmt, regionSpec, recordSelector, reverseFlag));
+              if (res.error) throw new Error(res.error);
+              entry = {
+                fasta: res.fasta,
+                recordId: res.record_id || `seq_${idx + 1}`
+              };
+              if (losatTiming) {
+                losatTiming.fastaPyodideFallbacks += 1;
+                console.warn('LOSAT browser FASTA extraction fell back to Pyodide:', fastError);
+              }
+            }
+            if (sourceFile) setCachedFastaExtraction(sourceFile, persistentCacheKey, entry);
+          }
           fastaCache.set(idx, entry);
           if (losatTiming) {
             losatTiming.fastaExtractionMs += getNow() - startedAt;
@@ -1270,12 +1455,29 @@ json.dumps({
           return entry;
         };
 
+        const writeLinearFileToFs = async (fileObj, path, { cacheText = false } = {}) => {
+          if (!fileObj) return false;
+          const buffer = await fileObj.arrayBuffer();
+          const bytes = new Uint8Array(buffer);
+          pyodide.FS.writeFile(path, bytes);
+          if (cacheText) {
+            linearFileTextCache.set(fileObj, new TextDecoder().decode(bytes));
+          }
+          return true;
+        };
+
         const getSeqHash = async (idx) => {
           if (fastaHashCache.has(idx)) return fastaHashCache.get(idx);
-          const entry = getSeqEntry(idx);
+          const entry = await getSeqEntry(idx);
+          if (entry.hash) {
+            if (losatTiming) losatTiming.cacheHashHits += 1;
+            fastaHashCache.set(idx, entry.hash);
+            return entry.hash;
+          }
           const startedAt = getNow();
           const hash = await hashText(entry.fasta);
           if (losatTiming) losatTiming.cacheHashMs += getNow() - startedAt;
+          entry.hash = hash;
           fastaHashCache.set(idx, hash);
           return hash;
         };
@@ -1332,12 +1534,12 @@ json.dumps({
             const seq = linearSeqs[i];
             if (lInputType.value === 'gb') {
               if (!seq.gb) throw new Error(`Sequence #${i + 1}: Missing GenBank file.`);
-              await writeFileToFs(seq.gb, `/seq_${i}.gb`);
+              await writeLinearFileToFs(seq.gb, `/seq_${i}.gb`, { cacheText: useLosat });
               inputArgs.push(`/seq_${i}.gb`);
             } else {
               if (!seq.gff || !seq.fasta) throw new Error(`Sequence #${i + 1}: GFF3 and FASTA are required.`);
-              await writeFileToFs(seq.gff, `/seq_${i}.gff`);
-              await writeFileToFs(seq.fasta, `/seq_${i}.fasta`);
+              await writeLinearFileToFs(seq.gff, `/seq_${i}.gff`);
+              await writeLinearFileToFs(seq.fasta, `/seq_${i}.fasta`, { cacheText: useLosat });
             }
           }
           if (losatTiming) losatTiming.inputWriteMs += getNow() - inputWriteStartedAt;
@@ -1360,10 +1562,12 @@ json.dumps({
           const losatJobs = [];
           const pendingJobKeys = new Set();
           const jobBuildStartedAt = getNow();
+          const fastaExtractionBeforeJobBuild = losatTiming.fastaExtractionMs;
+          const cacheHashBeforeJobBuild = losatTiming.cacheHashMs;
 
           for (let i = 0; i < linearSeqs.length - 1; i++) {
-            const queryEntry = getSeqEntry(i);
-            const subjectEntry = getSeqEntry(i + 1);
+            const queryEntry = await getSeqEntry(i);
+            const subjectEntry = await getSeqEntry(i + 1);
             const losatArgs = buildLosatArgs(i, i + 1);
             const cacheKey = await buildCacheKey(losatArgs, i, i + 1);
             const cached = cacheMap.get(cacheKey);
@@ -1396,9 +1600,16 @@ json.dumps({
             }
           }
           losatTiming.uniqueJobs = losatJobs.length;
-          losatTiming.jobBuildMs += getNow() - jobBuildStartedAt;
+          const jobBuildWallMs = getNow() - jobBuildStartedAt;
+          const nestedFastaMs = losatTiming.fastaExtractionMs - fastaExtractionBeforeJobBuild;
+          const nestedHashMs = losatTiming.cacheHashMs - cacheHashBeforeJobBuild;
+          losatTiming.jobBuildWallMs += jobBuildWallMs;
+          losatTiming.jobBuildMs += Math.max(0, jobBuildWallMs - nestedFastaMs - nestedHashMs);
 
           if (losatJobs.length > 0) {
+            const runtimeWaitStartedAt = getNow();
+            await losatRuntimeWarmup;
+            losatTiming.runtimeWaitMs += getNow() - runtimeWaitStartedAt;
             const executionStartedAt = getNow();
             const losatResults = await runLosatPairsParallel(losatJobs, {
               concurrency: getLosatParallelWorkers()
@@ -1426,8 +1637,14 @@ json.dumps({
               `unique jobs=${losatTiming.uniqueJobs}`,
               `input FS write=${formatDuration(losatTiming.inputWriteMs)}`,
               `FASTA extraction=${formatDuration(losatTiming.fastaExtractionMs)}`,
+              `FASTA cache hits=${losatTiming.fastaCacheHits}`,
+              `JS FASTA=${losatTiming.fastaJsExtractions}`,
+              `Pyodide FASTA=${losatTiming.fastaPyodideFallbacks}`,
               `cache hashing=${formatDuration(losatTiming.cacheHashMs)}`,
+              `cache hash hits=${losatTiming.cacheHashHits}`,
               `job build=${formatDuration(losatTiming.jobBuildMs)}`,
+              `job build wall=${formatDuration(losatTiming.jobBuildWallMs)}`,
+              `runtime wait=${formatDuration(losatTiming.runtimeWaitMs)}`,
               `execution=${formatDuration(losatTiming.executionMs)}`,
               `BLAST FS write=${formatDuration(losatTiming.blastWriteMs)}`,
               `FASTA chars=${losatTiming.totalFastaChars.toLocaleString()}`

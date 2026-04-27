@@ -373,3 +373,10 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
     return runLosatPairsSequential(jobList);
   }
 };
+
+export const prepareLosatRuntime = async ({ wasmPath = DEFAULT_WASM_PATH } = {}) => {
+  await Promise.all([
+    loadWasiShim(),
+    loadLosatModule(wasmPath)
+  ]);
+};
