@@ -242,6 +242,18 @@
                             </div>
                             <div class="mt-3 pt-3 border-t border-slate-200">
                                 <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Settings</div>
+                                <div class="grid grid-cols-1 gap-1 mb-2">
+                                    <div>
+                                        <label class="text-[9px] block">Parallel workers</label>
+                                        <select v-model="losat.parallelWorkers" class="form-input px-1 py-0.5 text-xs">
+                                            <option :value="undefined">Auto</option>
+                                            <option value="1">1</option>
+                                            <option value="2">2</option>
+                                            <option value="3">3</option>
+                                            <option value="4">4</option>
+                                        </select>
+                                    </div>
+                                </div>
                                 <div v-if="losatProgram === 'blastn'" class="space-y-2">
                                     <div class="grid grid-cols-1 gap-1">
                                         <div>

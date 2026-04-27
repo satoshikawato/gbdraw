@@ -20,7 +20,7 @@ def get_palettes_json():
     except:
         return "{}"
 
-def run_gbdraw_wrapper(mode, args):
+def run_gbdraw_wrapper(mode, args, virtual_blast_files_json=None):
     for f in glob.glob("*.svg"):
         try:
             os.remove(f)
@@ -30,6 +30,8 @@ def run_gbdraw_wrapper(mode, args):
     full_args = args + ["-f", "svg"]
     stdout_buf = io.StringIO()
     stderr_buf = io.StringIO()
+    original_load_comparisons = None
+    assemble_module = None
 
     def _collect_output():
         stdout_text = stdout_buf.getvalue()
@@ -51,8 +53,85 @@ def run_gbdraw_wrapper(mode, args):
             payload["stdout"] = stdout_text
         return {"error": payload}
 
+    def _install_virtual_blast_loader():
+        nonlocal original_load_comparisons, assemble_module
+        if not virtual_blast_files_json:
+            return
+        try:
+            payload = json.loads(str(virtual_blast_files_json))
+        except Exception:
+            payload = []
+        virtual_files = {
+            str(item.get("path", "")): str(item.get("text", ""))
+            for item in payload
+            if isinstance(item, dict) and str(item.get("path", ""))
+        }
+        if not virtual_files:
+            return
+
+        import pandas as pd
+        from io import StringIO
+        from gbdraw.diagrams.linear import assemble as _assemble_module
+
+        assemble_module = _assemble_module
+        original_load_comparisons = _assemble_module.load_comparisons
+
+        def _load_comparisons_from_virtual_files(comparison_files, blast_config):
+            evalue_threshold = blast_config.evalue
+            bitscore_threshold = blast_config.bitscore
+            identity_threshold = blast_config.identity
+            alignment_length_threshold = blast_config.alignment_length
+            comparison_list = []
+            fallback_files = []
+            for comparison_file in comparison_files:
+                comparison_path = str(comparison_file)
+                if comparison_path not in virtual_files:
+                    fallback_files.append(comparison_file)
+                    continue
+                try:
+                    df = pd.read_csv(
+                        StringIO(virtual_files[comparison_path]),
+                        sep="\\t",
+                        comment="#",
+                        names=(
+                            "query",
+                            "subject",
+                            "identity",
+                            "alignment_length",
+                            "mismatches",
+                            "gap_opens",
+                            "qstart",
+                            "qend",
+                            "sstart",
+                            "send",
+                            "evalue",
+                            "bitscore",
+                        ),
+                    )
+                    df = df[
+                        (df["evalue"] <= evalue_threshold)
+                        & (df["bitscore"] >= bitscore_threshold)
+                        & (df["identity"] >= identity_threshold)
+                        & (df["alignment_length"] >= alignment_length_threshold)
+                    ]
+                    comparison_list.append(df)
+                except ValueError as e:
+                    logging.getLogger(__name__).warning(
+                        f"WARNING: Error parsing comparison file {comparison_path}. It may be corrupt or in the wrong format. Error: {e}"
+                    )
+                except Exception as e:
+                    logging.getLogger(__name__).error(
+                        f"ERROR: An unexpected error occurred while processing {comparison_path}: {e}"
+                    )
+            if fallback_files:
+                comparison_list.extend(original_load_comparisons(fallback_files, blast_config))
+            return comparison_list
+
+        _assemble_module.load_comparisons = _load_comparisons_from_virtual_files
+
     original_streams = []
     try:
+        _install_virtual_blast_loader()
         for handler in logging.getLogger().handlers:
             if isinstance(handler, logging.StreamHandler):
                 original_streams.append((handler, handler.stream))
@@ -79,6 +158,8 @@ def run_gbdraw_wrapper(mode, args):
     finally:
         for handler, stream in original_streams:
             handler.setStream(stream)
+        if assemble_module is not None and original_load_comparisons is not None:
+            assemble_module.load_comparisons = original_load_comparisons
 
     files = glob.glob("*.svg")
     if not files:

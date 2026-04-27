@@ -341,7 +341,13 @@ const applyConfigData = (data) => {
   state.adv.linear_show_replicon = state.adv.linear_show_replicon === true;
   state.adv.linear_show_accession = state.adv.linear_show_accession !== false;
   state.adv.linear_show_length = state.adv.linear_show_length !== false;
-  if (data.losat) safeDeepMerge(state.losat, data.losat);
+  if (data.losat) {
+    safeDeepMerge(state.losat, data.losat);
+    const rawParallelWorkers = String(data.losat.parallelWorkers ?? '').trim().toLowerCase();
+    state.losat.parallelWorkers = ['1', '2', '3', '4'].includes(rawParallelWorkers)
+      ? rawParallelWorkers
+      : undefined;
+  }
   if (typeof data.paletteInstantPreviewEnabled === 'boolean') {
     state.paletteInstantPreviewEnabled.value = data.paletteInstantPreviewEnabled;
   }

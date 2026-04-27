@@ -16,9 +16,13 @@ from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...configurators import FeatureDrawingConfigurator  # type: ignore[reportMissingImports]
 from ...features.colors import preprocess_color_tables  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
+from ...features.objects import FeatureObject  # type: ignore[reportMissingImports]
 from ...render.groups.linear import DefinitionGroup  # type: ignore[reportMissingImports]
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
 from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear  # type: ignore[reportMissingImports]
+
+
+FeatureDict = dict[str, FeatureObject]
 
 
 def _precalculate_definition_metrics(
@@ -62,12 +66,53 @@ def _precalculate_definition_widths(
     return max_definition_width
 
 
+def _precalculate_feature_dicts(
+    records: list[SeqRecord],
+    feature_config: FeatureDrawingConfigurator,
+    canvas_config: LinearCanvasConfigurator,
+    config_dict: dict,
+    cfg: GbdrawConfig | None = None,
+) -> list[FeatureDict]:
+    """Build feature objects once per record for the linear assembly pipeline."""
+
+    cfg = cfg or GbdrawConfig.from_dict(config_dict)
+    raw_show_labels = cfg.canvas.show_labels
+    show_labels_mode = raw_show_labels if isinstance(raw_show_labels, str) else ("all" if raw_show_labels else "none")
+    color_table, default_colors = preprocess_color_tables(
+        feature_config.color_table,
+        feature_config.default_colors,
+    )
+    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+
+    feature_dicts: list[FeatureDict] = []
+    for i, record in enumerate(records):
+        compute_label_text = (
+            show_labels_mode == "all"
+            or (show_labels_mode == "first" and i == 0)
+        )
+        feature_dict, _ = create_feature_dict(
+            record,
+            color_table,
+            feature_config.selected_features_set,
+            default_colors,
+            canvas_config.strandedness,
+            canvas_config.resolve_overlaps,
+            label_filtering if compute_label_text else {},
+            directional_feature_types=feature_config.directional_feature_types,
+            feature_visibility_rules=feature_config.feature_visibility_rules,
+            compute_label_text=compute_label_text,
+        )
+        feature_dicts.append(feature_dict)
+    return feature_dicts
+
+
 def _precalculate_label_dimensions(
     records: list[SeqRecord],
     feature_config: FeatureDrawingConfigurator,
     canvas_config: LinearCanvasConfigurator,
     config_dict: dict,
     cfg: GbdrawConfig | None = None,
+    precomputed_feature_dicts: list[FeatureDict] | None = None,
 ) -> tuple[float, dict, dict]:
     """Pre-calculates label placements for all records to determine the required canvas height."""
 
@@ -82,11 +127,12 @@ def _precalculate_label_dimensions(
     all_labels_by_record = {}
     record_label_heights = {}  # Store height required for labels per record
     normalize_length = cfg.canvas.linear.normalize_length
-    color_table, default_colors = preprocess_color_tables(
-        feature_config.color_table,
-        feature_config.default_colors,
-    )
-    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
+    if precomputed_feature_dicts is None:
+        color_table, default_colors = preprocess_color_tables(
+            feature_config.color_table,
+            feature_config.default_colors,
+        )
+        label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
 
     for i, record in enumerate(records):
         if show_labels_mode == "first" and i > 0:
@@ -94,17 +140,20 @@ def _precalculate_label_dimensions(
             record_label_heights[record.id] = 0
             continue
 
-        feature_dict, _ = create_feature_dict(
-            record,
-            color_table,
-            feature_config.selected_features_set,
-            default_colors,
-            canvas_config.strandedness,
-            canvas_config.resolve_overlaps,
-            label_filtering,
-            directional_feature_types=feature_config.directional_feature_types,
-            feature_visibility_rules=feature_config.feature_visibility_rules,
-        )
+        if precomputed_feature_dicts is not None:
+            feature_dict = precomputed_feature_dicts[i]
+        else:
+            feature_dict, _ = create_feature_dict(
+                record,
+                color_table,
+                feature_config.selected_features_set,
+                default_colors,
+                canvas_config.strandedness,
+                canvas_config.resolve_overlaps,
+                label_filtering,
+                directional_feature_types=feature_config.directional_feature_types,
+                feature_visibility_rules=feature_config.feature_visibility_rules,
+            )
 
         record_length = len(record.seq)
         if normalize_length:
@@ -149,8 +198,10 @@ def _precalculate_label_dimensions(
 
 
 __all__ = [
+    "FeatureDict",
     "_precalculate_definition_metrics",
     "_precalculate_definition_widths",
+    "_precalculate_feature_dicts",
     "_precalculate_label_dimensions",
 ]
 
