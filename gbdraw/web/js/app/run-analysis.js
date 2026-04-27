@@ -638,6 +638,7 @@ json.dumps({
       let regionSpecs = [];
       let recordSelectors = [];
       let reverseFlags = [];
+      let virtualBlastFiles = [];
 
       if (form.prefix && form.prefix.trim() !== '') args.push('-o', form.prefix.trim());
       if (form.species) args.push('--species', form.species);
@@ -1222,7 +1223,6 @@ json.dumps({
         const useLosat = blastSource.value === 'losat';
         const fastaCache = new Map();
         const fastaHashCache = new Map();
-        const textEncoder = new TextEncoder();
         let extractFirstFasta = null;
         let cacheInfo = [];
         const cacheMap = losatCache.value || new Map();
@@ -1413,8 +1413,9 @@ json.dumps({
           losatPairs.forEach((pair) => {
             const cached = cacheMap.get(pair.cacheKey);
             const blastText = typeof cached?.text === 'string' ? cached.text : '';
-            pyodide.FS.writeFile(`/blast_${pair.pairIndex}.txt`, textEncoder.encode(blastText));
-            blastArgs.push(`/blast_${pair.pairIndex}.txt`);
+            const blastPath = `/blast_${pair.pairIndex}.txt`;
+            virtualBlastFiles.push({ path: blastPath, text: blastText });
+            blastArgs.push(blastPath);
           });
           losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
           console.info(
@@ -1465,7 +1466,11 @@ json.dumps({
       const gbdrawStartedAt = getNow();
       const jsonResult = pyodide
         .globals
-        .get('run_gbdraw_wrapper')(mode.value, pyodide.toPy(args.map(String)));
+        .get('run_gbdraw_wrapper')(
+          mode.value,
+          pyodide.toPy(args.map(String)),
+          virtualBlastFiles.length ? JSON.stringify(virtualBlastFiles) : null
+        );
       console.info(`gbdraw ${mode.value} wrapper execution: ${formatDuration(getNow() - gbdrawStartedAt)}.`);
       const res = JSON.parse(jsonResult);
       if (res.error) {
