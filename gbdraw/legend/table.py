@@ -27,6 +27,7 @@ def prepare_legend_table(
     has_blast: bool = False,
     used_color_rules: Optional[Set[Tuple[str, str]]] = None,
     default_used_features: Optional[Set[str]] = None,
+    depth_config=None,
 ):
     """
     Prepare the legend table for the diagram.
@@ -57,6 +58,7 @@ def prepare_legend_table(
     skew_stroke_color: str = skew_config.stroke_color
     skew_stroke_width: float = skew_config.stroke_width
     dinucleotide = gc_config.dinucleotide
+    show_depth = bool(getattr(depth_config, "show_depth", False)) if depth_config is not None else False
     feature_specific_colors = dict()
     default_used_features = default_used_features or set()
     if color_table is not None and not color_table.empty:
@@ -130,6 +132,13 @@ def prepare_legend_table(
                 "stroke": block_stroke_color,
                 "width": block_stroke_width,
             }
+    if show_depth:
+        legend_table["Depth"] = {
+            "type": "solid",
+            "fill": depth_config.fill_color,
+            "stroke": depth_config.stroke_color,
+            "width": depth_config.stroke_width,
+        }
     if show_gc:
         if gc_high_fill_color == gc_low_fill_color:
             legend_table[f"{dinucleotide} content"] = {

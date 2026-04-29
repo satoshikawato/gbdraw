@@ -86,6 +86,7 @@ class CircularCanvasConfigurator:
         self.track_ratio: float = cfg.canvas.circular.track_ratio
         self.show_gc: bool = cfg.canvas.show_gc
         self.show_skew: bool = cfg.canvas.show_skew
+        self.show_depth: bool = cfg.canvas.show_depth
         self.strandedness: bool = cfg.canvas.strandedness
         self.dpi: int = cfg.canvas.dpi
         self.length_threshold = cfg.labels.length_threshold.circular
@@ -188,9 +189,16 @@ class CircularCanvasConfigurator:
         """
 
         self.track_ids: dict = {}
-        gc_track_id: Literal[2] | None = 2 if self.show_gc or not self.show_skew else None
-        skew_track_id: Literal[3, 2] | None = (3 if self.show_gc else 2) if self.show_skew else None
+        depth_track_id: Literal[2] | None = 2 if self.show_depth else None
+        if self.show_depth:
+            gc_track_id: Literal[3] | None = 3 if self.show_gc else None
+            skew_track_id: Literal[4, 3] | None = (4 if self.show_gc else 3) if self.show_skew else None
+        else:
+            gc_track_id: Literal[2] | None = 2 if self.show_gc or not self.show_skew else None
+            skew_track_id: Literal[3, 2] | None = (3 if self.show_gc else 2) if self.show_skew else None
 
+        if depth_track_id is not None:
+            self.track_ids["depth_track"] = depth_track_id
         if gc_track_id is not None:
             self.track_ids["gc_track"] = gc_track_id
         if skew_track_id is not None:

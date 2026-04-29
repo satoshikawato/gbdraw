@@ -6,6 +6,7 @@ title = "gbdraw configs"
 dpi = 96 # fixed value; higher or lower values lead to abberant text sizes in CairoSVG output
 show_gc = true
 show_skew = true
+show_depth = false
 show_labels = false
 strandedness = false
 resolve_overlaps = false
@@ -16,8 +17,8 @@ resolve_overlaps = false
 height = 1000 # pixel
 radius = 390
 track_ratio = 0.19
-track_dict.short = {"spreadout" = {1 = 1.0, 2 = 0.85, 3 = 0.65}, "middle" = {1 = 1.0, 2 = 0.75, 3 = 0.55}, "tuckin" = {1 = 1.0, 2 = 0.64, 3 = 0.44}}
-track_dict.long = {"spreadout" = {1 = 1.0, 2 = 0.80, 3 = 0.60}, "middle" = {1 = 1.0, 2 = 0.75, 3 = 0.55}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.50}}
+track_dict.short = {"spreadout" = {1 = 1.0, 2 = 0.85, 3 = 0.65, 4 = 0.45}, "middle" = {1 = 1.0, 2 = 0.75, 3 = 0.55, 4 = 0.35}, "tuckin" = {1 = 1.0, 2 = 0.64, 3 = 0.44, 4 = 0.24}}
+track_dict.long = {"spreadout" = {1 = 1.0, 2 = 0.80, 3 = 0.60, 4 = 0.40}, "middle" = {1 = 1.0, 2 = 0.75, 3 = 0.55, 4 = 0.35}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.50, 4 = 0.30}}
 track_type = 'tuckin'
 allow_inner_labels = false
 [canvas.circular.width]
@@ -36,6 +37,8 @@ vertical_padding = 8
 comparison_height = 60
 canvas_padding = 50
 default_gc_height = 20
+depth_height = 10
+depth_padding = 8
 track_layout = "middle"
 track_axis_gap = "auto"
 ruler_on_axis = false
@@ -88,6 +91,22 @@ stroke_width = 0
 fill_opacity = 1
 [objects.gc_skew.circular]
 norm_factor = 0.80
+
+[objects.depth]
+fill_color = "#4A90E2"
+stroke_color = "none"
+stroke_width = 0
+fill_opacity = 0.8
+normalize = false
+min_depth = "auto"
+max_depth = "auto"
+show_axis = true
+show_ticks = true
+tick_interval = "auto"
+large_tick_interval = "auto"
+small_tick_interval = "none"
+tick_font_size = "auto"
+share_axis = false
 
 [objects.ticks]
 tick_width = 2.0

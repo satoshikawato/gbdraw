@@ -9,6 +9,7 @@ from .canvas import CircularCanvasConfigurator, LinearCanvasConfigurator
 from .config import GbdrawConfig, apply_config_overrides, load_default_config
 from .configurators import (
     BlastMatchConfigurator,
+    DepthConfigurator,
     FeatureDrawingConfigurator,
     GcContentConfigurator,
     GcSkewConfigurator,
@@ -55,6 +56,7 @@ __all__ = [
     "load_default_config",
     # configurators
     "BlastMatchConfigurator",
+    "DepthConfigurator",
     "FeatureDrawingConfigurator",
     "GcContentConfigurator",
     "GcSkewConfigurator",

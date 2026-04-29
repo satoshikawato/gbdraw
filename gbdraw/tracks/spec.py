@@ -57,6 +57,7 @@ class LinearTrackPlacement:
 TrackKind = Literal[
     # built-ins
     "features",
+    "depth",
     "gc_content",
     "gc_skew",
     "ticks",

@@ -242,6 +242,91 @@ def _get_args(args) -> argparse.Namespace:
         help='Suppress GC skew track (default: False).',
         action='store_true')
     parser.add_argument(
+        '--depth',
+        help='Depth TSV file in samtools depth format (reference, position, depth).',
+        type=str)
+    parser.add_argument(
+        '--show_depth',
+        help='Show depth coverage track. Implied when --depth is supplied.',
+        action='store_true')
+    parser.add_argument(
+        '--depth_color',
+        help='Depth track fill color (optional; default: #4A90E2).',
+        type=str)
+    parser.add_argument(
+        '--depth_width',
+        help='Depth track width for circular mode (in px; must be > 0).',
+        type=float)
+    parser.add_argument(
+        '--depth_window',
+        help='Depth aggregation window size. Defaults to one tenth of the GC/skew window, with a 100 bp minimum.',
+        type=int)
+    parser.add_argument(
+        '--depth_step',
+        help='Depth aggregation step size. Defaults to one tenth of the GC/skew step.',
+        type=int)
+    parser.add_argument(
+        '--share_depth_axis',
+        help='Use one depth y-axis scale across records.',
+        action='store_true')
+    parser.add_argument(
+        '--depth_min',
+        help='Minimum depth for clipping/normalization (optional; must be >= 0).',
+        type=float)
+    parser.add_argument(
+        '--depth_max',
+        help='Maximum depth for clipping/normalization (optional; must be >= 0).',
+        type=float)
+    parser.add_argument(
+        '--depth_log_scale',
+        dest='depth_normalize',
+        help='Render depth coverage on a log10 scale (IGV-style).',
+        action='store_true',
+        default=None)
+    parser.add_argument(
+        '--no_depth_log_scale',
+        dest='depth_normalize',
+        help='Render depth coverage on a linear scale.',
+        action='store_false')
+    parser.add_argument(
+        '--show_depth_axis',
+        dest='depth_show_axis',
+        help='Show depth coverage axis line, ticks, and labels.',
+        action='store_true',
+        default=None)
+    parser.add_argument(
+        '--hide_depth_axis',
+        dest='depth_show_axis',
+        help='Hide depth coverage axis line, ticks, and labels.',
+        action='store_false')
+    parser.add_argument(
+        '--show_depth_ticks',
+        dest='depth_show_ticks',
+        help='Show depth coverage axis ticks and labels.',
+        action='store_true',
+        default=None)
+    parser.add_argument(
+        '--hide_depth_ticks',
+        dest='depth_show_ticks',
+        help='Hide depth coverage axis ticks and labels.',
+        action='store_false')
+    parser.add_argument(
+        '--depth_tick_interval',
+        help='Depth coverage large tick interval in x coverage units (optional; must be > 0; legacy alias for --depth_large_tick_interval).',
+        type=float)
+    parser.add_argument(
+        '--depth_large_tick_interval',
+        help='Depth coverage large tick interval in x coverage units (optional; must be > 0).',
+        type=float)
+    parser.add_argument(
+        '--depth_small_tick_interval',
+        help='Depth coverage small tick interval in x coverage units (optional; must be > 0; hidden by default).',
+        type=float)
+    parser.add_argument(
+        '--depth_tick_font_size',
+        help='Depth coverage tick label font size (optional; must be > 0).',
+        type=float)
+    parser.add_argument(
         '-l',
         '--legend',
         help='Legend position (default: "right"; "left", "right", "top", "bottom", "upper_left", "upper_right", "lower_left", "lower_right", "none")',
@@ -403,6 +488,28 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--gc_skew_width must be > 0")
     if args.gc_skew_radius is not None and args.gc_skew_radius <= 0:
         parser.error("--gc_skew_radius must be > 0")
+    if args.depth_width is not None and args.depth_width <= 0:
+        parser.error("--depth_width must be > 0")
+    if args.depth_window is not None and args.depth_window <= 0:
+        parser.error("--depth_window must be > 0")
+    if args.depth_step is not None and args.depth_step <= 0:
+        parser.error("--depth_step must be > 0")
+    if args.show_depth and not args.depth:
+        parser.error("--show_depth requires --depth")
+    if args.depth_min is not None and args.depth_min < 0:
+        parser.error("--depth_min must be >= 0")
+    if args.depth_max is not None and args.depth_max < 0:
+        parser.error("--depth_max must be >= 0")
+    if args.depth_min is not None and args.depth_max is not None and args.depth_min > args.depth_max:
+        parser.error("--depth_min must be <= --depth_max")
+    if args.depth_tick_interval is not None and args.depth_tick_interval <= 0:
+        parser.error("--depth_tick_interval must be > 0")
+    if args.depth_large_tick_interval is not None and args.depth_large_tick_interval <= 0:
+        parser.error("--depth_large_tick_interval must be > 0")
+    if args.depth_small_tick_interval is not None and args.depth_small_tick_interval <= 0:
+        parser.error("--depth_small_tick_interval must be > 0")
+    if args.depth_tick_font_size is not None and args.depth_tick_font_size <= 0:
+        parser.error("--depth_tick_font_size must be > 0")
     if args.tick_label_font_size is not None and args.tick_label_font_size <= 0:
         parser.error("--tick_label_font_size must be > 0")
     if args.circular_label_spacing is not None and args.circular_label_spacing <= 0:
@@ -460,6 +567,22 @@ def circular_main(cmd_args) -> None:
     label_font_size: Optional[float] = args.label_font_size
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
+    depth_file: str | None = args.depth
+    show_depth: bool = bool(args.show_depth or depth_file)
+    depth_color: str | None = args.depth_color
+    depth_width: Optional[float] = args.depth_width
+    depth_window: Optional[int] = args.depth_window
+    depth_step: Optional[int] = args.depth_step
+    depth_share_axis: bool = bool(args.share_depth_axis)
+    depth_min: Optional[float] = args.depth_min
+    depth_max: Optional[float] = args.depth_max
+    depth_normalize: bool | None = args.depth_normalize
+    depth_show_axis: bool | None = args.depth_show_axis
+    depth_show_ticks: bool | None = args.depth_show_ticks
+    depth_tick_interval: Optional[float] = args.depth_tick_interval
+    depth_large_tick_interval: Optional[float] = args.depth_large_tick_interval
+    depth_small_tick_interval: Optional[float] = args.depth_small_tick_interval
+    depth_tick_font_size: Optional[float] = args.depth_tick_font_size
     labels_mode: str = args.labels
     show_labels: bool = labels_mode != "none"
     resolve_overlaps: bool = args.resolve_overlaps
@@ -569,6 +692,18 @@ def circular_main(cmd_args) -> None:
         resolve_overlaps=resolve_overlaps,
         show_gc=show_gc, 
         show_skew=show_skew, 
+        show_depth=show_depth,
+        depth_color=depth_color,
+        depth_min=depth_min,
+        depth_max=depth_max,
+        depth_normalize=depth_normalize,
+        depth_show_axis=depth_show_axis,
+        depth_show_ticks=depth_show_ticks,
+        depth_tick_interval=depth_tick_interval,
+        depth_large_tick_interval=depth_large_tick_interval,
+        depth_small_tick_interval=depth_small_tick_interval,
+        depth_tick_font_size=depth_tick_font_size,
+        depth_share_axis=depth_share_axis,
         allow_inner_labels=allow_inner_labels,
         circular_definition_font_size=definition_font_size,
         plot_title_font_size=plot_title_font_size,
@@ -597,6 +732,13 @@ def circular_main(cmd_args) -> None:
     track_specs: list[str] = []
     if feature_width is not None:
         track_specs.append(f"features@w={float(feature_width):g}px")
+    if depth_width is not None:
+        if not show_depth:
+            logger.warning(
+                "WARNING: Depth track is hidden. Ignoring --depth_width."
+            )
+        else:
+            track_specs.append(f"depth@w={float(depth_width):g}px")
 
     gc_content_spec_requested = (gc_content_width is not None) or (gc_content_radius is not None)
     if gc_content_spec_requested:
@@ -646,6 +788,9 @@ def circular_main(cmd_args) -> None:
             dinucleotide=dinucleotide,
             window=manual_window,
             step=manual_step,
+            depth_window=depth_window,
+            depth_step=depth_step,
+            depth_file=depth_file,
             species=species,
             strain=strain,
             plot_title=plot_title,
@@ -682,6 +827,9 @@ def circular_main(cmd_args) -> None:
                 dinucleotide=dinucleotide,
                 window=window,
                 step=step,
+                depth_window=depth_window,
+                depth_step=depth_step,
+                depth_file=depth_file,
                 species=species,
                 strain=strain,
                 plot_title=plot_title,

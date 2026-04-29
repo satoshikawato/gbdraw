@@ -1106,6 +1106,71 @@ json.dumps({
             })
             .filter((assignment) => typeof assignment === 'string' && assignment.length > 0)
         : [];
+      const appendDepthStyleArgs = () => {
+        if (adv.depth_color) args.push('--depth_color', adv.depth_color);
+        if (adv.depth_min !== null && adv.depth_min !== undefined && adv.depth_min !== '') {
+          args.push('--depth_min', adv.depth_min);
+        }
+        if (adv.depth_max !== null && adv.depth_max !== undefined && adv.depth_max !== '') {
+          args.push('--depth_max', adv.depth_max);
+        }
+        if (
+          adv.depth_min !== null &&
+          adv.depth_min !== undefined &&
+          adv.depth_min !== '' &&
+          adv.depth_max !== null &&
+          adv.depth_max !== undefined &&
+          adv.depth_max !== '' &&
+          Number(adv.depth_min) > Number(adv.depth_max)
+        ) {
+          throw new Error('Depth minimum must be less than or equal to depth maximum.');
+        }
+        if (adv.depth_normalize === true) args.push('--depth_log_scale');
+        if (adv.depth_share_axis === true) args.push('--share_depth_axis');
+        if (adv.depth_show_axis === false) args.push('--hide_depth_axis');
+        if (
+          adv.depth_window_size !== null &&
+          adv.depth_window_size !== undefined &&
+          adv.depth_window_size !== ''
+        ) {
+          if (Number(adv.depth_window_size) <= 0) throw new Error('Depth window must be greater than 0.');
+          args.push('--depth_window', adv.depth_window_size);
+        }
+        if (
+          adv.depth_step_size !== null &&
+          adv.depth_step_size !== undefined &&
+          adv.depth_step_size !== ''
+        ) {
+          if (Number(adv.depth_step_size) <= 0) throw new Error('Depth step must be greater than 0.');
+          args.push('--depth_step', adv.depth_step_size);
+        }
+        if (adv.depth_show_ticks === false) args.push('--hide_depth_ticks');
+        if (
+          adv.depth_tick_interval !== null &&
+          adv.depth_tick_interval !== undefined &&
+          adv.depth_tick_interval !== ''
+        ) {
+          if (Number(adv.depth_tick_interval) <= 0) throw new Error('Depth large tick interval must be greater than 0.');
+          args.push('--depth_large_tick_interval', adv.depth_tick_interval);
+        }
+        if (
+          mode.value === 'circular' &&
+          adv.depth_small_tick_interval !== null &&
+          adv.depth_small_tick_interval !== undefined &&
+          adv.depth_small_tick_interval !== ''
+        ) {
+          if (Number(adv.depth_small_tick_interval) <= 0) throw new Error('Depth small tick interval must be greater than 0.');
+          args.push('--depth_small_tick_interval', adv.depth_small_tick_interval);
+        }
+        if (
+          adv.depth_tick_font_size !== null &&
+          adv.depth_tick_font_size !== undefined &&
+          adv.depth_tick_font_size !== ''
+        ) {
+          if (Number(adv.depth_tick_font_size) <= 0) throw new Error('Depth tick font size must be greater than 0.');
+          args.push('--depth_tick_font_size', adv.depth_tick_font_size);
+        }
+      };
 
       if (mode.value === 'circular') {
         const multiCanvasSupport = getCircularMultiRecordCanvasOptionSupport();
@@ -1304,6 +1369,22 @@ json.dumps({
             Number(adv.gc_skew_radius_circular) > 0
           ) {
             args.push('--gc_skew_radius', adv.gc_skew_radius_circular);
+          }
+        }
+        const hasCircularDepthFile = Boolean(files.c_depth);
+        if (form.show_depth) {
+          if (!hasCircularDepthFile) throw new Error('Please upload a Depth TSV file or disable Show depth track.');
+          await writeFileToFs(files.c_depth, '/depth.tsv');
+          args.push('--depth', '/depth.tsv');
+          args.push('--show_depth');
+          appendDepthStyleArgs();
+          if (
+            adv.depth_width_circular !== null &&
+            adv.depth_width_circular !== undefined &&
+            adv.depth_width_circular !== '' &&
+            Number(adv.depth_width_circular) > 0
+          ) {
+            args.push('--depth_width', adv.depth_width_circular);
           }
         }
         if (adv.scale_interval) args.push('--scale_interval', adv.scale_interval);
@@ -1884,6 +1965,39 @@ json.dumps({
         if (useLosat) {
           losatCacheInfo.value = cacheInfo;
           losatCache.value = cacheMap;
+        }
+        const depthEntries = linearSeqs
+          .map((seq, idx) => ({ file: seq.depth, idx }))
+          .filter((entry) => Boolean(entry.file));
+        if (form.show_depth) {
+          if (depthEntries.length === 0) {
+            throw new Error('Please upload at least one Depth TSV file or disable Show depth track.');
+          }
+          if (depthEntries.length !== 1 && depthEntries.length !== linearSeqs.length) {
+            throw new Error('Upload one Depth TSV for all records, or one Depth TSV per sequence.');
+          }
+          const depthPaths = [];
+          if (depthEntries.length === 1 && linearSeqs.length > 1) {
+            await writeFileToFs(depthEntries[0].file, '/depth.tsv');
+            depthPaths.push('/depth.tsv');
+          } else {
+            for (const entry of depthEntries) {
+              const depthPath = `/seq_${entry.idx}.depth.tsv`;
+              await writeFileToFs(entry.file, depthPath);
+              depthPaths.push(depthPath);
+            }
+          }
+          args.push('--depth', ...depthPaths);
+          args.push('--show_depth');
+          appendDepthStyleArgs();
+          if (
+            adv.depth_height !== null &&
+            adv.depth_height !== undefined &&
+            adv.depth_height !== '' &&
+            Number(adv.depth_height) > 0
+          ) {
+            args.push('--depth_height', adv.depth_height);
+          }
         }
         if (lInputType.value === 'gb') args.push('--gbk', ...inputArgs);
         else {

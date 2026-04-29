@@ -1,7 +1,7 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
-const SESSION_VERSION = 10;
+const SESSION_VERSION = 13;
 
 const cloneColors = (colors) => ({ ...(colors || {}) });
 
@@ -338,6 +338,39 @@ const applyConfigData = (data) => {
   }
   state.adv.keep_full_definition_with_plot_title =
     state.adv.keep_full_definition_with_plot_title === true;
+  state.adv.depth_color = resolveColorToHex(String(state.adv.depth_color || '#4A90E2'));
+  state.adv.depth_normalize = state.adv.depth_normalize === true;
+  state.adv.depth_show_axis = state.adv.depth_show_axis !== false;
+  state.adv.depth_show_ticks = state.adv.depth_show_ticks !== false;
+  state.adv.depth_share_axis = state.adv.depth_share_axis === true;
+  state.adv.depth_height = normalizePositiveNumberOrNull(state.adv.depth_height);
+  state.adv.depth_width_circular = normalizePositiveNumberOrNull(state.adv.depth_width_circular);
+  state.adv.depth_window_size = normalizePositiveNumberOrNull(state.adv.depth_window_size);
+  state.adv.depth_step_size = normalizePositiveNumberOrNull(state.adv.depth_step_size);
+  state.adv.depth_tick_interval = normalizePositiveNumberOrNull(state.adv.depth_tick_interval);
+  state.adv.depth_small_tick_interval = normalizePositiveNumberOrNull(state.adv.depth_small_tick_interval);
+  state.adv.depth_tick_font_size = normalizePositiveNumberOrNull(state.adv.depth_tick_font_size);
+  const normalizeNonNegativeNumberOrNull = (value) => {
+    if (
+      value === null ||
+      value === undefined ||
+      value === '' ||
+      String(value).trim().toLowerCase() === 'auto'
+    ) {
+      return null;
+    }
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+  };
+  state.adv.depth_min = normalizeNonNegativeNumberOrNull(state.adv.depth_min);
+  state.adv.depth_max = normalizeNonNegativeNumberOrNull(state.adv.depth_max);
+  if (
+    state.adv.depth_min !== null &&
+    state.adv.depth_max !== null &&
+    state.adv.depth_min > state.adv.depth_max
+  ) {
+    state.adv.depth_max = null;
+  }
   state.adv.linear_show_replicon = state.adv.linear_show_replicon === true;
   state.adv.linear_show_accession = state.adv.linear_show_accession !== false;
   state.adv.linear_show_length = state.adv.linear_show_length !== false;
@@ -557,6 +590,7 @@ const serializeFiles = async () => {
       gb: await serializeFile(seq.gb),
       gff: await serializeFile(seq.gff),
       fasta: await serializeFile(seq.fasta),
+      depth: await serializeFile(seq.depth),
       blast: await serializeFile(seq.blast),
       losat_gencode: seq.losat_gencode ?? 1,
       losat_filename: seq.losat_filename ?? '',
@@ -572,6 +606,7 @@ const serializeFiles = async () => {
     c_gb: await serializeFile(state.files.c_gb),
     c_gff: await serializeFile(state.files.c_gff),
     c_fasta: await serializeFile(state.files.c_fasta),
+    c_depth: await serializeFile(state.files.c_depth),
     d_color: await serializeFile(state.files.d_color),
     t_color: await serializeFile(state.files.t_color),
     blacklist: await serializeFile(state.files.blacklist),
@@ -585,6 +620,7 @@ const applyFiles = (filesData) => {
   state.files.c_gb = null;
   state.files.c_gff = null;
   state.files.c_fasta = null;
+  state.files.c_depth = null;
   state.files.d_color = null;
   state.files.t_color = null;
   state.files.blacklist = null;
@@ -600,6 +636,7 @@ const applyFiles = (filesData) => {
   state.files.c_gb = deserializeFile(filesData.c_gb);
   state.files.c_gff = deserializeFile(filesData.c_gff);
   state.files.c_fasta = deserializeFile(filesData.c_fasta);
+  state.files.c_depth = deserializeFile(filesData.c_depth);
   state.files.d_color = deserializeFile(filesData.d_color);
   state.files.t_color = deserializeFile(filesData.t_color);
   state.files.blacklist = deserializeFile(filesData.blacklist);
@@ -612,6 +649,7 @@ const applyFiles = (filesData) => {
       gb: deserializeFile(seq.gb),
       gff: deserializeFile(seq.gff),
       fasta: deserializeFile(seq.fasta),
+      depth: deserializeFile(seq.depth),
       blast: deserializeFile(seq.blast),
       losat_gencode: seq.losat_gencode ?? 1,
       losat_filename: seq.losat_filename ?? '',
@@ -688,6 +726,7 @@ export const exportSession = async (titleOverride = null) => {
     (state.files.c_gb?.size || 0) +
     (state.files.c_gff?.size || 0) +
     (state.files.c_fasta?.size || 0) +
+    (state.files.c_depth?.size || 0) +
     (state.files.d_color?.size || 0) +
     (state.files.t_color?.size || 0) +
     (state.files.blacklist?.size || 0) +
@@ -699,6 +738,7 @@ export const exportSession = async (titleOverride = null) => {
         (seq.gb?.size || 0) +
         (seq.gff?.size || 0) +
         (seq.fasta?.size || 0) +
+        (seq.depth?.size || 0) +
         (seq.blast?.size || 0)
       );
     }, 0) +

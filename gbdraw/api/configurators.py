@@ -2,6 +2,7 @@
 
 from gbdraw.configurators import (  # type: ignore[reportMissingImports]
     BlastMatchConfigurator,
+    DepthConfigurator,
     FeatureDrawingConfigurator,
     GcContentConfigurator,
     GcSkewConfigurator,
@@ -10,6 +11,7 @@ from gbdraw.configurators import (  # type: ignore[reportMissingImports]
 
 __all__ = [
     "BlastMatchConfigurator",
+    "DepthConfigurator",
     "FeatureDrawingConfigurator",
     "GcContentConfigurator",
     "GcSkewConfigurator",

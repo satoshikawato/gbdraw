@@ -58,6 +58,12 @@ class DiagramOptions:
     dinucleotide: str = "GC"
     window: int | None = None
     step: int | None = None
+    depth_window: int | None = None
+    depth_step: int | None = None
+    depth_table: DataFrame | None = None
+    depth_file: str | None = None
+    depth_tables: Sequence[DataFrame] | None = None
+    depth_files: Sequence[str] | None = None
     plot_title: str | None = None
     plot_title_font_size: float | None = None
     keep_full_definition_with_plot_title: bool = False
