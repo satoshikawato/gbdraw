@@ -9,6 +9,20 @@ const processing = ref(false);
 const loadingStatus = ref('Initializing...');
 const errorLog = ref(null);
 const sessionTitle = ref('');
+const generationProgress = reactive({
+  phase: 'idle',
+  message: '',
+  cancellable: false,
+  cancelRequested: false,
+  losat: {
+    totalPairs: 0,
+    cachedPairs: 0,
+    queuedPairs: 0,
+    completedPairs: 0,
+    runningPairs: [],
+    completedPairIndexes: []
+  }
+});
 
 const results = ref([]);
 const selectedResultIndex = ref(0);
@@ -721,6 +735,7 @@ export const state = {
   loadingStatus,
   errorLog,
   sessionTitle,
+  generationProgress,
   results,
   selectedResultIndex,
   pairwiseMatchFactors,

@@ -12,6 +12,21 @@ const resolveWorkerUrl = () => new URL('../workers/losat-worker.js', import.meta
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
 const formatDuration = (startedAt) => `${((getNow() - startedAt) / 1000).toFixed(2)}s`;
 
+export const createAbortError = () => {
+  if (typeof DOMException === 'function') {
+    return new DOMException('Generation cancelled', 'AbortError');
+  }
+  const error = new Error('Generation cancelled');
+  error.name = 'AbortError';
+  return error;
+};
+
+export const isAbortError = (error) => error?.name === 'AbortError';
+
+const throwIfAborted = (signal) => {
+  if (signal?.aborted) throw createAbortError();
+};
+
 const loadWasiShim = async () => {
   if (!wasiShimPromise) {
     const wasiShimUrl = resolveAssetUrl(WASI_SHIM_URL);
@@ -234,15 +249,34 @@ const formatPairErrorPrefix = (job) => {
   return pairNumber ? `LOSAT pair #${pairNumber}` : 'LOSAT pair';
 };
 
-const runLosatPairsSequential = async (jobs) => {
+const runLosatPairsSequential = async (jobs, {
+  signal,
+  onQueued,
+  onStarted,
+  onCompleted,
+  onProgress
+} = {}) => {
   const startedAt = getNow();
   console.info(`Running ${jobs.length} LOSAT pair${jobs.length === 1 ? '' : 's'} sequentially.`);
   const results = [];
+  let completed = 0;
+  onQueued?.({ jobs: [...jobs], activeJobs: [], completed, total: jobs.length });
+  onProgress?.({ activeJobs: [], completed, total: jobs.length });
   for (const job of jobs) {
+    throwIfAborted(signal);
     try {
+      const activeJobs = [job];
+      onStarted?.({ job, activeJobs, completed, total: jobs.length });
+      onProgress?.({ activeJobs, completed, total: jobs.length });
       const text = await runLosatPair(job);
-      results.push({ ...job, text });
+      throwIfAborted(signal);
+      const result = { ...job, text };
+      results.push(result);
+      completed += 1;
+      onCompleted?.({ result, activeJobs: [], completed, total: jobs.length });
+      onProgress?.({ activeJobs: [], completed, total: jobs.length });
     } catch (error) {
+      if (isAbortError(error)) throw error;
       const message = error?.message ? String(error.message) : String(error || 'Unknown LOSAT error');
       throw new Error(`${formatPairErrorPrefix(job)}: ${message}`);
     }
@@ -251,27 +285,45 @@ const runLosatPairsSequential = async (jobs) => {
   return results;
 };
 
-const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath } = {}) => {
+const runLosatPairsWithWorkers = async (jobs, {
+  concurrency,
+  workerUrl,
+  wasmPath,
+  signal,
+  onQueued,
+  onStarted,
+  onCompleted,
+  onProgress
+} = {}) => {
   const workerCount = Math.min(
     jobs.length,
     Math.max(1, Number.isFinite(concurrency) ? Math.floor(concurrency) : getDefaultConcurrency(jobs.length))
   );
   if (workerCount <= 0) return [];
+  throwIfAborted(signal);
 
   const startedAt = getNow();
   const resolvedWorkerUrl = workerUrl || resolveWorkerUrl();
   const resolvedWasmUrl = resolveAssetUrl(wasmPath || DEFAULT_WASM_PATH);
   const resolvedWasiShimUrl = resolveAssetUrl(WASI_SHIM_URL);
   const wasmModule = await loadLosatModule(wasmPath || DEFAULT_WASM_PATH);
+  throwIfAborted(signal);
   const results = new Array(jobs.length);
   const workers = [];
+  const activeJobs = new Map();
   let nextJobIndex = 0;
   let completed = 0;
   let settled = false;
   let requestId = 0;
 
   return new Promise((resolve, reject) => {
+    const getActiveJobs = () => Array.from(activeJobs.values()).map((entry) => entry.job);
+    const emitProgress = () => {
+      onProgress?.({ activeJobs: getActiveJobs(), completed, total: jobs.length });
+    };
+
     const cleanup = () => {
+      signal?.removeEventListener('abort', handleAbort);
       workers.forEach((worker) => worker.terminate());
     };
 
@@ -281,6 +333,19 @@ const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath
       cleanup();
       reject(error);
     };
+
+    const handleAbort = () => {
+      console.info(
+        `Cancelling LOSAT worker pool after ${completed} / ${jobs.length} completed job${jobs.length === 1 ? '' : 's'}.`
+      );
+      fail(createAbortError());
+    };
+
+    if (signal?.aborted) {
+      fail(createAbortError());
+      return;
+    }
+    signal?.addEventListener('abort', handleAbort, { once: true });
 
     const maybeResolve = () => {
       if (settled || completed < jobs.length) return;
@@ -294,6 +359,10 @@ const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath
 
     const assignNext = (worker) => {
       if (settled) return;
+      if (signal?.aborted) {
+        fail(createAbortError());
+        return;
+      }
       if (nextJobIndex >= jobs.length) {
         maybeResolve();
         return;
@@ -303,21 +372,29 @@ const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath
       const job = jobs[index];
       const id = `${Date.now()}-${requestId}`;
       requestId += 1;
+      activeJobs.set(worker, { job, index, id });
+      onStarted?.({ job, activeJobs: getActiveJobs(), completed, total: jobs.length });
+      emitProgress();
 
       const handleMessage = (event) => {
         const data = event.data || {};
         if (data.id !== id) return;
+        if (settled) return;
         worker.removeEventListener('message', handleMessage);
         worker.removeEventListener('error', handleError);
         worker.removeEventListener('messageerror', handleMessageError);
+        activeJobs.delete(worker);
 
         if (!data.ok) {
           fail(new Error(`${formatPairErrorPrefix(job)}: ${data.error || 'LOSAT worker failed'}`));
           return;
         }
 
-        results[index] = { ...job, text: data.text || '' };
+        const result = { ...job, text: data.text || '' };
+        results[index] = result;
         completed += 1;
+        onCompleted?.({ result, activeJobs: getActiveJobs(), completed, total: jobs.length });
+        emitProgress();
         assignNext(worker);
       };
 
@@ -325,6 +402,7 @@ const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath
         worker.removeEventListener('message', handleMessage);
         worker.removeEventListener('error', handleError);
         worker.removeEventListener('messageerror', handleMessageError);
+        activeJobs.delete(worker);
         fail(new Error(`${formatPairErrorPrefix(job)}: ${event.message || 'LOSAT worker error'}`));
       };
 
@@ -332,6 +410,7 @@ const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath
         worker.removeEventListener('message', handleMessage);
         worker.removeEventListener('error', handleError);
         worker.removeEventListener('messageerror', handleMessageError);
+        activeJobs.delete(worker);
         fail(new Error(`${formatPairErrorPrefix(job)}: LOSAT worker message could not be decoded`));
       };
 
@@ -354,6 +433,8 @@ const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath
         workers.push(new Worker(resolvedWorkerUrl, { type: 'module' }));
       }
       console.info(`Running ${workerCount} LOSAT worker${workerCount === 1 ? '' : 's'}.`);
+      onQueued?.({ jobs: [...jobs], activeJobs: [], completed, total: jobs.length });
+      emitProgress();
       workers.forEach(assignNext);
     } catch (error) {
       fail(error);
@@ -364,13 +445,14 @@ const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath
 export const runLosatPairsParallel = async (jobs, options = {}) => {
   const jobList = Array.isArray(jobs) ? jobs : [];
   if (jobList.length === 0) return [];
-  if (jobList.length === 1) return runLosatPairsSequential(jobList);
+  throwIfAborted(options.signal);
 
   try {
     return await runLosatPairsWithWorkers(jobList, options);
   } catch (error) {
+    if (isAbortError(error)) throw error;
     console.warn('LOSAT Worker pool failed; falling back to sequential execution.', error);
-    return runLosatPairsSequential(jobList);
+    return runLosatPairsSequential(jobList, options);
   }
 };
 

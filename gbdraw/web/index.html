@@ -153,9 +153,47 @@
         <p class="text-xs text-slate-400 mt-4 font-mono" v-text="loadingStatus">Loading gbdraw...</p>
     </div>
 
-    <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
-        <div class="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mb-6"></div>
-        <h3 class="text-xl font-bold text-slate-800 animate-pulse">Generating Diagram...</h3>
+    <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="w-full max-w-sm rounded-lg border border-slate-200 bg-white shadow-xl p-5">
+            <div class="flex items-center gap-3">
+                <div class="animate-spin w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full shrink-0"></div>
+                <div class="min-w-0">
+                    <h3 class="text-lg font-bold text-slate-800">Generating Diagram...</h3>
+                    <p class="text-sm text-slate-500 truncate" v-text="generationProgress.message || generationProgress.phase">Preparing inputs</p>
+                </div>
+            </div>
+            <div v-if="generationProgress.losat.totalPairs > 0" class="mt-4 space-y-2">
+                <div class="h-2 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                        class="h-full bg-blue-600 transition-all duration-200"
+                        :style="{ width: generationProgress.losat.totalPairs ? Math.min(100, Math.round((generationProgress.losat.completedPairs / generationProgress.losat.totalPairs) * 100)) + '%' : '0%' }"
+                    ></div>
+                </div>
+                <div class="flex items-center justify-between gap-3 text-[11px] text-slate-500">
+                    <span>{{ generationProgress.losat.completedPairs }} / {{ generationProgress.losat.totalPairs }} comparisons complete</span>
+                    <span v-if="generationProgress.losat.cachedPairs || generationProgress.losat.queuedPairs" class="shrink-0">
+                        {{ generationProgress.losat.cachedPairs }} cached, {{ generationProgress.losat.queuedPairs }} queued
+                    </span>
+                </div>
+                <div v-if="generationProgress.losat.runningPairs.length" class="flex flex-wrap gap-1.5">
+                    <span
+                        v-for="pair in generationProgress.losat.runningPairs"
+                        :key="pair.pairIndex"
+                        class="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1"
+                    >{{ pair.label }}</span>
+                </div>
+            </div>
+            <button
+                v-if="generationProgress.cancellable"
+                type="button"
+                @click="cancelGeneration"
+                :disabled="generationProgress.cancelRequested"
+                class="btn btn-secondary w-full mt-4 justify-center"
+            >
+                <i class="ph ph-x-circle"></i>
+                {{ generationProgress.cancelRequested ? 'Cancelling...' : 'Cancel' }}
+            </button>
+        </div>
     </div>
 
     <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-14 shrink-0">
@@ -371,7 +409,7 @@
                                     <div class="text-[9px] text-slate-400 mt-1">Default: {{ getLosatPairDefaultName(idx) }}</div>
                                 </div>
                                 <button @click="downloadLosatPair(idx, seq.losat_filename)" class="btn btn-secondary text-xs w-full mt-2"
-                                        :disabled="!losatCacheInfo[idx]">
+                                        :disabled="!losatCacheInfo[idx]?.cached">
                                     <i class="ph ph-download-simple"></i> Save LOSAT TSV
                                 </button>
                             </div>

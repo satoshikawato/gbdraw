@@ -1,4 +1,9 @@
-import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
+import {
+  createAbortError,
+  isAbortError,
+  prepareLosatRuntime,
+  runLosatPairsParallel
+} from '../services/losat.js';
 import { buildLabelOverrideTsv } from './feature-editor/label-override-table.js';
 
 const downloadTextFile = (filename, text) => {
@@ -377,6 +382,7 @@ export const createRunAnalysis = ({
   const {
     pyodideReady,
     processing,
+    generationProgress,
     results,
     selectedResultIndex,
     errorLog,
@@ -445,12 +451,64 @@ export const createRunAnalysis = ({
   let activeReflowRequestId = 0;
   let pendingReflowReason = 'label-edit';
   let featureExtractionRequestId = 0;
+  let activeRunAbortController = null;
 
   const getLastLine = (text) => {
     const trimmed = String(text || '').trim();
     if (!trimmed) return '';
     const lines = trimmed.split(/\r?\n/);
     return lines[lines.length - 1] || '';
+  };
+
+  const resetGenerationProgress = () => {
+    generationProgress.phase = 'idle';
+    generationProgress.message = '';
+    generationProgress.cancellable = false;
+    generationProgress.cancelRequested = false;
+    generationProgress.losat.totalPairs = 0;
+    generationProgress.losat.cachedPairs = 0;
+    generationProgress.losat.queuedPairs = 0;
+    generationProgress.losat.completedPairs = 0;
+    generationProgress.losat.runningPairs = [];
+    generationProgress.losat.completedPairIndexes = [];
+  };
+
+  const setGenerationPhase = (phase, message = '', { cancellable = true } = {}) => {
+    generationProgress.phase = phase;
+    generationProgress.message = message;
+    generationProgress.cancellable = cancellable;
+  };
+
+  const setLosatProgress = ({
+    totalPairs,
+    cachedPairs,
+    queuedPairs,
+    completedPairs,
+    runningPairs,
+    completedPairIndexes
+  } = {}) => {
+    if (totalPairs !== undefined) generationProgress.losat.totalPairs = Math.max(0, Number(totalPairs) || 0);
+    if (cachedPairs !== undefined) generationProgress.losat.cachedPairs = Math.max(0, Number(cachedPairs) || 0);
+    if (queuedPairs !== undefined) generationProgress.losat.queuedPairs = Math.max(0, Number(queuedPairs) || 0);
+    if (completedPairs !== undefined) generationProgress.losat.completedPairs = Math.max(0, Number(completedPairs) || 0);
+    if (runningPairs !== undefined) {
+      generationProgress.losat.runningPairs = Array.isArray(runningPairs) ? runningPairs : [];
+    }
+    if (completedPairIndexes !== undefined) {
+      generationProgress.losat.completedPairIndexes = Array.isArray(completedPairIndexes)
+        ? completedPairIndexes
+        : [];
+    }
+  };
+
+  const yieldToBrowser = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  const cancelGeneration = () => {
+    if (!activeRunAbortController || activeRunAbortController.signal.aborted) return;
+    generationProgress.cancelRequested = true;
+    generationProgress.message = 'Cancelling...';
+    console.info('Generation cancellation requested.');
+    activeRunAbortController.abort();
   };
 
   const normalizeSections = (sections) =>
@@ -943,6 +1001,21 @@ json.dumps({
     if (isReflow && mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
       return { status: 'skipped' };
     }
+    let runAbortController = null;
+    let runSignal = null;
+    if (!isReflow) {
+      if (activeRunAbortController && !activeRunAbortController.signal.aborted) {
+        activeRunAbortController.abort();
+      }
+      runAbortController = new AbortController();
+      runSignal = runAbortController.signal;
+      activeRunAbortController = runAbortController;
+      resetGenerationProgress();
+      setGenerationPhase('Preparing inputs', 'Preparing inputs');
+    }
+    const throwIfCancelled = () => {
+      if (runSignal?.aborted) throw createAbortError();
+    };
     const previousSelectedResultIndex = selectedResultIndex.value;
     const editableLabelsSnapshot = Array.isArray(editableLabels.value)
       ? editableLabels.value.map((entry) => ({ ...entry }))
@@ -1323,11 +1396,14 @@ json.dumps({
         if (cInputType.value === 'gb') {
           if (!files.c_gb) throw new Error('Please upload a GenBank file.');
           await writeFileToFs(files.c_gb, '/input.gb');
+          throwIfCancelled();
           args.push('--gbk', '/input.gb');
         } else {
           if (!files.c_gff || !files.c_fasta) throw new Error('GFF3 and FASTA are required.');
           await writeFileToFs(files.c_gff, '/input.gff');
+          throwIfCancelled();
           await writeFileToFs(files.c_fasta, '/input.fasta');
+          throwIfCancelled();
           args.push('--gff', '/input.gff', '--fasta', '/input.fasta');
         }
       } else {
@@ -1677,6 +1753,7 @@ json.dumps({
         const writeLinearFileToFs = async (fileObj, path, { cacheText = false } = {}) => {
           if (!fileObj) return false;
           const buffer = await fileObj.arrayBuffer();
+          throwIfCancelled();
           const bytes = new Uint8Array(buffer);
           pyodide.FS.writeFile(path, bytes);
           if (cacheText) {
@@ -1688,6 +1765,7 @@ json.dumps({
         const getSeqHash = async (idx) => {
           if (fastaHashCache.has(idx)) return fastaHashCache.get(idx);
           const entry = await getSeqEntry(idx);
+          throwIfCancelled();
           if (entry.hash) {
             if (losatTiming) losatTiming.cacheHashHits += 1;
             fastaHashCache.set(idx, entry.hash);
@@ -1695,6 +1773,7 @@ json.dumps({
           }
           const startedAt = getNow();
           const hash = await hashText(entry.fasta);
+          throwIfCancelled();
           if (losatTiming) losatTiming.cacheHashMs += getNow() - startedAt;
           entry.hash = hash;
           fastaHashCache.set(idx, hash);
@@ -1763,6 +1842,13 @@ json.dumps({
           }
           if (losatTiming) losatTiming.inputWriteMs += getNow() - inputWriteStartedAt;
         }
+        throwIfCancelled();
+        if (!isReflow) {
+          setGenerationPhase(
+            'Preparing comparisons',
+            useLosat ? 'Preparing comparisons' : 'Preparing comparison files'
+          );
+        }
 
         regionSpecs = linearSeqs.map((seq, idx) => buildRegionSpec(seq, idx));
         regionSpecs.forEach((spec) => {
@@ -1780,15 +1866,19 @@ json.dumps({
           const losatPairs = [];
           const losatJobs = [];
           const pendingJobKeys = new Set();
+          const cacheKeyToPairIndexes = new Map();
           const jobBuildStartedAt = getNow();
           const fastaExtractionBeforeJobBuild = losatTiming.fastaExtractionMs;
           const cacheHashBeforeJobBuild = losatTiming.cacheHashMs;
 
           for (let i = 0; i < linearSeqs.length - 1; i++) {
             const queryEntry = await getSeqEntry(i);
+            throwIfCancelled();
             const subjectEntry = await getSeqEntry(i + 1);
+            throwIfCancelled();
             const losatArgs = buildLosatArgs(i, i + 1);
             const cacheKey = await buildCacheKey(losatArgs, i, i + 1);
+            throwIfCancelled();
             const cached = cacheMap.get(cacheKey);
             const hasCachedText = typeof cached?.text === 'string';
             losatTiming.totalPairs += 1;
@@ -1800,9 +1890,15 @@ json.dumps({
               filename: buildCacheFilename(i, queryEntry, subjectEntry)
             };
             losatPairs.push(pair);
+            if (!cacheKeyToPairIndexes.has(cacheKey)) {
+              cacheKeyToPairIndexes.set(cacheKey, []);
+            }
+            cacheKeyToPairIndexes.get(cacheKey).push(i);
             cacheInfo.push({
               key: cacheKey,
-              filename: pair.filename
+              filename: pair.filename,
+              pairIndex: i,
+              cached: hasCachedText
             });
 
             if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
@@ -1825,21 +1921,96 @@ json.dumps({
           losatTiming.jobBuildWallMs += jobBuildWallMs;
           losatTiming.jobBuildMs += Math.max(0, jobBuildWallMs - nestedFastaMs - nestedHashMs);
 
+          const completedPairIndexes = new Set(
+            cacheInfo
+              .filter((entry) => entry.cached)
+              .map((entry) => entry.pairIndex)
+              .filter((idx) => Number.isInteger(idx))
+          );
+          const formatRunningLosatPair = (job) => {
+            const pairIndex = Number(job?.pairIndex);
+            if (!Number.isInteger(pairIndex)) return null;
+            return {
+              pairIndex,
+              label: `Running #${pairIndex + 1} <-> #${pairIndex + 2}`
+            };
+          };
+          const refreshLosatCacheInfoState = () => {
+            losatCacheInfo.value = cacheInfo.map((entry) => ({ ...entry }));
+            losatCache.value = cacheMap;
+          };
+          const markLosatResultCached = (cacheKey) => {
+            if (!cacheMap.has(cacheKey)) return;
+            const pairIndexes = cacheKeyToPairIndexes.get(cacheKey) || [];
+            pairIndexes.forEach((pairIndex) => completedPairIndexes.add(pairIndex));
+            cacheInfo = cacheInfo.map((entry) =>
+              entry.key === cacheKey ? { ...entry, cached: true } : entry
+            );
+            refreshLosatCacheInfoState();
+          };
+          const updateLosatProgress = ({ activeJobs = [], completedJobs = 0 } = {}) => {
+            const runningPairs = activeJobs
+              .map(formatRunningLosatPair)
+              .filter(Boolean);
+            const queuedPairs = Math.max(0, losatJobs.length - completedJobs - runningPairs.length);
+            setLosatProgress({
+              totalPairs: losatPairs.length,
+              cachedPairs: losatTiming.cacheHits,
+              queuedPairs,
+              completedPairs: completedPairIndexes.size,
+              runningPairs,
+              completedPairIndexes: Array.from(completedPairIndexes).sort((a, b) => a - b)
+            });
+            if (!isReflow && generationProgress.phase === 'Running LOSAT') {
+              generationProgress.message = `${completedPairIndexes.size} / ${losatPairs.length} comparisons complete`;
+            }
+          };
+
+          refreshLosatCacheInfoState();
+          updateLosatProgress();
+
           if (losatJobs.length > 0) {
+            if (!isReflow) {
+              setGenerationPhase(
+                'Running LOSAT',
+                `${completedPairIndexes.size} / ${losatPairs.length} comparisons complete`
+              );
+            }
             const runtimeWaitStartedAt = getNow();
             await losatRuntimeWarmup;
+            throwIfCancelled();
             losatTiming.runtimeWaitMs += getNow() - runtimeWaitStartedAt;
             const executionStartedAt = getNow();
             const losatResults = await runLosatPairsParallel(losatJobs, {
-              concurrency: getLosatParallelWorkers()
+              concurrency: getLosatParallelWorkers(),
+              signal: runSignal,
+              onStarted: ({ activeJobs, completed }) => {
+                updateLosatProgress({ activeJobs, completedJobs: completed });
+              },
+              onCompleted: ({ result, activeJobs, completed }) => {
+                cacheMap.set(result.cacheKey, { text: result.text });
+                markLosatResultCached(result.cacheKey);
+                updateLosatProgress({ activeJobs, completedJobs: completed });
+              },
+              onProgress: ({ activeJobs, completed }) => {
+                updateLosatProgress({ activeJobs, completedJobs: completed });
+              }
             });
+            throwIfCancelled();
             losatTiming.executionMs += getNow() - executionStartedAt;
             losatResults.forEach((result) => {
               cacheMap.set(result.cacheKey, { text: result.text });
+              markLosatResultCached(result.cacheKey);
             });
+          } else if (!isReflow) {
+            setGenerationPhase(
+              'Preparing comparisons',
+              losatPairs.length > 0 ? 'Using cached LOSAT comparisons' : 'No LOSAT comparisons needed'
+            );
           }
 
           const blastWriteStartedAt = getNow();
+          throwIfCancelled();
           losatPairs.forEach((pair) => {
             const cached = cacheMap.get(pair.cacheKey);
             const blastText = typeof cached?.text === 'string' ? cached.text : '';
@@ -1874,6 +2045,7 @@ json.dumps({
             const seq = linearSeqs[i];
             if (seq.blast) {
               await writeFileToFs(seq.blast, `/blast_${i}.txt`);
+              throwIfCancelled();
               blastArgs.push(`/blast_${i}.txt`);
             }
           }
@@ -1882,7 +2054,7 @@ json.dumps({
           extractFirstFasta.destroy();
         }
         if (useLosat) {
-          losatCacheInfo.value = cacheInfo;
+          losatCacheInfo.value = cacheInfo.map((entry) => ({ ...entry }));
           losatCache.value = cacheMap;
         }
         if (lInputType.value === 'gb') args.push('--gbk', ...inputArgs);
@@ -1899,6 +2071,12 @@ json.dumps({
       }
 
       console.log('CMD:', args.join(' '));
+      throwIfCancelled();
+      if (!isReflow) {
+        setGenerationPhase('Rendering diagram', 'Rendering diagram');
+        await yieldToBrowser();
+        throwIfCancelled();
+      }
       const gbdrawStartedAt = getNow();
       const jsonResult = pyodide
         .globals
@@ -1908,6 +2086,11 @@ json.dumps({
           virtualBlastFiles.length ? JSON.stringify(virtualBlastFiles) : null
         );
       console.info(`gbdraw ${mode.value} wrapper execution: ${formatDuration(getNow() - gbdrawStartedAt)}.`);
+      if (!isReflow) {
+        setGenerationPhase('Preparing preview', 'Preparing preview');
+        await yieldToBrowser();
+        throwIfCancelled();
+      }
       const postGbdrawTimingEntries = [];
       const res = measureTiming(postGbdrawTimingEntries, 'run-analysis JSON.parse result', () => JSON.parse(jsonResult));
       if (res.error) {
@@ -1985,12 +2168,26 @@ json.dumps({
         labelReflowLastError.value = formatJsError(e)?.summary || 'Auto reflow failed';
         return { status: 'error' };
       }
+      if (isAbortError(e)) {
+        console.info('Generation cancelled. Completed LOSAT results were kept.');
+        generationProgress.phase = 'cancelled';
+        generationProgress.message = 'Generation cancelled. Completed LOSAT results were kept.';
+        errorLog.value = {
+          summary: 'Generation cancelled. Completed LOSAT results were kept.',
+          details: []
+        };
+        return { status: 'cancelled' };
+      }
       errorLog.value = formatJsError(e);
       return { status: 'error' };
     } finally {
       if (isReflow) {
         labelReflowProcessing.value = false;
       } else {
+        if (activeRunAbortController === runAbortController) {
+          activeRunAbortController = null;
+        }
+        generationProgress.cancellable = false;
         processing.value = false;
       }
     }
@@ -2051,6 +2248,7 @@ json.dumps({
 
   return {
     runAnalysis,
+    cancelGeneration,
     runLabelReflow,
     refreshCircularRecordOrder,
     downloadLosatCache,

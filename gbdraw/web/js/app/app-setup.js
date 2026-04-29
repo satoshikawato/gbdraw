@@ -21,6 +21,7 @@ export const createAppSetup = () => {
     loadingStatus,
     errorLog,
     sessionTitle,
+    generationProgress,
     results,
     selectedResultIndex,
     pairwiseMatchFactors,
@@ -161,6 +162,7 @@ export const createAppSetup = () => {
   const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions });
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
+    cancelGeneration,
     runLabelReflow,
     refreshCircularRecordOrder,
     downloadLosatCache,
@@ -636,6 +638,8 @@ export const createAppSetup = () => {
     errorDisplay,
     sessionTitle,
     sessionTitleLabel,
+    generationProgress,
+    cancelGeneration,
     results,
     selectedResultIndex,
     svgContent,
