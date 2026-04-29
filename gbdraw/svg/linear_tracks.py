@@ -92,6 +92,54 @@ def calculate_gc_skew_path_desc(
     return gc_skew_desc
 
 
-__all__ = ["calculate_corrdinate", "calculate_gc_content_path_desc", "calculate_gc_skew_path_desc"]
+def calculate_depth_path_desc(
+    start_x: float,
+    start_y: float,
+    depth_df: DataFrame,
+    record_len: int,
+    alignment_width: float,
+    genome_size_normalization_factor: float,
+    track_height: float,
+) -> str:
+    """Return a filled linear area path for binned depth coverage."""
+
+    if depth_df.empty or record_len <= 0 or track_height <= 0:
+        return ""
+
+    baseline_y = float(start_y) + float(track_height)
+    x_values: list[float] = []
+    y_values: list[float] = []
+    for _, row in depth_df.iterrows():
+        position = int(row["position"])
+        value = max(0.0, min(1.0, float(row["depth_normalized"])))
+        x_value = normalize_position_to_linear_track(
+            position, record_len, alignment_width, genome_size_normalization_factor
+        )
+        y_value = baseline_y - (float(track_height) * value)
+        x_values.append(float(x_value))
+        y_values.append(float(y_value))
+
+    if not x_values:
+        return ""
+
+    final_x = normalize_position_to_linear_track(
+        record_len, record_len, alignment_width, genome_size_normalization_factor
+    )
+    path_segments = [f"M{start_x} {baseline_y}", f"L{x_values[0]} {y_values[0]}"]
+    path_segments.extend(
+        f"L{x_value} {y_value}" for x_value, y_value in zip(x_values[1:], y_values[1:])
+    )
+    path_segments.append(f"L{final_x} {y_values[-1]}")
+    path_segments.append(f"L{final_x} {baseline_y}")
+    path_segments.append(f"L{start_x} {baseline_y}z")
+    return "".join(path_segments)
+
+
+__all__ = [
+    "calculate_corrdinate",
+    "calculate_depth_path_desc",
+    "calculate_gc_content_path_desc",
+    "calculate_gc_skew_path_desc",
+]
 
 

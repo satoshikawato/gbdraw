@@ -20,8 +20,7 @@ def calculate_record_offsets(count: int, record: SeqRecord, canvas_config: Linea
     offset: float = canvas_config.vertical_offset + (
         canvas_config.cds_height
         + canvas_config.vertical_padding
-        + canvas_config.gc_padding
-        + canvas_config.skew_padding
+        + canvas_config.plot_tracks_height
         + canvas_config.comparison_height
         + canvas_config.vertical_padding
     ) * (count - 1)
@@ -45,16 +44,36 @@ def position_gc_content_group(
     """Positions the GC content group on the canvas."""
     gc_content_group.translate(
         offset_x + canvas_config.horizontal_offset,
-        offset_y + canvas_config.cds_padding + canvas_config.vertical_padding,
+        offset_y
+        + canvas_config.cds_padding
+        + canvas_config.vertical_padding
+        + canvas_config.gc_content_track_offset,
     )
     return gc_content_group
 
 
+def position_depth_group(
+    depth_group: Group, offset_y: float, offset_x: float, canvas_config: LinearCanvasConfigurator
+) -> Group:
+    """Positions the depth group on the canvas."""
+    depth_group.translate(
+        offset_x + canvas_config.horizontal_offset,
+        offset_y
+        + canvas_config.cds_padding
+        + canvas_config.vertical_padding
+        + canvas_config.depth_track_offset,
+    )
+    return depth_group
+
+
 def position_gc_skew_group(gc_skew_group: Group, offset_y: float, offset_x: float, canvas_config: LinearCanvasConfigurator) -> Group:
     """Positions the GC skew group on the canvas."""
-    y_offset = offset_y + canvas_config.cds_padding + canvas_config.vertical_padding
-    if canvas_config.show_gc:
-        y_offset += canvas_config.gc_height
+    y_offset = (
+        offset_y
+        + canvas_config.cds_padding
+        + canvas_config.vertical_padding
+        + canvas_config.gc_skew_track_offset
+    )
 
     gc_skew_group.translate(offset_x + canvas_config.horizontal_offset, y_offset)
     return gc_skew_group
@@ -80,8 +99,7 @@ def position_comparison_group(comparison_count: int, canvas_config: LinearCanvas
             canvas_config.vertical_offset
             + 0.5 * canvas_config.cds_height
             + canvas_config.vertical_padding
-            + 0.9 * canvas_config.gc_padding
-            + 0.9 * canvas_config.skew_padding
+            + 0.9 * canvas_config.plot_tracks_height
         )
         + (
             (
@@ -89,8 +107,7 @@ def position_comparison_group(comparison_count: int, canvas_config: LinearCanvas
                 + canvas_config.vertical_padding
                 + canvas_config.cds_height
                 + canvas_config.vertical_padding
-                + canvas_config.gc_padding
-                + canvas_config.skew_padding
+                + canvas_config.plot_tracks_height
             )
             * (comparison_count - 1)
         )
@@ -99,6 +116,7 @@ def position_comparison_group(comparison_count: int, canvas_config: LinearCanvas
 
 __all__ = [
     "calculate_record_offsets",
+    "position_depth_group",
     "position_record_group",
     "position_gc_content_group",
     "position_gc_skew_group",

@@ -16,10 +16,12 @@ from svgwrite import Drawing  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
 from ...analysis.skew import skew_df  # type: ignore[reportMissingImports]
+from ...analysis.depth import depth_df as build_depth_df  # type: ignore[reportMissingImports]
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...configurators import (  # type: ignore[reportMissingImports]
     FeatureDrawingConfigurator,
+    DepthConfigurator,
     GcContentConfigurator,
     LegendDrawingConfigurator,
 )
@@ -38,6 +40,7 @@ from ...labels.linear import calculate_label_y_bounds  # type: ignore[reportMiss
 
 from .builders import (
     add_comparison_on_linear_canvas,
+    add_depth_group,
     add_gc_content_group,
     add_gc_skew_group,
     add_legends_on_linear_canvas,
@@ -260,6 +263,56 @@ def _precalculate_gc_dataframes(
     return [skew_df(record, window, step, dinucleotide) for record in records]
 
 
+def _precalculate_depth_dataframes(
+    records: list[SeqRecord],
+    *,
+    depth_tables: list[DataFrame | None] | None,
+    depth_config: DepthConfigurator | None,
+    enabled: bool,
+) -> list[DataFrame | None]:
+    """Build depth data once per record and share it across linear groups."""
+    if not enabled or depth_config is None or not depth_tables:
+        return [None for _ in records]
+    out: list[DataFrame | None] = []
+    for index, record in enumerate(records):
+        table = depth_tables[index] if index < len(depth_tables) else None
+        if table is None:
+            out.append(None)
+            continue
+        out.append(
+            build_depth_df(
+                record,
+                table,
+                int(depth_config.window),
+                int(depth_config.step),
+                normalize=bool(depth_config.normalize),
+                min_depth=depth_config.min_depth,
+                max_depth=depth_config.max_depth,
+            )
+        )
+    return out
+
+
+def _apply_shared_depth_axis(
+    record_depth_dfs: list[DataFrame | None],
+    depth_config: DepthConfigurator | None,
+) -> None:
+    """Use one automatically determined depth axis max across all records."""
+
+    if depth_config is None or not bool(getattr(depth_config, "share_axis", False)):
+        return
+    if depth_config.max_depth is not None:
+        return
+
+    max_depth_values = [
+        float(df["depth"].max())
+        for df in record_depth_dfs
+        if df is not None and not df.empty and "depth" in df.columns
+    ]
+    if max_depth_values:
+        depth_config.max_depth = max(max_depth_values)
+
+
 def _precalculate_label_heights_below(all_labels_by_record: dict[str, list[dict]]) -> dict[str, float]:
     """Return per-record label extents that protrude below the axis."""
     record_label_heights_below: dict[str, float] = {}
@@ -288,6 +341,8 @@ def assemble_linear_diagram(
     config_dict: dict,
     legend_config: LegendDrawingConfigurator,
     skew_config,
+    depth_config: DepthConfigurator | None = None,
+    depth_tables: list[DataFrame | None] | None = None,
     plot_title: str | None = None,
     plot_title_position: str = "bottom",
     plot_title_font_size: float = 32.0,
@@ -402,6 +457,17 @@ def assemble_linear_diagram(
         dinucleotide=str(gc_config.dinucleotide),
         enabled=bool(canvas_config.show_gc or canvas_config.show_skew),
     )
+    depth_enabled = bool(canvas_config.show_depth and depth_config is not None and depth_tables)
+    record_depth_dfs = _precalculate_depth_dataframes(
+        records,
+        depth_tables=depth_tables,
+        depth_config=depth_config,
+        enabled=depth_enabled,
+    )
+    _apply_shared_depth_axis(record_depth_dfs, depth_config)
+    if not depth_enabled:
+        canvas_config.show_depth = False
+        canvas_config.set_gc_height_and_gc_padding()
 
     # Prepare legend group
     has_blast = bool(blast_files)
@@ -428,6 +494,7 @@ def assemble_linear_diagram(
             gc_config, skew_config, feature_config, features_present, blast_config, has_blast,
             used_color_rules=used_color_rules,
             default_used_features=default_used_features,
+            depth_config=depth_config if depth_enabled else None,
         )
         legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
         legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table, cfg=cfg)
@@ -475,7 +542,10 @@ def assemble_linear_diagram(
             
             # Get the height below axis for the current record (feature tracks + GC/skew)
             current_feature_height_below = record_heights_below.get(current_record_id, canvas_config.cds_padding)
-            height_below_axis = current_feature_height_below + canvas_config.gc_padding + canvas_config.skew_padding
+            height_below_axis = (
+                current_feature_height_below
+                + canvas_config.plot_tracks_height
+            )
             current_label_height_below = record_label_heights_below.get(current_record_id, 0.0)
             height_below_axis += current_label_height_below
             
@@ -536,8 +606,7 @@ def assemble_linear_diagram(
     final_record_height_below = max(
         final_feature_height_below
         + final_label_height_below
-        + canvas_config.gc_padding
-        + canvas_config.skew_padding,
+        + canvas_config.plot_tracks_height,
         final_definition_height_below,
     )
 
@@ -601,7 +670,10 @@ def assemble_linear_diagram(
                 ribbon_start_y = record_offsets[i]
                 ribbon_end_y = record_offsets[i + 1]
             else:
-                height_below_axis = canvas_config.cds_padding + canvas_config.gc_padding + canvas_config.skew_padding
+                height_below_axis = (
+                    canvas_config.cds_padding
+                    + canvas_config.plot_tracks_height
+                )
                 ribbon_start_y = record_offsets[i] + height_below_axis
                 ribbon_end_y = record_offsets[i + 1] - canvas_config.cds_padding
             comparison_offsets.append(ribbon_start_y)
@@ -672,7 +744,20 @@ def assemble_linear_diagram(
             gc_offset_y = offset_y + (current_feature_height_below - canvas_config.cds_padding)
         gc_offset_y += record_label_heights_below.get(record.id, 0.0)
         shared_gc_df = record_gc_dfs[count - 1] if (count - 1) < len(record_gc_dfs) else None
+        shared_depth_df = record_depth_dfs[count - 1] if (count - 1) < len(record_depth_dfs) else None
 
+        if depth_enabled and shared_depth_df is not None and depth_config is not None:
+            add_depth_group(
+                canvas,
+                record,
+                gc_offset_y,
+                offset_x,
+                canvas_config,
+                depth_config,
+                config_dict,
+                cfg=record_cfg,
+                depth_df=shared_depth_df,
+            )
         if canvas_config.show_gc:
             add_gc_content_group(
                 canvas,
@@ -723,6 +808,8 @@ def plot_linear_diagram(
     out_formats,
     legend_config,
     skew_config,
+    depth_config: DepthConfigurator | None = None,
+    depth_tables: list[DataFrame | None] | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Backwards-compatible wrapper that assembles and saves a linear diagram."""
@@ -736,6 +823,8 @@ def plot_linear_diagram(
         config_dict=config_dict,
         legend_config=legend_config,
         skew_config=skew_config,
+        depth_config=depth_config,
+        depth_tables=depth_tables,
         cfg=cfg,
     )
     save_figure(canvas, out_formats)

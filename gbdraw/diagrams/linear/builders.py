@@ -16,17 +16,20 @@ from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImpo
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...configurators import (  # type: ignore[reportMissingImports]
     FeatureDrawingConfigurator,
+    DepthConfigurator,
     GcContentConfigurator,
     GcSkewConfigurator,
 )
 from ...render.groups.linear import (  # type: ignore[reportMissingImports]
     DefinitionGroup,
+    DepthGroup,
     GcContentGroup,
     GcSkewGroup,
     PairWiseMatchGroup,
     SeqRecordGroup,
 )
 from .positioning import (
+    position_depth_group,
     position_gc_content_group,
     position_gc_skew_group,
     position_record_definition_group,
@@ -86,6 +89,33 @@ def add_gc_content_group(
     ).get_group()
     position_gc_content_group(gc_content_group, offset_y, offset_x, canvas_config)
     canvas.add(gc_content_group)
+    return canvas
+
+
+def add_depth_group(
+    canvas: Drawing,
+    record: SeqRecord,
+    offset_y: float,
+    offset_x: float,
+    canvas_config: LinearCanvasConfigurator,
+    depth_config: DepthConfigurator,
+    config_dict: dict,
+    cfg: GbdrawConfig | None = None,
+    depth_df: DataFrame | None = None,
+) -> Drawing:
+    """Adds a depth coverage group to the linear canvas."""
+    depth_group: Group = DepthGroup(
+        gb_record=record,
+        alignment_width=canvas_config.alignment_width,
+        longest_record_len=canvas_config.longest_genome,
+        track_height=canvas_config.depth_height,
+        depth_config=depth_config,
+        config_dict=config_dict,
+        cfg=cfg,
+        depth_df=depth_df,
+    ).get_group()
+    position_depth_group(depth_group, offset_y, offset_x, canvas_config)
+    canvas.add(depth_group)
     return canvas
 
 
@@ -201,6 +231,7 @@ def add_legends_on_linear_canvas(canvas: Drawing, config_dict, canvas_config: Li
 
 __all__ = [
     "add_record_group",
+    "add_depth_group",
     "add_gc_content_group",
     "add_gc_skew_group",
     "add_record_definition_group",

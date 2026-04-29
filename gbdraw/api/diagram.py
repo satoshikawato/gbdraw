@@ -22,6 +22,7 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
+from gbdraw.analysis.depth import depth_df as build_depth_df, read_depth_tsv  # type: ignore[reportMissingImports]
 from gbdraw.analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from gbdraw.api.config import apply_config_overrides  # type: ignore[reportMissingImports]
 from gbdraw.api.options import DiagramOptions  # type: ignore[reportMissingImports]
@@ -35,6 +36,7 @@ from gbdraw.io.record_select import parse_record_selector  # type: ignore[report
 from gbdraw.features.visibility import read_feature_visibility_file  # type: ignore[reportMissingImports]
 from gbdraw.configurators import (  # type: ignore[reportMissingImports]
     BlastMatchConfigurator,
+    DepthConfigurator,
     FeatureDrawingConfigurator,
     GcContentConfigurator,
     GcSkewConfigurator,
@@ -64,6 +66,7 @@ logger = logging.getLogger(__name__)
 
 _SUPPORTED_CIRCULAR_TRACK_KINDS = {
     "features",
+    "depth",
     "gc_content",
     "gc_skew",
     "definition",
@@ -130,6 +133,109 @@ def _resolve_circular_window_step(
             resolved_step = cfg.objects.sliding_window.up10m[1]
 
     return int(resolved_window), int(resolved_step)
+
+
+def _validate_depth_bounds(min_depth: float | None, max_depth: float | None) -> None:
+    if min_depth is not None and float(min_depth) < 0:
+        raise ValidationError("depth_min must be >= 0")
+    if max_depth is not None and float(max_depth) < 0:
+        raise ValidationError("depth_max must be >= 0")
+    if min_depth is not None and max_depth is not None and float(min_depth) > float(max_depth):
+        raise ValidationError("depth_min must be <= depth_max")
+
+
+def _validate_depth_config(depth_config) -> None:
+    _validate_depth_bounds(depth_config.min_depth, depth_config.max_depth)
+    if depth_config.tick_interval is not None and float(depth_config.tick_interval) <= 0:
+        raise ValidationError("depth_tick_interval/depth_large_tick_interval must be > 0")
+    if depth_config.small_tick_interval is not None and float(depth_config.small_tick_interval) <= 0:
+        raise ValidationError("depth_small_tick_interval must be > 0")
+    if depth_config.tick_font_size is not None and float(depth_config.tick_font_size) <= 0:
+        raise ValidationError("depth_tick_font_size must be > 0")
+
+
+def _validate_positive_optional(name: str, value: int | None) -> None:
+    if value is not None and int(value) <= 0:
+        raise ValidationError(f"{name} must be > 0")
+
+
+def _resolve_depth_window_step(
+    *,
+    window: int,
+    step: int,
+    depth_window: int | None,
+    depth_step: int | None,
+) -> tuple[int, int]:
+    """Resolve depth window/step from GC/skew settings.
+
+    Depth uses a denser sampling step than GC/skew, but keeps at least a 100 bp
+    aggregation window so the default track is not overly noisy.
+    """
+
+    _validate_positive_optional("depth_window", depth_window)
+    _validate_positive_optional("depth_step", depth_step)
+    return (
+        int(depth_window) if depth_window is not None else max(100, int(window) // 10),
+        int(depth_step) if depth_step is not None else max(1, int(step) // 10),
+    )
+
+
+def _cfg_with_depth_scale_max(cfg: GbdrawConfig, max_depth: float | None) -> GbdrawConfig:
+    if max_depth is None:
+        return cfg
+    return replace(
+        cfg,
+        objects=replace(
+            cfg.objects,
+            depth=replace(cfg.objects.depth, max_depth=float(max_depth)),
+        ),
+    )
+
+
+def _max_depth_from_dataframes(depth_dfs: Sequence[DataFrame | None]) -> float | None:
+    max_values = [
+        float(depth_df["depth"].max())
+        for depth_df in depth_dfs
+        if depth_df is not None and not depth_df.empty and "depth" in depth_df.columns
+    ]
+    return max(max_values) if max_values else None
+
+
+def _load_depth_table(depth_table: DataFrame | None, depth_file: str | None) -> DataFrame | None:
+    if depth_table is not None and depth_file is not None:
+        raise ValidationError("Pass either depth_table or depth_file, not both.")
+    if depth_table is not None:
+        return depth_table
+    if depth_file:
+        return read_depth_tsv(depth_file)
+    return None
+
+
+def _load_depth_tables(
+    *,
+    records: Sequence[SeqRecord],
+    depth_tables: Sequence[DataFrame] | None,
+    depth_files: Sequence[str] | None,
+) -> list[DataFrame | None] | None:
+    if depth_tables is not None and depth_files is not None:
+        raise ValidationError("Pass either depth_tables or depth_files, not both.")
+    if depth_tables is None and depth_files is None:
+        return None
+
+    record_count = len(records)
+    if depth_tables is not None:
+        tables = list(depth_tables)
+    else:
+        depth_paths = list(depth_files or [])
+        tables = [read_depth_tsv(path) for path in depth_paths]
+
+    if len(tables) == 1:
+        return [tables[0] for _ in range(record_count)]
+    if len(tables) != record_count:
+        raise ValidationError(
+            f"Expected one depth table/file or one per record ({record_count}); got {len(tables)}."
+        )
+    return list(tables)
 
 
 def _parse_svg_length_px(value: object, *, default: float = 0.0) -> float:
@@ -1090,6 +1196,12 @@ def assemble_linear_diagram_from_records(
     dinucleotide: str = "GC",
     window: Optional[int] = None,
     step: Optional[int] = None,
+    depth_window: Optional[int] = None,
+    depth_step: Optional[int] = None,
+    depth_table: DataFrame | None = None,
+    depth_file: str | None = None,
+    depth_tables: Sequence[DataFrame] | None = None,
+    depth_files: Sequence[str] | None = None,
     plot_title: str | None = None,
     plot_title_position: Literal["center", "top", "bottom"] = "bottom",
     plot_title_font_size: float | None = None,
@@ -1113,6 +1225,8 @@ def assemble_linear_diagram_from_records(
         raise ValidationError("records is empty")
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
+    _validate_positive_optional("depth_window", depth_window)
+    _validate_positive_optional("depth_step", depth_step)
     if color_table is None and color_table_file is not None:
         color_table = read_color_table(color_table_file)
     if feature_table is None and feature_table_file is not None:
@@ -1134,6 +1248,23 @@ def assemble_linear_diagram_from_records(
             )
         config_dict = modify_config_dict(config_dict, **config_overrides)
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
+    if depth_table is not None or depth_file is not None:
+        if depth_tables is not None or depth_files is not None:
+            raise ValidationError("Use depth_table/depth_file or depth_tables/depth_files, not both.")
+        single_depth_table = _load_depth_table(depth_table, depth_file)
+        resolved_depth_tables = [single_depth_table for _ in records] if single_depth_table is not None else None
+    else:
+        resolved_depth_tables = _load_depth_tables(
+            records=records,
+            depth_tables=depth_tables,
+            depth_files=depth_files,
+        )
+    if cfg.canvas.show_depth and resolved_depth_tables is None:
+        raise ValidationError("show_depth requires a depth_table or depth_file.")
+    show_depth = resolved_depth_tables is not None
+    if show_depth != bool(cfg.canvas.show_depth):
+        cfg = replace(cfg, canvas=replace(cfg.canvas, show_depth=show_depth))
+    _validate_depth_config(cfg.objects.depth)
 
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
@@ -1163,6 +1294,12 @@ def assemble_linear_diagram_from_records(
             step = cfg.objects.sliding_window.up1m[1]
         else:
             step = cfg.objects.sliding_window.up10m[1]
+    resolved_depth_window, resolved_depth_step = _resolve_depth_window_step(
+        window=int(window),
+        step=int(step),
+        depth_window=depth_window,
+        depth_step=depth_step,
+    )
 
     blast_config = BlastMatchConfigurator(
         evalue=evalue,
@@ -1210,6 +1347,12 @@ def assemble_linear_diagram_from_records(
         default_colors_df=default_colors,
         cfg=cfg,
     )
+    depth_config = DepthConfigurator(
+        window=resolved_depth_window,
+        step=resolved_depth_step,
+        config_dict=config_dict,
+        cfg=cfg,
+    ) if show_depth else None
     legend_config = LegendDrawingConfigurator(
         color_table=color_table,
         default_colors=default_colors,
@@ -1233,6 +1376,8 @@ def assemble_linear_diagram_from_records(
         config_dict=config_dict,
         legend_config=legend_config,
         skew_config=skew_config,
+        depth_config=depth_config,
+        depth_tables=resolved_depth_tables,
         plot_title=normalized_plot_title or None,
         plot_title_position=normalized_plot_title_position,
         plot_title_font_size=resolved_plot_title_font_size,
@@ -1259,6 +1404,10 @@ def assemble_circular_diagram_from_record(
     dinucleotide: str = "GC",
     window: Optional[int] = None,
     step: Optional[int] = None,
+    depth_window: Optional[int] = None,
+    depth_step: Optional[int] = None,
+    depth_table: DataFrame | None = None,
+    depth_file: str | None = None,
     species: Optional[str] = None,
     strain: Optional[str] = None,
     plot_title: str | None = None,
@@ -1268,6 +1417,8 @@ def assemble_circular_diagram_from_record(
     track_specs: Sequence[str | TrackSpec] | None = None,
     _definition_profile: Literal["full", "record_summary", "shared_common"] = "full",
     _tick_track_channel_override: Literal["short", "long"] | None = None,
+    _precomputed_depth_df: DataFrame | None = None,
+    _shared_depth_max: float | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
@@ -1278,6 +1429,8 @@ def assemble_circular_diagram_from_record(
     If color_table is None and color_table_file is provided, it is loaded.
     If selected_features_set is None, it uses the CLI default feature list.
     """
+    _validate_positive_optional("depth_window", depth_window)
+    _validate_positive_optional("depth_step", depth_step)
     if color_table is None and color_table_file is not None:
         color_table = read_color_table(color_table_file)
     if feature_table is None and feature_table_file is not None:
@@ -1304,6 +1457,15 @@ def assemble_circular_diagram_from_record(
         cfg=cfg,
         plot_title_font_size=plot_title_font_size,
     )
+    resolved_depth_table = _load_depth_table(depth_table, depth_file)
+    if cfg.canvas.show_depth and resolved_depth_table is None:
+        raise ValidationError("show_depth requires a depth_table or depth_file.")
+    show_depth_from_input = resolved_depth_table is not None
+    if show_depth_from_input != bool(cfg.canvas.show_depth):
+        cfg = replace(cfg, canvas=replace(cfg.canvas, show_depth=show_depth_from_input))
+    if cfg.objects.depth.share_axis and cfg.objects.depth.max_depth is None and _shared_depth_max is not None:
+        cfg = _cfg_with_depth_scale_max(cfg, _shared_depth_max)
+    _validate_depth_config(cfg.objects.depth)
 
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
@@ -1354,10 +1516,20 @@ def assemble_circular_diagram_from_record(
     legend_effective = "none" if (legend_ts is not None and not legend_ts.show) else legend
 
     # Allow track specs to override high-level show flags (used by canvas sizing and track IDs).
+    show_depth = (
+        ts_by_kind.get("depth").show
+        if "depth" in ts_by_kind
+        else cfg.canvas.show_depth
+    )
     show_gc = ts_by_kind.get("gc_content").show if "gc_content" in ts_by_kind else cfg.canvas.show_gc
     show_skew = ts_by_kind.get("gc_skew").show if "gc_skew" in ts_by_kind else cfg.canvas.show_skew
     canvas_cfg = cfg.canvas
-    canvas_cfg = replace(canvas_cfg, show_gc=bool(show_gc), show_skew=bool(show_skew))
+    canvas_cfg = replace(
+        canvas_cfg,
+        show_depth=bool(show_depth and resolved_depth_table is not None),
+        show_gc=bool(show_gc),
+        show_skew=bool(show_skew),
+    )
     cfg = replace(cfg, canvas=canvas_cfg)
 
     seq_length = len(gb_record.seq)
@@ -1378,6 +1550,12 @@ def assemble_circular_diagram_from_record(
             step = cfg.objects.sliding_window.up1m[1]
         else:
             step = cfg.objects.sliding_window.up10m[1]
+    resolved_depth_window, resolved_depth_step = _resolve_depth_window_step(
+        window=int(window),
+        step=int(step),
+        depth_window=depth_window,
+        depth_step=depth_step,
+    )
 
     gc_config = GcContentConfigurator(
         window=window,
@@ -1395,9 +1573,36 @@ def assemble_circular_diagram_from_record(
         default_colors_df=default_colors,
         cfg=cfg,
     )
+    depth_config = (
+        DepthConfigurator(
+            window=resolved_depth_window,
+            step=resolved_depth_step,
+            config_dict=config_dict,
+            cfg=cfg,
+        )
+        if cfg.canvas.show_depth
+        else None
+    )
 
     # Circular drawing expects the precomputed GC/skew dataframe, but only when needed.
     gc_df = skew_df(gb_record, window, step, dinucleotide) if (cfg.canvas.show_gc or cfg.canvas.show_skew) else DataFrame()
+    if cfg.canvas.show_depth and depth_config is not None:
+        if _precomputed_depth_df is not None:
+            resolved_depth_df = _precomputed_depth_df
+        elif resolved_depth_table is not None:
+            resolved_depth_df = build_depth_df(
+                gb_record,
+                resolved_depth_table,
+                resolved_depth_window,
+                resolved_depth_step,
+                normalize=depth_config.normalize,
+                min_depth=depth_config.min_depth,
+                max_depth=depth_config.max_depth,
+            )
+        else:
+            resolved_depth_df = None
+    else:
+        resolved_depth_df = None
 
     canvas_config = CircularCanvasConfigurator(
         output_prefix=output_prefix, config_dict=config_dict, legend=legend_effective, gb_record=gb_record, cfg=cfg
@@ -1440,6 +1645,8 @@ def assemble_circular_diagram_from_record(
         ),
         config_dict=config_dict,
         legend_config=legend_config,
+        depth_df=resolved_depth_df,
+        depth_config=depth_config,
         cfg=cfg,
         track_specs=parsed_track_specs,
         definition_position="center",
@@ -1486,6 +1693,12 @@ def assemble_circular_diagram_from_records(
     dinucleotide: str = "GC",
     window: Optional[int] = None,
     step: Optional[int] = None,
+    depth_window: Optional[int] = None,
+    depth_step: Optional[int] = None,
+    depth_table: DataFrame | None = None,
+    depth_file: str | None = None,
+    depth_tables: Sequence[DataFrame] | None = None,
+    depth_files: Sequence[str] | None = None,
     species: Optional[str] = None,
     strain: Optional[str] = None,
     plot_title: str | None = None,
@@ -1503,6 +1716,8 @@ def assemble_circular_diagram_from_records(
     """Build and assemble a circular diagram grid from multiple records."""
     if not records:
         raise ValidationError("records is empty")
+    _validate_positive_optional("depth_window", depth_window)
+    _validate_positive_optional("depth_step", depth_step)
 
     normalized_multi_record_size_mode = _resolve_multi_record_size_mode(
         str(multi_record_size_mode)
@@ -1522,6 +1737,20 @@ def assemble_circular_diagram_from_records(
     normalized_plot_title = _normalize_plot_title(plot_title)
 
     if len(records) == 1:
+        if (depth_table is not None or depth_file is not None) and (
+            depth_tables is not None or depth_files is not None
+        ):
+            raise ValidationError("Use depth_table/depth_file or depth_tables/depth_files, not both.")
+        single_depth_table = depth_table
+        single_depth_file = depth_file
+        if depth_tables is not None:
+            if len(depth_tables) != 1:
+                raise ValidationError("Expected one depth table for one circular record.")
+            single_depth_table = depth_tables[0]
+        if depth_files is not None:
+            if len(depth_files) != 1:
+                raise ValidationError("Expected one depth file for one circular record.")
+            single_depth_file = depth_files[0]
         return assemble_circular_diagram_from_record(
             records[0],
             config_dict=config_dict,
@@ -1540,6 +1769,10 @@ def assemble_circular_diagram_from_records(
             dinucleotide=dinucleotide,
             window=window,
             step=step,
+            depth_window=depth_window,
+            depth_step=depth_step,
+            depth_table=single_depth_table,
+            depth_file=single_depth_file,
             species=species,
             strain=strain,
             plot_title=normalized_plot_title or None,
@@ -1580,10 +1813,31 @@ def assemble_circular_diagram_from_records(
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
 
+    records = list(records)
+    if depth_table is not None or depth_file is not None:
+        if depth_tables is not None or depth_files is not None:
+            raise ValidationError("Use depth_table/depth_file or depth_tables/depth_files, not both.")
+        single_depth_table = _load_depth_table(depth_table, depth_file)
+        resolved_depth_tables = [single_depth_table for _ in records] if single_depth_table is not None else None
+    else:
+        resolved_depth_tables = _load_depth_tables(
+            records=records,
+            depth_tables=depth_tables,
+            depth_files=depth_files,
+        )
+    if cfg.canvas.show_depth and resolved_depth_tables is None:
+        raise ValidationError("show_depth requires depth_tables or depth_files.")
+    show_depth_from_input = resolved_depth_tables is not None
+    if show_depth_from_input != bool(cfg.canvas.show_depth):
+        cfg = replace(cfg, canvas=replace(cfg.canvas, show_depth=show_depth_from_input))
+    _validate_depth_config(cfg.objects.depth)
+
     ordered_indices, row_counts = _resolve_multi_record_positions(
         records, multi_record_positions
     )
     records = [records[idx] for idx in ordered_indices]
+    if resolved_depth_tables is not None:
+        resolved_depth_tables = [resolved_depth_tables[idx] for idx in ordered_indices]
 
     parsed_track_specs: list[TrackSpec] | None = None
     if track_specs is not None:
@@ -1614,9 +1868,15 @@ def assemble_circular_diagram_from_records(
     legend_ts = ts_by_kind.get("legend")
     legend_effective = "none" if (legend_ts is not None and not legend_ts.show) else legend
 
+    show_depth = ts_by_kind.get("depth").show if "depth" in ts_by_kind else cfg.canvas.show_depth
     show_gc = ts_by_kind.get("gc_content").show if "gc_content" in ts_by_kind else cfg.canvas.show_gc
     show_skew = ts_by_kind.get("gc_skew").show if "gc_skew" in ts_by_kind else cfg.canvas.show_skew
-    canvas_cfg = replace(cfg.canvas, show_gc=bool(show_gc), show_skew=bool(show_skew))
+    canvas_cfg = replace(
+        cfg.canvas,
+        show_depth=bool(show_depth and resolved_depth_tables is not None),
+        show_gc=bool(show_gc),
+        show_skew=bool(show_skew),
+    )
     cfg = replace(cfg, canvas=canvas_cfg)
     show_plot_title = normalized_plot_title_position != "none"
     record_definition_profile: Literal["full", "record_summary"] = "record_summary"
@@ -1636,14 +1896,53 @@ def assemble_circular_diagram_from_records(
         mode=normalized_multi_record_size_mode,
         min_radius_ratio=normalized_multi_record_min_radius_ratio,
     )
+    record_depth_dfs: list[DataFrame | None] = [None for _ in records]
+    shared_depth_max: float | None = None
+    if cfg.canvas.show_depth and resolved_depth_tables is not None:
+        for record_index, record in enumerate(records):
+            record_depth_table = (
+                resolved_depth_tables[record_index]
+                if record_index < len(resolved_depth_tables)
+                else None
+            )
+            if record_depth_table is None:
+                continue
+            record_window, record_step = _resolve_circular_window_step(
+                record,
+                cfg,
+                window=window,
+                step=step,
+            )
+            record_depth_window, record_depth_step = _resolve_depth_window_step(
+                window=record_window,
+                step=record_step,
+                depth_window=depth_window,
+                depth_step=depth_step,
+            )
+            record_depth_dfs[record_index] = build_depth_df(
+                record,
+                record_depth_table,
+                record_depth_window,
+                record_depth_step,
+                normalize=cfg.objects.depth.normalize,
+                min_depth=cfg.objects.depth.min_depth,
+                max_depth=cfg.objects.depth.max_depth,
+            )
+        if cfg.objects.depth.share_axis and cfg.objects.depth.max_depth is None:
+            shared_depth_max = _max_depth_from_dataframes(record_depth_dfs)
 
     canvases: list[Drawing] = []
     widths: list[float] = []
     heights: list[float] = []
     record_radii_px: list[float] = []
-    for record, record_scale in zip(records, record_scales):
+    for record_index, (record, record_scale) in enumerate(zip(records, record_scales)):
         scaled_cfg = _scale_circular_cfg(cfg, scale=record_scale)
         record_radii_px.append(float(scaled_cfg.canvas.circular.radius))
+        record_depth_table = (
+            resolved_depth_tables[record_index]
+            if resolved_depth_tables is not None and record_index < len(resolved_depth_tables)
+            else None
+        )
         sub_canvas = assemble_circular_diagram_from_record(
             record,
             config_dict=config_dict,
@@ -1657,6 +1956,9 @@ def assemble_circular_diagram_from_records(
             dinucleotide=dinucleotide,
             window=window,
             step=step,
+            depth_window=depth_window,
+            depth_step=depth_step,
+            depth_table=record_depth_table,
             species=species,
             strain=strain,
             plot_title=None,
@@ -1664,6 +1966,8 @@ def assemble_circular_diagram_from_records(
             track_specs=parsed_track_specs,
             _definition_profile=record_definition_profile,
             _tick_track_channel_override=tick_track_channel_override,
+            _precomputed_depth_df=record_depth_dfs[record_index],
+            _shared_depth_max=shared_depth_max,
             cfg=scaled_cfg,
         )
         canvases.append(sub_canvas)
@@ -1904,6 +2208,16 @@ def assemble_circular_diagram_from_records(
             default_colors_df=default_colors,
             cfg=cfg,
         )
+        depth_config = (
+            DepthConfigurator(
+                window=legend_window,
+                step=legend_step,
+                config_dict=config_dict,
+                cfg=cfg,
+            )
+            if cfg.canvas.show_depth
+            else None
+        )
         feature_config = FeatureDrawingConfigurator(
             color_table=color_table,
             default_colors=default_colors,
@@ -1937,6 +2251,7 @@ def assemble_circular_diagram_from_records(
             features_present,
             used_color_rules=used_color_rules,
             default_used_features=default_used_features,
+            depth_config=depth_config,
         )
         if legend_table:
             legend_config = LegendDrawingConfigurator(
@@ -2126,6 +2441,18 @@ def build_circular_diagram(
         dinucleotide=options.dinucleotide,
         window=options.window,
         step=options.step,
+        depth_window=options.depth_window,
+        depth_step=options.depth_step,
+        depth_table=(
+            options.depth_table
+            if options.depth_table is not None
+            else (options.depth_tables[0] if options.depth_tables else None)
+        ),
+        depth_file=(
+            options.depth_file
+            if options.depth_file is not None
+            else (options.depth_files[0] if options.depth_files else None)
+        ),
         species=options.species,
         strain=options.strain,
         plot_title=options.plot_title,
@@ -2189,6 +2516,12 @@ def build_linear_diagram(
         dinucleotide=options.dinucleotide,
         window=options.window,
         step=options.step,
+        depth_window=options.depth_window,
+        depth_step=options.depth_step,
+        depth_table=options.depth_table,
+        depth_file=options.depth_file,
+        depth_tables=options.depth_tables,
+        depth_files=options.depth_files,
         plot_title=options.plot_title,
         plot_title_position=(
             output.plot_title_position

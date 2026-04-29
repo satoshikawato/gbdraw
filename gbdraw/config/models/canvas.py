@@ -80,6 +80,8 @@ class LinearCanvasConfig:
     comparison_height: float
     canvas_padding: float
     default_gc_height: float
+    depth_height: float
+    depth_padding: float
     track_layout: Literal["above", "middle", "below"]
     track_axis_gap: float | None
     ruler_on_axis: bool
@@ -125,6 +127,8 @@ class LinearCanvasConfig:
             comparison_height=float(d["comparison_height"]),
             canvas_padding=float(d["canvas_padding"]),
             default_gc_height=float(d["default_gc_height"]),
+            depth_height=float(d.get("depth_height", d.get("default_gc_height", 20))),
+            depth_padding=float(d.get("depth_padding", d.get("vertical_padding", 8))),
             track_layout=track_layout,
             track_axis_gap=track_axis_gap,
             ruler_on_axis=bool(d.get("ruler_on_axis", False)),
@@ -140,6 +144,7 @@ class CanvasConfig:
     dpi: int
     show_gc: bool
     show_skew: bool
+    show_depth: bool
     # - bool: typical config.toml / circular CLI usage
     # - str: linear CLI supports mode strings ("all"/"first"/"none")
     show_labels: bool | Literal["all", "first", "none"]
@@ -161,6 +166,7 @@ class CanvasConfig:
             dpi=int(d["dpi"]),
             show_gc=bool(d["show_gc"]),
             show_skew=bool(d["show_skew"]),
+            show_depth=bool(d.get("show_depth", False)),
             show_labels=show_labels,
             strandedness=bool(d["strandedness"]),
             resolve_overlaps=bool(d["resolve_overlaps"]),

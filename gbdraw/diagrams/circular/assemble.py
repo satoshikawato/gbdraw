@@ -20,6 +20,7 @@ from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingIm
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...configurators import (  # type: ignore[reportMissingImports]
     FeatureDrawingConfigurator,
+    DepthConfigurator,
     GcContentConfigurator,
     GcSkewConfigurator,
     LegendDrawingConfigurator,
@@ -48,6 +49,7 @@ from ...tracks import TrackSpec  # type: ignore[reportMissingImports]
 
 from .builders import (
     add_axis_group_on_canvas,
+    add_depth_group_on_canvas,
     add_gc_content_group_on_canvas,
     add_gc_skew_group_on_canvas,
     add_labels_group_on_canvas,
@@ -70,6 +72,7 @@ LABEL_CANVAS_PADDING_PX = 8.0
 FEATURE_BAND_EPSILON = 1e-6
 SINGLE_LEGEND_EDGE_MIN_PX = 16.0
 SINGLE_LEGEND_CONTENT_GAP_MIN_PX = 12.0
+GC_SKEW_TRACK_ORDER_INNER_TO_OUTER = ("gc_skew", "gc_content")
 
 
 logger = logging.getLogger(__name__)
@@ -914,6 +917,180 @@ def _track_spec_has_explicit_width(ts: TrackSpec | None) -> bool:
     return width_spec is not None
 
 
+def _default_gc_skew_track_ids_without_depth(*, show_gc: bool, show_skew: bool) -> dict[str, int]:
+    """Return built-in GC/skew track ids for the same visibility with depth disabled."""
+    track_ids: dict[str, int] = {}
+    if show_gc:
+        track_ids["gc_content"] = 2
+    if show_skew:
+        track_ids["gc_skew"] = 3 if show_gc else 2
+    return track_ids
+
+
+def _default_gc_skew_track_width_px(
+    kind: str,
+    *,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+) -> float:
+    """Return the default width for a built-in circular GC or skew track."""
+    length_param = str(canvas_config.length_param)
+    factor_index = 1 if kind == "gc_content" else 2
+    return (
+        float(canvas_config.radius)
+        * float(canvas_config.track_ratio)
+        * float(cfg.canvas.circular.track_ratio_factors[length_param][factor_index])
+    )
+
+
+def _default_gc_skew_layout_without_depth(
+    *,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+    show_gc: bool,
+    show_skew: bool,
+    radius_mapper: Callable[[float], float] | None = None,
+) -> dict[str, tuple[float, float]]:
+    """Return default no-depth GC/skew layout as {kind: (center_px, width_px)}."""
+    track_ids = _default_gc_skew_track_ids_without_depth(
+        show_gc=show_gc,
+        show_skew=show_skew,
+    )
+    if not track_ids:
+        return {}
+
+    length_param = str(canvas_config.length_param)
+    track_type = str(cfg.canvas.circular.track_type)
+    track_dict = cfg.canvas.circular.track_dict[length_param][track_type]
+    layout: dict[str, tuple[float, float]] = {}
+    for kind, track_id in track_ids.items():
+        center_px = float(canvas_config.radius) * float(track_dict[str(track_id)])
+        if radius_mapper is not None:
+            center_px = float(radius_mapper(center_px))
+        width_px = _default_gc_skew_track_width_px(
+            kind,
+            canvas_config=canvas_config,
+            cfg=cfg,
+        )
+        layout[kind] = (float(center_px), float(width_px))
+    return layout
+
+
+def _default_gc_skew_gap_px(
+    layout: dict[str, tuple[float, float]],
+    *,
+    canvas_config: CircularCanvasConfigurator,
+) -> float:
+    """Return the default radial gap between adjacent GC/skew tracks."""
+    fallback_gap = max(1.0, 0.01 * float(canvas_config.radius))
+    if len(layout) < 2:
+        return fallback_gap
+
+    annuli = sorted(
+        (
+            (
+                float(center_px) - (0.5 * float(width_px)),
+                float(center_px) + (0.5 * float(width_px)),
+            )
+            for center_px, width_px in layout.values()
+        ),
+        key=lambda annulus: annulus[0],
+    )
+    gaps = [
+        max(0.0, float(annuli[idx + 1][0]) - float(annuli[idx][1]))
+        for idx in range(len(annuli) - 1)
+    ]
+    positive_gaps = [gap for gap in gaps if gap > FEATURE_BAND_EPSILON]
+    if not positive_gaps:
+        return 0.0
+    return min(positive_gaps)
+
+
+def _resolve_depth_compressed_gc_skew_layout(
+    *,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+    depth_inner_radius_px: float,
+    show_gc: bool,
+    show_skew: bool,
+    gc_ts: TrackSpec | None,
+    skew_ts: TrackSpec | None,
+    radius_mapper: Callable[[float], float] | None = None,
+) -> dict[str, tuple[float, float]]:
+    """Compress default GC/skew tracks so depth does not steal definition space.
+
+    The inner edge of the innermost GC/skew track is pinned to the default
+    no-depth layout. Tracks are packed outward from that edge and narrowed only
+    when the depth track leaves less space than the no-depth layout used.
+    """
+    visible_kinds: list[str] = [
+        kind
+        for kind in GC_SKEW_TRACK_ORDER_INNER_TO_OUTER
+        if (kind == "gc_content" and show_gc) or (kind == "gc_skew" and show_skew)
+    ]
+    if not visible_kinds:
+        return {}
+
+    explicit_specs = {"gc_content": gc_ts, "gc_skew": skew_ts}
+    if any(
+        _track_spec_has_explicit_center(explicit_specs[kind])
+        or _track_spec_has_explicit_width(explicit_specs[kind])
+        for kind in visible_kinds
+    ):
+        return {}
+
+    default_layout = _default_gc_skew_layout_without_depth(
+        canvas_config=canvas_config,
+        cfg=cfg,
+        show_gc=show_gc,
+        show_skew=show_skew,
+        radius_mapper=radius_mapper,
+    )
+    if not default_layout:
+        return {}
+
+    default_inner_radius = min(
+        float(center_px) - (0.5 * float(width_px))
+        for center_px, width_px in default_layout.values()
+    )
+    available_width = float(depth_inner_radius_px) - float(default_inner_radius)
+    if available_width <= FEATURE_BAND_EPSILON:
+        return {
+            kind: (float(default_inner_radius), 0.0)
+            for kind in visible_kinds
+        }
+
+    default_widths = {
+        kind: max(0.0, float(default_layout[kind][1]))
+        for kind in visible_kinds
+        if kind in default_layout
+    }
+    total_default_width = sum(default_widths.values())
+    if total_default_width <= FEATURE_BAND_EPSILON:
+        return {}
+
+    gap_count = len(visible_kinds)
+    desired_gap = _default_gc_skew_gap_px(default_layout, canvas_config=canvas_config)
+    if gap_count > 0:
+        gap_px = min(
+            desired_gap,
+            max(0.0, available_width / (3.0 * float(gap_count))),
+        )
+    else:
+        gap_px = 0.0
+    width_budget = max(0.0, available_width - (float(gap_count) * gap_px))
+    width_scale = min(1.0, width_budget / total_default_width)
+
+    layout: dict[str, tuple[float, float]] = {}
+    cursor = float(default_inner_radius)
+    for kind in visible_kinds:
+        width_px = default_widths[kind] * width_scale
+        center_px = cursor + (0.5 * width_px)
+        layout[kind] = (float(center_px), float(width_px))
+        cursor += width_px + gap_px
+    return layout
+
+
 def _resolve_feature_track_ratio_factor_override(
     ts: TrackSpec | None,
     *,
@@ -1117,7 +1294,9 @@ def _default_track_center_radius_px(
     if kind in {"axis", "ticks"}:
         return float(canvas_config.radius)
 
-    if kind == "gc_content":
+    if kind == "depth":
+        track_id = canvas_config.track_ids.get("depth_track")
+    elif kind == "gc_content":
         track_id = canvas_config.track_ids.get("gc_track")
     elif kind == "gc_skew":
         track_id = canvas_config.track_ids.get("skew_track")
@@ -1425,6 +1604,8 @@ def add_record_on_circular_canvas(
     legend_config,
     legend_table,
     *,
+    depth_config: DepthConfigurator | None = None,
+    depth_df: DataFrame | None = None,
     cfg: GbdrawConfig | None = None,
     track_specs: list[TrackSpec] | None = None,
     definition_position: str = "center",
@@ -1833,8 +2014,119 @@ def add_record_on_circular_canvas(
             )
         canvas = add_legend_group_on_canvas(canvas, canvas_config, legend_config, legend_table)
 
-    # Add GC content group if configured to show.
+    depth_ts = ts_by_kind.get("depth")
     gc_ts = ts_by_kind.get("gc_content")
+    skew_ts = ts_by_kind.get("gc_skew")
+    show_gc_track = bool(canvas_config.show_gc and (gc_ts is None or gc_ts.show))
+    show_skew_track = bool(canvas_config.show_skew and (skew_ts is None or skew_ts.show))
+    depth_inner_radius_for_gc_skew_layout: float | None = None
+    compressed_gc_skew_layout: dict[str, tuple[float, float]] = {}
+    depth_enabled = bool(canvas_config.show_depth and depth_config is not None and depth_df is not None)
+    if depth_enabled and (depth_ts is None or depth_ts.show):
+        depth_center_px, depth_width_px = _resolve_track_center_and_width_with_autorelayout("depth", depth_ts)
+        depth_has_explicit_center = _track_spec_has_explicit_center(depth_ts)
+        depth_has_explicit_width = _track_spec_has_explicit_width(depth_ts)
+        default_depth_center = _default_track_center_radius_px(
+            "depth",
+            canvas_config=canvas_config,
+            cfg=cfg,
+        )
+        default_depth_width = (
+            float(canvas_config.radius)
+            * float(canvas_config.track_ratio)
+            * float(canvas_config.track_ratio_factors[1])
+            * 0.5
+        )
+        effective_depth_center = (
+            float(depth_center_px)
+            if depth_center_px is not None
+            else (float(default_depth_center) if default_depth_center is not None else None)
+        )
+        effective_depth_width = (
+            float(depth_width_px) if depth_width_px is not None else float(default_depth_width)
+        )
+
+        if (
+            core_track_overlap_relayout_enabled
+            and (rendered_feature_band_all_tracks is not None)
+            and (effective_depth_center is not None)
+        ):
+            forbidden_bands = [rendered_feature_band_all_tracks, *resolved_outer_core_track_annuli]
+            depth_annulus = _annulus_from_center_and_width(effective_depth_center, effective_depth_width)
+            if _annulus_overlaps_any_band(depth_annulus, forbidden_bands):
+                if not depth_has_explicit_center:
+                    adjusted_depth_center = _resolve_fixed_width_annulus_center_avoiding_forbidden_bands(
+                        current_center_px=effective_depth_center,
+                        width_px=effective_depth_width,
+                        forbidden_bands=forbidden_bands,
+                        prefer_inside=True,
+                    )
+                    if adjusted_depth_center is not None:
+                        effective_depth_center = float(adjusted_depth_center)
+                depth_annulus = _annulus_from_center_and_width(effective_depth_center, effective_depth_width)
+                if _annulus_overlaps_any_band(depth_annulus, forbidden_bands) and not depth_has_explicit_width:
+                    shrunk_depth_width = _shrink_fixed_width_annulus_to_avoid_forbidden_bands(
+                        center_px=effective_depth_center,
+                        current_width_px=effective_depth_width,
+                        forbidden_bands=forbidden_bands,
+                    )
+                    if shrunk_depth_width is not None:
+                        effective_depth_width = float(shrunk_depth_width)
+
+            final_depth_annulus = _annulus_from_center_and_width(effective_depth_center, effective_depth_width)
+            if not _annulus_overlaps_any_band(final_depth_annulus, forbidden_bands):
+                if default_depth_center is None:
+                    if depth_center_px is not None:
+                        depth_center_px = float(effective_depth_center)
+                elif depth_center_px is not None or not math.isclose(
+                    float(effective_depth_center),
+                    float(default_depth_center),
+                    rel_tol=1e-9,
+                    abs_tol=1e-9,
+                ):
+                    depth_center_px = float(effective_depth_center)
+
+                if depth_width_px is not None or not math.isclose(
+                    float(effective_depth_width),
+                    float(default_depth_width),
+                    rel_tol=1e-9,
+                    abs_tol=1e-9,
+                ):
+                    depth_width_px = float(effective_depth_width)
+                resolved_outer_core_track_annuli.append(final_depth_annulus)
+
+        if effective_depth_center is not None:
+            depth_inner_radius_for_gc_skew_layout = _annulus_from_center_and_width(
+                effective_depth_center,
+                effective_depth_width,
+            )[0]
+
+        norm_factor_override = (depth_center_px / canvas_config.radius) if depth_center_px is not None else None
+        canvas = add_depth_group_on_canvas(
+            canvas,
+            gb_record,
+            depth_df,
+            canvas_config,
+            depth_config,
+            config_dict,
+            track_width_override=depth_width_px,
+            norm_factor_override=norm_factor_override,
+            cfg=cfg,
+        )
+
+    if depth_inner_radius_for_gc_skew_layout is not None:
+        compressed_gc_skew_layout = _resolve_depth_compressed_gc_skew_layout(
+            canvas_config=canvas_config,
+            cfg=cfg,
+            depth_inner_radius_px=depth_inner_radius_for_gc_skew_layout,
+            show_gc=show_gc_track,
+            show_skew=show_skew_track,
+            gc_ts=gc_ts,
+            skew_ts=skew_ts,
+            radius_mapper=feature_radius_mapper,
+        )
+
+    # Add GC content group if configured to show.
     if canvas_config.show_gc and (gc_ts is None or gc_ts.show):
         gc_center_px, gc_width_px = _resolve_track_center_and_width_with_autorelayout("gc_content", gc_ts)
         gc_has_explicit_center = _track_spec_has_explicit_center(gc_ts)
@@ -1849,6 +2141,9 @@ def add_record_on_circular_canvas(
             * float(canvas_config.track_ratio)
             * float(canvas_config.track_ratio_factors[1])
         )
+        compressed_gc_layout = compressed_gc_skew_layout.get("gc_content")
+        if compressed_gc_layout is not None and not gc_has_explicit_center and not gc_has_explicit_width:
+            gc_center_px, gc_width_px = compressed_gc_layout
         effective_gc_center = (
             float(gc_center_px)
             if gc_center_px is not None
@@ -1918,7 +2213,6 @@ def add_record_on_circular_canvas(
             cfg=cfg,
         )
 
-    skew_ts = ts_by_kind.get("gc_skew")
     if canvas_config.show_skew and (skew_ts is None or skew_ts.show):
         skew_center_px, skew_width_px = _resolve_track_center_and_width_with_autorelayout("gc_skew", skew_ts)
         skew_has_explicit_center = _track_spec_has_explicit_center(skew_ts)
@@ -1933,6 +2227,9 @@ def add_record_on_circular_canvas(
             * float(canvas_config.track_ratio)
             * float(canvas_config.track_ratio_factors[2])
         )
+        compressed_skew_layout = compressed_gc_skew_layout.get("gc_skew")
+        if compressed_skew_layout is not None and not skew_has_explicit_center and not skew_has_explicit_width:
+            skew_center_px, skew_width_px = compressed_skew_layout
         effective_skew_center = (
             float(skew_center_px)
             if skew_center_px is not None
@@ -2016,6 +2313,8 @@ def assemble_circular_diagram(
     plot_title: Optional[str],
     config_dict: dict,
     legend_config: LegendDrawingConfigurator,
+    depth_df: DataFrame | None = None,
+    depth_config: DepthConfigurator | None = None,
     cfg: GbdrawConfig | None = None,
     track_specs: list[TrackSpec] | None = None,
     definition_position: str = "center",
@@ -2070,6 +2369,7 @@ def assemble_circular_diagram(
             features_present,
             used_color_rules=used_color_rules,
             default_used_features=default_used_features,
+            depth_config=depth_config if (depth_config is not None and depth_df is not None) else None,
         )
         legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
         canvas_config.recalculate_canvas_dimensions(legend_config)
@@ -2088,6 +2388,8 @@ def assemble_circular_diagram(
         config_dict,
         legend_config,
         legend_table,
+        depth_config=depth_config,
+        depth_df=depth_df,
         cfg=cfg,
         track_specs=track_specs,
         definition_position=definition_position,
@@ -2111,6 +2413,8 @@ def plot_circular_diagram(
     config_dict: dict,
     out_formats: list,
     legend_config: LegendDrawingConfigurator,
+    depth_df: DataFrame | None = None,
+    depth_config: DepthConfigurator | None = None,
     cfg: GbdrawConfig | None = None,
     track_specs: list[TrackSpec] | None = None,
     definition_position: str = "center",
@@ -2124,7 +2428,9 @@ def plot_circular_diagram(
         gb_record=gb_record,
         canvas_config=canvas_config,
         gc_df=gc_df,
+        depth_df=depth_df,
         gc_config=gc_config,
+        depth_config=depth_config,
         skew_config=skew_config,
         feature_config=feature_config,
         species=species,

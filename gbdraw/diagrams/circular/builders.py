@@ -14,12 +14,14 @@ from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingIm
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...configurators import (  # type: ignore[reportMissingImports]
     FeatureDrawingConfigurator,
+    DepthConfigurator,
     GcContentConfigurator,
     GcSkewConfigurator,
 )
 from ...render.groups.circular import (  # type: ignore[reportMissingImports]
     AxisGroup,
     DefinitionGroup,
+    DepthGroup,
     GcContentGroup,
     GcSkewGroup,
     LabelsGroup,
@@ -32,6 +34,41 @@ from .positioning import (
     place_definition_group_on_canvas,
     place_legend_on_canvas,
 )
+
+
+def add_depth_group_on_canvas(
+    canvas: Drawing,
+    gb_record: SeqRecord,
+    depth_df: DataFrame,
+    canvas_config: CircularCanvasConfigurator,
+    depth_config: DepthConfigurator,
+    config_dict: dict,
+    *,
+    track_width_override: float | None = None,
+    norm_factor_override: float | None = None,
+    cfg: GbdrawConfig | None = None,
+) -> Drawing:
+    """Adds the depth coverage group to the canvas."""
+    cfg = cfg or canvas_config._cfg
+    depth_track_width = (
+        float(track_width_override)
+        if track_width_override is not None
+        else canvas_config.radius * canvas_config.track_ratio * canvas_config.track_ratio_factors[1] * 0.5
+    )
+    depth_group: Group = DepthGroup(
+        gb_record,
+        depth_df,
+        canvas_config.radius,
+        depth_track_width,
+        depth_config,
+        config_dict,
+        canvas_config.track_ids["depth_track"],
+        norm_factor_override=norm_factor_override,
+        cfg=cfg,
+    ).get_group()
+    depth_group = center_group_on_canvas(depth_group, canvas_config)
+    canvas.add(depth_group)
+    return canvas
 
 
 def add_gc_skew_group_on_canvas(
@@ -350,6 +387,7 @@ def add_legend_group_on_canvas(canvas: Drawing, canvas_config: CircularCanvasCon
 
 
 __all__ = [
+    "add_depth_group_on_canvas",
     "add_gc_skew_group_on_canvas",
     "add_gc_content_group_on_canvas",
     "add_record_definition_group_on_canvas",

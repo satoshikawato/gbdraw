@@ -223,6 +223,11 @@
                             <file-uploader label="GFF3 File" v-model="files.c_gff"></file-uploader>
                             <file-uploader label="FASTA File" v-model="files.c_fasta"></file-uploader>
                         </div>
+                        <file-uploader
+                            label="Depth TSV"
+                            :model-value="files.c_depth"
+                            @update:model-value="files.c_depth = $event; form.show_depth = form.show_depth || Boolean($event)"
+                        ></file-uploader>
                     </div>
 
                     <div v-if="mode === 'linear'" class="space-y-4">
@@ -321,6 +326,13 @@
                                     label="FASTA"
                                     :model-value="seq.fasta"
                                     @update:model-value="setLinearSeqPrimaryFile(idx, 'fasta', $event)"
+                                ></file-uploader>
+                            </div>
+                            <div class="mt-2">
+                                <file-uploader
+                                    label="Depth TSV"
+                                    :model-value="seq.depth"
+                                    @update:model-value="seq.depth = $event; form.show_depth = form.show_depth || Boolean($event)"
                                 ></file-uploader>
                             </div>
                             <div class="mt-2">
@@ -445,6 +457,10 @@
                                         <input type="checkbox" v-model="form.show_skew" class="form-checkbox">
                                         <span class="inline-flex items-center gap-1">Show GC Skew <help-tip text="Display GC skew track."></help-tip></span>
                                     </label>
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="form.show_depth" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Show Depth <help-tip text="Display depth coverage track from uploaded Depth TSV file(s)."></help-tip></span>
+                                    </label>
                                 </div>
                             </template>
 
@@ -477,6 +493,10 @@
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.suppress_skew" class="form-checkbox">
                                         <span class="inline-flex items-center gap-1">Hide GC Skew <help-tip text="Suppress the GC skew track."></help-tip></span>
+                                    </label>
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="form.show_depth" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Show Depth <help-tip text="Display depth coverage track from the uploaded Depth TSV file."></help-tip></span>
                                     </label>
                                 </div>
 
@@ -1204,6 +1224,84 @@
                                     </template>
                                 </div>
                             </template>
+                        </div>
+                    </details>
+                </div>
+
+                <div v-if="form.show_depth" class="card bg-slate-50/50">
+                    <details>
+                        <summary><i class="ph ph-chart-line"></i> Depth track <help-tip text="Adjust depth coverage display, aggregation, and axis settings."></help-tip></summary>
+                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
+                            <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <label class="input-label text-[10px]">Depth Color <help-tip text="Fill color for the depth coverage track."></help-tip></label>
+                                        <input type="color" v-model="adv.depth_color" class="h-8 w-full p-0 border rounded">
+                                    </div>
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none pt-5">
+                                        <input type="checkbox" v-model="adv.depth_normalize" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Log Scale <help-tip text="Use IGV-style log10 scaling for depth: 10x is twice the height of 1x."></help-tip></span>
+                                    </label>
+                                </div>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="adv.depth_show_axis" class="form-checkbox">
+                                    <span class="inline-flex items-center gap-1">Depth Axis <help-tip text="Show the depth coverage axis line. Hiding the axis also hides depth tick marks and labels."></help-tip></span>
+                                </label>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="adv.depth_show_ticks" class="form-checkbox">
+                                    <span class="inline-flex items-center gap-1">Depth Ticks <help-tip text="Show depth coverage axis tick marks and x-coverage labels."></help-tip></span>
+                                </label>
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="adv.depth_share_axis" class="form-checkbox">
+                                    <span class="inline-flex items-center gap-1">Shared Y-axis <help-tip text="Use one depth axis range across all records so coverage differences between records remain visible."></help-tip></span>
+                                </label>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <label class="input-label text-[10px]">Depth Window <help-tip text="Window size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></label>
+                                        <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Depth Step <help-tip text="Step size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></label>
+                                        <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <label class="input-label text-[10px]">Depth Min <help-tip text="Minimum depth for clipping and normalization. Leave blank for auto."></help-tip></label>
+                                        <input type="number" min="0" step="1" v-model.number="adv.depth_min" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Depth Max <help-tip text="Maximum depth for clipping and normalization. Leave blank for auto."></help-tip></label>
+                                        <input type="number" min="0" step="1" v-model.number="adv.depth_max" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <label class="input-label text-[10px]">Large Tick <help-tip text="Depth large tick interval in x coverage units. Leave blank for min/max ticks."></help-tip></label>
+                                        <input type="number" min="0.01" step="1" v-model.number="adv.depth_tick_interval" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                    <div v-if="mode === 'circular'">
+                                        <label class="input-label text-[10px]">Small Tick <help-tip text="Depth small tick interval in x coverage units. Leave blank to hide small ticks."></help-tip></label>
+                                        <input type="number" min="0.01" step="1" v-model.number="adv.depth_small_tick_interval" class="form-input form-input-compact" placeholder="None">
+                                    </div>
+                                    <div v-else>
+                                        <label class="input-label text-[10px]">Tick Font Size <help-tip text="Font size for depth tick labels. Leave blank for auto."></help-tip></label>
+                                        <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_tick_font_size" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                </div>
+                                <div v-if="mode === 'circular'">
+                                    <label class="input-label text-[10px]">Tick Font Size <help-tip text="Font size for large depth tick labels. Leave blank for auto."></help-tip></label>
+                                    <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_tick_font_size" class="form-input form-input-compact" placeholder="Auto">
+                                </div>
+                                <div v-if="mode === 'linear'">
+                                    <label class="input-label text-[10px]">Depth Height <help-tip text="Height of the linear depth track."></help-tip></label>
+                                    <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_height" class="form-input form-input-compact" placeholder="Auto">
+                                </div>
+                                <div v-else>
+                                    <label class="input-label text-[10px]">Depth Width <help-tip text="Depth track width in px."></help-tip></label>
+                                    <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_width_circular" class="form-input form-input-compact" placeholder="Auto">
+                                </div>
+                            </div>
                         </div>
                     </details>
                 </div>

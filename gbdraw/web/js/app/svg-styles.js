@@ -600,6 +600,21 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       });
     }
 
+    const depthGroups = getGroupsByBaseIds(svg, ['depth']);
+    if (depthGroups.length > 0) {
+      const shouldHide = !form.show_depth;
+      depthGroups.forEach((depthGroup) => {
+        const currentDisplay = depthGroup.getAttribute('display');
+        if (shouldHide && currentDisplay !== 'none') {
+          depthGroup.setAttribute('display', 'none');
+          updated = true;
+        } else if (!shouldHide && currentDisplay === 'none') {
+          depthGroup.removeAttribute('display');
+          updated = true;
+        }
+      });
+    }
+
     if (updated) {
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
@@ -637,7 +652,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
   );
 
   watch(
-    () => [form.suppress_gc, form.suppress_skew, form.show_gc, form.show_skew],
+    () => [form.suppress_gc, form.suppress_skew, form.show_gc, form.show_skew, form.show_depth],
     () => {
       applyTrackVisibility();
     }

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Literal
 
@@ -20,6 +21,51 @@ def _get_default_linear_non_stranded_cds_heights() -> dict[str, float]:
         "short": 0.5 * float(default_cfg.canvas.linear.default_cds_height.short),
         "long": 0.5 * float(default_cfg.canvas.linear.default_cds_height.long),
     }
+
+
+@dataclass(frozen=True)
+class _LinearPlotTrack:
+    key: str
+    top_extent: float
+    bottom_extent: float
+    gap_after: float = 0.0
+
+
+def _calculate_linear_plot_track_layout(tracks: list[_LinearPlotTrack]) -> tuple[dict[str, float], dict[str, float], float]:
+    """Return anchor offsets, legacy padding segments, and visual stack span."""
+    if not tracks:
+        return {}, {}, 0.0
+
+    anchor_offsets: dict[str, float] = {}
+    current_anchor = 0.0
+    previous_track: _LinearPlotTrack | None = None
+    for track in tracks:
+        if previous_track is not None:
+            current_anchor += previous_track.bottom_extent + previous_track.gap_after + track.top_extent
+        anchor_offsets[track.key] = current_anchor
+        previous_track = track
+
+    first_track = tracks[0]
+    last_track = tracks[-1]
+    stack_span = (
+        first_track.top_extent
+        + anchor_offsets[last_track.key]
+        + last_track.bottom_extent
+        + last_track.gap_after
+    )
+
+    padding_segments: dict[str, float] = {}
+    consumed_span = 0.0
+    for index, track in enumerate(tracks):
+        if index < len(tracks) - 1:
+            next_track = tracks[index + 1]
+            segment = anchor_offsets[next_track.key] - anchor_offsets[track.key]
+        else:
+            segment = stack_span - consumed_span
+        padding_segments[track.key] = segment
+        consumed_span += segment
+
+    return anchor_offsets, padding_segments, stack_span
 
 
 class LinearCanvasConfigurator:
@@ -43,7 +89,7 @@ class LinearCanvasConfigurator:
     longest_genome (int): Length of the longest genome in the dataset.
 
     Methods:
-    set_gc_height_and_gc_padding(): Sets GC height and padding.
+    set_gc_height_and_gc_padding(): Sets plot track heights, offsets, and spacing.
     set_cds_height_and_cds_padding(): Sets CDS height and padding.
     set_arrow_length(): Sets the arrow length for representation.
     calculate_dimensions(): Calculates dimensions for the canvas.
@@ -98,9 +144,12 @@ class LinearCanvasConfigurator:
         self.default_cds_height: float = getattr(cfg.canvas.linear.default_cds_height, self.length_param)
         self.baseline_non_stranded_cds_heights = _get_default_linear_non_stranded_cds_heights()
         self.default_gc_height: float = cfg.canvas.linear.default_gc_height
+        self.default_depth_height: float = cfg.canvas.linear.depth_height
+        self.configured_depth_padding: float = cfg.canvas.linear.depth_padding
         self.dpi: int = cfg.canvas.dpi
         self.show_gc: bool = cfg.canvas.show_gc
         self.show_skew: bool = cfg.canvas.show_skew
+        self.show_depth: bool = cfg.canvas.show_depth
         self.strandedness: bool = cfg.canvas.strandedness
         self.resolve_overlaps: bool = cfg.canvas.resolve_overlaps
         self.track_layout: str = cfg.canvas.linear.track_layout
@@ -122,28 +171,49 @@ class LinearCanvasConfigurator:
 
     def set_gc_height_and_gc_padding(self) -> None:
         """
-        Sets the height and padding for the GC content track based on configuration settings.
-        This method adjusts the gc_height and gc_padding attributes.
+        Sets linear plot track heights, anchor offsets, and legacy padding segments.
         """
 
+        self.depth_height: float = self.default_depth_height if self.show_depth else 0.0
+        self.gc_height: float = self.default_gc_height if self.show_gc else 0.0
+        self.skew_height: float = self.default_gc_height if self.show_skew else 0.0
+
+        tracks: list[_LinearPlotTrack] = []
+        if self.show_depth:
+            tracks.append(
+                _LinearPlotTrack(
+                    key="depth",
+                    top_extent=0.0,
+                    bottom_extent=self.depth_height,
+                    gap_after=self.configured_depth_padding,
+                )
+            )
         if self.show_gc:
-            self.gc_height: float = self.default_gc_height
-            if self.show_skew:
-                self.gc_padding: float = self.gc_height
-            else:
-                self.gc_padding: float = self.gc_height
-        else:
-            self.gc_height: float = 0
-            self.gc_padding: float = 0
+            tracks.append(
+                _LinearPlotTrack(
+                    key="gc_content",
+                    top_extent=0.5 * self.gc_height,
+                    bottom_extent=0.5 * self.gc_height,
+                )
+            )
         if self.show_skew:
-            self.skew_height: float = self.default_gc_height
-            if self.show_gc:
-                self.skew_padding: float = self.skew_height
-            else:
-                self.skew_padding: float = self.skew_height
-        else:
-            self.skew_height: float = 0
-            self.skew_padding: float = 0
+            tracks.append(
+                _LinearPlotTrack(
+                    key="gc_skew",
+                    top_extent=0.5 * self.skew_height,
+                    bottom_extent=0.5 * self.skew_height,
+                )
+            )
+
+        track_offsets, padding_segments, stack_span = _calculate_linear_plot_track_layout(tracks)
+        self.plot_track_offsets = track_offsets
+        self.plot_tracks_height = stack_span
+        self.depth_track_offset = track_offsets.get("depth", 0.0)
+        self.gc_content_track_offset = track_offsets.get("gc_content", 0.0)
+        self.gc_skew_track_offset = track_offsets.get("gc_skew", 0.0)
+        self.depth_padding: float = padding_segments.get("depth", 0.0)
+        self.gc_padding: float = padding_segments.get("gc_content", 0.0)
+        self.skew_padding: float = padding_segments.get("gc_skew", 0.0)
 
     def set_cds_height_and_cds_padding(self) -> None:
         """
@@ -181,20 +251,22 @@ class LinearCanvasConfigurator:
 
         self.set_gc_height_and_gc_padding()
         self.set_cds_height_and_cds_padding()
-        self.add_margin: float | Literal[0] = 2 * self.cds_height if (self.show_gc and not self.strandedness) else 0
+        self.add_margin: float | Literal[0] = (
+            2 * self.cds_height if ((self.show_gc or self.show_depth) and not self.strandedness) else 0
+        )
         # Keep the record axis width fixed to the configured figure width from the start.
         # Horizontal offsets reposition the plotted record; they do not shorten its scale.
         self.alignment_width: float = self.fig_width
         self.total_width = int(self.fig_width + 2 * self.canvas_padding)
         self.total_height = int(
             2 * self.vertical_offset
-            + (self.cds_height + self.gc_padding)
+            + (self.cds_height + self.plot_tracks_height)
             + (
                 self.vertical_padding
                 + self.comparison_height
                 + self.vertical_padding
                 + self.cds_height
-                + self.gc_padding
+                + self.plot_tracks_height
             )
             * (self.num_of_entries - 1)
         )

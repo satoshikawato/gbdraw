@@ -45,6 +45,81 @@ class ObjectsGcSkewConfig:
         )
 
 
+def _optional_depth_bound(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"", "auto", "none", "null"}:
+            return None
+        return float(normalized)
+    return float(value)
+
+
+def _optional_depth_positive(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"", "auto", "none", "null"}:
+            return None
+        return float(normalized)
+    return float(value)
+
+
+def _bool_from_config(value: Any, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+    return bool(value)
+
+
+@dataclass(frozen=True)
+class ObjectsDepthConfig:
+    fill_color: str
+    stroke_color: str
+    stroke_width: float
+    fill_opacity: float
+    normalize: bool
+    min_depth: float | None
+    max_depth: float | None
+    show_axis: bool
+    show_ticks: bool
+    tick_interval: float | None
+    large_tick_interval: float | None
+    small_tick_interval: float | None
+    tick_font_size: float | None
+    share_axis: bool
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsDepthConfig":
+        legacy_tick_interval = _optional_depth_positive(d.get("tick_interval", None))
+        large_tick_interval = _optional_depth_positive(d.get("large_tick_interval", None))
+        if large_tick_interval is None:
+            large_tick_interval = legacy_tick_interval
+        return cls(
+            fill_color=str(d.get("fill_color", "#4A90E2")),
+            stroke_color=str(d.get("stroke_color", "none")),
+            stroke_width=float(d.get("stroke_width", 0)),
+            fill_opacity=float(d.get("fill_opacity", 0.8)),
+            normalize=_bool_from_config(d.get("normalize", False), default=False),
+            min_depth=_optional_depth_bound(d.get("min_depth", None)),
+            max_depth=_optional_depth_bound(d.get("max_depth", None)),
+            show_axis=_bool_from_config(d.get("show_axis", True), default=True),
+            show_ticks=_bool_from_config(d.get("show_ticks", True), default=True),
+            tick_interval=large_tick_interval,
+            large_tick_interval=large_tick_interval,
+            small_tick_interval=_optional_depth_positive(d.get("small_tick_interval", None)),
+            tick_font_size=_optional_depth_positive(d.get("tick_font_size", None)),
+            share_axis=_bool_from_config(d.get("share_axis", False), default=False),
+        )
+
+
 @dataclass(frozen=True)
 class ObjectsBlastMatchConfig:
     fill_opacity: float
@@ -274,6 +349,7 @@ class ObjectsConfig:
     text: ObjectsTextConfig
     gc_content: ObjectsGcContentConfig
     gc_skew: ObjectsGcSkewConfig
+    depth: ObjectsDepthConfig
     blast_match: ObjectsBlastMatchConfig
     features: ObjectsFeaturesConfig
     legends: ObjectsLegendsConfig
@@ -289,6 +365,7 @@ class ObjectsConfig:
             text=ObjectsTextConfig.from_dict(d["text"]),
             gc_content=ObjectsGcContentConfig.from_dict(d["gc_content"]),
             gc_skew=ObjectsGcSkewConfig.from_dict(d["gc_skew"]),
+            depth=ObjectsDepthConfig.from_dict(d.get("depth", {})),
             blast_match=ObjectsBlastMatchConfig.from_dict(d["blast_match"]),
             features=ObjectsFeaturesConfig.from_dict(d["features"]),
             legends=ObjectsLegendsConfig.from_dict(d["legends"]),
@@ -299,4 +376,3 @@ class ObjectsConfig:
 
 
 __all__ = ["ObjectsConfig"]
-

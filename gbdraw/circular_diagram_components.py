@@ -14,6 +14,7 @@ from gbdraw.diagrams.circular.assemble import (
 )
 from gbdraw.diagrams.circular.builders import (
     add_axis_group_on_canvas,
+    add_depth_group_on_canvas,
     add_gc_content_group_on_canvas,
     add_gc_skew_group_on_canvas,
     add_labels_group_on_canvas,
@@ -34,6 +35,7 @@ __all__ = [
     "plot_circular_diagram",
     # Builder functions
     "add_axis_group_on_canvas",
+    "add_depth_group_on_canvas",
     "add_gc_content_group_on_canvas",
     "add_gc_skew_group_on_canvas",
     "add_labels_group_on_canvas",
