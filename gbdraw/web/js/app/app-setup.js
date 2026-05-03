@@ -43,6 +43,9 @@ export const createAppSetup = () => {
     adv,
     losat,
     losatCacheInfo,
+    orthogroups,
+    featureOrthogroupIndex,
+    selectedOrthogroupAlignmentFeature,
     linearReorderNotice,
     circularRecordList,
     paletteDefinitions,
@@ -262,6 +265,55 @@ export const createAppSetup = () => {
   const runAnalysis = async () => {
     cancelDefinitionUpdate();
     return runGeneratedDiagramAnalysis();
+  };
+
+  const canUseClickedOrthogroupActions = computed(() => {
+    const cf = clickedFeature.value;
+    return Boolean(
+      cf &&
+      mode.value === 'linear' &&
+      blastSource.value === 'losat' &&
+      losatProgram.value === 'blastp' &&
+      lInputType.value === 'gb' &&
+      cf.feat?.type === 'CDS' &&
+      cf.orthogroupId
+    );
+  });
+
+  const alignByClickedOrthogroup = async () => {
+    const cf = clickedFeature.value;
+    if (!cf?.orthogroupId) return;
+    selectedOrthogroupAlignmentFeature.value = String(cf.svg_id || cf.proteinId || '').trim();
+    clickedFeature.value = null;
+    await runAnalysis();
+  };
+
+  const resetOrthogroupAlignment = async () => {
+    if (!selectedOrthogroupAlignmentFeature.value) return;
+    selectedOrthogroupAlignmentFeature.value = '';
+    clickedFeature.value = null;
+    await runAnalysis();
+  };
+
+  const highlightClickedOrthogroup = () => {
+    const cf = clickedFeature.value;
+    const orthogroupId = String(cf?.orthogroupId || '').trim();
+    if (!orthogroupId || !svgContainer.value) return;
+    const svg = svgContainer.value.querySelector('svg');
+    if (!svg) return;
+    const memberIds = new Set(
+      (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [])
+        .filter((feature) => String(feature?.orthogroupId || '').trim() === orthogroupId)
+        .map((feature) => String(feature?.svg_id || '').trim())
+        .filter(Boolean)
+    );
+    svg.querySelectorAll('path[id^="f"], polygon[id^="f"], rect[id^="f"]').forEach((el) => {
+      const id = String(el.getAttribute('id') || '').trim();
+      if (memberIds.has(id)) {
+        el.setAttribute('stroke', '#2563eb');
+        el.setAttribute('stroke-width', '2.4');
+      }
+    });
   };
 
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
@@ -669,6 +721,9 @@ export const createAppSetup = () => {
     canUseLinearRulerOnAxis,
     losat,
     losatCacheInfo,
+    orthogroups,
+    featureOrthogroupIndex,
+    selectedOrthogroupAlignmentFeature,
     circularRecordList,
     paletteDefinitions,
     paletteNames,
@@ -755,6 +810,10 @@ export const createAppSetup = () => {
     featurePopupRef,
     startFeaturePopupDrag,
     clickedFeatureLocation,
+    canUseClickedOrthogroupActions,
+    alignByClickedOrthogroup,
+    highlightClickedOrthogroup,
+    resetOrthogroupAlignment,
     specificRuleLegendOptions,
     updateClickedFeatureColor,
     updateClickedFeatureVisibility,

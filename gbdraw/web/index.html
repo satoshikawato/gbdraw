@@ -1562,9 +1562,34 @@
                             <div class="min-w-0">
                                 <div class="text-base font-bold text-slate-700 truncate max-w-[260px]">{{ clickedFeature.label }}</div>
                                 <div class="text-xs text-slate-500 mt-0.5">Location: {{ clickedFeatureLocation }}</div>
+                                <div v-if="clickedFeature.orthogroupId" class="text-xs text-slate-500 mt-0.5">
+                                    {{ clickedFeature.orthogroupId }} · {{ clickedFeature.orthogroupMemberCount }} members
+                                </div>
                             </div>
                             <button @click="clickedFeature = null" class="text-slate-400 hover:text-slate-600 ml-auto text-xl">
                                 <i class="ph ph-x"></i>
+                            </button>
+                        </div>
+                        <div v-if="canUseClickedOrthogroupActions" class="mb-4 grid grid-cols-3 gap-2">
+                            <button @click="alignByClickedOrthogroup"
+                                    class="px-2 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
+                                    title="Align by this orthogroup">
+                                <i class="ph ph-arrows-left-right"></i>
+                                <span>Align</span>
+                            </button>
+                            <button @click="highlightClickedOrthogroup"
+                                    class="px-2 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
+                                    title="Highlight orthogroup">
+                                <i class="ph ph-target"></i>
+                                <span>Highlight</span>
+                            </button>
+                            <button @click="resetOrthogroupAlignment"
+                                    :disabled="!selectedOrthogroupAlignmentFeature"
+                                    class="px-2 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
+                                    :class="selectedOrthogroupAlignmentFeature ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'"
+                                    title="Reset orthogroup alignment">
+                                <i class="ph ph-arrow-counter-clockwise"></i>
+                                <span>Reset</span>
                             </button>
                         </div>
                         <div class="mb-4">

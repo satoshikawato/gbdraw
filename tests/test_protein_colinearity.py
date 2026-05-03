@@ -10,6 +10,7 @@ from svgwrite import Drawing
 import gbdraw.api.diagram as api_diagram_module
 import gbdraw.linear as linear_cli_module
 from gbdraw.analysis.protein_colinearity import (
+    build_orthogroups_from_protein_hits,
     build_protein_colinearity_comparisons,
     cap_hits_per_query,
     convert_pair_protein_hits_to_genomic_links,
@@ -20,8 +21,10 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.api.options import DiagramOptions
+from gbdraw.diagrams.linear.orthogroup_alignment import calculate_orthogroup_alignment_offsets
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 
 
 def _record(
@@ -342,6 +345,157 @@ def test_build_protein_colinearity_comparisons_accepts_test_runner() -> None:
     assert len(comparisons) == 1
     assert comparisons[0].iloc[0]["query"] == "record_a"
     assert comparisons[0].iloc[0]["subject"] == "record_b"
+    assert comparisons[0].iloc[0]["orthogroup_id"] == "og_1"
+    assert comparisons[0].iloc[0]["query_protein_id"] == "gbd_r0001_cds000001"
+    assert comparisons[0].iloc[0]["subject_protein_id"] == "gbd_r0002_cds000001"
+
+
+@pytest.mark.linear
+def test_build_orthogroups_selects_record_representatives_with_paralogs() -> None:
+    records = [
+        _record("record_a", features=[_cds(0, 30)]),
+        _record("record_b", features=[_cds(100, 130), _cds(200, 230)]),
+        _record("record_c", features=[_cds(400, 430)]),
+    ]
+    extraction = extract_cds_proteins(records)
+    hits_ab = pd.DataFrame.from_records(
+        [
+            _hit_row("gbd_r0001_cds000001", "gbd_r0002_cds000001", bitscore=120, evalue=1e-20),
+            _hit_row("gbd_r0001_cds000001", "gbd_r0002_cds000002", bitscore=250, evalue=1e-30),
+        ],
+        columns=COMPARISON_COLUMNS,
+    )
+    hits_bc = pd.DataFrame.from_records(
+        [_hit_row("gbd_r0002_cds000001", "gbd_r0003_cds000001", bitscore=110, evalue=1e-10)],
+        columns=COMPARISON_COLUMNS,
+    )
+
+    orthogroups = build_orthogroups_from_protein_hits(
+        [hits_ab, hits_bc],
+        extraction.protein_map,
+    )
+
+    members = orthogroups.orthogroups["og_1"]
+    assert {member.protein_id for member in members} == {
+        "gbd_r0001_cds000001",
+        "gbd_r0002_cds000001",
+        "gbd_r0002_cds000002",
+        "gbd_r0003_cds000001",
+    }
+    record_b_reps = [
+        member.protein_id
+        for member in members
+        if member.record_index == 1 and member.representative
+    ]
+    assert record_b_reps == ["gbd_r0002_cds000002"]
+
+
+@pytest.mark.linear
+def test_orthogroup_alignment_offsets_align_selected_member_to_representatives() -> None:
+    records = [
+        _record("record_a", sequence="A" * 1000),
+        _record("record_b", sequence="A" * 1000),
+    ]
+    comparison = pd.DataFrame.from_records(
+        [
+            {
+                **_hit_row("record_a", "record_b", bitscore=200),
+                "qstart": 100,
+                "qend": 200,
+                "sstart": 400,
+                "send": 500,
+                "query_protein_id": "prot_a",
+                "subject_protein_id": "prot_b",
+                "query_source_protein_id": "",
+                "subject_source_protein_id": "",
+                "query_record_index": 0,
+                "subject_record_index": 1,
+                "query_feature_index": 0,
+                "subject_feature_index": 0,
+                "query_feature_svg_id": "fanchor",
+                "subject_feature_svg_id": "fsubject",
+                "orthogroup_id": "og_1",
+                "query_orthogroup_representative": True,
+                "subject_orthogroup_representative": True,
+            }
+        ]
+    )
+    canvas_config = type(
+        "CanvasConfig",
+        (),
+        {
+            "normalize_length": False,
+            "align_center": False,
+            "alignment_width": 1000.0,
+            "longest_genome": 1000,
+        },
+    )()
+
+    offsets = calculate_orthogroup_alignment_offsets(
+        records,
+        [comparison],
+        canvas_config,
+        "fanchor",
+    )
+
+    assert offsets[0] == pytest.approx(0.0)
+    assert offsets[1] == pytest.approx(-300.0)
+
+
+@pytest.mark.linear
+def test_pairwise_match_group_applies_record_specific_alignment_offsets() -> None:
+    records = [
+        _record("record_a", sequence="A" * 1000),
+        _record("record_b", sequence="A" * 1000),
+    ]
+    comparison = pd.DataFrame.from_records(
+        [
+            {
+                **_hit_row("record_a", "record_b", identity=90),
+                "qstart": 100,
+                "qend": 200,
+                "sstart": 400,
+                "send": 500,
+            }
+        ]
+    )
+    canvas_config = type(
+        "CanvasConfig",
+        (),
+        {
+            "normalize_length": False,
+            "align_center": False,
+            "longest_genome": 1000,
+            "alignment_width": 1000.0,
+        },
+    )()
+    blast_config = type(
+        "BlastConfig",
+        (),
+        {
+            "fill_color": "#cccccc",
+            "identity": 0,
+            "min_color": "#eeeeee",
+            "max_color": "#111111",
+            "fill_opacity": 0.5,
+            "stroke_color": "#000000",
+            "stroke_width": 0.1,
+        },
+    )()
+
+    group = PairWiseMatchGroup(
+        canvas_config,
+        {"record_a": 1000, "record_b": 1000},
+        comparison,
+        100.0,
+        1,
+        blast_config,
+        records,
+        record_offsets_x={1: -300.0},
+    ).get_group()
+
+    path = group.elements[0]
+    assert 'd="M 100.0,0L200.0,0 L200.0,100.0L100.0,100.0 z"' in path.tostring()
 
 
 @pytest.mark.linear
@@ -398,6 +552,28 @@ def test_build_linear_diagram_forwards_protein_colinearity_options(
     assert captured["protein_colinearity"] is True
     assert captured["losatp_bin"] == "custom-losat"
     assert captured["losatp_max_hits"] == 7
+    assert captured["align_orthogroup_feature"] is None
+
+
+@pytest.mark.linear
+def test_build_linear_diagram_forwards_orthogroup_alignment_option(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_assemble(*_args, **kwargs):
+        captured.update(kwargs)
+        return Drawing(filename="dummy.svg")
+
+    monkeypatch.setattr(api_diagram_module, "assemble_linear_diagram_from_records", fake_assemble)
+
+    canvas = api_diagram_module.build_linear_diagram(
+        [_record("record_a"), _record("record_b")],
+        options=DiagramOptions(align_orthogroup_feature="fanchor"),
+    )
+
+    assert isinstance(canvas, Drawing)
+    assert captured["align_orthogroup_feature"] == "fanchor"
 
 
 @pytest.mark.linear
@@ -476,3 +652,41 @@ def test_linear_cli_forwards_protein_colinearity_options(
     assert captured["protein_colinearity"] is True
     assert captured["losatp_bin"] == "custom-losat"
     assert captured["losatp_max_hits"] == 9
+    assert captured["align_orthogroup_feature"] is None
+
+
+@pytest.mark.linear
+def test_linear_cli_forwards_orthogroup_alignment_option(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    records = [_record("record_a"), _record("record_b")]
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
+
+    def fake_assemble(*_args, **kwargs):
+        captured.update(kwargs)
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+
+    linear_cli_module.linear_main(
+        [
+            "--gbk",
+            "a.gb",
+            "b.gb",
+            "--align_orthogroup_feature",
+            "fanchor",
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert captured["align_orthogroup_feature"] == "fanchor"

@@ -380,6 +380,9 @@ const losat = reactive({
 
 const losatCacheInfo = ref([]);
 const losatCache = ref(new Map());
+const orthogroups = ref([]);
+const featureOrthogroupIndex = ref(new Map());
+const selectedOrthogroupAlignmentFeature = ref('');
 const linearReorderNotice = ref('');
 const circularRecordList = ref([]); // [{ selector: '#1', record_id: 'NC_xxx' }]
 
@@ -771,6 +774,9 @@ export const state = {
   losat,
   losatCacheInfo,
   losatCache,
+  orthogroups,
+  featureOrthogroupIndex,
+  selectedOrthogroupAlignmentFeature,
   linearReorderNotice,
   circularRecordList,
   paletteDefinitions,

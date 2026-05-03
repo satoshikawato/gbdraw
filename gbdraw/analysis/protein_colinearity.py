@@ -20,6 +20,7 @@ from Bio.SeqFeature import SeqFeature  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.exceptions import ParseError, ValidationError
+from gbdraw.features.colors import compute_feature_hash
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,22 @@ logger = logging.getLogger(__name__)
 _VALID_PROTEIN_RE = re.compile(r"^[A-Z]+$")
 _VALID_FASTA_ID_RE = re.compile(r"^\S+$")
 _NUMERIC_COMPARISON_COLUMNS = COMPARISON_COLUMNS[2:]
+LOSATP_METADATA_COLUMNS = (
+    "query_protein_id",
+    "subject_protein_id",
+    "query_source_protein_id",
+    "subject_source_protein_id",
+    "query_record_index",
+    "subject_record_index",
+    "query_feature_index",
+    "subject_feature_index",
+    "query_feature_svg_id",
+    "subject_feature_svg_id",
+    "orthogroup_id",
+    "query_orthogroup_representative",
+    "subject_orthogroup_representative",
+)
+LOSATP_COMPARISON_COLUMNS = tuple(COMPARISON_COLUMNS) + LOSATP_METADATA_COLUMNS
 
 
 @dataclass(frozen=True)
@@ -44,6 +61,7 @@ class CdsProtein:
     protein_length: int
     sequence: str
     source_protein_id: str | None = None
+    feature_svg_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -52,6 +70,31 @@ class ProteinExtractionResult:
 
     proteins_by_record: list[list[CdsProtein]]
     protein_map: dict[str, CdsProtein]
+
+
+@dataclass(frozen=True)
+class OrthogroupMember:
+    """A CDS/protein member assigned to an orthogroup."""
+
+    orthogroup_id: str
+    protein_id: str
+    record_index: int
+    feature_index: int
+    record_id: str
+    start: int
+    end: int
+    strand: int | None
+    feature_svg_id: str | None
+    source_protein_id: str | None
+    representative: bool = False
+
+
+@dataclass(frozen=True)
+class OrthogroupResult:
+    """Connected-component orthogroups and per-protein lookup metadata."""
+
+    orthogroups: dict[str, list[OrthogroupMember]]
+    member_by_protein_id: dict[str, OrthogroupMember]
 
 
 @dataclass(frozen=True)
@@ -67,6 +110,7 @@ class _CdsProteinCandidate:
     label: str
     protein_length: int
     sequence: str
+    feature_svg_id: str | None
 
 
 LosatpRunner = Callable[[str, str], DataFrame]
@@ -181,6 +225,7 @@ def extract_cds_proteins(
     records: Sequence[SeqRecord],
     *,
     record_index_offset: int = 0,
+    prefer_source_ids: bool = True,
 ) -> ProteinExtractionResult:
     """Extract CDS proteins using protein IDs where possible and genomic spans.
 
@@ -240,6 +285,7 @@ def extract_cds_proteins(
                     label=label,
                     protein_length=len(protein_sequence),
                     sequence=protein_sequence,
+                    feature_svg_id=compute_feature_hash(feature, record_id=record.id),
                 )
             )
 
@@ -253,7 +299,8 @@ def extract_cds_proteins(
             fasta_safe_source_id = _fasta_safe_protein_id(candidate.source_protein_id)
             preferred_id = (
                 fasta_safe_source_id
-                if fasta_safe_source_id is not None
+                if prefer_source_ids
+                and fasta_safe_source_id is not None
                 and source_id_counts.get(fasta_safe_source_id, 0) == 1
                 else candidate.protein_id
             )
@@ -270,6 +317,7 @@ def extract_cds_proteins(
                 protein_length=candidate.protein_length,
                 sequence=candidate.sequence,
                 source_protein_id=candidate.source_protein_id,
+                feature_svg_id=candidate.feature_svg_id,
             )
             record_proteins.append(cds_protein)
             protein_map[protein_id] = cds_protein
@@ -366,6 +414,175 @@ def cap_hits_per_query(
     )
 
 
+class _UnionFind:
+    def __init__(self) -> None:
+        self._parent: dict[str, str] = {}
+
+    def add(self, item: str) -> None:
+        if item not in self._parent:
+            self._parent[item] = item
+
+    def find(self, item: str) -> str:
+        self.add(item)
+        parent = self._parent[item]
+        if parent != item:
+            parent = self.find(parent)
+            self._parent[item] = parent
+        return parent
+
+    def union(self, left: str, right: str) -> None:
+        left_root = self.find(left)
+        right_root = self.find(right)
+        if left_root == right_root:
+            return
+        if right_root < left_root:
+            left_root, right_root = right_root, left_root
+        self._parent[right_root] = left_root
+
+
+def _row_float(row: object, column: str, default: float = 0.0) -> float:
+    try:
+        return float(getattr(row, column))
+    except (TypeError, ValueError, AttributeError):
+        return float(default)
+
+
+def _member_rank_from_row(row: object) -> tuple[float, float, float]:
+    return (
+        _row_float(row, "bitscore", 0.0),
+        _row_float(row, "evalue", float("inf")),
+        _row_float(row, "identity", 0.0),
+    )
+
+
+def _is_better_member_rank(
+    candidate: tuple[float, float, float],
+    current: tuple[float, float, float] | None,
+) -> bool:
+    if current is None:
+        return True
+    return (
+        candidate[0] > current[0]
+        or (candidate[0] == current[0] and candidate[1] < current[1])
+        or (
+            candidate[0] == current[0]
+            and candidate[1] == current[1]
+            and candidate[2] > current[2]
+        )
+    )
+
+
+def _protein_sort_key(protein: CdsProtein) -> tuple[int, int, int, str]:
+    return (
+        int(protein.record_index),
+        int(protein.start),
+        int(protein.end),
+        str(protein.protein_id),
+    )
+
+
+def build_orthogroups_from_protein_hits(
+    hits_by_pair: Sequence[DataFrame],
+    protein_map: Mapping[str, CdsProtein],
+) -> OrthogroupResult:
+    """Build connected-component orthogroups from retained LOSATP protein hits."""
+
+    union_find = _UnionFind()
+    edge_nodes: list[tuple[str, str]] = []
+    member_ranks: dict[str, tuple[float, float, float]] = {}
+    missing_ids: set[str] = set()
+
+    for hits in hits_by_pair:
+        if hits is None or hits.empty:
+            continue
+        missing_columns = {"query", "subject"}.difference(hits.columns)
+        if missing_columns:
+            raise ParseError(
+                "LOSATP blastp output is missing required columns: "
+                + ", ".join(sorted(missing_columns))
+            )
+        for row in hits.itertuples(index=False):
+            query_id = str(row.query)
+            subject_id = str(row.subject)
+            if query_id not in protein_map:
+                missing_ids.add(query_id)
+            if subject_id not in protein_map:
+                missing_ids.add(subject_id)
+            if query_id not in protein_map or subject_id not in protein_map:
+                continue
+            union_find.union(query_id, subject_id)
+            edge_nodes.append((query_id, subject_id))
+            rank = _member_rank_from_row(row)
+            if _is_better_member_rank(rank, member_ranks.get(query_id)):
+                member_ranks[query_id] = rank
+            if _is_better_member_rank(rank, member_ranks.get(subject_id)):
+                member_ranks[subject_id] = rank
+
+    if missing_ids:
+        raise ParseError(
+            "LOSATP blastp output contains unknown protein IDs: "
+            + ", ".join(sorted(missing_ids))
+        )
+
+    components: dict[str, set[str]] = {}
+    for query_id, subject_id in edge_nodes:
+        components.setdefault(union_find.find(query_id), set()).update({query_id, subject_id})
+
+    sorted_components = sorted(
+        components.values(),
+        key=lambda member_ids: min(_protein_sort_key(protein_map[member_id]) for member_id in member_ids),
+    )
+
+    orthogroups: dict[str, list[OrthogroupMember]] = {}
+    member_by_protein_id: dict[str, OrthogroupMember] = {}
+    for component_index, member_ids in enumerate(sorted_components, start=1):
+        orthogroup_id = f"og_{component_index}"
+        member_ids_sorted = sorted(member_ids, key=lambda member_id: _protein_sort_key(protein_map[member_id]))
+
+        representative_ids: set[str] = set()
+        members_by_record: dict[int, list[str]] = {}
+        for member_id in member_ids_sorted:
+            protein = protein_map[member_id]
+            members_by_record.setdefault(int(protein.record_index), []).append(member_id)
+
+        for record_member_ids in members_by_record.values():
+            representative_id = min(
+                record_member_ids,
+                key=lambda member_id: (
+                    -member_ranks.get(member_id, (0.0, float("inf"), 0.0))[0],
+                    member_ranks.get(member_id, (0.0, float("inf"), 0.0))[1],
+                    -member_ranks.get(member_id, (0.0, float("inf"), 0.0))[2],
+                    str(member_id),
+                ),
+            )
+            representative_ids.add(representative_id)
+
+        group_members: list[OrthogroupMember] = []
+        for member_id in member_ids_sorted:
+            protein = protein_map[member_id]
+            member = OrthogroupMember(
+                orthogroup_id=orthogroup_id,
+                protein_id=protein.protein_id,
+                record_index=protein.record_index,
+                feature_index=protein.feature_index,
+                record_id=protein.record_id,
+                start=protein.start,
+                end=protein.end,
+                strand=protein.strand,
+                feature_svg_id=protein.feature_svg_id,
+                source_protein_id=protein.source_protein_id,
+                representative=member_id in representative_ids,
+            )
+            group_members.append(member)
+            member_by_protein_id[member_id] = member
+        orthogroups[orthogroup_id] = group_members
+
+    return OrthogroupResult(
+        orthogroups=orthogroups,
+        member_by_protein_id=member_by_protein_id,
+    )
+
+
 def _genomic_link_coordinates(protein: CdsProtein) -> tuple[int, int]:
     if protein.strand == -1:
         return protein.end, protein.start + 1
@@ -375,21 +592,36 @@ def _genomic_link_coordinates(protein: CdsProtein) -> tuple[int, int]:
 def convert_protein_hits_to_genomic_links(
     hits: DataFrame,
     protein_map: Mapping[str, CdsProtein],
+    orthogroups: OrthogroupResult | None = None,
 ) -> DataFrame:
     """Convert protein hit rows to genomic-coordinate comparison rows."""
 
-    return convert_pair_protein_hits_to_genomic_links(hits, protein_map, protein_map)
+    return convert_pair_protein_hits_to_genomic_links(
+        hits,
+        protein_map,
+        protein_map,
+        orthogroups=orthogroups,
+    )
+
+
+def _feature_svg_id(protein: CdsProtein) -> str:
+    return str(protein.feature_svg_id or "")
+
+
+def _protein_metadata_value(value: object | None) -> object:
+    return "" if value is None else value
 
 
 def convert_pair_protein_hits_to_genomic_links(
     hits: DataFrame,
     query_protein_map: Mapping[str, CdsProtein],
     subject_protein_map: Mapping[str, CdsProtein],
+    orthogroups: OrthogroupResult | None = None,
 ) -> DataFrame:
     """Convert pairwise protein hit rows using separate query and subject maps."""
 
     if hits.empty:
-        return pd.DataFrame(columns=COMPARISON_COLUMNS)
+        return pd.DataFrame(columns=LOSATP_COMPARISON_COLUMNS)
 
     rows: list[dict[str, object]] = []
     missing_ids: set[str] = set()
@@ -407,6 +639,24 @@ def convert_pair_protein_hits_to_genomic_links(
 
         qstart, qend = _genomic_link_coordinates(query_protein)
         sstart, send = _genomic_link_coordinates(subject_protein)
+        query_member = (
+            orthogroups.member_by_protein_id.get(query_id)
+            if orthogroups is not None
+            else None
+        )
+        subject_member = (
+            orthogroups.member_by_protein_id.get(subject_id)
+            if orthogroups is not None
+            else None
+        )
+        orthogroup_id = ""
+        if query_member is not None and subject_member is not None:
+            if query_member.orthogroup_id == subject_member.orthogroup_id:
+                orthogroup_id = query_member.orthogroup_id
+        elif query_member is not None:
+            orthogroup_id = query_member.orthogroup_id
+        elif subject_member is not None:
+            orthogroup_id = subject_member.orthogroup_id
         rows.append(
             {
                 "query": query_protein.record_id,
@@ -421,6 +671,23 @@ def convert_pair_protein_hits_to_genomic_links(
                 "send": send,
                 "evalue": row.evalue,
                 "bitscore": row.bitscore,
+                "query_protein_id": query_protein.protein_id,
+                "subject_protein_id": subject_protein.protein_id,
+                "query_source_protein_id": _protein_metadata_value(query_protein.source_protein_id),
+                "subject_source_protein_id": _protein_metadata_value(subject_protein.source_protein_id),
+                "query_record_index": query_protein.record_index,
+                "subject_record_index": subject_protein.record_index,
+                "query_feature_index": query_protein.feature_index,
+                "subject_feature_index": subject_protein.feature_index,
+                "query_feature_svg_id": _feature_svg_id(query_protein),
+                "subject_feature_svg_id": _feature_svg_id(subject_protein),
+                "orthogroup_id": orthogroup_id,
+                "query_orthogroup_representative": (
+                    bool(query_member.representative) if query_member is not None else False
+                ),
+                "subject_orthogroup_representative": (
+                    bool(subject_member.representative) if subject_member is not None else False
+                ),
             }
         )
 
@@ -430,7 +697,7 @@ def convert_pair_protein_hits_to_genomic_links(
             + ", ".join(sorted(missing_ids))
         )
 
-    return pd.DataFrame.from_records(rows, columns=COMPARISON_COLUMNS)
+    return pd.DataFrame.from_records(rows, columns=LOSATP_COMPARISON_COLUMNS)
 
 
 def run_losatp_blastp(
@@ -508,7 +775,7 @@ def build_protein_colinearity_comparisons(
             + ", ".join(empty_record_ids)
         )
 
-    comparisons: list[DataFrame] = []
+    capped_hits_by_pair: list[DataFrame] = []
     for record_index in range(len(records) - 1):
         query_fasta = proteins_to_fasta(extraction.proteins_by_record[record_index])
         subject_fasta = proteins_to_fasta(extraction.proteins_by_record[record_index + 1])
@@ -523,15 +790,31 @@ def build_protein_colinearity_comparisons(
             )
         )
         capped_hits = cap_hits_per_query(protein_hits, max_hits=max_hits)
-        comparisons.append(
-            convert_protein_hits_to_genomic_links(capped_hits, extraction.protein_map)
+        capped_hits_by_pair.append(capped_hits)
+
+    orthogroups = build_orthogroups_from_protein_hits(
+        capped_hits_by_pair,
+        extraction.protein_map,
+    )
+    comparisons = [
+        convert_protein_hits_to_genomic_links(
+            capped_hits,
+            extraction.protein_map,
+            orthogroups=orthogroups,
         )
+        for capped_hits in capped_hits_by_pair
+    ]
     return comparisons
 
 
 __all__ = [
     "CdsProtein",
+    "LOSATP_COMPARISON_COLUMNS",
+    "LOSATP_METADATA_COLUMNS",
+    "OrthogroupMember",
+    "OrthogroupResult",
     "ProteinExtractionResult",
+    "build_orthogroups_from_protein_hits",
     "build_protein_colinearity_comparisons",
     "cap_hits_per_query",
     "convert_pair_protein_hits_to_genomic_links",

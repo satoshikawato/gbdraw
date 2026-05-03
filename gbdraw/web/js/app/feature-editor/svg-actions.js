@@ -110,6 +110,11 @@ export const createFeatureSvgActions = ({
       labelSourceText: '',
       labelVisibility: 'default',
       featureVisibility: visibilityMode,
+      proteinId: feat.proteinId || '',
+      sourceProteinId: feat.sourceProteinId || '',
+      orthogroupId: feat.orthogroupId || '',
+      orthogroupMemberCount: feat.orthogroupMemberCount || 0,
+      orthogroupRepresentative: Boolean(feat.orthogroupRepresentative),
       hasEditableLabel: false,
       labelUnavailableReason: 'No editable feature label for this feature in current diagram.'
     };

@@ -1185,6 +1185,7 @@ def assemble_linear_diagram_from_records(
     protein_colinearity: bool = False,
     losatp_bin: str = "losat",
     losatp_max_hits: int = 5,
+    align_orthogroup_feature: str | None = None,
     config_dict: dict | None = None,
     config_overrides: Mapping[str, object] | None = None,
     color_table: Optional[DataFrame] = None,
@@ -1403,6 +1404,7 @@ def assemble_linear_diagram_from_records(
         plot_title_position=normalized_plot_title_position,
         plot_title_font_size=resolved_plot_title_font_size,
         comparison_dataframes=resolved_protein_comparisons,
+        align_orthogroup_feature=align_orthogroup_feature,
         cfg=cfg,
     )
 
@@ -2526,6 +2528,7 @@ def build_linear_diagram(
         protein_colinearity=options.protein_colinearity,
         losatp_bin=options.losatp_bin,
         losatp_max_hits=options.losatp_max_hits,
+        align_orthogroup_feature=options.align_orthogroup_feature,
         config_dict=config_dict,
         config_overrides=config_overrides,
         color_table=colors.color_table if colors else None,

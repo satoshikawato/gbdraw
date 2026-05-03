@@ -182,6 +182,7 @@ def add_comparison_on_linear_canvas(
     records: list,
     comparison_offsets: list,
     actual_comparison_heights: list,
+    record_offsets_x: dict[int, float] | None = None,
 ) -> Drawing:
     """Adds comparison groups at specified y-offsets with dynamic height."""
     for comparison_count, comparison in enumerate(comparisons, start=1):
@@ -199,6 +200,7 @@ def add_comparison_on_linear_canvas(
             comparison_count,
             blast_config,
             records,
+            record_offsets_x=record_offsets_x,
         ).get_group()
 
         match_group.translate(canvas_config.horizontal_offset, offset)

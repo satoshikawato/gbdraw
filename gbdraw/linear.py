@@ -150,6 +150,13 @@ def _get_args(args) -> argparse.Namespace:
         type=int,
         default=5)
     parser.add_argument(
+        '--align_orthogroup_feature',
+        '--align-orthogroup-feature',
+        dest='align_orthogroup_feature',
+        help='Align linear records by the LOSATP blastp orthogroup containing this feature SVG hash or protein ID.',
+        type=str,
+        default="")
+    parser.add_argument(
         '-t',
         '--table',
         help='color table (optional)',
@@ -633,6 +640,7 @@ def linear_main(cmd_args) -> None:
     protein_colinearity: bool = bool(args.protein_colinearity)
     losatp_bin: str = args.losatp_bin
     losatp_max_hits: int = args.losatp_max_hits
+    align_orthogroup_feature: str = str(args.align_orthogroup_feature or "").strip()
     color_table_path: str = args.table
     strandedness: bool = args.separate_strands
     resolve_overlaps: bool = args.resolve_overlaps
@@ -920,6 +928,7 @@ def linear_main(cmd_args) -> None:
         protein_colinearity=protein_colinearity,
         losatp_bin=losatp_bin,
         losatp_max_hits=losatp_max_hits,
+        align_orthogroup_feature=align_orthogroup_feature or None,
         evalue=evalue,
         bitscore=bitscore,
         identity=identity,

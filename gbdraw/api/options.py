@@ -74,6 +74,7 @@ class DiagramOptions:
     protein_colinearity: bool = False
     losatp_bin: str = "losat"
     losatp_max_hits: int = 5
+    align_orthogroup_feature: str | None = None
     evalue: float = 1e-5
     bitscore: float = 50.0
     identity: float = 70.0

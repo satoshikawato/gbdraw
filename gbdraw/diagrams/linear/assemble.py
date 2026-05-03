@@ -49,6 +49,7 @@ from .builders import (
     add_record_definition_group,
     add_record_group,
 )
+from .orthogroup_alignment import calculate_orthogroup_alignment_offsets
 from .precalc import (
     FeatureDict,
     _precalculate_definition_metrics,
@@ -348,6 +349,7 @@ def assemble_linear_diagram(
     plot_title_position: str = "bottom",
     plot_title_font_size: float = 32.0,
     comparison_dataframes: list[DataFrame] | None = None,
+    align_orthogroup_feature: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -473,6 +475,7 @@ def assemble_linear_diagram(
 
     # Prepare legend group
     has_blast = bool(blast_files or comparison_dataframes)
+    comparisons: list[DataFrame] = []
     legend_table: dict = {}
     legend_group: LegendGroup | None = None
     required_legend_height = 0.0
@@ -631,6 +634,36 @@ def assemble_linear_diagram(
 
     if legend_group is not None:
         canvas_config.recalculate_canvas_dimensions(legend_group, max_def_width)
+
+    if has_blast:
+        comparison_sources: list[list[DataFrame]] = []
+        if blast_files:
+            comparison_sources.append(load_comparisons(blast_files, blast_config))
+        if comparison_dataframes:
+            comparison_sources.append(
+                [
+                    filter_comparison_dataframe(comparison, blast_config)
+                    for comparison in comparison_dataframes
+                ]
+            )
+        max_source_len = max((len(source) for source in comparison_sources), default=0)
+        for index in range(max_source_len):
+            frames = [
+                source[index]
+                for source in comparison_sources
+                if index < len(source)
+            ]
+            if len(frames) == 1:
+                comparisons.append(frames[0])
+            elif frames:
+                comparisons.append(pd.concat(frames, ignore_index=True))
+
+    orthogroup_alignment_offsets = calculate_orthogroup_alignment_offsets(
+        records,
+        comparisons,
+        canvas_config,
+        align_orthogroup_feature,
+    )
     canvas: Drawing = canvas_config.create_svg_canvas()
 
     # Embed both viewBox configurations as data attributes for JavaScript repositioning
@@ -663,29 +696,6 @@ def assemble_linear_diagram(
         canvas = add_length_bar_on_linear_canvas(canvas, canvas_config, config_dict, length_bar_group, legend_group)
 
     if has_blast:
-        comparison_sources: list[list[DataFrame]] = []
-        if blast_files:
-            comparison_sources.append(load_comparisons(blast_files, blast_config))
-        if comparison_dataframes:
-            comparison_sources.append(
-                [
-                    filter_comparison_dataframe(comparison, blast_config)
-                    for comparison in comparison_dataframes
-                ]
-            )
-        comparisons: list[DataFrame] = []
-        max_source_len = max((len(source) for source in comparison_sources), default=0)
-        for index in range(max_source_len):
-            frames = [
-                source[index]
-                for source in comparison_sources
-                if index < len(source)
-            ]
-            if len(frames) == 1:
-                comparisons.append(frames[0])
-            elif frames:
-                comparisons.append(pd.concat(frames, ignore_index=True))
-
         comparison_offsets = []
         actual_comparison_heights = []
         for i in range(len(records) - 1):
@@ -713,6 +723,7 @@ def assemble_linear_diagram(
             records,
             comparison_offsets,
             actual_comparison_heights,
+            orthogroup_alignment_offsets,
         )
 
     raw_show_labels = cfg.canvas.show_labels
@@ -731,6 +742,7 @@ def assemble_linear_diagram(
                 if canvas_config.align_center
                 else 0
             )
+        offset_x += orthogroup_alignment_offsets.get(count - 1, 0.0)
 
         labels_for_record = all_labels.get(record.id)
         should_show_labels = False
@@ -836,6 +848,7 @@ def plot_linear_diagram(
     depth_tables: list[DataFrame | None] | None = None,
     cfg: GbdrawConfig | None = None,
     comparison_dataframes: list[DataFrame] | None = None,
+    align_orthogroup_feature: str | None = None,
 ) -> Drawing:
     """Backwards-compatible wrapper that assembles and saves a linear diagram."""
     canvas = assemble_linear_diagram(
@@ -851,6 +864,7 @@ def plot_linear_diagram(
         depth_config=depth_config,
         depth_tables=depth_tables,
         comparison_dataframes=comparison_dataframes,
+        align_orthogroup_feature=align_orthogroup_feature,
         cfg=cfg,
     )
     save_figure(canvas, out_formats)

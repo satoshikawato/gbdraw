@@ -414,6 +414,9 @@ export const createRunAnalysis = ({
     losat,
     losatCacheInfo,
     losatCache,
+    orthogroups,
+    featureOrthogroupIndex,
+    selectedOrthogroupAlignmentFeature,
     circularRecordList,
     files,
     linearSeqs,
@@ -529,6 +532,56 @@ export const createRunAnalysis = ({
     return featData;
   };
 
+  const buildOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
+
+  const setOrthogroupMetadata = (orthogroupPayload) => {
+    const groups = Array.isArray(orthogroupPayload) ? orthogroupPayload : [];
+    const index = new Map();
+    groups.forEach((group) => {
+      const orthogroupId = String(group?.id || '').trim();
+      const members = Array.isArray(group?.members) ? group.members : [];
+      const memberCount = Number(group?.member_count || members.length || 0);
+      members.forEach((member) => {
+        const featureSvgId = String(member?.featureSvgId || '').trim();
+        const recordIndex = Number(member?.recordIndex);
+        if (!featureSvgId || !Number.isInteger(recordIndex)) return;
+        const entry = {
+          orthogroupId,
+          orthogroupMemberCount: memberCount,
+          proteinId: String(member?.proteinId || '').trim(),
+          sourceProteinId: String(member?.sourceProteinId || '').trim(),
+          orthogroupRepresentative: Boolean(member?.representative)
+        };
+        index.set(buildOrthogroupIndexKey(recordIndex, featureSvgId), entry);
+        if (!index.has(featureSvgId)) index.set(featureSvgId, entry);
+      });
+    });
+    orthogroups.value = groups;
+    featureOrthogroupIndex.value = index;
+  };
+
+  const clearOrthogroupMetadata = ({ clearSelection = false } = {}) => {
+    orthogroups.value = [];
+    featureOrthogroupIndex.value = new Map();
+    if (clearSelection) selectedOrthogroupAlignmentFeature.value = '';
+  };
+
+  const enrichFeatureWithOrthogroup = (feature, recordIndex) => {
+    const svgId = String(feature?.svg_id || '').trim();
+    if (!svgId) return feature;
+    const index = featureOrthogroupIndex.value instanceof Map ? featureOrthogroupIndex.value : new Map();
+    const entry = index.get(buildOrthogroupIndexKey(recordIndex, svgId)) || index.get(svgId);
+    if (!entry) return feature;
+    return {
+      ...feature,
+      proteinId: entry.proteinId,
+      sourceProteinId: entry.sourceProteinId,
+      orthogroupId: entry.orthogroupId,
+      orthogroupMemberCount: entry.orthogroupMemberCount,
+      orthogroupRepresentative: entry.orthogroupRepresentative
+    };
+  };
+
   const isCurrentFeatureExtractionContext = (context) =>
     Boolean(context) &&
     context.requestId === featureExtractionRequestId &&
@@ -602,7 +655,7 @@ export const createRunAnalysis = ({
             console.warn(`Feature extraction failed for linear input #${i + 1}:`, featData.error);
           } else if (Array.isArray(featData?.features)) {
             const features = featData.features.map((feature) => ({
-              ...feature,
+              ...enrichFeatureWithOrthogroup(feature, i),
               fileIdx: i,
               displayRecordId: `File ${i + 1}: ${feature.record_id}`,
               id: `file${i}_${feature.id}`
@@ -717,7 +770,8 @@ export const createRunAnalysis = ({
         plot_title_font_size: false,
         show_replicon: false,
         hide_accession: false,
-        hide_length: false
+        hide_length: false,
+        orthogroup_alignment: false
       };
       return linearLabelSupportCache;
     }
@@ -742,6 +796,7 @@ json.dumps({
   "show_replicon": "--show_replicon" in _source,
   "hide_accession": "--hide_accession" in _source,
   "hide_length": "--hide_length" in _source,
+  "orthogroup_alignment": "--align_orthogroup_feature" in _source,
 })
       `);
       linearLabelSupportCache = JSON.parse(String(raw));
@@ -761,7 +816,8 @@ json.dumps({
         plot_title_font_size: false,
         show_replicon: false,
         hide_accession: false,
-        hide_length: false
+        hide_length: false,
+        orthogroup_alignment: false
       };
     }
     return linearLabelSupportCache;
@@ -1439,6 +1495,11 @@ json.dumps({
         if (form.show_skew) args.push('--show_skew');
         if (form.normalize_length) args.push('--normalize_length');
         if (form.legend !== 'right') args.push('-l', form.legend);
+        const useLosat = blastSource.value === 'losat';
+        const useProteinColinearity = useLosat && losatProgram.value === 'blastp';
+        const selectedOrthogroupTarget = String(selectedOrthogroupAlignmentFeature.value || '').trim();
+        const wantsOrthogroupAlignmentOption =
+          useProteinColinearity && lInputType.value === 'gb' && selectedOrthogroupTarget !== '';
         adv.min_bitscore = normalizeBlastThresholdNumber(
           adv.min_bitscore,
           DEFAULT_LINEAR_BLAST_FILTERS.bitscore
@@ -1526,7 +1587,8 @@ json.dumps({
           wantsPlotTitleFontSizeOption ||
           wantsShowRepliconOption ||
           wantsHideAccessionOption ||
-          wantsHideLengthOption
+          wantsHideLengthOption ||
+          wantsOrthogroupAlignmentOption
         ) {
           if (wantsPlacementOption && !linearLabelSupport.placement) {
             throw new Error("Current gbdraw wheel does not support --label_placement. Rebuild and redeploy the web wheel.");
@@ -1567,6 +1629,9 @@ json.dumps({
           if (wantsHideLengthOption && !linearLabelSupport.hide_length) {
             throw new Error("Current gbdraw wheel does not support --hide_length. Rebuild and redeploy the web wheel.");
           }
+          if (wantsOrthogroupAlignmentOption && !linearLabelSupport.orthogroup_alignment) {
+            throw new Error("Current gbdraw wheel does not support --align_orthogroup_feature. Rebuild and redeploy the web wheel.");
+          }
         }
         if (wantsPlotTitleOption) args.push('--plot_title', normalizedPlotTitle);
         if (wantsPlotTitlePositionOption) args.push('--plot_title_position', normalizedPlotTitlePosition);
@@ -1574,6 +1639,9 @@ json.dumps({
         if (wantsShowRepliconOption) args.push('--show_replicon');
         if (wantsHideAccessionOption) args.push('--hide_accession');
         if (wantsHideLengthOption) args.push('--hide_length');
+        if (wantsOrthogroupAlignmentOption) {
+          args.push('--align_orthogroup_feature', selectedOrthogroupTarget);
+        }
         if (normalizedLabelPlacement && normalizedLabelPlacement !== 'auto') {
           args.push('--label_placement', normalizedLabelPlacement);
         }
@@ -1669,14 +1737,17 @@ json.dumps({
 
         let inputArgs = [];
         let blastArgs = [];
-        const useLosat = blastSource.value === 'losat';
-        const useProteinColinearity = useLosat && losatProgram.value === 'blastp';
         const fastaCache = new Map();
         const fastaHashCache = new Map();
         const linearFileTextCache = new WeakMap();
         let extractFirstFasta = null;
         let extractProteinFasta = null;
         let convertProteinBlast = null;
+        if (useProteinColinearity) {
+          clearOrthogroupMetadata();
+        } else {
+          clearOrthogroupMetadata({ clearSelection: true });
+        }
         let cacheInfo = [];
         const cacheMap = losatCache.value || new Map();
         const losatTiming = useLosat
@@ -1710,7 +1781,7 @@ json.dumps({
         if (useLosat) {
           if (useProteinColinearity) {
             extractProteinFasta = pyodide.globals.get('extract_cds_protein_fasta');
-            convertProteinBlast = pyodide.globals.get('convert_protein_blast_to_genomic_tsv');
+            convertProteinBlast = pyodide.globals.get('convert_losatp_blastp_pairs_to_genomic_payload');
           } else {
             extractFirstFasta = pyodide.globals.get('extract_first_fasta');
           }
@@ -1965,27 +2036,50 @@ json.dumps({
           }
 
           const blastWriteStartedAt = getNow();
-          for (const pair of losatPairs) {
-            const cached = cacheMap.get(pair.cacheKey);
-            const losatText = typeof cached?.text === 'string' ? cached.text : '';
-            let blastText = losatText;
-            if (useProteinColinearity) {
+          if (useProteinColinearity) {
+            if (!convertProteinBlast) {
+              throw new Error('Current gbdraw wheel does not support LOSATP orthogroup metadata. Rebuild and redeploy the web wheel.');
+            }
+            const maxHits = normalizeBlastThresholdNumber(losat.blastp?.maxHits, 5, { integer: true });
+            const pairPayloads = [];
+            for (const pair of losatPairs) {
+              const cached = cacheMap.get(pair.cacheKey);
+              const losatText = typeof cached?.text === 'string' ? cached.text : '';
               const queryEntry = await getSeqEntry(pair.queryIndex);
               const subjectEntry = await getSeqEntry(pair.subjectIndex);
-              const maxHits = normalizeBlastThresholdNumber(losat.blastp?.maxHits, 5, { integer: true });
-              const converted = JSON.parse(
-                convertProteinBlast(
-                  losatText,
-                  JSON.stringify([queryEntry.proteinMap || {}, subjectEntry.proteinMap || {}]),
-                  Math.max(1, maxHits)
-                )
-              );
-              if (converted.error) throw new Error(converted.error);
-              blastText = converted.tsv || '';
+              pairPayloads.push({
+                pairIndex: pair.pairIndex,
+                blastText: losatText,
+                queryProteinMap: queryEntry.proteinMap || {},
+                subjectProteinMap: subjectEntry.proteinMap || {}
+              });
             }
-            const blastPath = `/blast_${pair.pairIndex}.txt`;
-            virtualBlastFiles.push({ path: blastPath, text: blastText });
-            blastArgs.push(blastPath);
+            const convertedPayload = JSON.parse(
+              convertProteinBlast(JSON.stringify(pairPayloads), Math.max(1, maxHits))
+            );
+            if (convertedPayload.error) throw new Error(convertedPayload.error);
+            setOrthogroupMetadata(convertedPayload.orthogroups || []);
+            const convertedByPair = new Map(
+              (convertedPayload.pairs || []).map((entry) => [Number(entry.pair_index), entry])
+            );
+            for (const pair of losatPairs) {
+              const converted = convertedByPair.get(pair.pairIndex) || {};
+              const blastPath = `/blast_${pair.pairIndex}.txt`;
+              virtualBlastFiles.push({
+                path: blastPath,
+                text: converted.tsv || '',
+                rows: Array.isArray(converted.rows) ? converted.rows : []
+              });
+              blastArgs.push(blastPath);
+            }
+          } else {
+            for (const pair of losatPairs) {
+              const cached = cacheMap.get(pair.cacheKey);
+              const blastText = typeof cached?.text === 'string' ? cached.text : '';
+              const blastPath = `/blast_${pair.pairIndex}.txt`;
+              virtualBlastFiles.push({ path: blastPath, text: blastText });
+              blastArgs.push(blastPath);
+            }
           }
           losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
           console.info(
