@@ -129,7 +129,7 @@ const suppressCircularMultiRecordDefaults = ref(false);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
 const blastSource = ref('upload'); // 'upload' | 'losat'
-const losatProgram = ref('blastn'); // 'blastn' | 'tblastx'
+const losatProgram = ref('blastn'); // 'blastn' | 'tblastx' | 'blastp'
 const files = reactive({
   c_gb: null,
   c_gff: null,
@@ -280,6 +280,7 @@ const form = reactive({
   suppress_gc: false,
   suppress_skew: false,
   align_center: false,
+  keep_definition_left_aligned: false,
   show_gc: false,
   show_skew: false,
   show_depth: false,
@@ -372,11 +373,26 @@ const losat = reactive({
   outfmt: '6',
   blastn: {
     task: 'megablast'
+  },
+  blastp: {
+    mode: 'orthogroup',
+    maxHits: 5,
+    candidateLimit: null
   }
 });
 
 const losatCacheInfo = ref([]);
 const losatCache = ref(new Map());
+const orthogroups = ref([]);
+const featureOrthogroupIndex = ref(new Map());
+const selectedOrthogroupAlignmentFeature = ref('');
+const orthogroupNameOverrides = reactive({});
+const orthogroupDescriptionOverrides = reactive({});
+const selectedOrthogroupId = ref('');
+const orthogroupSearch = ref('');
+const orthogroupSortMode = ref('id');
+const showRightDrawer = ref(false);
+const rightDrawerTab = ref('features'); // 'legend' | 'features' | 'orthogroups'
 const linearReorderNotice = ref('');
 const circularRecordList = ref([]); // [{ selector: '#1', record_id: 'NC_xxx' }]
 
@@ -560,6 +576,9 @@ const diagramOffset = reactive({ x: 0, y: 0 }); // Cumulative drag offset
 const diagramElementIds = ref([]); // IDs of elements that move together
 const diagramElementOriginalTransforms = ref(new Map()); // Store original transforms for each element
 const diagramElements = ref([]);
+const lengthBarElement = ref(null);
+const lengthBarOriginalTransform = ref({ x: 0, y: 0 });
+const lengthBarUserOffset = reactive({ x: 0, y: 0 });
 const plotTitleElement = ref(null);
 const plotTitleDragging = ref(false);
 const plotTitleDragStart = reactive({ x: 0, y: 0 });
@@ -768,6 +787,16 @@ export const state = {
   losat,
   losatCacheInfo,
   losatCache,
+  orthogroups,
+  featureOrthogroupIndex,
+  selectedOrthogroupAlignmentFeature,
+  orthogroupNameOverrides,
+  orthogroupDescriptionOverrides,
+  selectedOrthogroupId,
+  orthogroupSearch,
+  orthogroupSortMode,
+  showRightDrawer,
+  rightDrawerTab,
   linearReorderNotice,
   circularRecordList,
   paletteDefinitions,
@@ -850,6 +879,9 @@ export const state = {
   diagramElementIds,
   diagramElementOriginalTransforms,
   diagramElements,
+  lengthBarElement,
+  lengthBarOriginalTransform,
+  lengthBarUserOffset,
   plotTitleElement,
   plotTitleDragging,
   plotTitleDragStart,

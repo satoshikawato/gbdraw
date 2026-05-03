@@ -86,6 +86,7 @@ class LinearCanvasConfig:
     track_axis_gap: float | None
     ruler_on_axis: bool
     align_center: bool
+    keep_definition_left_aligned: bool
     normalize_length: bool
     default_cds_height: LinearCanvasDefaultCdsHeightConfig
     arrow_length_parameter: LinearCanvasArrowLengthParameterConfig
@@ -133,6 +134,7 @@ class LinearCanvasConfig:
             track_axis_gap=track_axis_gap,
             ruler_on_axis=bool(d.get("ruler_on_axis", False)),
             align_center=bool(d["align_center"]),
+            keep_definition_left_aligned=bool(d.get("keep_definition_left_aligned", False)),
             normalize_length=bool(d["normalize_length"]),
             default_cds_height=LinearCanvasDefaultCdsHeightConfig.from_dict(d["default_cds_height"]),
             arrow_length_parameter=LinearCanvasArrowLengthParameterConfig.from_dict(d["arrow_length_parameter"]),

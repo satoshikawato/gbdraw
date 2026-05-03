@@ -62,7 +62,7 @@ def run_gbdraw_wrapper(mode, args, virtual_blast_files_json=None):
         except Exception:
             payload = []
         virtual_files = {
-            str(item.get("path", "")): str(item.get("text", ""))
+            str(item.get("path", "")): item
             for item in payload
             if isinstance(item, dict) and str(item.get("path", ""))
         }
@@ -72,15 +72,12 @@ def run_gbdraw_wrapper(mode, args, virtual_blast_files_json=None):
         import pandas as pd
         from io import StringIO
         from gbdraw.diagrams.linear import assemble as _assemble_module
+        from gbdraw.io.comparisons import COMPARISON_COLUMNS, filter_comparison_dataframe
 
         assemble_module = _assemble_module
         original_load_comparisons = _assemble_module.load_comparisons
 
         def _load_comparisons_from_virtual_files(comparison_files, blast_config):
-            evalue_threshold = blast_config.evalue
-            bitscore_threshold = blast_config.bitscore
-            identity_threshold = blast_config.identity
-            alignment_length_threshold = blast_config.alignment_length
             comparison_list = []
             fallback_files = []
             for comparison_file in comparison_files:
@@ -89,32 +86,25 @@ def run_gbdraw_wrapper(mode, args, virtual_blast_files_json=None):
                     fallback_files.append(comparison_file)
                     continue
                 try:
-                    df = pd.read_csv(
-                        StringIO(virtual_files[comparison_path]),
-                        sep="\\t",
-                        comment="#",
-                        names=(
-                            "query",
-                            "subject",
-                            "identity",
-                            "alignment_length",
-                            "mismatches",
-                            "gap_opens",
-                            "qstart",
-                            "qend",
-                            "sstart",
-                            "send",
-                            "evalue",
-                            "bitscore",
-                        ),
-                    )
-                    df = df[
-                        (df["evalue"] <= evalue_threshold)
-                        & (df["bitscore"] >= bitscore_threshold)
-                        & (df["identity"] >= identity_threshold)
-                        & (df["alignment_length"] >= alignment_length_threshold)
-                    ]
-                    comparison_list.append(df)
+                    virtual_entry = virtual_files[comparison_path]
+                    comparison_rows = virtual_entry.get("rows") if isinstance(virtual_entry, dict) else None
+                    comparison_text = str(virtual_entry.get("text", "")) if isinstance(virtual_entry, dict) else str(virtual_entry)
+                    if isinstance(comparison_rows, list):
+                        if comparison_rows:
+                            df = pd.DataFrame.from_records(comparison_rows)
+                        else:
+                            df = pd.DataFrame(columns=COMPARISON_COLUMNS)
+                    elif not comparison_text.strip():
+                        comparison_list.append(pd.DataFrame(columns=COMPARISON_COLUMNS))
+                        continue
+                    else:
+                        df = pd.read_csv(
+                            StringIO(comparison_text),
+                            sep=chr(9),
+                            comment="#",
+                            names=COMPARISON_COLUMNS,
+                        )
+                    comparison_list.append(filter_comparison_dataframe(df, blast_config))
                 except ValueError as e:
                     logging.getLogger(__name__).warning(
                         f"WARNING: Error parsing comparison file {comparison_path}. It may be corrupt or in the wrong format. Error: {e}"
@@ -203,6 +193,396 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
         return json.dumps({"fasta": handle.getvalue(), "record_id": record.id})
     except StopIteration:
         return json.dumps({"error": "No records found"})
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
+
+def _normalize_web_record_selector(record_selector):
+    if record_selector is None:
+        return None
+    selector_raw = str(record_selector).strip()
+    if not selector_raw or selector_raw.lower() in {"none", "null", "jsnull", "undefined", "jsundefined", "-"}:
+        return None
+    return selector_raw
+
+def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None):
+    from Bio import SeqIO
+    from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
+    from gbdraw.io.regions import apply_region_specs, parse_region_specs
+
+    selector = parse_record_selector(_normalize_web_record_selector(record_selector))
+    reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
+    if fmt == "genbank":
+        records = list(SeqIO.parse(path, "genbank"))
+        if not records:
+            raise ValueError("No records found")
+        records = select_record(records, selector) if selector is not None else [records[0]]
+        records = reverse_records(records, reverse)
+    elif fmt == "gff":
+        if not fasta_path:
+            raise ValueError("GFF3 protein extraction requires a FASTA path.")
+        from gbdraw.io.genome import load_gff_fasta
+        records = load_gff_fasta(
+            [path],
+            [fasta_path],
+            "linear",
+            selected_features_set=["CDS"],
+            keep_all_features=True,
+            load_comparison=True,
+            record_selectors=[_normalize_web_record_selector(record_selector) or ""],
+            reverse_flags=[reverse],
+        )
+    else:
+        raise ValueError(f"Unsupported format: {fmt}")
+    if region_spec:
+        records = apply_region_specs(records, parse_region_specs([region_spec]))
+    if not records:
+        raise ValueError("No records found")
+    return records[0]
+
+def _serialize_cds_protein(protein):
+    return {
+        "protein_id": protein.protein_id,
+        "record_index": protein.record_index,
+        "feature_index": protein.feature_index,
+        "record_id": protein.record_id,
+        "start": protein.start,
+        "end": protein.end,
+        "strand": protein.strand,
+        "label": protein.label,
+        "protein_length": protein.protein_length,
+        "source_protein_id": protein.source_protein_id,
+        "feature_svg_id": protein.feature_svg_id,
+        "gene": getattr(protein, "gene", None),
+        "product": getattr(protein, "product", None),
+        "note": getattr(protein, "note", None),
+    }
+
+def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None):
+    """Extract CDS proteins and coordinate metadata for LOSATP blastp."""
+    try:
+        from gbdraw.analysis.protein_colinearity import extract_cds_proteins, proteins_to_fasta
+
+        record = _load_single_linear_record_for_proteins(
+            path,
+            fmt,
+            fasta_path=fasta_path,
+            region_spec=region_spec,
+            record_selector=record_selector,
+            reverse_flag=reverse_flag,
+        )
+        record_index_offset = int(record_index) if record_index is not None else 0
+        result = extract_cds_proteins(
+            [record],
+            record_index_offset=record_index_offset,
+            prefer_source_ids=False,
+        )
+        proteins = result.proteins_by_record[0] if result.proteins_by_record else []
+        if not proteins:
+            return json.dumps({"error": f"No CDS proteins found in {record.id}"})
+        protein_map = {
+            protein.protein_id: _serialize_cds_protein(protein)
+            for protein in proteins
+        }
+        return json.dumps({
+            "fasta": proteins_to_fasta(proteins),
+            "record_id": record.id,
+            "protein_count": len(proteins),
+            "protein_map": protein_map,
+        })
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
+
+def convert_protein_blast_to_genomic_tsv(blast_text, protein_maps_json, max_hits=5):
+    """Convert LOSATP blastp output into genomic comparison TSV for gbdraw linear."""
+    try:
+        from io import StringIO
+        from gbdraw.analysis.protein_colinearity import (
+            cap_hits_per_query,
+            convert_protein_hits_to_genomic_links,
+            parse_losatp_outfmt6,
+        )
+        from gbdraw.io.comparisons import COMPARISON_COLUMNS
+        try:
+            from gbdraw.analysis.protein_colinearity import convert_pair_protein_hits_to_genomic_links
+        except ImportError:
+            convert_pair_protein_hits_to_genomic_links = None
+
+        raw_maps = json.loads(str(protein_maps_json))
+        if isinstance(raw_maps, dict):
+            raw_maps = [raw_maps]
+
+        protein_maps = [_build_web_cds_protein_map(raw_map) for raw_map in raw_maps]
+        hits = parse_losatp_outfmt6(str(blast_text or ""))
+        capped = cap_hits_per_query(hits, max_hits=int(max_hits or 5))
+        if len(protein_maps) >= 2 and convert_pair_protein_hits_to_genomic_links is not None:
+            converted = convert_pair_protein_hits_to_genomic_links(
+                capped,
+                protein_maps[0],
+                protein_maps[1],
+            )
+        else:
+            protein_map = {}
+            for current_map in protein_maps:
+                protein_map.update(current_map)
+            converted = convert_protein_hits_to_genomic_links(capped, protein_map)
+        handle = StringIO()
+        converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(handle, sep=chr(9), header=False, index=False, lineterminator=chr(10))
+        return json.dumps({"tsv": handle.getvalue(), "hit_count": int(converted.shape[0])})
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
+
+def _build_web_cds_protein_map(raw_map):
+    from gbdraw.analysis.protein_colinearity import CdsProtein
+
+    protein_map = {}
+    if not isinstance(raw_map, dict):
+        return protein_map
+    for protein_id, data in raw_map.items():
+        if not isinstance(data, dict):
+            continue
+        strand = data.get("strand")
+        strand = int(strand) if strand in (-1, 1, "-1", "1") else None
+        kwargs = {
+            "protein_id": str(data.get("protein_id") or protein_id),
+            "record_index": int(data.get("record_index") or 0),
+            "feature_index": int(data.get("feature_index") or 0),
+            "record_id": str(data.get("record_id") or ""),
+            "start": int(data.get("start") or 0),
+            "end": int(data.get("end") or 0),
+            "strand": strand,
+            "label": str(data.get("label") or protein_id),
+            "protein_length": int(data.get("protein_length") or 0),
+            "sequence": "",
+            "source_protein_id": data.get("source_protein_id"),
+            "feature_svg_id": data.get("feature_svg_id"),
+        }
+        supported_fields = getattr(CdsProtein, "__dataclass_fields__", {})
+        for optional_field in ("gene", "product", "note"):
+            if optional_field in supported_fields:
+                kwargs[optional_field] = data.get(optional_field)
+        protein_map[str(protein_id)] = CdsProtein(**kwargs)
+    return protein_map
+
+def _clean_json_scalar(value):
+    try:
+        import pandas as pd
+        if pd.isna(value):
+            return ""
+    except Exception:
+        pass
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except Exception:
+            pass
+    return value
+
+def _dataframe_json_rows(df):
+    rows = []
+    for row in df.to_dict(orient="records"):
+        rows.append({str(key): _clean_json_scalar(value) for key, value in row.items()})
+    return rows
+
+def _serialize_orthogroup_name_candidate(candidate):
+    if isinstance(candidate, dict):
+        getter = candidate.get
+    else:
+        getter = lambda key, default=None: getattr(candidate, key, default)
+    return {
+        "text": str(getter("text", "") or ""),
+        "source": str(getter("source", "") or ""),
+        "memberCount": int(getter("member_count", 0) or 0),
+        "recordCoverageCount": int(getter("record_coverage_count", 0) or 0),
+        "representativeCount": int(getter("representative_count", 0) or 0),
+        "score": float(getter("score", 0.0) or 0.0),
+    }
+
+def convert_losatp_blastp_pairs_to_genomic_payload(
+    pairs_json,
+    mode="pairwise",
+    max_hits=5,
+    bitscore=50,
+    evalue="1e-2",
+    identity=0,
+    alignment_length=0,
+):
+    """Convert LOSATP blastp outputs for pairwise display or RBH orthogroups."""
+    try:
+        from io import StringIO
+        from gbdraw.analysis.protein_colinearity import (
+            build_orthogroups_from_protein_hits,
+            convert_pair_protein_hits_to_genomic_links,
+            filter_protein_hits_by_thresholds,
+            parse_losatp_outfmt6,
+            select_reciprocal_best_hit_edges,
+            select_top_hits_per_query,
+        )
+        from gbdraw.io.comparisons import COMPARISON_COLUMNS
+
+        raw_pairs = json.loads(str(pairs_json or "[]"))
+        if not isinstance(raw_pairs, list):
+            raw_pairs = []
+        normalized_mode = str(mode or "pairwise").strip().lower()
+        if normalized_mode not in {"pairwise", "orthogroup"}:
+            normalized_mode = "pairwise"
+
+        pair_items = []
+        combined_protein_map = {}
+        for idx, item in enumerate(raw_pairs):
+            if not isinstance(item, dict):
+                continue
+            query_map = _build_web_cds_protein_map(item.get("queryProteinMap") or {})
+            subject_map = _build_web_cds_protein_map(item.get("subjectProteinMap") or {})
+            hits = parse_losatp_outfmt6(str(item.get("blastText") or ""))
+            filtered = filter_protein_hits_by_thresholds(
+                hits,
+                evalue=evalue,
+                bitscore=bitscore,
+                identity=identity,
+                alignment_length=alignment_length,
+            )
+            query_index = int(item.get("queryIndex", item.get("pairIndex", idx)))
+            subject_index = int(item.get("subjectIndex", query_index + 1))
+            pair_index = int(item.get("pairIndex", min(query_index, subject_index)))
+            pair_items.append(
+                {
+                    "pair_index": pair_index,
+                    "query_index": query_index,
+                    "subject_index": subject_index,
+                    "hits": filtered,
+                    "query_map": query_map,
+                    "subject_map": subject_map,
+                }
+            )
+            combined_protein_map.update(query_map)
+            combined_protein_map.update(subject_map)
+
+        if normalized_mode == "pairwise":
+            converted_pairs = []
+            for item in pair_items:
+                display_hits = select_top_hits_per_query(
+                    item["hits"],
+                    max_hits=int(max_hits or 5),
+                )
+                converted = convert_pair_protein_hits_to_genomic_links(
+                    display_hits,
+                    item["query_map"],
+                    item["subject_map"],
+                    orthogroups=None,
+                )
+                handle = StringIO()
+                converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(
+                    handle,
+                    sep=chr(9),
+                    header=False,
+                    index=False,
+                    lineterminator=chr(10),
+                )
+                converted_pairs.append(
+                    {
+                        "pair_index": item["pair_index"],
+                        "tsv": handle.getvalue(),
+                        "rows": _dataframe_json_rows(converted),
+                        "hit_count": int(converted.shape[0]),
+                    }
+                )
+            return json.dumps({"pairs": converted_pairs, "orthogroups": []})
+
+        hits_by_direction = {
+            (item["query_index"], item["subject_index"]): item
+            for item in pair_items
+        }
+        orthogroup_edges_by_pair = []
+        adjacent_display_edges_by_pair = {}
+        for query_index, subject_index in sorted(hits_by_direction):
+            if query_index >= subject_index:
+                continue
+            forward = hits_by_direction.get((query_index, subject_index))
+            reverse = hits_by_direction.get((subject_index, query_index))
+            if forward is None or reverse is None:
+                continue
+            rbh_edges = select_reciprocal_best_hit_edges(
+                forward["hits"],
+                reverse["hits"],
+            )
+            orthogroup_edges_by_pair.append(rbh_edges)
+            if subject_index == query_index + 1:
+                adjacent_display_edges_by_pair[query_index] = (rbh_edges, forward)
+
+        orthogroups = build_orthogroups_from_protein_hits(
+            orthogroup_edges_by_pair,
+            combined_protein_map,
+        )
+
+        converted_pairs = []
+        for pair_index in sorted(adjacent_display_edges_by_pair):
+            display_hits, forward = adjacent_display_edges_by_pair[pair_index]
+            converted = convert_pair_protein_hits_to_genomic_links(
+                display_hits,
+                forward["query_map"],
+                forward["subject_map"],
+                orthogroups=orthogroups,
+            )
+            handle = StringIO()
+            converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(
+                handle,
+                sep=chr(9),
+                header=False,
+                index=False,
+                lineterminator=chr(10),
+            )
+            converted_pairs.append(
+                {
+                    "pair_index": pair_index,
+                    "tsv": handle.getvalue(),
+                    "rows": _dataframe_json_rows(converted),
+                    "hit_count": int(converted.shape[0]),
+                }
+            )
+
+        orthogroup_payload = []
+        names_by_orthogroup_id = getattr(orthogroups, "names_by_orthogroup_id", {}) or {}
+        descriptions_by_orthogroup_id = getattr(orthogroups, "descriptions_by_orthogroup_id", {}) or {}
+        candidates_by_orthogroup_id = getattr(orthogroups, "name_candidates_by_orthogroup_id", {}) or {}
+        confidence_by_orthogroup_id = getattr(orthogroups, "confidence_by_orthogroup_id", {}) or {}
+        for orthogroup_id, members in orthogroups.orthogroups.items():
+            record_coverage_count = len({int(member.record_index) for member in members})
+            orthogroup_payload.append(
+                {
+                    "id": orthogroup_id,
+                    "name": str(names_by_orthogroup_id.get(orthogroup_id, "") or ""),
+                    "description": str(descriptions_by_orthogroup_id.get(orthogroup_id, "") or ""),
+                    "nameConfidence": str(confidence_by_orthogroup_id.get(orthogroup_id, "none") or "none"),
+                    "nameCandidates": [
+                        _serialize_orthogroup_name_candidate(candidate)
+                        for candidate in (candidates_by_orthogroup_id.get(orthogroup_id, []) or [])
+                    ],
+                    "member_count": len(members),
+                    "record_coverage_count": record_coverage_count,
+                    "members": [
+                        {
+                            "orthogroupId": member.orthogroup_id,
+                            "proteinId": member.protein_id,
+                            "sourceProteinId": member.source_protein_id,
+                            "recordIndex": member.record_index,
+                            "recordId": member.record_id,
+                            "featureIndex": member.feature_index,
+                            "label": member.label,
+                            "featureSvgId": member.feature_svg_id,
+                            "start": member.start,
+                            "end": member.end,
+                            "strand": member.strand,
+                            "representative": member.representative,
+                            "gene": getattr(member, "gene", None),
+                            "product": getattr(member, "product", None),
+                            "note": getattr(member, "note", None),
+                        }
+                        for member in members
+                    ],
+                }
+            )
+
+        return json.dumps({"pairs": converted_pairs, "orthogroups": orthogroup_payload})
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 

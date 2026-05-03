@@ -164,7 +164,8 @@ export const setupGlobalUiEvents = ({ state, onMounted, onUnmounted }) => {
     clickedLabel,
     showCanvasControls,
     showLegendPanel,
-    showFeaturePanel
+    showFeaturePanel,
+    showRightDrawer
   } = state;
 
   const closeFeaturePopup = (e) => {
@@ -181,6 +182,7 @@ export const setupGlobalUiEvents = ({ state, onMounted, onUnmounted }) => {
       if (showCanvasControls.value) showCanvasControls.value = false;
       if (showLegendPanel.value) showLegendPanel.value = false;
       if (showFeaturePanel.value) showFeaturePanel.value = false;
+      if (showRightDrawer.value) showRightDrawer.value = false;
     }
   };
 

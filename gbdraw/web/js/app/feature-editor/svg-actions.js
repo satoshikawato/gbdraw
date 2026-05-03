@@ -29,14 +29,16 @@ export const createFeatureSvgActions = ({
     return normalized === 'on' || normalized === 'off' ? normalized : 'default';
   };
 
-  const getPopupPosition = (eventLike, popupWidth = 360, popupHeight = 360) => {
+  const getPopupPosition = (eventLike, popupWidth = 720, popupHeight = 520) => {
     const margin = 12;
     const fallbackX = window.innerWidth / 2;
     const fallbackY = window.innerHeight / 2;
+    const resolvedPopupWidth = Math.min(popupWidth, Math.max(0, window.innerWidth - (2 * margin)));
+    const resolvedPopupHeight = Math.min(popupHeight, Math.max(0, window.innerHeight - (2 * margin)));
     const rawX = Number.isFinite(eventLike?.clientX) ? eventLike.clientX + 10 : fallbackX;
     const rawY = Number.isFinite(eventLike?.clientY) ? eventLike.clientY + 10 : fallbackY;
-    const maxX = Math.max(margin, window.innerWidth - popupWidth - margin);
-    const maxY = Math.max(margin, window.innerHeight - popupHeight - margin);
+    const maxX = Math.max(margin, window.innerWidth - resolvedPopupWidth - margin);
+    const maxY = Math.max(margin, window.innerHeight - resolvedPopupHeight - margin);
     return {
       x: Math.min(Math.max(rawX, margin), maxX),
       y: Math.min(Math.max(rawY, margin), maxY)
@@ -110,6 +112,13 @@ export const createFeatureSvgActions = ({
       labelSourceText: '',
       labelVisibility: 'default',
       featureVisibility: visibilityMode,
+      proteinId: feat.proteinId || '',
+      sourceProteinId: feat.sourceProteinId || '',
+      orthogroupId: feat.orthogroupId || '',
+      orthogroupMemberCount: feat.orthogroupMemberCount || 0,
+      orthogroupRecordCoverage: feat.orthogroupRecordCoverage || 0,
+      orthogroupRepresentative: Boolean(feat.orthogroupRepresentative),
+      orthogroupMember: feat.orthogroupMember || null,
       hasEditableLabel: false,
       labelUnavailableReason: 'No editable feature label for this feature in current diagram.'
     };

@@ -10,6 +10,9 @@ export const createDiagramDragActions = ({ state }) => {
     diagramOffset,
     diagramDragging,
     diagramDragStart,
+    lengthBarElement,
+    lengthBarOriginalTransform,
+    lengthBarUserOffset,
     plotTitleElement,
     plotTitleDragging,
     plotTitleDragStart,
@@ -28,8 +31,9 @@ export const createDiagramDragActions = ({ state }) => {
   ]);
 
   let activeDragElements = [];
-  let activeDragMode = 'group'; // 'group' | 'record' | 'plot_title'
+  let activeDragMode = 'group'; // 'group' | 'record' | 'length_bar' | 'plot_title'
   let activeDragOriginalTransforms = new Map();
+  let activeLengthBarOffsetStart = { x: 0, y: 0 };
   let activePlotTitleOffsetStart = { x: 0, y: 0 };
   let diagramDragFrameId = null;
   let pendingDiagramPointer = null;
@@ -64,8 +68,10 @@ export const createDiagramDragActions = ({ state }) => {
     return { groups, ids };
   };
 
+  const isLengthBarGroup = (group) => (group?.id || '') === 'length_bar';
+
   const getDiagramGroupsForSingleRecordOrLinear = (svg) => {
-    const knownIds = ['tick', 'labels', 'Axis', 'gc_content', 'skew', 'gc_skew', 'length_bar'];
+    const knownIds = ['tick', 'labels', 'Axis', 'gc_content', 'skew', 'gc_skew'];
     const foundElements = [];
     const foundIds = [];
 
@@ -83,6 +89,7 @@ export const createDiagramDragActions = ({ state }) => {
       if (!id) return;
 
       if (LEGEND_GROUP_IDS.has(id)) return;
+      if (id === 'length_bar') return;
       if (foundElements.includes(group)) return;
 
       const isAccession = id.match(/^[A-Z]{2}_?\d+/) || id.match(/^[A-Z]+\d+\.\d+$/);
@@ -108,6 +115,7 @@ export const createDiagramDragActions = ({ state }) => {
       if (!el || el.tagName.toLowerCase() !== 'g') return;
       const id = el.getAttribute('id');
       if (!id || LEGEND_GROUP_IDS.has(id)) return;
+      if (id === 'length_bar') return;
       if (foundElements.includes(el)) return;
       foundElements.push(el);
       if (!foundIds.includes(id)) {
@@ -163,6 +171,68 @@ export const createDiagramDragActions = ({ state }) => {
     activePlotTitleOffsetStart = { x: 0, y: 0 };
   };
 
+  const applyLengthBarTransform = () => {
+    const group = lengthBarElement.value;
+    if (!group) return;
+    const base = normalizeTransform(lengthBarOriginalTransform.value);
+    const nextX = base.x + lengthBarUserOffset.x;
+    const nextY = base.y + lengthBarUserOffset.y;
+    setTranslate(group, nextX, nextY);
+  };
+
+  const resetLengthBarPosition = () => {
+    lengthBarUserOffset.x = 0;
+    lengthBarUserOffset.y = 0;
+    if (lengthBarElement.value) {
+      lengthBarElement.value.style.opacity = '1';
+      applyLengthBarTransform();
+    }
+  };
+
+  const clearLengthBarState = () => {
+    if (lengthBarElement.value) {
+      lengthBarElement.value.style.opacity = '1';
+      lengthBarElement.value.style.cursor = '';
+    }
+    lengthBarElement.value = null;
+    lengthBarOriginalTransform.value = { x: 0, y: 0 };
+    lengthBarUserOffset.x = 0;
+    lengthBarUserOffset.y = 0;
+    activeLengthBarOffsetStart = { x: 0, y: 0 };
+  };
+
+  const syncLengthBarElement = (svg, preserveOffset = false) => {
+    const nextLengthBar = svg?.getElementById('length_bar') || null;
+    if (!nextLengthBar) {
+      clearLengthBarState();
+      return;
+    }
+
+    const hadLengthBarState = !!lengthBarElement.value;
+    lengthBarElement.value = nextLengthBar;
+    lengthBarElement.value.style.opacity = '1';
+    lengthBarElement.value.style.cursor = 'grab';
+
+    if (!preserveOffset || !hadLengthBarState) {
+      lengthBarOriginalTransform.value = parseTransform(nextLengthBar.getAttribute('transform'));
+    }
+    if (!preserveOffset) {
+      lengthBarUserOffset.x = 0;
+      lengthBarUserOffset.y = 0;
+    }
+    applyLengthBarTransform();
+  };
+
+  const applyLengthBarBaseShift = (deltaX, deltaY) => {
+    if (!lengthBarElement.value) return;
+    const base = normalizeTransform(lengthBarOriginalTransform.value);
+    lengthBarOriginalTransform.value = {
+      x: base.x + deltaX,
+      y: base.y + deltaY
+    };
+    applyLengthBarTransform();
+  };
+
   const setPlotTitleAutoTransform = (group, nextAutoTransform, { preserveUserOffset = true } = {}) => {
     if (mode.value !== 'circular' || !group) {
       clearPlotTitleState();
@@ -212,16 +282,40 @@ export const createDiagramDragActions = ({ state }) => {
   };
 
   const applyDiagramShift = (deltaX, deltaY) => {
-    if (diagramElements.value.length === 0) return;
-    diagramElements.value.forEach((el) => {
-      const current = parseTransform(el.getAttribute('transform'));
-      const newX = current.x + deltaX;
-      const newY = current.y + deltaY;
-      setTranslate(el, newX, newY);
-      diagramElementOriginalTransforms.value.set(el, { x: newX, y: newY });
-    });
+    if (diagramElements.value.length > 0) {
+      diagramElements.value.forEach((el) => {
+        const current = parseTransform(el.getAttribute('transform'));
+        const newX = current.x + deltaX;
+        const newY = current.y + deltaY;
+        setTranslate(el, newX, newY);
+        diagramElementOriginalTransforms.value.set(el, { x: newX, y: newY });
+      });
+    }
+    applyLengthBarBaseShift(deltaX, deltaY);
     diagramOffset.x = 0;
     diagramOffset.y = 0;
+  };
+
+  const startLengthBarDrag = (e, group) => {
+    if (!group) return;
+
+    e.preventDefault();
+    cancelDiagramDragFrame();
+    pendingDiagramPointer = null;
+    lengthBarElement.value = group;
+    diagramDragging.value = true;
+    plotTitleDragging.value = false;
+    diagramDragStart.x = e.clientX;
+    diagramDragStart.y = e.clientY;
+    activeLengthBarOffsetStart = { x: lengthBarUserOffset.x, y: lengthBarUserOffset.y };
+    activeDragMode = 'length_bar';
+    activeDragElements = [group];
+    activeDragOriginalTransforms = new Map([[group, parseTransform(group.getAttribute('transform'))]]);
+    group.style.opacity = '0.8';
+    group.style.willChange = 'transform';
+
+    document.addEventListener('mousemove', onDiagramDrag);
+    document.addEventListener('mouseup', endDiagramDrag);
   };
 
   const startPlotTitleDrag = (e, group) => {
@@ -258,6 +352,12 @@ export const createDiagramDragActions = ({ state }) => {
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
+    const clickedLengthBar = e.target.closest('#length_bar');
+    if (clickedLengthBar) {
+      startLengthBarDrag(e, clickedLengthBar);
+      return;
+    }
+
     if (mode.value === 'circular') {
       const clickedPlotTitle = e.target.closest('#plot_title');
       if (clickedPlotTitle) {
@@ -281,6 +381,7 @@ export const createDiagramDragActions = ({ state }) => {
 
       const clickedId = clickedGroup.id;
       if (LEGEND_GROUP_IDS.has(clickedId)) return;
+      if (isLengthBarGroup(clickedGroup)) return;
 
       dragTargets = diagramElements.value;
       if (dragTargets.length === 0) return;
@@ -332,6 +433,13 @@ export const createDiagramDragActions = ({ state }) => {
       return;
     }
 
+    if (activeDragMode === 'length_bar') {
+      const group = activeDragElements[0];
+      const original = activeDragOriginalTransforms.get(group) || { x: 0, y: 0 };
+      setTranslate(group, original.x + deltaX, original.y + deltaY);
+      return;
+    }
+
     const includeGlobalOffset = activeDragMode === 'group';
 
     activeDragElements.forEach((el) => {
@@ -368,6 +476,9 @@ export const createDiagramDragActions = ({ state }) => {
     if (activeDragMode === 'group') {
       diagramOffset.x += deltaX;
       diagramOffset.y += deltaY;
+    } else if (activeDragMode === 'length_bar') {
+      lengthBarUserOffset.x = activeLengthBarOffsetStart.x + deltaX;
+      lengthBarUserOffset.y = activeLengthBarOffsetStart.y + deltaY;
     }
 
     diagramDragging.value = false;
@@ -382,6 +493,7 @@ export const createDiagramDragActions = ({ state }) => {
     activeDragElements = [];
     activeDragOriginalTransforms = new Map();
     activeDragMode = 'group';
+    activeLengthBarOffsetStart = { x: lengthBarUserOffset.x, y: lengthBarUserOffset.y };
     activePlotTitleOffsetStart = { x: plotTitleUserOffset.x, y: plotTitleUserOffset.y };
     pendingDiagramPointer = null;
   };
@@ -415,6 +527,7 @@ export const createDiagramDragActions = ({ state }) => {
         el.removeAttribute('transform');
       }
     });
+    resetLengthBarPosition();
   };
 
   let setupDiagramDragCallCount = 0;
@@ -440,6 +553,7 @@ export const createDiagramDragActions = ({ state }) => {
 
     diagramElements.value = foundElements;
     diagramElementIds.value = foundIds;
+    syncLengthBarElement(svg, preserveOffset);
     syncPlotTitleElement(svg, preserveOffset);
 
     const previousOriginalTransformsById = new Map();
@@ -504,6 +618,9 @@ export const createDiagramDragActions = ({ state }) => {
         el.style.cursor = 'grab';
       }
     });
+    if (lengthBarElement.value) {
+      lengthBarElement.value.style.cursor = 'grab';
+    }
 
     svg.removeEventListener('mousedown', startDiagramDrag);
     svg.addEventListener('mousedown', startDiagramDrag);
@@ -511,10 +628,12 @@ export const createDiagramDragActions = ({ state }) => {
 
   return {
     applyDiagramShift,
+    applyLengthBarBaseShift,
     clearPlotTitleState,
     endDiagramDrag,
     onDiagramDrag,
     resetDiagramPosition,
+    resetLengthBarPosition,
     resetPlotTitlePosition,
     setPlotTitleAutoTransform,
     setupDiagramDrag,

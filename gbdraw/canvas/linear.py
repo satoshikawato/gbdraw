@@ -156,6 +156,7 @@ class LinearCanvasConfigurator:
         self.track_axis_gap: float | None = cfg.canvas.linear.track_axis_gap
         self.ruler_on_axis: bool = cfg.canvas.linear.ruler_on_axis
         self.align_center: bool = cfg.canvas.linear.align_center
+        self.keep_definition_left_aligned: bool = cfg.canvas.linear.keep_definition_left_aligned
         self.normalize_length: bool = cfg.canvas.linear.normalize_length
         _label_setting = cfg.canvas.show_labels
         if isinstance(_label_setting, str):

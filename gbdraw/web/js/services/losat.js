@@ -2,6 +2,7 @@ import { WASI_SHIM_URL } from '../config.js';
 
 const DEFAULT_WASM_PATH = './wasm/losat/losat.wasm';
 const DEFAULT_MAX_WORKERS = 4;
+const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
 
 let wasiShimPromise = null;
 let wasmModulePromise = null;
@@ -154,8 +155,8 @@ export const runLosatPair = async ({
   extraArgs = [],
   wasmPath = DEFAULT_WASM_PATH
 } = {}) => {
-  if (!program || (program !== 'blastn' && program !== 'tblastx')) {
-    throw new Error('LOSAT program must be blastn or tblastx.');
+  if (!program || !SUPPORTED_PROGRAMS.has(program)) {
+    throw new Error('LOSAT program must be blastn, tblastx, or blastp.');
   }
   if (!queryFasta || !subjectFasta) {
     throw new Error('LOSAT requires both query and subject FASTA content.');

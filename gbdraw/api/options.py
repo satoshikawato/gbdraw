@@ -11,6 +11,7 @@ from typing import Literal, Mapping, Sequence
 
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
+from gbdraw.analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from gbdraw.tracks import TrackSpec  # type: ignore[reportMissingImports]
 
@@ -70,6 +71,13 @@ class DiagramOptions:
     species: str | None = None
     strain: str | None = None
     blast_files: Sequence[str] | None = None
+    protein_comparisons: Sequence[DataFrame] | None = None
+    orthogroups: OrthogroupResult | None = None
+    protein_blastp_mode: Literal["none", "pairwise", "orthogroup"] = "none"
+    losatp_bin: str = "losat"
+    protein_blastp_max_hits: int = 5
+    protein_blastp_candidate_limit: int | None = None
+    align_orthogroup_feature: str | None = None
     evalue: float = 1e-5
     bitscore: float = 50.0
     identity: float = 70.0

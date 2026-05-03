@@ -43,6 +43,7 @@ track_layout = "middle"
 track_axis_gap = "auto"
 ruler_on_axis = false
 align_center = false
+keep_definition_left_aligned = false
 normalize_length = false
 [canvas.linear.default_cds_height]
   short = 80

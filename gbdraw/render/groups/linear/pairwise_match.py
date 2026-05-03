@@ -34,6 +34,7 @@ class PairWiseMatchGroup:
         comparison_count: int,
         blast_config,
         records,
+        record_offsets_x: dict[int, float] | None = None,
     ) -> None:
         """
         Initializes the PairWiseMatchGroup with necessary data and configurations.
@@ -59,6 +60,7 @@ class PairWiseMatchGroup:
         self.match_stroke_width: float = blast_config.stroke_width
         self.comparison_count: int = comparison_count
         self.records = records
+        self.record_offsets_x = record_offsets_x or {}
         self.track_id: str = "comparison" + str(self.comparison_count)
         self.calculate_query_subject_offsets()
         self.match_group = Group(id=self.track_id)
@@ -89,6 +91,8 @@ class PairWiseMatchGroup:
                 self.subject_offset_x = (self.canvas_config.longest_genome - slen) / 2
             else:
                 self.query_offset_x = self.subject_offset_x = 0
+        self.query_alignment_offset_x = float(self.record_offsets_x.get(self.comparison_count - 1, 0.0))
+        self.subject_alignment_offset_x = float(self.record_offsets_x.get(self.comparison_count, 0.0))
 
     def generate_linear_match_path(self, row: DataFrame) -> Path:
         """
@@ -177,6 +181,9 @@ class PairWiseMatchGroup:
             start_x = normalize_position_linear(start, self.canvas_config.longest_genome, self.canvas_config.alignment_width)
             end_x = normalize_position_linear(end, self.canvas_config.longest_genome, self.canvas_config.alignment_width)
 
+        alignment_offset = self.query_alignment_offset_x if is_query else self.subject_alignment_offset_x
+        start_x += alignment_offset
+        end_x += alignment_offset
         return start_x, y_position, end_x, y_position
 
     def construct_path_description(

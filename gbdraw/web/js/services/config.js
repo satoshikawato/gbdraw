@@ -1,9 +1,27 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
-const SESSION_VERSION = 13;
+const SESSION_VERSION = 16;
 
 const cloneColors = (colors) => ({ ...(colors || {}) });
+
+const cloneStringMap = (source) => {
+  const cloned = {};
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return cloned;
+  Object.entries(source).forEach(([key, value]) => {
+    const normalizedKey = String(key || '').trim();
+    if (!normalizedKey) return;
+    cloned[normalizedKey] = String(value ?? '');
+  });
+  return cloned;
+};
+
+const replaceStringMap = (target, source) => {
+  Object.keys(target).forEach((key) => delete target[key]);
+  Object.entries(cloneStringMap(source)).forEach(([key, value]) => {
+    target[key] = value;
+  });
+};
 
 const safeDeepMerge = (target, source) => {
   if (!source || typeof source !== 'object') return;
@@ -102,6 +120,16 @@ const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim(
 
 const normalizeFeatureShape = (value) => (String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle');
 
+const normalizePositiveInteger = (value, fallback) => {
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric > 0 ? numeric : fallback;
+};
+
+const normalizeBlastpMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['pairwise', 'orthogroup'].includes(normalized) ? normalized : 'orthogroup';
+};
+
 const normalizeFeatureShapes = (featureShapes) => {
   const normalized = {};
   if (!featureShapes || typeof featureShapes !== 'object' || Array.isArray(featureShapes)) {
@@ -129,7 +157,11 @@ const buildConfigData = () => ({
   whitelist: state.manualWhitelist,
   blacklistText: state.manualBlacklist.value,
   blastSource: state.blastSource.value,
-  losatProgram: state.losatProgram.value
+  losatProgram: state.losatProgram.value,
+  webEdits: {
+    orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
+    orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
+  }
 });
 
 const shouldSuppressCircularMultiRecordDefaults = (incomingForm) => {
@@ -380,6 +412,11 @@ const applyConfigData = (data) => {
     state.losat.parallelWorkers = ['1', '2', '3', '4'].includes(rawParallelWorkers)
       ? rawParallelWorkers
       : undefined;
+    state.losat.blastp.mode = normalizeBlastpMode(state.losat.blastp?.mode);
+    state.losat.blastp.maxHits = normalizePositiveInteger(state.losat.blastp?.maxHits, 5);
+    state.losat.blastp.candidateLimit = null;
+    delete state.losat.blastp.orthogroupHitPolicy;
+    delete state.losat.blastp.orthogroupMaxHits;
   }
   if (typeof data.paletteInstantPreviewEnabled === 'boolean') {
     state.paletteInstantPreviewEnabled.value = data.paletteInstantPreviewEnabled;
@@ -419,7 +456,17 @@ const applyConfigData = (data) => {
   }
   if (data.blacklistText !== undefined) state.manualBlacklist.value = String(data.blacklistText || '');
   if (data.blastSource) state.blastSource.value = String(data.blastSource);
-  if (data.losatProgram) state.losatProgram.value = String(data.losatProgram);
+  if (data.losatProgram) {
+    const program = String(data.losatProgram);
+    state.losatProgram.value = ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn';
+  }
+  const webEdits = data.webEdits && typeof data.webEdits === 'object' ? data.webEdits : {};
+  if (Object.prototype.hasOwnProperty.call(webEdits, 'orthogroupNameOverrides')) {
+    replaceStringMap(state.orthogroupNameOverrides, webEdits.orthogroupNameOverrides);
+  }
+  if (Object.prototype.hasOwnProperty.call(webEdits, 'orthogroupDescriptionOverrides')) {
+    replaceStringMap(state.orthogroupDescriptionOverrides, webEdits.orthogroupDescriptionOverrides);
+  }
 };
 
 const restorePaletteStateAfterConfigImport = () => {
@@ -580,6 +627,57 @@ const applyLosatCache = (entries) => {
 
   state.losatCache.value = map;
   state.losatCacheInfo.value = info;
+};
+
+const buildOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
+
+const applyOrthogroupState = (orthogroupState = {}) => {
+  const groups = Array.isArray(orthogroupState.groups) ? orthogroupState.groups : [];
+  const groupIds = groups
+    .map((group) => String(group?.id || '').trim())
+    .filter(Boolean);
+  const groupIdSet = new Set(groupIds);
+  const index = new Map();
+
+  groups.forEach((group) => {
+    const orthogroupId = String(group?.id || '').trim();
+    const members = Array.isArray(group?.members) ? group.members : [];
+    const memberCount = Number(group?.member_count || members.length || 0);
+    const recordCoverage = Number(group?.record_coverage_count || new Set(
+      members.map((member) => Number(member?.recordIndex)).filter((recordIndex) => Number.isInteger(recordIndex))
+    ).size || 0);
+    members.forEach((member) => {
+      const featureSvgId = String(member?.featureSvgId || '').trim();
+      const recordIndex = Number(member?.recordIndex);
+      if (!featureSvgId || !Number.isInteger(recordIndex)) return;
+      const entry = {
+        orthogroupId,
+        orthogroupMemberCount: memberCount,
+        orthogroupRecordCoverage: recordCoverage,
+        proteinId: String(member?.proteinId || '').trim(),
+        sourceProteinId: String(member?.sourceProteinId || '').trim(),
+        orthogroupRepresentative: Boolean(member?.representative),
+        orthogroupMember: member
+      };
+      index.set(buildOrthogroupIndexKey(recordIndex, featureSvgId), entry);
+      if (!index.has(featureSvgId)) index.set(featureSvgId, entry);
+    });
+  });
+
+  state.orthogroups.value = groups;
+  state.featureOrthogroupIndex.value = index;
+  const selectedId = String(orthogroupState.selectedOrthogroupId || '').trim();
+  state.selectedOrthogroupId.value = selectedId && groupIdSet.has(selectedId) ? selectedId : (groupIds[0] || '');
+  state.selectedOrthogroupAlignmentFeature.value = String(orthogroupState.selectedOrthogroupAlignmentFeature || '').trim();
+
+  replaceStringMap(state.orthogroupNameOverrides, orthogroupState.orthogroupNameOverrides);
+  replaceStringMap(state.orthogroupDescriptionOverrides, orthogroupState.orthogroupDescriptionOverrides);
+  Object.keys(state.orthogroupNameOverrides).forEach((id) => {
+    if (!groupIdSet.has(id)) delete state.orthogroupNameOverrides[id];
+  });
+  Object.keys(state.orthogroupDescriptionOverrides).forEach((id) => {
+    if (!groupIdSet.has(id)) delete state.orthogroupDescriptionOverrides[id];
+  });
 };
 
 const serializeFiles = async () => {
@@ -804,6 +902,13 @@ export const exportSession = async (titleOverride = null) => {
       labelVisibilityOverrides: JSON.parse(JSON.stringify(state.labelVisibilityOverrides)),
       labelOverrideContextKey: String(state.labelOverrideContextKey.value || '')
     },
+    orthogroupState: {
+      groups: Array.isArray(state.orthogroups.value) ? JSON.parse(JSON.stringify(state.orthogroups.value)) : [],
+      selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
+      selectedOrthogroupAlignmentFeature: String(state.selectedOrthogroupAlignmentFeature.value || ''),
+      orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
+      orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
+    },
     losatCache: {
       entries: losatEntries
     }
@@ -996,6 +1101,24 @@ export const importSession = async (e) => {
       Object.keys(state.labelVisibilityOverrides).forEach((k) => delete state.labelVisibilityOverrides[k]);
     }
     state.labelOverrideContextKey.value = String(features.labelOverrideContextKey || '');
+
+    applyOrthogroupState(
+      data.orthogroupState && typeof data.orthogroupState === 'object'
+        ? data.orthogroupState
+        : {
+            groups: Array.isArray(data.orthogroups) ? data.orthogroups : [],
+            selectedOrthogroupId: features.selectedOrthogroupId,
+            selectedOrthogroupAlignmentFeature: features.selectedOrthogroupAlignmentFeature,
+            orthogroupNameOverrides:
+              features.orthogroupNameOverrides ||
+              data.config?.webEdits?.orthogroupNameOverrides ||
+              {},
+            orthogroupDescriptionOverrides:
+              features.orthogroupDescriptionOverrides ||
+              data.config?.webEdits?.orthogroupDescriptionOverrides ||
+              {}
+          }
+    );
 
     const resultCount = state.results.value.length;
     if (resultCount > 0) {

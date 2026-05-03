@@ -9,14 +9,17 @@ This module was extracted from `gbdraw.linear_diagram_components` to improve coh
 from __future__ import annotations
 
 from dataclasses import replace
+import math
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+import pandas as pd
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
 from ...analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from ...analysis.depth import depth_df as build_depth_df  # type: ignore[reportMissingImports]
+from ...analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...configurators import (  # type: ignore[reportMissingImports]
@@ -32,7 +35,7 @@ from ...render.groups.linear.length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
 )
-from ...io.comparisons import load_comparisons
+from ...io.comparisons import filter_comparison_dataframe, load_comparisons
 from ...legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...layout.linear import calculate_feature_position_factors_linear  # type: ignore[reportMissingImports]
@@ -47,6 +50,10 @@ from .builders import (
     add_length_bar_on_linear_canvas,
     add_record_definition_group,
     add_record_group,
+)
+from .orthogroup_alignment import (
+    calculate_orthogroup_alignment_canvas_adjustment,
+    calculate_orthogroup_alignment_offsets,
 )
 from .precalc import (
     FeatureDict,
@@ -346,6 +353,9 @@ def assemble_linear_diagram(
     plot_title: str | None = None,
     plot_title_position: str = "bottom",
     plot_title_font_size: float = 32.0,
+    comparison_dataframes: list[DataFrame] | None = None,
+    orthogroups: OrthogroupResult | None = None,
+    align_orthogroup_feature: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -470,7 +480,8 @@ def assemble_linear_diagram(
         canvas_config.set_gc_height_and_gc_padding()
 
     # Prepare legend group
-    has_blast = bool(blast_files)
+    has_blast = bool(blast_files or comparison_dataframes)
+    comparisons: list[DataFrame] = []
     legend_table: dict = {}
     legend_group: LegendGroup | None = None
     required_legend_height = 0.0
@@ -629,6 +640,51 @@ def assemble_linear_diagram(
 
     if legend_group is not None:
         canvas_config.recalculate_canvas_dimensions(legend_group, max_def_width)
+
+    if has_blast:
+        comparison_sources: list[list[DataFrame]] = []
+        if blast_files:
+            comparison_sources.append(load_comparisons(blast_files, blast_config))
+        if comparison_dataframes:
+            comparison_sources.append(
+                [
+                    filter_comparison_dataframe(comparison, blast_config)
+                    for comparison in comparison_dataframes
+                ]
+            )
+        max_source_len = max((len(source) for source in comparison_sources), default=0)
+        for index in range(max_source_len):
+            frames = [
+                source[index]
+                for source in comparison_sources
+                if index < len(source)
+            ]
+            if len(frames) == 1:
+                comparisons.append(frames[0])
+            elif frames:
+                comparisons.append(pd.concat(frames, ignore_index=True))
+
+    orthogroup_alignment_offsets = calculate_orthogroup_alignment_offsets(
+        records,
+        comparisons,
+        canvas_config,
+        align_orthogroup_feature,
+        orthogroups=orthogroups,
+    )
+    alignment_shift_x, alignment_width_extension = calculate_orthogroup_alignment_canvas_adjustment(
+        records,
+        canvas_config,
+        orthogroup_alignment_offsets,
+    )
+    definition_column_shift_x = alignment_shift_x
+    if alignment_shift_x or alignment_width_extension:
+        width_extension_px = math.ceil(alignment_width_extension)
+        canvas_config.horizontal_offset += alignment_shift_x
+        canvas_config.total_width += width_extension_px
+        if canvas_config.legend_position == "right":
+            canvas_config.legend_offset_x += width_extension_px
+        elif canvas_config.legend_position in {"top", "bottom"}:
+            canvas_config.legend_offset_x += 0.5 * width_extension_px
     canvas: Drawing = canvas_config.create_svg_canvas()
 
     # Embed both viewBox configurations as data attributes for JavaScript repositioning
@@ -660,8 +716,7 @@ def assemble_linear_diagram(
     if length_bar_group is not None:
         canvas = add_length_bar_on_linear_canvas(canvas, canvas_config, config_dict, length_bar_group, legend_group)
 
-    if blast_files:
-        comparisons = load_comparisons(blast_files, blast_config)
+    if has_blast:
         comparison_offsets = []
         actual_comparison_heights = []
         for i in range(len(records) - 1):
@@ -689,6 +744,7 @@ def assemble_linear_diagram(
             records,
             comparison_offsets,
             actual_comparison_heights,
+            orthogroup_alignment_offsets,
         )
 
     raw_show_labels = cfg.canvas.show_labels
@@ -707,6 +763,7 @@ def assemble_linear_diagram(
                 if canvas_config.align_center
                 else 0
             )
+        offset_x += orthogroup_alignment_offsets.get(count - 1, 0.0)
 
         labels_for_record = all_labels.get(record.id)
         should_show_labels = False
@@ -737,6 +794,7 @@ def assemble_linear_diagram(
             config_dict,
             max_def_width,
             cfg=record_cfg,
+            definition_column_shift_x=definition_column_shift_x,
         )
         gc_offset_y = offset_y
         if non_middle_layout:
@@ -811,6 +869,9 @@ def plot_linear_diagram(
     depth_config: DepthConfigurator | None = None,
     depth_tables: list[DataFrame | None] | None = None,
     cfg: GbdrawConfig | None = None,
+    comparison_dataframes: list[DataFrame] | None = None,
+    orthogroups: OrthogroupResult | None = None,
+    align_orthogroup_feature: str | None = None,
 ) -> Drawing:
     """Backwards-compatible wrapper that assembles and saves a linear diagram."""
     canvas = assemble_linear_diagram(
@@ -825,6 +886,9 @@ def plot_linear_diagram(
         skew_config=skew_config,
         depth_config=depth_config,
         depth_tables=depth_tables,
+        comparison_dataframes=comparison_dataframes,
+        orthogroups=orthogroups,
+        align_orthogroup_feature=align_orthogroup_feature,
         cfg=cfg,
     )
     save_figure(canvas, out_formats)

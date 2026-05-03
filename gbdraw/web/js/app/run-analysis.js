@@ -267,6 +267,10 @@ const normalizeBlastThresholdText = (value, defaultValue) => {
   const normalized = String(value ?? '').trim();
   return normalized === '' ? defaultValue : normalized;
 };
+const normalizeBlastpMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['pairwise', 'orthogroup'].includes(normalized) ? normalized : 'orthogroup';
+};
 const normalizeMultiRecordPositions = (value, { maxRow = Number.POSITIVE_INFINITY } = {}) => {
   if (!Array.isArray(value)) return [];
   const deduped = [];
@@ -414,6 +418,12 @@ export const createRunAnalysis = ({
     losat,
     losatCacheInfo,
     losatCache,
+    orthogroups,
+    featureOrthogroupIndex,
+    selectedOrthogroupAlignmentFeature,
+    orthogroupNameOverrides,
+    orthogroupDescriptionOverrides,
+    selectedOrthogroupId,
     circularRecordList,
     files,
     linearSeqs,
@@ -529,6 +539,84 @@ export const createRunAnalysis = ({
     return featData;
   };
 
+  const buildOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
+
+  const pruneOrthogroupOverrides = (groupIds, { clearAll = false } = {}) => {
+    const validIds = new Set(Array.isArray(groupIds) ? groupIds.map((id) => String(id || '').trim()).filter(Boolean) : []);
+    const pruneMap = (overrideMap) => {
+      Object.keys(overrideMap).forEach((id) => {
+        if (clearAll || !validIds.has(id)) delete overrideMap[id];
+      });
+    };
+    pruneMap(orthogroupNameOverrides);
+    pruneMap(orthogroupDescriptionOverrides);
+  };
+
+  const setOrthogroupMetadata = (orthogroupPayload) => {
+    const groups = Array.isArray(orthogroupPayload) ? orthogroupPayload : [];
+    const index = new Map();
+    const groupIds = [];
+    groups.forEach((group) => {
+      const orthogroupId = String(group?.id || '').trim();
+      if (orthogroupId) groupIds.push(orthogroupId);
+      const members = Array.isArray(group?.members) ? group.members : [];
+      const memberCount = Number(group?.member_count || members.length || 0);
+      const recordCoverage = Number(group?.record_coverage_count || new Set(
+        members.map((member) => Number(member?.recordIndex)).filter((recordIndex) => Number.isInteger(recordIndex))
+      ).size || 0);
+      members.forEach((member) => {
+        const featureSvgId = String(member?.featureSvgId || '').trim();
+        const recordIndex = Number(member?.recordIndex);
+        if (!featureSvgId || !Number.isInteger(recordIndex)) return;
+        const entry = {
+          orthogroupId,
+          orthogroupMemberCount: memberCount,
+          orthogroupRecordCoverage: recordCoverage,
+          proteinId: String(member?.proteinId || '').trim(),
+          sourceProteinId: String(member?.sourceProteinId || '').trim(),
+          orthogroupRepresentative: Boolean(member?.representative),
+          orthogroupMember: member
+        };
+        index.set(buildOrthogroupIndexKey(recordIndex, featureSvgId), entry);
+        if (!index.has(featureSvgId)) index.set(featureSvgId, entry);
+      });
+    });
+    orthogroups.value = groups;
+    featureOrthogroupIndex.value = index;
+    pruneOrthogroupOverrides(groupIds);
+    if (!selectedOrthogroupId.value || !groupIds.includes(String(selectedOrthogroupId.value || '').trim())) {
+      selectedOrthogroupId.value = groupIds[0] || '';
+    }
+  };
+
+  const clearOrthogroupMetadata = ({ clearSelection = false, clearOverrides = clearSelection } = {}) => {
+    orthogroups.value = [];
+    featureOrthogroupIndex.value = new Map();
+    if (clearSelection) {
+      selectedOrthogroupId.value = '';
+      selectedOrthogroupAlignmentFeature.value = '';
+    }
+    if (clearOverrides) pruneOrthogroupOverrides([], { clearAll: true });
+  };
+
+  const enrichFeatureWithOrthogroup = (feature, recordIndex) => {
+    const svgId = String(feature?.svg_id || '').trim();
+    if (!svgId) return feature;
+    const index = featureOrthogroupIndex.value instanceof Map ? featureOrthogroupIndex.value : new Map();
+    const entry = index.get(buildOrthogroupIndexKey(recordIndex, svgId)) || index.get(svgId);
+    if (!entry) return feature;
+    return {
+      ...feature,
+      proteinId: entry.proteinId,
+      sourceProteinId: entry.sourceProteinId,
+      orthogroupId: entry.orthogroupId,
+      orthogroupMemberCount: entry.orthogroupMemberCount,
+      orthogroupRecordCoverage: entry.orthogroupRecordCoverage,
+      orthogroupRepresentative: entry.orthogroupRepresentative,
+      orthogroupMember: entry.orthogroupMember
+    };
+  };
+
   const isCurrentFeatureExtractionContext = (context) =>
     Boolean(context) &&
     context.requestId === featureExtractionRequestId &&
@@ -602,7 +690,7 @@ export const createRunAnalysis = ({
             console.warn(`Feature extraction failed for linear input #${i + 1}:`, featData.error);
           } else if (Array.isArray(featData?.features)) {
             const features = featData.features.map((feature) => ({
-              ...feature,
+              ...enrichFeatureWithOrthogroup(feature, i),
               fileIdx: i,
               displayRecordId: `File ${i + 1}: ${feature.record_id}`,
               id: `file${i}_${feature.id}`
@@ -667,7 +755,11 @@ export const createRunAnalysis = ({
     return safe || makeSafeFilename(String(fallback || 'losat'));
   };
 
-  const buildLosatSuffix = () => (losatProgram.value === 'blastn' ? 'losatn' : 'tlosatx');
+  const buildLosatSuffix = () => {
+    if (losatProgram.value === 'blastn') return 'losatn';
+    if (losatProgram.value === 'blastp') return 'losatp';
+    return 'tlosatx';
+  };
 
   const buildLosatFilename = (leftLabel, rightLabel) => {
     const left = normalizeLabel(leftLabel, 'seq_1');
@@ -713,7 +805,9 @@ export const createRunAnalysis = ({
         plot_title_font_size: false,
         show_replicon: false,
         hide_accession: false,
-        hide_length: false
+        hide_length: false,
+        orthogroup_alignment: false,
+        keep_definition_left_aligned: false
       };
       return linearLabelSupportCache;
     }
@@ -738,6 +832,8 @@ json.dumps({
   "show_replicon": "--show_replicon" in _source,
   "hide_accession": "--hide_accession" in _source,
   "hide_length": "--hide_length" in _source,
+  "orthogroup_alignment": "--align_orthogroup_feature" in _source,
+  "keep_definition_left_aligned": "--keep_definition_left_aligned" in _source,
 })
       `);
       linearLabelSupportCache = JSON.parse(String(raw));
@@ -757,7 +853,9 @@ json.dumps({
         plot_title_font_size: false,
         show_replicon: false,
         hide_accession: false,
-        hide_length: false
+        hide_length: false,
+        orthogroup_alignment: false,
+        keep_definition_left_aligned: false
       };
     }
     return linearLabelSupportCache;
@@ -1435,6 +1533,13 @@ json.dumps({
         if (form.show_skew) args.push('--show_skew');
         if (form.normalize_length) args.push('--normalize_length');
         if (form.legend !== 'right') args.push('-l', form.legend);
+        const useLosat = blastSource.value === 'losat';
+        const useProteinBlastp = useLosat && losatProgram.value === 'blastp';
+        const blastpMode = normalizeBlastpMode(losat.blastp?.mode);
+        const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
+        const selectedOrthogroupTarget = String(selectedOrthogroupAlignmentFeature.value || '').trim();
+        const wantsOrthogroupAlignmentOption =
+          useOrthogroupBlastp && lInputType.value === 'gb' && selectedOrthogroupTarget !== '';
         adv.min_bitscore = normalizeBlastThresholdNumber(
           adv.min_bitscore,
           DEFAULT_LINEAR_BLAST_FILTERS.bitscore
@@ -1449,6 +1554,14 @@ json.dumps({
           DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
           { integer: true }
         );
+        const blastpDisplayMaxHits = normalizeBlastThresholdNumber(
+          losat.blastp?.maxHits,
+          5,
+          { integer: true }
+        );
+        losat.blastp.mode = blastpMode;
+        losat.blastp.maxHits = Math.max(1, blastpDisplayMaxHits);
+        losat.blastp.candidateLimit = null;
         args.push(
           '--bitscore',
           adv.min_bitscore,
@@ -1504,6 +1617,7 @@ json.dumps({
         const wantsShowRepliconOption = adv.linear_show_replicon === true;
         const wantsHideAccessionOption = adv.linear_show_accession === false;
         const wantsHideLengthOption = adv.linear_show_length === false;
+        const wantsKeepDefinitionLeftAlignedOption = form.keep_definition_left_aligned === true;
         const wantsRulerOnAxisOption =
           Boolean(form.linear_ruler_on_axis) &&
           form.scale_style === 'ruler' &&
@@ -1522,7 +1636,9 @@ json.dumps({
           wantsPlotTitleFontSizeOption ||
           wantsShowRepliconOption ||
           wantsHideAccessionOption ||
-          wantsHideLengthOption
+          wantsHideLengthOption ||
+          wantsOrthogroupAlignmentOption ||
+          wantsKeepDefinitionLeftAlignedOption
         ) {
           if (wantsPlacementOption && !linearLabelSupport.placement) {
             throw new Error("Current gbdraw wheel does not support --label_placement. Rebuild and redeploy the web wheel.");
@@ -1563,6 +1679,12 @@ json.dumps({
           if (wantsHideLengthOption && !linearLabelSupport.hide_length) {
             throw new Error("Current gbdraw wheel does not support --hide_length. Rebuild and redeploy the web wheel.");
           }
+          if (wantsOrthogroupAlignmentOption && !linearLabelSupport.orthogroup_alignment) {
+            throw new Error("Current gbdraw wheel does not support --align_orthogroup_feature. Rebuild and redeploy the web wheel.");
+          }
+          if (wantsKeepDefinitionLeftAlignedOption && !linearLabelSupport.keep_definition_left_aligned) {
+            throw new Error("Current gbdraw wheel does not support --keep_definition_left_aligned. Rebuild and redeploy the web wheel.");
+          }
         }
         if (wantsPlotTitleOption) args.push('--plot_title', normalizedPlotTitle);
         if (wantsPlotTitlePositionOption) args.push('--plot_title_position', normalizedPlotTitlePosition);
@@ -1570,6 +1692,12 @@ json.dumps({
         if (wantsShowRepliconOption) args.push('--show_replicon');
         if (wantsHideAccessionOption) args.push('--hide_accession');
         if (wantsHideLengthOption) args.push('--hide_length');
+        if (wantsOrthogroupAlignmentOption) {
+          args.push('--align_orthogroup_feature', selectedOrthogroupTarget);
+        }
+        if (wantsKeepDefinitionLeftAlignedOption) {
+          args.push('--keep_definition_left_aligned');
+        }
         if (normalizedLabelPlacement && normalizedLabelPlacement !== 'auto') {
           args.push('--label_placement', normalizedLabelPlacement);
         }
@@ -1665,11 +1793,17 @@ json.dumps({
 
         let inputArgs = [];
         let blastArgs = [];
-        const useLosat = blastSource.value === 'losat';
         const fastaCache = new Map();
         const fastaHashCache = new Map();
         const linearFileTextCache = new WeakMap();
         let extractFirstFasta = null;
+        let extractProteinFasta = null;
+        let convertProteinBlast = null;
+        if (useOrthogroupBlastp) {
+          clearOrthogroupMetadata();
+        } else {
+          clearOrthogroupMetadata({ clearSelection: true });
+        }
         let cacheInfo = [];
         const cacheMap = losatCache.value || new Map();
         const losatTiming = useLosat
@@ -1701,7 +1835,12 @@ json.dumps({
           : null;
 
         if (useLosat) {
-          extractFirstFasta = pyodide.globals.get('extract_first_fasta');
+          if (useProteinBlastp) {
+            extractProteinFasta = pyodide.globals.get('extract_cds_protein_fasta');
+            convertProteinBlast = pyodide.globals.get('convert_losatp_blastp_pairs_to_genomic_payload');
+          } else {
+            extractFirstFasta = pyodide.globals.get('extract_first_fasta');
+          }
         } else {
           losatCacheInfo.value = [];
         }
@@ -1709,43 +1848,69 @@ json.dumps({
         const getSeqEntry = async (idx) => {
           if (fastaCache.has(idx)) return fastaCache.get(idx);
           const startedAt = getNow();
-          const path = lInputType.value === 'gb' ? `/seq_${idx}.gb` : `/seq_${idx}.fasta`;
-          const fmt = lInputType.value === 'gb' ? 'genbank' : 'fasta';
+          const path = lInputType.value === 'gb'
+            ? `/seq_${idx}.gb`
+            : (useProteinBlastp ? `/seq_${idx}.gff` : `/seq_${idx}.fasta`);
+          const fmt = lInputType.value === 'gb'
+            ? 'genbank'
+            : (useProteinBlastp ? 'gff' : 'fasta');
+          const pairedFastaPath = lInputType.value === 'gff' && useProteinBlastp
+            ? `/seq_${idx}.fasta`
+            : null;
           const regionSpec = regionSpecs[idx]?.file || null;
           const recordSelector = recordSelectors[idx] ?? '';
           const reverseFlag = reverseFlags[idx] ? '1' : '0';
-          const sourceFile = lInputType.value === 'gb' ? linearSeqs[idx]?.gb : linearSeqs[idx]?.fasta;
+          const sourceFile = lInputType.value === 'gb'
+            ? linearSeqs[idx]?.gb
+            : (useProteinBlastp ? linearSeqs[idx]?.gff : linearSeqs[idx]?.fasta);
           const sourceText = sourceFile ? linearFileTextCache.get(sourceFile) : null;
           const persistentCacheKey = JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
-          const cachedEntry = sourceFile ? getCachedFastaExtraction(sourceFile, persistentCacheKey) : null;
+          const usePersistentFastaCache = !useProteinBlastp;
+          const cachedEntry = sourceFile && usePersistentFastaCache
+            ? getCachedFastaExtraction(sourceFile, persistentCacheKey)
+            : null;
           let entry = cachedEntry;
 
           if (entry) {
             if (losatTiming) losatTiming.fastaCacheHits += 1;
           } else {
-            try {
-              entry = await extractLosatFastaFast({
-                file: sourceFile,
-                text: sourceText,
-                fmt,
-                regionSpec,
-                recordSelector,
-                reverseFlag
-              });
-              if (losatTiming) losatTiming.fastaJsExtractions += 1;
-            } catch (fastError) {
-              const res = JSON.parse(extractFirstFasta(path, fmt, regionSpec, recordSelector, reverseFlag));
+            if (useProteinBlastp) {
+              const res = JSON.parse(
+                extractProteinFasta(path, fmt, pairedFastaPath, regionSpec, recordSelector, reverseFlag, idx)
+              );
               if (res.error) throw new Error(res.error);
               entry = {
                 fasta: res.fasta,
-                recordId: res.record_id || `seq_${idx + 1}`
+                recordId: res.record_id || `seq_${idx + 1}`,
+                proteinMap: res.protein_map || {},
+                proteinCount: res.protein_count || 0
               };
-              if (losatTiming) {
-                losatTiming.fastaPyodideFallbacks += 1;
-                console.warn('LOSAT browser FASTA extraction fell back to Pyodide:', fastError);
+              if (losatTiming) losatTiming.fastaPyodideFallbacks += 1;
+            } else {
+              try {
+                entry = await extractLosatFastaFast({
+                  file: sourceFile,
+                  text: sourceText,
+                  fmt,
+                  regionSpec,
+                  recordSelector,
+                  reverseFlag
+                });
+                if (losatTiming) losatTiming.fastaJsExtractions += 1;
+              } catch (fastError) {
+                const res = JSON.parse(extractFirstFasta(path, fmt, regionSpec, recordSelector, reverseFlag));
+                if (res.error) throw new Error(res.error);
+                entry = {
+                  fasta: res.fasta,
+                  recordId: res.record_id || `seq_${idx + 1}`
+                };
+                if (losatTiming) {
+                  losatTiming.fastaPyodideFallbacks += 1;
+                  console.warn('LOSAT browser FASTA extraction fell back to Pyodide:', fastError);
+                }
               }
             }
-            if (sourceFile) setCachedFastaExtraction(sourceFile, persistentCacheKey, entry);
+            if (sourceFile && usePersistentFastaCache) setCachedFastaExtraction(sourceFile, persistentCacheKey, entry);
           }
           fastaCache.set(idx, entry);
           if (losatTiming) {
@@ -1821,9 +1986,11 @@ json.dumps({
           const args = [];
           if (losatProgram.value === 'blastn') {
             pushArg(args, '--task', losat.blastn.task);
-          } else {
+          } else if (losatProgram.value === 'tblastx') {
             pushArg(args, '--query-gencode', getGencode(queryIdx));
             pushArg(args, '--db-gencode', getGencode(subjectIdx));
+          } else {
+            pushArg(args, '--max_hsps_per_subject', 1);
           }
           return args;
         };
@@ -1865,20 +2032,36 @@ json.dumps({
           const fastaExtractionBeforeJobBuild = losatTiming.fastaExtractionMs;
           const cacheHashBeforeJobBuild = losatTiming.cacheHashMs;
 
-          for (let i = 0; i < linearSeqs.length - 1; i++) {
-            const queryEntry = await getSeqEntry(i);
-            const subjectEntry = await getSeqEntry(i + 1);
-            const losatArgs = buildLosatArgs(i, i + 1);
-            const cacheKey = await buildCacheKey(losatArgs, i, i + 1);
+          const jobSpecs = [];
+          if (useOrthogroupBlastp) {
+            for (let i = 0; i < linearSeqs.length; i++) {
+              for (let j = i + 1; j < linearSeqs.length; j++) {
+                jobSpecs.push({ queryIndex: i, subjectIndex: j, pairIndex: i });
+                jobSpecs.push({ queryIndex: j, subjectIndex: i, pairIndex: i });
+              }
+            }
+          } else {
+            for (let i = 0; i < linearSeqs.length - 1; i++) {
+              jobSpecs.push({ queryIndex: i, subjectIndex: i + 1, pairIndex: i });
+            }
+          }
+
+          for (const spec of jobSpecs) {
+            const queryEntry = await getSeqEntry(spec.queryIndex);
+            const subjectEntry = await getSeqEntry(spec.subjectIndex);
+            const losatArgs = buildLosatArgs(spec.queryIndex, spec.subjectIndex);
+            const cacheKey = await buildCacheKey(losatArgs, spec.queryIndex, spec.subjectIndex);
             const cached = cacheMap.get(cacheKey);
             const hasCachedText = typeof cached?.text === 'string';
             losatTiming.totalPairs += 1;
             if (hasCachedText) losatTiming.cacheHits += 1;
             else losatTiming.cacheMisses += 1;
             const pair = {
-              pairIndex: i,
+              pairIndex: spec.pairIndex,
+              queryIndex: spec.queryIndex,
+              subjectIndex: spec.subjectIndex,
               cacheKey,
-              filename: buildCacheFilename(i, queryEntry, subjectEntry)
+              filename: buildCacheFilename(spec.pairIndex, queryEntry, subjectEntry)
             };
             losatPairs.push(pair);
             cacheInfo.push({
@@ -1889,7 +2072,7 @@ json.dumps({
             if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
               pendingJobKeys.add(cacheKey);
               losatJobs.push({
-                pairIndex: i,
+                pairIndex: spec.pairIndex,
                 cacheKey,
                 program: losatProgram.value,
                 queryFasta: queryEntry.fasta,
@@ -1921,13 +2104,63 @@ json.dumps({
           }
 
           const blastWriteStartedAt = getNow();
-          losatPairs.forEach((pair) => {
-            const cached = cacheMap.get(pair.cacheKey);
-            const blastText = typeof cached?.text === 'string' ? cached.text : '';
-            const blastPath = `/blast_${pair.pairIndex}.txt`;
-            virtualBlastFiles.push({ path: blastPath, text: blastText });
-            blastArgs.push(blastPath);
-          });
+          if (useProteinBlastp) {
+            if (!convertProteinBlast) {
+              throw new Error('Current gbdraw wheel does not support LOSATP orthogroup metadata. Rebuild and redeploy the web wheel.');
+            }
+            const pairPayloads = [];
+            for (const pair of losatPairs) {
+              const cached = cacheMap.get(pair.cacheKey);
+              const losatText = typeof cached?.text === 'string' ? cached.text : '';
+              const queryEntry = await getSeqEntry(pair.queryIndex);
+              const subjectEntry = await getSeqEntry(pair.subjectIndex);
+              pairPayloads.push({
+                pairIndex: pair.pairIndex,
+                queryIndex: pair.queryIndex,
+                subjectIndex: pair.subjectIndex,
+                blastText: losatText,
+                queryProteinMap: queryEntry.proteinMap || {},
+                subjectProteinMap: subjectEntry.proteinMap || {}
+              });
+            }
+            const convertedPayload = JSON.parse(
+              convertProteinBlast(
+                JSON.stringify(pairPayloads),
+                blastpMode,
+                Math.max(1, losat.blastp.maxHits),
+                adv.min_bitscore,
+                adv.evalue,
+                adv.identity,
+                adv.alignment_length
+              )
+            );
+            if (convertedPayload.error) throw new Error(convertedPayload.error);
+            if (useOrthogroupBlastp) {
+              setOrthogroupMetadata(convertedPayload.orthogroups || []);
+            } else {
+              clearOrthogroupMetadata({ clearSelection: true });
+            }
+            const convertedPairs = Array.isArray(convertedPayload.pairs) ? convertedPayload.pairs : [];
+            for (const converted of convertedPairs) {
+              const pairIndex = Number(converted?.pair_index);
+              if (!Number.isInteger(pairIndex)) continue;
+              const blastPath = `/blast_${pairIndex}.txt`;
+              virtualBlastFiles.push({
+                path: blastPath,
+                text: converted.tsv || '',
+                rows: Array.isArray(converted.rows) ? converted.rows : []
+              });
+              blastArgs.push(blastPath);
+            }
+          } else {
+            for (const pair of losatPairs) {
+              const cached = cacheMap.get(pair.cacheKey);
+              const blastText = typeof cached?.text === 'string' ? cached.text : '';
+              const blastPath = `/blast_${pair.pairIndex}.txt`;
+              virtualBlastFiles.push({ path: blastPath, text: blastText });
+              blastArgs.push(blastPath);
+            }
+          }
           losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
           console.info(
             [
@@ -1961,6 +2194,12 @@ json.dumps({
         }
         if (extractFirstFasta) {
           extractFirstFasta.destroy();
+        }
+        if (extractProteinFasta) {
+          extractProteinFasta.destroy();
+        }
+        if (convertProteinBlast) {
+          convertProteinBlast.destroy();
         }
         if (useLosat) {
           losatCacheInfo.value = cacheInfo;
