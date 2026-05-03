@@ -57,6 +57,15 @@ export const setupWatchers = ({
     featureVisibilityOverrides,
     featurePanelTab,
     labelSearch,
+    orthogroups,
+    featureOrthogroupIndex,
+    selectedOrthogroupAlignmentFeature,
+    orthogroupNameOverrides,
+    orthogroupDescriptionOverrides,
+    selectedOrthogroupId,
+    orthogroupSearch,
+    showRightDrawer,
+    rightDrawerTab,
     labelOverrideContextKey,
     labelTextBulkOverrides,
     labelTextFeatureOverrides,
@@ -520,6 +529,13 @@ export const setupWatchers = ({
       Object.keys(labelTextBulkOverrides).forEach((k) => delete labelTextBulkOverrides[k]);
       Object.keys(labelTextFeatureOverrideSources).forEach((k) => delete labelTextFeatureOverrideSources[k]);
       Object.keys(labelVisibilityOverrides).forEach((k) => delete labelVisibilityOverrides[k]);
+      orthogroups.value = [];
+      featureOrthogroupIndex.value = new Map();
+      selectedOrthogroupAlignmentFeature.value = '';
+      selectedOrthogroupId.value = '';
+      orthogroupSearch.value = '';
+      Object.keys(orthogroupNameOverrides).forEach((k) => delete orthogroupNameOverrides[k]);
+      Object.keys(orthogroupDescriptionOverrides).forEach((k) => delete orthogroupDescriptionOverrides[k]);
       labelOverrideContextKey.value = '';
       labelOverrideBuildWarning.value = '';
       labelSearch.value = '';
@@ -536,6 +552,8 @@ export const setupWatchers = ({
       globalLabelModeDialog.featureType = '';
       globalLabelModeDialog.resolve = null;
       showFeaturePanel.value = false;
+      showRightDrawer.value = false;
+      rightDrawerTab.value = 'features';
       linearReorderNotice.value = '';
     }
   );

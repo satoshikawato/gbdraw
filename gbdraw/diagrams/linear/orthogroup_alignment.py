@@ -11,6 +11,7 @@ from typing import Sequence
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
+from ...analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...exceptions import ValidationError
 
@@ -150,6 +151,35 @@ def _collect_alignment_members(
     return members_by_orthogroup
 
 
+def _collect_alignment_members_from_orthogroups(
+    orthogroups: OrthogroupResult,
+) -> dict[str, list[OrthogroupAlignmentMember]]:
+    members_by_orthogroup: dict[str, list[OrthogroupAlignmentMember]] = {}
+    for orthogroup_id, members in orthogroups.orthogroups.items():
+        group_members: list[OrthogroupAlignmentMember] = []
+        for member in members:
+            center = (min(float(member.start + 1), float(member.end)) + max(float(member.start + 1), float(member.end))) / 2.0
+            group_members.append(
+                OrthogroupAlignmentMember(
+                    orthogroup_id=orthogroup_id,
+                    record_index=int(member.record_index),
+                    protein_id=str(member.protein_id or ""),
+                    source_protein_id=str(member.source_protein_id or ""),
+                    feature_svg_id=str(member.feature_svg_id or ""),
+                    center=center,
+                    bitscore=0.0,
+                    evalue=float("inf"),
+                    identity=0.0,
+                    representative=bool(member.representative),
+                )
+            )
+        members_by_orthogroup[orthogroup_id] = sorted(
+            group_members,
+            key=lambda item: (item.record_index, item.center, item.protein_id, item.feature_svg_id),
+        )
+    return members_by_orthogroup
+
+
 def _target_matches(member: OrthogroupAlignmentMember, target: str) -> bool:
     return target in {
         member.orthogroup_id,
@@ -208,11 +238,50 @@ def _rendered_center_x(
     )
 
 
+def _rendered_record_width(
+    record: SeqRecord,
+    canvas_config: LinearCanvasConfigurator,
+) -> float:
+    if bool(canvas_config.normalize_length):
+        return float(canvas_config.alignment_width)
+    longest = max(1.0, float(canvas_config.longest_genome))
+    return float(canvas_config.alignment_width) * (float(len(record.seq)) / longest)
+
+
+def calculate_orthogroup_alignment_canvas_adjustment(
+    records: Sequence[SeqRecord],
+    canvas_config: LinearCanvasConfigurator,
+    record_offsets_x: dict[int, float],
+) -> tuple[float, float]:
+    """Return (horizontal_shift, width_extension) needed to keep aligned records on canvas."""
+
+    if not record_offsets_x:
+        return 0.0, 0.0
+
+    alignment_width = float(canvas_config.alignment_width)
+    min_left = 0.0
+    max_right = alignment_width
+    for record_index, record in enumerate(records):
+        local_left = (
+            _base_record_offset_x(record, canvas_config)
+            + float(record_offsets_x.get(record_index, 0.0))
+        )
+        local_right = local_left + _rendered_record_width(record, canvas_config)
+        min_left = min(min_left, local_left)
+        max_right = max(max_right, local_right)
+
+    horizontal_shift = max(0.0, -min_left)
+    width_extension = max(0.0, (max_right - min_left) - alignment_width)
+    return horizontal_shift, width_extension
+
+
 def calculate_orthogroup_alignment_offsets(
     records: Sequence[SeqRecord],
     comparisons: Sequence[DataFrame],
     canvas_config: LinearCanvasConfigurator,
     align_orthogroup_feature: str | None,
+    *,
+    orthogroups: OrthogroupResult | None = None,
 ) -> dict[int, float]:
     """Return per-record x offsets that align representatives to the selected member."""
 
@@ -220,10 +289,14 @@ def calculate_orthogroup_alignment_offsets(
     if not target:
         return {}
 
-    members_by_orthogroup = _collect_alignment_members(comparisons)
+    members_by_orthogroup = (
+        _collect_alignment_members_from_orthogroups(orthogroups)
+        if orthogroups is not None
+        else _collect_alignment_members(comparisons)
+    )
     if not members_by_orthogroup:
         raise ValidationError(
-            "align_orthogroup_feature requires LOSATP blastp comparison metadata."
+            "align_orthogroup_feature requires LOSATP blastp orthogroup metadata."
         )
 
     orthogroup_id, anchor_member = _resolve_target_member(members_by_orthogroup, target)
@@ -257,5 +330,6 @@ def calculate_orthogroup_alignment_offsets(
 
 __all__ = [
     "OrthogroupAlignmentMember",
+    "calculate_orthogroup_alignment_canvas_adjustment",
     "calculate_orthogroup_alignment_offsets",
 ]

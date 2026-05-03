@@ -116,6 +116,22 @@
         .basic-settings .input-label { font-size: 10px; letter-spacing: 0.04em; }
         .basic-settings .form-input { font-size: 10px; padding: 0.25rem 0.5rem; line-height: 1.2; }
         .basic-settings .form-input.text-xs { font-size: 10px; }
+        .feature-popup {
+            width: min(720px, calc(100vw - 24px));
+            max-height: calc(100vh - 24px);
+            overflow-y: auto;
+        }
+        .feature-popup-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 0.875rem;
+            align-items: start;
+        }
+        @media (max-width: 760px) {
+            .feature-popup-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
 
         .btn { @apply font-bold rounded-lg text-base px-4 py-2 shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2; }
         .btn-primary { @apply text-white bg-blue-600 hover:bg-blue-700; }
@@ -277,8 +293,15 @@
                                     <p class="text-[10px] text-slate-500">Query/DB gencode is set per entry below.</p>
                                 </div>
                                 <div v-else class="space-y-2">
-                                    <div class="grid grid-cols-1 gap-1">
-                                        <div>
+                                    <div class="grid grid-cols-2 gap-1">
+                                        <div class="col-span-2">
+                                            <label class="text-[9px] block">blastp mode</label>
+                                            <select v-model="losat.blastp.mode" class="form-input px-1 py-0.5 text-xs">
+                                                <option value="orthogroup">Orthogroups</option>
+                                                <option value="pairwise">Pairwise</option>
+                                            </select>
+                                        </div>
+                                        <div v-if="losat.blastp.mode === 'pairwise'">
                                             <label class="text-[9px] block">Max hits per protein</label>
                                             <input type="number" min="1" v-model.number="losat.blastp.maxHits" class="form-input px-1 py-0.5 text-xs">
                                         </div>
@@ -453,6 +476,10 @@
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.align_center" class="form-checkbox">
                                         <span class="inline-flex items-center gap-1">Align to Center <help-tip text="Align the linear map to the center of the page."></help-tip></span>
+                                    </label>
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="form.keep_definition_left_aligned" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Lock Definition Column <help-tip text="Keep linear definition labels in the left column when records are center-aligned or aligned by orthogroup."></help-tip></span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.normalize_length" class="form-checkbox">
@@ -1555,7 +1582,7 @@
                     <div v-if="clickedFeature"
                          ref="featurePopupRef"
                          @mousedown="startFeaturePopupDrag"
-                         class="fixed z-50 feature-popup bg-white rounded-xl shadow-2xl border border-slate-200 p-4 min-w-[320px] max-w-[360px]"
+                         class="fixed z-50 feature-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4"
                          :style="{ top: clickedFeaturePos.y + 'px', left: clickedFeaturePos.x + 'px' }">
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100">
                             <div class="w-4 h-4 rounded mt-1" :style="{ backgroundColor: clickedFeature.color }"></div>
@@ -1563,14 +1590,32 @@
                                 <div class="text-base font-bold text-slate-700 truncate max-w-[260px]">{{ clickedFeature.label }}</div>
                                 <div class="text-xs text-slate-500 mt-0.5">Location: {{ clickedFeatureLocation }}</div>
                                 <div v-if="clickedFeature.orthogroupId" class="text-xs text-slate-500 mt-0.5">
-                                    {{ clickedFeature.orthogroupId }} · {{ clickedFeature.orthogroupMemberCount }} members
+                                    <div class="font-medium text-slate-600 truncate max-w-[260px]">
+                                        {{ clickedOrthogroupDetail ? clickedOrthogroupDetail.displayName : clickedFeature.orthogroupId }}
+                                    </div>
+                                    <div>{{ clickedFeature.orthogroupId }} - {{ clickedFeature.orthogroupMemberCount }} members</div>
                                 </div>
                             </div>
+                            <input type="color"
+                                   :value="clickedFeature.color"
+                                   @input="clickedFeature.color = $event.target.value"
+                                   @change="updateClickedFeatureColor($event.target.value)"
+                                   :disabled="!canEditFeatureColor(clickedFeature.feat)"
+                                   :title="canEditFeatureColor(clickedFeature.feat) ? 'Change fill color' : 'No stable identifier available'"
+                                   :class="['w-8 h-8 cursor-pointer border-2 border-slate-200 rounded-lg shrink-0', canEditFeatureColor(clickedFeature.feat) ? '' : 'opacity-50 cursor-not-allowed']">
                             <button @click="clickedFeature = null" class="text-slate-400 hover:text-slate-600 ml-auto text-xl">
                                 <i class="ph ph-x"></i>
                             </button>
                         </div>
-                        <div v-if="canUseClickedOrthogroupActions" class="mb-4 grid grid-cols-3 gap-2">
+                        <div class="feature-popup-grid">
+                        <div class="space-y-3">
+                        <div v-if="canUseClickedOrthogroupActions" class="grid grid-cols-2 gap-2">
+                            <button @click="openClickedOrthogroupInEditor"
+                                    class="px-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
+                                    title="Open orthogroup editor">
+                                <i class="ph ph-sidebar-simple"></i>
+                                <span>Open</span>
+                            </button>
                             <button @click="alignByClickedOrthogroup"
                                     class="px-2 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
                                     title="Align by this orthogroup">
@@ -1592,7 +1637,73 @@
                                 <span>Reset</span>
                             </button>
                         </div>
-                        <div class="mb-4">
+                        <div v-if="clickedOrthogroupDetail" class="border-y border-slate-100 py-3">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">Orthogroup</div>
+                                <div class="text-[10px] text-slate-500">{{ clickedOrthogroupDetail.id }}</div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="text-sm font-semibold text-slate-700 truncate">{{ clickedOrthogroupDetail.displayName }}</div>
+                                <div v-if="clickedOrthogroupDetail.description" class="text-[10px] text-slate-500 line-clamp-2">
+                                    {{ clickedOrthogroupDetail.description }}
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-xs text-slate-600 mb-3">
+                                <div>
+                                    <div class="text-[10px] text-slate-400">Members</div>
+                                    <div class="font-medium">{{ clickedOrthogroupDetail.memberCount }}</div>
+                                </div>
+                                <div>
+                                    <div class="text-[10px] text-slate-400">Record coverage</div>
+                                    <div class="font-medium">{{ clickedOrthogroupDetail.recordCoverage }}</div>
+                                </div>
+                            </div>
+                            <div v-if="clickedOrthogroupDetail.currentMember" class="text-xs text-slate-600 mb-3">
+                                <div class="text-[10px] text-slate-400 mb-1">Current member</div>
+                                <div class="font-medium truncate">{{ clickedOrthogroupDetail.currentMember.label || clickedFeature.label }}</div>
+                                <div class="font-mono text-[10px] text-slate-500 break-all">
+                                    {{ clickedOrthogroupDetail.currentMember.proteinId || clickedFeature.proteinId }}
+                                </div>
+                                <div class="text-[10px] text-slate-500">
+                                    {{ clickedOrthogroupDetail.currentMember.recordId || '' }}
+                                    {{ Number(clickedOrthogroupDetail.currentMember.start) + 1 }}-{{ clickedOrthogroupDetail.currentMember.end }}
+                                    <span v-if="clickedOrthogroupDetail.currentMember.strand">({{ clickedOrthogroupDetail.currentMember.strand }})</span>
+                                    <span v-if="clickedOrthogroupDetail.currentMember.representative" class="font-medium text-blue-600"> representative</span>
+                                </div>
+                            </div>
+                            <div class="max-h-40 overflow-auto custom-scrollbar border border-slate-100 rounded-lg">
+                                <div v-for="recordGroup in clickedOrthogroupDetail.membersByRecord"
+                                     :key="`og-${clickedOrthogroupDetail.id}-${recordGroup.recordIndex}`"
+                                     class="border-b border-slate-100 last:border-b-0">
+                                    <div class="bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-500">
+                                        {{ recordGroup.recordLabel }}
+                                    </div>
+                                    <div v-for="member in recordGroup.members"
+                                         :key="`${member.featureSvgId}-${member.proteinId}`"
+                                         class="px-2 py-1 text-[10px] text-slate-600 grid grid-cols-[1fr_auto] gap-2">
+                                        <div class="min-w-0">
+                                            <div class="truncate">{{ member.label || member.proteinId }}</div>
+                                            <div class="font-mono text-slate-400 truncate">{{ member.sourceProteinId || member.proteinId }}</div>
+                                        </div>
+                                        <div class="text-right text-slate-400">
+                                            {{ Number(member.start) + 1 }}-{{ member.end }}
+                                            <span v-if="member.representative" class="text-blue-600">*</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-if="canUseClickedOrthogroupActions" class="mt-2 flex gap-2">
+                                <button @click="highlightClickedOrthogroup"
+                                        class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs">
+                                    Highlight
+                                </button>
+                                <button @click="clearOrthogroupHighlight"
+                                        class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs">
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                        <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">Legend name (optional)</label>
                             <input type="text"
                                    v-model="clickedFeature.legendName"
@@ -1624,7 +1735,7 @@
                                 No SPECIFIC RULES (-t) legend text available yet
                             </p>
                         </div>
-                        <div class="mb-4">
+                        <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">Feature visibility</label>
                             <select v-model="clickedFeature.featureVisibility"
                                     @change="updateClickedFeatureVisibility(clickedFeature.featureVisibility)"
@@ -1637,7 +1748,9 @@
                                 Applies to this feature only (hash ID rule).
                             </p>
                         </div>
-                        <div class="mb-4">
+                        </div>
+                        <div class="space-y-3">
+                        <div>
                             <div class="flex items-center justify-between mb-1">
                                 <label class="text-xs font-medium text-slate-500 block">Label text</label>
                                 <span v-if="clickedFeature.hasEditableLabel" class="text-[10px] font-mono text-slate-400">
@@ -1683,7 +1796,7 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="mb-4">
+                        <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">Fill Color</label>
                             <div class="flex items-center gap-4">
                                 <input type="color"
@@ -1728,6 +1841,8 @@
                                     <i class="ph ph-users-three text-lg"></i>
                                 </button>
                             </div>
+                        </div>
+                        </div>
                         </div>
                     </div>
 
@@ -1976,290 +2091,316 @@
 
                 </div>
 
-                <!-- Legend Editor Toggle Button -->
+                <!-- Right-side editor drawer -->
                 <button v-if="svgContent"
-                        @click="showLegendPanel = !showLegendPanel"
-                        class="absolute top-1/3 -translate-y-1/2 bg-purple-600 hover:bg-purple-700 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
-                        :style="{ right: (showFeaturePanel ? 320 : 0) + (showLegendPanel ? 288 : 0) + 'px' }"
-                        :title="showLegendPanel ? 'Close legend editor' : 'Edit legend'">
-                    <i class="ph ph-list-bullets text-lg"></i>
+                        @click="showRightDrawer ? closeRightDrawer() : openRightDrawerTab(rightDrawerTab || (orthogroupCount > 0 ? 'orthogroups' : 'features'))"
+                        class="absolute right-0 top-1/2 -translate-y-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
+                        :class="{ '-translate-x-[360px]': showRightDrawer }"
+                        :title="showRightDrawer ? 'Close editor' : 'Open editor'">
+                    <i class="ph ph-sidebar-simple text-lg"></i>
                 </button>
 
-                <!-- Legend Editor Panel -->
                 <div v-if="svgContent"
-                     class="absolute top-0 bottom-0 w-72 bg-white border-l border-slate-200 shadow-xl z-10 transition-all duration-300 flex flex-col"
-                     :style="{ right: showLegendPanel ? (showFeaturePanel ? '320px' : '0') : '-288px' }">
-                    <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-purple-50">
-                        <div class="flex items-center gap-2">
-                            <i class="ph ph-list-bullets text-purple-600"></i>
-                            <span class="font-bold text-slate-700">Legend Editor</span>
-                        </div>
-                        <button @click="showLegendPanel = false" class="text-slate-400 hover:text-slate-600" aria-label="Close legend editor">
-                            <i class="ph ph-x text-lg"></i>
-                        </button>
-                    </div>
-
-                    <!-- Legend position controls -->
-                    <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50">
-                        <div class="flex items-center justify-between">
-                            <span class="text-[10px] text-slate-500 flex items-center gap-1">
-                                <i class="ph ph-hand-grabbing"></i> Drag legend to reposition
-                            </span>
-                            <div class="flex items-center gap-1">
-                                <!-- Sort buttons -->
-                                <button @click="sortLegendEntries('asc')"
-                                        class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100 transition-colors"
-                                        title="Sort A-Z">
-                                    <i class="ph ph-sort-ascending"></i>
-                                </button>
-                                <button @click="sortLegendEntries('desc')"
-                                        class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100 transition-colors"
-                                        title="Sort Z-A">
-                                    <i class="ph ph-sort-descending"></i>
-                                </button>
-                                <button @click="sortLegendEntriesByDefault"
-                                        class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100 transition-colors"
-                                        title="Sort by default (generation order)">
-                                    <i class="ph ph-list-numbers"></i>
-                                </button>
-                                <span class="text-slate-300">|</span>
-                                <button @click="resetLegendPosition"
-                                        class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
-                                        title="Reset legend position and restore deleted entries">
-                                    <i class="ph ph-arrow-counter-clockwise"></i> Reset
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="flex-1 overflow-y-auto p-3 space-y-2">
-                        <div v-for="(entry, idx) in legendEntries" :key="idx"
-                             class="p-2 bg-slate-50 rounded border border-slate-100">
-                            <!-- Main row: Up/Down, Color, Caption, Delete -->
-                            <div class="flex items-center gap-1">
-                                <!-- Up/Down buttons -->
-                                <div class="flex flex-col shrink-0">
-                                    <button @click="moveLegendEntryUp(idx)"
-                                            :disabled="idx === 0"
-                                            class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none"
-                                            title="Move up">
-                                        <i class="ph ph-caret-up text-xs"></i>
-                                    </button>
-                                    <button @click="moveLegendEntryDown(idx)"
-                                            :disabled="idx === legendEntries.length - 1"
-                                            class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none"
-                                            title="Move down">
-                                        <i class="ph ph-caret-down text-xs"></i>
-                                    </button>
-                                </div>
-                                <!-- Color display (read-only) -->
-                                <div class="w-6 h-6 rounded border border-slate-300 shrink-0"
-                                     :style="{ backgroundColor: entry.color }"
-                                     :title="entry.color"></div>
-                                <input type="text"
-                                       :value="entry.caption"
-                                       @change="renameLegendEntry(idx, $event.target.value)"
-                                       class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0">
-                                <!-- Expand/Collapse stroke options -->
-                                <button @click="entry.showStroke = !entry.showStroke"
-                                        class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5"
-                                        :title="entry.showStroke ? 'Hide stroke options' : 'Show stroke options'">
-                                    <i class="ph text-xs" :class="entry.showStroke ? 'ph-caret-up' : 'ph-sliders-horizontal'"></i>
-                                </button>
-                                <button @click="deleteLegendEntry(idx)"
-                                        class="text-red-400 hover:text-red-600 shrink-0"
-                                        title="Remove entry">
-                                    <i class="ph ph-trash text-sm"></i>
-                                </button>
-                            </div>
-                            <!-- Stroke options row (collapsible) -->
-                            <div v-if="entry.showStroke" class="mt-2 pt-2 border-t border-slate-200 flex items-center gap-2 text-[10px]">
-                                <span class="text-slate-500 shrink-0">Stroke:</span>
-                                <input type="color"
-                                       :value="getLegendEntryStrokeColor(idx)"
-                                       @change="updateLegendEntryStrokeColor(idx, $event.target.value)"
-                                       class="w-6 h-5 p-0 border rounded shrink-0 cursor-pointer"
-                                       title="Stroke color">
-                                <input type="number"
-                                       :value="getLegendEntryStrokeWidth(idx)"
-                                       @change="updateLegendEntryStrokeWidth(idx, $event.target.value)"
-                                       class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5"
-                                       placeholder="Width"
-                                       step="0.5"
-                                       min="0"
-                                       title="Stroke width (Enter to apply)">
-                                <button @click="resetLegendEntryStroke(idx)"
-                                        class="text-slate-400 hover:text-slate-600 shrink-0"
-                                        title="Reset stroke to default">
-                                    <i class="ph ph-arrow-counter-clockwise text-xs"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div v-if="legendEntries.length === 0" class="text-center text-slate-400 text-sm py-4">
-                            No legend entries found
-                        </div>
-                    </div>
-
-                    <!-- Reset All Strokes button -->
-                    <div class="px-3 py-2 border-t border-slate-200">
-                        <button @click="resetAllStrokes"
-                                class="w-full text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded flex items-center justify-center gap-1 transition-colors"
-                                title="Reset all stroke colors and widths to default">
-                            <i class="ph ph-arrow-counter-clockwise"></i>
-                            Reset All Strokes
-                        </button>
-                    </div>
-
-                    <!-- Info message -->
-                    <div class="p-3 border-t border-slate-200 bg-slate-50 text-xs text-slate-500">
-                        <i class="ph ph-info"></i> Feature colors and labels are managed via Feature Editor
-                    </div>
-                </div>
-
-                <!-- Feature Editor Toggle Button (floating) -->
-                <button v-if="extractedFeatures.length > 0 || featureExtractionPending"
-                        @click="featureExtractionPending && extractedFeatures.length === 0 ? null : (showFeaturePanel = !showFeaturePanel)"
-                        :disabled="featureExtractionPending && extractedFeatures.length === 0"
-                        class="absolute right-0 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-wait text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
-                        :class="{ 'translate-x-0': !showFeaturePanel, '-translate-x-80': showFeaturePanel }"
-                        :title="featureExtractionPending && extractedFeatures.length === 0 ? 'Loading feature editor data' : (showFeaturePanel ? 'Close feature editor' : 'Open feature editor')">
-                    <i :class="featureExtractionPending && extractedFeatures.length === 0 ? 'ph ph-circle-notch animate-spin text-lg' : 'ph ph-paint-brush text-lg'"></i>
-                </button>
-
-                <!-- Feature Editor Drawer (slides from right) -->
-                <div v-if="extractedFeatures.length > 0"
-                     class="absolute right-0 top-0 bottom-0 w-80 bg-white border-l border-slate-200 shadow-xl z-10 transition-transform duration-300 flex flex-col"
-                     :class="showFeaturePanel ? 'translate-x-0' : 'translate-x-full'">
-                    <!-- Header -->
+                     class="absolute right-0 top-0 bottom-0 w-[360px] bg-white border-l border-slate-200 shadow-xl z-10 transition-transform duration-300 flex flex-col"
+                     :class="showRightDrawer ? 'translate-x-0' : 'translate-x-full'">
                     <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50">
                         <div class="flex items-center gap-2">
-                            <i class="ph ph-paint-brush text-blue-600"></i>
-                            <span class="font-bold text-slate-700">Feature Editor</span>
+                            <i class="ph ph-sliders-horizontal text-slate-600"></i>
+                            <span class="font-bold text-slate-700">Editor</span>
                         </div>
-                        <button @click="showFeaturePanel = false" class="text-slate-400 hover:text-slate-600" aria-label="Close feature editor">
+                        <button @click="closeRightDrawer" class="text-slate-400 hover:text-slate-600" aria-label="Close editor">
                             <i class="ph ph-x text-lg"></i>
                         </button>
                     </div>
 
-                    <div class="px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
-                        <p class="text-xs font-semibold text-slate-600">
-                            Features ({{ filteredFeatures.length }})
-                        </p>
+                    <div class="grid grid-cols-3 gap-1 p-2 border-b border-slate-200 bg-white shrink-0">
+                        <button @click="openRightDrawerTab('legend')"
+                                :class="[
+                                  'text-xs rounded px-2 py-1.5 flex items-center justify-center gap-1',
+                                  rightDrawerTab === 'legend' ? 'bg-purple-100 text-purple-700 font-semibold' : 'text-slate-500 hover:bg-slate-100'
+                                ]">
+                            <i class="ph ph-list-bullets"></i>
+                            <span>Legend</span>
+                        </button>
+                        <button @click="openRightDrawerTab('features')"
+                                :class="[
+                                  'text-xs rounded px-2 py-1.5 flex items-center justify-center gap-1',
+                                  rightDrawerTab === 'features' ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-slate-500 hover:bg-slate-100'
+                                ]">
+                            <i class="ph ph-paint-brush"></i>
+                            <span>Features</span>
+                        </button>
+                        <button @click="openRightDrawerTab('orthogroups')"
+                                :disabled="orthogroupCount === 0"
+                                :class="[
+                                  'text-xs rounded px-2 py-1.5 flex items-center justify-center gap-1',
+                                  rightDrawerTab === 'orthogroups' ? 'bg-emerald-100 text-emerald-700 font-semibold' : 'text-slate-500 hover:bg-slate-100',
+                                  orthogroupCount === 0 ? 'opacity-40 cursor-not-allowed hover:bg-transparent' : ''
+                                ]">
+                            <i class="ph ph-tree-structure"></i>
+                            <span>Orthogroups</span>
+                        </button>
                     </div>
 
-                    <!-- Record Selector (for multi-record files) -->
-                    <div v-if="featureRecordIds.length > 1" class="px-4 py-2 border-b border-slate-100 shrink-0">
-                        <select v-model="selectedFeatureRecordIdx" class="form-select text-xs w-full">
-                            <option v-for="(rid, idx) in featureRecordIds" :key="idx" :value="idx">
-                                {{ rid }}
-                            </option>
-                        </select>
-                    </div>
-
-                    <!-- Search -->
-                    <div class="px-4 py-2 border-b border-slate-100 shrink-0">
-                        <input v-model="featureSearch" placeholder="Search by feature or annotation..."
-                               class="form-input text-xs w-full">
-                    </div>
-
-                    <!-- Feature List -->
-                    <div class="flex-grow overflow-y-auto">
-                        <div v-for="feat in filteredFeatures" :key="feat.id"
-                             @click="openFeatureEditorFromList(feat, $event)"
-                             class="px-3 py-2 border-b border-slate-100 text-xs hover:bg-blue-50 cursor-pointer transition-colors space-y-1">
-                            <div class="flex items-center gap-2">
-                                <span class="w-10 font-mono text-slate-400 shrink-0 text-[10px]">{{ feat.type }}</span>
-                                <span class="w-16 font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="`${feat.start}..${feat.end}`">
-                                    {{ feat.start }}..{{ feat.end }}
+                    <div v-show="rightDrawerTab === 'legend'" class="flex-1 min-h-0 flex flex-col">
+                        <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[10px] text-slate-500 flex items-center gap-1">
+                                    <i class="ph ph-hand-grabbing"></i> Drag legend to reposition
                                 </span>
-                                <span class="flex-grow truncate text-slate-700"
-                                      :title="feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)'">
-                                    {{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}
-                                </span>
-                                <button @click.stop="openFeatureEditorFromList(feat, $event)"
-                                        class="text-[10px] px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 shrink-0"
-                                        title="Open feature editor">
-                                    Edit
-                                </button>
-                                <input type="color"
-                                       :value="getFeatureColor(feat)"
-                                       @click.stop
-                                       @change="requestFeatureColorChange(feat, $event.target.value)"
-                                       :disabled="!canEditFeatureColor(feat)"
-                                       :title="canEditFeatureColor(feat) ? 'Click to change color' : 'No identifier available (no locus_tag, gene, or product)'"
-                                       :class="['w-7 h-5 border rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
+                                <div class="flex items-center gap-1">
+                                    <button @click="sortLegendEntries('asc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort A-Z">
+                                        <i class="ph ph-sort-ascending"></i>
+                                    </button>
+                                    <button @click="sortLegendEntries('desc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort Z-A">
+                                        <i class="ph ph-sort-descending"></i>
+                                    </button>
+                                    <button @click="sortLegendEntriesByDefault" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort by default">
+                                        <i class="ph ph-list-numbers"></i>
+                                    </button>
+                                    <button @click="resetLegendPosition" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50" title="Reset legend position">
+                                        <i class="ph ph-arrow-counter-clockwise"></i> Reset
+                                    </button>
+                                </div>
                             </div>
-                            <p class="text-[10px] text-slate-400 truncate">
-                                <template v-if="getEditableLabelByFeatureId(feat.svg_id)">
-                                    Label: {{ getEditableLabelByFeatureId(feat.svg_id).text }}
-                                </template>
-                                <template v-else>
-                                    Label: (not editable)
-                                </template>
-                            </p>
-                            <p class="text-[10px] text-slate-400 truncate">
-                                Visibility: {{ getFeatureVisibility(feat) }}
-                            </p>
                         </div>
-                        <div v-if="filteredFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">
-                            No features found
+
+                        <div class="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
+                            <div v-for="(entry, idx) in legendEntries" :key="idx" class="p-2 bg-slate-50 rounded border border-slate-100">
+                                <div class="flex items-center gap-1">
+                                    <div class="flex flex-col shrink-0">
+                                        <button @click="moveLegendEntryUp(idx)" :disabled="idx === 0" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move up">
+                                            <i class="ph ph-caret-up text-xs"></i>
+                                        </button>
+                                        <button @click="moveLegendEntryDown(idx)" :disabled="idx === legendEntries.length - 1" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move down">
+                                            <i class="ph ph-caret-down text-xs"></i>
+                                        </button>
+                                    </div>
+                                    <div class="w-6 h-6 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: entry.color }" :title="entry.color"></div>
+                                    <input type="text" :value="entry.caption" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0">
+                                    <button @click="entry.showStroke = !entry.showStroke" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="entry.showStroke ? 'Hide stroke options' : 'Show stroke options'">
+                                        <i class="ph text-xs" :class="entry.showStroke ? 'ph-caret-up' : 'ph-sliders-horizontal'"></i>
+                                    </button>
+                                    <button @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove entry">
+                                        <i class="ph ph-trash text-sm"></i>
+                                    </button>
+                                </div>
+                                <div v-if="entry.showStroke" class="mt-2 pt-2 border-t border-slate-200 flex items-center gap-2 text-[10px]">
+                                    <span class="text-slate-500 shrink-0">Stroke:</span>
+                                    <input type="color" :value="getLegendEntryStrokeColor(idx)" @change="updateLegendEntryStrokeColor(idx, $event.target.value)" class="w-6 h-5 p-0 border rounded shrink-0 cursor-pointer" title="Stroke color">
+                                    <input type="number" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" placeholder="Width" step="0.5" min="0" title="Stroke width">
+                                    <button @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" title="Reset stroke to default">
+                                        <i class="ph ph-arrow-counter-clockwise text-xs"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="legendEntries.length === 0" class="text-center text-slate-400 text-sm py-4">No legend entries found</div>
+                        </div>
+
+                        <div class="px-3 py-2 border-t border-slate-200 shrink-0">
+                            <button @click="resetAllStrokes" class="w-full text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded flex items-center justify-center gap-1" title="Reset all stroke colors and widths to default">
+                                <i class="ph ph-arrow-counter-clockwise"></i>
+                                Reset All Strokes
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Footer -->
-                    <div class="px-4 py-2 border-t border-slate-200 shrink-0 bg-slate-50">
-                        <div class="space-y-2">
-                            <p class="text-[10px] text-slate-400">
-                                <i class="ph ph-info"></i> Click a feature row or the diagram to edit legend name, label text, and colors.
-                            </p>
-                            <div class="flex items-center justify-between gap-2">
-                                <p class="text-[10px] text-slate-400">
-                                    <i class="ph ph-info"></i> Label TSV format: record_id, feature_type, qualifier, value, label_text.
+                    <div v-show="rightDrawerTab === 'features'" class="flex-1 min-h-0 flex flex-col">
+                        <div class="px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
+                            <p class="text-xs font-semibold text-slate-600">Features ({{ filteredFeatures.length }})</p>
+                        </div>
+                        <div v-if="featureRecordIds.length > 1" class="px-4 py-2 border-b border-slate-100 shrink-0">
+                            <select v-model="selectedFeatureRecordIdx" class="form-select text-xs w-full">
+                                <option v-for="(rid, idx) in featureRecordIds" :key="idx" :value="idx">{{ rid }}</option>
+                            </select>
+                        </div>
+                        <div class="px-4 py-2 border-b border-slate-100 shrink-0">
+                            <input v-model="featureSearch" placeholder="Search by feature or annotation..." class="form-input text-xs w-full">
+                        </div>
+                        <div class="flex-grow overflow-y-auto custom-scrollbar">
+                            <div v-if="featureExtractionPending && extractedFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">
+                                <i class="ph ph-circle-notch animate-spin"></i> Loading features...
+                            </div>
+                            <div v-for="feat in filteredFeatures" :key="feat.id" @click="openFeatureEditorFromList(feat, $event)" class="px-3 py-2 border-b border-slate-100 text-xs hover:bg-blue-50 cursor-pointer transition-colors space-y-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-10 font-mono text-slate-400 shrink-0 text-[10px]">{{ feat.type }}</span>
+                                    <span class="w-16 font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="`${feat.start}..${feat.end}`">{{ feat.start }}..{{ feat.end }}</span>
+                                    <span class="flex-grow truncate text-slate-700" :title="feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)'">
+                                        {{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}
+                                    </span>
+                                    <button @click.stop="openFeatureEditorFromList(feat, $event)" class="text-[10px] px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 shrink-0" title="Open feature editor">Edit</button>
+                                    <input type="color" :value="getFeatureColor(feat)" @click.stop @change="requestFeatureColorChange(feat, $event.target.value)" :disabled="!canEditFeatureColor(feat)" :title="canEditFeatureColor(feat) ? 'Click to change color' : 'No stable identifier available'" :class="['w-7 h-5 border rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
+                                </div>
+                                <p class="text-[10px] text-slate-400 truncate">
+                                    <template v-if="getEditableLabelByFeatureId(feat.svg_id)">Label: {{ getEditableLabelByFeatureId(feat.svg_id).text }}</template>
+                                    <template v-else>Label: (not editable)</template>
                                 </p>
+                                <p class="text-[10px] text-slate-400 truncate">Visibility: {{ getFeatureVisibility(feat) }}</p>
+                            </div>
+                            <div v-if="!featureExtractionPending && filteredFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">No features found</div>
+                        </div>
+                        <div class="px-4 py-2 border-t border-slate-200 shrink-0 bg-slate-50 space-y-2">
+                            <div class="flex items-center justify-between gap-2">
                                 <div class="flex items-center gap-2 shrink-0">
-                                    <button @click="downloadLabelOverrideTable"
-                                            class="text-[10px] px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white">
-                                        Export Label TSV
-                                    </button>
-                                    <button @click="$refs.labelTableInput.click()"
-                                            class="text-[10px] px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-200">
-                                        Load Label TSV
-                                    </button>
-                                    <input type="file"
-                                           ref="labelTableInput"
-                                           accept=".tsv,.txt,text/tab-separated-values,text/plain"
-                                           class="hidden"
-                                           @change="loadLabelOverrideTable">
-                                    <button @click="resetAllLabelTextOverrides"
-                                            class="text-[10px] px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700">
-                                        Reset Label Edits
-                                    </button>
+                                    <button @click="downloadLabelOverrideTable" class="text-[10px] px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white">Export Label TSV</button>
+                                    <button @click="$refs.labelTableInput.click()" class="text-[10px] px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-200">Load Label TSV</button>
+                                    <input type="file" ref="labelTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain" class="hidden" @change="loadLabelOverrideTable">
+                                    <button @click="resetAllLabelTextOverrides" class="text-[10px] px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700">Reset Label Edits</button>
                                 </div>
                             </div>
                             <div class="flex items-center justify-between gap-2">
                                 <label class="inline-flex items-center gap-2 text-[10px] text-slate-600 select-none cursor-pointer">
-                                    <input type="checkbox"
-                                           v-model="autoLabelReflowEnabled"
-                                           class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                    <input type="checkbox" v-model="autoLabelReflowEnabled" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
                                     <span>Auto Reflow</span>
                                 </label>
-                                <span v-if="labelReflowProcessing"
-                                      class="text-[10px] text-blue-600 flex items-center gap-1"
-                                      aria-live="polite">
+                                <span v-if="labelReflowProcessing" class="text-[10px] text-blue-600 flex items-center gap-1" aria-live="polite">
                                     <i class="ph ph-circle-notch animate-spin"></i>
                                     Reflowing label placement...
                                 </span>
                             </div>
-                            <p v-if="labelReflowLastError"
-                               class="text-[10px] text-amber-600"
-                               :title="labelReflowLastError">
+                            <p v-if="labelReflowLastError" class="text-[10px] text-amber-600" :title="labelReflowLastError">
                                 <i class="ph ph-warning"></i> Auto Reflow failed. Current diagram is kept.
                             </p>
-                            <p v-if="labelOverrideBuildWarning"
-                               class="text-[10px] text-amber-600"
-                               :title="labelOverrideBuildWarning">
+                            <p v-if="labelOverrideBuildWarning" class="text-[10px] text-amber-600" :title="labelOverrideBuildWarning">
                                 <i class="ph ph-warning"></i> {{ labelOverrideBuildWarning }}
                             </p>
+                        </div>
+                    </div>
+
+                    <div v-show="rightDrawerTab === 'orthogroups'" class="flex-1 min-h-0 flex flex-col">
+                        <div class="px-4 py-2 border-b border-slate-100 bg-white shrink-0 space-y-2">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="font-semibold text-slate-600">{{ orthogroupCount }} orthogroups</span>
+                                <span class="text-[10px] text-slate-500 truncate max-w-[180px]" :title="selectedAlignmentTargetLabel">
+                                    Align: {{ selectedAlignmentTargetLabel || 'none' }}
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-[1fr_120px] gap-2">
+                                <input v-model="orthogroupSearch" placeholder="Search orthogroups..." class="form-input text-xs w-full">
+                                <select v-model="orthogroupSortMode" class="form-select text-xs w-full">
+                                    <option value="id">ID</option>
+                                    <option value="name">Name</option>
+                                    <option value="member_count">Members</option>
+                                    <option value="record_coverage">Coverage</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="h-48 overflow-y-auto border-b border-slate-100 custom-scrollbar">
+                            <button v-for="group in filteredOrthogroups"
+                                    :key="group.id"
+                                    @click="selectOrthogroup(group.id)"
+                                    :class="[
+                                      'w-full text-left px-3 py-2 border-b border-slate-100 hover:bg-emerald-50 transition-colors',
+                                      selectedOrthogroup && selectedOrthogroup.id === group.id ? 'bg-emerald-50' : 'bg-white'
+                                    ]">
+                                <div class="flex items-start gap-2">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="text-xs font-semibold text-slate-700 truncate">{{ resolveOrthogroupName(group) }}</div>
+                                        <div class="text-[10px] font-mono text-slate-400">{{ group.id }}</div>
+                                    </div>
+                                </div>
+                                <div class="mt-1 flex items-center gap-2 text-[10px] text-slate-500">
+                                    <span>{{ group.member_count || (group.members ? group.members.length : 0) }} members</span>
+                                    <span>{{ group.record_coverage_count || 0 }} records</span>
+                                    <span v-if="isOrthogroupRenamed(group)" class="text-blue-600 font-medium">Edited</span>
+                                </div>
+                            </button>
+                            <div v-if="filteredOrthogroups.length === 0" class="p-4 text-center text-slate-400 text-xs">No orthogroups found</div>
+                        </div>
+
+                        <div v-if="selectedOrthogroup" class="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[10px] font-mono text-slate-400">{{ selectedOrthogroup.id }}</span>
+                                    <span v-if="isOrthogroupRenamed(selectedOrthogroup)" class="text-[10px] text-blue-600 font-medium">Edited</span>
+                                </div>
+                                <div>
+                                    <label class="text-xs font-medium text-slate-500 block mb-1">Display name</label>
+                                    <input type="text"
+                                           :value="resolveOrthogroupName(selectedOrthogroup)"
+                                           @input="setOrthogroupNameOverride(selectedOrthogroup.id, $event.target.value)"
+                                           placeholder="Rename this orthogroup"
+                                           class="form-input text-sm w-full">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-medium text-slate-500 block mb-1">Description</label>
+                                    <textarea :value="resolveOrthogroupDescription(selectedOrthogroup)"
+                                              @input="setOrthogroupDescriptionOverride(selectedOrthogroup.id, $event.target.value)"
+                                              rows="3"
+                                              class="form-input text-xs w-full resize-none"></textarea>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                                <div class="bg-slate-50 border border-slate-100 rounded p-2">
+                                    <div class="text-[10px] text-slate-400">Members</div>
+                                    <div class="font-semibold">{{ selectedOrthogroup.member_count || (selectedOrthogroup.members ? selectedOrthogroup.members.length : 0) }}</div>
+                                </div>
+                                <div class="bg-slate-50 border border-slate-100 rounded p-2">
+                                    <div class="text-[10px] text-slate-400">Record coverage</div>
+                                    <div class="font-semibold">{{ selectedOrthogroup.record_coverage_count || 0 }}</div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="text-xs font-semibold text-slate-600 mb-2">Candidates</div>
+                                <div class="space-y-1">
+                                    <div v-for="candidate in (selectedOrthogroup.nameCandidates || [])"
+                                         :key="`${selectedOrthogroup.id}-${candidate.source}-${candidate.text}`"
+                                         class="border border-slate-100 rounded px-2 py-1.5 text-xs">
+                                        <div class="flex items-center justify-between gap-2">
+                                            <span class="font-medium text-slate-700 truncate">{{ candidate.text }}</span>
+                                            <span class="text-[10px] text-slate-400">{{ candidate.source }}</span>
+                                        </div>
+                                        <div class="text-[10px] text-slate-500">
+                                            {{ candidate.memberCount }} members · {{ candidate.recordCoverageCount }} records · score {{ Number(candidate.score || 0).toFixed(1) }}
+                                        </div>
+                                    </div>
+                                    <div v-if="!(selectedOrthogroup.nameCandidates || []).length" class="text-xs text-slate-400">No candidates</div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="text-xs font-semibold text-slate-600 mb-2">Members</div>
+                                <div class="border border-slate-100 rounded overflow-hidden">
+                                    <div v-for="recordGroup in selectedOrthogroupMembersByRecord"
+                                         :key="`${selectedOrthogroup.id}-${recordGroup.recordIndex}`"
+                                         class="border-b border-slate-100 last:border-b-0">
+                                        <div class="bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-500">{{ recordGroup.recordLabel }}</div>
+                                        <div v-for="member in recordGroup.members"
+                                             :key="`${member.featureSvgId}-${member.proteinId}`"
+                                             class="px-2 py-1 text-[10px] text-slate-600 grid grid-cols-[1fr_auto] gap-2">
+                                            <div class="min-w-0">
+                                                <div class="truncate">{{ member.product || member.gene || member.label || member.proteinId }}</div>
+                                                <div class="font-mono text-slate-400 truncate">{{ member.sourceProteinId || member.proteinId }}</div>
+                                            </div>
+                                            <div class="text-right text-slate-400">
+                                                {{ Number(member.start) + 1 }}-{{ member.end }}
+                                                <span v-if="member.representative" class="text-blue-600">*</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="selectedOrthogroup" class="px-3 py-2 border-t border-slate-200 bg-slate-50 shrink-0 grid grid-cols-3 gap-2">
+                            <button @click="highlightOrthogroupById(selectedOrthogroup.id)" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
+                                <i class="ph ph-target"></i> Highlight
+                            </button>
+                            <button @click="clearOrthogroupHighlight" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
+                                <i class="ph ph-eraser"></i> Clear
+                            </button>
+                            <button @click="alignOrthogroupById(selectedOrthogroup.id)" class="text-xs px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center justify-center gap-1">
+                                <i class="ph ph-arrows-left-right"></i> Align
+                            </button>
+                            <button @click="resetOrthogroupAlignment" :disabled="!selectedOrthogroupAlignmentFeature" :class="['text-xs px-2 py-1.5 rounded flex items-center justify-center gap-1', selectedOrthogroupAlignmentFeature ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed']">
+                                <i class="ph ph-arrow-counter-clockwise"></i> Reset Align
+                            </button>
+                            <button @click="resetOrthogroupRename(selectedOrthogroup.id)" class="col-span-2 text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
+                                <i class="ph ph-text-aa"></i> Reset Rename
+                            </button>
                         </div>
                     </div>
                 </div>

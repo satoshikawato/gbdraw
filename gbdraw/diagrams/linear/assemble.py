@@ -9,6 +9,7 @@ This module was extracted from `gbdraw.linear_diagram_components` to improve coh
 from __future__ import annotations
 
 from dataclasses import replace
+import math
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 import pandas as pd
@@ -18,6 +19,7 @@ from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
 from ...analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from ...analysis.depth import depth_df as build_depth_df  # type: ignore[reportMissingImports]
+from ...analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...configurators import (  # type: ignore[reportMissingImports]
@@ -49,7 +51,10 @@ from .builders import (
     add_record_definition_group,
     add_record_group,
 )
-from .orthogroup_alignment import calculate_orthogroup_alignment_offsets
+from .orthogroup_alignment import (
+    calculate_orthogroup_alignment_canvas_adjustment,
+    calculate_orthogroup_alignment_offsets,
+)
 from .precalc import (
     FeatureDict,
     _precalculate_definition_metrics,
@@ -349,6 +354,7 @@ def assemble_linear_diagram(
     plot_title_position: str = "bottom",
     plot_title_font_size: float = 32.0,
     comparison_dataframes: list[DataFrame] | None = None,
+    orthogroups: OrthogroupResult | None = None,
     align_orthogroup_feature: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
@@ -663,7 +669,22 @@ def assemble_linear_diagram(
         comparisons,
         canvas_config,
         align_orthogroup_feature,
+        orthogroups=orthogroups,
     )
+    alignment_shift_x, alignment_width_extension = calculate_orthogroup_alignment_canvas_adjustment(
+        records,
+        canvas_config,
+        orthogroup_alignment_offsets,
+    )
+    definition_column_shift_x = alignment_shift_x
+    if alignment_shift_x or alignment_width_extension:
+        width_extension_px = math.ceil(alignment_width_extension)
+        canvas_config.horizontal_offset += alignment_shift_x
+        canvas_config.total_width += width_extension_px
+        if canvas_config.legend_position == "right":
+            canvas_config.legend_offset_x += width_extension_px
+        elif canvas_config.legend_position in {"top", "bottom"}:
+            canvas_config.legend_offset_x += 0.5 * width_extension_px
     canvas: Drawing = canvas_config.create_svg_canvas()
 
     # Embed both viewBox configurations as data attributes for JavaScript repositioning
@@ -773,6 +794,7 @@ def assemble_linear_diagram(
             config_dict,
             max_def_width,
             cfg=record_cfg,
+            definition_column_shift_x=definition_column_shift_x,
         )
         gc_offset_y = offset_y
         if non_middle_layout:
@@ -848,6 +870,7 @@ def plot_linear_diagram(
     depth_tables: list[DataFrame | None] | None = None,
     cfg: GbdrawConfig | None = None,
     comparison_dataframes: list[DataFrame] | None = None,
+    orthogroups: OrthogroupResult | None = None,
     align_orthogroup_feature: str | None = None,
 ) -> Drawing:
     """Backwards-compatible wrapper that assembles and saves a linear diagram."""
@@ -864,6 +887,7 @@ def plot_linear_diagram(
         depth_config=depth_config,
         depth_tables=depth_tables,
         comparison_dataframes=comparison_dataframes,
+        orthogroups=orthogroups,
         align_orthogroup_feature=align_orthogroup_feature,
         cfg=cfg,
     )

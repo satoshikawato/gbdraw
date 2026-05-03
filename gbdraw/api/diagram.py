@@ -23,7 +23,13 @@ from svgwrite import Drawing  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
 from gbdraw.analysis.depth import depth_df as build_depth_df, read_depth_tsv  # type: ignore[reportMissingImports]
-from gbdraw.analysis.protein_colinearity import build_protein_colinearity_comparisons  # type: ignore[reportMissingImports]
+from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
+    OrthogroupResult,
+    ProteinBlastpMode,
+    build_pairwise_protein_blastp_comparisons,
+    build_rbh_orthogroup_protein_blastp_comparisons,
+    normalize_protein_blastp_mode,
+)
 from gbdraw.analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from gbdraw.api.config import apply_config_overrides  # type: ignore[reportMissingImports]
 from gbdraw.api.options import DiagramOptions  # type: ignore[reportMissingImports]
@@ -1182,9 +1188,11 @@ def assemble_linear_diagram_from_records(
     *,
     blast_files: Optional[Sequence[str]] = None,
     protein_comparisons: Sequence[DataFrame] | None = None,
-    protein_colinearity: bool = False,
+    orthogroups: OrthogroupResult | None = None,
+    protein_blastp_mode: ProteinBlastpMode | str = "none",
     losatp_bin: str = "losat",
-    losatp_max_hits: int = 5,
+    protein_blastp_max_hits: int = 5,
+    protein_blastp_candidate_limit: int | None = None,
     align_orthogroup_feature: str | None = None,
     config_dict: dict | None = None,
     config_overrides: Mapping[str, object] | None = None,
@@ -1231,12 +1239,26 @@ def assemble_linear_diagram_from_records(
         raise ValidationError("records is empty")
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
-    if int(losatp_max_hits) <= 0:
-        raise ValidationError("losatp_max_hits must be > 0")
-    if protein_colinearity and protein_comparisons is not None:
-        raise ValidationError("Pass either protein_colinearity or protein_comparisons, not both.")
-    if protein_colinearity and len(records) < 2:
-        raise ValidationError("protein_colinearity requires at least two records")
+    normalized_protein_blastp_mode = normalize_protein_blastp_mode(protein_blastp_mode)
+    if int(protein_blastp_max_hits) <= 0:
+        raise ValidationError("protein_blastp_max_hits must be > 0")
+    if protein_blastp_candidate_limit is not None and int(protein_blastp_candidate_limit) <= 0:
+        raise ValidationError("protein_blastp_candidate_limit must be > 0 or None")
+    if normalized_protein_blastp_mode != "none" and protein_comparisons is not None:
+        raise ValidationError("Pass either protein_blastp_mode or protein_comparisons, not both.")
+    if normalized_protein_blastp_mode != "none" and blast_files:
+        raise ValidationError("protein_blastp_mode cannot be used with blast_files.")
+    if normalized_protein_blastp_mode != "none" and len(records) < 2:
+        raise ValidationError("protein_blastp_mode requires at least two records")
+    has_precomputed_comparisons = bool(blast_files or protein_comparisons is not None)
+    if (
+        align_orthogroup_feature
+        and normalized_protein_blastp_mode != "orthogroup"
+        and not has_precomputed_comparisons
+    ):
+        raise ValidationError(
+            "align_orthogroup_feature requires protein_blastp_mode='orthogroup'."
+        )
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
     if color_table is None and color_table_file is not None:
@@ -1245,7 +1267,11 @@ def assemble_linear_diagram_from_records(
         feature_table = read_feature_visibility_file(feature_table_file)
 
     if default_colors is None:
-        has_comparisons = bool(blast_files or protein_comparisons or protein_colinearity)
+        has_comparisons = bool(
+            blast_files
+            or protein_comparisons
+            or normalized_protein_blastp_mode != "none"
+        )
         default_colors = load_default_colors(
             user_defined_default_colors=default_colors_file or "",
             palette=default_colors_palette or "default",
@@ -1282,14 +1308,33 @@ def assemble_linear_diagram_from_records(
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
     resolved_protein_comparisons: list[DataFrame] | None = None
+    resolved_orthogroups: OrthogroupResult | None = orthogroups
     if protein_comparisons is not None:
         resolved_protein_comparisons = list(protein_comparisons)
-    elif protein_colinearity:
-        resolved_protein_comparisons = build_protein_colinearity_comparisons(
+    elif normalized_protein_blastp_mode == "pairwise":
+        protein_blastp_result = build_pairwise_protein_blastp_comparisons(
             records,
             losatp_bin=losatp_bin,
-            max_hits=int(losatp_max_hits),
+            max_hits=int(protein_blastp_max_hits),
+            candidate_limit=protein_blastp_candidate_limit,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
         )
+        resolved_protein_comparisons = protein_blastp_result.comparisons
+    elif normalized_protein_blastp_mode == "orthogroup":
+        protein_blastp_result = build_rbh_orthogroup_protein_blastp_comparisons(
+            records,
+            losatp_bin=losatp_bin,
+            candidate_limit=protein_blastp_candidate_limit,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+        )
+        resolved_protein_comparisons = protein_blastp_result.comparisons
+        resolved_orthogroups = protein_blastp_result.orthogroups
     normalized_plot_title = str(plot_title or "").strip()
     normalized_plot_title_position = _resolve_linear_plot_title_position(
         str(plot_title_position)
@@ -1404,6 +1449,7 @@ def assemble_linear_diagram_from_records(
         plot_title_position=normalized_plot_title_position,
         plot_title_font_size=resolved_plot_title_font_size,
         comparison_dataframes=resolved_protein_comparisons,
+        orthogroups=resolved_orthogroups,
         align_orthogroup_feature=align_orthogroup_feature,
         cfg=cfg,
     )
@@ -2525,9 +2571,11 @@ def build_linear_diagram(
         records,
         blast_files=options.blast_files,
         protein_comparisons=options.protein_comparisons,
-        protein_colinearity=options.protein_colinearity,
+        orthogroups=options.orthogroups,
+        protein_blastp_mode=options.protein_blastp_mode,
         losatp_bin=options.losatp_bin,
-        losatp_max_hits=options.losatp_max_hits,
+        protein_blastp_max_hits=options.protein_blastp_max_hits,
+        protein_blastp_candidate_limit=options.protein_blastp_candidate_limit,
         align_orthogroup_feature=options.align_orthogroup_feature,
         config_dict=config_dict,
         config_overrides=config_overrides,

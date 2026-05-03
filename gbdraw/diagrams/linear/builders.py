@@ -155,17 +155,24 @@ def add_record_definition_group(
     config_dict: dict,
     max_def_width,
     cfg: GbdrawConfig | None = None,
+    definition_column_shift_x: float = 0.0,
 ) -> Drawing:
     """Adds a record definition group to the linear canvas."""
     definition_group_obj = DefinitionGroup(record, config_dict, canvas_config, cfg=cfg)
     definition_gap = min(canvas_config.canvas_padding, 20)
     definition_offset_x = (definition_group_obj.definition_bounding_box_width / 2) + definition_gap
+    locked_definition_offset_x = definition_offset_x + max(0.0, float(definition_column_shift_x))
+    positioned_definition_offset_x = (
+        locked_definition_offset_x
+        if getattr(canvas_config, "keep_definition_left_aligned", False)
+        else (definition_offset_x - record_offset_x)
+    )
     record_definition_group: Group = definition_group_obj.get_group()
 
     position_record_definition_group(
         record_definition_group,
         record_offset_y,
-        (definition_offset_x - record_offset_x),
+        positioned_definition_offset_x,
         canvas_config,
     )
 

@@ -267,6 +267,10 @@ const normalizeBlastThresholdText = (value, defaultValue) => {
   const normalized = String(value ?? '').trim();
   return normalized === '' ? defaultValue : normalized;
 };
+const normalizeBlastpMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['pairwise', 'orthogroup'].includes(normalized) ? normalized : 'orthogroup';
+};
 const normalizeMultiRecordPositions = (value, { maxRow = Number.POSITIVE_INFINITY } = {}) => {
   if (!Array.isArray(value)) return [];
   const deduped = [];
@@ -417,6 +421,9 @@ export const createRunAnalysis = ({
     orthogroups,
     featureOrthogroupIndex,
     selectedOrthogroupAlignmentFeature,
+    orthogroupNameOverrides,
+    orthogroupDescriptionOverrides,
+    selectedOrthogroupId,
     circularRecordList,
     files,
     linearSeqs,
@@ -534,13 +541,29 @@ export const createRunAnalysis = ({
 
   const buildOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
 
+  const pruneOrthogroupOverrides = (groupIds, { clearAll = false } = {}) => {
+    const validIds = new Set(Array.isArray(groupIds) ? groupIds.map((id) => String(id || '').trim()).filter(Boolean) : []);
+    const pruneMap = (overrideMap) => {
+      Object.keys(overrideMap).forEach((id) => {
+        if (clearAll || !validIds.has(id)) delete overrideMap[id];
+      });
+    };
+    pruneMap(orthogroupNameOverrides);
+    pruneMap(orthogroupDescriptionOverrides);
+  };
+
   const setOrthogroupMetadata = (orthogroupPayload) => {
     const groups = Array.isArray(orthogroupPayload) ? orthogroupPayload : [];
     const index = new Map();
+    const groupIds = [];
     groups.forEach((group) => {
       const orthogroupId = String(group?.id || '').trim();
+      if (orthogroupId) groupIds.push(orthogroupId);
       const members = Array.isArray(group?.members) ? group.members : [];
       const memberCount = Number(group?.member_count || members.length || 0);
+      const recordCoverage = Number(group?.record_coverage_count || new Set(
+        members.map((member) => Number(member?.recordIndex)).filter((recordIndex) => Number.isInteger(recordIndex))
+      ).size || 0);
       members.forEach((member) => {
         const featureSvgId = String(member?.featureSvgId || '').trim();
         const recordIndex = Number(member?.recordIndex);
@@ -548,9 +571,11 @@ export const createRunAnalysis = ({
         const entry = {
           orthogroupId,
           orthogroupMemberCount: memberCount,
+          orthogroupRecordCoverage: recordCoverage,
           proteinId: String(member?.proteinId || '').trim(),
           sourceProteinId: String(member?.sourceProteinId || '').trim(),
-          orthogroupRepresentative: Boolean(member?.representative)
+          orthogroupRepresentative: Boolean(member?.representative),
+          orthogroupMember: member
         };
         index.set(buildOrthogroupIndexKey(recordIndex, featureSvgId), entry);
         if (!index.has(featureSvgId)) index.set(featureSvgId, entry);
@@ -558,12 +583,20 @@ export const createRunAnalysis = ({
     });
     orthogroups.value = groups;
     featureOrthogroupIndex.value = index;
+    pruneOrthogroupOverrides(groupIds);
+    if (!selectedOrthogroupId.value || !groupIds.includes(String(selectedOrthogroupId.value || '').trim())) {
+      selectedOrthogroupId.value = groupIds[0] || '';
+    }
   };
 
-  const clearOrthogroupMetadata = ({ clearSelection = false } = {}) => {
+  const clearOrthogroupMetadata = ({ clearSelection = false, clearOverrides = clearSelection } = {}) => {
     orthogroups.value = [];
     featureOrthogroupIndex.value = new Map();
-    if (clearSelection) selectedOrthogroupAlignmentFeature.value = '';
+    if (clearSelection) {
+      selectedOrthogroupId.value = '';
+      selectedOrthogroupAlignmentFeature.value = '';
+    }
+    if (clearOverrides) pruneOrthogroupOverrides([], { clearAll: true });
   };
 
   const enrichFeatureWithOrthogroup = (feature, recordIndex) => {
@@ -578,7 +611,9 @@ export const createRunAnalysis = ({
       sourceProteinId: entry.sourceProteinId,
       orthogroupId: entry.orthogroupId,
       orthogroupMemberCount: entry.orthogroupMemberCount,
-      orthogroupRepresentative: entry.orthogroupRepresentative
+      orthogroupRecordCoverage: entry.orthogroupRecordCoverage,
+      orthogroupRepresentative: entry.orthogroupRepresentative,
+      orthogroupMember: entry.orthogroupMember
     };
   };
 
@@ -771,7 +806,8 @@ export const createRunAnalysis = ({
         show_replicon: false,
         hide_accession: false,
         hide_length: false,
-        orthogroup_alignment: false
+        orthogroup_alignment: false,
+        keep_definition_left_aligned: false
       };
       return linearLabelSupportCache;
     }
@@ -797,6 +833,7 @@ json.dumps({
   "hide_accession": "--hide_accession" in _source,
   "hide_length": "--hide_length" in _source,
   "orthogroup_alignment": "--align_orthogroup_feature" in _source,
+  "keep_definition_left_aligned": "--keep_definition_left_aligned" in _source,
 })
       `);
       linearLabelSupportCache = JSON.parse(String(raw));
@@ -817,7 +854,8 @@ json.dumps({
         show_replicon: false,
         hide_accession: false,
         hide_length: false,
-        orthogroup_alignment: false
+        orthogroup_alignment: false,
+        keep_definition_left_aligned: false
       };
     }
     return linearLabelSupportCache;
@@ -1496,10 +1534,12 @@ json.dumps({
         if (form.normalize_length) args.push('--normalize_length');
         if (form.legend !== 'right') args.push('-l', form.legend);
         const useLosat = blastSource.value === 'losat';
-        const useProteinColinearity = useLosat && losatProgram.value === 'blastp';
+        const useProteinBlastp = useLosat && losatProgram.value === 'blastp';
+        const blastpMode = normalizeBlastpMode(losat.blastp?.mode);
+        const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
         const selectedOrthogroupTarget = String(selectedOrthogroupAlignmentFeature.value || '').trim();
         const wantsOrthogroupAlignmentOption =
-          useProteinColinearity && lInputType.value === 'gb' && selectedOrthogroupTarget !== '';
+          useOrthogroupBlastp && lInputType.value === 'gb' && selectedOrthogroupTarget !== '';
         adv.min_bitscore = normalizeBlastThresholdNumber(
           adv.min_bitscore,
           DEFAULT_LINEAR_BLAST_FILTERS.bitscore
@@ -1514,6 +1554,14 @@ json.dumps({
           DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
           { integer: true }
         );
+        const blastpDisplayMaxHits = normalizeBlastThresholdNumber(
+          losat.blastp?.maxHits,
+          5,
+          { integer: true }
+        );
+        losat.blastp.mode = blastpMode;
+        losat.blastp.maxHits = Math.max(1, blastpDisplayMaxHits);
+        losat.blastp.candidateLimit = null;
         args.push(
           '--bitscore',
           adv.min_bitscore,
@@ -1569,6 +1617,7 @@ json.dumps({
         const wantsShowRepliconOption = adv.linear_show_replicon === true;
         const wantsHideAccessionOption = adv.linear_show_accession === false;
         const wantsHideLengthOption = adv.linear_show_length === false;
+        const wantsKeepDefinitionLeftAlignedOption = form.keep_definition_left_aligned === true;
         const wantsRulerOnAxisOption =
           Boolean(form.linear_ruler_on_axis) &&
           form.scale_style === 'ruler' &&
@@ -1588,7 +1637,8 @@ json.dumps({
           wantsShowRepliconOption ||
           wantsHideAccessionOption ||
           wantsHideLengthOption ||
-          wantsOrthogroupAlignmentOption
+          wantsOrthogroupAlignmentOption ||
+          wantsKeepDefinitionLeftAlignedOption
         ) {
           if (wantsPlacementOption && !linearLabelSupport.placement) {
             throw new Error("Current gbdraw wheel does not support --label_placement. Rebuild and redeploy the web wheel.");
@@ -1632,6 +1682,9 @@ json.dumps({
           if (wantsOrthogroupAlignmentOption && !linearLabelSupport.orthogroup_alignment) {
             throw new Error("Current gbdraw wheel does not support --align_orthogroup_feature. Rebuild and redeploy the web wheel.");
           }
+          if (wantsKeepDefinitionLeftAlignedOption && !linearLabelSupport.keep_definition_left_aligned) {
+            throw new Error("Current gbdraw wheel does not support --keep_definition_left_aligned. Rebuild and redeploy the web wheel.");
+          }
         }
         if (wantsPlotTitleOption) args.push('--plot_title', normalizedPlotTitle);
         if (wantsPlotTitlePositionOption) args.push('--plot_title_position', normalizedPlotTitlePosition);
@@ -1641,6 +1694,9 @@ json.dumps({
         if (wantsHideLengthOption) args.push('--hide_length');
         if (wantsOrthogroupAlignmentOption) {
           args.push('--align_orthogroup_feature', selectedOrthogroupTarget);
+        }
+        if (wantsKeepDefinitionLeftAlignedOption) {
+          args.push('--keep_definition_left_aligned');
         }
         if (normalizedLabelPlacement && normalizedLabelPlacement !== 'auto') {
           args.push('--label_placement', normalizedLabelPlacement);
@@ -1743,7 +1799,7 @@ json.dumps({
         let extractFirstFasta = null;
         let extractProteinFasta = null;
         let convertProteinBlast = null;
-        if (useProteinColinearity) {
+        if (useOrthogroupBlastp) {
           clearOrthogroupMetadata();
         } else {
           clearOrthogroupMetadata({ clearSelection: true });
@@ -1779,7 +1835,7 @@ json.dumps({
           : null;
 
         if (useLosat) {
-          if (useProteinColinearity) {
+          if (useProteinBlastp) {
             extractProteinFasta = pyodide.globals.get('extract_cds_protein_fasta');
             convertProteinBlast = pyodide.globals.get('convert_losatp_blastp_pairs_to_genomic_payload');
           } else {
@@ -1794,11 +1850,11 @@ json.dumps({
           const startedAt = getNow();
           const path = lInputType.value === 'gb'
             ? `/seq_${idx}.gb`
-            : (useProteinColinearity ? `/seq_${idx}.gff` : `/seq_${idx}.fasta`);
+            : (useProteinBlastp ? `/seq_${idx}.gff` : `/seq_${idx}.fasta`);
           const fmt = lInputType.value === 'gb'
             ? 'genbank'
-            : (useProteinColinearity ? 'gff' : 'fasta');
-          const pairedFastaPath = lInputType.value === 'gff' && useProteinColinearity
+            : (useProteinBlastp ? 'gff' : 'fasta');
+          const pairedFastaPath = lInputType.value === 'gff' && useProteinBlastp
             ? `/seq_${idx}.fasta`
             : null;
           const regionSpec = regionSpecs[idx]?.file || null;
@@ -1806,10 +1862,10 @@ json.dumps({
           const reverseFlag = reverseFlags[idx] ? '1' : '0';
           const sourceFile = lInputType.value === 'gb'
             ? linearSeqs[idx]?.gb
-            : (useProteinColinearity ? linearSeqs[idx]?.gff : linearSeqs[idx]?.fasta);
+            : (useProteinBlastp ? linearSeqs[idx]?.gff : linearSeqs[idx]?.fasta);
           const sourceText = sourceFile ? linearFileTextCache.get(sourceFile) : null;
           const persistentCacheKey = JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
-          const usePersistentFastaCache = !useProteinColinearity;
+          const usePersistentFastaCache = !useProteinBlastp;
           const cachedEntry = sourceFile && usePersistentFastaCache
             ? getCachedFastaExtraction(sourceFile, persistentCacheKey)
             : null;
@@ -1818,7 +1874,7 @@ json.dumps({
           if (entry) {
             if (losatTiming) losatTiming.fastaCacheHits += 1;
           } else {
-            if (useProteinColinearity) {
+            if (useProteinBlastp) {
               const res = JSON.parse(
                 extractProteinFasta(path, fmt, pairedFastaPath, regionSpec, recordSelector, reverseFlag, idx)
               );
@@ -1934,8 +1990,6 @@ json.dumps({
             pushArg(args, '--query-gencode', getGencode(queryIdx));
             pushArg(args, '--db-gencode', getGencode(subjectIdx));
           } else {
-            const maxHits = normalizeBlastThresholdNumber(losat.blastp?.maxHits, 5, { integer: true });
-            pushArg(args, '--max_target_seqs', Math.max(1, maxHits));
             pushArg(args, '--max_hsps_per_subject', 1);
           }
           return args;
@@ -1978,22 +2032,36 @@ json.dumps({
           const fastaExtractionBeforeJobBuild = losatTiming.fastaExtractionMs;
           const cacheHashBeforeJobBuild = losatTiming.cacheHashMs;
 
-          for (let i = 0; i < linearSeqs.length - 1; i++) {
-            const queryEntry = await getSeqEntry(i);
-            const subjectEntry = await getSeqEntry(i + 1);
-            const losatArgs = buildLosatArgs(i, i + 1);
-            const cacheKey = await buildCacheKey(losatArgs, i, i + 1);
+          const jobSpecs = [];
+          if (useOrthogroupBlastp) {
+            for (let i = 0; i < linearSeqs.length; i++) {
+              for (let j = i + 1; j < linearSeqs.length; j++) {
+                jobSpecs.push({ queryIndex: i, subjectIndex: j, pairIndex: i });
+                jobSpecs.push({ queryIndex: j, subjectIndex: i, pairIndex: i });
+              }
+            }
+          } else {
+            for (let i = 0; i < linearSeqs.length - 1; i++) {
+              jobSpecs.push({ queryIndex: i, subjectIndex: i + 1, pairIndex: i });
+            }
+          }
+
+          for (const spec of jobSpecs) {
+            const queryEntry = await getSeqEntry(spec.queryIndex);
+            const subjectEntry = await getSeqEntry(spec.subjectIndex);
+            const losatArgs = buildLosatArgs(spec.queryIndex, spec.subjectIndex);
+            const cacheKey = await buildCacheKey(losatArgs, spec.queryIndex, spec.subjectIndex);
             const cached = cacheMap.get(cacheKey);
             const hasCachedText = typeof cached?.text === 'string';
             losatTiming.totalPairs += 1;
             if (hasCachedText) losatTiming.cacheHits += 1;
             else losatTiming.cacheMisses += 1;
             const pair = {
-              pairIndex: i,
-              queryIndex: i,
-              subjectIndex: i + 1,
+              pairIndex: spec.pairIndex,
+              queryIndex: spec.queryIndex,
+              subjectIndex: spec.subjectIndex,
               cacheKey,
-              filename: buildCacheFilename(i, queryEntry, subjectEntry)
+              filename: buildCacheFilename(spec.pairIndex, queryEntry, subjectEntry)
             };
             losatPairs.push(pair);
             cacheInfo.push({
@@ -2004,7 +2072,7 @@ json.dumps({
             if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
               pendingJobKeys.add(cacheKey);
               losatJobs.push({
-                pairIndex: i,
+                pairIndex: spec.pairIndex,
                 cacheKey,
                 program: losatProgram.value,
                 queryFasta: queryEntry.fasta,
@@ -2036,11 +2104,10 @@ json.dumps({
           }
 
           const blastWriteStartedAt = getNow();
-          if (useProteinColinearity) {
+          if (useProteinBlastp) {
             if (!convertProteinBlast) {
               throw new Error('Current gbdraw wheel does not support LOSATP orthogroup metadata. Rebuild and redeploy the web wheel.');
             }
-            const maxHits = normalizeBlastThresholdNumber(losat.blastp?.maxHits, 5, { integer: true });
             const pairPayloads = [];
             for (const pair of losatPairs) {
               const cached = cacheMap.get(pair.cacheKey);
@@ -2049,22 +2116,35 @@ json.dumps({
               const subjectEntry = await getSeqEntry(pair.subjectIndex);
               pairPayloads.push({
                 pairIndex: pair.pairIndex,
+                queryIndex: pair.queryIndex,
+                subjectIndex: pair.subjectIndex,
                 blastText: losatText,
                 queryProteinMap: queryEntry.proteinMap || {},
                 subjectProteinMap: subjectEntry.proteinMap || {}
               });
             }
             const convertedPayload = JSON.parse(
-              convertProteinBlast(JSON.stringify(pairPayloads), Math.max(1, maxHits))
+              convertProteinBlast(
+                JSON.stringify(pairPayloads),
+                blastpMode,
+                Math.max(1, losat.blastp.maxHits),
+                adv.min_bitscore,
+                adv.evalue,
+                adv.identity,
+                adv.alignment_length
+              )
             );
             if (convertedPayload.error) throw new Error(convertedPayload.error);
-            setOrthogroupMetadata(convertedPayload.orthogroups || []);
-            const convertedByPair = new Map(
-              (convertedPayload.pairs || []).map((entry) => [Number(entry.pair_index), entry])
-            );
-            for (const pair of losatPairs) {
-              const converted = convertedByPair.get(pair.pairIndex) || {};
-              const blastPath = `/blast_${pair.pairIndex}.txt`;
+            if (useOrthogroupBlastp) {
+              setOrthogroupMetadata(convertedPayload.orthogroups || []);
+            } else {
+              clearOrthogroupMetadata({ clearSelection: true });
+            }
+            const convertedPairs = Array.isArray(convertedPayload.pairs) ? convertedPayload.pairs : [];
+            for (const converted of convertedPairs) {
+              const pairIndex = Number(converted?.pair_index);
+              if (!Number.isInteger(pairIndex)) continue;
+              const blastPath = `/blast_${pairIndex}.txt`;
               virtualBlastFiles.push({
                 path: blastPath,
                 text: converted.tsv || '',

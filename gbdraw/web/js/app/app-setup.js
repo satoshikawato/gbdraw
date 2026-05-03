@@ -11,6 +11,7 @@ import { createRunAnalysis } from './run-analysis.js';
 import { createLegendLayout } from './legend-layout.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
+import { createOrthogroupEditor } from './orthogroups.js';
 
 const { onMounted, onUnmounted, watch, nextTick, computed } = window.Vue;
 
@@ -46,6 +47,13 @@ export const createAppSetup = () => {
     orthogroups,
     featureOrthogroupIndex,
     selectedOrthogroupAlignmentFeature,
+    orthogroupNameOverrides,
+    orthogroupDescriptionOverrides,
+    selectedOrthogroupId,
+    orthogroupSearch,
+    orthogroupSortMode,
+    showRightDrawer,
+    rightDrawerTab,
     linearReorderNotice,
     circularRecordList,
     paletteDefinitions,
@@ -267,6 +275,11 @@ export const createAppSetup = () => {
     return runGeneratedDiagramAnalysis();
   };
 
+  const orthogroupActions = createOrthogroupEditor({
+    state,
+    runAnalysis
+  });
+
   const canUseClickedOrthogroupActions = computed(() => {
     const cf = clickedFeature.value;
     return Boolean(
@@ -274,46 +287,84 @@ export const createAppSetup = () => {
       mode.value === 'linear' &&
       blastSource.value === 'losat' &&
       losatProgram.value === 'blastp' &&
+      losat.blastp?.mode === 'orthogroup' &&
       lInputType.value === 'gb' &&
       cf.feat?.type === 'CDS' &&
       cf.orthogroupId
     );
   });
 
+  const clickedOrthogroupDetail = computed(() => {
+    const cf = clickedFeature.value;
+    const orthogroupId = String(cf?.orthogroupId || '').trim();
+    if (!orthogroupId) return null;
+    const group = (Array.isArray(orthogroups.value) ? orthogroups.value : [])
+      .find((entry) => String(entry?.id || '').trim() === orthogroupId);
+    if (!group) return null;
+    const members = Array.isArray(group.members) ? group.members : [];
+    const currentSvgId = String(cf?.svg_id || '').trim();
+    const currentRecordIndex = Number(cf?.orthogroupMember?.recordIndex);
+    const currentMember = members.find((member) => (
+      String(member?.featureSvgId || '').trim() === currentSvgId &&
+      (!Number.isInteger(currentRecordIndex) || Number(member?.recordIndex) === currentRecordIndex)
+    )) || cf.orthogroupMember || null;
+    const grouped = new Map();
+    members.forEach((member) => {
+      const recordIndex = Number(member?.recordIndex);
+      const key = Number.isInteger(recordIndex) ? recordIndex : -1;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(member);
+    });
+    const membersByRecord = Array.from(grouped.entries())
+      .sort((left, right) => left[0] - right[0])
+      .map(([recordIndex, recordMembers]) => ({
+        recordIndex,
+        recordLabel: recordIndex >= 0
+          ? (linearSeqs[recordIndex]?.name || linearSeqs[recordIndex]?.gb?.name || linearSeqs[recordIndex]?.gff?.name || `Record ${recordIndex + 1}`)
+          : 'Record',
+        members: recordMembers
+      }));
+    return {
+      id: orthogroupId,
+      displayName: orthogroupActions.resolveOrthogroupName(group),
+      description: orthogroupActions.resolveOrthogroupDescription(group),
+      candidates: Array.isArray(group.nameCandidates) ? group.nameCandidates : [],
+      memberCount: Number(group.member_count || members.length || 0),
+      recordCoverage: Number(group.record_coverage_count || membersByRecord.length || 0),
+      currentMember,
+      membersByRecord
+    };
+  });
+
   const alignByClickedOrthogroup = async () => {
     const cf = clickedFeature.value;
     if (!cf?.orthogroupId) return;
-    selectedOrthogroupAlignmentFeature.value = String(cf.svg_id || cf.proteinId || '').trim();
+    selectedOrthogroupAlignmentFeature.value = String(cf.orthogroupId || '').trim();
     clickedFeature.value = null;
     await runAnalysis();
   };
 
   const resetOrthogroupAlignment = async () => {
-    if (!selectedOrthogroupAlignmentFeature.value) return;
-    selectedOrthogroupAlignmentFeature.value = '';
     clickedFeature.value = null;
-    await runAnalysis();
+    await orthogroupActions.resetOrthogroupAlignment();
   };
 
   const highlightClickedOrthogroup = () => {
     const cf = clickedFeature.value;
     const orthogroupId = String(cf?.orthogroupId || '').trim();
-    if (!orthogroupId || !svgContainer.value) return;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-    const memberIds = new Set(
-      (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [])
-        .filter((feature) => String(feature?.orthogroupId || '').trim() === orthogroupId)
-        .map((feature) => String(feature?.svg_id || '').trim())
-        .filter(Boolean)
-    );
-    svg.querySelectorAll('path[id^="f"], polygon[id^="f"], rect[id^="f"]').forEach((el) => {
-      const id = String(el.getAttribute('id') || '').trim();
-      if (memberIds.has(id)) {
-        el.setAttribute('stroke', '#2563eb');
-        el.setAttribute('stroke-width', '2.4');
-      }
-    });
+    if (!orthogroupId) return;
+    orthogroupActions.highlightOrthogroupById(orthogroupId);
+  };
+
+  const clearOrthogroupHighlight = () => {
+    orthogroupActions.clearOrthogroupHighlight();
+  };
+
+  const openClickedOrthogroupInEditor = () => {
+    const orthogroupId = String(clickedFeature.value?.orthogroupId || '').trim();
+    if (!orthogroupId) return;
+    orthogroupActions.openOrthogroupInDrawer(orthogroupId);
+    clickedFeature.value = null;
   };
 
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
@@ -724,6 +775,30 @@ export const createAppSetup = () => {
     orthogroups,
     featureOrthogroupIndex,
     selectedOrthogroupAlignmentFeature,
+    orthogroupNameOverrides,
+    orthogroupDescriptionOverrides,
+    selectedOrthogroupId,
+    orthogroupSearch,
+    orthogroupSortMode,
+    showRightDrawer,
+    rightDrawerTab,
+    orthogroupCount: orthogroupActions.orthogroupCount,
+    selectedAlignmentTargetLabel: orthogroupActions.selectedAlignmentTargetLabel,
+    filteredOrthogroups: orthogroupActions.filteredOrthogroups,
+    selectedOrthogroup: orthogroupActions.selectedOrthogroup,
+    selectedOrthogroupMembersByRecord: orthogroupActions.selectedOrthogroupMembersByRecord,
+    resolveOrthogroupName: orthogroupActions.resolveOrthogroupName,
+    resolveOrthogroupDescription: orthogroupActions.resolveOrthogroupDescription,
+    isOrthogroupRenamed: orthogroupActions.isOrthogroupRenamed,
+    selectOrthogroup: orthogroupActions.selectOrthogroup,
+    setOrthogroupNameOverride: orthogroupActions.setOrthogroupNameOverride,
+    setOrthogroupDescriptionOverride: orthogroupActions.setOrthogroupDescriptionOverride,
+    resetOrthogroupRename: orthogroupActions.resetOrthogroupRename,
+    highlightOrthogroupById: orthogroupActions.highlightOrthogroupById,
+    alignOrthogroupById: orthogroupActions.alignOrthogroupById,
+    openRightDrawerTab: orthogroupActions.openRightDrawerTab,
+    closeRightDrawer: orthogroupActions.closeRightDrawer,
+    openOrthogroupInDrawer: orthogroupActions.openOrthogroupInDrawer,
     circularRecordList,
     paletteDefinitions,
     paletteNames,
@@ -811,9 +886,12 @@ export const createAppSetup = () => {
     startFeaturePopupDrag,
     clickedFeatureLocation,
     canUseClickedOrthogroupActions,
+    clickedOrthogroupDetail,
     alignByClickedOrthogroup,
     highlightClickedOrthogroup,
+    clearOrthogroupHighlight,
     resetOrthogroupAlignment,
+    openClickedOrthogroupInEditor,
     specificRuleLegendOptions,
     updateClickedFeatureColor,
     updateClickedFeatureVisibility,

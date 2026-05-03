@@ -13,6 +13,7 @@ from .io.regions import apply_region_specs, parse_region_specs
 from .config.toml import load_config_toml
 from .render.export import parse_formats, save_figure
 from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[reportMissingImports]
+from .analysis.protein_colinearity import PROTEIN_BLASTP_MODES
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .labels.filtering import (
@@ -32,6 +33,20 @@ from .cli_utils.common import (
     handle_output_formats,
     calculate_window_step,
 )
+
+
+def _parse_optional_positive_int(value: str) -> int | None:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"", "none", "auto", "null"}:
+        return None
+    try:
+        parsed = int(normalized)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer or 'none'") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer or 'none'")
+    return parsed
+
 
 # Setup for the logging system
 logger = logging.getLogger()
@@ -130,25 +145,33 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         nargs='*')
     parser.add_argument(
-        '--protein_colinearity',
-        '--protein-colinearity',
-        dest='protein_colinearity',
-        help='Run LOSATP blastp on CDS translations between adjacent records and draw protein colinearity links.',
-        action='store_true')
-    parser.add_argument(
         '--losatp_bin',
         '--losatp-bin',
         dest='losatp_bin',
-        help='LOSATP executable for --protein_colinearity (default: losat).',
+        help='LOSATP executable for --protein_blastp_mode pairwise/orthogroup (default: losat).',
         type=str,
         default='losat')
     parser.add_argument(
-        '--losatp_max_hits',
-        '--losatp-max-hits',
-        dest='losatp_max_hits',
-        help='Maximum distinct subject protein hits per query protein for --protein_colinearity (default: 5).',
+        '--protein_blastp_mode',
+        '--protein-blastp-mode',
+        dest='protein_blastp_mode',
+        help='LOSATP blastp mode: none, pairwise adjacent ribbons, or all-vs-all RBH orthogroups (default: none).',
+        choices=PROTEIN_BLASTP_MODES,
+        default='none')
+    parser.add_argument(
+        '--protein_blastp_max_hits',
+        '--protein-blastp-max-hits',
+        dest='protein_blastp_max_hits',
+        help='Maximum distinct subject protein hits per query protein for pairwise LOSATP blastp display links (default: 5).',
         type=int,
         default=5)
+    parser.add_argument(
+        '--protein_blastp_candidate_limit',
+        '--protein-blastp-candidate-limit',
+        dest='protein_blastp_candidate_limit',
+        help="Optional LOSATP blastp candidate cap per query; use 'none' for no cap (default: none).",
+        type=_parse_optional_positive_int,
+        default=None)
     parser.add_argument(
         '--align_orthogroup_feature',
         '--align-orthogroup-feature',
@@ -298,6 +321,12 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '--align_center',
         help='Align genomes to the center (default: False). ',
+        action='store_true')
+    parser.add_argument(
+        '--keep_definition_left_aligned',
+        '--keep-definition-left-aligned',
+        dest='keep_definition_left_aligned',
+        help='Keep linear definition labels in the left column when records are center-aligned or aligned by orthogroup (default: False).',
         action='store_true')
     parser.add_argument(
         '--evalue',
@@ -579,10 +608,12 @@ def _get_args(args) -> argparse.Namespace:
     args = parser.parse_args(args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
-    if args.protein_colinearity and args.blast:
-        parser.error("--protein_colinearity cannot be used with -b/--blast")
-    if args.losatp_max_hits <= 0:
-        parser.error("--losatp_max_hits must be > 0")
+    if args.protein_blastp_mode != "none" and args.blast:
+        parser.error("--protein_blastp_mode cannot be used with -b/--blast")
+    if args.protein_blastp_max_hits <= 0:
+        parser.error("--protein_blastp_max_hits must be > 0")
+    if args.align_orthogroup_feature and args.protein_blastp_mode != "orthogroup" and not args.blast:
+        parser.error("--align_orthogroup_feature requires --protein_blastp_mode orthogroup")
     if args.show_depth and not args.depth:
         parser.error("--show_depth requires --depth")
     if args.depth_height is not None and args.depth_height <= 0:
@@ -637,9 +668,10 @@ def linear_main(cmd_args) -> None:
             "WARNING: The -i/--input option is deprecated and will be removed in a future version. Please use --gbk instead.")  
     out_file_prefix: str = args.output
     blast_files: str = args.blast
-    protein_colinearity: bool = bool(args.protein_colinearity)
+    protein_blastp_mode: str = str(args.protein_blastp_mode or "none")
     losatp_bin: str = args.losatp_bin
-    losatp_max_hits: int = args.losatp_max_hits
+    protein_blastp_max_hits: int = args.protein_blastp_max_hits
+    protein_blastp_candidate_limit: int | None = args.protein_blastp_candidate_limit
     align_orthogroup_feature: str = str(args.align_orthogroup_feature or "").strip()
     color_table_path: str = args.table
     strandedness: bool = args.separate_strands
@@ -665,6 +697,7 @@ def linear_main(cmd_args) -> None:
     depth_small_tick_interval: Optional[float] = args.depth_small_tick_interval
     depth_tick_font_size: Optional[float] = args.depth_tick_font_size
     align_center: bool = args.align_center
+    keep_definition_left_aligned: bool = args.keep_definition_left_aligned
     evalue: float = args.evalue
     legend: str = args.legend
     gc_height: Optional[float] = args.gc_height
@@ -701,7 +734,7 @@ def linear_main(cmd_args) -> None:
     normalize_length = args.normalize_length
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
-    if blast_files or protein_colinearity:
+    if blast_files or protein_blastp_mode != "none":
         load_comparison = True
     else:
         load_comparison = False
@@ -798,7 +831,8 @@ def linear_main(cmd_args) -> None:
         linear_track_layout=track_layout,
         linear_track_axis_gap=track_axis_gap,
         linear_ruler_on_axis=ruler_on_axis,
-        align_center=align_center, 
+        align_center=align_center,
+        keep_definition_left_aligned=keep_definition_left_aligned,
         strandedness=strandedness,
         label_blacklist=label_blacklist,
         label_whitelist=label_whitelist,
@@ -898,8 +932,8 @@ def linear_main(cmd_args) -> None:
             logger.warning(
                 "WARNING: Region cropping is enabled; ensure BLAST coordinates match the cropped regions (and reverse complements if specified)."
             )
-    if protein_colinearity and len(records) < 2:
-        raise ValidationError("--protein_colinearity requires at least two linear records.")
+    if protein_blastp_mode != "none" and len(records) < 2:
+        raise ValidationError("--protein_blastp_mode requires at least two linear records.")
     # Use raw records to avoid collapsing lengths when IDs are duplicated.
     longest_genome: int = max(len(record.seq) for record in records)
     cfg = GbdrawConfig.from_dict(config_dict)
@@ -925,9 +959,10 @@ def linear_main(cmd_args) -> None:
         plot_title=plot_title,
         plot_title_position=plot_title_position,
         plot_title_font_size=plot_title_font_size,
-        protein_colinearity=protein_colinearity,
+        protein_blastp_mode=protein_blastp_mode,
         losatp_bin=losatp_bin,
-        losatp_max_hits=losatp_max_hits,
+        protein_blastp_max_hits=protein_blastp_max_hits,
+        protein_blastp_candidate_limit=protein_blastp_candidate_limit,
         align_orthogroup_feature=align_orthogroup_feature or None,
         evalue=evalue,
         bitscore=bitscore,

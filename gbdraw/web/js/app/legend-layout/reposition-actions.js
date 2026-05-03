@@ -741,6 +741,7 @@ export const createLegendRepositionActions = ({
           el.setAttribute('transform', `translate(${newX}, ${newY})`);
           diagramElementOriginalTransforms.value.set(el, { x: newX, y: newY });
         });
+        diagramActions.applyLengthBarBaseShift?.(shiftX, shiftY);
         diagramOffset.x = 0;
         diagramOffset.y = 0;
 
