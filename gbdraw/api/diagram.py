@@ -23,6 +23,7 @@ from svgwrite import Drawing  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
 from gbdraw.analysis.depth import depth_df as build_depth_df, read_depth_tsv  # type: ignore[reportMissingImports]
+from gbdraw.analysis.protein_colinearity import build_protein_colinearity_comparisons  # type: ignore[reportMissingImports]
 from gbdraw.analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from gbdraw.api.config import apply_config_overrides  # type: ignore[reportMissingImports]
 from gbdraw.api.options import DiagramOptions  # type: ignore[reportMissingImports]
@@ -1180,6 +1181,10 @@ def assemble_linear_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
     blast_files: Optional[Sequence[str]] = None,
+    protein_comparisons: Sequence[DataFrame] | None = None,
+    protein_colinearity: bool = False,
+    losatp_bin: str = "losat",
+    losatp_max_hits: int = 5,
     config_dict: dict | None = None,
     config_overrides: Mapping[str, object] | None = None,
     color_table: Optional[DataFrame] = None,
@@ -1225,6 +1230,12 @@ def assemble_linear_diagram_from_records(
         raise ValidationError("records is empty")
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
+    if int(losatp_max_hits) <= 0:
+        raise ValidationError("losatp_max_hits must be > 0")
+    if protein_colinearity and protein_comparisons is not None:
+        raise ValidationError("Pass either protein_colinearity or protein_comparisons, not both.")
+    if protein_colinearity and len(records) < 2:
+        raise ValidationError("protein_colinearity requires at least two records")
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
     if color_table is None and color_table_file is not None:
@@ -1233,10 +1244,11 @@ def assemble_linear_diagram_from_records(
         feature_table = read_feature_visibility_file(feature_table_file)
 
     if default_colors is None:
+        has_comparisons = bool(blast_files or protein_comparisons or protein_colinearity)
         default_colors = load_default_colors(
             user_defined_default_colors=default_colors_file or "",
             palette=default_colors_palette or "default",
-            load_comparison=bool(blast_files),
+            load_comparison=has_comparisons,
         )
 
     if config_dict is None:
@@ -1268,6 +1280,15 @@ def assemble_linear_diagram_from_records(
 
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
+    resolved_protein_comparisons: list[DataFrame] | None = None
+    if protein_comparisons is not None:
+        resolved_protein_comparisons = list(protein_comparisons)
+    elif protein_colinearity:
+        resolved_protein_comparisons = build_protein_colinearity_comparisons(
+            records,
+            losatp_bin=losatp_bin,
+            max_hits=int(losatp_max_hits),
+        )
     normalized_plot_title = str(plot_title or "").strip()
     normalized_plot_title_position = _resolve_linear_plot_title_position(
         str(plot_title_position)
@@ -1319,7 +1340,7 @@ def assemble_linear_diagram_from_records(
         legend=legend,
         output_prefix=output_prefix,
         cfg=cfg,
-        has_comparisons=bool(blast_files),
+        has_comparisons=bool(blast_files or resolved_protein_comparisons),
     )
     feature_config = FeatureDrawingConfigurator(
         color_table=color_table,
@@ -1381,6 +1402,7 @@ def assemble_linear_diagram_from_records(
         plot_title=normalized_plot_title or None,
         plot_title_position=normalized_plot_title_position,
         plot_title_font_size=resolved_plot_title_font_size,
+        comparison_dataframes=resolved_protein_comparisons,
         cfg=cfg,
     )
 
@@ -2500,6 +2522,10 @@ def build_linear_diagram(
     return assemble_linear_diagram_from_records(
         records,
         blast_files=options.blast_files,
+        protein_comparisons=options.protein_comparisons,
+        protein_colinearity=options.protein_colinearity,
+        losatp_bin=options.losatp_bin,
+        losatp_max_hits=options.losatp_max_hits,
         config_dict=config_dict,
         config_overrides=config_overrides,
         color_table=colors.color_table if colors else None,

@@ -419,7 +419,10 @@ const applyConfigData = (data) => {
   }
   if (data.blacklistText !== undefined) state.manualBlacklist.value = String(data.blacklistText || '');
   if (data.blastSource) state.blastSource.value = String(data.blastSource);
-  if (data.losatProgram) state.losatProgram.value = String(data.losatProgram);
+  if (data.losatProgram) {
+    const program = String(data.losatProgram);
+    state.losatProgram.value = ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn';
+  }
 };
 
 const restorePaletteStateAfterConfigImport = () => {

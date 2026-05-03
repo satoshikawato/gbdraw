@@ -90,6 +90,7 @@ def print_help_message() -> NoReturn:
     print("  gbdraw linear --gbk input.gb")
     print("  gbdraw linear --gff input.gff --fasta input.fna")
     print("  gbdraw linear --gbk input1.gb input2.gb input3.gb -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt")
+    print("  gbdraw linear --gbk input1.gb input2.gb --protein_colinearity")
     print("  gbdraw linear --gff input1.gff input2.gff input3.gff --fasta input1.fna input2.fna input3.fna -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt")
     print("  gbdraw gui")
     print("")
@@ -99,6 +100,7 @@ def print_help_message() -> NoReturn:
     print("  --fasta              Input FASTA file(s) (required with --gff; mutually exclusive with --gbk)")
     print("  -o, --output         Output file prefix (optional)")
     print("  -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)")
+    print("  --protein_colinearity Run LOSATP blastp on CDS translations for linear pairwise links")
 
     print("")
     print("Additional Information:")

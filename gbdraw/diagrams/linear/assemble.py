@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+import pandas as pd
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
@@ -32,7 +33,7 @@ from ...render.groups.linear.length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
 )
-from ...io.comparisons import load_comparisons
+from ...io.comparisons import filter_comparison_dataframe, load_comparisons
 from ...legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...layout.linear import calculate_feature_position_factors_linear  # type: ignore[reportMissingImports]
@@ -346,6 +347,7 @@ def assemble_linear_diagram(
     plot_title: str | None = None,
     plot_title_position: str = "bottom",
     plot_title_font_size: float = 32.0,
+    comparison_dataframes: list[DataFrame] | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -470,7 +472,7 @@ def assemble_linear_diagram(
         canvas_config.set_gc_height_and_gc_padding()
 
     # Prepare legend group
-    has_blast = bool(blast_files)
+    has_blast = bool(blast_files or comparison_dataframes)
     legend_table: dict = {}
     legend_group: LegendGroup | None = None
     required_legend_height = 0.0
@@ -660,8 +662,30 @@ def assemble_linear_diagram(
     if length_bar_group is not None:
         canvas = add_length_bar_on_linear_canvas(canvas, canvas_config, config_dict, length_bar_group, legend_group)
 
-    if blast_files:
-        comparisons = load_comparisons(blast_files, blast_config)
+    if has_blast:
+        comparison_sources: list[list[DataFrame]] = []
+        if blast_files:
+            comparison_sources.append(load_comparisons(blast_files, blast_config))
+        if comparison_dataframes:
+            comparison_sources.append(
+                [
+                    filter_comparison_dataframe(comparison, blast_config)
+                    for comparison in comparison_dataframes
+                ]
+            )
+        comparisons: list[DataFrame] = []
+        max_source_len = max((len(source) for source in comparison_sources), default=0)
+        for index in range(max_source_len):
+            frames = [
+                source[index]
+                for source in comparison_sources
+                if index < len(source)
+            ]
+            if len(frames) == 1:
+                comparisons.append(frames[0])
+            elif frames:
+                comparisons.append(pd.concat(frames, ignore_index=True))
+
         comparison_offsets = []
         actual_comparison_heights = []
         for i in range(len(records) - 1):
@@ -811,6 +835,7 @@ def plot_linear_diagram(
     depth_config: DepthConfigurator | None = None,
     depth_tables: list[DataFrame | None] | None = None,
     cfg: GbdrawConfig | None = None,
+    comparison_dataframes: list[DataFrame] | None = None,
 ) -> Drawing:
     """Backwards-compatible wrapper that assembles and saves a linear diagram."""
     canvas = assemble_linear_diagram(
@@ -825,6 +850,7 @@ def plot_linear_diagram(
         skew_config=skew_config,
         depth_config=depth_config,
         depth_tables=depth_tables,
+        comparison_dataframes=comparison_dataframes,
         cfg=cfg,
     )
     save_figure(canvas, out_formats)

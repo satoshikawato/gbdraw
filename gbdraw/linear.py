@@ -130,6 +130,26 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         nargs='*')
     parser.add_argument(
+        '--protein_colinearity',
+        '--protein-colinearity',
+        dest='protein_colinearity',
+        help='Run LOSATP blastp on CDS translations between adjacent records and draw protein colinearity links.',
+        action='store_true')
+    parser.add_argument(
+        '--losatp_bin',
+        '--losatp-bin',
+        dest='losatp_bin',
+        help='LOSATP executable for --protein_colinearity (default: losat).',
+        type=str,
+        default='losat')
+    parser.add_argument(
+        '--losatp_max_hits',
+        '--losatp-max-hits',
+        dest='losatp_max_hits',
+        help='Maximum distinct subject protein hits per query protein for --protein_colinearity (default: 5).',
+        type=int,
+        default=5)
+    parser.add_argument(
         '-t',
         '--table',
         help='color table (optional)',
@@ -552,6 +572,10 @@ def _get_args(args) -> argparse.Namespace:
     args = parser.parse_args(args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
+    if args.protein_colinearity and args.blast:
+        parser.error("--protein_colinearity cannot be used with -b/--blast")
+    if args.losatp_max_hits <= 0:
+        parser.error("--losatp_max_hits must be > 0")
     if args.show_depth and not args.depth:
         parser.error("--show_depth requires --depth")
     if args.depth_height is not None and args.depth_height <= 0:
@@ -606,6 +630,9 @@ def linear_main(cmd_args) -> None:
             "WARNING: The -i/--input option is deprecated and will be removed in a future version. Please use --gbk instead.")  
     out_file_prefix: str = args.output
     blast_files: str = args.blast
+    protein_colinearity: bool = bool(args.protein_colinearity)
+    losatp_bin: str = args.losatp_bin
+    losatp_max_hits: int = args.losatp_max_hits
     color_table_path: str = args.table
     strandedness: bool = args.separate_strands
     resolve_overlaps: bool = args.resolve_overlaps
@@ -666,7 +693,7 @@ def linear_main(cmd_args) -> None:
     normalize_length = args.normalize_length
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
-    if blast_files:
+    if blast_files or protein_colinearity:
         load_comparison = True
     else:
         load_comparison = False
@@ -863,6 +890,8 @@ def linear_main(cmd_args) -> None:
             logger.warning(
                 "WARNING: Region cropping is enabled; ensure BLAST coordinates match the cropped regions (and reverse complements if specified)."
             )
+    if protein_colinearity and len(records) < 2:
+        raise ValidationError("--protein_colinearity requires at least two linear records.")
     # Use raw records to avoid collapsing lengths when IDs are duplicated.
     longest_genome: int = max(len(record.seq) for record in records)
     cfg = GbdrawConfig.from_dict(config_dict)
@@ -888,6 +917,9 @@ def linear_main(cmd_args) -> None:
         plot_title=plot_title,
         plot_title_position=plot_title_position,
         plot_title_font_size=plot_title_font_size,
+        protein_colinearity=protein_colinearity,
+        losatp_bin=losatp_bin,
+        losatp_max_hits=losatp_max_hits,
         evalue=evalue,
         bitscore=bitscore,
         identity=identity,

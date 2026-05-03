@@ -667,7 +667,11 @@ export const createRunAnalysis = ({
     return safe || makeSafeFilename(String(fallback || 'losat'));
   };
 
-  const buildLosatSuffix = () => (losatProgram.value === 'blastn' ? 'losatn' : 'tlosatx');
+  const buildLosatSuffix = () => {
+    if (losatProgram.value === 'blastn') return 'losatn';
+    if (losatProgram.value === 'blastp') return 'losatp';
+    return 'tlosatx';
+  };
 
   const buildLosatFilename = (leftLabel, rightLabel) => {
     const left = normalizeLabel(leftLabel, 'seq_1');
@@ -1666,10 +1670,13 @@ json.dumps({
         let inputArgs = [];
         let blastArgs = [];
         const useLosat = blastSource.value === 'losat';
+        const useProteinColinearity = useLosat && losatProgram.value === 'blastp';
         const fastaCache = new Map();
         const fastaHashCache = new Map();
         const linearFileTextCache = new WeakMap();
         let extractFirstFasta = null;
+        let extractProteinFasta = null;
+        let convertProteinBlast = null;
         let cacheInfo = [];
         const cacheMap = losatCache.value || new Map();
         const losatTiming = useLosat
@@ -1701,7 +1708,12 @@ json.dumps({
           : null;
 
         if (useLosat) {
-          extractFirstFasta = pyodide.globals.get('extract_first_fasta');
+          if (useProteinColinearity) {
+            extractProteinFasta = pyodide.globals.get('extract_cds_protein_fasta');
+            convertProteinBlast = pyodide.globals.get('convert_protein_blast_to_genomic_tsv');
+          } else {
+            extractFirstFasta = pyodide.globals.get('extract_first_fasta');
+          }
         } else {
           losatCacheInfo.value = [];
         }
@@ -1709,43 +1721,69 @@ json.dumps({
         const getSeqEntry = async (idx) => {
           if (fastaCache.has(idx)) return fastaCache.get(idx);
           const startedAt = getNow();
-          const path = lInputType.value === 'gb' ? `/seq_${idx}.gb` : `/seq_${idx}.fasta`;
-          const fmt = lInputType.value === 'gb' ? 'genbank' : 'fasta';
+          const path = lInputType.value === 'gb'
+            ? `/seq_${idx}.gb`
+            : (useProteinColinearity ? `/seq_${idx}.gff` : `/seq_${idx}.fasta`);
+          const fmt = lInputType.value === 'gb'
+            ? 'genbank'
+            : (useProteinColinearity ? 'gff' : 'fasta');
+          const pairedFastaPath = lInputType.value === 'gff' && useProteinColinearity
+            ? `/seq_${idx}.fasta`
+            : null;
           const regionSpec = regionSpecs[idx]?.file || null;
           const recordSelector = recordSelectors[idx] ?? '';
           const reverseFlag = reverseFlags[idx] ? '1' : '0';
-          const sourceFile = lInputType.value === 'gb' ? linearSeqs[idx]?.gb : linearSeqs[idx]?.fasta;
+          const sourceFile = lInputType.value === 'gb'
+            ? linearSeqs[idx]?.gb
+            : (useProteinColinearity ? linearSeqs[idx]?.gff : linearSeqs[idx]?.fasta);
           const sourceText = sourceFile ? linearFileTextCache.get(sourceFile) : null;
           const persistentCacheKey = JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
-          const cachedEntry = sourceFile ? getCachedFastaExtraction(sourceFile, persistentCacheKey) : null;
+          const usePersistentFastaCache = !useProteinColinearity;
+          const cachedEntry = sourceFile && usePersistentFastaCache
+            ? getCachedFastaExtraction(sourceFile, persistentCacheKey)
+            : null;
           let entry = cachedEntry;
 
           if (entry) {
             if (losatTiming) losatTiming.fastaCacheHits += 1;
           } else {
-            try {
-              entry = await extractLosatFastaFast({
-                file: sourceFile,
-                text: sourceText,
-                fmt,
-                regionSpec,
-                recordSelector,
-                reverseFlag
-              });
-              if (losatTiming) losatTiming.fastaJsExtractions += 1;
-            } catch (fastError) {
-              const res = JSON.parse(extractFirstFasta(path, fmt, regionSpec, recordSelector, reverseFlag));
+            if (useProteinColinearity) {
+              const res = JSON.parse(
+                extractProteinFasta(path, fmt, pairedFastaPath, regionSpec, recordSelector, reverseFlag, idx)
+              );
               if (res.error) throw new Error(res.error);
               entry = {
                 fasta: res.fasta,
-                recordId: res.record_id || `seq_${idx + 1}`
+                recordId: res.record_id || `seq_${idx + 1}`,
+                proteinMap: res.protein_map || {},
+                proteinCount: res.protein_count || 0
               };
-              if (losatTiming) {
-                losatTiming.fastaPyodideFallbacks += 1;
-                console.warn('LOSAT browser FASTA extraction fell back to Pyodide:', fastError);
+              if (losatTiming) losatTiming.fastaPyodideFallbacks += 1;
+            } else {
+              try {
+                entry = await extractLosatFastaFast({
+                  file: sourceFile,
+                  text: sourceText,
+                  fmt,
+                  regionSpec,
+                  recordSelector,
+                  reverseFlag
+                });
+                if (losatTiming) losatTiming.fastaJsExtractions += 1;
+              } catch (fastError) {
+                const res = JSON.parse(extractFirstFasta(path, fmt, regionSpec, recordSelector, reverseFlag));
+                if (res.error) throw new Error(res.error);
+                entry = {
+                  fasta: res.fasta,
+                  recordId: res.record_id || `seq_${idx + 1}`
+                };
+                if (losatTiming) {
+                  losatTiming.fastaPyodideFallbacks += 1;
+                  console.warn('LOSAT browser FASTA extraction fell back to Pyodide:', fastError);
+                }
               }
             }
-            if (sourceFile) setCachedFastaExtraction(sourceFile, persistentCacheKey, entry);
+            if (sourceFile && usePersistentFastaCache) setCachedFastaExtraction(sourceFile, persistentCacheKey, entry);
           }
           fastaCache.set(idx, entry);
           if (losatTiming) {
@@ -1821,9 +1859,13 @@ json.dumps({
           const args = [];
           if (losatProgram.value === 'blastn') {
             pushArg(args, '--task', losat.blastn.task);
-          } else {
+          } else if (losatProgram.value === 'tblastx') {
             pushArg(args, '--query-gencode', getGencode(queryIdx));
             pushArg(args, '--db-gencode', getGencode(subjectIdx));
+          } else {
+            const maxHits = normalizeBlastThresholdNumber(losat.blastp?.maxHits, 5, { integer: true });
+            pushArg(args, '--max_target_seqs', Math.max(1, maxHits));
+            pushArg(args, '--max_hsps_per_subject', 1);
           }
           return args;
         };
@@ -1877,6 +1919,8 @@ json.dumps({
             else losatTiming.cacheMisses += 1;
             const pair = {
               pairIndex: i,
+              queryIndex: i,
+              subjectIndex: i + 1,
               cacheKey,
               filename: buildCacheFilename(i, queryEntry, subjectEntry)
             };
@@ -1921,13 +1965,28 @@ json.dumps({
           }
 
           const blastWriteStartedAt = getNow();
-          losatPairs.forEach((pair) => {
+          for (const pair of losatPairs) {
             const cached = cacheMap.get(pair.cacheKey);
-            const blastText = typeof cached?.text === 'string' ? cached.text : '';
+            const losatText = typeof cached?.text === 'string' ? cached.text : '';
+            let blastText = losatText;
+            if (useProteinColinearity) {
+              const queryEntry = await getSeqEntry(pair.queryIndex);
+              const subjectEntry = await getSeqEntry(pair.subjectIndex);
+              const maxHits = normalizeBlastThresholdNumber(losat.blastp?.maxHits, 5, { integer: true });
+              const converted = JSON.parse(
+                convertProteinBlast(
+                  losatText,
+                  JSON.stringify([queryEntry.proteinMap || {}, subjectEntry.proteinMap || {}]),
+                  Math.max(1, maxHits)
+                )
+              );
+              if (converted.error) throw new Error(converted.error);
+              blastText = converted.tsv || '';
+            }
             const blastPath = `/blast_${pair.pairIndex}.txt`;
             virtualBlastFiles.push({ path: blastPath, text: blastText });
             blastArgs.push(blastPath);
-          });
+          }
           losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
           console.info(
             [
@@ -1961,6 +2020,12 @@ json.dumps({
         }
         if (extractFirstFasta) {
           extractFirstFasta.destroy();
+        }
+        if (extractProteinFasta) {
+          extractProteinFasta.destroy();
+        }
+        if (convertProteinBlast) {
+          convertProteinBlast.destroy();
         }
         if (useLosat) {
           losatCacheInfo.value = cacheInfo;

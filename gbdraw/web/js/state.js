@@ -129,7 +129,7 @@ const suppressCircularMultiRecordDefaults = ref(false);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
 const blastSource = ref('upload'); // 'upload' | 'losat'
-const losatProgram = ref('blastn'); // 'blastn' | 'tblastx'
+const losatProgram = ref('blastn'); // 'blastn' | 'tblastx' | 'blastp'
 const files = reactive({
   c_gb: null,
   c_gff: null,
@@ -372,6 +372,9 @@ const losat = reactive({
   outfmt: '6',
   blastn: {
     task: 'megablast'
+  },
+  blastp: {
+    maxHits: 5
   }
 });
 

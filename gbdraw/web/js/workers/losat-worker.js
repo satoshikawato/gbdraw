@@ -1,4 +1,5 @@
 const DEFAULT_WASM_URL = '../../wasm/losat/losat.wasm';
+const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
 
 let wasiShimPromise = null;
 let wasmModulePromise = null;
@@ -153,8 +154,8 @@ const runLosatPair = async ({
   wasmUrl,
   wasiShimUrl
 } = {}) => {
-  if (!program || (program !== 'blastn' && program !== 'tblastx')) {
-    throw new Error('LOSAT program must be blastn or tblastx.');
+  if (!program || !SUPPORTED_PROGRAMS.has(program)) {
+    throw new Error('LOSAT program must be blastn, tblastx, or blastp.');
   }
   if (!queryFasta || !subjectFasta) {
     throw new Error('LOSAT requires both query and subject FASTA content.');

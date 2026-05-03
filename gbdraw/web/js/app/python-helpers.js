@@ -72,15 +72,12 @@ def run_gbdraw_wrapper(mode, args, virtual_blast_files_json=None):
         import pandas as pd
         from io import StringIO
         from gbdraw.diagrams.linear import assemble as _assemble_module
+        from gbdraw.io.comparisons import COMPARISON_COLUMNS, filter_comparison_dataframe
 
         assemble_module = _assemble_module
         original_load_comparisons = _assemble_module.load_comparisons
 
         def _load_comparisons_from_virtual_files(comparison_files, blast_config):
-            evalue_threshold = blast_config.evalue
-            bitscore_threshold = blast_config.bitscore
-            identity_threshold = blast_config.identity
-            alignment_length_threshold = blast_config.alignment_length
             comparison_list = []
             fallback_files = []
             for comparison_file in comparison_files:
@@ -89,32 +86,17 @@ def run_gbdraw_wrapper(mode, args, virtual_blast_files_json=None):
                     fallback_files.append(comparison_file)
                     continue
                 try:
+                    comparison_text = virtual_files[comparison_path]
+                    if not comparison_text.strip():
+                        comparison_list.append(pd.DataFrame(columns=COMPARISON_COLUMNS))
+                        continue
                     df = pd.read_csv(
-                        StringIO(virtual_files[comparison_path]),
-                        sep="\\t",
+                        StringIO(comparison_text),
+                        sep=chr(9),
                         comment="#",
-                        names=(
-                            "query",
-                            "subject",
-                            "identity",
-                            "alignment_length",
-                            "mismatches",
-                            "gap_opens",
-                            "qstart",
-                            "qend",
-                            "sstart",
-                            "send",
-                            "evalue",
-                            "bitscore",
-                        ),
+                        names=COMPARISON_COLUMNS,
                     )
-                    df = df[
-                        (df["evalue"] <= evalue_threshold)
-                        & (df["bitscore"] >= bitscore_threshold)
-                        & (df["identity"] >= identity_threshold)
-                        & (df["alignment_length"] >= alignment_length_threshold)
-                    ]
-                    comparison_list.append(df)
+                    comparison_list.append(filter_comparison_dataframe(df, blast_config))
                 except ValueError as e:
                     logging.getLogger(__name__).warning(
                         f"WARNING: Error parsing comparison file {comparison_path}. It may be corrupt or in the wrong format. Error: {e}"
@@ -203,6 +185,156 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
         return json.dumps({"fasta": handle.getvalue(), "record_id": record.id})
     except StopIteration:
         return json.dumps({"error": "No records found"})
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
+
+def _normalize_web_record_selector(record_selector):
+    if record_selector is None:
+        return None
+    selector_raw = str(record_selector).strip()
+    if not selector_raw or selector_raw.lower() in {"none", "null", "jsnull", "undefined", "jsundefined", "-"}:
+        return None
+    return selector_raw
+
+def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None):
+    from Bio import SeqIO
+    from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
+    from gbdraw.io.regions import apply_region_specs, parse_region_specs
+
+    selector = parse_record_selector(_normalize_web_record_selector(record_selector))
+    reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
+    if fmt == "genbank":
+        records = list(SeqIO.parse(path, "genbank"))
+        if not records:
+            raise ValueError("No records found")
+        records = select_record(records, selector) if selector is not None else [records[0]]
+        records = reverse_records(records, reverse)
+    elif fmt == "gff":
+        if not fasta_path:
+            raise ValueError("GFF3 protein extraction requires a FASTA path.")
+        from gbdraw.io.genome import load_gff_fasta
+        records = load_gff_fasta(
+            [path],
+            [fasta_path],
+            "linear",
+            selected_features_set=["CDS"],
+            keep_all_features=True,
+            load_comparison=True,
+            record_selectors=[_normalize_web_record_selector(record_selector) or ""],
+            reverse_flags=[reverse],
+        )
+    else:
+        raise ValueError(f"Unsupported format: {fmt}")
+    if region_spec:
+        records = apply_region_specs(records, parse_region_specs([region_spec]))
+    if not records:
+        raise ValueError("No records found")
+    return records[0]
+
+def _serialize_cds_protein(protein):
+    return {
+        "protein_id": protein.protein_id,
+        "record_index": protein.record_index,
+        "feature_index": protein.feature_index,
+        "record_id": protein.record_id,
+        "start": protein.start,
+        "end": protein.end,
+        "strand": protein.strand,
+        "label": protein.label,
+        "protein_length": protein.protein_length,
+        "source_protein_id": protein.source_protein_id,
+    }
+
+def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None):
+    """Extract CDS proteins and coordinate metadata for LOSATP blastp."""
+    try:
+        from gbdraw.analysis.protein_colinearity import extract_cds_proteins, proteins_to_fasta
+
+        record = _load_single_linear_record_for_proteins(
+            path,
+            fmt,
+            fasta_path=fasta_path,
+            region_spec=region_spec,
+            record_selector=record_selector,
+            reverse_flag=reverse_flag,
+        )
+        record_index_offset = int(record_index) if record_index is not None else 0
+        result = extract_cds_proteins([record], record_index_offset=record_index_offset)
+        proteins = result.proteins_by_record[0] if result.proteins_by_record else []
+        if not proteins:
+            return json.dumps({"error": f"No CDS proteins found in {record.id}"})
+        protein_map = {
+            protein.protein_id: _serialize_cds_protein(protein)
+            for protein in proteins
+        }
+        return json.dumps({
+            "fasta": proteins_to_fasta(proteins),
+            "record_id": record.id,
+            "protein_count": len(proteins),
+            "protein_map": protein_map,
+        })
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
+
+def convert_protein_blast_to_genomic_tsv(blast_text, protein_maps_json, max_hits=5):
+    """Convert LOSATP blastp output into genomic comparison TSV for gbdraw linear."""
+    try:
+        from io import StringIO
+        from gbdraw.analysis.protein_colinearity import (
+            CdsProtein,
+            cap_hits_per_query,
+            convert_protein_hits_to_genomic_links,
+            parse_losatp_outfmt6,
+        )
+        try:
+            from gbdraw.analysis.protein_colinearity import convert_pair_protein_hits_to_genomic_links
+        except ImportError:
+            convert_pair_protein_hits_to_genomic_links = None
+
+        raw_maps = json.loads(str(protein_maps_json))
+        if isinstance(raw_maps, dict):
+            raw_maps = [raw_maps]
+        def _build_protein_map(raw_map):
+            protein_map = {}
+            if not isinstance(raw_map, dict):
+                return protein_map
+            for protein_id, data in raw_map.items():
+                if not isinstance(data, dict):
+                    continue
+                strand = data.get("strand")
+                strand = int(strand) if strand in (-1, 1, "-1", "1") else None
+                protein_map[str(protein_id)] = CdsProtein(
+                    protein_id=str(data.get("protein_id") or protein_id),
+                    record_index=int(data.get("record_index") or 0),
+                    feature_index=int(data.get("feature_index") or 0),
+                    record_id=str(data.get("record_id") or ""),
+                    start=int(data.get("start") or 0),
+                    end=int(data.get("end") or 0),
+                    strand=strand,
+                    label=str(data.get("label") or protein_id),
+                    protein_length=int(data.get("protein_length") or 0),
+                    sequence="",
+                    source_protein_id=data.get("source_protein_id"),
+                )
+            return protein_map
+
+        protein_maps = [_build_protein_map(raw_map) for raw_map in raw_maps]
+        hits = parse_losatp_outfmt6(str(blast_text or ""))
+        capped = cap_hits_per_query(hits, max_hits=int(max_hits or 5))
+        if len(protein_maps) >= 2 and convert_pair_protein_hits_to_genomic_links is not None:
+            converted = convert_pair_protein_hits_to_genomic_links(
+                capped,
+                protein_maps[0],
+                protein_maps[1],
+            )
+        else:
+            protein_map = {}
+            for current_map in protein_maps:
+                protein_map.update(current_map)
+            converted = convert_protein_hits_to_genomic_links(capped, protein_map)
+        handle = StringIO()
+        converted.to_csv(handle, sep=chr(9), header=False, index=False, lineterminator=chr(10))
+        return json.dumps({"tsv": handle.getvalue(), "hit_count": int(converted.shape[0])})
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 

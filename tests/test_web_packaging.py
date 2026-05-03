@@ -72,7 +72,7 @@ def ensure_prepared_browser_wheel():
 
 def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
     verify_module, expected_wheel_path = ensure_prepared_browser_wheel()
-    expected_wheel_name = "gbdraw-0.9.2-py3-none-any.whl"
+    expected_wheel_name = "gbdraw-0.11.0b0-py3-none-any.whl"
     assert verify_module._parse_wheel_name() == expected_wheel_name
     assert expected_wheel_path.name == expected_wheel_name
     verify_module.assert_browser_wheel_is_not_recursive(expected_wheel_path)
@@ -186,7 +186,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
     )
 
     wheel_path = next(dist_dir.glob("gbdraw-*.whl"))
-    assert wheel_path.name == "gbdraw-0.9.2-py3-none-any.whl"
+    assert wheel_path.name == "gbdraw-0.11.0b0-py3-none-any.whl"
     subprocess.run(
         [sys.executable, "tools/verify_gui_offline.py", "inspect-wheel", str(wheel_path)],
         cwd=REPO_ROOT,
