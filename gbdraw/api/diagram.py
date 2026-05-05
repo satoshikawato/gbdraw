@@ -811,6 +811,31 @@ def _resolve_circular_plot_title_position(
     return cast(Literal["none", "top", "bottom"], normalized)
 
 
+def _resolve_pairwise_match_style(style: str) -> Literal["ribbon", "curve"]:
+    normalized = str(style).strip().lower()
+    if normalized not in {"ribbon", "curve"}:
+        raise ValidationError("pairwise_match_style must be one of: ribbon, curve")
+    return cast(Literal["ribbon", "curve"], normalized)
+
+
+def _comparison_frames_have_collinearity_color_mode(
+    frames: Sequence[DataFrame] | None,
+    modes: set[str],
+) -> bool:
+    if not frames:
+        return False
+    for frame in frames:
+        if "collinearity_color_mode" not in frame.columns:
+            continue
+        for value in frame["collinearity_color_mode"].dropna():
+            normalized = str(value).strip().lower().replace("-", "_")
+            if normalized == "identity":
+                normalized = "average_identity"
+            if normalized in modes:
+                return True
+    return False
+
+
 def _resolve_plot_title_font_size(value: float | None) -> float:
     if value is None:
         return float(_PLOT_TITLE_DEFAULT_FONT_SIZE)
@@ -1200,10 +1225,11 @@ def assemble_linear_diagram_from_records(
     protein_comparisons: Sequence[DataFrame] | None = None,
     orthogroups: OrthogroupResult | None = None,
     protein_blastp_mode: ProteinBlastpMode | str = "none",
+    pairwise_match_style: Literal["ribbon", "curve"] | str = "ribbon",
     collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None,
     collinearity_params: CollinearityParameters | None = None,
     collinearity_unit_mode: CollinearityUnitMode | str = "auto",
-    collinearity_color_mode: CollinearityColorMode | str = "identity",
+    collinearity_color_mode: CollinearityColorMode | str = "orientation",
     losatp_bin: str = "losat",
     protein_blastp_max_hits: int = 5,
     protein_blastp_candidate_limit: int | None = None,
@@ -1254,6 +1280,7 @@ def assemble_linear_diagram_from_records(
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
     normalized_protein_blastp_mode = normalize_protein_blastp_mode(protein_blastp_mode)
+    normalized_pairwise_match_style = _resolve_pairwise_match_style(pairwise_match_style)
     normalized_collinearity_color_mode = normalize_collinearity_color_mode(str(collinearity_color_mode))
     if int(protein_blastp_max_hits) <= 0:
         raise ValidationError("protein_blastp_max_hits must be > 0")
@@ -1308,7 +1335,30 @@ def assemble_linear_diagram_from_records(
                 "config_overrides cannot be used with cfg; pass cfg=None or apply overrides before."
             )
         config_dict = modify_config_dict(config_dict, **config_overrides)
-    cfg = cfg or GbdrawConfig.from_dict(config_dict)
+    pairwise_style_from_overrides = (
+        config_overrides is not None
+        and normalized_pairwise_match_style == "ribbon"
+        and "pairwise_match_style" in config_overrides
+    )
+    if pairwise_style_from_overrides:
+        normalized_pairwise_match_style = _resolve_pairwise_match_style(
+            str(config_overrides["pairwise_match_style"])
+        )
+    else:
+        config_dict = modify_config_dict(config_dict, pairwise_match_style=normalized_pairwise_match_style)
+    if cfg is not None:
+        cfg = replace(
+            cfg,
+            objects=replace(
+                cfg.objects,
+                blast_match=replace(
+                    cfg.objects.blast_match,
+                    style=normalized_pairwise_match_style,
+                ),
+            ),
+        )
+    else:
+        cfg = GbdrawConfig.from_dict(config_dict)
     if depth_table is not None or depth_file is not None:
         if depth_tables is not None or depth_files is not None:
             raise ValidationError("Use depth_table/depth_file or depth_tables/depth_files, not both.")
@@ -1427,6 +1477,30 @@ def assemble_linear_diagram_from_records(
         default_colors_df=default_colors,
         cfg=cfg,
     )
+    blast_config.collinearity_color_mode = normalized_collinearity_color_mode
+    uses_collinearity_rendering = (
+        collinearity_blocks is not None
+        or normalized_protein_blastp_mode == "collinear"
+        or _comparison_frames_have_collinearity_color_mode(
+            resolved_protein_comparisons,
+            {"average_identity", "orientation"},
+        )
+    )
+    blast_config.hide_pairwise_identity_legend = (
+        uses_collinearity_rendering
+        and normalized_collinearity_color_mode == "orientation"
+    ) or _comparison_frames_have_collinearity_color_mode(
+        resolved_protein_comparisons,
+        {"orientation"},
+    )
+    if (
+        uses_collinearity_rendering
+        and normalized_collinearity_color_mode == "average_identity"
+    ) or _comparison_frames_have_collinearity_color_mode(
+        resolved_protein_comparisons,
+        {"average_identity"},
+    ):
+        blast_config.pairwise_identity_legend_label = "Average identity"
 
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=len(records),
@@ -2622,6 +2696,7 @@ def build_linear_diagram(
         protein_comparisons=options.protein_comparisons,
         orthogroups=options.orthogroups,
         protein_blastp_mode=options.protein_blastp_mode,
+        pairwise_match_style=options.pairwise_match_style,
         collinearity_blocks=options.collinearity_blocks,
         collinearity_params=options.collinearity_params,
         collinearity_unit_mode=options.collinearity_unit_mode,

@@ -1,7 +1,10 @@
 export const PYTHON_HELPERS = `
 import warnings
 warnings.simplefilter('ignore', SyntaxWarning)
-import tomllib
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 from importlib import resources
 import json
 import traceback
@@ -462,7 +465,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     collinear_constant_anchor_score=50.0,
     collinear_min_block_score=None,
     collinear_unit_mode="auto",
-    collinear_color_mode="identity",
+    collinear_color_mode="orientation",
 ):
     """Convert LOSATP blastp outputs for pairwise display or RBH orthogroups."""
     try:
@@ -571,7 +574,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             converted_frames = convert_collinearity_blocks_to_comparisons(
                 collinearity_result,
                 record_ids=record_ids,
-                color_mode=_collinear_text(collinear_color_mode, "identity"),
+                color_mode=_collinear_text(collinear_color_mode, "orientation"),
             )
             converted_pairs = []
             for pair_index, converted in enumerate(converted_frames):

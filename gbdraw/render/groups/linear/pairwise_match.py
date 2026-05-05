@@ -9,24 +9,10 @@ from svgwrite.path import Path
 
 from ....canvas import LinearCanvasConfigurator
 from ....layout.linear_coords import normalize_position_linear
-from ....core.color import interpolate_color
-
-_COLLINEARITY_BLOCK_PALETTE = (
-    "#4E79A7",
-    "#F28E2B",
-    "#59A14F",
-    "#E15759",
-    "#76B7B2",
-    "#EDC948",
-    "#B07AA1",
-    "#FF9DA7",
-    "#9C755F",
-    "#BAB0AC",
+from ....core.color import (
+    DEFAULT_COLLINEAR_ORIENTATION_COLORS,
+    interpolate_color,
 )
-_COLLINEARITY_ORIENTATION_COLORS = {
-    "plus": "#4E79A7",
-    "minus": "#E15759",
-}
 
 
 def _row_value(row: object, name: str, default: object = "") -> object:
@@ -45,15 +31,6 @@ def _row_float(row: object, name: str, default: float = 0.0) -> float:
 
 def _row_span(row: object, start_name: str, end_name: str) -> float:
     return abs(_row_float(row, end_name) - _row_float(row, start_name))
-
-
-def _stable_block_color(block_id: str) -> str:
-    if not block_id:
-        return _COLLINEARITY_BLOCK_PALETTE[0]
-    total = 0
-    for char in block_id:
-        total = (total * 33 + ord(char)) % 1_000_003
-    return _COLLINEARITY_BLOCK_PALETTE[total % len(_COLLINEARITY_BLOCK_PALETTE)]
 
 
 def _match_draw_order_key(row: object) -> tuple[int, int, float, float, float, float, str]:
@@ -124,6 +101,12 @@ class PairWiseMatchGroup:
         self.match_fill_opacity: float = blast_config.fill_opacity
         self.match_stroke_color: str = blast_config.stroke_color
         self.match_stroke_width: float = blast_config.stroke_width
+        self.collinearity_orientation_colors: dict[str, str] = {
+            **DEFAULT_COLLINEAR_ORIENTATION_COLORS,
+            **(getattr(blast_config, "collinearity_orientation_colors", {}) or {}),
+        }
+        self.match_style: str = str(getattr(blast_config, "match_style", "ribbon")).lower()
+        self.curve_tension: float = float(getattr(blast_config, "curve_tension", 0.5))
         self.comparison_count: int = comparison_count
         self.records = records
         self.record_offsets_x = record_offsets_x or {}
@@ -188,10 +171,13 @@ class PairWiseMatchGroup:
         collinearity_block_id = str(_row_value(row, "collinearity_block_id", "") or "")
         collinearity_orientation = str(_row_value(row, "collinearity_orientation", "") or "")
         collinearity_color_mode = str(_row_value(row, "collinearity_color_mode", "") or "").lower()
-        if collinearity_block_id and collinearity_color_mode == "block":
-            dynamic_fill_color = _stable_block_color(collinearity_block_id)
-        elif collinearity_block_id and collinearity_color_mode == "orientation":
-            dynamic_fill_color = _COLLINEARITY_ORIENTATION_COLORS.get(
+        if collinearity_block_id and collinearity_color_mode == "orientation":
+            orientation_colors = getattr(
+                self,
+                "collinearity_orientation_colors",
+                DEFAULT_COLLINEAR_ORIENTATION_COLORS,
+            )
+            dynamic_fill_color = orientation_colors.get(
                 collinearity_orientation,
                 dynamic_fill_color,
             )
@@ -203,16 +189,30 @@ class PairWiseMatchGroup:
             subject_start, subject_end, self.comparison_height, is_query=False
         )
 
-        match_path_desc: str = self.construct_path_description(
-            query_start_x,
-            query_start_y,
-            query_end_x,
-            query_end_y,
-            subject_start_x,
-            subject_start_y,
-            subject_end_x,
-            subject_end_y,
-        )
+        match_style = str(getattr(self, "match_style", "ribbon")).lower()
+        if match_style == "curve":
+            match_path_desc: str = self.construct_curved_ribbon_path_description(
+                query_start_x,
+                query_start_y,
+                query_end_x,
+                query_end_y,
+                subject_start_x,
+                subject_start_y,
+                subject_end_x,
+                subject_end_y,
+            )
+        else:
+            match_style = "ribbon"
+            match_path_desc = self.construct_path_description(
+                query_start_x,
+                query_start_y,
+                query_end_x,
+                query_end_y,
+                subject_start_x,
+                subject_start_y,
+                subject_end_x,
+                subject_end_y,
+            )
         path = Path(
             d=match_path_desc,
             fill=dynamic_fill_color,
@@ -221,6 +221,8 @@ class PairWiseMatchGroup:
             stroke_width=self.match_stroke_width,
             debug=False,
         )
+        path.attribs["data-pairwise-match-style"] = match_style
+        path.attribs["data-identity-factor"] = f"{factor:.6g}"
         self.add_optional_metadata_attributes(path, row)
         return path
 
@@ -231,6 +233,7 @@ class PairWiseMatchGroup:
         metadata_columns = {
             "collinearity_block_id": "data-collinearity-block-id",
             "collinearity_orientation": "data-collinearity-orientation",
+            "collinearity_color_mode": "data-collinearity-color-mode",
             "query_protein_id": "data-query-protein-id",
             "subject_protein_id": "data-subject-protein-id",
             "query_feature_svg_id": "data-query-feature-svg-id",
@@ -313,6 +316,31 @@ class PairWiseMatchGroup:
             str: SVG path description string.
         """
         return f"M {query_start_x},{query_start_y}L{query_end_x},{query_end_y} L{subject_end_x},{subject_end_y}L{subject_start_x},{subject_start_y} z"
+
+    def construct_curved_ribbon_path_description(
+        self,
+        query_start_x: float,
+        query_start_y: float,
+        query_end_x: float,
+        query_end_y: float,
+        subject_start_x: float,
+        subject_start_y: float,
+        subject_end_x: float,
+        subject_end_y: float,
+    ) -> str:
+        """
+        Constructs a closed curved ribbon path preserving both aligned intervals.
+        """
+        tension = float(getattr(self, "curve_tension", 0.5))
+        dy = subject_start_y - query_start_y
+        c1y = query_start_y + dy * tension
+        c2y = subject_start_y - dy * tension
+        return (
+            f"M {query_start_x},{query_start_y}"
+            f"C{query_start_x},{c1y} {subject_start_x},{c2y} {subject_start_x},{subject_start_y} "
+            f"L{subject_end_x},{subject_end_y}"
+            f"C{subject_end_x},{c2y} {query_end_x},{c1y} {query_end_x},{query_end_y} z"
+        )
 
     def add_elements_to_group(self) -> Group:
         """

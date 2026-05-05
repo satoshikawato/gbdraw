@@ -99,6 +99,24 @@ def _parse_linear_track_axis_gap(value: str) -> float | None:
     return axis_gap
 
 
+def _parse_pairwise_match_style(value: str) -> str:
+    normalized = str(value).strip().lower()
+    if normalized not in {"ribbon", "curve"}:
+        raise argparse.ArgumentTypeError("pairwise_match_style must be one of: ribbon, curve")
+    return normalized
+
+
+def _parse_collinear_color_mode(value: str) -> str:
+    normalized = str(value).strip().lower().replace("-", "_")
+    if normalized == "identity":
+        normalized = "average_identity"
+    if normalized not in {"average_identity", "orientation"}:
+        raise argparse.ArgumentTypeError(
+            "collinear_color_mode must be one of: average_identity, orientation"
+        )
+    return normalized
+
+
 def _parse_feature_shape_assignment_arg(value: str) -> str:
     try:
         parse_feature_shape_assignment(value)
@@ -246,9 +264,10 @@ def _get_args(args) -> argparse.Namespace:
         '--collinear_color_mode',
         '--collinear-color-mode',
         dest='collinear_color_mode',
-        help='Collinear ribbon color mode: identity, block, or orientation (default: identity).',
-        choices=["identity", "block", "orientation"],
-        default='identity')
+        help='Collinear ribbon color mode: average_identity or orientation (default: orientation).',
+        type=_parse_collinear_color_mode,
+        choices=["average_identity", "orientation"],
+        default='orientation')
     parser.add_argument(
         '--collinear_blocks',
         '--collinear-blocks',
@@ -432,6 +451,17 @@ def _get_args(args) -> argparse.Namespace:
         help='minimum BLAST alignment length threshold (default=0)',
         type=int,
         default=0)
+    parser.add_argument(
+        '--pairwise_match_style',
+        '--pairwise-match-style',
+        dest='pairwise_match_style',
+        help=(
+            'Pairwise comparison link style: ribbon keeps straight filled ribbons; '
+            'curve draws curved filled ribbons that preserve alignment spans.'
+        ),
+        type=_parse_pairwise_match_style,
+        choices=["ribbon", "curve"],
+        default="ribbon")
     parser.add_argument(
         '-k',
         '--features',
@@ -774,7 +804,7 @@ def linear_main(cmd_args) -> None:
     protein_blastp_candidate_limit: int | None = args.protein_blastp_candidate_limit
     align_orthogroup_feature: str = str(args.align_orthogroup_feature or "").strip()
     collinear_unit_mode: str = str(args.collinear_unit_mode or "auto")
-    collinear_color_mode: str = str(args.collinear_color_mode or "identity")
+    collinear_color_mode: str = str(args.collinear_color_mode or "orientation")
     collinear_blocks_path: str = str(args.collinear_blocks or "").strip()
     save_collinear_blocks_path: str = str(args.save_collinear_blocks or "").strip()
     collinearity_params = CollinearityParameters(
@@ -818,6 +848,7 @@ def linear_main(cmd_args) -> None:
     bitscore: float = args.bitscore
     identity: float = args.identity
     alignment_length: int = args.alignment_length
+    pairwise_match_style: str = args.pairwise_match_style
     show_labels: str = args.show_labels
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
@@ -962,6 +993,7 @@ def linear_main(cmd_args) -> None:
         scale_interval=scale_interval,
         legend_box_size=legend_box_size,
         legend_font_size=legend_font_size,
+        pairwise_match_style=pairwise_match_style,
         normalize_length=normalize_length
         )
 
@@ -1115,6 +1147,7 @@ def linear_main(cmd_args) -> None:
         protein_blastp_max_hits=protein_blastp_max_hits,
         protein_blastp_candidate_limit=protein_blastp_candidate_limit,
         align_orthogroup_feature=align_orthogroup_feature or None,
+        pairwise_match_style=pairwise_match_style,
         evalue=evalue,
         bitscore=bitscore,
         identity=identity,

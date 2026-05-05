@@ -316,10 +316,9 @@
                                                 <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxGeneGap" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                             <div>
-                                                <label class="text-[9px] flex items-center">Color mode <help-tip text="Identity uses the pairwise identity gradient, Block gives each collinear block a stable color, and Orientation colors plus blocks blue and inverted blocks red."></help-tip></label>
+                                                <label class="text-[9px] flex items-center">Color mode <help-tip text="Average identity uses the block's alignment-length-weighted average identity gradient, and Orientation colors plus blocks gray and inverted blocks red."></help-tip></label>
                                                 <select v-model="losat.blastp.collinearColorMode" class="form-input px-1 py-0.5 text-xs">
-                                                    <option value="identity">Identity</option>
-                                                    <option value="block">Block</option>
+                                                    <option value="average_identity">Average identity</option>
                                                     <option value="orientation">Orientation</option>
                                                 </select>
                                             </div>
@@ -833,7 +832,7 @@
 
                             <div>
                                 <div class="flex justify-between items-center mb-2">
-                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS (-d) <help-tip text="Base colors for features. Acts as the -d override table."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS (-d) <help-tip text="Base colors for features, comparison tracks, and collinear blocks. Orientation mode uses collinear_block_plus and collinear_block_minus."></help-tip></h4>
                                     <button @click="resetColors" class="text-[10px] text-blue-600 hover:underline">Reset</button>
                                 </div>
                                 <div class="mb-2 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
@@ -858,9 +857,9 @@
 
                                 <div class="mt-2 p-2 bg-slate-50 rounded border border-slate-200 flex gap-2 items-end">
                                     <div class="flex-grow">
-                                        <label class="text-[9px] font-bold text-slate-500 block mb-1">ADD FEATURE</label>
+                                        <label class="text-[9px] font-bold text-slate-500 block mb-1">ADD KEY</label>
                                         <select v-model="newColorFeat" class="form-input text-xs py-1 px-2 h-8">
-                                            <option v-for="k in featureKeys" :value="k">{{ k }}</option>
+                                            <option v-for="k in defaultColorKeys" :value="k">{{ k }}</option>
                                         </select>
                                     </div>
                                     <div>
@@ -1406,6 +1405,13 @@
                             <p class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-2">
                                 Applies to BLAST or LOSAT pairwise comparison tracks.
                             </p>
+                            <div>
+                                <label class="input-label text-[10px]">Pairwise Match Style <help-tip text="Ribbon draws straight filled links; Curve draws curved filled links while preserving each alignment span."></help-tip></label>
+                                <select v-model="adv.pairwise_match_style" class="form-input form-input-compact">
+                                    <option value="ribbon">Ribbon</option>
+                                    <option value="curve">Curve</option>
+                                </select>
+                            </div>
                             <div>
                                 <label class="input-label text-[10px]">Pairwise Match Height <help-tip text="Height of the comparison blocks."></help-tip></label>
                                 <input type="number" v-model.number="adv.comparison_height" class="form-input form-input-compact" placeholder="Auto">

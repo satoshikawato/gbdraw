@@ -258,6 +258,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [-s STEP] [--separate_strands] [--show_gc] [--show_skew]
               [--align_center] [--evalue EVALUE] [--bitscore BITSCORE]
               [--identity IDENTITY] [--alignment_length ALIGNMENT_LENGTH]
+              [--pairwise_match_style {ribbon,curve}]
               [-k FEATURES] [--feature_shape TYPE=SHAPE]
               [--block_stroke_color BLOCK_STROKE_COLOR]
               [--block_stroke_width BLOCK_STROKE_WIDTH]
@@ -328,6 +329,10 @@ options:
   --identity IDENTITY   identity threshold (default=0)
   --alignment_length ALIGNMENT_LENGTH
                         minimum BLAST alignment length threshold (default=0)
+  --pairwise_match_style {ribbon,curve}
+                        Pairwise comparison link style: ribbon keeps straight
+                        filled ribbons; curve draws curved filled ribbons that
+                        preserve alignment spans.
   -k, --features FEATURES
                         Comma-separated list of feature keys to draw (default:
                         CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)

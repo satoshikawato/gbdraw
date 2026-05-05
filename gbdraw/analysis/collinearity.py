@@ -31,7 +31,7 @@ from gbdraw.io.comparisons import COMPARISON_COLUMNS
 
 CollinearityOrientation = Literal["plus", "minus"]
 CollinearityScoreMode = Literal["constant", "bitscore"]
-CollinearityColorMode = Literal["identity", "block", "orientation"]
+CollinearityColorMode = Literal["average_identity", "orientation"]
 
 COLLINEARITY_METADATA_COLUMNS = (
     "collinearity_block_id",
@@ -54,7 +54,7 @@ COLLINEARITY_METADATA_COLUMNS = (
     "subject_feature_svg_id",
 )
 COLLINEARITY_COMPARISON_COLUMNS = tuple(COMPARISON_COLUMNS) + COLLINEARITY_METADATA_COLUMNS
-COLLINEARITY_COLOR_MODES = ("identity", "block", "orientation")
+COLLINEARITY_COLOR_MODES = ("average_identity", "orientation")
 
 
 @dataclass(frozen=True)
@@ -143,7 +143,9 @@ class _Chain:
 
 
 def normalize_collinearity_color_mode(mode: str | None) -> CollinearityColorMode:
-    normalized = str(mode or "identity").strip().lower()
+    normalized = str(mode or "orientation").strip().lower().replace("-", "_")
+    if normalized == "identity":
+        normalized = "average_identity"
     if normalized not in COLLINEARITY_COLOR_MODES:
         raise ValidationError(
             "collinear_color_mode must be one of: "
@@ -747,7 +749,7 @@ def convert_collinearity_blocks_to_comparisons(
     *,
     records: Sequence[SeqRecord] | None = None,
     record_ids: Sequence[str] | None = None,
-    color_mode: CollinearityColorMode | str = "identity",
+    color_mode: CollinearityColorMode | str = "orientation",
 ) -> list[DataFrame]:
     """Convert accepted blocks into existing linear comparison rows.
 

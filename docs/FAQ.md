@@ -45,6 +45,10 @@ The most common causes are:
 
 See [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
 
+## Can pairwise comparison links be curved?
+
+Yes. In linear mode, `--pairwise_match_style ribbon` is the default straight filled ribbon style. Use `--pairwise_match_style curve` for curved filled ribbons, which are useful for dense synteny-style views while still preserving each match span.
+
 ## Can I use gene names instead of product descriptions for labels?
 
 Yes. Use `--qualifier_priority` to prefer `gene`, `locus_tag`, or other qualifiers.

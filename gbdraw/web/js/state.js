@@ -1,3 +1,8 @@
+import {
+  COMPARISON_COLOR_KEYS,
+  normalizePaletteColors,
+  normalizePaletteDefinitions
+} from './app/color-utils.js';
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -52,12 +57,15 @@ const svgContent = computed(() => {
         'data-label-editable',
         'data-collinearity-block-id',
         'data-collinearity-orientation',
+        'data-collinearity-color-mode',
         'data-query-protein-id',
         'data-subject-protein-id',
         'data-query-feature-svg-id',
         'data-subject-feature-svg-id',
         'data-query-unit-id',
         'data-subject-unit-id',
+        'data-pairwise-match-style',
+        'data-identity-factor',
         'fill',
         'fill-opacity',
         'stroke',
@@ -345,6 +353,7 @@ const adv = reactive({
   depth_small_tick_interval: null,
   depth_tick_font_size: null,
   comparison_height: null,
+  pairwise_match_style: 'ribbon',
   min_bitscore: 50,
   evalue: '1e-2',
   identity: 0,
@@ -393,7 +402,7 @@ const losat = reactive({
     collinearScoreMode: 'constant',
     collinearConstantAnchorScore: 50,
     collinearMinBlockScore: null,
-    collinearColorMode: 'identity',
+    collinearColorMode: 'orientation',
     collinearUnitMode: 'auto'
   }
 });
@@ -713,6 +722,8 @@ const featureKeys = [
   "5'UTR"
 ];
 
+const defaultColorKeys = [...featureKeys, 'default', 'skew_high', 'skew_low', 'gc_content', ...COMPARISON_COLOR_KEYS];
+
 const newColorFeat = ref('gene');
 const newColorVal = ref('#d3d3d3');
 
@@ -917,7 +928,10 @@ export const state = {
   circularBaseConfig,
   linearBaseConfig,
   diagramElementBaseTransforms,
+  normalizePaletteColors,
+  normalizePaletteDefinitions,
   featureKeys,
+  defaultColorKeys,
   newColorFeat,
   newColorVal,
   manualPriorityRules,

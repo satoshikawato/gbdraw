@@ -130,6 +130,17 @@ const normalizeBlastpMode = (value) => {
   return ['pairwise', 'orthogroup', 'collinear'].includes(normalized) ? normalized : 'orthogroup';
 };
 
+const normalizeCollinearColorMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  if (normalized === 'identity') return 'average_identity';
+  return ['average_identity', 'orientation'].includes(normalized) ? normalized : 'orientation';
+};
+
+const normalizePairwiseMatchStyle = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['ribbon', 'curve'].includes(normalized) ? normalized : 'ribbon';
+};
+
 const normalizeFeatureShapes = (featureShapes) => {
   const normalized = {};
   if (!featureShapes || typeof featureShapes !== 'object' || Array.isArray(featureShapes)) {
@@ -406,6 +417,7 @@ const applyConfigData = (data) => {
   state.adv.linear_show_replicon = state.adv.linear_show_replicon === true;
   state.adv.linear_show_accession = state.adv.linear_show_accession !== false;
   state.adv.linear_show_length = state.adv.linear_show_length !== false;
+  state.adv.pairwise_match_style = normalizePairwiseMatchStyle(state.adv.pairwise_match_style);
   if (data.losat) {
     safeDeepMerge(state.losat, data.losat);
     const rawParallelWorkers = String(data.losat.parallelWorkers ?? '').trim().toLowerCase();
@@ -430,8 +442,7 @@ const applyConfigData = (data) => {
       state.losat.blastp.collinearMinBlockScore = Number.isFinite(minBlockScore) && minBlockScore >= 0 ? minBlockScore : null;
       const scoreMode = String(state.losat.blastp?.collinearScoreMode || '').trim().toLowerCase();
       state.losat.blastp.collinearScoreMode = scoreMode === 'bitscore' ? 'bitscore' : 'constant';
-      const colorMode = String(state.losat.blastp?.collinearColorMode || '').trim().toLowerCase();
-      state.losat.blastp.collinearColorMode = ['identity', 'block', 'orientation'].includes(colorMode) ? colorMode : 'identity';
+      state.losat.blastp.collinearColorMode = normalizeCollinearColorMode(state.losat.blastp?.collinearColorMode);
       const unitMode = String(state.losat.blastp?.collinearUnitMode || '').trim().toLowerCase();
       state.losat.blastp.collinearUnitMode = ['auto', 'cds', 'locus'].includes(unitMode) ? unitMode : 'auto';
     }
@@ -446,7 +457,7 @@ const applyConfigData = (data) => {
     Object.entries(data.colors).forEach(([key, value]) => {
       normalized[key] = resolveColorToHex(String(value || '').trim());
     });
-    state.currentColors.value = normalized;
+    state.currentColors.value = state.normalizePaletteColors(normalized);
   }
   if (data.palette) state.selectedPalette.value = data.palette;
 
@@ -491,7 +502,7 @@ const applyConfigData = (data) => {
 
 const restorePaletteStateAfterConfigImport = () => {
   const draftPaletteName = String(state.selectedPalette.value || state.appliedPaletteName.value || 'default');
-  const draftColors = cloneColors(state.currentColors.value);
+  const draftColors = state.normalizePaletteColors(cloneColors(state.currentColors.value));
   const hasPreviewResults = Array.isArray(state.results.value) && state.results.value.length > 0;
 
   if (
@@ -512,7 +523,7 @@ const restorePaletteStateAfterConfigImport = () => {
 
 const restorePaletteStateFromSession = (ui = {}) => {
   const draftPaletteName = String(state.selectedPalette.value || state.appliedPaletteName.value || 'default');
-  const draftColors = cloneColors(state.currentColors.value);
+  const draftColors = state.normalizePaletteColors(cloneColors(state.currentColors.value));
   const savedAppliedPaletteName = String(ui.appliedPaletteName || draftPaletteName || 'default');
   const savedAppliedPaletteColors =
     ui.appliedPaletteColors && typeof ui.appliedPaletteColors === 'object'
@@ -535,11 +546,11 @@ const restorePaletteStateFromSession = (ui = {}) => {
       : draftColors;
 
   state.appliedPaletteName.value = savedAppliedPaletteName;
-  state.appliedPaletteColors.value = cloneColors(savedAppliedPaletteColors);
+  state.appliedPaletteColors.value = state.normalizePaletteColors(cloneColors(savedAppliedPaletteColors));
 
   if (!state.paletteInstantPreviewEnabled.value && savedPendingPaletteName) {
     state.pendingPaletteName.value = savedPendingPaletteName;
-    state.pendingPaletteColors.value = cloneColors(savedPendingPaletteColors);
+    state.pendingPaletteColors.value = state.normalizePaletteColors(cloneColors(savedPendingPaletteColors));
   } else {
     state.pendingPaletteName.value = '';
     state.pendingPaletteColors.value = {};

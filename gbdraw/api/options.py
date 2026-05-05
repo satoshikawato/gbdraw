@@ -81,10 +81,11 @@ class DiagramOptions:
     protein_comparisons: Sequence[DataFrame] | None = None
     orthogroups: OrthogroupResult | None = None
     protein_blastp_mode: Literal["none", "pairwise", "orthogroup", "collinear"] = "none"
+    pairwise_match_style: Literal["ribbon", "curve"] = "ribbon"
     collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None
     collinearity_params: CollinearityParameters | None = None
     collinearity_unit_mode: CollinearityUnitMode | str = "auto"
-    collinearity_color_mode: CollinearityColorMode | str = "identity"
+    collinearity_color_mode: CollinearityColorMode | str = "orientation"
     losatp_bin: str = "losat"
     protein_blastp_max_hits: int = 5
     protein_blastp_candidate_limit: int | None = None

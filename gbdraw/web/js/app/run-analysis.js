@@ -271,6 +271,15 @@ const normalizeBlastpMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['pairwise', 'orthogroup', 'collinear'].includes(normalized) ? normalized : 'orthogroup';
 };
+const normalizeCollinearColorMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  if (normalized === 'identity') return 'average_identity';
+  return ['average_identity', 'orientation'].includes(normalized) ? normalized : 'orientation';
+};
+const normalizePairwiseMatchStyle = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['ribbon', 'curve'].includes(normalized) ? normalized : 'ribbon';
+};
 const normalizeMultiRecordPositions = (value, { maxRow = Number.POSITIVE_INFINITY } = {}) => {
   if (!Array.isArray(value)) return [];
   const deduped = [];
@@ -807,6 +816,7 @@ export const createRunAnalysis = ({
         hide_accession: false,
         hide_length: false,
         orthogroup_alignment: false,
+        pairwise_match_style: false,
         keep_definition_left_aligned: false
       };
       return linearLabelSupportCache;
@@ -833,6 +843,7 @@ json.dumps({
   "hide_accession": "--hide_accession" in _source,
   "hide_length": "--hide_length" in _source,
   "orthogroup_alignment": "--align_orthogroup_feature" in _source,
+  "pairwise_match_style": "--pairwise_match_style" in _source,
   "keep_definition_left_aligned": "--keep_definition_left_aligned" in _source,
 })
       `);
@@ -855,6 +866,7 @@ json.dumps({
         hide_accession: false,
         hide_length: false,
         orthogroup_alignment: false,
+        pairwise_match_style: false,
         keep_definition_left_aligned: false
       };
     }
@@ -983,6 +995,57 @@ json.dumps({
     labelTextScopeDialog.matchingCount = 0;
   };
 
+  const validateDepthInputPresence = () => {
+    if (!form.show_depth) return '';
+    if (mode.value === 'circular') {
+      return files.c_depth ? '' : 'Please upload a Depth TSV file or disable Show depth track.';
+    }
+
+    const depthCount = linearSeqs.filter((seq) => Boolean(seq.depth)).length;
+    if (depthCount === 0) {
+      return 'Please upload at least one Depth TSV file or disable Show depth track.';
+    }
+    if (depthCount !== 1 && depthCount !== linearSeqs.length) {
+      return 'Upload one Depth TSV for all records, or one Depth TSV per sequence.';
+    }
+    return '';
+  };
+
+  const shouldSuppressPairwiseIdentityLegend = () => {
+    return (
+      mode.value === 'linear' &&
+      blastSource.value === 'losat' &&
+      losatProgram.value === 'blastp' &&
+      normalizeBlastpMode(losat.blastp?.mode) === 'collinear' &&
+      normalizeCollinearColorMode(losat.blastp?.collinearColorMode) === 'orientation'
+    );
+  };
+
+  const removePairwiseIdentityLegendFromSvgContent = (content) => {
+    if (typeof content !== 'string' || !content.includes('pairwise_legend')) return content;
+    const doc = new DOMParser().parseFromString(content, 'image/svg+xml');
+    const parseError = doc.querySelector('parsererror');
+    if (parseError) return content;
+    let removed = false;
+    doc.querySelectorAll('#pairwise_legend, [id="pairwise_legend"]').forEach((legend) => {
+      legend.remove();
+      removed = true;
+    });
+    if (!removed) return content;
+    return new XMLSerializer().serializeToString(doc.documentElement);
+  };
+
+  const stripPairwiseIdentityLegendsFromResults = (items) => {
+    if (!Array.isArray(items)) return items;
+    return items.map((item) => {
+      if (!item || typeof item.content !== 'string') return item;
+      return {
+        ...item,
+        content: removePairwiseIdentityLegendFromSvgContent(item.content)
+      };
+    });
+  };
+
   const refreshCircularRecordOrder = async () => {
     if (!Array.isArray(adv.multi_record_positions)) {
       adv.multi_record_positions = [];
@@ -1040,6 +1103,15 @@ json.dumps({
     const isReflow = runMode === 'reflow';
     if (isReflow && mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
       return { status: 'skipped' };
+    }
+    const depthInputError = validateDepthInputPresence();
+    if (depthInputError) {
+      if (isReflow) {
+        labelReflowLastError.value = depthInputError;
+      } else {
+        errorLog.value = formatJsError(new Error(depthInputError));
+      }
+      return { status: 'error' };
     }
     const previousSelectedResultIndex = selectedResultIndex.value;
     const editableLabelsSnapshot = Array.isArray(editableLabels.value)
@@ -1528,6 +1600,8 @@ json.dumps({
             : form.linear_track_layout === 'tuckin'
               ? 'below'
               : (form.linear_track_layout || 'middle');
+        const normalizedPairwiseMatchStyle = normalizePairwiseMatchStyle(adv.pairwise_match_style);
+        adv.pairwise_match_style = normalizedPairwiseMatchStyle;
         if (form.align_center) args.push('--align_center');
         if (form.show_gc) args.push('--show_gc');
         if (form.show_skew) args.push('--show_skew');
@@ -1583,11 +1657,7 @@ json.dumps({
           String(losat.blastp?.collinearScoreMode || '').trim().toLowerCase() === 'bitscore'
             ? 'bitscore'
             : 'constant';
-        losat.blastp.collinearColorMode = ['identity', 'block', 'orientation'].includes(
-          String(losat.blastp?.collinearColorMode || '').trim().toLowerCase()
-        )
-          ? String(losat.blastp.collinearColorMode).trim().toLowerCase()
-          : 'identity';
+        losat.blastp.collinearColorMode = normalizeCollinearColorMode(losat.blastp?.collinearColorMode);
         losat.blastp.collinearUnitMode = ['auto', 'cds', 'locus'].includes(
           String(losat.blastp?.collinearUnitMode || '').trim().toLowerCase()
         )
@@ -1653,6 +1723,7 @@ json.dumps({
         const wantsShowRepliconOption = adv.linear_show_replicon === true;
         const wantsHideAccessionOption = adv.linear_show_accession === false;
         const wantsHideLengthOption = adv.linear_show_length === false;
+        const wantsPairwiseMatchStyleOption = normalizedPairwiseMatchStyle !== 'ribbon';
         const wantsKeepDefinitionLeftAlignedOption = form.keep_definition_left_aligned === true;
         const wantsRulerOnAxisOption =
           Boolean(form.linear_ruler_on_axis) &&
@@ -1673,6 +1744,7 @@ json.dumps({
           wantsShowRepliconOption ||
           wantsHideAccessionOption ||
           wantsHideLengthOption ||
+          wantsPairwiseMatchStyleOption ||
           wantsOrthogroupAlignmentOption ||
           wantsKeepDefinitionLeftAlignedOption
         ) {
@@ -1715,6 +1787,9 @@ json.dumps({
           if (wantsHideLengthOption && !linearLabelSupport.hide_length) {
             throw new Error("Current gbdraw wheel does not support --hide_length. Rebuild and redeploy the web wheel.");
           }
+          if (wantsPairwiseMatchStyleOption && !linearLabelSupport.pairwise_match_style) {
+            throw new Error("Current gbdraw wheel does not support --pairwise_match_style. Rebuild and redeploy the web wheel.");
+          }
           if (wantsOrthogroupAlignmentOption && !linearLabelSupport.orthogroup_alignment) {
             throw new Error("Current gbdraw wheel does not support --align_orthogroup_feature. Rebuild and redeploy the web wheel.");
           }
@@ -1728,6 +1803,7 @@ json.dumps({
         if (wantsShowRepliconOption) args.push('--show_replicon');
         if (wantsHideAccessionOption) args.push('--hide_accession');
         if (wantsHideLengthOption) args.push('--hide_length');
+        if (wantsPairwiseMatchStyleOption) args.push('--pairwise_match_style', normalizedPairwiseMatchStyle);
         if (wantsOrthogroupAlignmentOption) {
           args.push('--align_orthogroup_feature', selectedOrthogroupTarget);
         }
@@ -2328,7 +2404,9 @@ json.dumps({
       }
 
       measureTiming(postGbdrawTimingEntries, 'run-analysis assign results', () => {
-        results.value = res;
+        results.value = shouldSuppressPairwiseIdentityLegend()
+          ? stripPairwiseIdentityLegendsFromResults(res)
+          : res;
       });
       logPostGbdrawTimings(postGbdrawTimingEntries);
       if (isReflow) {
