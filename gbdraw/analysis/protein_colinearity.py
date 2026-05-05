@@ -44,8 +44,8 @@ LOSATP_METADATA_COLUMNS = (
     "subject_orthogroup_representative",
 )
 LOSATP_COMPARISON_COLUMNS = tuple(COMPARISON_COLUMNS) + LOSATP_METADATA_COLUMNS
-PROTEIN_BLASTP_MODES = ("none", "pairwise", "orthogroup")
-ProteinBlastpMode = Literal["none", "pairwise", "orthogroup"]
+PROTEIN_BLASTP_MODES = ("none", "pairwise", "orthogroup", "collinear")
+ProteinBlastpMode = Literal["none", "pairwise", "orthogroup", "collinear"]
 
 
 @dataclass(frozen=True)
@@ -67,6 +67,13 @@ class CdsProtein:
     gene: str | None = None
     product: str | None = None
     note: str | None = None
+    locus_tag: str | None = None
+    gene_id: str | None = None
+    old_locus_tag: str | None = None
+    db_xref: tuple[str, ...] = ()
+    gff_id: str | None = None
+    parent_ids: tuple[str, ...] = ()
+    gene_parent_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -147,6 +154,13 @@ class _CdsProteinCandidate:
     gene: str | None
     product: str | None
     note: str | None
+    locus_tag: str | None
+    gene_id: str | None
+    old_locus_tag: str | None
+    db_xref: tuple[str, ...]
+    gff_id: str | None
+    parent_ids: tuple[str, ...]
+    gene_parent_id: str | None
 
 
 LosatpRunner = Callable[[str, str], DataFrame]
@@ -162,6 +176,20 @@ def _first_qualifier(feature: SeqFeature, key: str) -> str | None:
         value = value[0]
     text = str(value).strip()
     return text or None
+
+
+def _qualifier_values(feature: SeqFeature, key: str) -> tuple[str, ...]:
+    value = feature.qualifiers.get(key)
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        value = (value,)
+    values: list[str] = []
+    for item in value:
+        text = str(item).strip()
+        if text:
+            values.append(text)
+    return tuple(values)
 
 
 def _first_qualifier_from_any(feature: SeqFeature, keys: Sequence[str]) -> str | None:
@@ -227,6 +255,88 @@ def _codon_start(feature: SeqFeature) -> int:
     return codon_start if codon_start in {1, 2, 3} else 1
 
 
+def _feature_identifier(feature: SeqFeature) -> str | None:
+    feature_id = _first_qualifier(feature, "ID")
+    if feature_id:
+        return feature_id
+    raw_id = str(getattr(feature, "id", "") or "").strip()
+    if raw_id and raw_id != "<unknown id>":
+        return raw_id
+    return None
+
+
+def _iter_record_features(
+    record: SeqRecord,
+) -> list[tuple[int, SeqFeature, tuple[SeqFeature, ...]]]:
+    items: list[tuple[int, SeqFeature, tuple[SeqFeature, ...]]] = []
+
+    def walk(feature: SeqFeature, ancestors: tuple[SeqFeature, ...]) -> None:
+        items.append((len(items), feature, ancestors))
+        sub_features = getattr(feature, "sub_features", None) or []
+        for sub_feature in sub_features:
+            walk(sub_feature, ancestors + (feature,))
+
+    for feature in record.features:
+        walk(feature, ())
+    return items
+
+
+def _build_parent_graph(
+    feature_items: Sequence[tuple[int, SeqFeature, tuple[SeqFeature, ...]]],
+) -> dict[str, tuple[str, tuple[str, ...]]]:
+    graph: dict[str, tuple[str, tuple[str, ...]]] = {}
+    for _feature_index, feature, ancestors in feature_items:
+        feature_id = _feature_identifier(feature)
+        if not feature_id:
+            continue
+        parent_ids = _qualifier_values(feature, "Parent")
+        if not parent_ids and ancestors:
+            ancestor_id = _feature_identifier(ancestors[-1])
+            if ancestor_id:
+                parent_ids = (ancestor_id,)
+        graph[feature_id] = (str(feature.type), tuple(parent_ids))
+    return graph
+
+
+def _resolve_gene_parent_id(
+    feature: SeqFeature,
+    ancestors: Sequence[SeqFeature],
+    parent_graph: Mapping[str, tuple[str, tuple[str, ...]]],
+) -> str | None:
+    for ancestor in reversed(tuple(ancestors)):
+        if str(ancestor.type).lower() == "gene":
+            ancestor_id = _feature_identifier(ancestor)
+            if ancestor_id:
+                return ancestor_id
+
+    start_ids = list(_qualifier_values(feature, "Parent"))
+    if not start_ids and ancestors:
+        ancestor_id = _feature_identifier(ancestors[-1])
+        if ancestor_id:
+            start_ids.append(ancestor_id)
+
+    seen: set[str] = set()
+
+    def resolve(feature_id: str) -> str | None:
+        if feature_id in seen:
+            return None
+        seen.add(feature_id)
+        feature_type, parent_ids = parent_graph.get(feature_id, ("", ()))
+        if str(feature_type).lower() == "gene":
+            return feature_id
+        for parent_id in parent_ids:
+            resolved = resolve(parent_id)
+            if resolved:
+                return resolved
+        return None
+
+    for parent_id in start_ids:
+        resolved = resolve(parent_id)
+        if resolved:
+            return resolved
+    return None
+
+
 def _translate_cds_feature(record: SeqRecord, feature: SeqFeature) -> str | None:
     try:
         nucleotide_sequence = feature.extract(record.seq)
@@ -279,7 +389,9 @@ def extract_cds_proteins(
         global_record_index = record_index + record_index_offset
         record_candidates: list[_CdsProteinCandidate] = []
         cds_count = 0
-        for feature_index, feature in enumerate(record.features):
+        feature_items = _iter_record_features(record)
+        parent_graph = _build_parent_graph(feature_items)
+        for feature_index, feature, ancestors in feature_items:
             if feature.type != "CDS":
                 continue
 
@@ -305,6 +417,17 @@ def extract_cds_proteins(
             gene = _first_qualifier(feature, "gene")
             product = _first_qualifier(feature, "product")
             note = _first_qualifier(feature, "note")
+            locus_tag = _first_qualifier(feature, "locus_tag")
+            gene_id = _first_qualifier(feature, "gene_id")
+            old_locus_tag = _first_qualifier(feature, "old_locus_tag")
+            db_xref = _qualifier_values(feature, "db_xref")
+            gff_id = _feature_identifier(feature)
+            parent_ids = _qualifier_values(feature, "Parent")
+            if not parent_ids and ancestors:
+                ancestor_id = _feature_identifier(ancestors[-1])
+                if ancestor_id:
+                    parent_ids = (ancestor_id,)
+            gene_parent_id = _resolve_gene_parent_id(feature, ancestors, parent_graph)
             label = (
                 _first_qualifier_from_any(
                     feature, ("locus_tag", "protein_id", "gene", "product")
@@ -328,6 +451,13 @@ def extract_cds_proteins(
                     gene=gene,
                     product=product,
                     note=note,
+                    locus_tag=locus_tag,
+                    gene_id=gene_id,
+                    old_locus_tag=old_locus_tag,
+                    db_xref=db_xref,
+                    gff_id=gff_id,
+                    parent_ids=parent_ids,
+                    gene_parent_id=gene_parent_id,
                 )
             )
 
@@ -363,6 +493,13 @@ def extract_cds_proteins(
                 gene=candidate.gene,
                 product=candidate.product,
                 note=candidate.note,
+                locus_tag=candidate.locus_tag,
+                gene_id=candidate.gene_id,
+                old_locus_tag=candidate.old_locus_tag,
+                db_xref=candidate.db_xref,
+                gff_id=candidate.gff_id,
+                parent_ids=candidate.parent_ids,
+                gene_parent_id=candidate.gene_parent_id,
             )
             record_proteins.append(cds_protein)
             protein_map[protein_id] = cds_protein

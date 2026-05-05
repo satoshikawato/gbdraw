@@ -11,6 +11,72 @@ from ....canvas import LinearCanvasConfigurator
 from ....layout.linear_coords import normalize_position_linear
 from ....core.color import interpolate_color
 
+_COLLINEARITY_BLOCK_PALETTE = (
+    "#4E79A7",
+    "#F28E2B",
+    "#59A14F",
+    "#E15759",
+    "#76B7B2",
+    "#EDC948",
+    "#B07AA1",
+    "#FF9DA7",
+    "#9C755F",
+    "#BAB0AC",
+)
+_COLLINEARITY_ORIENTATION_COLORS = {
+    "plus": "#4E79A7",
+    "minus": "#E15759",
+}
+
+
+def _row_value(row: object, name: str, default: object = "") -> object:
+    value = getattr(row, name, default)
+    if value is None:
+        return default
+    return value
+
+
+def _row_float(row: object, name: str, default: float = 0.0) -> float:
+    try:
+        return float(_row_value(row, name, default))
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _row_span(row: object, start_name: str, end_name: str) -> float:
+    return abs(_row_float(row, end_name) - _row_float(row, start_name))
+
+
+def _stable_block_color(block_id: str) -> str:
+    if not block_id:
+        return _COLLINEARITY_BLOCK_PALETTE[0]
+    total = 0
+    for char in block_id:
+        total = (total * 33 + ord(char)) % 1_000_003
+    return _COLLINEARITY_BLOCK_PALETTE[total % len(_COLLINEARITY_BLOCK_PALETTE)]
+
+
+def _match_draw_order_key(row: object) -> tuple[int, int, float, float, float, float, str]:
+    block_id = str(_row_value(row, "collinearity_block_id", "") or "").strip()
+    if not block_id:
+        return (0, 0, 0.0, 0.0, _row_float(row, "qstart"), _row_float(row, "sstart"), "")
+
+    orientation = str(_row_value(row, "collinearity_orientation", "") or "").strip().lower()
+    orientation_rank = 1 if orientation == "plus" else 2 if orientation == "minus" else 1
+    query_span = _row_span(row, "qstart", "qend")
+    subject_span = _row_span(row, "sstart", "send")
+    area = query_span * subject_span
+    total_span = query_span + subject_span
+    return (
+        1,
+        orientation_rank,
+        -area,
+        -total_span,
+        _row_float(row, "qstart"),
+        _row_float(row, "sstart"),
+        block_id,
+    )
+
 
 class PairWiseMatchGroup:
     """
@@ -119,6 +185,16 @@ class PairWiseMatchGroup:
         identity_percent = float(row.identity)
         factor = (identity_percent - self.min_identity) / (100 - self.min_identity)
         dynamic_fill_color = interpolate_color(self.match_min_color, self.match_max_color, factor)
+        collinearity_block_id = str(_row_value(row, "collinearity_block_id", "") or "")
+        collinearity_orientation = str(_row_value(row, "collinearity_orientation", "") or "")
+        collinearity_color_mode = str(_row_value(row, "collinearity_color_mode", "") or "").lower()
+        if collinearity_block_id and collinearity_color_mode == "block":
+            dynamic_fill_color = _stable_block_color(collinearity_block_id)
+        elif collinearity_block_id and collinearity_color_mode == "orientation":
+            dynamic_fill_color = _COLLINEARITY_ORIENTATION_COLORS.get(
+                collinearity_orientation,
+                dynamic_fill_color,
+            )
         query_start, query_end, subject_start, subject_end = self.calculate_offsets(row)
         query_start_x, query_start_y, query_end_x, query_end_y = self.normalize_positions(
             query_start, query_end, 0, is_query=True
@@ -137,13 +213,36 @@ class PairWiseMatchGroup:
             subject_end_x,
             subject_end_y,
         )
-        return Path(
+        path = Path(
             d=match_path_desc,
             fill=dynamic_fill_color,
             fill_opacity=self.match_fill_opacity,
             stroke=self.match_stroke_color,
             stroke_width=self.match_stroke_width,
+            debug=False,
         )
+        self.add_optional_metadata_attributes(path, row)
+        return path
+
+    def add_optional_metadata_attributes(self, path: Path, row: DataFrame) -> None:
+        collinearity_block_id = str(_row_value(row, "collinearity_block_id", "") or "").strip()
+        if not collinearity_block_id:
+            return
+        metadata_columns = {
+            "collinearity_block_id": "data-collinearity-block-id",
+            "collinearity_orientation": "data-collinearity-orientation",
+            "query_protein_id": "data-query-protein-id",
+            "subject_protein_id": "data-subject-protein-id",
+            "query_feature_svg_id": "data-query-feature-svg-id",
+            "subject_feature_svg_id": "data-subject-feature-svg-id",
+            "query_unit_id": "data-query-unit-id",
+            "subject_unit_id": "data-subject-unit-id",
+        }
+        for column, attribute in metadata_columns.items():
+            value = _row_value(row, column, "")
+            text = str(value or "").strip()
+            if text:
+                path.attribs[attribute] = text
 
     def calculate_offsets(self, row: DataFrame) -> tuple[float, float, float, float]:
         """
@@ -225,7 +324,10 @@ class PairWiseMatchGroup:
         Returns:
             Group: The SVG group with all match paths added.
         """
-        for row in self.comparison_df.itertuples():
+        rows = list(self.comparison_df.itertuples())
+        if any(str(_row_value(row, "collinearity_block_id", "") or "").strip() for row in rows):
+            rows = sorted(rows, key=_match_draw_order_key)
+        for row in rows:
             match_path: Path = self.generate_linear_match_path(row)
             self.match_group.add(match_path)
         return self.match_group

@@ -13,6 +13,16 @@ import logging
 from gbdraw.circular import circular_main
 from gbdraw.linear import linear_main
 
+def _is_blank_or_js_nullish(value):
+    if value is None:
+        return True
+    if type(value).__name__ in {"JsNull", "JsUndefined"}:
+        return True
+    try:
+        return str(value).strip().lower() in {"", "null", "undefined", "none"}
+    except Exception:
+        return False
+
 def get_palettes_json():
     try:
         with resources.files("gbdraw.data").joinpath("color_palettes.toml").open("rb") as fh:
@@ -255,6 +265,13 @@ def _serialize_cds_protein(protein):
         "gene": getattr(protein, "gene", None),
         "product": getattr(protein, "product", None),
         "note": getattr(protein, "note", None),
+        "locus_tag": getattr(protein, "locus_tag", None),
+        "gene_id": getattr(protein, "gene_id", None),
+        "old_locus_tag": getattr(protein, "old_locus_tag", None),
+        "db_xref": list(getattr(protein, "db_xref", ()) or ()),
+        "gff_id": getattr(protein, "gff_id", None),
+        "parent_ids": list(getattr(protein, "parent_ids", ()) or ()),
+        "gene_parent_id": getattr(protein, "gene_parent_id", None),
     }
 
 def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None):
@@ -357,11 +374,43 @@ def _build_web_cds_protein_map(raw_map):
             "feature_svg_id": data.get("feature_svg_id"),
         }
         supported_fields = getattr(CdsProtein, "__dataclass_fields__", {})
-        for optional_field in ("gene", "product", "note"):
+        for optional_field in (
+            "gene",
+            "product",
+            "note",
+            "locus_tag",
+            "gene_id",
+            "old_locus_tag",
+            "gff_id",
+            "gene_parent_id",
+        ):
             if optional_field in supported_fields:
                 kwargs[optional_field] = data.get(optional_field)
+        for tuple_field in ("db_xref", "parent_ids"):
+            if tuple_field in supported_fields:
+                raw_values = data.get(tuple_field) or ()
+                if isinstance(raw_values, (list, tuple)):
+                    kwargs[tuple_field] = tuple(str(value) for value in raw_values if str(value).strip())
+                else:
+                    kwargs[tuple_field] = (str(raw_values),) if str(raw_values).strip() else ()
         protein_map[str(protein_id)] = CdsProtein(**kwargs)
     return protein_map
+
+def _build_web_protein_extraction(protein_maps):
+    from gbdraw.analysis.protein_colinearity import ProteinExtractionResult
+
+    combined = {}
+    max_record_index = -1
+    for protein_map in protein_maps:
+        combined.update(protein_map)
+        for protein in protein_map.values():
+            max_record_index = max(max_record_index, int(protein.record_index))
+    proteins_by_record = [[] for _ in range(max_record_index + 1)]
+    for protein in combined.values():
+        proteins_by_record[int(protein.record_index)].append(protein)
+    for record_proteins in proteins_by_record:
+        record_proteins.sort(key=lambda protein: (int(protein.start), int(protein.end), int(protein.feature_index), str(protein.protein_id)))
+    return ProteinExtractionResult(proteins_by_record=proteins_by_record, protein_map=combined)
 
 def _clean_json_scalar(value):
     try:
@@ -405,10 +454,25 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     evalue="1e-2",
     identity=0,
     alignment_length=0,
+    collinear_min_anchors=5,
+    collinear_max_gene_gap=25,
+    collinear_gap_penalty=1.0,
+    collinear_nearby_duplicate_window=5,
+    collinear_score_mode="constant",
+    collinear_constant_anchor_score=50.0,
+    collinear_min_block_score=None,
+    collinear_unit_mode="auto",
+    collinear_color_mode="identity",
 ):
     """Convert LOSATP blastp outputs for pairwise display or RBH orthogroups."""
     try:
         from io import StringIO
+        import pandas as pd
+        from gbdraw.analysis.collinearity import (
+            CollinearityParameters,
+            build_collinearity_blocks_from_hits,
+            convert_collinearity_blocks_to_comparisons,
+        )
         from gbdraw.analysis.protein_colinearity import (
             build_orthogroups_from_protein_hits,
             convert_pair_protein_hits_to_genomic_links,
@@ -423,16 +487,18 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         if not isinstance(raw_pairs, list):
             raw_pairs = []
         normalized_mode = str(mode or "pairwise").strip().lower()
-        if normalized_mode not in {"pairwise", "orthogroup"}:
+        if normalized_mode not in {"pairwise", "orthogroup", "collinear"}:
             normalized_mode = "pairwise"
 
         pair_items = []
         combined_protein_map = {}
+        protein_maps_for_extraction = []
         for idx, item in enumerate(raw_pairs):
             if not isinstance(item, dict):
                 continue
             query_map = _build_web_cds_protein_map(item.get("queryProteinMap") or {})
             subject_map = _build_web_cds_protein_map(item.get("subjectProteinMap") or {})
+            protein_maps_for_extraction.extend([query_map, subject_map])
             hits = parse_losatp_outfmt6(str(item.get("blastText") or ""))
             filtered = filter_protein_hits_by_thresholds(
                 hits,
@@ -456,6 +522,87 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             )
             combined_protein_map.update(query_map)
             combined_protein_map.update(subject_map)
+
+        if normalized_mode == "collinear":
+            extraction = _build_web_protein_extraction(protein_maps_for_extraction)
+            record_ids = []
+            for record_proteins in extraction.proteins_by_record:
+                if record_proteins:
+                    record_ids.append(str(record_proteins[0].record_id))
+                else:
+                    record_ids.append("")
+            pair_count = max(0, len(record_ids) - 1)
+            hits_by_pair = [pd.DataFrame(columns=COMPARISON_COLUMNS) for _ in range(pair_count)]
+            for item in pair_items:
+                query_index = int(item["query_index"])
+                subject_index = int(item["subject_index"])
+                if subject_index == query_index + 1 and 0 <= query_index < pair_count:
+                    hits_by_pair[query_index] = item["hits"]
+            def _collinear_int(value, default):
+                if _is_blank_or_js_nullish(value):
+                    return int(default)
+                return int(value)
+            def _collinear_float(value, default):
+                if _is_blank_or_js_nullish(value):
+                    return float(default)
+                return float(value)
+            def _collinear_text(value, default):
+                if _is_blank_or_js_nullish(value):
+                    return default
+                return str(value).strip()
+            min_block_score = None
+            if not _is_blank_or_js_nullish(collinear_min_block_score):
+                min_block_score = float(collinear_min_block_score)
+            params = CollinearityParameters(
+                min_anchors=_collinear_int(collinear_min_anchors, 5),
+                max_gene_gap=_collinear_int(collinear_max_gene_gap, 25),
+                gap_penalty=_collinear_float(collinear_gap_penalty, 1.0),
+                nearby_duplicate_window=_collinear_int(collinear_nearby_duplicate_window, 5),
+                score_mode=_collinear_text(collinear_score_mode, "constant"),
+                constant_anchor_score=_collinear_float(collinear_constant_anchor_score, 50.0),
+                min_block_score=min_block_score,
+            )
+            collinearity_result = build_collinearity_blocks_from_hits(
+                hits_by_pair,
+                extraction,
+                params=params,
+                unit_mode=_collinear_text(collinear_unit_mode, "auto"),
+            )
+            converted_frames = convert_collinearity_blocks_to_comparisons(
+                collinearity_result,
+                record_ids=record_ids,
+                color_mode=_collinear_text(collinear_color_mode, "identity"),
+            )
+            converted_pairs = []
+            for pair_index, converted in enumerate(converted_frames):
+                handle = StringIO()
+                converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(
+                    handle,
+                    sep=chr(9),
+                    header=False,
+                    index=False,
+                    lineterminator=chr(10),
+                )
+                converted_pairs.append(
+                    {
+                        "pair_index": pair_index,
+                        "tsv": handle.getvalue(),
+                        "rows": _dataframe_json_rows(converted),
+                        "hit_count": int(converted.shape[0]),
+                    }
+                )
+            block_payload = [
+                {
+                    "id": block.block_id,
+                    "orientation": block.orientation,
+                    "score": block.score,
+                    "anchor_count": len(block.anchors),
+                    "queryRecordIndex": block.query_record_index,
+                    "subjectRecordIndex": block.subject_record_index,
+                }
+                for block in collinearity_result.blocks
+            ]
+            return json.dumps({"pairs": converted_pairs, "orthogroups": [], "collinearityBlocks": block_payload})
 
         if normalized_mode == "pairwise":
             converted_pairs = []

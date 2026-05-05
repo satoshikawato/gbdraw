@@ -50,6 +50,14 @@ const svgContent = computed(() => {
         'data-label-feature-id',
         'data-label-source-text',
         'data-label-editable',
+        'data-collinearity-block-id',
+        'data-collinearity-orientation',
+        'data-query-protein-id',
+        'data-subject-protein-id',
+        'data-query-feature-svg-id',
+        'data-subject-feature-svg-id',
+        'data-query-unit-id',
+        'data-subject-unit-id',
         'fill',
         'fill-opacity',
         'stroke',
@@ -377,7 +385,16 @@ const losat = reactive({
   blastp: {
     mode: 'orthogroup',
     maxHits: 5,
-    candidateLimit: null
+    candidateLimit: null,
+    collinearMinAnchors: 5,
+    collinearMaxGeneGap: 25,
+    collinearGapPenalty: 1,
+    collinearNearbyDuplicateWindow: 5,
+    collinearScoreMode: 'constant',
+    collinearConstantAnchorScore: 50,
+    collinearMinBlockScore: null,
+    collinearColorMode: 'identity',
+    collinearUnitMode: 'auto'
   }
 });
 

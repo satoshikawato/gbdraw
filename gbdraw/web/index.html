@@ -263,10 +263,10 @@
                                 <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="losatProgram" value="blastp" class="text-blue-600"> blastp</label>
                             </div>
                             <div class="mt-3 pt-3 border-t border-slate-200">
-                                <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Settings</div>
+                                <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Settings <help-tip text="Configure browser-side LOSAT execution and how blastp comparison results are reduced before drawing."></help-tip></div>
                                 <div class="grid grid-cols-1 gap-1 mb-2">
                                     <div>
-                                        <label class="text-[9px] block">Parallel workers</label>
+                                        <label class="text-[9px] flex items-center">Parallel workers <help-tip text="Number of LOSAT jobs to run at the same time. Auto chooses a conservative worker count for the browser."></help-tip></label>
                                         <select v-model="losat.parallelWorkers" class="form-input px-1 py-0.5 text-xs">
                                             <option :value="undefined">Auto</option>
                                             <option value="1">1</option>
@@ -279,7 +279,7 @@
                                 <div v-if="losatProgram === 'blastn'" class="space-y-2">
                                     <div class="grid grid-cols-1 gap-1">
                                         <div>
-                                            <label class="text-[9px] block">Task</label>
+                                            <label class="text-[9px] flex items-center">Task <help-tip text="LOSAT blastn task preset. megablast is fastest for highly similar nucleotide sequences; blastn is more sensitive."></help-tip></label>
                                             <select v-model="losat.blastn.task" class="form-input px-1 py-0.5 text-xs">
                                                 <option value="megablast">megablast</option>
                                                 <option value="blastn">blastn</option>
@@ -295,16 +295,73 @@
                                 <div v-else class="space-y-2">
                                     <div class="grid grid-cols-2 gap-1">
                                         <div class="col-span-2">
-                                            <label class="text-[9px] block">blastp mode</label>
+                                            <label class="text-[9px] flex items-center">blastp mode <help-tip text="Pairwise draws top protein hits, Orthogroups keeps reciprocal best-hit groups, and Collinear blocks calls ordered syntenic blocks from adjacent records."></help-tip></label>
                                             <select v-model="losat.blastp.mode" class="form-input px-1 py-0.5 text-xs">
                                                 <option value="orthogroup">Orthogroups</option>
+                                                <option value="collinear">Collinear blocks</option>
                                                 <option value="pairwise">Pairwise</option>
                                             </select>
                                         </div>
                                         <div v-if="losat.blastp.mode === 'pairwise'">
-                                            <label class="text-[9px] block">Max hits per protein</label>
+                                            <label class="text-[9px] flex items-center">Max hits per protein <help-tip text="Maximum distinct subject proteins drawn for each query protein in Pairwise mode. Higher values show repeats but increase clutter."></help-tip></label>
                                             <input type="number" min="1" v-model.number="losat.blastp.maxHits" class="form-input px-1 py-0.5 text-xs">
                                         </div>
+                                        <template v-if="losat.blastp.mode === 'collinear'">
+                                            <div>
+                                                <label class="text-[9px] flex items-center">Min anchors <help-tip text="Minimum number of ordered protein-hit anchors required to accept a collinear block. Larger values suppress short or weak blocks."></help-tip></label>
+                                                <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMinAnchors" class="form-input px-1 py-0.5 text-xs">
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] flex items-center">Max gene gap <help-tip text="Maximum number of unmatched collinearity units allowed between neighboring anchors inside one block. Smaller values split blocks more aggressively."></help-tip></label>
+                                                <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxGeneGap" class="form-input px-1 py-0.5 text-xs">
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] flex items-center">Color mode <help-tip text="Identity uses the pairwise identity gradient, Block gives each collinear block a stable color, and Orientation colors plus blocks blue and inverted blocks red."></help-tip></label>
+                                                <select v-model="losat.blastp.collinearColorMode" class="form-input px-1 py-0.5 text-xs">
+                                                    <option value="identity">Identity</option>
+                                                    <option value="block">Block</option>
+                                                    <option value="orientation">Orientation</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] flex items-center">Unit mode <help-tip text="Auto collapses CDS features by stable locus IDs when available, CDS treats every CDS separately, and Locus requires locus IDs for all CDS features."></help-tip></label>
+                                                <select v-model="losat.blastp.collinearUnitMode" class="form-input px-1 py-0.5 text-xs">
+                                                    <option value="auto">Auto</option>
+                                                    <option value="cds">CDS</option>
+                                                    <option value="locus">Locus</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-span-2">
+                                                <details class="rounded border border-slate-200 bg-white px-2 py-1">
+                                                    <summary class="text-[10px] font-semibold text-slate-600 cursor-pointer">Advanced</summary>
+                                                    <div class="grid grid-cols-2 gap-1.5 mt-2">
+                                                        <div>
+                                                            <label class="text-[9px] flex items-center">Gap penalty <help-tip text="Score penalty applied for skipped units between anchors. Higher values favor tighter, less gapped blocks."></help-tip></label>
+                                                            <input type="number" min="0" step="0.1" v-model.number="losat.blastp.collinearGapPenalty" class="form-input px-1 py-0.5 text-xs">
+                                                        </div>
+                                                        <div>
+                                                            <label class="text-[9px] flex items-center">Duplicate window <help-tip text="Nearby duplicate-hit collapse window in unit order. Increase to reduce tandem-repeat clutter before block calling."></help-tip></label>
+                                                            <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearNearbyDuplicateWindow" class="form-input px-1 py-0.5 text-xs">
+                                                        </div>
+                                                        <div>
+                                                            <label class="text-[9px] flex items-center">Score mode <help-tip text="Constant gives every accepted anchor the same score; Bitscore weights anchors by LOSAT blastp bitscore."></help-tip></label>
+                                                            <select v-model="losat.blastp.collinearScoreMode" class="form-input px-1 py-0.5 text-xs">
+                                                                <option value="constant">Constant</option>
+                                                                <option value="bitscore">Bitscore</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label class="text-[9px] flex items-center">Anchor score <help-tip text="Per-anchor score used when Score mode is Constant. The default makes Min anchors control the default block score cutoff."></help-tip></label>
+                                                            <input type="number" min="0.000001" step="1" v-model.number="losat.blastp.collinearConstantAnchorScore" class="form-input px-1 py-0.5 text-xs">
+                                                        </div>
+                                                        <div class="col-span-2">
+                                                            <label class="text-[9px] flex items-center">Min block score <help-tip text="Optional minimum total chain score. Auto uses Min anchors times Anchor score in Constant mode."></help-tip></label>
+                                                            <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMinBlockScore" class="form-input px-1 py-0.5 text-xs" placeholder="Auto">
+                                                        </div>
+                                                    </div>
+                                                </details>
+                                            </div>
+                                        </template>
                                     </div>
                                 </div>
                             </div>

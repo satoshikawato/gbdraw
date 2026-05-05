@@ -30,6 +30,16 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     build_rbh_orthogroup_protein_blastp_comparisons,
     normalize_protein_blastp_mode,
 )
+from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
+    CollinearityBlock,
+    CollinearityColorMode,
+    CollinearityParameters,
+    CollinearityResult,
+    build_native_collinearity_blocks,
+    convert_collinearity_blocks_to_comparisons,
+    normalize_collinearity_color_mode,
+)
+from gbdraw.analysis.collinearity_units import CollinearityUnitMode  # type: ignore[reportMissingImports]
 from gbdraw.analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from gbdraw.api.config import apply_config_overrides  # type: ignore[reportMissingImports]
 from gbdraw.api.options import DiagramOptions  # type: ignore[reportMissingImports]
@@ -1190,6 +1200,10 @@ def assemble_linear_diagram_from_records(
     protein_comparisons: Sequence[DataFrame] | None = None,
     orthogroups: OrthogroupResult | None = None,
     protein_blastp_mode: ProteinBlastpMode | str = "none",
+    collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None,
+    collinearity_params: CollinearityParameters | None = None,
+    collinearity_unit_mode: CollinearityUnitMode | str = "auto",
+    collinearity_color_mode: CollinearityColorMode | str = "identity",
     losatp_bin: str = "losat",
     protein_blastp_max_hits: int = 5,
     protein_blastp_candidate_limit: int | None = None,
@@ -1240,17 +1254,24 @@ def assemble_linear_diagram_from_records(
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
     normalized_protein_blastp_mode = normalize_protein_blastp_mode(protein_blastp_mode)
+    normalized_collinearity_color_mode = normalize_collinearity_color_mode(str(collinearity_color_mode))
     if int(protein_blastp_max_hits) <= 0:
         raise ValidationError("protein_blastp_max_hits must be > 0")
     if protein_blastp_candidate_limit is not None and int(protein_blastp_candidate_limit) <= 0:
         raise ValidationError("protein_blastp_candidate_limit must be > 0 or None")
     if normalized_protein_blastp_mode != "none" and protein_comparisons is not None:
         raise ValidationError("Pass either protein_blastp_mode or protein_comparisons, not both.")
+    if collinearity_blocks is not None and (
+        normalized_protein_blastp_mode != "none" or protein_comparisons is not None or blast_files
+    ):
+        raise ValidationError(
+            "Pass collinearity_blocks without protein_blastp_mode, protein_comparisons, or blast_files."
+        )
     if normalized_protein_blastp_mode != "none" and blast_files:
         raise ValidationError("protein_blastp_mode cannot be used with blast_files.")
     if normalized_protein_blastp_mode != "none" and len(records) < 2:
         raise ValidationError("protein_blastp_mode requires at least two records")
-    has_precomputed_comparisons = bool(blast_files or protein_comparisons is not None)
+    has_precomputed_comparisons = bool(blast_files or protein_comparisons is not None or collinearity_blocks is not None)
     if (
         align_orthogroup_feature
         and normalized_protein_blastp_mode != "orthogroup"
@@ -1270,6 +1291,7 @@ def assemble_linear_diagram_from_records(
         has_comparisons = bool(
             blast_files
             or protein_comparisons
+            or collinearity_blocks
             or normalized_protein_blastp_mode != "none"
         )
         default_colors = load_default_colors(
@@ -1311,6 +1333,16 @@ def assemble_linear_diagram_from_records(
     resolved_orthogroups: OrthogroupResult | None = orthogroups
     if protein_comparisons is not None:
         resolved_protein_comparisons = list(protein_comparisons)
+    elif collinearity_blocks is not None:
+        if isinstance(collinearity_blocks, CollinearityResult):
+            collinearity_result = collinearity_blocks
+        else:
+            collinearity_result = CollinearityResult(blocks=tuple(collinearity_blocks))
+        resolved_protein_comparisons = convert_collinearity_blocks_to_comparisons(
+            collinearity_result,
+            records=records,
+            color_mode=normalized_collinearity_color_mode,
+        )
     elif normalized_protein_blastp_mode == "pairwise":
         protein_blastp_result = build_pairwise_protein_blastp_comparisons(
             records,
@@ -1335,6 +1367,23 @@ def assemble_linear_diagram_from_records(
         )
         resolved_protein_comparisons = protein_blastp_result.comparisons
         resolved_orthogroups = protein_blastp_result.orthogroups
+    elif normalized_protein_blastp_mode == "collinear":
+        collinearity_result = build_native_collinearity_blocks(
+            records,
+            losatp_bin=losatp_bin,
+            candidate_limit=protein_blastp_candidate_limit,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+            params=collinearity_params,
+            unit_mode=collinearity_unit_mode,
+        )
+        resolved_protein_comparisons = convert_collinearity_blocks_to_comparisons(
+            collinearity_result,
+            records=records,
+            color_mode=normalized_collinearity_color_mode,
+        )
     normalized_plot_title = str(plot_title or "").strip()
     normalized_plot_title_position = _resolve_linear_plot_title_position(
         str(plot_title_position)
@@ -2573,6 +2622,10 @@ def build_linear_diagram(
         protein_comparisons=options.protein_comparisons,
         orthogroups=options.orthogroups,
         protein_blastp_mode=options.protein_blastp_mode,
+        collinearity_blocks=options.collinearity_blocks,
+        collinearity_params=options.collinearity_params,
+        collinearity_unit_mode=options.collinearity_unit_mode,
+        collinearity_color_mode=options.collinearity_color_mode,
         losatp_bin=options.losatp_bin,
         protein_blastp_max_hits=options.protein_blastp_max_hits,
         protein_blastp_candidate_limit=options.protein_blastp_candidate_limit,

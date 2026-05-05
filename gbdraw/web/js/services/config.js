@@ -1,7 +1,7 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
-const SESSION_VERSION = 16;
+const SESSION_VERSION = 17;
 
 const cloneColors = (colors) => ({ ...(colors || {}) });
 
@@ -127,7 +127,7 @@ const normalizePositiveInteger = (value, fallback) => {
 
 const normalizeBlastpMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
-  return ['pairwise', 'orthogroup'].includes(normalized) ? normalized : 'orthogroup';
+  return ['pairwise', 'orthogroup', 'collinear'].includes(normalized) ? normalized : 'orthogroup';
 };
 
 const normalizeFeatureShapes = (featureShapes) => {
@@ -415,6 +415,26 @@ const applyConfigData = (data) => {
     state.losat.blastp.mode = normalizeBlastpMode(state.losat.blastp?.mode);
     state.losat.blastp.maxHits = normalizePositiveInteger(state.losat.blastp?.maxHits, 5);
     state.losat.blastp.candidateLimit = null;
+    state.losat.blastp.collinearMinAnchors = normalizePositiveInteger(state.losat.blastp?.collinearMinAnchors, 5);
+    {
+      const maxGap = Number(state.losat.blastp?.collinearMaxGeneGap);
+      state.losat.blastp.collinearMaxGeneGap = Number.isInteger(maxGap) && maxGap >= 0 ? maxGap : 25;
+      const duplicateWindow = Number(state.losat.blastp?.collinearNearbyDuplicateWindow);
+      state.losat.blastp.collinearNearbyDuplicateWindow =
+        Number.isInteger(duplicateWindow) && duplicateWindow >= 0 ? duplicateWindow : 5;
+      const gapPenalty = Number(state.losat.blastp?.collinearGapPenalty);
+      state.losat.blastp.collinearGapPenalty = Number.isFinite(gapPenalty) && gapPenalty >= 0 ? gapPenalty : 1;
+      const anchorScore = Number(state.losat.blastp?.collinearConstantAnchorScore);
+      state.losat.blastp.collinearConstantAnchorScore = Number.isFinite(anchorScore) && anchorScore > 0 ? anchorScore : 50;
+      const minBlockScore = Number(state.losat.blastp?.collinearMinBlockScore);
+      state.losat.blastp.collinearMinBlockScore = Number.isFinite(minBlockScore) && minBlockScore >= 0 ? minBlockScore : null;
+      const scoreMode = String(state.losat.blastp?.collinearScoreMode || '').trim().toLowerCase();
+      state.losat.blastp.collinearScoreMode = scoreMode === 'bitscore' ? 'bitscore' : 'constant';
+      const colorMode = String(state.losat.blastp?.collinearColorMode || '').trim().toLowerCase();
+      state.losat.blastp.collinearColorMode = ['identity', 'block', 'orientation'].includes(colorMode) ? colorMode : 'identity';
+      const unitMode = String(state.losat.blastp?.collinearUnitMode || '').trim().toLowerCase();
+      state.losat.blastp.collinearUnitMode = ['auto', 'cds', 'locus'].includes(unitMode) ? unitMode : 'auto';
+    }
     delete state.losat.blastp.orthogroupHitPolicy;
     delete state.losat.blastp.orthogroupMaxHits;
   }

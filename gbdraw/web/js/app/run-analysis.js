@@ -269,7 +269,7 @@ const normalizeBlastThresholdText = (value, defaultValue) => {
 };
 const normalizeBlastpMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
-  return ['pairwise', 'orthogroup'].includes(normalized) ? normalized : 'orthogroup';
+  return ['pairwise', 'orthogroup', 'collinear'].includes(normalized) ? normalized : 'orthogroup';
 };
 const normalizeMultiRecordPositions = (value, { maxRow = Number.POSITIVE_INFINITY } = {}) => {
   if (!Array.isArray(value)) return [];
@@ -1562,6 +1562,42 @@ json.dumps({
         losat.blastp.mode = blastpMode;
         losat.blastp.maxHits = Math.max(1, blastpDisplayMaxHits);
         losat.blastp.candidateLimit = null;
+        losat.blastp.collinearMinAnchors = Math.max(
+          1,
+          normalizeBlastThresholdNumber(losat.blastp?.collinearMinAnchors, 5, { integer: true })
+        );
+        losat.blastp.collinearMaxGeneGap = Math.max(
+          0,
+          normalizeBlastThresholdNumber(losat.blastp?.collinearMaxGeneGap, 25, { integer: true })
+        );
+        losat.blastp.collinearNearbyDuplicateWindow = Math.max(
+          0,
+          normalizeBlastThresholdNumber(losat.blastp?.collinearNearbyDuplicateWindow, 5, { integer: true })
+        );
+        losat.blastp.collinearGapPenalty = normalizeBlastThresholdNumber(losat.blastp?.collinearGapPenalty, 1);
+        losat.blastp.collinearConstantAnchorScore = Math.max(
+          0.000001,
+          normalizeBlastThresholdNumber(losat.blastp?.collinearConstantAnchorScore, 50)
+        );
+        losat.blastp.collinearScoreMode =
+          String(losat.blastp?.collinearScoreMode || '').trim().toLowerCase() === 'bitscore'
+            ? 'bitscore'
+            : 'constant';
+        losat.blastp.collinearColorMode = ['identity', 'block', 'orientation'].includes(
+          String(losat.blastp?.collinearColorMode || '').trim().toLowerCase()
+        )
+          ? String(losat.blastp.collinearColorMode).trim().toLowerCase()
+          : 'identity';
+        losat.blastp.collinearUnitMode = ['auto', 'cds', 'locus'].includes(
+          String(losat.blastp?.collinearUnitMode || '').trim().toLowerCase()
+        )
+          ? String(losat.blastp.collinearUnitMode).trim().toLowerCase()
+          : 'auto';
+        if (losat.blastp.collinearMinBlockScore !== null && losat.blastp.collinearMinBlockScore !== undefined && losat.blastp.collinearMinBlockScore !== '') {
+          losat.blastp.collinearMinBlockScore = normalizeBlastThresholdNumber(losat.blastp.collinearMinBlockScore, null);
+        } else {
+          losat.blastp.collinearMinBlockScore = null;
+        }
         args.push(
           '--bitscore',
           adv.min_bitscore,
@@ -2131,7 +2167,16 @@ json.dumps({
                 adv.min_bitscore,
                 adv.evalue,
                 adv.identity,
-                adv.alignment_length
+                adv.alignment_length,
+                losat.blastp.collinearMinAnchors,
+                losat.blastp.collinearMaxGeneGap,
+                losat.blastp.collinearGapPenalty,
+                losat.blastp.collinearNearbyDuplicateWindow,
+                losat.blastp.collinearScoreMode,
+                losat.blastp.collinearConstantAnchorScore,
+                losat.blastp.collinearMinBlockScore,
+                losat.blastp.collinearUnitMode,
+                losat.blastp.collinearColorMode
               )
             );
             if (convertedPayload.error) throw new Error(convertedPayload.error);
