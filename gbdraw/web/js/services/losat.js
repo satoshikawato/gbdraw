@@ -235,13 +235,50 @@ const formatPairErrorPrefix = (job) => {
   return pairNumber ? `LOSAT pair #${pairNumber}` : 'LOSAT pair';
 };
 
-const runLosatPairsSequential = async (jobs, { onProgress } = {}) => {
+const normalizeSequenceStore = (sequences) => {
+  if (sequences instanceof Map) return sequences;
+  if (Array.isArray(sequences)) {
+    return new Map(
+      sequences
+        .filter((entry) => entry && entry.key !== undefined)
+        .map((entry) => [String(entry.key), String(entry.fasta || '')])
+    );
+  }
+  if (sequences && typeof sequences === 'object') {
+    return new Map(Object.entries(sequences).map(([key, fasta]) => [String(key), String(fasta || '')]));
+  }
+  return new Map();
+};
+
+const sequenceStoreToPayload = (sequences) =>
+  Array.from(normalizeSequenceStore(sequences), ([key, fasta]) => ({ key, fasta }));
+
+const resolveJobSequence = (sequenceStore, key, label) => {
+  const normalizedKey = String(key || '');
+  if (!normalizedKey || !sequenceStore.has(normalizedKey)) {
+    throw new Error(`Missing LOSAT ${label} sequence for key '${normalizedKey || '(blank)'}'.`);
+  }
+  const fasta = sequenceStore.get(normalizedKey);
+  if (!fasta) {
+    throw new Error(`LOSAT ${label} sequence for key '${normalizedKey}' is empty.`);
+  }
+  return fasta;
+};
+
+const materializeJobSequences = (job, sequenceStore) => ({
+  ...job,
+  queryFasta: resolveJobSequence(sequenceStore, job.querySequenceKey, 'query'),
+  subjectFasta: resolveJobSequence(sequenceStore, job.subjectSequenceKey, 'subject')
+});
+
+const runLosatPairsSequential = async (jobs, { onProgress, sequences } = {}) => {
   const startedAt = getNow();
+  const sequenceStore = normalizeSequenceStore(sequences);
   console.info(`Running ${jobs.length} LOSAT pair${jobs.length === 1 ? '' : 's'} sequentially.`);
   const results = [];
   for (const job of jobs) {
     try {
-      const text = await runLosatPair(job);
+      const text = await runLosatPair(materializeJobSequences(job, sequenceStore));
       results.push({ ...job, text });
       if (typeof onProgress === 'function') {
         onProgress({ completed: results.length, total: jobs.length, job });
@@ -255,7 +292,45 @@ const runLosatPairsSequential = async (jobs, { onProgress } = {}) => {
   return results;
 };
 
-const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath, onProgress } = {}) => {
+const initializeLosatWorker = (worker, payload) =>
+  new Promise((resolve, reject) => {
+    const handleMessage = (event) => {
+      const data = event.data || {};
+      if (data.id !== payload.id || data.type !== 'init') return;
+      worker.removeEventListener('message', handleMessage);
+      worker.removeEventListener('error', handleError);
+      worker.removeEventListener('messageerror', handleMessageError);
+      if (data.ok) {
+        resolve(worker);
+        return;
+      }
+      reject(new Error(data.error || 'LOSAT worker initialization failed'));
+    };
+
+    const handleError = (event) => {
+      worker.removeEventListener('message', handleMessage);
+      worker.removeEventListener('error', handleError);
+      worker.removeEventListener('messageerror', handleMessageError);
+      reject(new Error(event.message || 'LOSAT worker initialization error'));
+    };
+
+    const handleMessageError = () => {
+      worker.removeEventListener('message', handleMessage);
+      worker.removeEventListener('error', handleError);
+      worker.removeEventListener('messageerror', handleMessageError);
+      reject(new Error('LOSAT worker initialization message could not be decoded'));
+    };
+
+    worker.addEventListener('message', handleMessage);
+    worker.addEventListener('error', handleError);
+    worker.addEventListener('messageerror', handleMessageError);
+    worker.postMessage(payload);
+  });
+
+const runLosatPairsWithWorkers = async (
+  jobs,
+  { concurrency, workerUrl, wasmPath, onProgress, sequences } = {}
+) => {
   const workerCount = Math.min(
     jobs.length,
     Math.max(1, Number.isFinite(concurrency) ? Math.floor(concurrency) : getDefaultConcurrency(jobs.length))
@@ -267,12 +342,34 @@ const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath
   const resolvedWasmUrl = resolveAssetUrl(wasmPath || DEFAULT_WASM_PATH);
   const resolvedWasiShimUrl = resolveAssetUrl(WASI_SHIM_URL);
   const wasmModule = await loadLosatModule(wasmPath || DEFAULT_WASM_PATH);
+  const sequencePayload = sequenceStoreToPayload(sequences);
   const results = new Array(jobs.length);
   const workers = [];
   let nextJobIndex = 0;
   let completed = 0;
   let settled = false;
   let requestId = 0;
+
+  try {
+    for (let i = 0; i < workerCount; i += 1) {
+      workers.push(new Worker(resolvedWorkerUrl, { type: 'module' }));
+    }
+    await Promise.all(
+      workers.map((worker, index) =>
+        initializeLosatWorker(worker, {
+          type: 'init',
+          id: `init-${index}-${Date.now()}`,
+          wasmModule,
+          wasmUrl: resolvedWasmUrl,
+          wasiShimUrl: resolvedWasiShimUrl,
+          sequences: sequencePayload
+        })
+      )
+    );
+  } catch (error) {
+    workers.forEach((worker) => worker.terminate());
+    throw error;
+  }
 
   return new Promise((resolve, reject) => {
     const cleanup = () => {
@@ -311,6 +408,7 @@ const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath
       const handleMessage = (event) => {
         const data = event.data || {};
         if (data.id !== id) return;
+        if (data.type && data.type !== 'run') return;
         worker.removeEventListener('message', handleMessage);
         worker.removeEventListener('error', handleError);
         worker.removeEventListener('messageerror', handleMessageError);
@@ -346,20 +444,13 @@ const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath
       worker.addEventListener('error', handleError);
       worker.addEventListener('messageerror', handleMessageError);
       worker.postMessage({
+        type: 'run',
         id,
-        job: {
-          ...job,
-          wasmModule,
-          wasmUrl: resolvedWasmUrl,
-          wasiShimUrl: resolvedWasiShimUrl
-        }
+        job
       });
     };
 
     try {
-      for (let i = 0; i < workerCount; i += 1) {
-        workers.push(new Worker(resolvedWorkerUrl, { type: 'module' }));
-      }
       console.info(`Running ${workerCount} LOSAT worker${workerCount === 1 ? '' : 's'}.`);
       workers.forEach(assignNext);
     } catch (error) {

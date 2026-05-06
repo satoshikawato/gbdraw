@@ -707,84 +707,75 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups() -> No
         [_hit_row("b", "a1", bitscore=300)],
         columns=COMPARISON_COLUMNS,
     )
-    payload = [
-        {
-            "pairIndex": 0,
-            "queryIndex": 0,
-            "subjectIndex": 1,
-            "blastText": forward_hits.to_csv(
-                sep="\t",
-                header=False,
-                index=False,
-                lineterminator="\n",
-            ),
-            "queryProteinMap": {
-                "a1": _web_protein_entry(
-                    "a1",
-                    record_index=0,
-                    record_id="record_a",
-                    feature_index=0,
-                    gene="rpoB",
-                    product="DNA-directed RNA polymerase beta subunit",
-                ),
-                "a2": _web_protein_entry(
-                    "a2",
-                    record_index=0,
-                    record_id="record_a",
-                    feature_index=1,
-                    start=100,
-                    end=190,
+    query_map = {
+        "a1": _web_protein_entry(
+            "a1",
+            record_index=0,
+            record_id="record_a",
+            feature_index=0,
+            gene="rpoB",
+            product="DNA-directed RNA polymerase beta subunit",
+        ),
+        "a2": _web_protein_entry(
+            "a2",
+            record_index=0,
+            record_id="record_a",
+            feature_index=1,
+            start=100,
+            end=190,
+        ),
+    }
+    subject_map = {
+        "b": _web_protein_entry(
+            "b",
+            record_index=1,
+            record_id="record_b",
+            gene="rpoB",
+            product="DNA-directed RNA polymerase beta subunit",
+        ),
+    }
+    payload = {
+        "records": [
+            {
+                "recordIndex": 0,
+                "recordId": "record_a",
+                "proteinMap": query_map,
+                "proteinCacheKey": "record-a-cache",
+            },
+            {
+                "recordIndex": 1,
+                "recordId": "record_b",
+                "proteinMap": subject_map,
+                "proteinCacheKey": "record-b-cache",
+            },
+        ],
+        "pairs": [
+            {
+                "pairIndex": 0,
+                "queryIndex": 0,
+                "subjectIndex": 1,
+                "cacheKey": "pair-a-b",
+                "blastText": forward_hits.to_csv(
+                    sep="\t",
+                    header=False,
+                    index=False,
+                    lineterminator="\n",
                 ),
             },
-            "subjectProteinMap": {
-                "b": _web_protein_entry(
-                    "b",
-                    record_index=1,
-                    record_id="record_b",
-                    gene="rpoB",
-                    product="DNA-directed RNA polymerase beta subunit",
+            {
+                "pairIndex": 0,
+                "queryIndex": 1,
+                "subjectIndex": 0,
+                "cacheKey": "pair-b-a",
+                "blastText": reverse_hits.to_csv(
+                    sep="\t",
+                    header=False,
+                    index=False,
+                    lineterminator="\n",
                 ),
             },
-        },
-        {
-            "pairIndex": 0,
-            "queryIndex": 1,
-            "subjectIndex": 0,
-            "blastText": reverse_hits.to_csv(
-                sep="\t",
-                header=False,
-                index=False,
-                lineterminator="\n",
-            ),
-            "queryProteinMap": {
-                "b": _web_protein_entry(
-                    "b",
-                    record_index=1,
-                    record_id="record_b",
-                    gene="rpoB",
-                    product="DNA-directed RNA polymerase beta subunit",
-                ),
-            },
-            "subjectProteinMap": {
-                "a1": _web_protein_entry(
-                    "a1",
-                    record_index=0,
-                    record_id="record_a",
-                    feature_index=0,
-                    gene="rpoB",
-                    product="DNA-directed RNA polymerase beta subunit",
-                ),
-                "a2": _web_protein_entry(
-                    "a2",
-                    record_index=0,
-                    record_id="record_a",
-                    feature_index=1,
-                    start=100,
-                    end=190,
-                ),
-            },
-        },
-    ]
+        ],
+    }
 
     raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
         json.dumps(payload),
@@ -806,6 +797,54 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups() -> No
     rows = result["pairs"][0]["rows"]
     assert rows[0]["orthogroup_id"] == "og_1"
     assert len(rows) == 1
+    assert result["cache"]["convertedPayloadHit"] is False
+    assert result["cache"]["filteredHitCacheMisses"] == 2
+
+    repeated_result = json.loads(str(namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+        json.dumps(payload),
+        "orthogroup",
+        2,
+        50,
+        "1e-5",
+        0,
+        0,
+    )))
+    assert repeated_result["cache"]["convertedPayloadHit"] is True
+    assert repeated_result["pairs"] == result["pairs"]
+
+    filter_cached_result = json.loads(str(namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+        json.dumps(payload),
+        "orthogroup",
+        3,
+        50,
+        "1e-5",
+        0,
+        0,
+    )))
+    assert filter_cached_result["cache"]["convertedPayloadHit"] is False
+    assert filter_cached_result["cache"]["filteredHitCacheHits"] == 2
+
+
+@pytest.mark.linear
+def test_web_losatp_blastp_payload_helper_rejects_legacy_list_payload() -> None:
+    helpers_js = Path("gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
+    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
+    namespace: dict[str, object] = {}
+    exec(helper_source, namespace)
+
+    raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+        json.dumps([]),
+        "pairwise",
+        2,
+        50,
+        "1e-5",
+        0,
+        0,
+    )
+    result = json.loads(str(raw_result))
+
+    assert "error" in result
+    assert "must be an object" in result["error"]
 
 
 @pytest.mark.linear

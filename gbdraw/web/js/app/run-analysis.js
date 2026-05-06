@@ -31,6 +31,8 @@ const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now
 const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
 const fastaExtractionCache = new WeakMap();
 const FASTA_EXTRACTION_CACHE_LIMIT = 12;
+const proteinExtractionCache = new WeakMap();
+const PROTEIN_EXTRACTION_CACHE_LIMIT = 16;
 const featureExtractionCache = new WeakMap();
 const FEATURE_EXTRACTION_CACHE_LIMIT = 16;
 
@@ -166,6 +168,29 @@ const setCachedFastaExtraction = (file, key, value) => {
     fastaExtractionCache.set(file, byKey);
   }
   if (byKey.size >= FASTA_EXTRACTION_CACHE_LIMIT) byKey.delete(byKey.keys().next().value);
+  byKey.set(key, value);
+};
+const getFileFingerprint = (file) => {
+  if (!file) return null;
+  return {
+    name: String(file.name || ''),
+    size: Number(file.size || 0),
+    lastModified: Number(file.lastModified || 0)
+  };
+};
+const getCachedProteinExtraction = (file, key) => {
+  if (!file) return null;
+  const byKey = proteinExtractionCache.get(file);
+  return byKey?.get(key) || null;
+};
+const setCachedProteinExtraction = (file, key, value) => {
+  if (!file || value?.error) return;
+  let byKey = proteinExtractionCache.get(file);
+  if (!byKey) {
+    byKey = new Map();
+    proteinExtractionCache.set(file, byKey);
+  }
+  if (byKey.size >= PROTEIN_EXTRACTION_CACHE_LIMIT) byKey.delete(byKey.keys().next().value);
   byKey.set(key, value);
 };
 const cloneFeatureExtractionData = (data) => ({
@@ -1918,6 +1943,7 @@ json.dumps({
         let blastArgs = [];
         const fastaCache = new Map();
         const fastaHashCache = new Map();
+        const sequenceEntriesByKey = new Map();
         const linearFileTextCache = new WeakMap();
         let extractFirstFasta = null;
         let extractProteinFasta = null;
@@ -1941,8 +1967,12 @@ json.dumps({
               blastWriteMs: 0,
               totalFastaChars: 0,
               fastaCacheHits: 0,
+              proteinExtractionCacheHits: 0,
               fastaJsExtractions: 0,
               fastaPyodideFallbacks: 0,
+              proteinConversionCacheHits: 0,
+              proteinFilteredHitCacheHits: 0,
+              proteinFilteredHitCacheMisses: 0,
               cacheHashHits: 0,
               cacheHits: 0,
               cacheMisses: 0,
@@ -1987,26 +2017,51 @@ json.dumps({
             ? linearSeqs[idx]?.gb
             : (useProteinBlastp ? linearSeqs[idx]?.gff : linearSeqs[idx]?.fasta);
           const sourceText = sourceFile ? linearFileTextCache.get(sourceFile) : null;
-          const persistentCacheKey = JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
+          const pairedFastaFile = lInputType.value === 'gff' && useProteinBlastp
+            ? linearSeqs[idx]?.fasta
+            : null;
+          const persistentCacheKey = useProteinBlastp
+            ? JSON.stringify({
+                inputFormat: lInputType.value,
+                primaryFile: getFileFingerprint(sourceFile),
+                pairedFastaFile: getFileFingerprint(pairedFastaFile),
+                regionSpec,
+                recordSelector,
+                reverseFlag,
+                recordIndex: idx
+              })
+            : JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
           const usePersistentFastaCache = !useProteinBlastp;
-          const cachedEntry = sourceFile && usePersistentFastaCache
-            ? getCachedFastaExtraction(sourceFile, persistentCacheKey)
+          const cachedEntry = sourceFile
+            ? (
+                useProteinBlastp
+                  ? getCachedProteinExtraction(sourceFile, persistentCacheKey)
+                  : (usePersistentFastaCache ? getCachedFastaExtraction(sourceFile, persistentCacheKey) : null)
+              )
             : null;
           let entry = cachedEntry;
 
           if (entry) {
-            if (losatTiming) losatTiming.fastaCacheHits += 1;
+            if (losatTiming) {
+              if (useProteinBlastp) losatTiming.proteinExtractionCacheHits += 1;
+              else losatTiming.fastaCacheHits += 1;
+            }
           } else {
             if (useProteinBlastp) {
               const res = JSON.parse(
                 extractProteinFasta(path, fmt, pairedFastaPath, regionSpec, recordSelector, reverseFlag, idx)
               );
               if (res.error) throw new Error(res.error);
+              const fastaHash = await hashText(res.fasta || '');
+              const proteinCacheKey = await hashText(JSON.stringify({ extraction: persistentCacheKey, fastaHash }));
               entry = {
                 fasta: res.fasta,
                 recordId: res.record_id || `seq_${idx + 1}`,
                 proteinMap: res.protein_map || {},
-                proteinCount: res.protein_count || 0
+                proteinCount: res.protein_count || 0,
+                proteinCacheKey,
+                sequenceKey: `protein:${fastaHash}`,
+                hash: fastaHash
               };
               if (losatTiming) losatTiming.fastaPyodideFallbacks += 1;
             } else {
@@ -2033,7 +2088,11 @@ json.dumps({
                 }
               }
             }
-            if (sourceFile && usePersistentFastaCache) setCachedFastaExtraction(sourceFile, persistentCacheKey, entry);
+            if (sourceFile && useProteinBlastp) {
+              setCachedProteinExtraction(sourceFile, persistentCacheKey, entry);
+            } else if (sourceFile && usePersistentFastaCache) {
+              setCachedFastaExtraction(sourceFile, persistentCacheKey, entry);
+            }
           }
           fastaCache.set(idx, entry);
           if (losatTiming) {
@@ -2059,6 +2118,7 @@ json.dumps({
           const entry = await getSeqEntry(idx);
           if (entry.hash) {
             if (losatTiming) losatTiming.cacheHashHits += 1;
+            if (!entry.sequenceKey) entry.sequenceKey = `seq:${entry.hash}`;
             fastaHashCache.set(idx, entry.hash);
             return entry.hash;
           }
@@ -2066,6 +2126,7 @@ json.dumps({
           const hash = await hashText(entry.fasta);
           if (losatTiming) losatTiming.cacheHashMs += getNow() - startedAt;
           entry.hash = hash;
+          if (!entry.sequenceKey) entry.sequenceKey = `seq:${hash}`;
           fastaHashCache.set(idx, hash);
           return hash;
         };
@@ -2195,6 +2256,11 @@ json.dumps({
             const subjectEntry = await getSeqEntry(spec.subjectIndex);
             const losatArgs = buildLosatArgs(spec.queryIndex, spec.subjectIndex);
             const cacheKey = await buildCacheKey(losatArgs, spec.queryIndex, spec.subjectIndex);
+            if (!queryEntry.sequenceKey || !subjectEntry.sequenceKey) {
+              throw new Error('LOSAT sequence cache key was not prepared.');
+            }
+            sequenceEntriesByKey.set(queryEntry.sequenceKey, queryEntry.fasta);
+            sequenceEntriesByKey.set(subjectEntry.sequenceKey, subjectEntry.fasta);
             const cached = cacheMap.get(cacheKey);
             const hasCachedText = typeof cached?.text === 'string';
             losatTiming.totalPairs += 1;
@@ -2224,8 +2290,8 @@ json.dumps({
                 pairIndex: spec.pairIndex,
                 cacheKey,
                 program: losatProgram.value,
-                queryFasta: queryEntry.fasta,
-                subjectFasta: subjectEntry.fasta,
+                querySequenceKey: queryEntry.sequenceKey,
+                subjectSequenceKey: subjectEntry.sequenceKey,
                 outfmt: losat.outfmt || '6',
                 extraArgs: losatArgs
               });
@@ -2246,6 +2312,7 @@ json.dumps({
             const executionStartedAt = getNow();
             const losatResults = await runLosatPairsParallel(losatJobs, {
               concurrency: getLosatParallelWorkers(),
+              sequences: sequenceEntriesByKey,
               onProgress: ({ completed, total }) => {
                 setProcessingStatus(`Running LOSAT: ${completed}/${total} LOSAT jobs complete`);
               }
@@ -2263,19 +2330,26 @@ json.dumps({
             if (!convertProteinBlast) {
               throw new Error('Current gbdraw wheel does not support LOSATP orthogroup metadata. Rebuild and redeploy the web wheel.');
             }
+            const recordPayloads = [];
+            for (let i = 0; i < linearSeqs.length; i += 1) {
+              const entry = await getSeqEntry(i);
+              recordPayloads.push({
+                recordIndex: i,
+                recordId: entry.recordId || `seq_${i + 1}`,
+                proteinMap: entry.proteinMap || {},
+                proteinCacheKey: entry.proteinCacheKey || entry.sequenceKey || `record:${i}`
+              });
+            }
             const pairPayloads = [];
             for (const pair of losatPairs) {
               const cached = cacheMap.get(pair.cacheKey);
               const losatText = typeof cached?.text === 'string' ? cached.text : '';
-              const queryEntry = await getSeqEntry(pair.queryIndex);
-              const subjectEntry = await getSeqEntry(pair.subjectIndex);
               pairPayloads.push({
                 pairIndex: pair.pairIndex,
                 queryIndex: pair.queryIndex,
                 subjectIndex: pair.subjectIndex,
-                blastText: losatText,
-                queryProteinMap: queryEntry.proteinMap || {},
-                subjectProteinMap: subjectEntry.proteinMap || {}
+                cacheKey: pair.cacheKey,
+                blastText: losatText
               });
             }
             setProcessingStatus(
@@ -2285,7 +2359,7 @@ json.dumps({
             );
             const convertedPayload = JSON.parse(
               convertProteinBlast(
-                JSON.stringify(pairPayloads),
+                JSON.stringify({ records: recordPayloads, pairs: pairPayloads }),
                 blastpMode,
                 Math.max(1, losat.blastp.maxHits),
                 adv.min_bitscore,
@@ -2306,6 +2380,10 @@ json.dumps({
               )
             );
             if (convertedPayload.error) throw new Error(convertedPayload.error);
+            const conversionCache = convertedPayload.cache || {};
+            if (conversionCache.convertedPayloadHit) losatTiming.proteinConversionCacheHits += 1;
+            losatTiming.proteinFilteredHitCacheHits += Number(conversionCache.filteredHitCacheHits || 0);
+            losatTiming.proteinFilteredHitCacheMisses += Number(conversionCache.filteredHitCacheMisses || 0);
             if (useOrthogroupBlastp || useCollinearBlastp) {
               setOrthogroupMetadata(convertedPayload.orthogroups || []);
             } else {
@@ -2342,8 +2420,12 @@ json.dumps({
               `input FS write=${formatDuration(losatTiming.inputWriteMs)}`,
               `FASTA extraction=${formatDuration(losatTiming.fastaExtractionMs)}`,
               `FASTA cache hits=${losatTiming.fastaCacheHits}`,
+              `protein extraction cache hits=${losatTiming.proteinExtractionCacheHits}`,
               `JS FASTA=${losatTiming.fastaJsExtractions}`,
               `Pyodide FASTA=${losatTiming.fastaPyodideFallbacks}`,
+              `protein conversion cache hits=${losatTiming.proteinConversionCacheHits}`,
+              `filtered hit cache hits=${losatTiming.proteinFilteredHitCacheHits}`,
+              `filtered hit cache misses=${losatTiming.proteinFilteredHitCacheMisses}`,
               `cache hashing=${formatDuration(losatTiming.cacheHashMs)}`,
               `cache hash hits=${losatTiming.cacheHashHits}`,
               `job build=${formatDuration(losatTiming.jobBuildMs)}`,

@@ -5,6 +5,8 @@ let wasiShimPromise = null;
 let wasmModulePromise = null;
 let wasmModuleUrl = null;
 let directInstancePromise = null;
+let runtime = null;
+let sequenceStore = new Map();
 
 const loadWasiShim = async (wasiShimUrl) => {
   if (!wasiShimPromise) {
@@ -226,14 +228,71 @@ const runLosatPair = async ({
   return stdoutText;
 };
 
+const initializeWorkerRuntime = async ({
+  wasmModule,
+  wasmUrl = DEFAULT_WASM_URL,
+  wasiShimUrl,
+  sequences = []
+} = {}) => {
+  if (!wasiShimUrl) {
+    throw new Error('LOSAT worker requires a browser_wasi_shim URL.');
+  }
+  const entries = Array.isArray(sequences) ? sequences : [];
+  sequenceStore = new Map(
+    entries
+      .filter((entry) => entry && entry.key !== undefined)
+      .map((entry) => [String(entry.key), String(entry.fasta || '')])
+  );
+  runtime = {
+    wasmModule,
+    wasmUrl,
+    wasiShimUrl
+  };
+  await Promise.all([
+    loadWasiShim(wasiShimUrl),
+    getLosatModule({ wasmModule, wasmUrl })
+  ]);
+};
+
+const resolveSequence = (key, label) => {
+  const normalizedKey = String(key || '');
+  if (!normalizedKey || !sequenceStore.has(normalizedKey)) {
+    throw new Error(`Missing LOSAT ${label} sequence for key '${normalizedKey || '(blank)'}'.`);
+  }
+  const fasta = sequenceStore.get(normalizedKey);
+  if (!fasta) {
+    throw new Error(`LOSAT ${label} sequence for key '${normalizedKey}' is empty.`);
+  }
+  return fasta;
+};
+
 self.onmessage = async (event) => {
-  const { id, job } = event.data || {};
+  const { id, type, job } = event.data || {};
   try {
-    const text = await runLosatPair(job);
-    self.postMessage({ id, ok: true, text });
+    if (type === 'init') {
+      await initializeWorkerRuntime(event.data || {});
+      self.postMessage({ id, ok: true, type: 'init' });
+      return;
+    }
+    if (type !== 'run') {
+      throw new Error(`Unsupported LOSAT worker message type '${type || '(blank)'}'.`);
+    }
+    if (!runtime) {
+      throw new Error('LOSAT worker has not been initialized.');
+    }
+    const text = await runLosatPair({
+      ...job,
+      queryFasta: resolveSequence(job?.querySequenceKey, 'query'),
+      subjectFasta: resolveSequence(job?.subjectSequenceKey, 'subject'),
+      wasmModule: runtime.wasmModule,
+      wasmUrl: runtime.wasmUrl,
+      wasiShimUrl: runtime.wasiShimUrl
+    });
+    self.postMessage({ id, ok: true, type: 'run', text });
   } catch (error) {
     self.postMessage({
       id,
+      type: type || 'run',
       ok: false,
       error: error?.message ? String(error.message) : String(error || 'Unknown LOSAT worker error')
     });
