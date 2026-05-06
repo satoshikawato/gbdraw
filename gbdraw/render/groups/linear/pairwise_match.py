@@ -33,22 +33,19 @@ def _row_span(row: object, start_name: str, end_name: str) -> float:
     return abs(_row_float(row, end_name) - _row_float(row, start_name))
 
 
-def _match_draw_order_key(row: object) -> tuple[int, int, float, float, float, float, str]:
+def _match_draw_order_key(row: object) -> tuple[int, float, float, float, float, float, str]:
     block_id = str(_row_value(row, "collinearity_block_id", "") or "").strip()
-    if not block_id:
-        return (0, 0, 0.0, 0.0, _row_float(row, "qstart"), _row_float(row, "sstart"), "")
-
     orientation = str(_row_value(row, "collinearity_orientation", "") or "").strip().lower()
-    orientation_rank = 1 if orientation == "plus" else 2 if orientation == "minus" else 1
+    orientation_rank = 0 if orientation == "plus" else 2 if orientation == "minus" else 1
     query_span = _row_span(row, "qstart", "qend")
     subject_span = _row_span(row, "sstart", "send")
     area = query_span * subject_span
     total_span = query_span + subject_span
     return (
-        1,
         orientation_rank,
         -area,
         -total_span,
+        _row_float(row, "identity"),
         _row_float(row, "qstart"),
         _row_float(row, "sstart"),
         block_id,
@@ -232,8 +229,11 @@ class PairWiseMatchGroup:
             return
         metadata_columns = {
             "collinearity_block_id": "data-collinearity-block-id",
+            "collinearity_block_kind": "data-collinearity-block-kind",
             "collinearity_orientation": "data-collinearity-orientation",
+            "collinearity_block_evalue": "data-collinearity-block-evalue",
             "collinearity_color_mode": "data-collinearity-color-mode",
+            "orthogroup_id": "data-orthogroup-id",
             "query_protein_id": "data-query-protein-id",
             "subject_protein_id": "data-subject-protein-id",
             "query_feature_svg_id": "data-query-feature-svg-id",
@@ -352,9 +352,7 @@ class PairWiseMatchGroup:
         Returns:
             Group: The SVG group with all match paths added.
         """
-        rows = list(self.comparison_df.itertuples())
-        if any(str(_row_value(row, "collinearity_block_id", "") or "").strip() for row in rows):
-            rows = sorted(rows, key=_match_draw_order_key)
+        rows = sorted(self.comparison_df.itertuples(), key=_match_draw_order_key)
         for row in rows:
             match_path: Path = self.generate_linear_match_path(row)
             self.match_group.add(match_path)

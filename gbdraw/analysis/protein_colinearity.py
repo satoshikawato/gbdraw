@@ -138,6 +138,15 @@ class ProteinBlastpResult:
 
 
 @dataclass(frozen=True)
+class OrthogroupEdgeSelectionResult:
+    """RBH orthogroup selection plus the adjacent display edges."""
+
+    orthogroups: OrthogroupResult
+    all_edges_by_pair: dict[tuple[int, int], DataFrame]
+    adjacent_display_edges_by_pair: dict[tuple[int, int], DataFrame]
+
+
+@dataclass(frozen=True)
 class _CdsProteinCandidate:
     protein_id: str
     source_protein_id: str | None
@@ -1062,6 +1071,8 @@ def _build_orthogroup_name_metadata(
 def build_orthogroups_from_protein_hits(
     hits_by_pair: Sequence[DataFrame],
     protein_map: Mapping[str, CdsProtein],
+    *,
+    include_singletons: bool = False,
 ) -> OrthogroupResult:
     """Build connected-component orthogroups from retained LOSATP protein hits."""
 
@@ -1107,6 +1118,10 @@ def build_orthogroups_from_protein_hits(
     components: dict[str, set[str]] = {}
     for query_id, subject_id in edge_nodes:
         components.setdefault(union_find.find(query_id), set()).update({query_id, subject_id})
+    if include_singletons:
+        for protein_id in protein_map:
+            root = union_find.find(str(protein_id))
+            components.setdefault(root, set()).add(str(protein_id))
 
     sorted_components = sorted(
         components.values(),
@@ -1379,6 +1394,64 @@ def _run_losatp_search(
     )
 
 
+def _empty_comparison_hits() -> DataFrame:
+    return pd.DataFrame(columns=COMPARISON_COLUMNS)
+
+
+def select_rbh_orthogroup_edges_from_directional_hits(
+    directional_hits_by_pair: Mapping[tuple[int, int], DataFrame],
+    protein_map: Mapping[str, CdsProtein],
+    *,
+    record_count: int | None = None,
+    include_singletons: bool = False,
+) -> OrthogroupEdgeSelectionResult:
+    """Select the exact RBH edges used by Orthogroup mode.
+
+    Input tables are already threshold-filtered LOSATP outfmt6 rows keyed by
+    directional record pair. Returned display edges are keyed by forward
+    adjacent pairs, e.g. ``(0, 1)``.
+    """
+
+    unordered_pairs = sorted(
+        {
+            (min(int(query_index), int(subject_index)), max(int(query_index), int(subject_index)))
+            for query_index, subject_index in directional_hits_by_pair
+            if int(query_index) != int(subject_index)
+        }
+    )
+    all_edges_by_pair: dict[tuple[int, int], DataFrame] = {}
+    adjacent_display_edges_by_pair: dict[tuple[int, int], DataFrame] = {}
+    for query_index, subject_index in unordered_pairs:
+        forward_hits = directional_hits_by_pair.get((query_index, subject_index), _empty_comparison_hits())
+        reverse_hits = directional_hits_by_pair.get((subject_index, query_index), _empty_comparison_hits())
+        rbh_edges = select_reciprocal_best_hit_edges(forward_hits, reverse_hits)
+        pair = (query_index, subject_index)
+        all_edges_by_pair[pair] = rbh_edges
+        if subject_index == query_index + 1:
+            adjacent_display_edges_by_pair[pair] = rbh_edges
+
+    if record_count is None:
+        record_count = 0
+        for query_index, subject_index in unordered_pairs:
+            record_count = max(record_count, query_index + 1, subject_index + 1)
+    for query_index in range(max(0, int(record_count) - 1)):
+        adjacent_display_edges_by_pair.setdefault(
+            (query_index, query_index + 1),
+            _empty_comparison_hits(),
+        )
+
+    orthogroups = build_orthogroups_from_protein_hits(
+        tuple(all_edges_by_pair.values()),
+        protein_map,
+        include_singletons=include_singletons,
+    )
+    return OrthogroupEdgeSelectionResult(
+        orthogroups=orthogroups,
+        all_edges_by_pair=all_edges_by_pair,
+        adjacent_display_edges_by_pair=adjacent_display_edges_by_pair,
+    )
+
+
 def build_pairwise_protein_blastp_comparisons(
     records: Sequence[SeqRecord],
     *,
@@ -1462,12 +1535,8 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
         option_name="protein_blastp_mode='orthogroup'",
     )
 
-    adjacent_rbh_edges_by_pair: list[DataFrame] = [
-        pd.DataFrame(columns=COMPARISON_COLUMNS)
-        for _ in range(len(records) - 1)
-    ]
-    orthogroup_edges: list[DataFrame] = []
-
+    search_candidate_limit = candidate_limit if candidate_limit is not None else 1
+    directional_hits_by_pair: dict[tuple[int, int], DataFrame] = {}
     for query_index in range(len(records)):
         for subject_index in range(query_index + 1, len(records)):
             query_fasta = proteins_to_fasta(extraction.proteins_by_record[query_index])
@@ -1477,14 +1546,14 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                 query_fasta,
                 subject_fasta,
                 losatp_bin=losatp_bin,
-                candidate_limit=candidate_limit,
+                candidate_limit=search_candidate_limit,
                 runner=runner,
             )
             reverse_hits = _run_losatp_search(
                 subject_fasta,
                 query_fasta,
                 losatp_bin=losatp_bin,
-                candidate_limit=candidate_limit,
+                candidate_limit=search_candidate_limit,
                 runner=runner,
             )
             filtered_forward_hits = filter_protein_hits_by_thresholds(
@@ -1501,27 +1570,26 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                 identity=identity,
                 alignment_length=alignment_length,
             )
-            rbh_edges = select_reciprocal_best_hit_edges(
-                filtered_forward_hits,
-                filtered_reverse_hits,
-            )
-            orthogroup_edges.append(rbh_edges)
-            if subject_index == query_index + 1:
-                adjacent_rbh_edges_by_pair[query_index] = rbh_edges
+            directional_hits_by_pair[(query_index, subject_index)] = filtered_forward_hits
+            directional_hits_by_pair[(subject_index, query_index)] = filtered_reverse_hits
 
-    orthogroups = build_orthogroups_from_protein_hits(
-        orthogroup_edges,
+    edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits_by_pair,
         extraction.protein_map,
+        record_count=len(records),
     )
     comparisons = [
         convert_protein_hits_to_genomic_links(
-            rbh_edges,
+            edge_selection.adjacent_display_edges_by_pair.get(
+                (record_index, record_index + 1),
+                _empty_comparison_hits(),
+            ),
             extraction.protein_map,
-            orthogroups=orthogroups,
+            orthogroups=edge_selection.orthogroups,
         )
-        for rbh_edges in adjacent_rbh_edges_by_pair
+        for record_index in range(len(records) - 1)
     ]
-    return ProteinBlastpResult(comparisons=comparisons, orthogroups=orthogroups)
+    return ProteinBlastpResult(comparisons=comparisons, orthogroups=edge_selection.orthogroups)
 
 
 def build_protein_colinearity_comparisons(
@@ -1556,6 +1624,7 @@ __all__ = [
     "LOSATP_COMPARISON_COLUMNS",
     "LOSATP_METADATA_COLUMNS",
     "PROTEIN_BLASTP_MODES",
+    "OrthogroupEdgeSelectionResult",
     "OrthogroupMember",
     "OrthogroupNameCandidate",
     "OrthogroupResult",
@@ -1576,6 +1645,7 @@ __all__ = [
     "proteins_to_fasta",
     "run_losatp_blastp",
     "select_best_hits_per_query",
+    "select_rbh_orthogroup_edges_from_directional_hits",
     "select_reciprocal_best_hit_edges",
     "select_reciprocal_best_hits",
     "select_top_hits_per_query",

@@ -11,6 +11,7 @@ const formatTimingMs = (ms) => `${ms.toFixed(1)}ms`;
 // System State
 const pyodideReady = ref(false);
 const processing = ref(false);
+const processingStatus = ref('');
 const loadingStatus = ref('Initializing...');
 const errorLog = ref(null);
 const sessionTitle = ref('');
@@ -56,8 +57,11 @@ const svgContent = computed(() => {
         'data-label-source-text',
         'data-label-editable',
         'data-collinearity-block-id',
+        'data-collinearity-block-kind',
         'data-collinearity-orientation',
+        'data-collinearity-block-evalue',
         'data-collinearity-color-mode',
+        'data-orthogroup-id',
         'data-query-protein-id',
         'data-subject-protein-id',
         'data-query-feature-svg-id',
@@ -395,15 +399,17 @@ const losat = reactive({
     mode: 'orthogroup',
     maxHits: 5,
     candidateLimit: null,
-    collinearMinAnchors: 5,
-    collinearMaxGeneGap: 25,
-    collinearGapPenalty: 1,
-    collinearNearbyDuplicateWindow: 5,
-    collinearScoreMode: 'constant',
-    collinearConstantAnchorScore: 50,
-    collinearMinBlockScore: null,
+    collinearMinAnchors: 1,
+    collinearMaxGeneGap: 0,
+    collinearBlockMergeGap: 50,
+    collinearSingletonMergeGap: 25,
+    collinearMaxDiagonalDrift: 0,
+    collinearMaxConflictsInMergeGap: 1,
+    collinearMaxParalogLinksPerOrthogroup: 2,
     collinearColorMode: 'orientation',
-    collinearUnitMode: 'auto'
+    collinearUnitMode: 'auto',
+    collinearAnchorMode: 'rbh',
+    collinearSearchScope: 'adjacent'
   }
 });
 
@@ -782,6 +788,7 @@ const filteredEditableLabels = computed(() => {
 export const state = {
   pyodideReady,
   processing,
+  processingStatus,
   loadingStatus,
   errorLog,
   sessionTitle,

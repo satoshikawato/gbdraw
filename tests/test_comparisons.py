@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import pandas as pd
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
@@ -257,3 +258,55 @@ def test_pairwise_match_curve_path_preserves_endpoint_spans() -> None:
     assert path_desc.strip().lower().endswith("z")
     assert path.attribs["data-pairwise-match-style"] == "curve"
     assert float(path.attribs["data-identity-factor"]) == pytest.approx(0.95)
+
+
+@pytest.mark.linear
+def test_pairwise_match_group_draws_smaller_high_identity_hits_above_broad_hits() -> None:
+    rows = [
+        {
+            "identity": 95,
+            "qstart": 60,
+            "qend": 80,
+            "sstart": 70,
+            "send": 90,
+        },
+        {
+            "identity": 10,
+            "qstart": 1,
+            "qend": 220,
+            "sstart": 1,
+            "send": 220,
+        },
+    ]
+    comparison_df = pd.DataFrame.from_records(rows)
+    canvas_config = SimpleNamespace(
+        normalize_length=False,
+        alignment_width=1000,
+        longest_genome=400,
+        align_center=False,
+    )
+    blast_config = SimpleNamespace(
+        fill_color="#d3d3d3",
+        min_color="#ffffff",
+        max_color="#000000",
+        fill_opacity=1.0,
+        stroke_color="none",
+        stroke_width=0,
+        identity=0,
+        sequence_length_dict={},
+    )
+    match_group = PairWiseMatchGroup(
+        canvas_config,
+        blast_config.sequence_length_dict,
+        comparison_df,
+        40,
+        1,
+        blast_config,
+        [_build_record(), _build_record()],
+    ).get_group()
+
+    drawing = Drawing(debug=False)
+    drawing.add(match_group)
+    svg = drawing.tostring()
+
+    assert svg.index('data-identity-factor="0.1"') < svg.index('data-identity-factor="0.95"')

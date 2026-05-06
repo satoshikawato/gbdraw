@@ -1,7 +1,7 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
-const SESSION_VERSION = 17;
+const SESSION_VERSION = 18;
 
 const cloneColors = (colors) => ({ ...(colors || {}) });
 
@@ -134,6 +134,29 @@ const normalizeCollinearColorMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   if (normalized === 'identity') return 'average_identity';
   return ['average_identity', 'orientation'].includes(normalized) ? normalized : 'orientation';
+};
+
+const normalizeCollinearAnchorMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  const aliases = {
+    raw: 'all',
+    all_hits: 'all',
+    top_n: 'all',
+    topn: 'all',
+    one2one: 'one_to_one',
+    mutual_best: 'one_to_one',
+    top1: 'one_to_one',
+    top_1: 'one_to_one',
+    reciprocal_best: 'rbh',
+    strict_rbh: 'rbh'
+  };
+  const resolved = aliases[normalized] || normalized;
+  return ['all', 'one_to_one', 'rbh'].includes(resolved) ? resolved : 'rbh';
+};
+
+const normalizeCollinearSearchScope = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  return ['adjacent', 'all'].includes(normalized) ? normalized : 'adjacent';
 };
 
 const normalizePairwiseMatchStyle = (value) => {
@@ -427,24 +450,25 @@ const applyConfigData = (data) => {
     state.losat.blastp.mode = normalizeBlastpMode(state.losat.blastp?.mode);
     state.losat.blastp.maxHits = normalizePositiveInteger(state.losat.blastp?.maxHits, 5);
     state.losat.blastp.candidateLimit = null;
-    state.losat.blastp.collinearMinAnchors = normalizePositiveInteger(state.losat.blastp?.collinearMinAnchors, 5);
+    state.losat.blastp.collinearMinAnchors = normalizePositiveInteger(state.losat.blastp?.collinearMinAnchors, 1);
     {
       const maxGap = Number(state.losat.blastp?.collinearMaxGeneGap);
-      state.losat.blastp.collinearMaxGeneGap = Number.isInteger(maxGap) && maxGap >= 0 ? maxGap : 25;
-      const duplicateWindow = Number(state.losat.blastp?.collinearNearbyDuplicateWindow);
-      state.losat.blastp.collinearNearbyDuplicateWindow =
-        Number.isInteger(duplicateWindow) && duplicateWindow >= 0 ? duplicateWindow : 5;
-      const gapPenalty = Number(state.losat.blastp?.collinearGapPenalty);
-      state.losat.blastp.collinearGapPenalty = Number.isFinite(gapPenalty) && gapPenalty >= 0 ? gapPenalty : 1;
-      const anchorScore = Number(state.losat.blastp?.collinearConstantAnchorScore);
-      state.losat.blastp.collinearConstantAnchorScore = Number.isFinite(anchorScore) && anchorScore > 0 ? anchorScore : 50;
-      const minBlockScore = Number(state.losat.blastp?.collinearMinBlockScore);
-      state.losat.blastp.collinearMinBlockScore = Number.isFinite(minBlockScore) && minBlockScore >= 0 ? minBlockScore : null;
-      const scoreMode = String(state.losat.blastp?.collinearScoreMode || '').trim().toLowerCase();
-      state.losat.blastp.collinearScoreMode = scoreMode === 'bitscore' ? 'bitscore' : 'constant';
+      state.losat.blastp.collinearMaxGeneGap = Number.isInteger(maxGap) && maxGap >= 0 ? maxGap : 0;
+      const blockMergeGap = Number(state.losat.blastp?.collinearBlockMergeGap);
+      state.losat.blastp.collinearBlockMergeGap = Number.isInteger(blockMergeGap) && blockMergeGap >= 0 ? blockMergeGap : 50;
+      const singletonMergeGap = Number(state.losat.blastp?.collinearSingletonMergeGap);
+      state.losat.blastp.collinearSingletonMergeGap = Number.isInteger(singletonMergeGap) && singletonMergeGap >= 0 ? singletonMergeGap : 25;
+      const diagonalDrift = Number(state.losat.blastp?.collinearMaxDiagonalDrift);
+      state.losat.blastp.collinearMaxDiagonalDrift = Number.isInteger(diagonalDrift) && diagonalDrift >= 0 ? diagonalDrift : 0;
+      const mergeConflicts = Number(state.losat.blastp?.collinearMaxConflictsInMergeGap);
+      state.losat.blastp.collinearMaxConflictsInMergeGap = Number.isInteger(mergeConflicts) && mergeConflicts >= 0 ? mergeConflicts : 1;
+      const paralogLinks = Number(state.losat.blastp?.collinearMaxParalogLinksPerOrthogroup);
+      state.losat.blastp.collinearMaxParalogLinksPerOrthogroup = Number.isInteger(paralogLinks) && paralogLinks > 0 ? paralogLinks : 2;
       state.losat.blastp.collinearColorMode = normalizeCollinearColorMode(state.losat.blastp?.collinearColorMode);
       const unitMode = String(state.losat.blastp?.collinearUnitMode || '').trim().toLowerCase();
       state.losat.blastp.collinearUnitMode = ['auto', 'cds', 'locus'].includes(unitMode) ? unitMode : 'auto';
+      state.losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode(state.losat.blastp?.collinearAnchorMode);
+      state.losat.blastp.collinearSearchScope = normalizeCollinearSearchScope(state.losat.blastp?.collinearSearchScope);
     }
     delete state.losat.blastp.orthogroupHitPolicy;
     delete state.losat.blastp.orthogroupMaxHits;
@@ -627,6 +651,7 @@ const serializeLosatCache = () => {
     entries.push({
       key: entry.key,
       filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
+      display: entry.display !== false,
       text: cached.text
     });
     seen.add(entry.key);
@@ -635,7 +660,7 @@ const serializeLosatCache = () => {
   cacheMap.forEach((value, key) => {
     if (seen.has(key)) return;
     if (!value || typeof value.text !== 'string') return;
-    entries.push({ key, filename: '', text: value.text });
+    entries.push({ key, filename: '', display: false, text: value.text });
   });
 
   return entries;
@@ -649,9 +674,11 @@ const applyLosatCache = (entries) => {
     entries.forEach((entry, idx) => {
       if (!entry || !entry.key || typeof entry.text !== 'string') return;
       map.set(entry.key, { text: entry.text });
+      if (entry.display === false) return;
       info.push({
         key: entry.key,
-        filename: entry.filename || `losat_pair_${idx + 1}.tsv`
+        filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
+        display: true
       });
     });
   }

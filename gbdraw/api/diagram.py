@@ -32,12 +32,17 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
 )
 from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     CollinearityBlock,
+    CollinearityAnchorMode,
     CollinearityColorMode,
     CollinearityParameters,
     CollinearityResult,
-    build_native_collinearity_blocks,
+    CollinearitySearchScope,
+    LosslessCollinearityParameters,
+    build_orthogroup_collinearity_blocks,
     convert_collinearity_blocks_to_comparisons,
+    normalize_collinearity_anchor_mode,
     normalize_collinearity_color_mode,
+    normalize_collinearity_search_scope,
 )
 from gbdraw.analysis.collinearity_units import CollinearityUnitMode  # type: ignore[reportMissingImports]
 from gbdraw.analysis.skew import skew_df  # type: ignore[reportMissingImports]
@@ -1227,8 +1232,10 @@ def assemble_linear_diagram_from_records(
     protein_blastp_mode: ProteinBlastpMode | str = "none",
     pairwise_match_style: Literal["ribbon", "curve"] | str = "ribbon",
     collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None,
-    collinearity_params: CollinearityParameters | None = None,
+    collinearity_params: CollinearityParameters | LosslessCollinearityParameters | None = None,
     collinearity_unit_mode: CollinearityUnitMode | str = "auto",
+    collinearity_anchor_mode: CollinearityAnchorMode | str = "rbh",
+    collinearity_search_scope: CollinearitySearchScope | str = "adjacent",
     collinearity_color_mode: CollinearityColorMode | str = "orientation",
     losatp_bin: str = "losat",
     protein_blastp_max_hits: int = 5,
@@ -1281,6 +1288,8 @@ def assemble_linear_diagram_from_records(
         raise ValidationError("alignment_length must be >= 0")
     normalized_protein_blastp_mode = normalize_protein_blastp_mode(protein_blastp_mode)
     normalized_pairwise_match_style = _resolve_pairwise_match_style(pairwise_match_style)
+    normalized_collinearity_anchor_mode = normalize_collinearity_anchor_mode(str(collinearity_anchor_mode))
+    normalized_collinearity_search_scope = normalize_collinearity_search_scope(str(collinearity_search_scope))
     normalized_collinearity_color_mode = normalize_collinearity_color_mode(str(collinearity_color_mode))
     if int(protein_blastp_max_hits) <= 0:
         raise ValidationError("protein_blastp_max_hits must be > 0")
@@ -1418,7 +1427,7 @@ def assemble_linear_diagram_from_records(
         resolved_protein_comparisons = protein_blastp_result.comparisons
         resolved_orthogroups = protein_blastp_result.orthogroups
     elif normalized_protein_blastp_mode == "collinear":
-        collinearity_result = build_native_collinearity_blocks(
+        collinearity_result = build_orthogroup_collinearity_blocks(
             records,
             losatp_bin=losatp_bin,
             candidate_limit=protein_blastp_candidate_limit,
@@ -1428,6 +1437,8 @@ def assemble_linear_diagram_from_records(
             alignment_length=alignment_length,
             params=collinearity_params,
             unit_mode=collinearity_unit_mode,
+            edge_mode=normalized_collinearity_anchor_mode,
+            search_scope=normalized_collinearity_search_scope,
         )
         resolved_protein_comparisons = convert_collinearity_blocks_to_comparisons(
             collinearity_result,
@@ -2700,6 +2711,8 @@ def build_linear_diagram(
         collinearity_blocks=options.collinearity_blocks,
         collinearity_params=options.collinearity_params,
         collinearity_unit_mode=options.collinearity_unit_mode,
+        collinearity_anchor_mode=options.collinearity_anchor_mode,
+        collinearity_search_scope=options.collinearity_search_scope,
         collinearity_color_mode=options.collinearity_color_mode,
         losatp_bin=options.losatp_bin,
         protein_blastp_max_hits=options.protein_blastp_max_hits,

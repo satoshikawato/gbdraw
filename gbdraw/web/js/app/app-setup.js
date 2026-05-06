@@ -19,6 +19,7 @@ export const createAppSetup = () => {
   const {
     pyodideReady,
     processing,
+    processingStatus,
     loadingStatus,
     errorLog,
     sessionTitle,
@@ -735,6 +736,7 @@ export const createAppSetup = () => {
   return {
     pyodideReady,
     processing,
+    processingStatus,
     loadingStatus,
     errorLog,
     errorDisplay,

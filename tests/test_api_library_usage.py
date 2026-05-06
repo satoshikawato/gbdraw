@@ -6,10 +6,12 @@ import pandas as pd
 import pytest
 from Bio import SeqIO
 
+import gbdraw.api.diagram as api_diagram_module
 from gbdraw.api import (
     assemble_circular_diagram_from_record,
     assemble_linear_diagram_from_records,
 )
+from gbdraw.api.options import DiagramOptions
 from gbdraw.config.toml import load_config_toml
 from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.io.genome import load_gbks
@@ -25,6 +27,28 @@ SELECTED_FEATURES = [
     "misc_RNA",
     "repeat_region",
 ]
+
+
+@pytest.mark.linear
+def test_api_diagram_options_forward_collinearity_search_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_assemble(records, **kwargs):
+        captured["records"] = records
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(api_diagram_module, "assemble_linear_diagram_from_records", fake_assemble)
+
+    api_diagram_module.build_linear_diagram(
+        [],
+        options=DiagramOptions(
+            protein_blastp_mode="collinear",
+            collinearity_search_scope="all",
+        ),
+    )
+
+    assert captured["collinearity_search_scope"] == "all"
 
 
 @pytest.mark.circular

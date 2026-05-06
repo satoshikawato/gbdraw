@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,25 +13,37 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
+import gbdraw.analysis.collinearity as collinearity_module
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
     CollinearityParameters,
     CollinearityResult,
+    LosslessCollinearityParameters,
     build_collinearity_blocks_from_hits,
+    calculate_collinearity_block_evalue,
     call_collinearity_blocks,
+    cluster_lossless_collinearity_anchors,
     convert_collinearity_blocks_to_comparisons,
     deduplicate_unit_pair_anchors,
+    iter_collinearity_search_pairs,
+    normalize_collinearity_anchor_mode,
     normalize_collinearity_color_mode,
+    normalize_collinearity_search_scope,
+    orthogroup_edges_to_lossless_collinearity_anchors,
 )
 import gbdraw.linear as linear_cli_module
-from gbdraw.analysis.protein_colinearity import extract_cds_proteins
+from gbdraw.analysis.protein_colinearity import (
+    extract_cds_proteins,
+    select_rbh_orthogroup_edges_from_directional_hits,
+)
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators.blast import BlastMatchConfigurator
 from gbdraw.io.collinearity import parse_native_collinearity_tsv, write_native_collinearity_tsv
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.legend.table import prepare_legend_table
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
+from gbdraw.exceptions import ValidationError
 
 
 def _record(record_id: str, features: list[SeqFeature]) -> SeqRecord:
@@ -62,6 +75,13 @@ def _hit_row(query: str, subject: str, bitscore: float = 200.0) -> dict[str, obj
     }
 
 
+def _first_fasta_id(fasta_text: str) -> str:
+    for line in str(fasta_text).splitlines():
+        if line.startswith(">"):
+            return line[1:].split(None, 1)[0]
+    return ""
+
+
 def _web_protein_entry(
     protein_id: str,
     *,
@@ -85,7 +105,18 @@ def _web_protein_entry(
     }
 
 
-def _anchor(query_order: int, subject_order: int, *, bitscore: float = 200.0) -> CollinearityAnchor:
+def _anchor(
+    query_order: int,
+    subject_order: int,
+    *,
+    bitscore: float = 200.0,
+    query_strand: int | None = 1,
+    subject_strand: int | None = 1,
+    query_start: int | None = None,
+    query_end: int | None = None,
+    subject_start: int | None = None,
+    subject_end: int | None = None,
+) -> CollinearityAnchor:
     return CollinearityAnchor(
         query_protein_id=f"q{query_order}",
         subject_protein_id=f"s{subject_order}",
@@ -93,10 +124,12 @@ def _anchor(query_order: int, subject_order: int, *, bitscore: float = 200.0) ->
         subject_record_index=1,
         query_order=query_order,
         subject_order=subject_order,
-        query_start=query_order * 10 + 1,
-        query_end=query_order * 10 + 9,
-        subject_start=subject_order * 10 + 1,
-        subject_end=subject_order * 10 + 9,
+        query_start=query_start if query_start is not None else query_order * 10 + 1,
+        query_end=query_end if query_end is not None else query_order * 10 + 9,
+        subject_start=subject_start if subject_start is not None else subject_order * 10 + 1,
+        subject_end=subject_end if subject_end is not None else subject_order * 10 + 9,
+        query_strand=query_strand,
+        subject_strand=subject_strand,
         identity=90.0,
         evalue=1e-30,
         bitscore=bitscore,
@@ -126,8 +159,88 @@ def test_deduplicate_unit_pair_anchors_keeps_strongest_hit() -> None:
 
 
 @pytest.mark.linear
+def test_collinearity_parameters_validates_block_evalue() -> None:
+    CollinearityParameters(block_evalue=None).validate()
+    CollinearityParameters(block_evalue=0).validate()
+    CollinearityParameters(block_evalue=1e-3).validate()
+
+    with pytest.raises(ValidationError, match="collinear_block_evalue"):
+        CollinearityParameters(block_evalue=-1).validate()
+
+
+@pytest.mark.linear
+def test_collinearity_blocks_are_called_without_block_evalue_acceptance() -> None:
+    anchors = [_anchor(index, index) for index in range(8)]
+    result = call_collinearity_blocks(
+        anchors,
+        params=CollinearityParameters(min_anchors=5, max_gene_gap=1),
+    )
+
+    assert len(result.blocks) == 1
+    assert result.blocks[0].kind == "syntenic"
+    assert result.blocks[0].block_evalue is None
+
+
+@pytest.mark.linear
+def test_collinearity_block_evalue_uses_genomic_coordinates_not_unit_order() -> None:
+    positions = [100, 110, 120, 130, 1100]
+    anchors = [
+        _anchor(
+            index,
+            index,
+            query_start=position,
+            query_end=position + 8,
+            subject_start=position,
+            subject_end=position + 8,
+        )
+        for index, position in enumerate(positions)
+    ]
+
+    observed = calculate_collinearity_block_evalue(
+        SimpleNamespace(orientation="plus", score=250.0, anchors=tuple(anchors)),
+        anchors,
+    )
+    m = len(positions)
+    expected_log = math.log(2.0) + math.lgamma(m + 1)
+    region_length = positions[-1] - positions[0]
+    for previous, current in zip(positions, positions[1:]):
+        expected_log += math.log(current - previous) * 2.0
+    expected_log -= (m - 1) * (math.log(region_length) * 2.0)
+    expected = math.exp(expected_log)
+    old_unit_order_value = 2.0 * math.factorial(m) / ((m - 1) ** (2 * (m - 1)))
+
+    assert observed == pytest.approx(expected)
+    assert observed < 1e-5
+    assert old_unit_order_value > 1e-5
+
+
+@pytest.mark.linear
+def test_pairwise_singleton_anchor_is_emitted_by_default() -> None:
+    result = call_collinearity_blocks(
+        [_anchor(0, 0)],
+        params=CollinearityParameters(),
+    )
+
+    assert len(result.blocks) == 1
+    assert result.blocks[0].kind == "singleton"
+    assert result.blocks[0].anchors[0].query_protein_id == "q0"
+
+
+@pytest.mark.linear
+def test_min_anchors_drops_singleton_blocks() -> None:
+    anchor = _anchor(0, 0)
+    result = call_collinearity_blocks(
+        [anchor],
+        params=CollinearityParameters(min_anchors=2),
+    )
+
+    assert result.blocks == ()
+    assert result.unblocked_anchors == (anchor,)
+
+
+@pytest.mark.linear
 def test_native_block_caller_detects_plus_and_minus_orientation() -> None:
-    params = CollinearityParameters(min_anchors=3, max_gene_gap=1)
+    params = CollinearityParameters(min_anchors=3, max_gene_gap=1, block_evalue=None)
 
     plus = call_collinearity_blocks([_anchor(0, 0), _anchor(1, 1), _anchor(2, 2)], params=params)
     minus = call_collinearity_blocks([_anchor(0, 2), _anchor(1, 1), _anchor(2, 0)], params=params)
@@ -140,9 +253,296 @@ def test_native_block_caller_detects_plus_and_minus_orientation() -> None:
 
 
 @pytest.mark.linear
+def test_single_anchor_block_orientation_uses_feature_strands() -> None:
+    params = CollinearityParameters(min_anchors=1, max_gene_gap=0, block_evalue=2)
+
+    same_strand = call_collinearity_blocks(
+        [_anchor(0, 0, query_strand=1, subject_strand=1)],
+        params=params,
+    )
+    opposite_strand = call_collinearity_blocks(
+        [_anchor(0, 0, query_strand=1, subject_strand=-1)],
+        params=params,
+    )
+
+    assert same_strand.blocks[0].orientation == "plus"
+    assert opposite_strand.blocks[0].orientation == "minus"
+
+
+@pytest.mark.linear
 def test_collinearity_color_mode_defaults_to_orientation_and_aliases_identity() -> None:
     assert normalize_collinearity_color_mode(None) == "orientation"
     assert normalize_collinearity_color_mode("identity") == "average_identity"
+
+
+@pytest.mark.linear
+def test_collinearity_anchor_mode_defaults_to_rbh_and_aliases_top1() -> None:
+    assert normalize_collinearity_anchor_mode(None) == "rbh"
+    assert normalize_collinearity_anchor_mode("top1") == "one_to_one"
+    assert normalize_collinearity_anchor_mode("mutual-best") == "one_to_one"
+    assert normalize_collinearity_anchor_mode("reciprocal-best") == "rbh"
+
+
+@pytest.mark.linear
+def test_collinearity_search_scope_defaults_to_adjacent() -> None:
+    assert normalize_collinearity_search_scope(None) == "adjacent"
+    assert normalize_collinearity_search_scope("all") == "all"
+
+    with pytest.raises(ValidationError, match="collinear_search_scope"):
+        normalize_collinearity_search_scope("pairwise")
+
+
+@pytest.mark.linear
+def test_iter_collinearity_search_pairs_adjacent_returns_neighboring_pairs() -> None:
+    assert iter_collinearity_search_pairs(5, scope="adjacent") == (
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 4),
+    )
+
+
+@pytest.mark.linear
+def test_iter_collinearity_search_pairs_all_returns_every_unordered_pair() -> None:
+    assert iter_collinearity_search_pairs(5, scope="all") == (
+        (0, 1),
+        (0, 2),
+        (0, 3),
+        (0, 4),
+        (1, 2),
+        (1, 3),
+        (1, 4),
+        (2, 3),
+        (2, 4),
+        (3, 4),
+    )
+
+
+@pytest.mark.linear
+def test_build_blocks_from_hits_one_to_one_removes_query_to_many_noise() -> None:
+    records = [
+        _record(
+            "record_a",
+            [_cds(0, 9, {"locus_tag": ["qa0"], "protein_id": ["qa0"]})],
+        ),
+        _record(
+            "record_b",
+            [
+                _cds(0, 9, {"locus_tag": ["sb0"], "protein_id": ["sb0"]}),
+                _cds(12, 21, {"locus_tag": ["sb1"], "protein_id": ["sb1"]}),
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    hits = pd.DataFrame.from_records(
+        [_hit_row("qa0", "sb0", bitscore=300), _hit_row("qa0", "sb1", bitscore=250)],
+        columns=COMPARISON_COLUMNS,
+    )
+    params = CollinearityParameters(
+        min_anchors=1,
+        max_gene_gap=0,
+        nearby_duplicate_window=0,
+        block_evalue=2,
+    )
+
+    all_hits = build_collinearity_blocks_from_hits(
+        [hits],
+        extraction,
+        records=records,
+        params=params,
+        anchor_mode="all",
+    )
+    one_to_one = build_collinearity_blocks_from_hits(
+        [hits],
+        extraction,
+        records=records,
+        params=params,
+        anchor_mode="one_to_one",
+    )
+
+    assert len(all_hits.blocks) == 2
+    assert all_hits.blocks[0].anchors[0].subject_protein_id == "sb0"
+    assert all_hits.blocks[0].anchors[0].subject_orthogroup_member_count == 2
+    assert len(one_to_one.blocks) == 1
+    assert one_to_one.blocks[0].anchors[0].subject_protein_id == "sb0"
+
+
+@pytest.mark.linear
+def test_build_blocks_from_hits_rbh_uses_reverse_best_hits() -> None:
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(0, 9, {"locus_tag": ["qa0"], "protein_id": ["qa0"]}),
+                _cds(12, 21, {"locus_tag": ["qa1"], "protein_id": ["qa1"]}),
+            ],
+        ),
+        _record(
+            "record_b",
+            [
+                _cds(0, 9, {"locus_tag": ["sb0"], "protein_id": ["sb0"]}),
+                _cds(12, 21, {"locus_tag": ["sb1"], "protein_id": ["sb1"]}),
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    forward_hits = pd.DataFrame.from_records(
+        [_hit_row("qa0", "sb0", bitscore=300), _hit_row("qa1", "sb1", bitscore=250)],
+        columns=COMPARISON_COLUMNS,
+    )
+    reverse_hits = pd.DataFrame.from_records(
+        [_hit_row("sb0", "qa0", bitscore=300), _hit_row("sb1", "qa0", bitscore=400)],
+        columns=COMPARISON_COLUMNS,
+    )
+    params = CollinearityParameters(
+        min_anchors=1,
+        max_gene_gap=0,
+        nearby_duplicate_window=0,
+        block_evalue=2,
+    )
+
+    one_to_one = build_collinearity_blocks_from_hits(
+        [forward_hits],
+        extraction,
+        records=records,
+        params=params,
+        anchor_mode="one_to_one",
+    )
+    rbh = build_collinearity_blocks_from_hits(
+        [forward_hits],
+        extraction,
+        records=records,
+        params=params,
+        anchor_mode="rbh",
+        reverse_hits_by_pair=[reverse_hits],
+    )
+
+    assert sum(len(block.anchors) for block in one_to_one.blocks) == 2
+    assert len(rbh.blocks) == 1
+    assert rbh.blocks[0].anchors[0].query_protein_id == "qa0"
+    assert rbh.blocks[0].anchors[0].subject_protein_id == "sb0"
+
+
+@pytest.mark.linear
+def test_lossless_collinearity_preserves_every_adjacent_orthogroup_edge() -> None:
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(index * 12, index * 12 + 9, {"locus_tag": [protein_id], "protein_id": [protein_id]})
+                for index, protein_id in enumerate(["a0", "a1", "a2", "a3", "a4"])
+            ],
+        ),
+        _record(
+            "record_b",
+            [
+                _cds(index * 12, index * 12 + 9, {"locus_tag": [protein_id], "protein_id": [protein_id]})
+                for index, protein_id in enumerate(["b0", "b1", "b2", "b3", "b4", "b5"])
+            ],
+        ),
+        _record(
+            "record_c",
+            [_cds(0, 9, {"locus_tag": ["c0"], "protein_id": ["c0"]})],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records(
+            [
+                _hit_row("a0", "b0"),
+                _hit_row("a1", "b1"),
+                _hit_row("a2", "b4"),
+                _hit_row("a3", "b5"),
+                _hit_row("a4", "b2"),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (1, 0): pd.DataFrame.from_records(
+            [
+                _hit_row("b0", "a0"),
+                _hit_row("b1", "a1"),
+                _hit_row("b4", "a2"),
+                _hit_row("b5", "a3"),
+                _hit_row("b2", "a4"),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (0, 2): pd.DataFrame.from_records([_hit_row("a3", "c0")], columns=COMPARISON_COLUMNS),
+        (2, 0): pd.DataFrame.from_records([_hit_row("c0", "a3")], columns=COMPARISON_COLUMNS),
+        (1, 2): pd.DataFrame.from_records([_hit_row("b4", "c0")], columns=COMPARISON_COLUMNS),
+        (2, 1): pd.DataFrame.from_records([_hit_row("c0", "b4")], columns=COMPARISON_COLUMNS),
+    }
+
+    edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=len(records),
+    )
+    expected_edge_ids = {
+        (str(row.query), str(row.subject), query_index, subject_index)
+        for (query_index, subject_index), edges in edge_selection.adjacent_display_edges_by_pair.items()
+        for row in edges.itertuples(index=False)
+    }
+    anchors = orthogroup_edges_to_lossless_collinearity_anchors(
+        edge_selection.adjacent_display_edges_by_pair,
+        extraction.protein_map,
+        edge_selection.orthogroups,
+    )
+
+    assert {
+        (
+            anchor.query_protein_id,
+            anchor.subject_protein_id,
+            anchor.query_record_index,
+            anchor.subject_record_index,
+        )
+        for anchor in anchors
+    } == expected_edge_ids
+
+    result = cluster_lossless_collinearity_anchors(
+        anchors,
+        params=LosslessCollinearityParameters(max_unit_gap=0, max_diagonal_drift=0),
+    )
+    rendered_frames = convert_collinearity_blocks_to_comparisons(
+        result,
+        records=records,
+        color_mode="orientation",
+    )
+    rendered_edge_ids = set()
+    for frame in rendered_frames:
+        for row in frame.itertuples(index=False):
+            query_ids = str(row.query_protein_id).split(";")
+            subject_ids = str(row.subject_protein_id).split(";")
+            rendered_edge_ids.update(zip(query_ids, subject_ids))
+
+    assert {(query_id, subject_id) for query_id, subject_id, *_ in expected_edge_ids} <= rendered_edge_ids
+    assert any(block.kind == "singleton" for block in result.blocks)
+    assert any(block.kind == "cluster" and len(block.anchors) > 1 for block in result.blocks)
+
+
+@pytest.mark.linear
+def test_lossless_min_anchors_filters_blocks_after_clustering() -> None:
+    anchors = [_anchor(0, 0), _anchor(1, 1), _anchor(4, 4)]
+
+    min_one = cluster_lossless_collinearity_anchors(
+        anchors,
+        params=LosslessCollinearityParameters(min_anchors=1, max_unit_gap=0),
+    )
+    min_two = cluster_lossless_collinearity_anchors(
+        anchors,
+        params=LosslessCollinearityParameters(min_anchors=2, max_unit_gap=0),
+    )
+    min_three = cluster_lossless_collinearity_anchors(
+        anchors,
+        params=LosslessCollinearityParameters(min_anchors=3, max_unit_gap=0),
+    )
+
+    assert [len(block.anchors) for block in min_one.blocks] == [2, 1]
+    assert [len(block.anchors) for block in min_two.blocks] == [2]
+    assert min_two.unblocked_anchors == (anchors[2],)
+    assert min_three.blocks == ()
+    assert min_three.unblocked_anchors == tuple(anchors)
 
 
 @pytest.mark.linear
@@ -167,16 +567,225 @@ def test_build_blocks_from_hits_maps_proteins_to_units() -> None:
         [hits],
         extraction,
         records=records,
-        params=CollinearityParameters(min_anchors=3, max_gene_gap=1),
+        params=CollinearityParameters(min_anchors=3, max_gene_gap=1, block_evalue=None),
+        anchor_mode="one_to_one",
     )
     comparisons = convert_collinearity_blocks_to_comparisons(result, records=records, color_mode="orientation")
 
     assert result.blocks[0].block_id == "block_0001"
+    assert result.blocks[0].kind == "cluster"
     assert comparisons[0].shape[0] == 1
     assert comparisons[0].iloc[0]["collinearity_block_id"] == "block_0001"
+    assert comparisons[0].iloc[0]["collinearity_block_kind"] == "cluster"
     assert comparisons[0].iloc[0]["collinearity_anchor_count"] == 3
     assert comparisons[0].iloc[0]["collinearity_color_mode"] == "orientation"
+    assert comparisons[0].iloc[0]["orthogroup_id"] == "og_1;og_2;og_3"
     assert comparisons[0].iloc[0]["query_locus_id"] == "qa0;qa1;qa2"
+
+
+@pytest.mark.linear
+def test_true_global_singleton_orthogroup_does_not_create_link() -> None:
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(0, 9, {"locus_tag": ["qa0"], "protein_id": ["qa0"]}),
+                _cds(12, 21, {"locus_tag": ["qa_single"], "protein_id": ["qa_single"]}),
+            ],
+        ),
+        _record(
+            "record_b",
+            [_cds(0, 9, {"locus_tag": ["sb0"], "protein_id": ["sb0"]})],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    hits = pd.DataFrame.from_records([_hit_row("qa0", "sb0")], columns=COMPARISON_COLUMNS)
+
+    result = build_collinearity_blocks_from_hits(
+        [hits],
+        extraction,
+        records=records,
+        params=LosslessCollinearityParameters(min_anchors=1),
+        anchor_mode="one_to_one",
+    )
+
+    assert len(result.blocks) == 1
+    assert result.blocks[0].kind == "singleton"
+    assert result.blocks[0].anchors[0].orthogroup_id == "og_1"
+    assert result.orthogroups is not None
+    assert len(result.orthogroups.orthogroups) == 1
+    assert all(
+        "qa_single" not in [member.protein_id for member in members]
+        for members in result.orthogroups.orthogroups.values()
+    )
+
+
+@pytest.mark.linear
+def test_build_blocks_from_hits_adjacent_scope_ignores_non_adjacent_tables() -> None:
+    records = [
+        _record("record_a", [_cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]})]),
+        _record("record_b", [_cds(0, 9, {"locus_tag": ["b0"], "protein_id": ["b0"]})]),
+        _record("record_c", [_cds(0, 9, {"locus_tag": ["c0"], "protein_id": ["c0"]})]),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 2): pd.DataFrame.from_records([_hit_row("a0", "c0")], columns=COMPARISON_COLUMNS),
+    }
+
+    result = collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
+        directional_hits,
+        extraction,
+        records=records,
+        params=LosslessCollinearityParameters(),
+        edge_mode="one_to_one",
+        search_scope="adjacent",
+    )
+
+    assert result.blocks == ()
+    assert result.orthogroups is not None
+    assert result.orthogroups.orthogroups == {}
+
+
+@pytest.mark.linear
+def test_build_blocks_from_hits_all_scope_uses_non_adjacent_connectivity_only_as_evidence() -> None:
+    records = [
+        _record("record_a", [_cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]})]),
+        _record("record_b", [_cds(0, 9, {"locus_tag": ["b0"], "protein_id": ["b0"]})]),
+        _record("record_c", [_cds(0, 9, {"locus_tag": ["c0"], "protein_id": ["c0"]})]),
+    ]
+    extraction = extract_cds_proteins(records)
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records([_hit_row("a0", "b0")], columns=COMPARISON_COLUMNS),
+        (0, 2): pd.DataFrame.from_records([_hit_row("a0", "c0")], columns=COMPARISON_COLUMNS),
+    }
+
+    result = collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
+        directional_hits,
+        extraction,
+        records=records,
+        params=LosslessCollinearityParameters(),
+        edge_mode="one_to_one",
+        search_scope="all",
+    )
+    comparisons = convert_collinearity_blocks_to_comparisons(
+        result,
+        records=records,
+        color_mode="orientation",
+    )
+
+    assert result.orthogroups is not None
+    assert any(
+        {member.protein_id for member in members} == {"a0", "b0", "c0"}
+        for members in result.orthogroups.orthogroups.values()
+    )
+    assert all(
+        block.subject_record_index == block.query_record_index + 1
+        for block in result.blocks
+    )
+    assert comparisons[0].shape[0] == 1
+    assert comparisons[1].shape[0] == 0
+
+
+@pytest.mark.linear
+def test_orthogroup_collinearity_rbh_search_defaults_to_top_candidate(monkeypatch) -> None:
+    records = [
+        _record("record_a", [_cds(0, 9, {"locus_tag": ["qa0"], "protein_id": ["qa0"]})]),
+        _record("record_b", [_cds(0, 9, {"locus_tag": ["sb0"], "protein_id": ["sb0"]})]),
+        _record("record_c", [_cds(0, 9, {"locus_tag": ["tc0"], "protein_id": ["tc0"]})]),
+    ]
+    observed_limits: list[int | None] = []
+    observed_pairs: list[tuple[str, str]] = []
+
+    def fake_search(query_fasta, subject_fasta, *, losatp_bin, candidate_limit, runner):
+        observed_limits.append(candidate_limit)
+        observed_pairs.append((_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta)))
+        return pd.DataFrame.from_records(
+            [_hit_row(_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta))],
+            columns=COMPARISON_COLUMNS,
+        )
+
+    monkeypatch.setattr(collinearity_module, "_run_losatp_search", fake_search)
+
+    result = collinearity_module.build_orthogroup_collinearity_blocks(
+        records,
+        params=LosslessCollinearityParameters(),
+        edge_mode="rbh",
+    )
+
+    assert observed_limits == [1, 1, 1, 1]
+    assert observed_pairs == [("qa0", "sb0"), ("sb0", "qa0"), ("sb0", "tc0"), ("tc0", "sb0")]
+    assert len(result.blocks) == 2
+    assert {block.query_record_index for block in result.blocks} == {0, 1}
+
+
+@pytest.mark.linear
+def test_orthogroup_collinearity_all_hits_keeps_uncapped_search(monkeypatch) -> None:
+    records = [
+        _record("record_a", [_cds(0, 9, {"locus_tag": ["qa0"], "protein_id": ["qa0"]})]),
+        _record("record_b", [_cds(0, 9, {"locus_tag": ["sb0"], "protein_id": ["sb0"]})]),
+        _record("record_c", [_cds(0, 9, {"locus_tag": ["tc0"], "protein_id": ["tc0"]})]),
+    ]
+    observed_limits: list[int | None] = []
+    observed_pairs: list[tuple[str, str]] = []
+
+    def fake_search(query_fasta, subject_fasta, *, losatp_bin, candidate_limit, runner):
+        observed_limits.append(candidate_limit)
+        observed_pairs.append((_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta)))
+        return pd.DataFrame.from_records(
+            [_hit_row(_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta))],
+            columns=COMPARISON_COLUMNS,
+        )
+
+    monkeypatch.setattr(collinearity_module, "_run_losatp_search", fake_search)
+
+    result = collinearity_module.build_orthogroup_collinearity_blocks(
+        records,
+        params=LosslessCollinearityParameters(),
+        edge_mode="all",
+        search_scope="all",
+    )
+
+    assert observed_limits == [None, None, None]
+    assert observed_pairs == [("qa0", "sb0"), ("qa0", "tc0"), ("sb0", "tc0")]
+    assert all(
+        block.subject_record_index == block.query_record_index + 1
+        for block in result.blocks
+    )
+
+
+@pytest.mark.linear
+def test_orthogroup_collinearity_all_scope_rbh_searches_every_direction(monkeypatch) -> None:
+    records = [
+        _record("record_a", [_cds(0, 9, {"locus_tag": ["qa0"], "protein_id": ["qa0"]})]),
+        _record("record_b", [_cds(0, 9, {"locus_tag": ["sb0"], "protein_id": ["sb0"]})]),
+        _record("record_c", [_cds(0, 9, {"locus_tag": ["tc0"], "protein_id": ["tc0"]})]),
+    ]
+    observed_pairs: list[tuple[str, str]] = []
+
+    def fake_search(query_fasta, subject_fasta, *, losatp_bin, candidate_limit, runner):
+        observed_pairs.append((_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta)))
+        return pd.DataFrame.from_records(
+            [_hit_row(_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta))],
+            columns=COMPARISON_COLUMNS,
+        )
+
+    monkeypatch.setattr(collinearity_module, "_run_losatp_search", fake_search)
+
+    collinearity_module.build_orthogroup_collinearity_blocks(
+        records,
+        params=LosslessCollinearityParameters(),
+        edge_mode="rbh",
+        search_scope="all",
+    )
+
+    assert observed_pairs == [
+        ("qa0", "sb0"),
+        ("sb0", "qa0"),
+        ("qa0", "tc0"),
+        ("tc0", "qa0"),
+        ("sb0", "tc0"),
+        ("tc0", "sb0"),
+    ]
 
 
 @pytest.mark.linear
@@ -199,9 +808,9 @@ def test_native_tsv_parser_resolves_records_and_units_and_writer_round_trips() -
     ]
     text = "\n".join(
         [
-            "block_id\tanchor_index\tquery_record\tquery_unit\tsubject_record\tsubject_unit\torientation\tidentity\tevalue\tbitscore\talignment_length\tscore",
-            "block_a\t1\t#1\tqa0\t#2\tsb0\tplus\t91\t1e-20\t200\t100\t50",
-            "block_a\t2\trecord_a\tqa1\trecord_b\tsb1\tplus\t92\t1e-25\t210\t100\t50",
+            "block_id\tanchor_index\tquery_record\tquery_unit\tsubject_record\tsubject_unit\torientation\tidentity\tevalue\tbitscore\talignment_length\tscore\tblock_evalue",
+            "block_a\t1\t#1\tqa0\t#2\tsb0\tplus\t91\t1e-20\t200\t100\t50\t1e-8",
+            "block_a\t2\trecord_a\tqa1\trecord_b\tsb1\tplus\t92\t1e-25\t210\t100\t50\t0.00000001",
             "",
         ]
     )
@@ -219,8 +828,100 @@ def test_native_tsv_parser_resolves_records_and_units_and_writer_round_trips() -
     )
 
     assert result.blocks[0].block_id == "block_a"
+    assert result.blocks[0].kind == "syntenic"
+    assert result.blocks[0].block_evalue == pytest.approx(1e-8)
     assert [anchor.query_display_name for anchor in result.blocks[0].anchors] == ["qa0", "qa1"]
+    assert "block_kind" in written.splitlines()[0].split("\t")
+    assert "orthogroup_id" in written.splitlines()[0].split("\t")
+    assert "block_evalue" in written.splitlines()[0].split("\t")
     assert reparsed.blocks[0].anchors[1].subject_locus_id == "sb1"
+    assert reparsed.blocks[0].block_evalue == pytest.approx(1e-8)
+
+
+@pytest.mark.linear
+def test_native_tsv_parser_round_trips_singleton_block_kind() -> None:
+    records = [
+        _record("record_a", [_cds(0, 9, {"locus_tag": ["qa0"], "protein_id": ["qa0"]})]),
+        _record("record_b", [_cds(0, 9, {"locus_tag": ["sb0"], "protein_id": ["sb0"]})]),
+    ]
+    text = "\n".join(
+        [
+            "block_id\tblock_kind\tanchor_index\torthogroup_id\tquery_record\tquery_unit\tsubject_record\tsubject_unit\torientation",
+            "singleton_a\tsingleton\t1\tog_x\t#1\tqa0\t#2\tsb0\tplus",
+            "",
+        ]
+    )
+
+    result = parse_native_collinearity_tsv(
+        text,
+        records,
+        params=LosslessCollinearityParameters(min_anchors=1),
+    )
+    written = write_native_collinearity_tsv(result)
+
+    assert result.blocks[0].kind == "singleton"
+    assert result.blocks[0].anchors[0].orthogroup_id == "og_x"
+    assert "\tsingleton\t" in written
+
+
+@pytest.mark.linear
+def test_native_tsv_parser_min_anchors_drops_small_blocks() -> None:
+    records = [
+        _record("record_a", [_cds(0, 9, {"locus_tag": ["qa0"], "protein_id": ["qa0"]})]),
+        _record("record_b", [_cds(0, 9, {"locus_tag": ["sb0"], "protein_id": ["sb0"]})]),
+    ]
+    text = "\n".join(
+        [
+            "block_id\tblock_kind\tanchor_index\torthogroup_id\tquery_record\tquery_unit\tsubject_record\tsubject_unit\torientation",
+            "singleton_a\tsingleton\t1\tog_x\t#1\tqa0\t#2\tsb0\tplus",
+            "",
+        ]
+    )
+
+    result = parse_native_collinearity_tsv(
+        text,
+        records,
+        params=LosslessCollinearityParameters(min_anchors=2),
+    )
+
+    assert result.blocks == ()
+    assert len(result.unblocked_anchors) == 1
+    assert result.unblocked_anchors[0].orthogroup_id == "og_x"
+
+
+@pytest.mark.linear
+def test_native_tsv_parser_rejects_conflicting_block_evalues() -> None:
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(0, 9, {"locus_tag": ["qa0"], "protein_id": ["qa0"]}),
+                _cds(12, 21, {"locus_tag": ["qa1"], "protein_id": ["qa1"]}),
+            ],
+        ),
+        _record(
+            "record_b",
+            [
+                _cds(0, 9, {"locus_tag": ["sb0"], "protein_id": ["sb0"]}),
+                _cds(12, 21, {"locus_tag": ["sb1"], "protein_id": ["sb1"]}),
+            ],
+        ),
+    ]
+    text = "\n".join(
+        [
+            "block_id\tanchor_index\tquery_record\tquery_unit\tsubject_record\tsubject_unit\torientation\tscore\tblock_evalue",
+            "block_a\t1\t#1\tqa0\t#2\tsb0\tplus\t50\t1e-8",
+            "block_a\t2\t#1\tqa1\t#2\tsb1\tplus\t50\t1e-7",
+            "",
+        ]
+    )
+
+    with pytest.raises(ValidationError, match="conflicting block_evalue"):
+        parse_native_collinearity_tsv(
+            text,
+            records,
+            params=CollinearityParameters(min_anchors=2),
+        )
 
 
 @pytest.mark.linear
@@ -241,6 +942,8 @@ def test_linear_cli_builds_and_saves_native_collinearity(
     def fake_build(*_args, **kwargs):
         captured["collinearity_params"] = kwargs["params"]
         captured["unit_mode"] = kwargs["unit_mode"]
+        captured["edge_mode"] = kwargs["edge_mode"]
+        captured["search_scope"] = kwargs["search_scope"]
         anchor = _anchor(0, 0)
         return CollinearityResult(
             blocks=(
@@ -260,7 +963,7 @@ def test_linear_cli_builds_and_saves_native_collinearity(
         captured["protein_blastp_mode"] = kwargs.get("protein_blastp_mode")
         return kwargs.get("canvas") or object()
 
-    monkeypatch.setattr(linear_cli_module, "build_native_collinearity_blocks", fake_build)
+    monkeypatch.setattr(linear_cli_module, "build_orthogroup_collinearity_blocks", fake_build)
     monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
 
     linear_cli_module.linear_main(
@@ -274,6 +977,14 @@ def test_linear_cli_builds_and_saves_native_collinearity(
             "1",
             "--collinear_unit_mode",
             "cds",
+            "--collinear_anchor_mode",
+            "rbh",
+            "--collinear_search_scope",
+            "all",
+            "--collinear_block_merge_gap",
+            "12",
+            "--collinear_singleton_merge_gap",
+            "7",
             "--collinear_color_mode",
             "orientation",
             "--save_collinear_blocks",
@@ -286,14 +997,70 @@ def test_linear_cli_builds_and_saves_native_collinearity(
     )
 
     params = captured["collinearity_params"]
-    assert isinstance(params, CollinearityParameters)
+    assert isinstance(params, LosslessCollinearityParameters)
     assert params.min_anchors == 1
+    assert params.max_unit_gap == 0
+    assert params.max_diagonal_drift == 0
     assert captured["unit_mode"] == "cds"
+    assert captured["edge_mode"] == "rbh"
+    assert captured["search_scope"] == "all"
     assert captured["protein_blastp_mode"] == "none"
     comparisons = captured["protein_comparisons"]
     assert isinstance(comparisons, list)
     assert comparisons[0].iloc[0]["collinearity_color_mode"] == "orientation"
     assert "block_0001" in save_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.linear
+def test_linear_cli_parses_collinear_block_evalue_none() -> None:
+    args = linear_cli_module._get_args(
+        [
+            "--gbk",
+            "a.gb",
+            "b.gb",
+            "--protein_blastp_mode",
+            "collinear",
+            "--collinear_block_evalue",
+            "none",
+        ]
+    )
+
+    assert args.collinear_block_evalue is None
+
+
+@pytest.mark.linear
+def test_linear_cli_parses_collinear_min_anchors() -> None:
+    default_args = linear_cli_module._get_args(["--gbk", "a.gb", "b.gb"])
+    explicit_args = linear_cli_module._get_args(
+        ["--gbk", "a.gb", "b.gb", "--collinear_min_anchors", "2"]
+    )
+
+    assert default_args.collinear_min_anchors == 1
+    assert explicit_args.collinear_min_anchors == 2
+
+
+@pytest.mark.linear
+def test_linear_cli_rejects_nonpositive_collinear_min_anchors() -> None:
+    with pytest.raises(SystemExit):
+        linear_cli_module._get_args(
+            ["--gbk", "a.gb", "b.gb", "--collinear_min_anchors", "0"]
+        )
+
+
+@pytest.mark.linear
+def test_linear_cli_rejects_negative_collinear_block_evalue() -> None:
+    with pytest.raises(SystemExit):
+        linear_cli_module._get_args(
+            [
+                "--gbk",
+                "a.gb",
+                "b.gb",
+                "--protein_blastp_mode",
+                "collinear",
+                "--collinear_block_evalue",
+                "-1",
+            ]
+        )
 
 
 @pytest.mark.linear
@@ -308,7 +1075,7 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows() -> None:
     exec(helper_source, namespace)
 
     hits = pd.DataFrame.from_records(
-        [_hit_row(f"qa{index}", f"sb{index}") for index in range(3)],
+        [_hit_row(f"qa{index}", f"sb{index}") for index in range(8)],
         columns=COMPARISON_COLUMNS,
     )
     payload = [
@@ -326,7 +1093,7 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows() -> None:
                     start=index * 12,
                     end=index * 12 + 9,
                 )
-                for index in range(3)
+                for index in range(8)
             },
             "subjectProteinMap": {
                 f"sb{index}": _web_protein_entry(
@@ -337,7 +1104,7 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows() -> None:
                     start=index * 12,
                     end=index * 12 + 9,
                 )
-                for index in range(3)
+                for index in range(8)
             },
         }
     ]
@@ -351,14 +1118,15 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows() -> None:
         0,
         0,
         3,
-        JsNull(),
-        JsNull(),
-        JsNull(),
-        JsNull(),
-        JsNull(),
-        JsNull(),
+        1,
         "cds",
         "orientation",
+        "one_to_one",
+        50,
+        25,
+        25,
+        1,
+        2,
     )
     result = json.loads(str(raw_result))
 
@@ -367,8 +1135,227 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows() -> None:
     rows = result["pairs"][0]["rows"]
     assert len(rows) == 1
     assert rows[0]["collinearity_block_id"] == "block_0001"
-    assert rows[0]["collinearity_anchor_count"] == 3
+    assert rows[0]["collinearity_block_kind"] == "cluster"
+    assert rows[0]["collinearity_anchor_count"] == 8
     assert rows[0]["collinearity_color_mode"] == "orientation"
+    assert rows[0]["collinearity_block_evalue"] == ""
+    assert len(result["orthogroups"]) == 8
+
+
+@pytest.mark.linear
+def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode() -> None:
+    class JsNull:
+        def __str__(self) -> str:
+            return "null"
+
+    helpers_js = Path("gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
+    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
+    namespace: dict[str, object] = {}
+    exec(helper_source, namespace)
+
+    query_map = {
+        f"qa{index}": _web_protein_entry(
+            f"qa{index}",
+            record_index=0,
+            record_id="record_a",
+            feature_index=index,
+            start=index * 12,
+            end=index * 12 + 9,
+        )
+        for index in range(2)
+    }
+    subject_map = {
+        f"sb{index}": _web_protein_entry(
+            f"sb{index}",
+            record_index=1,
+            record_id="record_b",
+            feature_index=index,
+            start=index * 12,
+            end=index * 12 + 9,
+        )
+        for index in range(2)
+    }
+    forward_hits = pd.DataFrame.from_records(
+        [_hit_row("qa0", "sb0", bitscore=300), _hit_row("qa1", "sb1", bitscore=250)],
+        columns=COMPARISON_COLUMNS,
+    )
+    reverse_hits = pd.DataFrame.from_records(
+        [_hit_row("sb0", "qa0", bitscore=300), _hit_row("sb1", "qa0", bitscore=400)],
+        columns=COMPARISON_COLUMNS,
+    )
+    payload = [
+        {
+            "pairIndex": 0,
+            "queryIndex": 0,
+            "subjectIndex": 1,
+            "blastText": forward_hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
+            "queryProteinMap": query_map,
+            "subjectProteinMap": subject_map,
+        },
+        {
+            "pairIndex": 0,
+            "queryIndex": 1,
+            "subjectIndex": 0,
+            "blastText": reverse_hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
+            "queryProteinMap": subject_map,
+            "subjectProteinMap": query_map,
+        },
+    ]
+
+    raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+        json.dumps(payload),
+        "collinear",
+        5,
+        50,
+        "1e-5",
+        0,
+        0,
+        1,
+        0,
+        "cds",
+        "orientation",
+        "rbh",
+        50,
+        25,
+        25,
+        1,
+        2,
+    )
+    result = json.loads(str(raw_result))
+
+    assert "error" not in result
+    rows = result["pairs"][0]["rows"]
+    assert len(rows) == 1
+    assert rows[0]["collinearity_anchor_count"] == 1
+    assert rows[0]["collinearity_block_kind"] == "singleton"
+    assert rows[0]["query_protein_id"] == "qa0"
+    assert rows[0]["subject_protein_id"] == "sb0"
+
+    raw_min_two = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+        json.dumps(payload),
+        "collinear",
+        5,
+        50,
+        "1e-5",
+        0,
+        0,
+        2,
+        0,
+        "cds",
+        "orientation",
+        "rbh",
+        50,
+        25,
+        25,
+        1,
+        2,
+    )
+    min_two = json.loads(str(raw_min_two))
+
+    assert "error" not in min_two
+    assert min_two["pairs"][0]["rows"] == []
+
+
+@pytest.mark.linear
+def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope() -> None:
+    helpers_js = Path("gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
+    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
+    namespace: dict[str, object] = {}
+    exec(helper_source, namespace)
+
+    a_map = {
+        "a0": _web_protein_entry(
+            "a0",
+            record_index=0,
+            record_id="record_a",
+            feature_index=0,
+            start=0,
+            end=9,
+        )
+    }
+    b_map = {
+        "b0": _web_protein_entry(
+            "b0",
+            record_index=1,
+            record_id="record_b",
+            feature_index=0,
+            start=0,
+            end=9,
+        )
+    }
+    c_map = {
+        "c0": _web_protein_entry(
+            "c0",
+            record_index=2,
+            record_id="record_c",
+            feature_index=0,
+            start=0,
+            end=9,
+        )
+    }
+    adjacent_hits = pd.DataFrame.from_records([_hit_row("a0", "b0")], columns=COMPARISON_COLUMNS)
+    non_adjacent_hits = pd.DataFrame.from_records([_hit_row("a0", "c0")], columns=COMPARISON_COLUMNS)
+    payload = [
+        {
+            "pairIndex": 0,
+            "queryIndex": 0,
+            "subjectIndex": 1,
+            "blastText": adjacent_hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
+            "queryProteinMap": a_map,
+            "subjectProteinMap": b_map,
+        },
+        {
+            "pairIndex": 0,
+            "queryIndex": 0,
+            "subjectIndex": 2,
+            "blastText": non_adjacent_hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
+            "queryProteinMap": a_map,
+            "subjectProteinMap": c_map,
+        },
+    ]
+
+    def convert(scope: str) -> dict[str, object]:
+        raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+            json.dumps(payload),
+            "collinear",
+            5,
+            50,
+            "1e-5",
+            0,
+            0,
+            1,
+            0,
+            "cds",
+            "orientation",
+            "one_to_one",
+            50,
+            25,
+            25,
+            1,
+            2,
+            scope,
+        )
+        return json.loads(str(raw_result))
+
+    adjacent = convert("adjacent")
+    all_records = convert("all")
+
+    assert "error" not in adjacent
+    assert "error" not in all_records
+    adjacent_member_sets = [
+        {member["proteinId"] for member in group["members"]}
+        for group in adjacent["orthogroups"]
+    ]
+    all_member_sets = [
+        {member["proteinId"] for member in group["members"]}
+        for group in all_records["orthogroups"]
+    ]
+    assert {"a0", "b0"} in adjacent_member_sets
+    assert {"a0", "b0", "c0"} in all_member_sets
+    assert all(
+        block["subjectRecordIndex"] == block["queryRecordIndex"] + 1
+        for block in all_records["collinearityBlocks"]
+    )
 
 
 @pytest.mark.linear
@@ -381,6 +1368,7 @@ def test_collinearity_comparison_rows_use_block_spans() -> None:
                 subject_record_index=1,
                 orientation="plus",
                 score=150.0,
+                block_evalue=1e-9,
                 anchors=(_anchor(0, 0), _anchor(1, 1), _anchor(2, 2)),
             ),
             CollinearityBlock(
@@ -389,6 +1377,7 @@ def test_collinearity_comparison_rows_use_block_spans() -> None:
                 subject_record_index=1,
                 orientation="minus",
                 score=150.0,
+                block_evalue=2e-9,
                 anchors=(_anchor(0, 2), _anchor(1, 1), _anchor(2, 0)),
             ),
         )
@@ -409,6 +1398,7 @@ def test_collinearity_comparison_rows_use_block_spans() -> None:
     assert rows.loc["block_minus", "qend"] == 29
     assert rows.loc["block_minus", "sstart"] == 29
     assert rows.loc["block_minus", "send"] == 1
+    assert rows.loc["block_plus", "collinearity_block_evalue"] == pytest.approx(1e-9)
 
 
 @pytest.mark.linear
@@ -441,8 +1431,11 @@ def test_collinearity_match_path_with_metadata_serializes() -> None:
         sstart=10,
         send=110,
         collinearity_block_id="block_0001",
+        collinearity_block_kind="singleton",
         collinearity_orientation="plus",
+        collinearity_block_evalue=1e-9,
         collinearity_color_mode="orientation",
+        orthogroup_id="og_1",
         query_protein_id="qa0",
         subject_protein_id="sb0",
         query_feature_svg_id="feature_qa0",
@@ -455,6 +1448,9 @@ def test_collinearity_match_path_with_metadata_serializes() -> None:
     drawing.add(group.generate_linear_match_path(row))
 
     assert "data-collinearity-block-id" in drawing.tostring()
+    assert 'data-collinearity-block-kind="singleton"' in drawing.tostring()
+    assert 'data-orthogroup-id="og_1"' in drawing.tostring()
+    assert 'data-collinearity-block-evalue="1e-09"' in drawing.tostring()
     assert 'data-collinearity-color-mode="orientation"' in drawing.tostring()
     assert 'fill="#112233"' in drawing.tostring()
 

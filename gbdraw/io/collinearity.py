@@ -8,6 +8,7 @@ from __future__ import annotations
 from io import StringIO
 from pathlib import Path
 import csv
+import math
 from typing import Mapping, Sequence
 
 import pandas as pd
@@ -18,6 +19,8 @@ from gbdraw.analysis.collinearity import (
     CollinearityBlock,
     CollinearityParameters,
     CollinearityResult,
+    LosslessCollinearityParameters,
+    _filter_blocks_by_min_anchors,
 )
 from gbdraw.analysis.collinearity_units import (
     CollinearityUnit,
@@ -38,7 +41,11 @@ NATIVE_COLLINEARITY_REQUIRED_COLUMNS = (
 )
 NATIVE_COLLINEARITY_WRITER_COLUMNS = (
     "block_id",
+    "block_kind",
     "anchor_index",
+    "orthogroup_id",
+    "query_orthogroup_member_count",
+    "subject_orthogroup_member_count",
     "query_record",
     "query_unit",
     "query_unit_kind",
@@ -47,6 +54,7 @@ NATIVE_COLLINEARITY_WRITER_COLUMNS = (
     "query_display_name",
     "query_start",
     "query_end",
+    "query_strand",
     "subject_record",
     "subject_unit",
     "subject_unit_kind",
@@ -55,12 +63,14 @@ NATIVE_COLLINEARITY_WRITER_COLUMNS = (
     "subject_display_name",
     "subject_start",
     "subject_end",
+    "subject_strand",
     "orientation",
     "identity",
     "evalue",
     "bitscore",
     "alignment_length",
     "score",
+    "block_evalue",
 )
 
 
@@ -88,6 +98,18 @@ def _optional_float(value: object, default: float) -> float:
         return float(str(value).strip())
     except ValueError as exc:
         raise ParseError(f"Invalid numeric value in native collinearity TSV: {value}") from exc
+
+
+def _optional_nullable_float(value: object) -> float | None:
+    if _is_missing(value):
+        return None
+    try:
+        parsed = float(str(value).strip())
+    except ValueError as exc:
+        raise ParseError(f"Invalid numeric value in native collinearity TSV: {value}") from exc
+    if not math.isfinite(parsed) or parsed < 0:
+        raise ParseError(f"Invalid numeric value in native collinearity TSV: {value}")
+    return parsed
 
 
 def _optional_int(value: object, default: int) -> int:
@@ -176,6 +198,15 @@ def _normalize_header(row: Mapping[str, str]) -> dict[str, str]:
     return normalized
 
 
+def _normalize_block_kind(value: object) -> str:
+    text = str(value or "").strip().lower()
+    if not text:
+        return "syntenic"
+    if text not in {"syntenic", "cluster", "singleton"}:
+        raise ParseError(f"Invalid native collinearity block_kind '{text}'.")
+    return text
+
+
 def _parse_rows(text: str) -> list[dict[str, str]]:
     lines = [
         line
@@ -203,15 +234,17 @@ def parse_native_collinearity_tsv(
     source: str | Path,
     records: Sequence[SeqRecord],
     *,
-    params: CollinearityParameters | None = None,
+    params: CollinearityParameters | LosslessCollinearityParameters | None = None,
     unit_mode: CollinearityUnitMode | str = "auto",
 ) -> CollinearityResult:
     """Parse and validate native headered collinearity TSV."""
 
     if len(records) < 2:
         raise ValidationError("Native collinearity TSV import requires at least two records.")
-    params = params or CollinearityParameters()
+    params = params or LosslessCollinearityParameters()
     params.validate()
+    min_anchors = int(params.min_anchors)
+    default_anchor_score = float(getattr(params, "constant_anchor_score", 50.0))
     rows = _parse_rows(_read_text(source))
     extraction = extract_cds_proteins(records)
     unit_index = build_collinearity_unit_index(
@@ -223,6 +256,8 @@ def parse_native_collinearity_tsv(
     grouped: dict[str, list[tuple[int, CollinearityAnchor, float]]] = {}
     block_record_pairs: dict[str, tuple[int, int]] = {}
     block_orientations: dict[str, str] = {}
+    block_kinds: dict[str, str] = {}
+    block_evalues: dict[str, float | None] = {}
     for row_number, row in enumerate(rows, start=2):
         block_id = str(row.get("block_id", "")).strip()
         if not block_id:
@@ -245,6 +280,14 @@ def parse_native_collinearity_tsv(
         existing_orientation = block_orientations.setdefault(block_id, orientation)
         if existing_orientation != orientation:
             raise ValidationError(f"Native collinearity TSV block '{block_id}' has mixed orientations.")
+        block_kind = _normalize_block_kind(row.get("block_kind"))
+        existing_kind = block_kinds.setdefault(block_id, block_kind)
+        if existing_kind != block_kind:
+            raise ValidationError(f"Native collinearity TSV block '{block_id}' has mixed block_kind values.")
+        block_evalue = _optional_nullable_float(row.get("block_evalue"))
+        existing_block_evalue = block_evalues.setdefault(block_id, block_evalue)
+        if existing_block_evalue != block_evalue:
+            raise ValidationError(f"Native collinearity TSV block '{block_id}' has conflicting block_evalue values.")
 
         query_unit = _resolve_unit_selector(unit_index, query_record_index, row.get("query_unit"))
         subject_unit = _resolve_unit_selector(unit_index, subject_record_index, row.get("subject_unit"))
@@ -254,7 +297,7 @@ def parse_native_collinearity_tsv(
         qend = _optional_int(row.get("query_end"), default_qend)
         sstart = _optional_int(row.get("subject_start"), default_sstart)
         send = _optional_int(row.get("subject_end"), default_send)
-        score = _optional_float(row.get("score"), params.constant_anchor_score)
+        score = _optional_float(row.get("score"), default_anchor_score)
         anchor = CollinearityAnchor(
             query_protein_id=query_unit.representative_protein_id,
             subject_protein_id=subject_unit.representative_protein_id,
@@ -266,6 +309,8 @@ def parse_native_collinearity_tsv(
             query_end=qend,
             subject_start=sstart,
             subject_end=send,
+            query_strand=query_unit.strand,
+            subject_strand=subject_unit.strand,
             identity=_optional_float(row.get("identity"), 0.0),
             evalue=_optional_float(row.get("evalue"), 0.0),
             bitscore=_optional_float(row.get("bitscore"), score),
@@ -281,6 +326,9 @@ def parse_native_collinearity_tsv(
             subject_locus_id=subject_unit.locus_id,
             query_display_name=query_unit.display_name,
             subject_display_name=subject_unit.display_name,
+            orthogroup_id=str(row.get("orthogroup_id", "") or "").strip(),
+            query_orthogroup_member_count=_optional_int(row.get("query_orthogroup_member_count"), 0),
+            subject_orthogroup_member_count=_optional_int(row.get("subject_orthogroup_member_count"), 0),
         )
         anchor_index = _optional_int(row.get("anchor_index"), len(grouped.get(block_id, [])) + 1)
         grouped.setdefault(block_id, []).append((anchor_index, anchor, score))
@@ -298,10 +346,10 @@ def parse_native_collinearity_tsv(
             ),
         )
         anchors = tuple(item[1] for item in ordered_entries)
-        if len(anchors) < int(params.min_anchors):
+        block_kind = block_kinds.get(block_id, "syntenic")
+        if block_kind == "singleton" and len(anchors) != 1:
             raise ValidationError(
-                f"Native collinearity TSV block '{block_id}' has fewer than "
-                f"{params.min_anchors} accepted anchors."
+                f"Native collinearity TSV singleton block '{block_id}' must contain exactly one anchor."
             )
         score = float(sum(item[2] for item in ordered_entries))
         pair = block_record_pairs[block_id]
@@ -312,10 +360,16 @@ def parse_native_collinearity_tsv(
                 subject_record_index=pair[1],
                 orientation=block_orientations[block_id],  # type: ignore[arg-type]
                 score=score,
+                kind=block_kind,  # type: ignore[arg-type]
+                block_evalue=block_evalues.get(block_id),
                 anchors=anchors,
             )
         )
-    return CollinearityResult(blocks=tuple(blocks))
+    filtered_blocks, unblocked_anchors = _filter_blocks_by_min_anchors(
+        blocks,
+        min_anchors=min_anchors,
+    )
+    return CollinearityResult(blocks=filtered_blocks, unblocked_anchors=unblocked_anchors)
 
 
 def write_native_collinearity_tsv(result: CollinearityResult) -> str:
@@ -334,7 +388,11 @@ def write_native_collinearity_tsv(result: CollinearityResult) -> str:
             writer.writerow(
                 {
                     "block_id": block.block_id,
+                    "block_kind": block.kind,
                     "anchor_index": anchor_index,
+                    "orthogroup_id": anchor.orthogroup_id,
+                    "query_orthogroup_member_count": anchor.query_orthogroup_member_count,
+                    "subject_orthogroup_member_count": anchor.subject_orthogroup_member_count,
                     "query_record": f"#{anchor.query_record_index + 1}",
                     "query_unit": anchor.query_unit_id,
                     "query_unit_kind": anchor.query_unit_kind,
@@ -343,6 +401,7 @@ def write_native_collinearity_tsv(result: CollinearityResult) -> str:
                     "query_display_name": anchor.query_display_name,
                     "query_start": anchor.query_start,
                     "query_end": anchor.query_end,
+                    "query_strand": anchor.query_strand or "",
                     "subject_record": f"#{anchor.subject_record_index + 1}",
                     "subject_unit": anchor.subject_unit_id,
                     "subject_unit_kind": anchor.subject_unit_kind,
@@ -351,6 +410,7 @@ def write_native_collinearity_tsv(result: CollinearityResult) -> str:
                     "subject_display_name": anchor.subject_display_name,
                     "subject_start": anchor.subject_start,
                     "subject_end": anchor.subject_end,
+                    "subject_strand": anchor.subject_strand or "",
                     "orientation": block.orientation,
                     "identity": anchor.identity,
                     "evalue": anchor.evalue,
@@ -360,6 +420,11 @@ def write_native_collinearity_tsv(result: CollinearityResult) -> str:
                         anchor.bitscore
                         if pd.notna(anchor.bitscore)
                         else ""
+                    ),
+                    "block_evalue": (
+                        block.block_evalue
+                        if block.block_evalue is not None
+                        else "."
                     ),
                 }
             )

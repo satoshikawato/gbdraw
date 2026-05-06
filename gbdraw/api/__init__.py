@@ -34,6 +34,17 @@ from .io import (
     parse_region_spec,
     parse_region_specs,
 )
+from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
+    CollinearityAnchor,
+    CollinearityBlock,
+    CollinearityParameters,
+    CollinearityResult,
+    CollinearitySearchScope,
+    LosslessCollinearityParameters,
+    build_orthogroup_collinearity_blocks,
+    iter_collinearity_search_pairs,
+    normalize_collinearity_search_scope,
+)
 from .options import ColorOptions, DiagramOptions, OutputOptions, TrackOptions
 from .render import parse_formats, render_to_bytes, save_figure, save_figure_to
 from .tracks import (  # type: ignore[reportMissingImports]
@@ -78,6 +89,16 @@ __all__ = [
     "parse_record_selectors",
     "parse_region_spec",
     "parse_region_specs",
+    # collinearity
+    "CollinearityAnchor",
+    "CollinearityBlock",
+    "CollinearityParameters",
+    "CollinearityResult",
+    "CollinearitySearchScope",
+    "LosslessCollinearityParameters",
+    "build_orthogroup_collinearity_blocks",
+    "iter_collinearity_search_pairs",
+    "normalize_collinearity_search_scope",
     # options
     "ColorOptions",
     "DiagramOptions",
