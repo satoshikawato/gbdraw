@@ -269,7 +269,37 @@ const normalizeBlastThresholdText = (value, defaultValue) => {
 };
 const normalizeBlastpMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
-  return ['pairwise', 'orthogroup'].includes(normalized) ? normalized : 'orthogroup';
+  return ['pairwise', 'orthogroup', 'collinear'].includes(normalized) ? normalized : 'orthogroup';
+};
+const normalizeCollinearColorMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  if (normalized === 'identity') return 'average_identity';
+  return ['average_identity', 'orientation'].includes(normalized) ? normalized : 'orientation';
+};
+const normalizeCollinearAnchorMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  const aliases = {
+    raw: 'all',
+    all_hits: 'all',
+    top_n: 'all',
+    topn: 'all',
+    one2one: 'one_to_one',
+    mutual_best: 'one_to_one',
+    top1: 'one_to_one',
+    top_1: 'one_to_one',
+    reciprocal_best: 'rbh',
+    strict_rbh: 'rbh'
+  };
+  const resolved = aliases[normalized] || normalized;
+  return ['all', 'one_to_one', 'rbh'].includes(resolved) ? resolved : 'rbh';
+};
+const normalizeCollinearSearchScope = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  return ['adjacent', 'all'].includes(normalized) ? normalized : 'adjacent';
+};
+const normalizePairwiseMatchStyle = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['ribbon', 'curve'].includes(normalized) ? normalized : 'ribbon';
 };
 const normalizeMultiRecordPositions = (value, { maxRow = Number.POSITIVE_INFINITY } = {}) => {
   if (!Array.isArray(value)) return [];
@@ -381,6 +411,7 @@ export const createRunAnalysis = ({
   const {
     pyodideReady,
     processing,
+    processingStatus,
     results,
     selectedResultIndex,
     errorLog,
@@ -807,6 +838,7 @@ export const createRunAnalysis = ({
         hide_accession: false,
         hide_length: false,
         orthogroup_alignment: false,
+        pairwise_match_style: false,
         keep_definition_left_aligned: false
       };
       return linearLabelSupportCache;
@@ -833,6 +865,7 @@ json.dumps({
   "hide_accession": "--hide_accession" in _source,
   "hide_length": "--hide_length" in _source,
   "orthogroup_alignment": "--align_orthogroup_feature" in _source,
+  "pairwise_match_style": "--pairwise_match_style" in _source,
   "keep_definition_left_aligned": "--keep_definition_left_aligned" in _source,
 })
       `);
@@ -855,6 +888,7 @@ json.dumps({
         hide_accession: false,
         hide_length: false,
         orthogroup_alignment: false,
+        pairwise_match_style: false,
         keep_definition_left_aligned: false
       };
     }
@@ -983,6 +1017,57 @@ json.dumps({
     labelTextScopeDialog.matchingCount = 0;
   };
 
+  const validateDepthInputPresence = () => {
+    if (!form.show_depth) return '';
+    if (mode.value === 'circular') {
+      return files.c_depth ? '' : 'Please upload a Depth TSV file or disable Show depth track.';
+    }
+
+    const depthCount = linearSeqs.filter((seq) => Boolean(seq.depth)).length;
+    if (depthCount === 0) {
+      return 'Please upload at least one Depth TSV file or disable Show depth track.';
+    }
+    if (depthCount !== 1 && depthCount !== linearSeqs.length) {
+      return 'Upload one Depth TSV for all records, or one Depth TSV per sequence.';
+    }
+    return '';
+  };
+
+  const shouldSuppressPairwiseIdentityLegend = () => {
+    return (
+      mode.value === 'linear' &&
+      blastSource.value === 'losat' &&
+      losatProgram.value === 'blastp' &&
+      normalizeBlastpMode(losat.blastp?.mode) === 'collinear' &&
+      normalizeCollinearColorMode(losat.blastp?.collinearColorMode) === 'orientation'
+    );
+  };
+
+  const removePairwiseIdentityLegendFromSvgContent = (content) => {
+    if (typeof content !== 'string' || !content.includes('pairwise_legend')) return content;
+    const doc = new DOMParser().parseFromString(content, 'image/svg+xml');
+    const parseError = doc.querySelector('parsererror');
+    if (parseError) return content;
+    let removed = false;
+    doc.querySelectorAll('#pairwise_legend, [id="pairwise_legend"]').forEach((legend) => {
+      legend.remove();
+      removed = true;
+    });
+    if (!removed) return content;
+    return new XMLSerializer().serializeToString(doc.documentElement);
+  };
+
+  const stripPairwiseIdentityLegendsFromResults = (items) => {
+    if (!Array.isArray(items)) return items;
+    return items.map((item) => {
+      if (!item || typeof item.content !== 'string') return item;
+      return {
+        ...item,
+        content: removePairwiseIdentityLegendFromSvgContent(item.content)
+      };
+    });
+  };
+
   const refreshCircularRecordOrder = async () => {
     if (!Array.isArray(adv.multi_record_positions)) {
       adv.multi_record_positions = [];
@@ -1038,8 +1123,20 @@ json.dumps({
     if (!pyodide) return { status: 'skipped' };
 
     const isReflow = runMode === 'reflow';
+    const setProcessingStatus = (message) => {
+      if (!isReflow) processingStatus.value = String(message || '');
+    };
     if (isReflow && mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
       return { status: 'skipped' };
+    }
+    const depthInputError = validateDepthInputPresence();
+    if (depthInputError) {
+      if (isReflow) {
+        labelReflowLastError.value = depthInputError;
+      } else {
+        errorLog.value = formatJsError(new Error(depthInputError));
+      }
+      return { status: 'error' };
     }
     const previousSelectedResultIndex = selectedResultIndex.value;
     const editableLabelsSnapshot = Array.isArray(editableLabels.value)
@@ -1069,6 +1166,7 @@ json.dumps({
       featureExtractionPending.value = false;
       featureExtractionError.value = null;
       processing.value = true;
+      processingStatus.value = 'Preparing input files...';
       results.value = [];
       selectedResultIndex.value = 0;
       errorLog.value = null;
@@ -1528,6 +1626,8 @@ json.dumps({
             : form.linear_track_layout === 'tuckin'
               ? 'below'
               : (form.linear_track_layout || 'middle');
+        const normalizedPairwiseMatchStyle = normalizePairwiseMatchStyle(adv.pairwise_match_style);
+        adv.pairwise_match_style = normalizedPairwiseMatchStyle;
         if (form.align_center) args.push('--align_center');
         if (form.show_gc) args.push('--show_gc');
         if (form.show_skew) args.push('--show_skew');
@@ -1537,6 +1637,7 @@ json.dumps({
         const useProteinBlastp = useLosat && losatProgram.value === 'blastp';
         const blastpMode = normalizeBlastpMode(losat.blastp?.mode);
         const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
+        const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
         const selectedOrthogroupTarget = String(selectedOrthogroupAlignmentFeature.value || '').trim();
         const wantsOrthogroupAlignmentOption =
           useOrthogroupBlastp && lInputType.value === 'gb' && selectedOrthogroupTarget !== '';
@@ -1562,6 +1663,22 @@ json.dumps({
         losat.blastp.mode = blastpMode;
         losat.blastp.maxHits = Math.max(1, blastpDisplayMaxHits);
         losat.blastp.candidateLimit = null;
+        losat.blastp.collinearMinAnchors = Math.max(
+          1,
+          normalizeBlastThresholdNumber(losat.blastp?.collinearMinAnchors, 1, { integer: true })
+        );
+        losat.blastp.collinearMaxGeneGap = Math.max(
+          0,
+          normalizeBlastThresholdNumber(losat.blastp?.collinearMaxGeneGap, 0, { integer: true })
+        );
+        losat.blastp.collinearMaxDiagonalDrift = Math.max(
+          0,
+          normalizeBlastThresholdNumber(losat.blastp?.collinearMaxDiagonalDrift, 0, { integer: true })
+        );
+        losat.blastp.collinearColorMode = normalizeCollinearColorMode(losat.blastp?.collinearColorMode);
+        losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode(losat.blastp?.collinearAnchorMode);
+        losat.blastp.collinearSearchScope = normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope);
+        const collinearSearchScope = losat.blastp.collinearSearchScope;
         args.push(
           '--bitscore',
           adv.min_bitscore,
@@ -1617,6 +1734,7 @@ json.dumps({
         const wantsShowRepliconOption = adv.linear_show_replicon === true;
         const wantsHideAccessionOption = adv.linear_show_accession === false;
         const wantsHideLengthOption = adv.linear_show_length === false;
+        const wantsPairwiseMatchStyleOption = normalizedPairwiseMatchStyle !== 'ribbon';
         const wantsKeepDefinitionLeftAlignedOption = form.keep_definition_left_aligned === true;
         const wantsRulerOnAxisOption =
           Boolean(form.linear_ruler_on_axis) &&
@@ -1637,6 +1755,7 @@ json.dumps({
           wantsShowRepliconOption ||
           wantsHideAccessionOption ||
           wantsHideLengthOption ||
+          wantsPairwiseMatchStyleOption ||
           wantsOrthogroupAlignmentOption ||
           wantsKeepDefinitionLeftAlignedOption
         ) {
@@ -1679,6 +1798,9 @@ json.dumps({
           if (wantsHideLengthOption && !linearLabelSupport.hide_length) {
             throw new Error("Current gbdraw wheel does not support --hide_length. Rebuild and redeploy the web wheel.");
           }
+          if (wantsPairwiseMatchStyleOption && !linearLabelSupport.pairwise_match_style) {
+            throw new Error("Current gbdraw wheel does not support --pairwise_match_style. Rebuild and redeploy the web wheel.");
+          }
           if (wantsOrthogroupAlignmentOption && !linearLabelSupport.orthogroup_alignment) {
             throw new Error("Current gbdraw wheel does not support --align_orthogroup_feature. Rebuild and redeploy the web wheel.");
           }
@@ -1692,6 +1814,7 @@ json.dumps({
         if (wantsShowRepliconOption) args.push('--show_replicon');
         if (wantsHideAccessionOption) args.push('--hide_accession');
         if (wantsHideLengthOption) args.push('--hide_length');
+        if (wantsPairwiseMatchStyleOption) args.push('--pairwise_match_style', normalizedPairwiseMatchStyle);
         if (wantsOrthogroupAlignmentOption) {
           args.push('--align_orthogroup_feature', selectedOrthogroupTarget);
         }
@@ -1982,6 +2105,15 @@ json.dumps({
           return num;
         };
 
+        const getBlastpCandidateLimit = () => {
+          if (!useProteinBlastp) return null;
+          if (useOrthogroupBlastp) return 1;
+          if (useCollinearBlastp) {
+            return losat.blastp.collinearAnchorMode === 'all' ? null : 1;
+          }
+          return Math.max(1, losat.blastp.maxHits);
+        };
+
         const buildLosatArgs = (queryIdx, subjectIdx) => {
           const args = [];
           if (losatProgram.value === 'blastn') {
@@ -1990,7 +2122,8 @@ json.dumps({
             pushArg(args, '--query-gencode', getGencode(queryIdx));
             pushArg(args, '--db-gencode', getGencode(subjectIdx));
           } else {
-            pushArg(args, '--max_hsps_per_subject', 1);
+            pushArg(args, '--max-hsps-per-subject', 1);
+            pushArg(args, '--max-target-seqs', getBlastpCandidateLimit());
           }
           return args;
         };
@@ -2025,6 +2158,7 @@ json.dumps({
         });
 
         if (useLosat) {
+          setProcessingStatus('Preparing LOSAT jobs...');
           const losatPairs = [];
           const losatJobs = [];
           const pendingJobKeys = new Set();
@@ -2038,6 +2172,16 @@ json.dumps({
               for (let j = i + 1; j < linearSeqs.length; j++) {
                 jobSpecs.push({ queryIndex: i, subjectIndex: j, pairIndex: i });
                 jobSpecs.push({ queryIndex: j, subjectIndex: i, pairIndex: i });
+              }
+            }
+          } else if (useCollinearBlastp) {
+            for (let i = 0; i < linearSeqs.length - 1; i++) {
+              const subjectEnd = collinearSearchScope === 'all' ? linearSeqs.length : i + 2;
+              for (let j = i + 1; j < subjectEnd; j++) {
+                jobSpecs.push({ queryIndex: i, subjectIndex: j, pairIndex: i });
+                if (losat.blastp.collinearAnchorMode === 'rbh') {
+                  jobSpecs.push({ queryIndex: j, subjectIndex: i, pairIndex: i });
+                }
               }
             }
           } else {
@@ -2056,18 +2200,23 @@ json.dumps({
             losatTiming.totalPairs += 1;
             if (hasCachedText) losatTiming.cacheHits += 1;
             else losatTiming.cacheMisses += 1;
+            const isAdjacentForwardDisplayPair = spec.subjectIndex === spec.queryIndex + 1;
             const pair = {
               pairIndex: spec.pairIndex,
               queryIndex: spec.queryIndex,
               subjectIndex: spec.subjectIndex,
               cacheKey,
-              filename: buildCacheFilename(spec.pairIndex, queryEntry, subjectEntry)
+              filename: buildCacheFilename(spec.pairIndex, queryEntry, subjectEntry),
+              displayPair: isAdjacentForwardDisplayPair
             };
             losatPairs.push(pair);
-            cacheInfo.push({
-              key: cacheKey,
-              filename: pair.filename
-            });
+            if (isAdjacentForwardDisplayPair) {
+              cacheInfo.push({
+                key: cacheKey,
+                filename: pair.filename,
+                display: true
+              });
+            }
 
             if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
               pendingJobKeys.add(cacheKey);
@@ -2090,17 +2239,23 @@ json.dumps({
           losatTiming.jobBuildMs += Math.max(0, jobBuildWallMs - nestedFastaMs - nestedHashMs);
 
           if (losatJobs.length > 0) {
+            setProcessingStatus(`Running LOSAT: 0/${losatJobs.length} LOSAT jobs complete`);
             const runtimeWaitStartedAt = getNow();
             await losatRuntimeWarmup;
             losatTiming.runtimeWaitMs += getNow() - runtimeWaitStartedAt;
             const executionStartedAt = getNow();
             const losatResults = await runLosatPairsParallel(losatJobs, {
-              concurrency: getLosatParallelWorkers()
+              concurrency: getLosatParallelWorkers(),
+              onProgress: ({ completed, total }) => {
+                setProcessingStatus(`Running LOSAT: ${completed}/${total} LOSAT jobs complete`);
+              }
             });
             losatTiming.executionMs += getNow() - executionStartedAt;
             losatResults.forEach((result) => {
               cacheMap.set(result.cacheKey, { text: result.text });
             });
+          } else {
+            setProcessingStatus('Using cached LOSAT results...');
           }
 
           const blastWriteStartedAt = getNow();
@@ -2123,6 +2278,11 @@ json.dumps({
                 subjectProteinMap: subjectEntry.proteinMap || {}
               });
             }
+            setProcessingStatus(
+              useCollinearBlastp
+                ? 'Converting LOSAT protein links to collinear ribbons...'
+                : 'Converting LOSAT protein hits...'
+            );
             const convertedPayload = JSON.parse(
               convertProteinBlast(
                 JSON.stringify(pairPayloads),
@@ -2131,11 +2291,22 @@ json.dumps({
                 adv.min_bitscore,
                 adv.evalue,
                 adv.identity,
-                adv.alignment_length
+                adv.alignment_length,
+                losat.blastp.collinearMinAnchors,
+                losat.blastp.collinearMaxGeneGap,
+                'cds',
+                losat.blastp.collinearColorMode,
+                losat.blastp.collinearAnchorMode,
+                50,
+                25,
+                losat.blastp.collinearMaxDiagonalDrift,
+                0,
+                0,
+                collinearSearchScope
               )
             );
             if (convertedPayload.error) throw new Error(convertedPayload.error);
-            if (useOrthogroupBlastp) {
+            if (useOrthogroupBlastp || useCollinearBlastp) {
               setOrthogroupMetadata(convertedPayload.orthogroups || []);
             } else {
               clearOrthogroupMetadata({ clearSelection: true });
@@ -2252,6 +2423,7 @@ json.dumps({
       }
 
       console.log('CMD:', args.join(' '));
+      setProcessingStatus('Rendering SVG...');
       const gbdrawStartedAt = getNow();
       const jsonResult = pyodide
         .globals
@@ -2283,7 +2455,9 @@ json.dumps({
       }
 
       measureTiming(postGbdrawTimingEntries, 'run-analysis assign results', () => {
-        results.value = res;
+        results.value = shouldSuppressPairwiseIdentityLegend()
+          ? stripPairwiseIdentityLegendsFromResults(res)
+          : res;
       });
       logPostGbdrawTimings(postGbdrawTimingEntries);
       if (isReflow) {
@@ -2344,6 +2518,7 @@ json.dumps({
       if (isReflow) {
         labelReflowProcessing.value = false;
       } else {
+        processingStatus.value = '';
         processing.value = false;
       }
     }

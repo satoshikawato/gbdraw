@@ -235,7 +235,7 @@ const formatPairErrorPrefix = (job) => {
   return pairNumber ? `LOSAT pair #${pairNumber}` : 'LOSAT pair';
 };
 
-const runLosatPairsSequential = async (jobs) => {
+const runLosatPairsSequential = async (jobs, { onProgress } = {}) => {
   const startedAt = getNow();
   console.info(`Running ${jobs.length} LOSAT pair${jobs.length === 1 ? '' : 's'} sequentially.`);
   const results = [];
@@ -243,6 +243,9 @@ const runLosatPairsSequential = async (jobs) => {
     try {
       const text = await runLosatPair(job);
       results.push({ ...job, text });
+      if (typeof onProgress === 'function') {
+        onProgress({ completed: results.length, total: jobs.length, job });
+      }
     } catch (error) {
       const message = error?.message ? String(error.message) : String(error || 'Unknown LOSAT error');
       throw new Error(`${formatPairErrorPrefix(job)}: ${message}`);
@@ -252,7 +255,7 @@ const runLosatPairsSequential = async (jobs) => {
   return results;
 };
 
-const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath } = {}) => {
+const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath, onProgress } = {}) => {
   const workerCount = Math.min(
     jobs.length,
     Math.max(1, Number.isFinite(concurrency) ? Math.floor(concurrency) : getDefaultConcurrency(jobs.length))
@@ -319,6 +322,9 @@ const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath
 
         results[index] = { ...job, text: data.text || '' };
         completed += 1;
+        if (typeof onProgress === 'function') {
+          onProgress({ completed, total: jobs.length, job, index });
+        }
         assignNext(worker);
       };
 
@@ -365,13 +371,13 @@ const runLosatPairsWithWorkers = async (jobs, { concurrency, workerUrl, wasmPath
 export const runLosatPairsParallel = async (jobs, options = {}) => {
   const jobList = Array.isArray(jobs) ? jobs : [];
   if (jobList.length === 0) return [];
-  if (jobList.length === 1) return runLosatPairsSequential(jobList);
+  if (jobList.length === 1) return runLosatPairsSequential(jobList, options);
 
   try {
     return await runLosatPairsWithWorkers(jobList, options);
   } catch (error) {
     console.warn('LOSAT Worker pool failed; falling back to sequential execution.', error);
-    return runLosatPairsSequential(jobList);
+    return runLosatPairsSequential(jobList, options);
   }
 };
 

@@ -17,7 +17,9 @@ export const createPyodideManager = ({ state }) => {
     appliedPaletteName,
     appliedPaletteColors,
     pendingPaletteName,
-    pendingPaletteColors
+    pendingPaletteColors,
+    normalizePaletteColors,
+    normalizePaletteDefinitions
   } = state;
   const pyodideRef = { current: null };
 
@@ -84,11 +86,10 @@ export const createPyodideManager = ({ state }) => {
 
       const allPalettes = loadPalettes();
       if (allPalettes) {
-        const normalizedPalettes = { ...allPalettes };
-        delete normalizedPalettes.title;
+        const normalizedPalettes = normalizePaletteDefinitions(allPalettes);
         paletteDefinitions.value = normalizedPalettes;
-        paletteNames.value = Object.keys(allPalettes).filter((k) => k !== 'title').sort();
-        const defaultColors = { ...(allPalettes.default || {}) };
+        paletteNames.value = Object.keys(normalizedPalettes).sort();
+        const defaultColors = normalizePaletteColors(normalizedPalettes.default || {});
         selectedPalette.value = 'default';
         currentColors.value = defaultColors;
         appliedPaletteName.value = 'default';

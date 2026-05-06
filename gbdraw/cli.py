@@ -100,7 +100,7 @@ def print_help_message() -> NoReturn:
     print("  --fasta              Input FASTA file(s) (required with --gff; mutually exclusive with --gbk)")
     print("  -o, --output         Output file prefix (optional)")
     print("  -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)")
-    print("  --protein_blastp_mode {none,pairwise,orthogroup}  Run LOSATP blastp protein comparison for linear diagrams")
+    print("  --protein_blastp_mode {none,pairwise,orthogroup,collinear}  Run LOSATP blastp protein comparison for linear diagrams")
 
     print("")
     print("Additional Information:")

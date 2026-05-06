@@ -6,6 +6,17 @@ from typing import Dict
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.core.color import (
+    COLLINEAR_ORIENTATION_COLOR_KEYS,
+    DEFAULT_COLLINEAR_ORIENTATION_COLORS,
+)
+
+
+def _default_color(default_colors_df: DataFrame, feature_type: str, fallback: str) -> str:
+    matching_rows = default_colors_df[default_colors_df["feature_type"] == feature_type]
+    if matching_rows.empty:
+        return fallback
+    return str(matching_rows["color"].values[0])
 
 
 class BlastMatchConfigurator:
@@ -59,10 +70,20 @@ class BlastMatchConfigurator:
         self.fill_color: str = default_colors_df[default_colors_df["feature_type"] == "pairwise_match"][
             "color"
         ].values[0]
+        self.collinearity_orientation_colors: dict[str, str] = {
+            orientation: _default_color(
+                default_colors_df,
+                color_key,
+                DEFAULT_COLLINEAR_ORIENTATION_COLORS[orientation],
+            )
+            for orientation, color_key in COLLINEAR_ORIENTATION_COLOR_KEYS.items()
+        }
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self.fill_opacity: float = cfg.objects.blast_match.fill_opacity
         self.stroke_color: str = cfg.objects.blast_match.stroke_color
         self.stroke_width: float = cfg.objects.blast_match.stroke_width
+        self.match_style: str = str(cfg.objects.blast_match.style)
+        self.curve_tension: float = cfg.objects.blast_match.curve_tension
 
 
 __all__ = ["BlastMatchConfigurator"]

@@ -19,6 +19,7 @@ export const createAppSetup = () => {
   const {
     pyodideReady,
     processing,
+    processingStatus,
     loadingStatus,
     errorLog,
     sessionTitle,
@@ -142,6 +143,7 @@ export const createAppSetup = () => {
     linearBaseConfig,
     diagramElementBaseTransforms,
     featureKeys,
+    defaultColorKeys,
     newColorFeat,
     newColorVal,
     manualPriorityRules,
@@ -734,6 +736,7 @@ export const createAppSetup = () => {
   return {
     pyodideReady,
     processing,
+    processingStatus,
     loadingStatus,
     errorLog,
     errorDisplay,
@@ -831,6 +834,7 @@ export const createAppSetup = () => {
     manualBlacklist,
     manualWhitelist,
     featureKeys,
+    defaultColorKeys,
     newColorFeat,
     newColorVal,
     addCustomColor,

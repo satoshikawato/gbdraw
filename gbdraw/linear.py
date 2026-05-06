@@ -4,7 +4,9 @@
 
 import argparse
 import logging
+import math
 import sys
+from pathlib import Path
 from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .io.colors import load_default_colors, read_color_table
@@ -13,7 +15,15 @@ from .io.regions import apply_region_specs, parse_region_specs
 from .config.toml import load_config_toml
 from .render.export import parse_formats, save_figure
 from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[reportMissingImports]
+from .analysis.collinearity import (
+    LosslessCollinearityParameters,
+    build_orthogroup_collinearity_blocks,
+    convert_collinearity_blocks_to_comparisons,
+    normalize_collinearity_anchor_mode,
+    normalize_collinearity_search_scope,
+)
 from .analysis.protein_colinearity import PROTEIN_BLASTP_MODES
+from .io.collinearity import parse_native_collinearity_tsv, write_native_collinearity_tsv
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .labels.filtering import (
@@ -45,6 +55,19 @@ def _parse_optional_positive_int(value: str) -> int | None:
         raise argparse.ArgumentTypeError("must be a positive integer or 'none'") from exc
     if parsed <= 0:
         raise argparse.ArgumentTypeError("must be a positive integer or 'none'")
+    return parsed
+
+
+def _parse_optional_nonnegative_float(value: str) -> float | None:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"", "none", "null"}:
+        return None
+    try:
+        parsed = float(normalized)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a non-negative number or 'none'") from exc
+    if not math.isfinite(parsed) or parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative number or 'none'")
     return parsed
 
 
@@ -90,6 +113,38 @@ def _parse_linear_track_axis_gap(value: str) -> float | None:
     if axis_gap < 0:
         raise argparse.ArgumentTypeError("track axis gap must be >= 0")
     return axis_gap
+
+
+def _parse_pairwise_match_style(value: str) -> str:
+    normalized = str(value).strip().lower()
+    if normalized not in {"ribbon", "curve"}:
+        raise argparse.ArgumentTypeError("pairwise_match_style must be one of: ribbon, curve")
+    return normalized
+
+
+def _parse_collinear_color_mode(value: str) -> str:
+    normalized = str(value).strip().lower().replace("-", "_")
+    if normalized == "identity":
+        normalized = "average_identity"
+    if normalized not in {"average_identity", "orientation"}:
+        raise argparse.ArgumentTypeError(
+            "collinear_color_mode must be one of: average_identity, orientation"
+        )
+    return normalized
+
+
+def _parse_collinear_anchor_mode(value: str) -> str:
+    try:
+        return normalize_collinearity_anchor_mode(value)
+    except ValidationError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _parse_collinear_search_scope(value: str) -> str:
+    try:
+        return normalize_collinearity_search_scope(value)
+    except ValidationError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def _parse_feature_shape_assignment_arg(value: str) -> str:
@@ -148,14 +203,14 @@ def _get_args(args) -> argparse.Namespace:
         '--losatp_bin',
         '--losatp-bin',
         dest='losatp_bin',
-        help='LOSATP executable for --protein_blastp_mode pairwise/orthogroup (default: losat).',
+        help='LOSATP executable for --protein_blastp_mode pairwise/orthogroup/collinear (default: losat).',
         type=str,
         default='losat')
     parser.add_argument(
         '--protein_blastp_mode',
         '--protein-blastp-mode',
         dest='protein_blastp_mode',
-        help='LOSATP blastp mode: none, pairwise adjacent ribbons, or all-vs-all RBH orthogroups (default: none).',
+        help='LOSATP blastp mode: none, pairwise adjacent ribbons, all-record Orthogroups, or Collinear blocks (default: none).',
         choices=PROTEIN_BLASTP_MODES,
         default='none')
     parser.add_argument(
@@ -177,6 +232,146 @@ def _get_args(args) -> argparse.Namespace:
         '--align-orthogroup-feature',
         dest='align_orthogroup_feature',
         help='Align linear records by the LOSATP blastp orthogroup containing this feature SVG hash or protein ID.',
+        type=str,
+        default="")
+    parser.add_argument(
+        '--collinear_unit_mode',
+        '--collinear-unit-mode',
+        dest='collinear_unit_mode',
+        help=argparse.SUPPRESS,
+        choices=["auto", "cds", "locus"],
+        default='auto')
+    parser.add_argument(
+        '--collinear_anchor_mode',
+        '--collinear-anchor-mode',
+        '--collinear_orthogroup_edge_mode',
+        '--collinear-orthogroup-edge-mode',
+        dest='collinear_anchor_mode',
+        help='Collinear edge mode inside the selected search scope: rbh, one_to_one, or all (default: rbh).',
+        type=_parse_collinear_anchor_mode,
+        choices=["all", "one_to_one", "rbh"],
+        default='rbh')
+    parser.add_argument(
+        '--collinear_search_scope',
+        '--collinear-search-scope',
+        dest='collinear_search_scope',
+        help='Collinear LOSATP evidence search scope: adjacent record pairs or all record pairs (default: adjacent).',
+        type=_parse_collinear_search_scope,
+        choices=["adjacent", "all"],
+        default='adjacent')
+    parser.add_argument(
+        '--collinear_min_anchors',
+        '--collinear-min-anchors',
+        dest='collinear_min_anchors',
+        help='Minimum anchors/genes required for a rendered Collinear block; 1 allows singleton links (default: 1).',
+        type=int,
+        default=1)
+    parser.add_argument(
+        '--collinear_max_unit_gap',
+        '--collinear-max-unit-gap',
+        '--collinear_max_gene_gap',
+        '--collinear-max-gene-gap',
+        dest='collinear_max_unit_gap',
+        help='Maximum unit gap between neighboring collinear anchors (default: 0).',
+        type=int,
+        default=0)
+    parser.add_argument(
+        '--collinear_block_merge_gap',
+        '--collinear-block-merge-gap',
+        dest='collinear_block_merge_gap',
+        help=argparse.SUPPRESS,
+        type=int,
+        default=50)
+    parser.add_argument(
+        '--collinear_singleton_merge_gap',
+        '--collinear-singleton-merge-gap',
+        dest='collinear_singleton_merge_gap',
+        help=argparse.SUPPRESS,
+        type=int,
+        default=25)
+    parser.add_argument(
+        '--collinear_max_diagonal_drift',
+        '--collinear-max-diagonal-drift',
+        dest='collinear_max_diagonal_drift',
+        help='Maximum order-space diagonal drift allowed within or between collinear runs (default: 0).',
+        type=int,
+        default=0)
+    parser.add_argument(
+        '--collinear_max_conflicts_in_merge_gap',
+        '--collinear-max-conflicts-in-merge-gap',
+        dest='collinear_max_conflicts_in_merge_gap',
+        help=argparse.SUPPRESS,
+        type=int,
+        default=1)
+    parser.add_argument(
+        '--collinear_max_paralog_links_per_orthogroup',
+        '--collinear-max-paralog-links-per-orthogroup',
+        dest='collinear_max_paralog_links_per_orthogroup',
+        help=argparse.SUPPRESS,
+        type=int,
+        default=2)
+    parser.add_argument(
+        '--collinear_gap_penalty',
+        '--collinear-gap-penalty',
+        dest='collinear_gap_penalty',
+        help=argparse.SUPPRESS,
+        type=float,
+        default=1.0)
+    parser.add_argument(
+        '--collinear_nearby_duplicate_window',
+        '--collinear-nearby-duplicate-window',
+        dest='collinear_nearby_duplicate_window',
+        help=argparse.SUPPRESS,
+        type=int,
+        default=0)
+    parser.add_argument(
+        '--collinear_score_mode',
+        '--collinear-score-mode',
+        dest='collinear_score_mode',
+        help=argparse.SUPPRESS,
+        choices=["constant", "bitscore"],
+        default='constant')
+    parser.add_argument(
+        '--collinear_constant_anchor_score',
+        '--collinear-constant-anchor-score',
+        dest='collinear_constant_anchor_score',
+        help=argparse.SUPPRESS,
+        type=float,
+        default=50.0)
+    parser.add_argument(
+        '--collinear_min_block_score',
+        '--collinear-min-block-score',
+        dest='collinear_min_block_score',
+        help=argparse.SUPPRESS,
+        type=float,
+        default=None)
+    parser.add_argument(
+        '--collinear_block_evalue',
+        '--collinear-block-evalue',
+        dest='collinear_block_evalue',
+        help=argparse.SUPPRESS,
+        type=_parse_optional_nonnegative_float,
+        default=None)
+    parser.add_argument(
+        '--collinear_color_mode',
+        '--collinear-color-mode',
+        dest='collinear_color_mode',
+        help='Collinear ribbon color mode: average_identity or orientation (default: orientation).',
+        type=_parse_collinear_color_mode,
+        choices=["average_identity", "orientation"],
+        default='orientation')
+    parser.add_argument(
+        '--collinear_blocks',
+        '--collinear-blocks',
+        dest='collinear_blocks',
+        help='Headered native .collinear.tsv file to import instead of running LOSATP.',
+        type=str,
+        default="")
+    parser.add_argument(
+        '--save_collinear_blocks',
+        '--save-collinear-blocks',
+        dest='save_collinear_blocks',
+        help='Write accepted or validated native collinear blocks to this TSV path.',
         type=str,
         default="")
     parser.add_argument(
@@ -348,6 +543,17 @@ def _get_args(args) -> argparse.Namespace:
         help='minimum BLAST alignment length threshold (default=0)',
         type=int,
         default=0)
+    parser.add_argument(
+        '--pairwise_match_style',
+        '--pairwise-match-style',
+        dest='pairwise_match_style',
+        help=(
+            'Pairwise comparison link style: ribbon keeps straight filled ribbons; '
+            'curve draws curved filled ribbons that preserve alignment spans.'
+        ),
+        type=_parse_pairwise_match_style,
+        choices=["ribbon", "curve"],
+        default="ribbon")
     parser.add_argument(
         '-k',
         '--features',
@@ -610,6 +816,12 @@ def _get_args(args) -> argparse.Namespace:
     validate_label_args(parser, args)
     if args.protein_blastp_mode != "none" and args.blast:
         parser.error("--protein_blastp_mode cannot be used with -b/--blast")
+    if args.collinear_blocks and args.blast:
+        parser.error("--collinear_blocks cannot be used with -b/--blast")
+    if args.collinear_blocks and args.protein_blastp_mode != "none":
+        parser.error("--collinear_blocks imports native blocks and cannot be used with --protein_blastp_mode")
+    if args.save_collinear_blocks and not args.collinear_blocks and args.protein_blastp_mode != "collinear":
+        parser.error("--save_collinear_blocks requires --protein_blastp_mode collinear or --collinear_blocks")
     if args.protein_blastp_max_hits <= 0:
         parser.error("--protein_blastp_max_hits must be > 0")
     if args.align_orthogroup_feature and args.protein_blastp_mode != "orthogroup" and not args.blast:
@@ -636,6 +848,26 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--depth_small_tick_interval must be > 0")
     if args.depth_tick_font_size is not None and args.depth_tick_font_size <= 0:
         parser.error("--depth_tick_font_size must be > 0")
+    if args.collinear_min_anchors <= 0:
+        parser.error("--collinear_min_anchors must be > 0")
+    if args.collinear_max_unit_gap < 0:
+        parser.error("--collinear_max_unit_gap must be >= 0")
+    if args.collinear_block_merge_gap < 0:
+        parser.error("--collinear_block_merge_gap must be >= 0")
+    if args.collinear_singleton_merge_gap < 0:
+        parser.error("--collinear_singleton_merge_gap must be >= 0")
+    if args.collinear_max_diagonal_drift < 0:
+        parser.error("--collinear_max_diagonal_drift must be >= 0")
+    if args.collinear_max_conflicts_in_merge_gap < 0:
+        parser.error("--collinear_max_conflicts_in_merge_gap must be >= 0")
+    if args.collinear_max_paralog_links_per_orthogroup <= 0:
+        parser.error("--collinear_max_paralog_links_per_orthogroup must be > 0")
+    if args.collinear_gap_penalty < 0:
+        parser.error("--collinear_gap_penalty must be >= 0")
+    if args.collinear_nearby_duplicate_window < 0:
+        parser.error("--collinear_nearby_duplicate_window must be >= 0")
+    if args.collinear_constant_anchor_score <= 0:
+        parser.error("--collinear_constant_anchor_score must be > 0")
     return args
 
 
@@ -673,6 +905,17 @@ def linear_main(cmd_args) -> None:
     protein_blastp_max_hits: int = args.protein_blastp_max_hits
     protein_blastp_candidate_limit: int | None = args.protein_blastp_candidate_limit
     align_orthogroup_feature: str = str(args.align_orthogroup_feature or "").strip()
+    collinear_unit_mode: str = str(args.collinear_unit_mode or "auto")
+    collinear_anchor_mode: str = str(args.collinear_anchor_mode or "rbh")
+    collinear_search_scope: str = str(args.collinear_search_scope or "adjacent")
+    collinear_color_mode: str = str(args.collinear_color_mode or "orientation")
+    collinear_blocks_path: str = str(args.collinear_blocks or "").strip()
+    save_collinear_blocks_path: str = str(args.save_collinear_blocks or "").strip()
+    collinearity_params = LosslessCollinearityParameters(
+        min_anchors=args.collinear_min_anchors,
+        max_unit_gap=args.collinear_max_unit_gap,
+        max_diagonal_drift=args.collinear_max_diagonal_drift,
+    )
     color_table_path: str = args.table
     strandedness: bool = args.separate_strands
     resolve_overlaps: bool = args.resolve_overlaps
@@ -705,6 +948,7 @@ def linear_main(cmd_args) -> None:
     bitscore: float = args.bitscore
     identity: float = args.identity
     alignment_length: int = args.alignment_length
+    pairwise_match_style: str = args.pairwise_match_style
     show_labels: str = args.show_labels
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
@@ -734,7 +978,7 @@ def linear_main(cmd_args) -> None:
     normalize_length = args.normalize_length
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
-    if blast_files or protein_blastp_mode != "none":
+    if blast_files or protein_blastp_mode != "none" or collinear_blocks_path:
         load_comparison = True
     else:
         load_comparison = False
@@ -849,6 +1093,7 @@ def linear_main(cmd_args) -> None:
         scale_interval=scale_interval,
         legend_box_size=legend_box_size,
         legend_font_size=legend_font_size,
+        pairwise_match_style=pairwise_match_style,
         normalize_length=normalize_length
         )
 
@@ -934,6 +1179,45 @@ def linear_main(cmd_args) -> None:
             )
     if protein_blastp_mode != "none" and len(records) < 2:
         raise ValidationError("--protein_blastp_mode requires at least two linear records.")
+    if collinear_blocks_path and len(records) < 2:
+        raise ValidationError("--collinear_blocks requires at least two linear records.")
+    collinearity_comparisons: list[DataFrame] | None = None
+    if collinear_blocks_path:
+        collinearity_result = parse_native_collinearity_tsv(
+            collinear_blocks_path,
+            records,
+            params=collinearity_params,
+            unit_mode=collinear_unit_mode,
+        )
+        collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
+            collinearity_result,
+            records=records,
+            color_mode=collinear_color_mode,
+        )
+    elif protein_blastp_mode == "collinear":
+        collinearity_result = build_orthogroup_collinearity_blocks(
+            records,
+            losatp_bin=losatp_bin,
+            candidate_limit=protein_blastp_candidate_limit,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+            params=collinearity_params,
+            unit_mode=collinear_unit_mode,
+            edge_mode=collinear_anchor_mode,
+            search_scope=collinear_search_scope,
+        )
+        collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
+            collinearity_result,
+            records=records,
+            color_mode=collinear_color_mode,
+        )
+    if save_collinear_blocks_path:
+        Path(save_collinear_blocks_path).write_text(
+            write_native_collinearity_tsv(collinearity_result),
+            encoding="utf-8",
+        )
     # Use raw records to avoid collapsing lengths when IDs are duplicated.
     longest_genome: int = max(len(record.seq) for record in records)
     cfg = GbdrawConfig.from_dict(config_dict)
@@ -959,11 +1243,13 @@ def linear_main(cmd_args) -> None:
         plot_title=plot_title,
         plot_title_position=plot_title_position,
         plot_title_font_size=plot_title_font_size,
-        protein_blastp_mode=protein_blastp_mode,
+        protein_comparisons=collinearity_comparisons,
+        protein_blastp_mode="none" if collinearity_comparisons is not None else protein_blastp_mode,
         losatp_bin=losatp_bin,
         protein_blastp_max_hits=protein_blastp_max_hits,
         protein_blastp_candidate_limit=protein_blastp_candidate_limit,
         align_orthogroup_feature=align_orthogroup_feature or None,
+        pairwise_match_style=pairwise_match_style,
         evalue=evalue,
         bitscore=bitscore,
         identity=identity,

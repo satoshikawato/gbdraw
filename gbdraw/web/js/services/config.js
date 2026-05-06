@@ -1,7 +1,7 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
-const SESSION_VERSION = 16;
+const SESSION_VERSION = 18;
 
 const cloneColors = (colors) => ({ ...(colors || {}) });
 
@@ -127,7 +127,41 @@ const normalizePositiveInteger = (value, fallback) => {
 
 const normalizeBlastpMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
-  return ['pairwise', 'orthogroup'].includes(normalized) ? normalized : 'orthogroup';
+  return ['pairwise', 'orthogroup', 'collinear'].includes(normalized) ? normalized : 'orthogroup';
+};
+
+const normalizeCollinearColorMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  if (normalized === 'identity') return 'average_identity';
+  return ['average_identity', 'orientation'].includes(normalized) ? normalized : 'orientation';
+};
+
+const normalizeCollinearAnchorMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  const aliases = {
+    raw: 'all',
+    all_hits: 'all',
+    top_n: 'all',
+    topn: 'all',
+    one2one: 'one_to_one',
+    mutual_best: 'one_to_one',
+    top1: 'one_to_one',
+    top_1: 'one_to_one',
+    reciprocal_best: 'rbh',
+    strict_rbh: 'rbh'
+  };
+  const resolved = aliases[normalized] || normalized;
+  return ['all', 'one_to_one', 'rbh'].includes(resolved) ? resolved : 'rbh';
+};
+
+const normalizeCollinearSearchScope = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  return ['adjacent', 'all'].includes(normalized) ? normalized : 'adjacent';
+};
+
+const normalizePairwiseMatchStyle = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['ribbon', 'curve'].includes(normalized) ? normalized : 'ribbon';
 };
 
 const normalizeFeatureShapes = (featureShapes) => {
@@ -406,6 +440,7 @@ const applyConfigData = (data) => {
   state.adv.linear_show_replicon = state.adv.linear_show_replicon === true;
   state.adv.linear_show_accession = state.adv.linear_show_accession !== false;
   state.adv.linear_show_length = state.adv.linear_show_length !== false;
+  state.adv.pairwise_match_style = normalizePairwiseMatchStyle(state.adv.pairwise_match_style);
   if (data.losat) {
     safeDeepMerge(state.losat, data.losat);
     const rawParallelWorkers = String(data.losat.parallelWorkers ?? '').trim().toLowerCase();
@@ -415,6 +450,26 @@ const applyConfigData = (data) => {
     state.losat.blastp.mode = normalizeBlastpMode(state.losat.blastp?.mode);
     state.losat.blastp.maxHits = normalizePositiveInteger(state.losat.blastp?.maxHits, 5);
     state.losat.blastp.candidateLimit = null;
+    state.losat.blastp.collinearMinAnchors = normalizePositiveInteger(state.losat.blastp?.collinearMinAnchors, 1);
+    {
+      const maxGap = Number(state.losat.blastp?.collinearMaxGeneGap);
+      state.losat.blastp.collinearMaxGeneGap = Number.isInteger(maxGap) && maxGap >= 0 ? maxGap : 0;
+      const blockMergeGap = Number(state.losat.blastp?.collinearBlockMergeGap);
+      state.losat.blastp.collinearBlockMergeGap = Number.isInteger(blockMergeGap) && blockMergeGap >= 0 ? blockMergeGap : 50;
+      const singletonMergeGap = Number(state.losat.blastp?.collinearSingletonMergeGap);
+      state.losat.blastp.collinearSingletonMergeGap = Number.isInteger(singletonMergeGap) && singletonMergeGap >= 0 ? singletonMergeGap : 25;
+      const diagonalDrift = Number(state.losat.blastp?.collinearMaxDiagonalDrift);
+      state.losat.blastp.collinearMaxDiagonalDrift = Number.isInteger(diagonalDrift) && diagonalDrift >= 0 ? diagonalDrift : 0;
+      const mergeConflicts = Number(state.losat.blastp?.collinearMaxConflictsInMergeGap);
+      state.losat.blastp.collinearMaxConflictsInMergeGap = Number.isInteger(mergeConflicts) && mergeConflicts >= 0 ? mergeConflicts : 1;
+      const paralogLinks = Number(state.losat.blastp?.collinearMaxParalogLinksPerOrthogroup);
+      state.losat.blastp.collinearMaxParalogLinksPerOrthogroup = Number.isInteger(paralogLinks) && paralogLinks > 0 ? paralogLinks : 2;
+      state.losat.blastp.collinearColorMode = normalizeCollinearColorMode(state.losat.blastp?.collinearColorMode);
+      const unitMode = String(state.losat.blastp?.collinearUnitMode || '').trim().toLowerCase();
+      state.losat.blastp.collinearUnitMode = ['auto', 'cds', 'locus'].includes(unitMode) ? unitMode : 'auto';
+      state.losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode(state.losat.blastp?.collinearAnchorMode);
+      state.losat.blastp.collinearSearchScope = normalizeCollinearSearchScope(state.losat.blastp?.collinearSearchScope);
+    }
     delete state.losat.blastp.orthogroupHitPolicy;
     delete state.losat.blastp.orthogroupMaxHits;
   }
@@ -426,7 +481,7 @@ const applyConfigData = (data) => {
     Object.entries(data.colors).forEach(([key, value]) => {
       normalized[key] = resolveColorToHex(String(value || '').trim());
     });
-    state.currentColors.value = normalized;
+    state.currentColors.value = state.normalizePaletteColors(normalized);
   }
   if (data.palette) state.selectedPalette.value = data.palette;
 
@@ -471,7 +526,7 @@ const applyConfigData = (data) => {
 
 const restorePaletteStateAfterConfigImport = () => {
   const draftPaletteName = String(state.selectedPalette.value || state.appliedPaletteName.value || 'default');
-  const draftColors = cloneColors(state.currentColors.value);
+  const draftColors = state.normalizePaletteColors(cloneColors(state.currentColors.value));
   const hasPreviewResults = Array.isArray(state.results.value) && state.results.value.length > 0;
 
   if (
@@ -492,7 +547,7 @@ const restorePaletteStateAfterConfigImport = () => {
 
 const restorePaletteStateFromSession = (ui = {}) => {
   const draftPaletteName = String(state.selectedPalette.value || state.appliedPaletteName.value || 'default');
-  const draftColors = cloneColors(state.currentColors.value);
+  const draftColors = state.normalizePaletteColors(cloneColors(state.currentColors.value));
   const savedAppliedPaletteName = String(ui.appliedPaletteName || draftPaletteName || 'default');
   const savedAppliedPaletteColors =
     ui.appliedPaletteColors && typeof ui.appliedPaletteColors === 'object'
@@ -515,11 +570,11 @@ const restorePaletteStateFromSession = (ui = {}) => {
       : draftColors;
 
   state.appliedPaletteName.value = savedAppliedPaletteName;
-  state.appliedPaletteColors.value = cloneColors(savedAppliedPaletteColors);
+  state.appliedPaletteColors.value = state.normalizePaletteColors(cloneColors(savedAppliedPaletteColors));
 
   if (!state.paletteInstantPreviewEnabled.value && savedPendingPaletteName) {
     state.pendingPaletteName.value = savedPendingPaletteName;
-    state.pendingPaletteColors.value = cloneColors(savedPendingPaletteColors);
+    state.pendingPaletteColors.value = state.normalizePaletteColors(cloneColors(savedPendingPaletteColors));
   } else {
     state.pendingPaletteName.value = '';
     state.pendingPaletteColors.value = {};
@@ -596,6 +651,7 @@ const serializeLosatCache = () => {
     entries.push({
       key: entry.key,
       filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
+      display: entry.display !== false,
       text: cached.text
     });
     seen.add(entry.key);
@@ -604,7 +660,7 @@ const serializeLosatCache = () => {
   cacheMap.forEach((value, key) => {
     if (seen.has(key)) return;
     if (!value || typeof value.text !== 'string') return;
-    entries.push({ key, filename: '', text: value.text });
+    entries.push({ key, filename: '', display: false, text: value.text });
   });
 
   return entries;
@@ -618,9 +674,11 @@ const applyLosatCache = (entries) => {
     entries.forEach((entry, idx) => {
       if (!entry || !entry.key || typeof entry.text !== 'string') return;
       map.set(entry.key, { text: entry.text });
+      if (entry.display === false) return;
       info.push({
         key: entry.key,
-        filename: entry.filename || `losat_pair_${idx + 1}.tsv`
+        filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
+        display: true
       });
     });
   }

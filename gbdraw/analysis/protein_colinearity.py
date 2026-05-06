@@ -44,8 +44,8 @@ LOSATP_METADATA_COLUMNS = (
     "subject_orthogroup_representative",
 )
 LOSATP_COMPARISON_COLUMNS = tuple(COMPARISON_COLUMNS) + LOSATP_METADATA_COLUMNS
-PROTEIN_BLASTP_MODES = ("none", "pairwise", "orthogroup")
-ProteinBlastpMode = Literal["none", "pairwise", "orthogroup"]
+PROTEIN_BLASTP_MODES = ("none", "pairwise", "orthogroup", "collinear")
+ProteinBlastpMode = Literal["none", "pairwise", "orthogroup", "collinear"]
 
 
 @dataclass(frozen=True)
@@ -67,6 +67,13 @@ class CdsProtein:
     gene: str | None = None
     product: str | None = None
     note: str | None = None
+    locus_tag: str | None = None
+    gene_id: str | None = None
+    old_locus_tag: str | None = None
+    db_xref: tuple[str, ...] = ()
+    gff_id: str | None = None
+    parent_ids: tuple[str, ...] = ()
+    gene_parent_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -131,6 +138,15 @@ class ProteinBlastpResult:
 
 
 @dataclass(frozen=True)
+class OrthogroupEdgeSelectionResult:
+    """RBH orthogroup selection plus the adjacent display edges."""
+
+    orthogroups: OrthogroupResult
+    all_edges_by_pair: dict[tuple[int, int], DataFrame]
+    adjacent_display_edges_by_pair: dict[tuple[int, int], DataFrame]
+
+
+@dataclass(frozen=True)
 class _CdsProteinCandidate:
     protein_id: str
     source_protein_id: str | None
@@ -147,6 +163,13 @@ class _CdsProteinCandidate:
     gene: str | None
     product: str | None
     note: str | None
+    locus_tag: str | None
+    gene_id: str | None
+    old_locus_tag: str | None
+    db_xref: tuple[str, ...]
+    gff_id: str | None
+    parent_ids: tuple[str, ...]
+    gene_parent_id: str | None
 
 
 LosatpRunner = Callable[[str, str], DataFrame]
@@ -162,6 +185,20 @@ def _first_qualifier(feature: SeqFeature, key: str) -> str | None:
         value = value[0]
     text = str(value).strip()
     return text or None
+
+
+def _qualifier_values(feature: SeqFeature, key: str) -> tuple[str, ...]:
+    value = feature.qualifiers.get(key)
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        value = (value,)
+    values: list[str] = []
+    for item in value:
+        text = str(item).strip()
+        if text:
+            values.append(text)
+    return tuple(values)
 
 
 def _first_qualifier_from_any(feature: SeqFeature, keys: Sequence[str]) -> str | None:
@@ -227,6 +264,88 @@ def _codon_start(feature: SeqFeature) -> int:
     return codon_start if codon_start in {1, 2, 3} else 1
 
 
+def _feature_identifier(feature: SeqFeature) -> str | None:
+    feature_id = _first_qualifier(feature, "ID")
+    if feature_id:
+        return feature_id
+    raw_id = str(getattr(feature, "id", "") or "").strip()
+    if raw_id and raw_id != "<unknown id>":
+        return raw_id
+    return None
+
+
+def _iter_record_features(
+    record: SeqRecord,
+) -> list[tuple[int, SeqFeature, tuple[SeqFeature, ...]]]:
+    items: list[tuple[int, SeqFeature, tuple[SeqFeature, ...]]] = []
+
+    def walk(feature: SeqFeature, ancestors: tuple[SeqFeature, ...]) -> None:
+        items.append((len(items), feature, ancestors))
+        sub_features = getattr(feature, "sub_features", None) or []
+        for sub_feature in sub_features:
+            walk(sub_feature, ancestors + (feature,))
+
+    for feature in record.features:
+        walk(feature, ())
+    return items
+
+
+def _build_parent_graph(
+    feature_items: Sequence[tuple[int, SeqFeature, tuple[SeqFeature, ...]]],
+) -> dict[str, tuple[str, tuple[str, ...]]]:
+    graph: dict[str, tuple[str, tuple[str, ...]]] = {}
+    for _feature_index, feature, ancestors in feature_items:
+        feature_id = _feature_identifier(feature)
+        if not feature_id:
+            continue
+        parent_ids = _qualifier_values(feature, "Parent")
+        if not parent_ids and ancestors:
+            ancestor_id = _feature_identifier(ancestors[-1])
+            if ancestor_id:
+                parent_ids = (ancestor_id,)
+        graph[feature_id] = (str(feature.type), tuple(parent_ids))
+    return graph
+
+
+def _resolve_gene_parent_id(
+    feature: SeqFeature,
+    ancestors: Sequence[SeqFeature],
+    parent_graph: Mapping[str, tuple[str, tuple[str, ...]]],
+) -> str | None:
+    for ancestor in reversed(tuple(ancestors)):
+        if str(ancestor.type).lower() == "gene":
+            ancestor_id = _feature_identifier(ancestor)
+            if ancestor_id:
+                return ancestor_id
+
+    start_ids = list(_qualifier_values(feature, "Parent"))
+    if not start_ids and ancestors:
+        ancestor_id = _feature_identifier(ancestors[-1])
+        if ancestor_id:
+            start_ids.append(ancestor_id)
+
+    seen: set[str] = set()
+
+    def resolve(feature_id: str) -> str | None:
+        if feature_id in seen:
+            return None
+        seen.add(feature_id)
+        feature_type, parent_ids = parent_graph.get(feature_id, ("", ()))
+        if str(feature_type).lower() == "gene":
+            return feature_id
+        for parent_id in parent_ids:
+            resolved = resolve(parent_id)
+            if resolved:
+                return resolved
+        return None
+
+    for parent_id in start_ids:
+        resolved = resolve(parent_id)
+        if resolved:
+            return resolved
+    return None
+
+
 def _translate_cds_feature(record: SeqRecord, feature: SeqFeature) -> str | None:
     try:
         nucleotide_sequence = feature.extract(record.seq)
@@ -279,7 +398,9 @@ def extract_cds_proteins(
         global_record_index = record_index + record_index_offset
         record_candidates: list[_CdsProteinCandidate] = []
         cds_count = 0
-        for feature_index, feature in enumerate(record.features):
+        feature_items = _iter_record_features(record)
+        parent_graph = _build_parent_graph(feature_items)
+        for feature_index, feature, ancestors in feature_items:
             if feature.type != "CDS":
                 continue
 
@@ -305,6 +426,17 @@ def extract_cds_proteins(
             gene = _first_qualifier(feature, "gene")
             product = _first_qualifier(feature, "product")
             note = _first_qualifier(feature, "note")
+            locus_tag = _first_qualifier(feature, "locus_tag")
+            gene_id = _first_qualifier(feature, "gene_id")
+            old_locus_tag = _first_qualifier(feature, "old_locus_tag")
+            db_xref = _qualifier_values(feature, "db_xref")
+            gff_id = _feature_identifier(feature)
+            parent_ids = _qualifier_values(feature, "Parent")
+            if not parent_ids and ancestors:
+                ancestor_id = _feature_identifier(ancestors[-1])
+                if ancestor_id:
+                    parent_ids = (ancestor_id,)
+            gene_parent_id = _resolve_gene_parent_id(feature, ancestors, parent_graph)
             label = (
                 _first_qualifier_from_any(
                     feature, ("locus_tag", "protein_id", "gene", "product")
@@ -328,6 +460,13 @@ def extract_cds_proteins(
                     gene=gene,
                     product=product,
                     note=note,
+                    locus_tag=locus_tag,
+                    gene_id=gene_id,
+                    old_locus_tag=old_locus_tag,
+                    db_xref=db_xref,
+                    gff_id=gff_id,
+                    parent_ids=parent_ids,
+                    gene_parent_id=gene_parent_id,
                 )
             )
 
@@ -363,6 +502,13 @@ def extract_cds_proteins(
                 gene=candidate.gene,
                 product=candidate.product,
                 note=candidate.note,
+                locus_tag=candidate.locus_tag,
+                gene_id=candidate.gene_id,
+                old_locus_tag=candidate.old_locus_tag,
+                db_xref=candidate.db_xref,
+                gff_id=candidate.gff_id,
+                parent_ids=candidate.parent_ids,
+                gene_parent_id=candidate.gene_parent_id,
             )
             record_proteins.append(cds_protein)
             protein_map[protein_id] = cds_protein
@@ -925,6 +1071,8 @@ def _build_orthogroup_name_metadata(
 def build_orthogroups_from_protein_hits(
     hits_by_pair: Sequence[DataFrame],
     protein_map: Mapping[str, CdsProtein],
+    *,
+    include_singletons: bool = False,
 ) -> OrthogroupResult:
     """Build connected-component orthogroups from retained LOSATP protein hits."""
 
@@ -970,6 +1118,10 @@ def build_orthogroups_from_protein_hits(
     components: dict[str, set[str]] = {}
     for query_id, subject_id in edge_nodes:
         components.setdefault(union_find.find(query_id), set()).update({query_id, subject_id})
+    if include_singletons:
+        for protein_id in protein_map:
+            root = union_find.find(str(protein_id))
+            components.setdefault(root, set()).add(str(protein_id))
 
     sorted_components = sorted(
         components.values(),
@@ -1242,6 +1394,64 @@ def _run_losatp_search(
     )
 
 
+def _empty_comparison_hits() -> DataFrame:
+    return pd.DataFrame(columns=COMPARISON_COLUMNS)
+
+
+def select_rbh_orthogroup_edges_from_directional_hits(
+    directional_hits_by_pair: Mapping[tuple[int, int], DataFrame],
+    protein_map: Mapping[str, CdsProtein],
+    *,
+    record_count: int | None = None,
+    include_singletons: bool = False,
+) -> OrthogroupEdgeSelectionResult:
+    """Select the exact RBH edges used by Orthogroup mode.
+
+    Input tables are already threshold-filtered LOSATP outfmt6 rows keyed by
+    directional record pair. Returned display edges are keyed by forward
+    adjacent pairs, e.g. ``(0, 1)``.
+    """
+
+    unordered_pairs = sorted(
+        {
+            (min(int(query_index), int(subject_index)), max(int(query_index), int(subject_index)))
+            for query_index, subject_index in directional_hits_by_pair
+            if int(query_index) != int(subject_index)
+        }
+    )
+    all_edges_by_pair: dict[tuple[int, int], DataFrame] = {}
+    adjacent_display_edges_by_pair: dict[tuple[int, int], DataFrame] = {}
+    for query_index, subject_index in unordered_pairs:
+        forward_hits = directional_hits_by_pair.get((query_index, subject_index), _empty_comparison_hits())
+        reverse_hits = directional_hits_by_pair.get((subject_index, query_index), _empty_comparison_hits())
+        rbh_edges = select_reciprocal_best_hit_edges(forward_hits, reverse_hits)
+        pair = (query_index, subject_index)
+        all_edges_by_pair[pair] = rbh_edges
+        if subject_index == query_index + 1:
+            adjacent_display_edges_by_pair[pair] = rbh_edges
+
+    if record_count is None:
+        record_count = 0
+        for query_index, subject_index in unordered_pairs:
+            record_count = max(record_count, query_index + 1, subject_index + 1)
+    for query_index in range(max(0, int(record_count) - 1)):
+        adjacent_display_edges_by_pair.setdefault(
+            (query_index, query_index + 1),
+            _empty_comparison_hits(),
+        )
+
+    orthogroups = build_orthogroups_from_protein_hits(
+        tuple(all_edges_by_pair.values()),
+        protein_map,
+        include_singletons=include_singletons,
+    )
+    return OrthogroupEdgeSelectionResult(
+        orthogroups=orthogroups,
+        all_edges_by_pair=all_edges_by_pair,
+        adjacent_display_edges_by_pair=adjacent_display_edges_by_pair,
+    )
+
+
 def build_pairwise_protein_blastp_comparisons(
     records: Sequence[SeqRecord],
     *,
@@ -1325,12 +1535,8 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
         option_name="protein_blastp_mode='orthogroup'",
     )
 
-    adjacent_rbh_edges_by_pair: list[DataFrame] = [
-        pd.DataFrame(columns=COMPARISON_COLUMNS)
-        for _ in range(len(records) - 1)
-    ]
-    orthogroup_edges: list[DataFrame] = []
-
+    search_candidate_limit = candidate_limit if candidate_limit is not None else 1
+    directional_hits_by_pair: dict[tuple[int, int], DataFrame] = {}
     for query_index in range(len(records)):
         for subject_index in range(query_index + 1, len(records)):
             query_fasta = proteins_to_fasta(extraction.proteins_by_record[query_index])
@@ -1340,14 +1546,14 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                 query_fasta,
                 subject_fasta,
                 losatp_bin=losatp_bin,
-                candidate_limit=candidate_limit,
+                candidate_limit=search_candidate_limit,
                 runner=runner,
             )
             reverse_hits = _run_losatp_search(
                 subject_fasta,
                 query_fasta,
                 losatp_bin=losatp_bin,
-                candidate_limit=candidate_limit,
+                candidate_limit=search_candidate_limit,
                 runner=runner,
             )
             filtered_forward_hits = filter_protein_hits_by_thresholds(
@@ -1364,27 +1570,26 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                 identity=identity,
                 alignment_length=alignment_length,
             )
-            rbh_edges = select_reciprocal_best_hit_edges(
-                filtered_forward_hits,
-                filtered_reverse_hits,
-            )
-            orthogroup_edges.append(rbh_edges)
-            if subject_index == query_index + 1:
-                adjacent_rbh_edges_by_pair[query_index] = rbh_edges
+            directional_hits_by_pair[(query_index, subject_index)] = filtered_forward_hits
+            directional_hits_by_pair[(subject_index, query_index)] = filtered_reverse_hits
 
-    orthogroups = build_orthogroups_from_protein_hits(
-        orthogroup_edges,
+    edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits_by_pair,
         extraction.protein_map,
+        record_count=len(records),
     )
     comparisons = [
         convert_protein_hits_to_genomic_links(
-            rbh_edges,
+            edge_selection.adjacent_display_edges_by_pair.get(
+                (record_index, record_index + 1),
+                _empty_comparison_hits(),
+            ),
             extraction.protein_map,
-            orthogroups=orthogroups,
+            orthogroups=edge_selection.orthogroups,
         )
-        for rbh_edges in adjacent_rbh_edges_by_pair
+        for record_index in range(len(records) - 1)
     ]
-    return ProteinBlastpResult(comparisons=comparisons, orthogroups=orthogroups)
+    return ProteinBlastpResult(comparisons=comparisons, orthogroups=edge_selection.orthogroups)
 
 
 def build_protein_colinearity_comparisons(
@@ -1419,6 +1624,7 @@ __all__ = [
     "LOSATP_COMPARISON_COLUMNS",
     "LOSATP_METADATA_COLUMNS",
     "PROTEIN_BLASTP_MODES",
+    "OrthogroupEdgeSelectionResult",
     "OrthogroupMember",
     "OrthogroupNameCandidate",
     "OrthogroupResult",
@@ -1439,6 +1645,7 @@ __all__ = [
     "proteins_to_fasta",
     "run_losatp_blastp",
     "select_best_hits_per_query",
+    "select_rbh_orthogroup_edges_from_directional_hits",
     "select_reciprocal_best_hit_edges",
     "select_reciprocal_best_hits",
     "select_top_hits_per_query",

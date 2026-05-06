@@ -1,9 +1,30 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional
+from typing import Any, Literal, Mapping, Optional
+
+from gbdraw.exceptions import ValidationError
 
 from .common import ShortLongFloatConfig
+
+
+PairwiseMatchStyle = Literal["ribbon", "curve"]
+_PAIRWISE_MATCH_STYLES: tuple[PairwiseMatchStyle, ...] = ("ribbon", "curve")
+
+
+def _normalize_pairwise_match_style(value: Any) -> PairwiseMatchStyle:
+    normalized = str(value if value is not None else "ribbon").strip().lower()
+    if normalized not in _PAIRWISE_MATCH_STYLES:
+        raise ValidationError("pairwise_match_style must be one of: ribbon, curve")
+    return normalized  # type: ignore[return-value]
+
+
+def _normalize_curve_tension(value: Any) -> float:
+    tension = float(0.5 if value is None else value)
+    if not math.isfinite(tension) or tension < 0.0 or tension > 1.0:
+        raise ValidationError("curve_tension must be a finite number in [0.0, 1.0]")
+    return tension
 
 
 @dataclass(frozen=True)
@@ -125,6 +146,8 @@ class ObjectsBlastMatchConfig:
     fill_opacity: float
     stroke_color: str
     stroke_width: float
+    style: PairwiseMatchStyle | str
+    curve_tension: float
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsBlastMatchConfig":
@@ -132,6 +155,8 @@ class ObjectsBlastMatchConfig:
             fill_opacity=float(d["fill_opacity"]),
             stroke_color=str(d["stroke_color"]),
             stroke_width=float(d["stroke_width"]),
+            style=_normalize_pairwise_match_style(d.get("style", "ribbon")),
+            curve_tension=_normalize_curve_tension(d.get("curve_tension", 0.5)),
         )
 
 

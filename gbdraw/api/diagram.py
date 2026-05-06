@@ -30,6 +30,21 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     build_rbh_orthogroup_protein_blastp_comparisons,
     normalize_protein_blastp_mode,
 )
+from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
+    CollinearityBlock,
+    CollinearityAnchorMode,
+    CollinearityColorMode,
+    CollinearityParameters,
+    CollinearityResult,
+    CollinearitySearchScope,
+    LosslessCollinearityParameters,
+    build_orthogroup_collinearity_blocks,
+    convert_collinearity_blocks_to_comparisons,
+    normalize_collinearity_anchor_mode,
+    normalize_collinearity_color_mode,
+    normalize_collinearity_search_scope,
+)
+from gbdraw.analysis.collinearity_units import CollinearityUnitMode  # type: ignore[reportMissingImports]
 from gbdraw.analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from gbdraw.api.config import apply_config_overrides  # type: ignore[reportMissingImports]
 from gbdraw.api.options import DiagramOptions  # type: ignore[reportMissingImports]
@@ -801,6 +816,31 @@ def _resolve_circular_plot_title_position(
     return cast(Literal["none", "top", "bottom"], normalized)
 
 
+def _resolve_pairwise_match_style(style: str) -> Literal["ribbon", "curve"]:
+    normalized = str(style).strip().lower()
+    if normalized not in {"ribbon", "curve"}:
+        raise ValidationError("pairwise_match_style must be one of: ribbon, curve")
+    return cast(Literal["ribbon", "curve"], normalized)
+
+
+def _comparison_frames_have_collinearity_color_mode(
+    frames: Sequence[DataFrame] | None,
+    modes: set[str],
+) -> bool:
+    if not frames:
+        return False
+    for frame in frames:
+        if "collinearity_color_mode" not in frame.columns:
+            continue
+        for value in frame["collinearity_color_mode"].dropna():
+            normalized = str(value).strip().lower().replace("-", "_")
+            if normalized == "identity":
+                normalized = "average_identity"
+            if normalized in modes:
+                return True
+    return False
+
+
 def _resolve_plot_title_font_size(value: float | None) -> float:
     if value is None:
         return float(_PLOT_TITLE_DEFAULT_FONT_SIZE)
@@ -1190,6 +1230,13 @@ def assemble_linear_diagram_from_records(
     protein_comparisons: Sequence[DataFrame] | None = None,
     orthogroups: OrthogroupResult | None = None,
     protein_blastp_mode: ProteinBlastpMode | str = "none",
+    pairwise_match_style: Literal["ribbon", "curve"] | str = "ribbon",
+    collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None,
+    collinearity_params: CollinearityParameters | LosslessCollinearityParameters | None = None,
+    collinearity_unit_mode: CollinearityUnitMode | str = "auto",
+    collinearity_anchor_mode: CollinearityAnchorMode | str = "rbh",
+    collinearity_search_scope: CollinearitySearchScope | str = "adjacent",
+    collinearity_color_mode: CollinearityColorMode | str = "orientation",
     losatp_bin: str = "losat",
     protein_blastp_max_hits: int = 5,
     protein_blastp_candidate_limit: int | None = None,
@@ -1240,17 +1287,27 @@ def assemble_linear_diagram_from_records(
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
     normalized_protein_blastp_mode = normalize_protein_blastp_mode(protein_blastp_mode)
+    normalized_pairwise_match_style = _resolve_pairwise_match_style(pairwise_match_style)
+    normalized_collinearity_anchor_mode = normalize_collinearity_anchor_mode(str(collinearity_anchor_mode))
+    normalized_collinearity_search_scope = normalize_collinearity_search_scope(str(collinearity_search_scope))
+    normalized_collinearity_color_mode = normalize_collinearity_color_mode(str(collinearity_color_mode))
     if int(protein_blastp_max_hits) <= 0:
         raise ValidationError("protein_blastp_max_hits must be > 0")
     if protein_blastp_candidate_limit is not None and int(protein_blastp_candidate_limit) <= 0:
         raise ValidationError("protein_blastp_candidate_limit must be > 0 or None")
     if normalized_protein_blastp_mode != "none" and protein_comparisons is not None:
         raise ValidationError("Pass either protein_blastp_mode or protein_comparisons, not both.")
+    if collinearity_blocks is not None and (
+        normalized_protein_blastp_mode != "none" or protein_comparisons is not None or blast_files
+    ):
+        raise ValidationError(
+            "Pass collinearity_blocks without protein_blastp_mode, protein_comparisons, or blast_files."
+        )
     if normalized_protein_blastp_mode != "none" and blast_files:
         raise ValidationError("protein_blastp_mode cannot be used with blast_files.")
     if normalized_protein_blastp_mode != "none" and len(records) < 2:
         raise ValidationError("protein_blastp_mode requires at least two records")
-    has_precomputed_comparisons = bool(blast_files or protein_comparisons is not None)
+    has_precomputed_comparisons = bool(blast_files or protein_comparisons is not None or collinearity_blocks is not None)
     if (
         align_orthogroup_feature
         and normalized_protein_blastp_mode != "orthogroup"
@@ -1270,6 +1327,7 @@ def assemble_linear_diagram_from_records(
         has_comparisons = bool(
             blast_files
             or protein_comparisons
+            or collinearity_blocks
             or normalized_protein_blastp_mode != "none"
         )
         default_colors = load_default_colors(
@@ -1286,7 +1344,30 @@ def assemble_linear_diagram_from_records(
                 "config_overrides cannot be used with cfg; pass cfg=None or apply overrides before."
             )
         config_dict = modify_config_dict(config_dict, **config_overrides)
-    cfg = cfg or GbdrawConfig.from_dict(config_dict)
+    pairwise_style_from_overrides = (
+        config_overrides is not None
+        and normalized_pairwise_match_style == "ribbon"
+        and "pairwise_match_style" in config_overrides
+    )
+    if pairwise_style_from_overrides:
+        normalized_pairwise_match_style = _resolve_pairwise_match_style(
+            str(config_overrides["pairwise_match_style"])
+        )
+    else:
+        config_dict = modify_config_dict(config_dict, pairwise_match_style=normalized_pairwise_match_style)
+    if cfg is not None:
+        cfg = replace(
+            cfg,
+            objects=replace(
+                cfg.objects,
+                blast_match=replace(
+                    cfg.objects.blast_match,
+                    style=normalized_pairwise_match_style,
+                ),
+            ),
+        )
+    else:
+        cfg = GbdrawConfig.from_dict(config_dict)
     if depth_table is not None or depth_file is not None:
         if depth_tables is not None or depth_files is not None:
             raise ValidationError("Use depth_table/depth_file or depth_tables/depth_files, not both.")
@@ -1311,6 +1392,16 @@ def assemble_linear_diagram_from_records(
     resolved_orthogroups: OrthogroupResult | None = orthogroups
     if protein_comparisons is not None:
         resolved_protein_comparisons = list(protein_comparisons)
+    elif collinearity_blocks is not None:
+        if isinstance(collinearity_blocks, CollinearityResult):
+            collinearity_result = collinearity_blocks
+        else:
+            collinearity_result = CollinearityResult(blocks=tuple(collinearity_blocks))
+        resolved_protein_comparisons = convert_collinearity_blocks_to_comparisons(
+            collinearity_result,
+            records=records,
+            color_mode=normalized_collinearity_color_mode,
+        )
     elif normalized_protein_blastp_mode == "pairwise":
         protein_blastp_result = build_pairwise_protein_blastp_comparisons(
             records,
@@ -1335,6 +1426,25 @@ def assemble_linear_diagram_from_records(
         )
         resolved_protein_comparisons = protein_blastp_result.comparisons
         resolved_orthogroups = protein_blastp_result.orthogroups
+    elif normalized_protein_blastp_mode == "collinear":
+        collinearity_result = build_orthogroup_collinearity_blocks(
+            records,
+            losatp_bin=losatp_bin,
+            candidate_limit=protein_blastp_candidate_limit,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+            params=collinearity_params,
+            unit_mode=collinearity_unit_mode,
+            edge_mode=normalized_collinearity_anchor_mode,
+            search_scope=normalized_collinearity_search_scope,
+        )
+        resolved_protein_comparisons = convert_collinearity_blocks_to_comparisons(
+            collinearity_result,
+            records=records,
+            color_mode=normalized_collinearity_color_mode,
+        )
     normalized_plot_title = str(plot_title or "").strip()
     normalized_plot_title_position = _resolve_linear_plot_title_position(
         str(plot_title_position)
@@ -1378,6 +1488,30 @@ def assemble_linear_diagram_from_records(
         default_colors_df=default_colors,
         cfg=cfg,
     )
+    blast_config.collinearity_color_mode = normalized_collinearity_color_mode
+    uses_collinearity_rendering = (
+        collinearity_blocks is not None
+        or normalized_protein_blastp_mode == "collinear"
+        or _comparison_frames_have_collinearity_color_mode(
+            resolved_protein_comparisons,
+            {"average_identity", "orientation"},
+        )
+    )
+    blast_config.hide_pairwise_identity_legend = (
+        uses_collinearity_rendering
+        and normalized_collinearity_color_mode == "orientation"
+    ) or _comparison_frames_have_collinearity_color_mode(
+        resolved_protein_comparisons,
+        {"orientation"},
+    )
+    if (
+        uses_collinearity_rendering
+        and normalized_collinearity_color_mode == "average_identity"
+    ) or _comparison_frames_have_collinearity_color_mode(
+        resolved_protein_comparisons,
+        {"average_identity"},
+    ):
+        blast_config.pairwise_identity_legend_label = "Average identity"
 
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=len(records),
@@ -2573,6 +2707,13 @@ def build_linear_diagram(
         protein_comparisons=options.protein_comparisons,
         orthogroups=options.orthogroups,
         protein_blastp_mode=options.protein_blastp_mode,
+        pairwise_match_style=options.pairwise_match_style,
+        collinearity_blocks=options.collinearity_blocks,
+        collinearity_params=options.collinearity_params,
+        collinearity_unit_mode=options.collinearity_unit_mode,
+        collinearity_anchor_mode=options.collinearity_anchor_mode,
+        collinearity_search_scope=options.collinearity_search_scope,
+        collinearity_color_mode=options.collinearity_color_mode,
         losatp_bin=options.losatp_bin,
         protein_blastp_max_hits=options.protein_blastp_max_hits,
         protein_blastp_candidate_limit=options.protein_blastp_candidate_limit,

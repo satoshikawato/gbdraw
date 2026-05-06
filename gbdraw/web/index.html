@@ -172,6 +172,7 @@
     <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
         <div class="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mb-6"></div>
         <h3 class="text-xl font-bold text-slate-800 animate-pulse">Generating Diagram...</h3>
+        <p v-if="processingStatus" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
     </div>
 
     <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-14 shrink-0">
@@ -263,10 +264,10 @@
                                 <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="losatProgram" value="blastp" class="text-blue-600"> blastp</label>
                             </div>
                             <div class="mt-3 pt-3 border-t border-slate-200">
-                                <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Settings</div>
+                                <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Settings <help-tip text="Configure browser-side LOSAT execution and how blastp comparison results are reduced before drawing."></help-tip></div>
                                 <div class="grid grid-cols-1 gap-1 mb-2">
                                     <div>
-                                        <label class="text-[9px] block">Parallel workers</label>
+                                        <label class="text-[9px] flex items-center">Parallel workers <help-tip text="Number of LOSAT jobs to run at the same time. Auto chooses a conservative worker count for the browser."></help-tip></label>
                                         <select v-model="losat.parallelWorkers" class="form-input px-1 py-0.5 text-xs">
                                             <option :value="undefined">Auto</option>
                                             <option value="1">1</option>
@@ -279,7 +280,7 @@
                                 <div v-if="losatProgram === 'blastn'" class="space-y-2">
                                     <div class="grid grid-cols-1 gap-1">
                                         <div>
-                                            <label class="text-[9px] block">Task</label>
+                                            <label class="text-[9px] flex items-center">Task <help-tip text="LOSAT blastn task preset. megablast is fastest for highly similar nucleotide sequences; blastn is more sensitive."></help-tip></label>
                                             <select v-model="losat.blastn.task" class="form-input px-1 py-0.5 text-xs">
                                                 <option value="megablast">megablast</option>
                                                 <option value="blastn">blastn</option>
@@ -295,15 +296,70 @@
                                 <div v-else class="space-y-2">
                                     <div class="grid grid-cols-2 gap-1">
                                         <div class="col-span-2">
-                                            <label class="text-[9px] block">blastp mode</label>
-                                            <select v-model="losat.blastp.mode" class="form-input px-1 py-0.5 text-xs">
+                                            <label class="text-[9px] flex items-center">blastp mode <help-tip text="Pairwise draws top protein hits, Orthogroups keeps reciprocal best-hit groups, and Collinear mode clusters selected edge links into span ribbons."></help-tip></label>
+                                            <select v-model="losat.blastp.mode" @change="losat.blastp.mode === 'collinear' && (adv.pairwise_match_style = 'curve')" class="form-input px-1 py-0.5 text-xs">
                                                 <option value="orthogroup">Orthogroups</option>
+                                                <option value="collinear">Collinear blocks</option>
                                                 <option value="pairwise">Pairwise</option>
                                             </select>
                                         </div>
                                         <div v-if="losat.blastp.mode === 'pairwise'">
-                                            <label class="text-[9px] block">Max hits per protein</label>
+                                            <label class="text-[9px] flex items-center">Max hits per protein <help-tip text="Maximum distinct subject proteins drawn for each query protein in Pairwise mode. Higher values show repeats but increase clutter."></help-tip></label>
                                             <input type="number" min="1" v-model.number="losat.blastp.maxHits" class="form-input px-1 py-0.5 text-xs">
+                                        </div>
+                                        <template v-if="losat.blastp.mode === 'collinear'">
+                                            <div>
+                                                <label class="text-[9px] flex items-center">Max unit gap <help-tip text="Maximum CDS-order gap between neighboring Orthogroup RBH anchors that can be merged into one span ribbon."></help-tip></label>
+                                                <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxGeneGap" class="form-input px-1 py-0.5 text-xs">
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] flex items-center">Min block genes <help-tip text="Minimum connected genes required for a Collinear ribbon. Use 1 to include singleton links."></help-tip></label>
+                                                <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMinAnchors" class="form-input px-1 py-0.5 text-xs">
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] flex items-center">Color mode <help-tip text="Average identity uses the block's alignment-length-weighted average identity gradient, and Orientation colors plus blocks gray and inverted blocks red."></help-tip></label>
+                                                <select v-model="losat.blastp.collinearColorMode" class="form-input px-1 py-0.5 text-xs">
+                                                    <option value="average_identity">Average identity</option>
+                                                    <option value="orientation">Orientation</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] flex items-center">Edge mode <help-tip text="RBH is recommended because it matches the Orthogroup display-edge contract."></help-tip></label>
+                                                <select v-model="losat.blastp.collinearAnchorMode" class="form-input px-1 py-0.5 text-xs">
+                                                    <option value="rbh">RBH</option>
+                                                    <option value="one_to_one">Top1</option>
+                                                    <option value="all">All hits</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] flex items-center">Search scope <help-tip text="Adjacent pairs searches only neighboring records; All records uses every record pair as Collinear evidence."></help-tip></label>
+                                                <select v-model="losat.blastp.collinearSearchScope" class="form-input px-1 py-0.5 text-xs">
+                                                    <option value="adjacent">Adjacent pairs</option>
+                                                    <option value="all">All records</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] flex items-center">Diagonal drift <help-tip text="Maximum order-space diagonal drift allowed when merging neighboring Orthogroup RBH anchors."></help-tip></label>
+                                                <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxDiagonalDrift" class="form-input px-1 py-0.5 text-xs">
+                                            </div>
+                                        </template>
+                                        <div class="col-span-2 grid grid-cols-2 gap-1 pt-2 border-t border-slate-200">
+                                            <div>
+                                                <label class="text-[9px] flex items-center">Bitscore <help-tip text="Minimum LOSATP blastp bitscore retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
+                                                <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? 50 : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" placeholder="50">
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] flex items-center">E-value <help-tip text="Maximum LOSATP blastp e-value retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
+                                                <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? '1e-2' : String($event.target.value).trim()" class="form-input px-1 py-0.5 text-xs" placeholder="1e-2">
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] flex items-center">Minimum Identity <help-tip text="Minimum LOSATP blastp percent identity retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
+                                                <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" placeholder="0">
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] flex items-center">Minimum Length <help-tip text="Minimum LOSATP blastp alignment length retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
+                                                <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" placeholder="0">
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -776,7 +832,7 @@
 
                             <div>
                                 <div class="flex justify-between items-center mb-2">
-                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS (-d) <help-tip text="Base colors for features. Acts as the -d override table."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS (-d) <help-tip text="Base colors for features, comparison tracks, and collinear blocks. Orientation mode uses collinear_block_plus and collinear_block_minus."></help-tip></h4>
                                     <button @click="resetColors" class="text-[10px] text-blue-600 hover:underline">Reset</button>
                                 </div>
                                 <div class="mb-2 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
@@ -801,9 +857,9 @@
 
                                 <div class="mt-2 p-2 bg-slate-50 rounded border border-slate-200 flex gap-2 items-end">
                                     <div class="flex-grow">
-                                        <label class="text-[9px] font-bold text-slate-500 block mb-1">ADD FEATURE</label>
+                                        <label class="text-[9px] font-bold text-slate-500 block mb-1">ADD KEY</label>
                                         <select v-model="newColorFeat" class="form-input text-xs py-1 px-2 h-8">
-                                            <option v-for="k in featureKeys" :value="k">{{ k }}</option>
+                                            <option v-for="k in defaultColorKeys" :value="k">{{ k }}</option>
                                         </select>
                                     </div>
                                     <div>
@@ -1346,14 +1402,24 @@
                     <details>
                         <summary><i class="ph ph-arrows-left-right"></i> Pairwise Match <help-tip text="Adjust pairwise comparison height and filter BLAST or LOSAT tracks."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
-                            <p class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-2">
+                            <p v-if="!(blastSource === 'losat' && losatProgram === 'blastp')" class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-2">
                                 Applies to BLAST or LOSAT pairwise comparison tracks.
                             </p>
+                            <p v-else class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-2">
+                                LOSATP blastp filters are in LOSAT Settings.
+                            </p>
+                            <div>
+                                <label class="input-label text-[10px]">Pairwise Match Style <help-tip text="Ribbon draws straight filled links; Curve draws curved filled links while preserving each alignment span."></help-tip></label>
+                                <select v-model="adv.pairwise_match_style" class="form-input form-input-compact">
+                                    <option value="ribbon">Ribbon</option>
+                                    <option value="curve">Curve</option>
+                                </select>
+                            </div>
                             <div>
                                 <label class="input-label text-[10px]">Pairwise Match Height <help-tip text="Height of the comparison blocks."></help-tip></label>
                                 <input type="number" v-model.number="adv.comparison_height" class="form-input form-input-compact" placeholder="Auto">
                             </div>
-                            <div class="grid grid-cols-2 gap-1.5">
+                            <div v-if="!(blastSource === 'losat' && losatProgram === 'blastp')" class="grid grid-cols-2 gap-1.5">
                                 <div>
                                     <label class="input-label text-[10px]">Bitscore</label>
                                     <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? 50 : Number($event.target.value)" class="form-input form-input-compact" placeholder="50">

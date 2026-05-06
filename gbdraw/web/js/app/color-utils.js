@@ -9,6 +9,26 @@ export const hexToRgb = (hex) => {
     : { r: 128, g: 128, b: 128 };
 };
 
+export const COLLINEAR_ORIENTATION_COLOR_KEYS = Object.freeze({
+  plus: 'collinear_block_plus',
+  minus: 'collinear_block_minus'
+});
+
+export const DEFAULT_COLLINEAR_ORIENTATION_COLORS = Object.freeze({
+  plus: '#d3d3d3',
+  minus: '#E15759'
+});
+
+export const DEFAULT_COMPARISON_COLORS = Object.freeze({
+  pairwise_match: '#d3d3d3',
+  pairwise_match_min: '#FFE7E7',
+  pairwise_match_max: '#FF7272',
+  collinear_block_plus: DEFAULT_COLLINEAR_ORIENTATION_COLORS.plus,
+  collinear_block_minus: DEFAULT_COLLINEAR_ORIENTATION_COLORS.minus
+});
+
+export const COMPARISON_COLOR_KEYS = Object.freeze(Object.keys(DEFAULT_COMPARISON_COLORS));
+
 const COLOR_NAME_MAP = {
   aliceblue: '#F0F8FF',
   antiquewhite: '#FAEBD7',
@@ -207,4 +227,39 @@ export const resolveColorToHex = (colorValue) => {
   if (!trimmed) return trimmed;
   if (trimmed.startsWith('#')) return trimmed;
   return COLOR_NAME_MAP[trimmed.toLowerCase()] || trimmed;
+};
+
+export const normalizePaletteColors = (colors = {}) => {
+  const normalized = { ...(colors || {}) };
+  Object.keys(normalized).forEach((key) => {
+    if (/^collinear_block_\d+$/.test(key)) delete normalized[key];
+  });
+  Object.entries(DEFAULT_COMPARISON_COLORS).forEach(([key, value]) => {
+    if (!normalized[key]) normalized[key] = value;
+  });
+  return normalized;
+};
+
+export const normalizePaletteDefinitions = (palettes = {}) => {
+  const normalized = {};
+  Object.entries(palettes || {}).forEach(([name, colors]) => {
+    if (name === 'title') return;
+    normalized[name] = normalizePaletteColors(colors || {});
+  });
+  return normalized;
+};
+
+export const resolveCollinearMatchColor = ({ blockId, colorMode, orientation, colors = {} }) => {
+  const normalizedBlockId = String(blockId || '').trim();
+  if (!normalizedBlockId) return null;
+
+  const normalizedMode = String(colorMode || '').trim().toLowerCase();
+  if (normalizedMode === 'orientation') {
+    const normalizedOrientation = String(orientation || '').trim().toLowerCase();
+    const colorKey = COLLINEAR_ORIENTATION_COLOR_KEYS[normalizedOrientation];
+    if (!colorKey) return null;
+    return colors[colorKey] || DEFAULT_COLLINEAR_ORIENTATION_COLORS[normalizedOrientation];
+  }
+
+  return null;
 };

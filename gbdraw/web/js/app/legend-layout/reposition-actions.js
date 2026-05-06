@@ -1,4 +1,4 @@
-import { estimateColorFactor, interpolateColor } from '../color-utils.js';
+import { estimateColorFactor, interpolateColor, resolveCollinearMatchColor } from '../color-utils.js';
 import {
   getDefinitionGroupTranslate,
   getElementsBounds,
@@ -790,8 +790,26 @@ export const createLegendRepositionActions = ({
           const pathKey = `comp${compIdx}_path${pathIdx}`;
           const currentFill = path.getAttribute('fill');
           if (currentFill) {
+            const collinearityBlockId = path.getAttribute('data-collinearity-block-id') || '';
+            const collinearityColorMode = path.getAttribute('data-collinearity-color-mode') || '';
+            const collinearColor = resolveCollinearMatchColor({
+              blockId: collinearityBlockId,
+              colorMode: collinearityColorMode,
+              orientation: path.getAttribute('data-collinearity-orientation') || '',
+              colors
+            });
+            if (collinearColor) {
+              path.setAttribute('fill', collinearColor);
+              return;
+            }
+            if (collinearityBlockId && !collinearityColorMode) return;
+
             let factor;
-            if (pairwiseMatchFactors.value[pathKey] !== undefined) {
+            const metadataFactor = Number(path.getAttribute('data-identity-factor'));
+            if (Number.isFinite(metadataFactor)) {
+              factor = metadataFactor;
+              pairwiseMatchFactors.value[pathKey] = factor;
+            } else if (pairwiseMatchFactors.value[pathKey] !== undefined) {
               factor = pairwiseMatchFactors.value[pathKey];
             } else {
               const origMin = window._origPairwiseMin || '#FFE7E7';

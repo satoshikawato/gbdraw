@@ -11,6 +11,16 @@ from typing import Literal, Mapping, Sequence
 
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
+from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
+    CollinearityBlock,
+    CollinearityAnchorMode,
+    CollinearityColorMode,
+    CollinearityParameters,
+    CollinearityResult,
+    CollinearitySearchScope,
+    LosslessCollinearityParameters,
+)
+from gbdraw.analysis.collinearity_units import CollinearityUnitMode  # type: ignore[reportMissingImports]
 from gbdraw.analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from gbdraw.tracks import TrackSpec  # type: ignore[reportMissingImports]
@@ -73,7 +83,14 @@ class DiagramOptions:
     blast_files: Sequence[str] | None = None
     protein_comparisons: Sequence[DataFrame] | None = None
     orthogroups: OrthogroupResult | None = None
-    protein_blastp_mode: Literal["none", "pairwise", "orthogroup"] = "none"
+    protein_blastp_mode: Literal["none", "pairwise", "orthogroup", "collinear"] = "none"
+    pairwise_match_style: Literal["ribbon", "curve"] = "ribbon"
+    collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None
+    collinearity_params: CollinearityParameters | LosslessCollinearityParameters | None = None
+    collinearity_unit_mode: CollinearityUnitMode | str = "auto"
+    collinearity_anchor_mode: CollinearityAnchorMode | str = "rbh"
+    collinearity_search_scope: CollinearitySearchScope | str = "adjacent"
+    collinearity_color_mode: CollinearityColorMode | str = "orientation"
     losatp_bin: str = "losat"
     protein_blastp_max_hits: int = 5
     protein_blastp_candidate_limit: int | None = None

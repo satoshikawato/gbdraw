@@ -1,6 +1,16 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+COLLINEAR_ORIENTATION_COLOR_KEYS = {
+    "plus": "collinear_block_plus",
+    "minus": "collinear_block_minus",
+}
+DEFAULT_COLLINEAR_ORIENTATION_COLORS = {
+    "plus": "#d3d3d3",
+    "minus": "#E15759",
+}
+
+
 def interpolate_color(color_min: str, color_max: str, factor: float) -> str:
     r_min, g_min, b_min = (
         int(color_min[1:3], 16),
@@ -20,6 +30,10 @@ def interpolate_color(color_min: str, color_max: str, factor: float) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-__all__ = ["interpolate_color"]
+__all__ = [
+    "COLLINEAR_ORIENTATION_COLOR_KEYS",
+    "DEFAULT_COLLINEAR_ORIENTATION_COLORS",
+    "interpolate_color",
+]
 
 

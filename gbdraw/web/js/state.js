@@ -1,3 +1,8 @@
+import {
+  COMPARISON_COLOR_KEYS,
+  normalizePaletteColors,
+  normalizePaletteDefinitions
+} from './app/color-utils.js';
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -6,6 +11,7 @@ const formatTimingMs = (ms) => `${ms.toFixed(1)}ms`;
 // System State
 const pyodideReady = ref(false);
 const processing = ref(false);
+const processingStatus = ref('');
 const loadingStatus = ref('Initializing...');
 const errorLog = ref(null);
 const sessionTitle = ref('');
@@ -50,6 +56,20 @@ const svgContent = computed(() => {
         'data-label-feature-id',
         'data-label-source-text',
         'data-label-editable',
+        'data-collinearity-block-id',
+        'data-collinearity-block-kind',
+        'data-collinearity-orientation',
+        'data-collinearity-block-evalue',
+        'data-collinearity-color-mode',
+        'data-orthogroup-id',
+        'data-query-protein-id',
+        'data-subject-protein-id',
+        'data-query-feature-svg-id',
+        'data-subject-feature-svg-id',
+        'data-query-unit-id',
+        'data-subject-unit-id',
+        'data-pairwise-match-style',
+        'data-identity-factor',
         'fill',
         'fill-opacity',
         'stroke',
@@ -337,6 +357,7 @@ const adv = reactive({
   depth_small_tick_interval: null,
   depth_tick_font_size: null,
   comparison_height: null,
+  pairwise_match_style: 'ribbon',
   min_bitscore: 50,
   evalue: '1e-2',
   identity: 0,
@@ -377,7 +398,18 @@ const losat = reactive({
   blastp: {
     mode: 'orthogroup',
     maxHits: 5,
-    candidateLimit: null
+    candidateLimit: null,
+    collinearMinAnchors: 1,
+    collinearMaxGeneGap: 0,
+    collinearBlockMergeGap: 50,
+    collinearSingletonMergeGap: 25,
+    collinearMaxDiagonalDrift: 0,
+    collinearMaxConflictsInMergeGap: 1,
+    collinearMaxParalogLinksPerOrthogroup: 2,
+    collinearColorMode: 'orientation',
+    collinearUnitMode: 'auto',
+    collinearAnchorMode: 'rbh',
+    collinearSearchScope: 'adjacent'
   }
 });
 
@@ -696,6 +728,8 @@ const featureKeys = [
   "5'UTR"
 ];
 
+const defaultColorKeys = [...featureKeys, 'default', 'skew_high', 'skew_low', 'gc_content', ...COMPARISON_COLOR_KEYS];
+
 const newColorFeat = ref('gene');
 const newColorVal = ref('#d3d3d3');
 
@@ -754,6 +788,7 @@ const filteredEditableLabels = computed(() => {
 export const state = {
   pyodideReady,
   processing,
+  processingStatus,
   loadingStatus,
   errorLog,
   sessionTitle,
@@ -900,7 +935,10 @@ export const state = {
   circularBaseConfig,
   linearBaseConfig,
   diagramElementBaseTransforms,
+  normalizePaletteColors,
+  normalizePaletteDefinitions,
   featureKeys,
+  defaultColorKeys,
   newColorFeat,
   newColorVal,
   manualPriorityRules,

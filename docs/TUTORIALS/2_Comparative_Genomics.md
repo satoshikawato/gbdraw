@@ -52,6 +52,8 @@ gbdraw linear \
 
 ![Escherichia_Shigella_pair.svg](../../examples/Escherichia_Shigella_pair.svg)
 
+The default pairwise link style is `ribbon`, which draws straight filled ribbons and is best when the exact BLAST alignment span is the main signal. Use `--pairwise_match_style curve` for curved filled ribbons in dense synteny-style views; the curve style still preserves each match span from `qstart/qend` and `sstart/send`.
+
 ## 4. Select Records or Regions
 
 Linear mode supports three selectors:

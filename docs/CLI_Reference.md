@@ -254,10 +254,18 @@ options:
 ```text
 usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--fasta [FASTA_FILE ...]] [-b [BLAST ...]] [-t TABLE]
+              [--losatp_bin LOSATP_BIN]
+              [--protein_blastp_mode {none,pairwise,orthogroup,collinear}]
+              [--collinear_min_anchors COLLINEAR_MIN_ANCHORS]
+              [--collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP]
+              [--collinear_color_mode {average_identity,orientation}]
+              [--collinear_blocks COLLINEAR_BLOCKS]
+              [--save_collinear_blocks SAVE_COLLINEAR_BLOCKS]
               [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT] [-n NT] [-w WINDOW]
               [-s STEP] [--separate_strands] [--show_gc] [--show_skew]
               [--align_center] [--evalue EVALUE] [--bitscore BITSCORE]
               [--identity IDENTITY] [--alignment_length ALIGNMENT_LENGTH]
+              [--pairwise_match_style {ribbon,curve}]
               [-k FEATURES] [--feature_shape TYPE=SHAPE]
               [--block_stroke_color BLOCK_STROKE_COLOR]
               [--block_stroke_width BLOCK_STROKE_WIDTH]
@@ -306,6 +314,29 @@ options:
   -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format
                         (-outfmt 6 or 7) (optional)
+  --losatp_bin, --losatp-bin LOSATP_BIN
+                        LOSATP executable for --protein_blastp_mode
+                        pairwise/orthogroup/collinear (default: losat).
+  --protein_blastp_mode, --protein-blastp-mode {none,pairwise,orthogroup,collinear}
+                        LOSATP blastp mode: none, pairwise adjacent ribbons,
+                        all-record Orthogroups, or Collinear blocks (default:
+                        none).
+  --collinear_min_anchors, --collinear-min-anchors COLLINEAR_MIN_ANCHORS
+                        Minimum anchors/genes required for a rendered
+                        Collinear block. The default 1 includes singleton
+                        links.
+  --collinear_max_unit_gap, --collinear-max-unit-gap, --collinear_max_gene_gap, --collinear-max-gene-gap COLLINEAR_MAX_UNIT_GAP
+                        Maximum unit gap between neighboring collinear anchors
+                        (default: 0).
+  --collinear_color_mode, --collinear-color-mode {average_identity,orientation}
+                        Collinear ribbon color mode: average_identity or
+                        orientation (default: orientation).
+  --collinear_blocks, --collinear-blocks COLLINEAR_BLOCKS
+                        Headered native .collinear.tsv file to import instead
+                        of running LOSATP.
+  --save_collinear_blocks, --save-collinear-blocks SAVE_COLLINEAR_BLOCKS
+                        Write accepted or validated native collinear blocks to
+                        this TSV path.
   -t, --table TABLE     color table (optional)
   -p, --palette PALETTE
                         Palette name (default: default)
@@ -328,6 +359,10 @@ options:
   --identity IDENTITY   identity threshold (default=0)
   --alignment_length ALIGNMENT_LENGTH
                         minimum BLAST alignment length threshold (default=0)
+  --pairwise_match_style {ribbon,curve}
+                        Pairwise comparison link style: ribbon keeps straight
+                        filled ribbons; curve draws curved filled ribbons that
+                        preserve alignment spans.
   -k, --features FEATURES
                         Comma-separated list of feature keys to draw (default:
                         CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)

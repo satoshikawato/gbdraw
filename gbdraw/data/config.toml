@@ -71,6 +71,8 @@ short = 20
 fill_opacity = 1.0
 stroke_color = 'none'
 stroke_width = 0
+style = 'ribbon'
+curve_tension = 0.5
 
 [objects.sliding_window]
 up10m = [100000, 10000]

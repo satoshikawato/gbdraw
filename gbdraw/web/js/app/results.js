@@ -26,7 +26,9 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
     appliedPaletteName,
     appliedPaletteColors,
     pendingPaletteName,
-    pendingPaletteColors
+    pendingPaletteColors,
+    normalizePaletteColors,
+    normalizePaletteDefinitions
   } = state;
   const { clearPlotTitleState, setPlotTitleAutoTransform } = legendLayout;
 
@@ -42,14 +44,13 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
 
     const paletteJson = pyodide.runPython('get_palettes_json()');
     const all = JSON.parse(paletteJson);
-    const normalized = { ...(all || {}) };
-    delete normalized.title;
+    const normalized = normalizePaletteDefinitions(all || {});
     paletteDefinitions.value = normalized;
     return normalized;
   };
   const getPaletteBaseColors = (paletteName) => {
     const allPalettes = getPaletteMap();
-    return cloneColors(allPalettes[paletteName] || {});
+    return normalizePaletteColors(cloneColors(allPalettes[paletteName] || {}));
   };
   const setAppliedPaletteState = (paletteName, colors = currentColors.value) => {
     appliedPaletteName.value = String(paletteName || selectedPalette.value || 'default');
