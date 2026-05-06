@@ -90,6 +90,63 @@ def _prepare_linear_labels(
     )
 
 
+def _prepare_linear_labels_for_records(
+    *,
+    input_filenames: tuple[str, ...],
+    show_labels: str = "first",
+    label_placement: str,
+    label_rotation: float = 0.0,
+    label_font_size: float = 14.0,
+    separate_strands: bool = False,
+    track_layout: str = "middle",
+    qualifier_priority: tuple[str, str] | None = None,
+) -> list[dict]:
+    input_dir = Path(__file__).parent / "test_inputs"
+    records = [SeqIO.read(str(input_dir / filename), "genbank") for filename in input_filenames]
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        show_labels=show_labels,
+        strandedness=separate_strands,
+        label_blacklist="",
+        label_font_size=label_font_size,
+        label_placement=label_placement,
+        label_rotation=label_rotation,
+        linear_track_layout=track_layout,
+    )
+    if qualifier_priority is not None:
+        feature_type, priorities = qualifier_priority
+        config_dict["labels"]["filtering"]["qualifier_priority_df"] = DataFrame(
+            [{"feature_type": feature_type, "priorities": priorities}]
+        )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_cfg = LinearCanvasConfigurator(
+        num_of_entries=len(records),
+        longest_genome=max(len(record.seq) for record in records),
+        config_dict=config_dict,
+        legend="none",
+        cfg=cfg,
+    )
+    feature_cfg = FeatureDrawingConfigurator(
+        color_table=None,
+        default_colors=load_default_colors("", "default"),
+        selected_features_set=cfg.objects.features.features_drawn,
+        config_dict=config_dict,
+        canvas_config=canvas_cfg,
+        cfg=cfg,
+    )
+
+    _, all_labels_by_record, _ = _precalculate_label_dimensions(
+        records,
+        feature_cfg,
+        canvas_cfg,
+        config_dict,
+        cfg=cfg,
+    )
+    return all_labels_by_record[records[0].id]
+
+
 def _rotated_y_bounds_from_anchor(label: dict) -> tuple[float, float]:
     radians = math.radians(float(label["rotation_deg"]))
     width_px = float(label["width_px"])
@@ -107,18 +164,29 @@ def _rotated_y_bounds_from_anchor(label: dict) -> tuple[float, float]:
     return min(y_offsets), max(y_offsets)
 
 
+def _feature_adjacent_label_y(label: dict) -> float:
+    label_vertical_gap = max(1.0, float(label["height_px"]) * 0.05)
+    if bool(label.get("above_feature_place_above", True)):
+        return float(label["feature_top_y"]) - label_vertical_gap - float(label["label_contact_y_offset"])
+    return float(label["feature_bottom_y"]) + label_vertical_gap - float(label["label_contact_y_offset"])
+
+
+def _label_bounds_overlap(label1: dict, label2: dict, min_gap_px: float = 0.0) -> bool:
+    left1, right1, top1, bottom1 = calculate_label_bounds(label1)
+    left2, right2, top2, bottom2 = calculate_label_bounds(label2)
+    return not (
+        right1 + min_gap_px <= left2
+        or right2 + min_gap_px <= left1
+        or bottom1 + min_gap_px <= top2
+        or bottom2 + min_gap_px <= top1
+    )
+
+
 def _assert_no_label_bounds_overlap(labels: list[dict]) -> None:
     placed = []
     for label in sorted(labels, key=lambda item: float(item["feature_anchor_x"])):
-        left, right, top, bottom = calculate_label_bounds(label)
         for other in placed:
-            other_left, other_right, other_top, other_bottom = calculate_label_bounds(other)
-            assert (
-                right <= other_left
-                or other_right <= left
-                or bottom <= other_top
-                or other_bottom <= top
-            )
+            assert not _label_bounds_overlap(label, other)
         placed.append(label)
 
 
@@ -255,6 +323,44 @@ def test_linear_above_feature_bgc0000708_gene_labels_do_not_overlap() -> None:
     assert any(label.get("leader_line") for label in labels)
     assert any(not label.get("leader_line") for label in labels)
     _assert_no_label_bounds_overlap(labels)
+
+
+@pytest.mark.linear
+def test_linear_above_feature_bgc_multi_record_gene_labels_compact_without_overlap() -> None:
+    labels = _prepare_linear_labels_for_records(
+        input_filenames=(
+            "BGC0000708.gbk",
+            "BGC0000709.gbk",
+            "BGC0000712.gbk",
+            "BGC0000713.gbk",
+        ),
+        show_labels="first",
+        label_placement="above_feature",
+        label_rotation=45.0,
+        qualifier_priority=("CDS", "gene"),
+    )
+    assert labels
+    _assert_no_label_bounds_overlap(labels)
+
+    collision_gap = max(1.0, max(float(label["height_px"]) for label in labels) * 0.05)
+    rotated_heights = [
+        calculate_label_bounds(label)[3] - calculate_label_bounds(label)[2]
+        for label in labels
+        if bool(label.get("above_feature_place_above", True))
+    ]
+    old_global_step = max(float(collision_gap), max(rotated_heights) + float(collision_gap), 4.0)
+
+    shifted_livx = next(label for label in labels if label["label_text"] == "livX" and label.get("leader_line"))
+    livx_original_y = _feature_adjacent_label_y(shifted_livx)
+    livx_shift = livx_original_y - float(shifted_livx["middle_y"])
+
+    assert livx_shift > 0.0
+    assert livx_shift < old_global_step
+
+    livy = next(label for label in labels if label["label_text"] == "livY")
+    assert float(livy["middle_y"]) == pytest.approx(_feature_adjacent_label_y(livy))
+    for neighbor in [label for label in labels if label["label_text"] in {"livW", "livZ"}]:
+        assert not _label_bounds_overlap(livy, neighbor)
 
 
 @pytest.mark.linear

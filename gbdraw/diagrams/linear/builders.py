@@ -216,7 +216,12 @@ def add_comparison_on_linear_canvas(
 
 
 def add_length_bar_on_linear_canvas(
-    canvas: Drawing, canvas_config: LinearCanvasConfigurator, config_dict: dict, scale_group, legend_group
+    canvas: Drawing,
+    canvas_config: LinearCanvasConfigurator,
+    config_dict: dict,
+    scale_group,
+    legend_group,
+    offset_x: float = 0.0,
 ) -> Drawing:
     """Adds a length bar to the linear canvas."""
     if canvas_config.legend_position == "bottom" or canvas_config.legend_position == "top":
@@ -224,7 +229,7 @@ def add_length_bar_on_linear_canvas(
     else:
         offset_for_length_bar = canvas_config.height_below_final_record
     scale_group = scale_group.get_group()
-    scale_group.translate(canvas_config.horizontal_offset, offset_for_length_bar)
+    scale_group.translate(canvas_config.horizontal_offset + offset_x, offset_for_length_bar)
     canvas.add(scale_group)
     return canvas
 

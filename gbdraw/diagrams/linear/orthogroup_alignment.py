@@ -30,6 +30,22 @@ class OrthogroupAlignmentMember:
     representative: bool = False
 
 
+@dataclass(frozen=True)
+class OrthogroupAlignmentCanvasExtents:
+    horizontal_shift: float
+    width_extension: float
+    min_left: float
+    max_right: float
+
+    @property
+    def ruler_offset_x(self) -> float:
+        return self.min_left
+
+    @property
+    def ruler_width(self) -> float:
+        return max(0.0, self.max_right - self.min_left)
+
+
 def _row_value(row: object, column: str, default: object = "") -> object:
     return getattr(row, column, default)
 
@@ -255,10 +271,31 @@ def calculate_orthogroup_alignment_canvas_adjustment(
 ) -> tuple[float, float]:
     """Return (horizontal_shift, width_extension) needed to keep aligned records on canvas."""
 
-    if not record_offsets_x:
-        return 0.0, 0.0
+    extents = calculate_orthogroup_alignment_canvas_extents(
+        records,
+        canvas_config,
+        record_offsets_x,
+    )
+    return extents.horizontal_shift, extents.width_extension
+
+
+def calculate_orthogroup_alignment_canvas_extents(
+    records: Sequence[SeqRecord],
+    canvas_config: LinearCanvasConfigurator,
+    record_offsets_x: dict[int, float],
+) -> OrthogroupAlignmentCanvasExtents:
+    """Return the aligned record bounds and canvas growth needed to fit them."""
 
     alignment_width = float(canvas_config.alignment_width)
+
+    if not record_offsets_x:
+        return OrthogroupAlignmentCanvasExtents(
+            horizontal_shift=0.0,
+            width_extension=0.0,
+            min_left=0.0,
+            max_right=alignment_width,
+        )
+
     min_left = 0.0
     max_right = alignment_width
     for record_index, record in enumerate(records):
@@ -272,7 +309,12 @@ def calculate_orthogroup_alignment_canvas_adjustment(
 
     horizontal_shift = max(0.0, -min_left)
     width_extension = max(0.0, (max_right - min_left) - alignment_width)
-    return horizontal_shift, width_extension
+    return OrthogroupAlignmentCanvasExtents(
+        horizontal_shift=horizontal_shift,
+        width_extension=width_extension,
+        min_left=min_left,
+        max_right=max_right,
+    )
 
 
 def calculate_orthogroup_alignment_offsets(
@@ -329,7 +371,9 @@ def calculate_orthogroup_alignment_offsets(
 
 
 __all__ = [
+    "OrthogroupAlignmentCanvasExtents",
     "OrthogroupAlignmentMember",
     "calculate_orthogroup_alignment_canvas_adjustment",
+    "calculate_orthogroup_alignment_canvas_extents",
     "calculate_orthogroup_alignment_offsets",
 ]

@@ -52,7 +52,7 @@ from .builders import (
     add_record_group,
 )
 from .orthogroup_alignment import (
-    calculate_orthogroup_alignment_canvas_adjustment,
+    calculate_orthogroup_alignment_canvas_extents,
     calculate_orthogroup_alignment_offsets,
 )
 from .precalc import (
@@ -588,8 +588,46 @@ def assemble_linear_diagram(
                 )
             current_y += inter_record_space
 
+    if has_blast:
+        comparison_sources: list[list[DataFrame]] = []
+        if blast_files:
+            comparison_sources.append(load_comparisons(blast_files, blast_config))
+        if comparison_dataframes:
+            comparison_sources.append(
+                [
+                    filter_comparison_dataframe(comparison, blast_config)
+                    for comparison in comparison_dataframes
+                ]
+            )
+        max_source_len = max((len(source) for source in comparison_sources), default=0)
+        for index in range(max_source_len):
+            frames = [
+                source[index]
+                for source in comparison_sources
+                if index < len(source)
+            ]
+            if len(frames) == 1:
+                comparisons.append(frames[0])
+            elif frames:
+                comparisons.append(pd.concat(frames, ignore_index=True))
+
+    orthogroup_alignment_offsets = calculate_orthogroup_alignment_offsets(
+        records,
+        comparisons,
+        canvas_config,
+        align_orthogroup_feature,
+        orthogroups=orthogroups,
+    )
+    alignment_extents = calculate_orthogroup_alignment_canvas_extents(
+        records,
+        canvas_config,
+        orthogroup_alignment_offsets,
+    )
+
     length_bar_group: LengthBarGroup | None = None
+    length_bar_offset_x = 0.0
     if not canvas_config.normalize_length and not axis_ruler_enabled:
+        length_bar_offset_x = alignment_extents.ruler_offset_x
         length_bar_group = LengthBarGroup(
             canvas_config.fig_width,
             canvas_config.alignment_width,
@@ -597,6 +635,7 @@ def assemble_linear_diagram(
             config_dict,
             canvas_config,
             cfg=cfg,
+            ruler_width=alignment_extents.ruler_width,
         )
     length_bar_height = (
         float(length_bar_group.scale_group_height)
@@ -641,41 +680,8 @@ def assemble_linear_diagram(
     if legend_group is not None:
         canvas_config.recalculate_canvas_dimensions(legend_group, max_def_width)
 
-    if has_blast:
-        comparison_sources: list[list[DataFrame]] = []
-        if blast_files:
-            comparison_sources.append(load_comparisons(blast_files, blast_config))
-        if comparison_dataframes:
-            comparison_sources.append(
-                [
-                    filter_comparison_dataframe(comparison, blast_config)
-                    for comparison in comparison_dataframes
-                ]
-            )
-        max_source_len = max((len(source) for source in comparison_sources), default=0)
-        for index in range(max_source_len):
-            frames = [
-                source[index]
-                for source in comparison_sources
-                if index < len(source)
-            ]
-            if len(frames) == 1:
-                comparisons.append(frames[0])
-            elif frames:
-                comparisons.append(pd.concat(frames, ignore_index=True))
-
-    orthogroup_alignment_offsets = calculate_orthogroup_alignment_offsets(
-        records,
-        comparisons,
-        canvas_config,
-        align_orthogroup_feature,
-        orthogroups=orthogroups,
-    )
-    alignment_shift_x, alignment_width_extension = calculate_orthogroup_alignment_canvas_adjustment(
-        records,
-        canvas_config,
-        orthogroup_alignment_offsets,
-    )
+    alignment_shift_x = alignment_extents.horizontal_shift
+    alignment_width_extension = alignment_extents.width_extension
     definition_column_shift_x = alignment_shift_x
     if alignment_shift_x or alignment_width_extension:
         width_extension_px = math.ceil(alignment_width_extension)
@@ -714,7 +720,14 @@ def assemble_linear_diagram(
     if canvas_config.legend_position != "none":
         canvas = add_legends_on_linear_canvas(canvas, config_dict, canvas_config, legend_group, legend_table)
     if length_bar_group is not None:
-        canvas = add_length_bar_on_linear_canvas(canvas, canvas_config, config_dict, length_bar_group, legend_group)
+        canvas = add_length_bar_on_linear_canvas(
+            canvas,
+            canvas_config,
+            config_dict,
+            length_bar_group,
+            legend_group,
+            offset_x=length_bar_offset_x,
+        )
 
     if has_blast:
         comparison_offsets = []

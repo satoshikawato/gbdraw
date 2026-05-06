@@ -13,6 +13,7 @@ from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 
 RULER_TICK_LENGTH = 10.0 * (2.0 / 3.0)
 RULER_LABEL_OFFSET = 15.0
+RULER_LABEL_COLLISION_PADDING = 2.0
 
 _AUTO_LINEAR_TICK_THRESHOLDS: list[tuple[float, int]] = [
     (2000, 100),
@@ -75,6 +76,20 @@ def format_linear_tick_label(
     return f"{value_text} {unit}"
 
 
+def _label_bounds(x_pos: float, bbox_width: float) -> tuple[float, float]:
+    half_width = 0.5 * float(bbox_width)
+    return float(x_pos) - half_width, float(x_pos) + half_width
+
+
+def _label_bounds_overlap(
+    left_bounds: tuple[float, float],
+    right_bounds: tuple[float, float],
+    *,
+    padding: float = RULER_LABEL_COLLISION_PADDING,
+) -> bool:
+    return float(left_bounds[1]) + float(padding) > float(right_bounds[0])
+
+
 class LengthBarGroup:
     """
     Handles the creation and display of a length scale in a linear layout.
@@ -90,6 +105,8 @@ class LengthBarGroup:
         canvas_config: dict,
         group_id="length_bar",
         cfg: GbdrawConfig | None = None,
+        *,
+        ruler_width: float | None = None,
     ) -> None:
         """
         Initializes the LengthBarGroup with the given parameters.
@@ -116,6 +133,11 @@ class LengthBarGroup:
         # --- 2. Set other properties ---
         self.longest_genome: int = longest_genome
         self.alignment_width: float = alignment_width
+        self.ruler_width: float = (
+            max(0.0, float(ruler_width))
+            if ruler_width is not None
+            else self.alignment_width
+        )
         self.group_id: str = group_id
 
         self.scale_group = Group(id=self.group_id)
@@ -153,35 +175,61 @@ class LengthBarGroup:
         Sets up the 'ruler' style.
         Uses manual_interval if provided, otherwise falls back to an automatic interval.
         """
+        ruler_length_bp = self._ruler_length_bp()
         # Determine the tick interval
         if self.manual_interval is not None and self.manual_interval > 0:
             tick_interval = self.manual_interval
         else:
-            self.define_ticks_by_length_for_bar()  # Use the same auto-logic to get a sensible interval
-            tick_interval = self.tick
+            tick_interval = auto_linear_tick_interval(ruler_length_bp)
 
-        if tick_interval <= 0 or self.longest_genome <= 0:
+        if tick_interval <= 0 or ruler_length_bp <= 0 or self.ruler_width <= 0:
             return
 
         # Draw the main axis line
         main_axis = Line(
             start=(0, 0),
-            end=(self.alignment_width, 0),
+            end=(self.ruler_width, 0),
             stroke=self.stroke_color,
             stroke_width=self.stroke_width,
         )
         self.scale_group.add(main_axis)
-        scale_ruler_length = self.alignment_width
+        scale_ruler_length = self.ruler_width
 
-        # Draw ticks and labels from 0 up to the end of the genome
+        tick_positions: list[int] = []
         position = 0
-        first_tick_bbox_width = 0
-        last_tick_bbox_width = 0
-        max_tick_bbox_height = 0
-        while True:
-            x_pos = (position / self.longest_genome) * self.alignment_width
+        while position < ruler_length_bp:
+            tick_positions.append(int(position))
+            position += tick_interval
+        if not tick_positions or tick_positions[-1] != ruler_length_bp:
+            tick_positions.append(int(ruler_length_bp))
 
-            # Draw tick line
+        terminal_tick_is_extra = bool(
+            len(tick_positions) > 1 and tick_positions[-1] % int(tick_interval) != 0
+        )
+        label_bounds: list[tuple[float, float]] = []
+        first_tick_bbox_width = 0.0
+        last_tick_bbox_width = 0.0
+        max_tick_bbox_height = 0
+        for index, position in enumerate(tick_positions):
+            x_pos = min(
+                self.ruler_width,
+                (position / self.longest_genome) * self.alignment_width,
+            )
+
+            # Draw label
+            label_text = format_linear_tick_label(
+                position,
+                context_length=ruler_length_bp,
+                tick_interval=tick_interval,
+            )
+            bbox_width, bbox_height = calculate_bbox_dimensions(
+                label_text, self.font_family, self.ruler_label_font_size, self.dpi
+            )
+            current_bounds = _label_bounds(x_pos, bbox_width)
+            is_terminal_extra_tick = terminal_tick_is_extra and index == len(tick_positions) - 1
+            if is_terminal_extra_tick and label_bounds and _label_bounds_overlap(label_bounds[-1], current_bounds):
+                continue
+
             tick_line = Line(
                 start=(x_pos, 0 - (0.5 * self.stroke_width)),
                 end=(x_pos, RULER_TICK_LENGTH),
@@ -190,12 +238,6 @@ class LengthBarGroup:
             )
             self.scale_group.add(tick_line)
 
-            # Draw label
-            label_text = format_linear_tick_label(
-                position,
-                context_length=self.longest_genome,
-                tick_interval=tick_interval,
-            )
             text_element = Text(
                 label_text,
                 insert=(x_pos, RULER_LABEL_OFFSET),
@@ -208,24 +250,24 @@ class LengthBarGroup:
                 dominant_baseline="hanging",
             )
             self.scale_group.add(text_element)
-            bbox_width, bbox_height = calculate_bbox_dimensions(
-                label_text, self.font_family, self.ruler_label_font_size, self.dpi
-            )
+            label_bounds.append(current_bounds)
             max_tick_bbox_height = max(max_tick_bbox_height, bbox_height)
-            if first_tick_bbox_width == 0:
+            if first_tick_bbox_width == 0.0:
                 first_tick_bbox_width = bbox_width
-            if position >= self.longest_genome:
-                last_tick_bbox_width = bbox_width
-                self.scale_group_width = (
-                    (0.5 * first_tick_bbox_width) + scale_ruler_length + (0.5 * last_tick_bbox_width)
-                )
-                self.scale_group_height = (0.5 * self.stroke_width) + RULER_LABEL_OFFSET + max_tick_bbox_height
-                break  # Exit after drawing the last tick
+            last_tick_bbox_width = bbox_width
 
-            position += tick_interval
-            # Ensure the final tick is exactly at the end
-            if position > self.longest_genome:
-                position = self.longest_genome
+        self.scale_group_width = (
+            (0.5 * first_tick_bbox_width) + scale_ruler_length + (0.5 * last_tick_bbox_width)
+        )
+        self.scale_group_height = (0.5 * self.stroke_width) + RULER_LABEL_OFFSET + max_tick_bbox_height
+
+    def _ruler_length_bp(self) -> int:
+        if self.alignment_width <= 0 or self.longest_genome <= 0:
+            return 0
+        return max(
+            1,
+            int(math.ceil(self.ruler_width * (self.longest_genome / self.alignment_width))),
+        )
 
     def define_ticks_by_length_for_bar(self) -> None:
         """

@@ -21,7 +21,7 @@ from gbdraw.io.colors import load_default_colors
 from gbdraw.layout.linear import calculate_feature_position_factors_linear
 from gbdraw.labels.linear import calculate_label_y_bounds
 from gbdraw.linear import _parse_linear_track_axis_gap, _parse_linear_track_layout
-from gbdraw.render.groups.linear.length_bar import RULER_TICK_LENGTH
+from gbdraw.render.groups.linear.length_bar import LengthBarGroup, RULER_TICK_LENGTH
 
 
 INPUT_GBK = Path(__file__).parent / "test_inputs" / "MjeNMV.gb"
@@ -97,6 +97,36 @@ def _count_ruler_ticks(svg_fragment: str) -> int:
 
 def _extract_ruler_text_tags(svg_fragment: str) -> list[str]:
     return re.findall(r'<text[^>]*>[^<]*(?:bp|kbp|Mbp)</text>', svg_fragment)
+
+
+def _build_bottom_ruler_fragment(
+    longest_genome: int,
+    scale_interval: int,
+    ruler_width: float | None = None,
+) -> str:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        scale_style="ruler",
+        scale_interval=scale_interval,
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=longest_genome,
+        config_dict=config_dict,
+        legend="none",
+        cfg=cfg,
+    )
+    return LengthBarGroup(
+        canvas_config.fig_width,
+        canvas_config.alignment_width,
+        longest_genome,
+        config_dict,
+        canvas_config,
+        cfg=cfg,
+        ruler_width=ruler_width,
+    ).get_group().tostring()
 
 
 def _extract_min_absolute_feature_y(svg_content: str) -> float:
@@ -835,6 +865,51 @@ def test_linear_ruler_bottom_defaults_label_font_size_to_long_ruler_value(tmp_pa
     assert length_bar_match is not None
     ruler_text_tags = _extract_ruler_text_tags(length_bar_match.group(1))
     assert any('font-size="12.0"' in tag for tag in ruler_text_tags)
+
+
+@pytest.mark.linear
+def test_linear_bottom_ruler_hides_terminal_tick_when_label_collides_with_previous_tick() -> None:
+    ruler_fragment = _build_bottom_ruler_fragment(longest_genome=50_833, scale_interval=5_000)
+
+    assert _count_ruler_ticks(ruler_fragment) == 11
+    assert ">50 kbp</text>" in ruler_fragment
+    assert ">51 kbp</text>" not in ruler_fragment
+
+
+@pytest.mark.linear
+def test_linear_bottom_ruler_keeps_terminal_label_when_it_has_room() -> None:
+    ruler_fragment = _build_bottom_ruler_fragment(longest_genome=58_000, scale_interval=5_000)
+
+    assert _count_ruler_ticks(ruler_fragment) == 13
+    assert ">55 kbp</text>" in ruler_fragment
+    assert ">58 kbp</text>" in ruler_fragment
+
+
+@pytest.mark.linear
+def test_linear_bottom_ruler_can_extend_beyond_alignment_width() -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict = modify_config_dict(
+        config_dict,
+        scale_style="ruler",
+        scale_interval=100,
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=400,
+        config_dict=config_dict,
+        legend="none",
+        cfg=cfg,
+    )
+    ruler_width = canvas_config.alignment_width * 1.25
+    ruler_fragment = _build_bottom_ruler_fragment(
+        longest_genome=400,
+        scale_interval=100,
+        ruler_width=ruler_width,
+    )
+
+    assert f'x2="{ruler_width}"' in ruler_fragment
+    assert ">500 bp</text>" in ruler_fragment
 
 
 @pytest.mark.linear

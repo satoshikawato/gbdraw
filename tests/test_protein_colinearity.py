@@ -32,6 +32,7 @@ from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.api.options import DiagramOptions
 from gbdraw.diagrams.linear.orthogroup_alignment import (
     calculate_orthogroup_alignment_canvas_adjustment,
+    calculate_orthogroup_alignment_canvas_extents,
     calculate_orthogroup_alignment_offsets,
 )
 from gbdraw.exceptions import ValidationError
@@ -965,6 +966,14 @@ def test_orthogroup_alignment_canvas_adjustment_fits_negative_record_offsets() -
     assert shift_x == pytest.approx(300.0)
     assert width_extension == pytest.approx(300.0)
 
+    extents = calculate_orthogroup_alignment_canvas_extents(
+        records,
+        canvas_config,
+        {1: -300.0},
+    )
+    assert extents.ruler_offset_x == pytest.approx(-300.0)
+    assert extents.ruler_width == pytest.approx(1300.0)
+
 
 @pytest.mark.linear
 def test_orthogroup_alignment_canvas_adjustment_extends_positive_record_offsets() -> None:
@@ -991,6 +1000,14 @@ def test_orthogroup_alignment_canvas_adjustment_extends_positive_record_offsets(
 
     assert shift_x == pytest.approx(0.0)
     assert width_extension == pytest.approx(250.0)
+
+    extents = calculate_orthogroup_alignment_canvas_extents(
+        records,
+        canvas_config,
+        {1: 250.0},
+    )
+    assert extents.ruler_offset_x == pytest.approx(0.0)
+    assert extents.ruler_width == pytest.approx(1250.0)
 
 
 @pytest.mark.linear

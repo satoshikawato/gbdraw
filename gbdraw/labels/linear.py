@@ -152,6 +152,38 @@ def _update_linear_label_leader_end(label: dict) -> None:
     label["leader_end_y"] = float(label["middle_y"]) + contact_y_offset
 
 
+def _place_linear_label_without_overlap(
+    label: dict,
+    placed: list[dict],
+    min_gap_px: float,
+    direction: float,
+) -> bool:
+    """Move one linear label away from the axis until its bbox clears placed labels."""
+    original_y = float(label["middle_y"])
+    for _ in range(len(placed) + 1):
+        required_shift = 0.0
+        _, _, candidate_top, candidate_bottom = calculate_label_bounds(label)
+
+        for other in placed:
+            if not _label_bounds_overlap(label, other, min_gap_px):
+                continue
+
+            _, _, placed_top, placed_bottom = calculate_label_bounds(other)
+            if direction < 0.0:
+                shift = (placed_top - float(min_gap_px)) - candidate_bottom
+                required_shift = min(required_shift, shift)
+            else:
+                shift = (placed_bottom + float(min_gap_px)) - candidate_top
+                required_shift = max(required_shift, shift)
+
+        if required_shift == 0.0:
+            return abs(float(label["middle_y"]) - original_y) > 0.001
+
+        label["middle_y"] = float(label["middle_y"]) + required_shift
+
+    return abs(float(label["middle_y"]) - original_y) > 0.001
+
+
 def _resolve_above_feature_label_overlaps(labels: list[dict], min_gap_px: float) -> None:
     """Stack rotated above-feature labels away from the axis when their bboxes collide."""
     if not labels:
@@ -163,27 +195,10 @@ def _resolve_above_feature_label_overlaps(labels: list[dict], min_gap_px: float)
         side_labels = [label for label in labels if bool(label.get("above_feature_place_above", True)) is place_above]
         if not side_labels:
             continue
-        rotated_heights = []
-        for label in side_labels:
-            _, _, y_min_offset, y_max_offset = _rotated_bounds_from_anchor(
-                float(label["width_px"]),
-                float(label["height_px"]),
-                float(label.get("rotation_deg", 0.0)),
-                str(label.get("text_anchor", "middle")),
-            )
-            rotated_heights.append(y_max_offset - y_min_offset)
-        vertical_step = max(float(min_gap_px), max(rotated_heights) + float(min_gap_px), 4.0)
         placed: list[dict] = []
         direction = -1.0 if place_above else 1.0
         for label in sorted(side_labels, key=lambda item: float(item.get("feature_anchor_x", item["middle_x"]))):
-            original_y = float(label["middle_y"])
-            level = 0
-            while level <= len(side_labels):
-                label["middle_y"] = original_y + (direction * vertical_step * level)
-                if not any(_label_bounds_overlap(label, other, min_gap_px) for other in placed):
-                    break
-                level += 1
-            if abs(float(label["middle_y"]) - original_y) > 0.001:
+            if _place_linear_label_without_overlap(label, placed, min_gap_px, direction):
                 label["leader_line"] = True
                 _update_linear_label_leader_end(label)
             placed.append(label)
