@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from Bio import SeqIO
+from pandas import DataFrame
 from svgwrite.container import Group
 
 from gbdraw.canvas import LinearCanvasConfigurator
@@ -17,7 +18,7 @@ from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
 from gbdraw.io.colors import load_default_colors
 from gbdraw.labels.filtering import preprocess_label_filtering
-from gbdraw.labels.linear import prepare_label_list_linear
+from gbdraw.labels.linear import calculate_label_bounds, prepare_label_list_linear
 from gbdraw.render.drawers.linear.labels import LabelDrawer
 
 
@@ -30,6 +31,7 @@ def _prepare_linear_labels(
     separate_strands: bool = False,
     track_layout: str = "middle",
     input_filename: str = "MjeNMV.gb",
+    qualifier_priority: tuple[str, str] | None = None,
 ) -> list[dict]:
     input_path = Path(__file__).parent / "test_inputs" / input_filename
     record = SeqIO.read(str(input_path), "genbank")
@@ -46,6 +48,11 @@ def _prepare_linear_labels(
         label_rotation=label_rotation,
         linear_track_layout=track_layout,
     )
+    if qualifier_priority is not None:
+        feature_type, priorities = qualifier_priority
+        config_dict["labels"]["filtering"]["qualifier_priority_df"] = DataFrame(
+            [{"feature_type": feature_type, "priorities": priorities}]
+        )
     cfg = GbdrawConfig.from_dict(config_dict)
     canvas_cfg = LinearCanvasConfigurator(
         num_of_entries=1,
@@ -100,6 +107,21 @@ def _rotated_y_bounds_from_anchor(label: dict) -> tuple[float, float]:
     return min(y_offsets), max(y_offsets)
 
 
+def _assert_no_label_bounds_overlap(labels: list[dict]) -> None:
+    placed = []
+    for label in sorted(labels, key=lambda item: float(item["feature_anchor_x"])):
+        left, right, top, bottom = calculate_label_bounds(label)
+        for other in placed:
+            other_left, other_right, other_top, other_bottom = calculate_label_bounds(other)
+            assert (
+                right <= other_left
+                or other_right <= left
+                or bottom <= other_top
+                or other_bottom <= top
+            )
+        placed.append(label)
+
+
 @pytest.mark.linear
 def test_linear_above_feature_placement_embeds_all_labels() -> None:
     auto_labels = _prepare_linear_labels(label_placement="auto")
@@ -143,7 +165,8 @@ def test_linear_above_feature_anchor_is_feature_midpoint() -> None:
 
     for label in labels:
         feature_mid_x = (float(label["feature_start_x"]) + float(label["feature_end_x"])) / 2.0
-        assert float(label["middle_x"]) == pytest.approx(feature_mid_x)
+        label_contact_x = float(label["middle_x"]) + float(label["label_contact_x_offset"])
+        assert label_contact_x == pytest.approx(feature_mid_x)
         assert label["text_anchor"] == "start"
 
 
@@ -207,6 +230,45 @@ def test_linear_label_drawer_applies_rotation_transform() -> None:
     assert "rotate(45" in negative_transform
     assert positive_anchor == "start"
     assert negative_anchor == "start"
+
+
+@pytest.mark.linear
+def test_linear_above_feature_rotated_labels_do_not_overlap() -> None:
+    labels = _prepare_linear_labels(
+        label_placement="above_feature",
+        label_rotation=45.0,
+    )
+    assert labels
+
+    _assert_no_label_bounds_overlap(labels)
+
+
+@pytest.mark.linear
+def test_linear_above_feature_bgc0000708_gene_labels_do_not_overlap() -> None:
+    labels = _prepare_linear_labels(
+        label_placement="above_feature",
+        label_rotation=45.0,
+        input_filename="BGC0000708.gbk",
+        qualifier_priority=("CDS", "gene"),
+    )
+    assert labels
+    assert any(label.get("leader_line") for label in labels)
+    assert any(not label.get("leader_line") for label in labels)
+    _assert_no_label_bounds_overlap(labels)
+
+
+@pytest.mark.linear
+def test_linear_above_feature_shifted_labels_get_leader_lines() -> None:
+    labels = _prepare_linear_labels(
+        label_placement="above_feature",
+        label_rotation=45.0,
+    )
+    shifted = [label for label in labels if label.get("leader_line")]
+    assert shifted
+    for label in shifted:
+        assert float(label["leader_start_x"]) == pytest.approx(float(label["feature_anchor_x"]))
+        assert float(label["leader_end_x"]) == pytest.approx(float(label["feature_anchor_x"]))
+        assert abs(float(label["leader_end_y"]) - float(label["leader_start_y"])) > 0.0
 
 
 @pytest.mark.linear

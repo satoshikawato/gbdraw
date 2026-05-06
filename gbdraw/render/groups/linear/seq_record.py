@@ -229,7 +229,15 @@ class SeqRecordGroup:
         # Process labels if enabled
         if self.show_labels:
             for label in label_list:
-                if not label["is_embedded"]:
+                if label.get("leader_line"):
+                    line_path = Line(
+                        start=(label["leader_start_x"], label["leader_start_y"]),
+                        end=(label["leader_end_x"], label["leader_end_y"]),
+                        stroke=self.label_stroke_color,
+                        stroke_width=self.label_stroke_width,
+                    )
+                    group.add(line_path)
+                elif not label["is_embedded"]:
                     label_middle_y = float(label["middle_y"])
                     feature_middle_y = float(label["feature_middle_y"])
                     label_height = float(label["height_px"])

@@ -43,6 +43,36 @@ def find_lowest_available_track(track_dict, label):
         track_num += 1
 
 
+def _anchor_x_values(width_px: float, text_anchor: str) -> tuple[float, float]:
+    if text_anchor == "start":
+        return 0.0, width_px
+    if text_anchor == "end":
+        return -width_px, 0.0
+    return -width_px / 2.0, width_px / 2.0
+
+
+def _rotated_corner_offsets(
+    width_px: float,
+    height_px: float,
+    rotation_deg: float,
+    text_anchor: str,
+) -> list[tuple[float, float]]:
+    half_height = height_px / 2.0
+    x_values = _anchor_x_values(width_px, text_anchor)
+    y_values = (-half_height, half_height)
+    radians = math.radians(rotation_deg)
+    sin_theta = math.sin(radians)
+    cos_theta = math.cos(radians)
+    return [
+        (
+            (x * cos_theta) - (y * sin_theta),
+            (x * sin_theta) + (y * cos_theta),
+        )
+        for x in x_values
+        for y in y_values
+    ]
+
+
 def _rotated_y_bounds_from_anchor(
     width_px: float,
     height_px: float,
@@ -50,31 +80,113 @@ def _rotated_y_bounds_from_anchor(
     text_anchor: str,
 ) -> tuple[float, float]:
     """Return min/max y-offset after rotation around the text anchor point."""
-    half_height = height_px / 2.0
-    if text_anchor == "start":
-        x_values = (0.0, width_px)
-    elif text_anchor == "end":
-        x_values = (-width_px, 0.0)
-    else:
-        x_values = (-width_px / 2.0, width_px / 2.0)
-    y_values = (-half_height, half_height)
-    radians = math.radians(rotation_deg)
-    sin_theta = math.sin(radians)
-    cos_theta = math.cos(radians)
-    y_offsets = [(x * sin_theta) + (y * cos_theta) for x in x_values for y in y_values]
-    return min(y_offsets), max(y_offsets)
+    _, _, y_min, y_max = _rotated_bounds_from_anchor(width_px, height_px, rotation_deg, text_anchor)
+    return y_min, y_max
 
 
-def calculate_label_y_bounds(label: dict) -> tuple[float, float]:
-    """Return absolute top/bottom y coordinates for a label after rotation."""
-    y_min_offset, y_max_offset = _rotated_y_bounds_from_anchor(
+def _rotated_bounds_from_anchor(
+    width_px: float,
+    height_px: float,
+    rotation_deg: float,
+    text_anchor: str,
+) -> tuple[float, float, float, float]:
+    """Return min/max x/y offsets after rotation around the text anchor point."""
+    offsets = _rotated_corner_offsets(width_px, height_px, rotation_deg, text_anchor)
+    x_offsets = [point[0] for point in offsets]
+    y_offsets = [point[1] for point in offsets]
+    return min(x_offsets), max(x_offsets), min(y_offsets), max(y_offsets)
+
+
+def _rotated_extreme_y_point_from_anchor(
+    width_px: float,
+    height_px: float,
+    rotation_deg: float,
+    text_anchor: str,
+    *,
+    choose_max: bool,
+) -> tuple[float, float]:
+    """Return the rotated corner offset at the top/bottom edge used as a leader contact."""
+    points = _rotated_corner_offsets(width_px, height_px, rotation_deg, text_anchor)
+    return max(points, key=lambda point: point[1]) if choose_max else min(points, key=lambda point: point[1])
+
+
+def calculate_label_bounds(label: dict) -> tuple[float, float, float, float]:
+    """Return absolute left/right/top/bottom coordinates for a label after rotation."""
+    x_min_offset, x_max_offset, y_min_offset, y_max_offset = _rotated_bounds_from_anchor(
         float(label["width_px"]),
         float(label["height_px"]),
         float(label.get("rotation_deg", 0.0)),
         str(label.get("text_anchor", "middle")),
     )
+    middle_x = float(label["middle_x"])
     middle_y = float(label["middle_y"])
-    return middle_y + y_min_offset, middle_y + y_max_offset
+    return (
+        middle_x + x_min_offset,
+        middle_x + x_max_offset,
+        middle_y + y_min_offset,
+        middle_y + y_max_offset,
+    )
+
+
+def calculate_label_y_bounds(label: dict) -> tuple[float, float]:
+    """Return absolute top/bottom y coordinates for a label after rotation."""
+    _, _, top_y, bottom_y = calculate_label_bounds(label)
+    return top_y, bottom_y
+
+
+def _label_bounds_overlap(label1: dict, label2: dict, min_gap_px: float) -> bool:
+    left1, right1, top1, bottom1 = calculate_label_bounds(label1)
+    left2, right2, top2, bottom2 = calculate_label_bounds(label2)
+    return not (
+        right1 + min_gap_px <= left2
+        or right2 + min_gap_px <= left1
+        or bottom1 + min_gap_px <= top2
+        or bottom2 + min_gap_px <= top1
+    )
+
+
+def _update_linear_label_leader_end(label: dict) -> None:
+    contact_x_offset = float(label.get("label_contact_x_offset", 0.0))
+    contact_y_offset = float(label.get("label_contact_y_offset", 0.0))
+    label["leader_end_x"] = float(label["middle_x"]) + contact_x_offset
+    label["leader_end_y"] = float(label["middle_y"]) + contact_y_offset
+
+
+def _resolve_above_feature_label_overlaps(labels: list[dict], min_gap_px: float) -> None:
+    """Stack rotated above-feature labels away from the axis when their bboxes collide."""
+    if not labels:
+        return
+    if len(labels) > 300:
+        return
+
+    for place_above in (True, False):
+        side_labels = [label for label in labels if bool(label.get("above_feature_place_above", True)) is place_above]
+        if not side_labels:
+            continue
+        rotated_heights = []
+        for label in side_labels:
+            _, _, y_min_offset, y_max_offset = _rotated_bounds_from_anchor(
+                float(label["width_px"]),
+                float(label["height_px"]),
+                float(label.get("rotation_deg", 0.0)),
+                str(label.get("text_anchor", "middle")),
+            )
+            rotated_heights.append(y_max_offset - y_min_offset)
+        vertical_step = max(float(min_gap_px), max(rotated_heights) + float(min_gap_px), 4.0)
+        placed: list[dict] = []
+        direction = -1.0 if place_above else 1.0
+        for label in sorted(side_labels, key=lambda item: float(item.get("feature_anchor_x", item["middle_x"]))):
+            original_y = float(label["middle_y"])
+            level = 0
+            while level <= len(side_labels):
+                label["middle_y"] = original_y + (direction * vertical_step * level)
+                if not any(_label_bounds_overlap(label, other, min_gap_px) for other in placed):
+                    break
+                level += 1
+            if abs(float(label["middle_y"]) - original_y) > 0.001:
+                label["leader_line"] = True
+                _update_linear_label_leader_end(label)
+            placed.append(label)
 
 
 def prepare_label_list_linear(
@@ -208,7 +320,27 @@ def prepare_label_list_linear(
             label_rotation_deg = 0.0
             label_text_anchor = "middle"
 
-        label_anchor_x = (normalized_start + normalized_end) / 2.0
+        feature_anchor_x = (normalized_start + normalized_end) / 2.0
+        label_anchor_x = feature_anchor_x
+        label_contact_x_offset = 0.0
+        label_contact_y_offset = 0.0
+        label_leader_start_y = 0.0
+        if force_above_feature:
+            place_above_feature = not (strandedness and coordinate_strand == "negative")
+            if label_rotation_deg == 0.0:
+                y_min_offset, y_max_offset = _rotated_y_bounds_from_anchor(
+                    bbox_width_px, bbox_height_px, label_rotation_deg, label_text_anchor
+                )
+                label_contact_y_offset = y_max_offset if place_above_feature else y_min_offset
+            else:
+                label_contact_x_offset, label_contact_y_offset = _rotated_extreme_y_point_from_anchor(
+                    bbox_width_px,
+                    bbox_height_px,
+                    label_rotation_deg,
+                    label_text_anchor,
+                    choose_max=place_above_feature,
+                )
+            label_anchor_x = feature_anchor_x - label_contact_x_offset
         bbox_start = label_anchor_x - (bbox_width_px / 2)
         bbox_end = label_anchor_x + (bbox_width_px / 2)
 
@@ -240,6 +372,7 @@ def prepare_label_list_linear(
             "feature_bottom_y": feature_bottom_y,
             "feature_start_x": normalized_start,
             "feature_end_x": normalized_end,
+            "feature_anchor_x": feature_anchor_x,
             "font_size": font_size,
             "font_family": font_family,
             "rotation_deg": label_rotation_deg,
@@ -256,14 +389,24 @@ def prepare_label_list_linear(
             if is_negative_separate:
                 # Keep rotated label top edge below the feature bottom.
                 label_y = feature_bottom_y + label_vertical_gap - y_min_offset
+                label_leader_start_y = feature_bottom_y
             else:
                 # Keep rotated label bottom edge above the feature top.
                 label_y = feature_top_y - label_vertical_gap - y_max_offset
+                label_leader_start_y = feature_top_y
             label_entry.update(
                 {
                     "middle_y": label_y,
                     "is_embedded": True,
                     "track_id": "track_0",
+                    "above_feature_place_above": not is_negative_separate,
+                    "label_contact_x_offset": label_contact_x_offset,
+                    "label_contact_y_offset": label_contact_y_offset,
+                    "leader_line": False,
+                    "leader_start_x": feature_anchor_x,
+                    "leader_start_y": label_leader_start_y,
+                    "leader_end_x": feature_anchor_x,
+                    "leader_end_y": label_y + label_contact_y_offset,
                 }
             )
             track_dict["track_0"].append(label_entry)
@@ -281,6 +424,9 @@ def prepare_label_list_linear(
 
     # Process embedded labels
     if "track_0" in track_dict:
+        if force_above_feature:
+            above_feature_collision_gap = max(1.0, max_bbox_height * 0.05)
+            _resolve_above_feature_label_overlaps(track_dict["track_0"], above_feature_collision_gap)
         for label in track_dict["track_0"]:
             embedded_labels.append(label)
 
@@ -304,6 +450,7 @@ def prepare_label_list_linear(
 
 
 __all__ = [
+    "calculate_label_bounds",
     "calculate_label_y_bounds",
     "check_label_overlap",
     "find_lowest_available_track",
