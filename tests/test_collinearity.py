@@ -1078,36 +1078,53 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows() -> None:
         [_hit_row(f"qa{index}", f"sb{index}") for index in range(8)],
         columns=COMPARISON_COLUMNS,
     )
-    payload = [
-        {
-            "pairIndex": 0,
-            "queryIndex": 0,
-            "subjectIndex": 1,
-            "blastText": hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
-            "queryProteinMap": {
-                f"qa{index}": _web_protein_entry(
-                    f"qa{index}",
-                    record_index=0,
-                    record_id="record_a",
-                    feature_index=index,
-                    start=index * 12,
-                    end=index * 12 + 9,
-                )
-                for index in range(8)
+    query_map = {
+        f"qa{index}": _web_protein_entry(
+            f"qa{index}",
+            record_index=0,
+            record_id="record_a",
+            feature_index=index,
+            start=index * 12,
+            end=index * 12 + 9,
+        )
+        for index in range(8)
+    }
+    subject_map = {
+        f"sb{index}": _web_protein_entry(
+            f"sb{index}",
+            record_index=1,
+            record_id="record_b",
+            feature_index=index,
+            start=index * 12,
+            end=index * 12 + 9,
+        )
+        for index in range(8)
+    }
+    payload = {
+        "records": [
+            {
+                "recordIndex": 0,
+                "recordId": "record_a",
+                "proteinMap": query_map,
+                "proteinCacheKey": "record-a-cache",
             },
-            "subjectProteinMap": {
-                f"sb{index}": _web_protein_entry(
-                    f"sb{index}",
-                    record_index=1,
-                    record_id="record_b",
-                    feature_index=index,
-                    start=index * 12,
-                    end=index * 12 + 9,
-                )
-                for index in range(8)
+            {
+                "recordIndex": 1,
+                "recordId": "record_b",
+                "proteinMap": subject_map,
+                "proteinCacheKey": "record-b-cache",
             },
-        }
-    ]
+        ],
+        "pairs": [
+            {
+                "pairIndex": 0,
+                "queryIndex": 0,
+                "subjectIndex": 1,
+                "cacheKey": "pair-a-b",
+                "blastText": hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
+            }
+        ],
+    }
 
     raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
         json.dumps(payload),
@@ -1183,24 +1200,38 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode() -> No
         [_hit_row("sb0", "qa0", bitscore=300), _hit_row("sb1", "qa0", bitscore=400)],
         columns=COMPARISON_COLUMNS,
     )
-    payload = [
-        {
-            "pairIndex": 0,
-            "queryIndex": 0,
-            "subjectIndex": 1,
-            "blastText": forward_hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
-            "queryProteinMap": query_map,
-            "subjectProteinMap": subject_map,
-        },
-        {
-            "pairIndex": 0,
-            "queryIndex": 1,
-            "subjectIndex": 0,
-            "blastText": reverse_hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
-            "queryProteinMap": subject_map,
-            "subjectProteinMap": query_map,
-        },
-    ]
+    payload = {
+        "records": [
+            {
+                "recordIndex": 0,
+                "recordId": "record_a",
+                "proteinMap": query_map,
+                "proteinCacheKey": "record-a-cache",
+            },
+            {
+                "recordIndex": 1,
+                "recordId": "record_b",
+                "proteinMap": subject_map,
+                "proteinCacheKey": "record-b-cache",
+            },
+        ],
+        "pairs": [
+            {
+                "pairIndex": 0,
+                "queryIndex": 0,
+                "subjectIndex": 1,
+                "cacheKey": "pair-a-b",
+                "blastText": forward_hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
+            },
+            {
+                "pairIndex": 0,
+                "queryIndex": 1,
+                "subjectIndex": 0,
+                "cacheKey": "pair-b-a",
+                "blastText": reverse_hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
+            },
+        ],
+    }
 
     raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
         json.dumps(payload),
@@ -1295,24 +1326,44 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope() -> No
     }
     adjacent_hits = pd.DataFrame.from_records([_hit_row("a0", "b0")], columns=COMPARISON_COLUMNS)
     non_adjacent_hits = pd.DataFrame.from_records([_hit_row("a0", "c0")], columns=COMPARISON_COLUMNS)
-    payload = [
-        {
-            "pairIndex": 0,
-            "queryIndex": 0,
-            "subjectIndex": 1,
-            "blastText": adjacent_hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
-            "queryProteinMap": a_map,
-            "subjectProteinMap": b_map,
-        },
-        {
-            "pairIndex": 0,
-            "queryIndex": 0,
-            "subjectIndex": 2,
-            "blastText": non_adjacent_hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
-            "queryProteinMap": a_map,
-            "subjectProteinMap": c_map,
-        },
-    ]
+    payload = {
+        "records": [
+            {
+                "recordIndex": 0,
+                "recordId": "record_a",
+                "proteinMap": a_map,
+                "proteinCacheKey": "record-a-cache",
+            },
+            {
+                "recordIndex": 1,
+                "recordId": "record_b",
+                "proteinMap": b_map,
+                "proteinCacheKey": "record-b-cache",
+            },
+            {
+                "recordIndex": 2,
+                "recordId": "record_c",
+                "proteinMap": c_map,
+                "proteinCacheKey": "record-c-cache",
+            },
+        ],
+        "pairs": [
+            {
+                "pairIndex": 0,
+                "queryIndex": 0,
+                "subjectIndex": 1,
+                "cacheKey": "pair-a-b",
+                "blastText": adjacent_hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
+            },
+            {
+                "pairIndex": 0,
+                "queryIndex": 0,
+                "subjectIndex": 2,
+                "cacheKey": "pair-a-c",
+                "blastText": non_adjacent_hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
+            },
+        ],
+    }
 
     def convert(scope: str) -> dict[str, object]:
         raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
