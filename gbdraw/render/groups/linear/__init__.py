@@ -6,7 +6,7 @@ from .depth import DepthGroup
 from .gc_content import GcContentGroup
 from .gc_skew import GcSkewGroup
 from .seq_record import SeqRecordGroup
-from .pairwise_match import PairWiseMatchGroup
+from .pairwise_match import PairWiseMatchGroup, RowWiseMatchGroup
 from .legend import LegendGroup
 from .plot_title import PlotTitleGroup
 
@@ -19,6 +19,7 @@ __all__ = [
     "LengthBarGroup",
     "PairWiseMatchGroup",
     "PlotTitleGroup",
+    "RowWiseMatchGroup",
     "SeqRecordGroup",
 ]
 

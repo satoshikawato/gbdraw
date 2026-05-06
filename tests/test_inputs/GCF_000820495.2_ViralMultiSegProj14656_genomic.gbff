@@ -1,0 +1,795 @@
+LOCUS       NC_002204               2368 bp    cRNA    linear   VRL 07-MAY-2025
+DEFINITION  Influenza B virus RNA 1, complete sequence.
+ACCESSION   NC_002204
+VERSION     NC_002204.1
+DBLINK      BioProject: PRJNA485481
+KEYWORDS    RefSeq.
+SOURCE      Influenza B virus (B/Lee/1940)
+  ORGANISM  Influenza B virus (B/Lee/1940)
+            Viruses; Riboviria; Orthornavirae; Negarnaviricota;
+            Polyploviricotina; Insthoviricetes; Articulavirales;
+            Orthomyxoviridae; Betainfluenzavirus; Betainfluenzavirus
+            influenzae.
+REFERENCE   1  (bases 1 to 2368)
+  AUTHORS   Kemdirim,S., Palefsky,J. and Briedis,D.J.
+  TITLE     Influenza B virus PB1 protein; nucleotide sequence of the genome
+            RNA segment predicts a high degree of structural homology with the
+            corresponding influenza A virus polymerase protein
+  JOURNAL   Virology 152 (1), 126-135 (1986)
+   PUBMED   3754992
+REFERENCE   2  (bases 1 to 2368)
+  AUTHORS   Breidis,D.J.
+  JOURNAL   Unpublished
+REFERENCE   3  (bases 1 to 2368)
+  CONSRTM   NCBI Genome Project
+  TITLE     Direct Submission
+  JOURNAL   Submitted (12-JUN-2000) National Center for Biotechnology
+            Information, NIH, Bethesda, MD 20894, USA
+COMMENT     REVIEWED REFSEQ: This record has been curated by NCBI staff. The
+            reference sequence was derived from M14880.
+            COMPLETENESS: full length.
+FEATURES             Location/Qualifiers
+     source          1..2368
+                     /organism="Influenza B virus (B/Lee/1940)"
+                     /mol_type="viral cRNA"
+                     /strain="B/Lee/1940"
+                     /db_xref="taxon:518987"
+                     /segment="1"
+     gene            21..2279
+                     /gene="PB1"
+                     /locus_tag="FLUBVsRNA-1gp1"
+                     /db_xref="GeneID:956545"
+     CDS             21..2279
+                     /gene="PB1"
+                     /locus_tag="FLUBVsRNA-1gp1"
+                     /codon_start=1
+                     /product="polymerase PB1"
+                     /protein_id="NP_056657.1"
+                     /db_xref="GeneID:956545"
+                     /translation="MNINPYFLFIDVPIQAAISTTFPYTGVPPYSHGTGTGYTIDTVI
+                     RTHEYSNKGKQYISDVTGCVMVDPTNGPLPEDNEPSAYAQLDCVLEALDRMDEEHPGL
+                     FQAGSQNAMEALMVTTVDKLTQGRQTFDWTVCRNQPAATALNTTITSFRLNDLNGADK
+                     GGLVPFCQDIIDSLDKPEMIFFTVKNIKKKLPAKNRKGFLIKRIPMKVKDRITRVEYI
+                     KRALSLNTMTKDAERGKLKRRAIATAGIQIRGFVLVVENLAKNICENLEQSGLPVGGN
+                     EKKAKLSNAVAKMLSNCPPGGISMTVTGDNTKWNECLNPRIFLAMTERITRDSPIWFR
+                     DFCSIAPVLFSNKIARLGKGFMITSKTKRLKAQIPCPDLFNIPLERYNEETRAKLKKL
+                     KPFFNEEGTASLSPGMMMGMFNMLSTVLGVAALGIKNIGNKEYLWDGLQSSDDFALFV
+                     NAKDEETCMEGINDFYRTCKLLGINMSKKKSYCNETGMFEFTSMFYRDGFVSNFAMEL
+                     PSFGVAGVNESADMAIGMTIIKNNMINNGMGPATAQTAIQLFIADYRYTYKCHRGDSK
+                     VEGKRMKIIKELWENTKGRDGLLVADGGPNLYNLRNLHIPEIILKYNIMDPEYKGRLL
+                     HPQNPFVGHLSIEGIKEADITPAHGPIKKMDYDAVSGTHSWRTKRNRSILNTDQRNMI
+                     LEEQCYAKCCNLFEACFNSASYRKPVGQHSMLEAMAHRLRMDARLDYESGRMSKEDFE
+                     KAMAHLGEIGYM"
+ORIGIN      
+        1 agcagaagcg gagctttaag atgaatataa atccatattt tcttttcata gatgtaccta
+       61 tacaggcagc aatttcaaca acattcccat acaccggtgt tcccccttat tctcatggaa
+      121 cgggaacagg ctacacaata gacaccgtga ttagaacaca cgagtactca aacaagggaa
+      181 aacaatacat ttctgatgtt acaggatgtg taatggtaga tccaacaaat gggccattac
+      241 ccgaagacaa tgaaccgagt gcctatgcac aattggattg tgttctggag gctttggata
+      301 gaatggatga agaacatcca ggtctgtttc aagcagggtc acagaatgcc atggaggcac
+      361 taatggtcac aacagtggac aaattgactc aggggagaca gacctttgat tggacggtgt
+      421 gtagaaacca acctgctgca acggcactga acacaacaat aacctctttt aggttgaatg
+      481 atttaaatgg agccgacaag ggtggattag tgcccttttg ccaagatatc attgattcat
+      541 tagacaaacc tgaaatgatt ttcttcacag taaagaatat aaagaaaaaa ttgcctgcta
+      601 aaaacagaaa gggtttcctt ataaaaagaa tacctatgaa ggtaaaagac agaataacaa
+      661 gagtggaata catcaaaaga gcattatcat taaacacaat gactaaagat gctgaaagag
+      721 gcaaactaaa aagaagagca attgccaccg ctgggataca aatcagagga tttgtattag
+      781 tagttgaaaa cttggctaaa aatatctgtg aaaatctaga gcaaagtggt ttacccgtag
+      841 gtggaaacga aaagaaggcc aaactatcaa atgcagtggc taaaatgctc agtaattgtc
+      901 caccaggagg gatcagtatg actgtgacag gagacaatac taaatggaat gaatgcttaa
+      961 atccaagaat ctttttggct atgactgaaa gaataaccag agacagccca atttggttcc
+     1021 gggatttttg tagtatagca ccggtcttgt tctccaataa aatagctaga ttgggaaaag
+     1081 ggttcatgat aacaagtaaa acaaaaagac taaaagctca aataccttgt cccgatctgt
+     1141 ttaatatacc attagaaaga tataatgaag aaacaagggc aaaactgaaa aagctaaaac
+     1201 ctttcttcaa tgaagaagga acggcatctc tttcgccagg aatgatgatg ggaatgttta
+     1261 atatgctatc tacagtatta ggagtagccg cactagggat aaaaaacatt ggaaacaaag
+     1321 aatacttatg ggatggactg cagtcttcgg atgattttgc tctgtttgtt aatgcaaaag
+     1381 atgaagagac atgtatggaa ggaataaacg atttttaccg aacatgtaag ctattgggaa
+     1441 taaacatgag caaaaagaaa agttactgta atgaaactgg gatgtttgaa tttaccagca
+     1501 tgttttacag agatggattt gtatctaatt ttgcaatgga actcccttca tttggagtcg
+     1561 ctggagtgaa tgaatcagca gacatggcaa taggaatgac aataataaag aacaatatga
+     1621 tcaacaatgg gatgggccca gcaacggcac aaacagccat acaattattc atagctgact
+     1681 atagatacac ctacaaatgc cacaggggag attccaaagt ggaagggaag agaatgaaaa
+     1741 ttataaagga gctatgggaa aacactaaag gaagagatgg tctattagta gcagatggtg
+     1801 ggcctaatct ttacaatttg agaaacctgc atattccaga aataatatta aaatacaaca
+     1861 taatggaccc tgagtacaaa ggacggttac tgcatcctca aaatcccttt gtaggacatt
+     1921 tgtctattga gggtatcaaa gaagcagata taacacctgc acatggccca ataaagaaaa
+     1981 tggactacga tgcggtatct ggaactcata gttggagaac caaaaggaac agatctatac
+     2041 taaacactga tcagaggaac atgattcttg aggaacaatg ctacgctaag tgttgcaacc
+     2101 tttttgaggc ttgctttaac agtgcgtcat acaggaaacc agtaggccag cacagcatgc
+     2161 ttgaagctat ggcccacaga ttaagaatgg atgcacgact ggactatgag tcaggaagga
+     2221 tgtcaaaaga ggatttcgaa aaagcaatgg ctcaccttgg tgagattggg tacatgtaag
+     2281 ctccggaaat gtctatgggg ttattggtca tcgttgaata catgcggtgc acaaatgatt
+     2341 aaaatgaaaa aaggctcgtg tttctact
+//
+LOCUS       NC_002205               2313 bp    cRNA    linear   VRL 13-AUG-2018
+DEFINITION  Influenza B virus (B/Lee/1940) segment 2, complete sequence.
+ACCESSION   NC_002205
+VERSION     NC_002205.1
+DBLINK      BioProject: PRJNA485481
+KEYWORDS    RefSeq.
+SOURCE      Influenza B virus (B/Lee/1940)
+  ORGANISM  Influenza B virus (B/Lee/1940)
+            Viruses; Riboviria; Orthornavirae; Negarnaviricota;
+            Polyploviricotina; Insthoviricetes; Articulavirales;
+            Orthomyxoviridae; Betainfluenzavirus; Betainfluenzavirus
+            influenzae.
+REFERENCE   1  (bases 1 to 2313)
+  AUTHORS   Hiromoto,Y., Saito,T., Lindstrom,S.E., Li,Y., Nerome,R., Sugita,S.,
+            Shinjoh,M. and Nerome,K.
+  TITLE     Phylogenetic analysis of the three polymerase genes (PB1, PB2 and
+            PA) of influenza B virus
+  JOURNAL   J. Gen. Virol. 81 (Pt 4), 929-937 (2000)
+   PUBMED   10725418
+REFERENCE   2  (bases 1 to 2313)
+  CONSRTM   NCBI Genome Project
+  TITLE     Direct Submission
+  JOURNAL   Submitted (12-JUN-2000) National Center for Biotechnology
+            Information, NIH, Bethesda, MD 20894, USA
+REFERENCE   3  (bases 1 to 2313)
+  AUTHORS   Hiromoto,Y.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (28-OCT-1998) Virology I, National Institute of
+            Infectious Diseases, 1-23-1 Toyama Shinjuku-ku, Tokyo 162-8640,
+            Japan
+COMMENT     REVIEWED REFSEQ: This record has been curated by NCBI staff. The
+            reference sequence was derived from AF101982.
+            COMPLETENESS: full length.
+FEATURES             Location/Qualifiers
+     source          1..2313
+                     /organism="Influenza B virus (B/Lee/1940)"
+                     /mol_type="viral cRNA"
+                     /strain="B/Lee/1940"
+                     /db_xref="taxon:518987"
+                     /segment="2"
+     gene            1..2313
+                     /gene="PB2"
+                     /locus_tag="FLUBVsRNA-2gp1"
+                     /db_xref="GeneID:956546"
+     CDS             1..2313
+                     /gene="PB2"
+                     /locus_tag="FLUBVsRNA-2gp1"
+                     /codon_start=1
+                     /product="polymerase PB2"
+                     /protein_id="NP_056658.1"
+                     /db_xref="GeneID:956546"
+                     /translation="MTLAKIELLKQLLRDNEAKTVLRQTTVDQYNIIRKFNTSRIEKN
+                     PSLRMKWAMCSNFPLALTKGDMANRIPLEYKGIQLKTNAEDIGTKGQMCSIAAVTWWN
+                     TYGPIGDTEGFEKVYESFFLRKMRLDNATWGRITFGPVERVRKRVLLNPLTKEMPPDE
+                     ASNVIMEILFPKEAGIPRESTWIHRELIKEKREKLKGTMITPIVLAYMLERELVARRR
+                     FLPVAGATSAEFIEMLHCLQGENWRQIYHPGGNKLTESRSQSMIVACRKIIRRSIVAS
+                     NPLELAVEIANKTVIDTEPLKSCLAALDGGDVACDIIRAALGLKIRQRQRFGRLELKR
+                     ISGRGFKNDEEILIGNGTIQKIGIWDGEEEFHVRCGECRGILKKSQMRMEKLLINSAK
+                     KEDMKDLIILCMVFSQDTRMFQGVRGEINFLNRAGQLLSPMYQLQRYFLNRSNDLFDQ
+                     WGYEESPKASELHGINELMNASDYTLKGVVVTKNVIDDFSSTETEKVSITKNLSLIKR
+                     TGEVIMGANDVSELESQAQLMITYDTPKMWEMGTTKELVQNTYQWVLKNLVTLKAQFL
+                     LGKEDMFQWDAFEAFESIIPQKMAGQYSGFARAVLKQMRDQEVMKTDQFIKLLPFCFS
+                     PPKLRSNGEPYQFLRLMLKGGGENFIEVRKGSPLFSYNPQTEILTICGRMMSLKGKIE
+                     DEERNRSMGNAVLAGFLVSGKYDPDLGDFKTIEELERLKPGEKANILLYQGKPVKVVK
+                     RKRYSALSNDISQGIKRQRMTVESMGWALS"
+ORIGIN      
+        1 atgacgttgg ctaaaattga actactaaag cagctgttaa gggacaatga agccaaaacg
+       61 gtgttgagac agacaacggt agaccaatac aacataataa gaaaattcaa tacatcaaga
+      121 attgaaaaga acccttcatt aagaatgaag tgggccatgt gttccaattt tcccttagct
+      181 ctgaccaagg gtgatatggc aaatcgaatc cccttggaat acaagggaat acaacttaaa
+      241 acaaatgctg aagacatagg aactaaagga caaatgtgtt caatagcagc agttacctgg
+      301 tggaatacat atgggcccat aggggatact gaagggtttg aaaaggtcta cgaaagcttt
+      361 tttctcagaa agatgagact tgacaatgcc acttggggcc gaataacctt tggccctgtt
+      421 gagagagtaa gaaaaagagt actactaaac ccgctcacca aggaaatgcc cccagatgaa
+      481 gcgagcaatg taataatgga aatattattc cctaaagaag caggaatacc aagagaatct
+      541 acttggatac atagagaact gataaaagaa aaaagagaaa aattgaaggg aacgatgata
+      601 actcccattg tactggcata catgcttgag agagaactag ttgcccgaag aaggttcctg
+      661 ccagtagcag gagcaacatc agcagagttc atagaaatgc tacattgctt acaaggtgaa
+      721 aattggagac aaatatatca tccaggaggg aataaactaa ctgaatctag atctcaatca
+      781 atgattgtag cttgcaggaa gataatcaga agatcaatag ttgcatcaaa cccactagag
+      841 ctagctgtag agattgcaaa taagactgtg atagacactg aacctttaaa atcatgtctg
+      901 gcagccctgg atggaggtga tgtagcctgt gacataataa gagctgcatt aggattaaaa
+      961 attagacaaa gacaaagatt tgggagactt gaactaaaga gaatatcagg aagaggattc
+     1021 aaaaatgatg aagagatatt aatcggaaac ggaacaatac aaaagattgg aatatgggac
+     1081 ggagaagagg aattccatgt aagatgtggc gaatgcaggg ggatattgaa aaaaagccaa
+     1141 atgagaatgg aaaaactact gataaattca gccaaaaagg aggacatgaa agatttaata
+     1201 atcttatgca tggtattttc tcaagacact aggatgttcc aaggagtgag aggagagata
+     1261 aattttctta atcgagcagg ccaactttta tcccccatgt accaactcca acgatacttt
+     1321 ctgaatagga gcaatgacct ttttgatcaa tggggatatg aggaatcacc taaagcaagt
+     1381 gagctacatg ggataaatga attaatgaat gcatctgact atacattgaa aggggttgta
+     1441 gtaacaaaaa atgtgattga tgattttagt tctactgaaa cagaaaaagt atctataaca
+     1501 aaaaatctta gtttaataaa aaggactggg gaagttataa tgggagccaa tgacgtaagt
+     1561 gaattagaat cacaagcaca gctaatgata acgtatgata cacccaagat gtgggaaatg
+     1621 ggaacaacca aagaactggt acaaaacact taccaatggg tgcttaaaaa tttagtaaca
+     1681 ttgaaggctc agtttctttt gggaaaagaa gacatgttcc aatgggatgc atttgaagca
+     1741 tttgaaagca taatccctca gaagatggct ggtcagtaca gtggatttgc aagagcagtg
+     1801 ctcaaacaaa tgagagacca agaggttatg aaaactgacc aattcataaa attgttgcct
+     1861 ttctgttttt cgccaccaaa attaaggagc aatggagagc cttatcaatt tttgaggctt
+     1921 atgctgaaag gaggagggga aaatttcatc gaagtaagga aagggtcccc cttgttctcc
+     1981 tacaatccac aaacggaaat cctaactata tgcggcagaa tgatgtcatt aaaaggaaaa
+     2041 attgaggatg aagaaagaaa tagatcaatg gggaatgcag tactggcagg ctttcttgtt
+     2101 agtggcaaat atgaccctga tcttggagat ttcaaaacca ttgaggaact tgaaagacta
+     2161 aaaccgggag aaaaagccaa catcttactt taccaaggaa agcccgttaa agtagttaaa
+     2221 aggaaaagat atagtgcttt atccaatgat atttcacaag ggattaagag acaaagaatg
+     2281 acagttgagt ccatggggtg ggccttgagc taa
+//
+LOCUS       NC_002206               2204 bp    cRNA    linear   VRL 13-AUG-2018
+DEFINITION  Influenza B virus (B/Lee/1940) segment 3, complete sequence.
+ACCESSION   NC_002206
+VERSION     NC_002206.1
+DBLINK      BioProject: PRJNA485481
+KEYWORDS    RefSeq.
+SOURCE      Influenza B virus (B/Lee/1940)
+  ORGANISM  Influenza B virus (B/Lee/1940)
+            Viruses; Riboviria; Orthornavirae; Negarnaviricota;
+            Polyploviricotina; Insthoviricetes; Articulavirales;
+            Orthomyxoviridae; Betainfluenzavirus; Betainfluenzavirus
+            influenzae.
+REFERENCE   1  (bases 1 to 2204)
+  AUTHORS   Hiromoto,Y., Saito,T., Lindstrom,S.E., Li,Y., Nerome,R., Sugita,S.,
+            Shinjoh,M. and Nerome,K.
+  TITLE     Phylogenetic analysis of the three polymerase genes (PB1, PB2 and
+            PA) of influenza B virus
+  JOURNAL   J. Gen. Virol. 81 (Pt 4), 929-937 (2000)
+   PUBMED   10725418
+REFERENCE   2  (bases 1 to 2204)
+  CONSRTM   NCBI Genome Project
+  TITLE     Direct Submission
+  JOURNAL   Submitted (12-JUN-2000) National Center for Biotechnology
+            Information, NIH, Bethesda, MD 20894, USA
+REFERENCE   3  (bases 1 to 2204)
+  AUTHORS   Hiromoto,Y.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (28-OCT-1998) Virology I, National Institute of
+            Infectious Diseases, 1-23-1 Toyama Shinjuku-ku, Tokyo 162-8640,
+            Japan
+COMMENT     REVIEWED REFSEQ: This record has been curated by NCBI staff. The
+            reference sequence was derived from AF102017.
+            COMPLETENESS: full length.
+FEATURES             Location/Qualifiers
+     source          1..2204
+                     /organism="Influenza B virus (B/Lee/1940)"
+                     /mol_type="viral cRNA"
+                     /strain="B/Lee/1940"
+                     /db_xref="taxon:518987"
+                     /segment="3"
+     gene            1..2181
+                     /gene="PA"
+                     /locus_tag="FLUBVsRNA-3gp1"
+                     /db_xref="GeneID:956547"
+     CDS             1..2181
+                     /gene="PA"
+                     /locus_tag="FLUBVsRNA-3gp1"
+                     /codon_start=1
+                     /product="polymerase PA"
+                     /protein_id="NP_056659.1"
+                     /db_xref="GeneID:956547"
+                     /translation="MDTFITKNFQTTIIQKAKNTMAEFSEDPELQPAVLFNICVHLEV
+                     CYVISDMNFLDEEGKTYTALEGQGKEQNLRPQYEVIEGMPRNIAWMVQRSLAQEHGIE
+                     TPRYLADLFDYKTKRFIEVGITKGLADDYFWKKKEKLGNSMELMIFSYNQDYSLSDES
+                     SLDEEGKGRVLSRLTELQAELSLKNLWQVLIGEEEIEKGIDFKLGQTISKLRNISVPA
+                     GFSNFEGMRSYIDNIDPKGAIERNLARMSPLVSVTPKKLKWEDLRPIGPHIYNHELPE
+                     VPYNAFLLMSDELGLANMTEGKSKKPKTLAKECLERYSTLRDQTDPILIMKSEKANEN
+                     FLWRLWRDCVNTISNEETGNELQKTNYAKWATGDGLTYQKIMKEVAIDDETMYQEEPK
+                     IPNKCRVAAWVQAEMNLLSTLTSKRALDLPEIGPDVAPVEHVGSERRKYFVNEINYCK
+                     ASTVMMKYVLFHTSLLNESNASMGKYKVIPITNRVVNEKGESFDMLYGLAVKGQSHLR
+                     GDTDVVTVVTFEFSSTDPRVDSGKWPKYTVFKIGSLFVSGREKPVYLYCRVNGTNKIQ
+                     MKWGMEARRCLLQSMQQMEAIVDQESSIQGYDMTKACFKGDRVNNPKTFSIGTQEGKL
+                     VKGSFGKALRVIFTKCLMHYVFGNAQLEGFSAESRRLLLLIQALKDRKGPWVFDLEGM
+                     YFGVEECISNNPWVIQSAYWFNEWLGIEKEGSKVLESIDEIMDE"
+ORIGIN      
+        1 atggatactt ttattacaaa gaatttccag actacaataa tacaaaaggc caaaaacaca
+       61 atggcagaat ttagtgaaga tcctgaatta cagccagcag tactattcaa catctgcgtc
+      121 catctggagg tctgctatgt aataagtgat atgaactttc ttgatgagga aggaaagaca
+      181 tatacagcat tagaaggaca aggaaaagag caaaatttga gaccacagta tgaagtgatt
+      241 gagggaatgc caagaaacat agcatggatg gttcaaagat ccttagccca agagcatgga
+      301 atagagactc caaggtatct ggctgattta tttgattata aaaccaagag gtttatcgaa
+      361 gtcggaataa caaagggatt ggctgatgat tacttttgga aaaagaaaga aaagttgggg
+      421 aatagcatgg aactgatgat attcagctac aatcaagact actcgttaag tgatgaatct
+      481 tcattggatg aggaaggaaa agggagagtg ctaagcagac tcacagaact tcaggctgag
+      541 ttaagtttga aaaacctatg gcaagttcta ataggggaag aagaaattga aaaaggaatt
+      601 gacttcaaac ttggacaaac aatatctaaa ctgaggaata tatctgttcc agctggtttc
+      661 tccaattttg aagggatgag aagttacata gacaacatag accctaaagg agcaatagag
+      721 agaaatctag caaggatgtc tcccttagta tcagttacac ccaaaaagtt gaaatgggag
+      781 gacctgagac ccatagggcc tcacatttac aaccatgagc taccagaagt tccatataat
+      841 gcctttctcc tcatgtctga tgagttgggg ctggccaata tgactgaagg aaagtccaag
+      901 aaaccgaaga ccttagctaa ggaatgtcta gaaaggtatt caacactacg tgatcaaact
+      961 gacccaatat tgataatgaa aagcgaaaaa gctaacgaaa acttcttatg gaggttatgg
+     1021 agggactgtg taaatacaat aagcaatgag gaaacaggca acgaattaca gaaaaccaat
+     1081 tatgccaagt gggccacagg agatggacta acataccaaa aaataatgaa agaagtagca
+     1141 atagatgacg aaacgatgta ccaagaagaa cccaaaatac ccaataaatg tagagtggct
+     1201 gcttgggttc aggcagagat gaatctactg agtactctga caagtaaaag ggccctggat
+     1261 ctgccagaaa tagggccaga tgtagcaccc gtggagcatg tagggagtga aagaaggaaa
+     1321 tactttgtta atgaaatcaa ctactgtaaa gcctctacag ttatgatgaa gtatgtactt
+     1381 tttcacactt cattattaaa tgaaagcaat gctagtatgg gaaaatataa agtaatacca
+     1441 atcaccaaca gagtggtaaa tgaaaaaggg gaaagctttg acatgcttta tggtctggcg
+     1501 gttaaggggc aatctcattt gcggggggac acggatgttg taacagttgt gactttcgag
+     1561 tttagtagta cagatcctag agtggactca ggaaagtggc caaaatatac tgtctttaaa
+     1621 attggctccc tatttgtgag tggaagagaa aaacctgtgt acctatattg ccgagtgaat
+     1681 ggtacaaaca aaatccaaat gaaatgggga atggaagcta gaagatgtct gcttcaatca
+     1741 atgcaacaaa tggaggcaat tgttgatcaa gaatcatcga tacaagggta tgatatgacc
+     1801 aaagcttgtt tcaagggaga cagagtgaat aatcccaaaa ctttcagtat tgggactcag
+     1861 gaaggcaaac tagtaaaagg gtcctttggg aaagcactaa gagtaatatt caccaaatgt
+     1921 ttgatgcatt atgtatttgg aaatgctcaa ttggaggggt ttagtgccga atctaggaga
+     1981 cttctactgt taattcaggc attaaaagac aggaagggcc cttgggtatt tgacttggag
+     2041 ggaatgtact ttggagtaga ggaatgtatt agtaacaatc cttgggtaat acagagtgca
+     2101 tactggttta atgaatggtt gggcattgaa aaagaaggaa gtaaagtgtt agaatcaata
+     2161 gatgaaataa tggatgaatg aacgaagggc atagcgctca attt
+//
+LOCUS       NC_002207               1882 bp    cRNA    linear   VRL 13-AUG-2018
+DEFINITION  Influenza B virus (B/Lee/1940) segment 4, complete sequence.
+ACCESSION   NC_002207
+VERSION     NC_002207.1
+DBLINK      BioProject: PRJNA485481
+KEYWORDS    RefSeq.
+SOURCE      Influenza B virus (B/Lee/1940)
+  ORGANISM  Influenza B virus (B/Lee/1940)
+            Viruses; Riboviria; Orthornavirae; Negarnaviricota;
+            Polyploviricotina; Insthoviricetes; Articulavirales;
+            Orthomyxoviridae; Betainfluenzavirus; Betainfluenzavirus
+            influenzae.
+REFERENCE   1  (bases 1 to 1882)
+  AUTHORS   Krystal,M., Young,J.F., Palese,P., Wilson,I.A., Skehel,J.J. and
+            Wiley,D.C.
+  TITLE     Sequential mutations in hemagglutinins of influenza B virus
+            isolates: Definition of antigenic domains: Corrections
+  JOURNAL   Proc. Natl. Acad. Sci. U.S.A. 81, 1261-1261 (1984)
+REFERENCE   2  (bases 1 to 1882)
+  AUTHORS   Krystal,M., Young,J.F., Palese,P., Wilson,I.A., Skehel,J.J. and
+            Wiley,D.C.
+  TITLE     Sequential mutations in hemagglutinins of influenza B virus
+            isolates: definition of antigenic domains
+  JOURNAL   Proc. Natl. Acad. Sci. U.S.A. 80 (14), 4527-4531 (1983)
+   PUBMED   6192436
+REFERENCE   3  (bases 1 to 1882)
+  CONSRTM   NCBI Genome Project
+  TITLE     Direct Submission
+  JOURNAL   Submitted (12-JUN-2000) National Center for Biotechnology
+            Information, NIH, Bethesda, MD 20894, USA
+REFERENCE   4  (bases 1 to 1882)
+  AUTHORS   Krystal,M., Young,J.F., Palese,P., Wilson,I.A., Skehel,J.J. and
+            Wiley,D.C.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (02-AUG-1993) Moount Sinai School of Medicine of the City
+            University of New York, One Gustave L. Levy Place, New York, NY
+            10029, USA
+COMMENT     REVIEWED REFSEQ: This record has been curated by NCBI staff. The
+            reference sequence is identical to K00423.
+            COMPLETENESS: full length.
+FEATURES             Location/Qualifiers
+     source          1..1882
+                     /organism="Influenza B virus (B/Lee/1940)"
+                     /mol_type="viral cRNA"
+                     /strain="B/Lee/40"
+                     /db_xref="taxon:518987"
+                     /segment="4"
+     gene            34..1788
+                     /gene="HA"
+                     /locus_tag="FLUBVsRNA-4gp1"
+                     /db_xref="GeneID:956538"
+     CDS             34..1788
+                     /gene="HA"
+                     /locus_tag="FLUBVsRNA-4gp1"
+                     /note="glycoprotein"
+                     /codon_start=1
+                     /product="hemagglutinin"
+                     /protein_id="NP_056660.1"
+                     /db_xref="GeneID:956538"
+                     /translation="MKAIIVLLMVVTSNADRICTGITSSNSPHVVKTATQGEVNVTGV
+                     IPLTTTPTKSHFANLKGTQTRGKLCPNCFNCTDLDVALGRPKCMGNTPSAKVSILHEV
+                     KPATSGCFPIMHDRTKIRQLPNLLRGYENIRLSTSNVINTETAPGGPYKVGTSGSCPN
+                     VANGNGFFNTMAWVIPKDNNKTAINPVTVEVPYICSEGEDQITVWGFHSDDKTQMERL
+                     YGDSNPQKFTSSANGVTTHYVSQIGGFPNQTEDEGLKQSGRIVVDYMVQKPGKTGTIV
+                     YQRGILLPQKVWCASGRSKVIKGSLPLIGEADCLHEKYGGLNKSKPYYTGEHAKAIGN
+                     CPIWVKTPLKLANGTKYRPPAKLLKERGFFGAIAGFLEGGWEGMIAGWHGYTSHGAHG
+                     VAVAADLKSTQEAINKITKNLNYLSELEVKNLQRLSGAMNELHDEILELDEKVDDLRA
+                     DTISSQIELAVLLSNEGIINSEDEHLLALERKLKKMLGPSAVEIGNGCFETKHKCNQT
+                     CLDRIAAGTFNAGDFSLPTFDSLNITAASLNDDGLDNHTILLYYSTAASSLAVTLMIA
+                     IFIVYMVSRDNVSCSICL"
+ORIGIN      
+        1 agcagaagcg ttgcattttc taatatccac aaaatgaagg caataattgt actactcatg
+       61 gtagtaacat ccaatgcaga tcgaatctgc actgggataa catcgtcaaa ctcacctcat
+      121 gtggttaaaa ctgccactca aggggaagtc aatgtgactg gtgtgatacc actaacaaca
+      181 acacctacca aatctcattt tgcaaatctc aaaggaacac agaccagagg aaaactatgc
+      241 ccaaactgtt ttaactgcac agatctggac gtggccctag gcagaccaaa atgcatgggg
+      301 aacacaccct ccgcaaaagt ctcaatactc catgaagtca aacctgctac atctggatgc
+      361 tttcctataa tgcacgacag aacaaaaatc agacaactac ctaatcttct cagaggatat
+      421 gaaaacatca ggttatcaac cagtaatgtt atcaatacag agacggcacc aggaggaccc
+      481 tacaaggtgg ggacctcagg atcttgccct aacgttgcta atgggaacgg cttcttcaac
+      541 acaatggctt gggttatccc aaaagacaac aacaagacag caataaatcc agtaacagta
+      601 gaagtaccat acatttgttc agaaggggaa gaccaaatta ctgtttgggg gttccactct
+      661 gatgacaaaa cccaaatgga aagactctat ggagactcaa atcctcaaaa gttcacctca
+      721 tctgccaatg gagtaaccac acattatgtt tctcagattg gtggcttccc aaatcaaaca
+      781 gaagacgaag ggctaaaaca aagcggcaga attgttgttg attacatggt acaaaaacct
+      841 ggaaaaacag gaacaattgt ttatcaaaga ggcattttat tgcctcaaaa agtgtggtgc
+      901 gcaagtggca ggagcaaggt aataaaaggg tccttgcctt taattggtga agcagattgc
+      961 ctccacgaaa agtacggtgg attaaataaa agcaagcctt actacacagg agagcatgca
+     1021 aaggccatag gaaattgccc aatatgggtg aaaacaccct tgaagctggc caatggaacc
+     1081 aaatatagac cgcctgcaaa actattaaag gaaagaggtt tcttcggagc tattgctggt
+     1141 ttcttggaag gaggatggga aggaatgatt gcaggttggc acggatacac atctcatgga
+     1201 gcacatggag tggcagtggc agcagacctt aagagtacac aagaagctat aaacaagata
+     1261 acaaaaaatc tcaactattt aagtgagcta gaagtaaaaa accttcaaag actaagcgga
+     1321 gcaatgaatg agcttcacga cgaaatactc gagctagacg aaaaagtgga tgatctaaga
+     1381 gctgatacaa taagctcaca aatagagctt gcagtcttgc tttccaacga agggataata
+     1441 aacagtgaag atgagcatct cttggcactt gaaagaaaac tgaagaaaat gcttggcccc
+     1501 tctgctgtag aaatagggaa tgggtgcttt gaaaccaaac acaaatgcaa ccagacttgc
+     1561 ctagacagga tagctgctgg cacctttaat gcaggagatt tttctcttcc cacttttgat
+     1621 tcattaaaca ttactgctgc atctttaaat gatgatggct tggataatca tactatactg
+     1681 ctctactact caactgctgc ttctagcttg gctgtaacat taatgatagc tatcttcatt
+     1741 gtctacatgg tctccagaga caatgtttct tgttccatct gtctgtgagg gagattaagc
+     1801 cctgtgtttt cctttactgt agtgctcatt tgcttgtcac cattacaaag aaacgttatt
+     1861 gaaaaatgct cttgttacta ct
+//
+LOCUS       NC_002208               1841 bp    cRNA    linear   VRL 13-AUG-2018
+DEFINITION  Influenza B virus (B/Lee/1940) segment 5, complete sequence.
+ACCESSION   NC_002208
+VERSION     NC_002208.1
+DBLINK      BioProject: PRJNA485481
+KEYWORDS    RefSeq.
+SOURCE      Influenza B virus (B/Lee/1940)
+  ORGANISM  Influenza B virus (B/Lee/1940)
+            Viruses; Riboviria; Orthornavirae; Negarnaviricota;
+            Polyploviricotina; Insthoviricetes; Articulavirales;
+            Orthomyxoviridae; Betainfluenzavirus; Betainfluenzavirus
+            influenzae.
+REFERENCE   1  (bases 1 to 1841)
+  AUTHORS   Briedis,D.J. and Tobin,M.
+  TITLE     Influenza B virus genome: complete nucleotide sequence of the
+            influenza B/lee/40 virus genome RNA segment 5 encoding the
+            nucleoprotein and comparison with the B/Singapore/222/79
+            nucleoprotein
+  JOURNAL   Virology 133 (2), 448-455 (1984)
+   PUBMED   6324462
+REFERENCE   2  (bases 1 to 1841)
+  CONSRTM   NCBI Genome Project
+  TITLE     Direct Submission
+  JOURNAL   Submitted (12-JUN-2000) National Center for Biotechnology
+            Information, NIH, Bethesda, MD 20894, USA
+COMMENT     PROVISIONAL REFSEQ: This record has not yet been subject to final
+            NCBI review. The reference sequence is identical to K01395.
+            Sequence below, when reported in [1], was flanked on 5' end by
+            non-viral (vector) sequence 'aagcggctggtc'.
+               Mia 18-MAY-1987 review.
+            COMPLETENESS: full length.
+FEATURES             Location/Qualifiers
+     source          1..1841
+                     /organism="Influenza B virus (B/Lee/1940)"
+                     /mol_type="viral cRNA"
+                     /strain="B/Lee/1940"
+                     /db_xref="taxon:518987"
+                     /segment="5"
+     gene            58..1740
+                     /gene="NP"
+                     /locus_tag="FLUBVsRNA-5gp1"
+                     /db_xref="GeneID:26824002"
+     CDS             58..1740
+                     /gene="NP"
+                     /locus_tag="FLUBVsRNA-5gp1"
+                     /codon_start=1
+                     /product="nucleoprotein"
+                     /protein_id="NP_056661.1"
+                     /db_xref="GeneID:26824002"
+                     /translation="MSNMDIDSINTGTIDKTPEELTPGTSGATRPIIKPATLAPPSNK
+                     RTRNPSPERTTTSSETDIGRKIQKKQTPTEIKKSVYKMVVKLGEFYNQMMVKAGLNDD
+                     MERNLIQNAQAVERILLAATDDKKTEYQKKRNARDVKEGKEEIDHNKTGGTFYKMVRD
+                     DKTIYFSPIKITFLKEEVKTMYKTTMGSDGFSGLNHIMIGHSQMNDVCFQRSKGLKRV
+                     GLDPSLISTFAGSTLPRRSGTTGVAIKGGGTLVDEAIRFIGRAMADRGLLRDIKAKTA
+                     YEKILLNLKNKCSAPQQKALVDQVIGSRNPGIADIEDLTLLARSMVVVRPSVASKVVL
+                     PISIYAKIPQLGFNTEEYSMVGYEAMALYNMATPVSILRMGDDAKDKSQLFFMSCFGA
+                     AYEDLRVLSALTGTEFKPRSALKCKGFHVPAKEQVEGMGAALMSIKLQFWAPMTRSGG
+                     NEVSGEGGSGQISCSPVFAVERPIALSKQAVRRMLSMNVEGRDADVKGNLLKMMNDSM
+                     AKKTSGNAFIGKKMFQISDKNKVNPIEIPIKQTIPNFFFGRDTAEDYDDLDY"
+ORIGIN      
+        1 ggcagaagca cagcattttc ttgtgagctt cgagcactaa taaaactgaa aatcaaaatg
+       61 tccaacatgg atattgacag tataaatacc ggaacaatcg ataaaacacc agaagaactg
+      121 actcccggaa ccagtggggc aaccagacca atcatcaagc cagcaaccct tgctccgcca
+      181 agcaacaaac gaacccgaaa tccatctcca gaaaggacaa ccacaagcag tgaaaccgat
+      241 atcggaagga aaatccaaaa gaaacaaacc ccaacagaga taaagaagag cgtctacaaa
+      301 atggtggtaa aactgggtga attctacaac cagatgatgg tcaaagctgg acttaatgat
+      361 gacatggaaa ggaatctaat tcaaaatgca caagctgtgg agagaatcct attggctgca
+      421 actgatgaca agaaaactga ataccaaaag aaaaggaatg ccagagatgt caaagaaggg
+      481 aaggaagaaa tagaccacaa caagacagga ggcacctttt ataagatggt aagagatgat
+      541 aaaaccatct acttcagccc tataaaaatt acctttttaa aagaagaggt gaaaacaatg
+      601 tacaagacca ccatggggag tgatggtttc agtggactaa atcacattat gattggacat
+      661 tcacagatga acgatgtctg tttccaaaga tcaaagggac tgaaaagggt tggacttgac
+      721 ccttcattaa tcagtacttt tgccggaagc acactaccca gaagatcagg tacaactggt
+      781 gttgcaatca aaggaggtgg aactttagtg gatgaagcca tccgatttat aggaagagca
+      841 atggcagaca gagggctact gagagacatc aaggccaaga cggcctatga aaagattctt
+      901 ctgaatctga aaaacaagtg ctctgcgccg caacaaaagg ctctagttga tcaagtgatc
+      961 ggaagtagga acccagggat tgcagacata gaagacctaa ctctgcttgc cagaagcatg
+     1021 gtagttgtca gaccctctgt agcgagcaaa gtggtgcttc ccataagcat ttatgctaaa
+     1081 atacctcaac taggattcaa taccgaagaa tactctatgg ttgggtatga agccatggct
+     1141 ctttataata tggcaacacc tgtttccata ttaagaatgg gagatgacgc aaaagataaa
+     1201 tctcaactat tcttcatgtc gtgcttcgga gctgcctatg aagatctaag agtgttatct
+     1261 gcactaacgg gcaccgaatt taagcctaga tcagcactaa aatgcaaggg tttccatgtc
+     1321 ccggctaagg agcaagtaga aggaatgggg gcagctctga tgtccatcaa gcttcagttc
+     1381 tgggccccaa tgaccagatc tggagggaat gaagtaagtg gagaaggagg gtctggtcaa
+     1441 ataagttgca gccctgtgtt tgcagtagaa agacctattg ctctaagcaa gcaagctgta
+     1501 agaagaatgc tgtcaatgaa cgttgaagga cgtgatgcag atgtcaaagg aaatctactc
+     1561 aaaatgatga atgattcaat ggcaaagaaa accagtggaa atgctttcat tgggaagaaa
+     1621 atgtttcaaa tatcagacaa aaacaaagtc aatcccattg agattccaat taagcagacc
+     1681 atccccaatt tcttctttgg gagggacaca gcagaggatt atgatgacct cgattattaa
+     1741 agcaataaaa tagacactat ggctgtgact gtttcagtac gtttgggatg tgggtgttta
+     1801 ctcttattga aataaatgta aaaaatgctg ttgtttctac t
+//
+LOCUS       NC_002209               1557 bp    cRNA    linear   VRL 13-AUG-2018
+DEFINITION  Influenza B virus (B/Lee/1940) segment 6, complete sequence.
+ACCESSION   NC_002209
+VERSION     NC_002209.1
+DBLINK      BioProject: PRJNA485481
+KEYWORDS    RefSeq.
+SOURCE      Influenza B virus (B/Lee/1940)
+  ORGANISM  Influenza B virus (B/Lee/1940)
+            Viruses; Riboviria; Orthornavirae; Negarnaviricota;
+            Polyploviricotina; Insthoviricetes; Articulavirales;
+            Orthomyxoviridae; Betainfluenzavirus; Betainfluenzavirus
+            influenzae.
+REFERENCE   1  (bases 1 to 358)
+  AUTHORS   Shaw,M.W., Choppin,P.W. and Lamb,R.A.
+  TITLE     A previously unrecognized influenza B virus glycoprotein from a
+            bicistronic mRNA that also encodes the viral neuraminidase
+  JOURNAL   Proc. Natl. Acad. Sci. U.S.A. 80 (16), 4879-4883 (1983)
+   PUBMED   6308656
+REFERENCE   2  (bases 1 to 1557)
+  AUTHORS   Shaw,M.W., Lamb,R.A., Erickson,B.W., Briedis,D.J. and Choppin,P.W.
+  TITLE     Complete nucleotide sequence of the neuraminidase gene of influenza
+            B virus
+  JOURNAL   Proc. Natl. Acad. Sci. U.S.A. 79 (22), 6817-6821 (1982)
+   PUBMED   6294654
+REFERENCE   3  (bases 1 to 1557)
+  CONSRTM   NCBI Genome Project
+  TITLE     Direct Submission
+  JOURNAL   Submitted (12-JUN-2000) National Center for Biotechnology
+            Information, NIH, Bethesda, MD 20894, USA
+COMMENT     PROVISIONAL REFSEQ: This record has not yet been subject to final
+            NCBI review. The reference sequence is identical to J02095.
+            Sequence flanked on 5' end by cellular 'cap transfer' DNA
+            (AGACACACGC). Neuraminidase cds determined by consideration of open
+            reading frames, and mw and composition of the protein product. The
+            second open reading frame codes for a protein (nb) found only in
+            type b influenzas Its functional significance is not yet known.
+            COMPLETENESS: full length.
+FEATURES             Location/Qualifiers
+     source          1..1557
+                     /organism="Influenza B virus (B/Lee/1940)"
+                     /mol_type="viral cRNA"
+                     /strain="B/Lee/1940"
+                     /db_xref="taxon:518987"
+                     /segment="6"
+     gene            47..349
+                     /gene="NB"
+                     /locus_tag="FLUBVsRNA-6gp1"
+                     /db_xref="GeneID:26824003"
+     CDS             47..349
+                     /gene="NB"
+                     /locus_tag="FLUBVsRNA-6gp1"
+                     /codon_start=1
+                     /product="NB protein"
+                     /protein_id="NP_056662.1"
+                     /db_xref="GeneID:26824003"
+                     /translation="MNNATFNCTNINPITHIRGSIIITICVSLIVILIVFGCIAKIFI
+                     NKNNCTNNVIRVHKRIKCPDCEPFCNKRDDISTPRAGVDIPSFILPGLNLSEGTPN"
+     gene            54..1454
+                     /gene="NA"
+                     /locus_tag="FLUBVsRNA-6gp2"
+                     /db_xref="GeneID:26824004"
+     CDS             54..1454
+                     /gene="NA"
+                     /locus_tag="FLUBVsRNA-6gp2"
+                     /codon_start=1
+                     /product="neuraminidase"
+                     /protein_id="NP_056663.1"
+                     /db_xref="GeneID:26824004"
+                     /translation="MLPSTVQTLTLLLTSGGVLLSLYVSASLSYLLYSDVLLKFSSTK
+                     TTAPTMSLECTNASNAQTVNHSATKEMTFPPPEPEWTYPRLSCQGSTFQKALLISPHR
+                     FGEIKGNSAPLIIREPFVACGPKECRHFALTHYAAQPGGYYNGTRKDRNKLRHLVSVK
+                     LGKIPTVENSIFHMAAWSGSACHDGREWTYIGVDGPDNDALVKIKYGEAYTDTYHSYA
+                     HNILRTQESACNCIGGDCYLMITDGSASGISKCRFLKIREGRIIKEILPTGRVEHTEE
+                     CTCGFASNKTIECACRDNSYTAKRPFVKLNVETDTAEIRLMCTKTYLDTPRPDDGSIA
+                     GPCESNGDKWLGGIKGGFVHQRMASKIGRWYSRTMSKTNRMGMELYVKYDGDPWTDSD
+                     ALTLSGVMVSIEEPGWYSFGFEIKDKKCDVPCIGIEMVHDGGKDTWHSAATAIYCLMG
+                     SGQLLWDTVTGVDMAL"
+ORIGIN      
+        1 agcagaagca gagcatattc ttagaactga agtgaacagg ccaaaaatga acaatgctac
+       61 cttcaactgt acaaacatta accctattac tcacatcagg gggagtatta ttatcactat
+      121 atgtgtcagc ctcattgtca tacttattgt attcggatgt attgctaaaa ttttcatcaa
+      181 caaaaacaac tgcaccaaca atgtcattag agtgcacaaa cgcatcaaat gcccagactg
+      241 tgaaccattc tgcaacaaaa gagatgacat ttccaccccc agagccggag tggacatacc
+      301 ctcgtttatc ttgccagggc tcaacctttc agaaggcact cctaattagc cctcataggt
+      361 tcggagagat caaaggaaac tcagctccct tgataataag agaacctttt gttgcttgtg
+      421 gaccaaaaga atgcagacac tttgctctga cccattatgc agctcagccg gggggatact
+      481 acaatggaac aagaaaggac agaaacaagc tgaggcatct agtatcagtc aaattgggaa
+      541 aaatcccaac tgtggaaaac tccattttcc acatggcagc ttggagcgga tccgcatgcc
+      601 atgatggtag agaatggaca tatatcggag ttgatggtcc tgacaatgat gcattggtca
+      661 aaataaaata tggagaagca tatactgaca catatcattc ctatgcacac aacatcctaa
+      721 gaacacaaga aagtgcctgc aattgcatcg ggggagattg ttatcttatg ataacagacg
+      781 gctcagcttc aggaattagt aaatgcagat ttcttaaaat tagagagggt cgaataataa
+      841 aagaaatact tccaacagga agagtggagc acactgaaga gtgcacatgc gggttcgcca
+      901 gcaataaaac catagaatgt gcctgtagag acaacagtta cacagcaaaa agaccctttg
+      961 tcaaattaaa tgtggaaact gatacagctg aaataagatt gatgtgcaca aagacttatc
+     1021 tagacactcc cagaccggat gatggaagca tagcagggcc ttgcgaatct aatggagaca
+     1081 agtggcttgg aggcatcaaa ggaggattcg tccatcaaag aatggcatct aagattggaa
+     1141 gatggtactc ccgaacgatg tctaaaacta acagaatggg gatggaactg tatgtaaagt
+     1201 atgatggtga cccatggact gacagtgatg ctcttactct tagtggagta atggtttcca
+     1261 tagaagaacc tggttggtat tcttttggct tcgaaataaa ggacaagaaa tgtgatgtcc
+     1321 cttgtattgg gatagagatg gtacacgatg gtggaaaaga tacttggcat tcagctgcaa
+     1381 cagccattta ctgtttgatg ggctcaggac aattgctatg ggacactgtc acaggcgttg
+     1441 atatggcttt ataatagagg aatggttgga tctgttctaa accctttgtt cctattttat
+     1501 ttgaacagtt gttcttacta gatttaattg tttctgaaaa atgctcttgt tactact
+//
+LOCUS       NC_002210               1191 bp    cRNA    linear   VRL 13-AUG-2018
+DEFINITION  Influenza B virus (B/Lee/1940) segment 7, complete sequence.
+ACCESSION   NC_002210
+VERSION     NC_002210.1
+DBLINK      BioProject: PRJNA485481
+KEYWORDS    RefSeq.
+SOURCE      Influenza B virus (B/Lee/1940)
+  ORGANISM  Influenza B virus (B/Lee/1940)
+            Viruses; Riboviria; Orthornavirae; Negarnaviricota;
+            Polyploviricotina; Insthoviricetes; Articulavirales;
+            Orthomyxoviridae; Betainfluenzavirus; Betainfluenzavirus
+            influenzae.
+REFERENCE   1  (bases 1 to 1191)
+  AUTHORS   Briedis,D.J., Lamb,R.A. and Choppin,P.W.
+  TITLE     Sequence of RNA segment 7 of the influenza B virus genome: partial
+            amino acid homology between the membrane proteins (M1) of influenza
+            A and B viruses and conservation of a second open reading frame
+  JOURNAL   Virology 116 (2), 581-588 (1982)
+   PUBMED   6278729
+REFERENCE   2  (bases 1 to 1191)
+  CONSRTM   NCBI Genome Project
+  TITLE     Direct Submission
+  JOURNAL   Submitted (12-JUN-2000) National Center for Biotechnology
+            Information, NIH, Bethesda, MD 20894, USA
+COMMENT     PROVISIONAL REFSEQ: This record has not yet been subject to final
+            NCBI review. The reference sequence is identical to J02094.
+            Sequence reported in [1] flanked on 5' end by vector DNA
+            (agcagctcctgc). Determination of M1 cds by consideration of open
+            reading frames and comparison with related sequences. There is an
+            open reading frame from 513 to 1100 which may encode (part of) an
+            m2 protein. The similarity of this sequence to those of the type A
+            viruses is too inexact to tell.
+            COMPLETENESS: full length.
+FEATURES             Location/Qualifiers
+     source          1..1191
+                     /organism="Influenza B virus (B/Lee/1940)"
+                     /mol_type="viral cRNA"
+                     /strain="B/Lee/1940"
+                     /db_xref="taxon:518987"
+                     /segment="7"
+     gene            25..771
+                     /gene="M1"
+                     /locus_tag="FLUBVsRNA-7gp1"
+                     /db_xref="GeneID:26824006"
+     CDS             25..771
+                     /gene="M1"
+                     /locus_tag="FLUBVsRNA-7gp1"
+                     /codon_start=1
+                     /product="matrix protein M1"
+                     /protein_id="NP_056664.1"
+                     /db_xref="GeneID:26824006"
+                     /translation="MSLFGDTIAYLLSLIEDGEGKAELAEKLHCWFGGKEFDLDSALE
+                     WIKNKRCLTDIQKALIGASICFLKPKDQERKRRFITEPLSGMGTTATKKKGLILAERK
+                     MRRCVSFHEAFEIAEGHESSALLYCLMVMYLNPENYSMQVKLGTLCALCEKQASHSHR
+                     AHSRAARSSVPGVRREMQMVSAMNTAKTMNGMGKGEDVQKLAEELQNNIGVLRSLGAS
+                     QKNGEGIAKDVMEVLKQSSMGNSALVRKYL"
+ORIGIN      
+        1 agcagaagca cgcactttct taaaatgtcg ctgtttggag acacaattgc ctacctgctt
+       61 tcactaatag aagatggaga aggcaaagca gaactagctg aaaaattaca ctgttggttc
+      121 ggtgggaaag aatttgacct agattctgct ttggaatgga taaaaaacaa aaggtgccta
+      181 actgatatac aaaaagcact aattggtgcc tctatatgct ttttaaaacc caaagaccaa
+      241 gaaagaaaaa ggagattcat cacagagccc ctgtcaggaa tgggaacaac agcaacaaag
+      301 aagaaaggcc taattctagc tgagagaaaa atgagaagat gtgtaagctt tcatgaagca
+      361 tttgaaatag cagaaggcca cgaaagctca gcattactat attgtcttat ggtcatgtac
+      421 ctaaaccctg aaaactattc aatgcaagta aaactaggaa cgctctgtgc tttatgcgag
+      481 aaacaagcat cgcactcgca tagagcccat agcagagcag caaggtcttc ggtacctgga
+      541 gtaagacgag aaatgcagat ggtttcagct atgaacacag caaagacaat gaatggaatg
+      601 ggaaagggag aagacgtcca aaaactagca gaagagctgc aaaacaacat tggagtgttg
+      661 agatctctag gagcaagtca aaagaatgga gaaggaattg ccaaagatgt aatggaagtg
+      721 ctaaaacaga gctctatggg aaattcagct cttgtgagga aatacttata atgctcgaac
+      781 cacttcagat tctttcaatt tgttctttca ttttatcagc tctccatttc atggcttgga
+      841 caatagggca tttgaatcaa ataaaaagag gggtaaactt gaaaatacaa ataaggaatc
+      901 caaataagga ggcaataaac agagaggtgt caattctgag acacaattac caaaaggaaa
+      961 tccaagccaa agaaacaatg aagaaaatac tctctgacaa catggaagta ttgggtgacc
+     1021 acatagtagt tgaagggctt tcaactgatg agataataaa aatgggtgaa acagttttgg
+     1081 aggtggaaga attgcaatga gcccaatttt cactgtattt cttactatgc atttaagcaa
+     1141 attgtaatca atgtcagtga ataaaactgg aaaaagtgcg ttgtttctac t
+//
+LOCUS       NC_002211               1096 bp    cRNA    linear   VRL 13-AUG-2018
+DEFINITION  Influenza B virus (B/Lee/1940) segment 8, complete sequence.
+ACCESSION   NC_002211
+VERSION     NC_002211.1
+DBLINK      BioProject: PRJNA485481
+KEYWORDS    RefSeq.
+SOURCE      Influenza B virus (B/Lee/1940)
+  ORGANISM  Influenza B virus (B/Lee/1940)
+            Viruses; Riboviria; Orthornavirae; Negarnaviricota;
+            Polyploviricotina; Insthoviricetes; Articulavirales;
+            Orthomyxoviridae; Betainfluenzavirus; Betainfluenzavirus
+            influenzae.
+REFERENCE   1  (bases 1 to 1096)
+  AUTHORS   Briedis,D.J. and Lamb,R.A.
+  TITLE     Influenza B virus genome: sequences and structural organization of
+            RNA segment 8 and the mRNAs coding for the NS1 and NS2 proteins
+  JOURNAL   J. Virol. 42 (1), 186-193 (1982)
+   PUBMED   6283137
+REFERENCE   2  (bases 6 to 150)
+  AUTHORS   Air,G.M. and Hackett,J.A.
+  TITLE     Gene 8 of influenza virus: sequences of cDNA transcribed from the
+            3' ends of viral RNA of influenza A and B strains
+  JOURNAL   Virology 103 (2), 291-298 (1980)
+   PUBMED   7385583
+REFERENCE   3  (bases 1 to 1096)
+  CONSRTM   NCBI Genome Project
+  TITLE     Direct Submission
+  JOURNAL   Submitted (12-JUN-2000) National Center for Biotechnology
+            Information, NIH, Bethesda, MD 20894, USA
+COMMENT     PROVISIONAL REFSEQ: This record has not yet been subject to final
+            NCBI review. The reference sequence is identical to J02096.
+            No antigenicity (sub-type) specified. viral RNA sequence determined
+            by analysis of fragments of cDNA (synthesized with polyadenylated
+            vRNA) cloned (pbn27) in pbr322. NS-2 mRNA sequence determined by
+            analysis of cDNA fragment (from above clone) primer. Coding regions
+            and introns assigned by consideration of open reading frames,
+            comparison of predicted MW with experimentally determined MW,
+            comparison to the coding regions of segment 8 in other influenza
+            strains and consideration of consensus splice sites. The influenza
+            genome is single-stranded RNA, and minus-stranded. The sequence
+            reported below is the + strand.
+            COMPLETENESS: full length.
+FEATURES             Location/Qualifiers
+     source          1..1096
+                     /organism="Influenza B virus (B/Lee/1940)"
+                     /mol_type="viral cRNA"
+                     /strain="B/Lee/1940"
+                     /db_xref="taxon:518987"
+                     /segment="8"
+     gene            43..1066
+                     /gene="NEP"
+                     /locus_tag="FLUBVsRNA-8gp2"
+                     /gene_synonym="NS2"
+                     /db_xref="GeneID:26824007"
+     CDS             join(43..75,731..1066)
+                     /gene="NEP"
+                     /locus_tag="FLUBVsRNA-8gp2"
+                     /gene_synonym="NS2"
+                     /codon_start=1
+                     /product="nonstructural protein NS-2"
+                     /protein_id="NP_056665.1"
+                     /db_xref="GeneID:26824007"
+                     /translation="MADNMTTTQIEWRMKKMAIGSSTHSSSVLMKDIQSQFEQLKLRW
+                     ESYPNLVKSTDYHQKRETIRLATEELYLLSKRIDDSILFHKTVIANSSIIADMIVSLS
+                     LLETLYEMKDVVEVYSRQCL"
+     gene            43..888
+                     /gene="NS1"
+                     /locus_tag="FLUBVsRNA-8gp1"
+                     /db_xref="GeneID:26824008"
+     CDS             43..888
+                     /gene="NS1"
+                     /locus_tag="FLUBVsRNA-8gp1"
+                     /codon_start=1
+                     /product="nonstructural protein NS-1"
+                     /protein_id="NP_056666.1"
+                     /db_xref="GeneID:26824008"
+                     /translation="MADNMTTTQIEVGPGATNATINFEAGILECYERFSWQRALDYPG
+                     QDRLHRLKRKLESRIKTHNKSEPENKRMSLEERKAIGVKMMKVLLFMDPSAGIEGFEP
+                     YCVKNPSTSKCPNYDWTDYPPTPGKYLDDIEEEPENVDHPIEVVLRDMNNKDARQKIK
+                     DEVNTQKEGKFRLTIKRDIRNVLSLRVLVNGTFLKHPNGDKSLSTLHRLNAYDQNGGL
+                     VAKLVATDDRTVEDEKDGHRILNSLFERFDEGHSKPIRAAETAVGVLSQFGQEHRLSP
+                     EEGDN"
+ORIGIN      
+        1 cgcagaagca gaggatttat ttagtcactg gcaaacggaa agatggcgga caacatgacc
+       61 acaacacaaa ttgaggtggg tccgggagca accaatgcca ctataaactt tgaagcagga
+      121 attctggagt gctatgaaag gttttcatgg caaagagccc ttgactatcc tggtcaagac
+      181 cgcctacaca gactaaaacg aaaattagaa tcaagaataa agactcacaa caagagtgag
+      241 cctgagaata aaaggatgtc tcttgaagag agaaaagcaa ttggggtaaa aatgatgaaa
+      301 gtgcttctgt ttatggatcc ctctgctgga attgaagggt ttgagccata ctgtgtgaaa
+      361 aatccctcaa ctagcaaatg tccaaattac gattggaccg attaccctcc aaccccagga
+      421 aagtaccttg atgacataga agaagagccg gaaaatgtcg atcacccaat tgaggtagta
+      481 ttaagggaca tgaacaataa agatgcacga caaaagataa aggatgaagt aaacactcag
+      541 aaagagggga aattccgttt gacaataaaa agggatatac gtaatgtgtt gtccttgaga
+      601 gtgttggtga acggaacctt cctcaagcac cctaatggag acaagtcctt atcaactctt
+      661 catagattga atgcatatga ccagaatgga gggcttgttg ctaaacttgt tgctactgat
+      721 gatcggacag tggaggatga aaaagatggc catcggatcc tcaactcact cttcgagcgt
+      781 tttgatgaag gacattcaaa gccaattcga gcagctgaaa ctgcggtggg agtcttatcc
+      841 caatttggtc aagagcaccg attatcacca gaagagggag acaattagac tggccacgga
+      901 agaactttat ctcttgagta aaagaattga tgatagtata ttgttccaca aaacagtaat
+      961 agctaacagc tccataatag ctgacatgat tgtatcatta tcattactgg aaacattgta
+     1021 tgaaatgaag gatgtggttg aagtgtacag caggcagtgc ttatgaatgt aaaataaaaa
+     1081 tcctcttgtt actact
+//

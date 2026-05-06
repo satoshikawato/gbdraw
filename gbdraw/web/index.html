@@ -520,6 +520,13 @@
                                         <option value="below">Below</option>
                                     </select>
                                 </div>
+                                <div>
+                                    <label class="input-label text-[10px] mb-1">Row Model <help-tip text="Record keeps the legacy one-record-per-row layout. Source draws each uploaded file or GFF3+FASTA pair as one row with all selected records as horizontal segments."></help-tip></label>
+                                    <select v-model="form.linear_row_model" class="form-input text-xs py-1">
+                                        <option value="record">Record</option>
+                                        <option value="source">Source</option>
+                                    </select>
+                                </div>
                                 <div class="grid grid-cols-2 gap-y-1 gap-x-1 p-1 bg-slate-50 rounded-lg">
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.separate_strands" class="form-checkbox">

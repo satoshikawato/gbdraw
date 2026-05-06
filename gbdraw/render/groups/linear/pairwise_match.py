@@ -8,6 +8,7 @@ from svgwrite.container import Group
 from svgwrite.path import Path
 
 from ....canvas import LinearCanvasConfigurator
+from ....layout.linear_rows import LinearLayoutIndex
 from ....layout.linear_coords import normalize_position_linear
 from ....core.color import (
     DEFAULT_COLLINEAR_ORIENTATION_COLORS,
@@ -368,6 +369,132 @@ class PairWiseMatchGroup:
         return self.match_group
 
 
-__all__ = ["PairWiseMatchGroup"]
+class RowWiseMatchGroup:
+    """Visualize pairwise matches between two source rows via a LinearLayoutIndex."""
+
+    def __init__(
+        self,
+        canvas_config: LinearCanvasConfigurator,
+        comparison_df: DataFrame,
+        actual_comparison_height: float,
+        query_row_index: int,
+        subject_row_index: int,
+        blast_config,
+        layout_index: LinearLayoutIndex,
+        track_id: str | None = None,
+    ) -> None:
+        self.canvas_config = canvas_config
+        self.comparison_df = comparison_df
+        self.comparison_height = float(actual_comparison_height)
+        self.query_row_index = int(query_row_index)
+        self.subject_row_index = int(subject_row_index)
+        self.layout_index = layout_index
+        self.match_fill_color = blast_config.fill_color
+        self.min_identity = float(blast_config.identity)
+        self.match_min_color = blast_config.min_color
+        self.match_max_color = blast_config.max_color
+        self.match_fill_opacity = blast_config.fill_opacity
+        self.match_stroke_color = blast_config.stroke_color
+        self.match_stroke_width = blast_config.stroke_width
+        self.collinearity_orientation_colors = {
+            **DEFAULT_COLLINEAR_ORIENTATION_COLORS,
+            **(getattr(blast_config, "collinearity_orientation_colors", {}) or {}),
+        }
+        self.match_style = str(getattr(blast_config, "match_style", "ribbon")).lower()
+        self.curve_tension = float(getattr(blast_config, "curve_tension", 0.5))
+        self.track_id = track_id or f"comparison{self.query_row_index + 1}"
+        self.match_group = Group(id=self.track_id)
+        self.add_elements_to_group()
+
+    def _dynamic_fill_color(self, row: object) -> tuple[str, float]:
+        identity_percent = float(_row_value(row, "identity", 0.0))
+        factor = (identity_percent - self.min_identity) / (100 - self.min_identity)
+        dynamic_fill_color = interpolate_color(self.match_min_color, self.match_max_color, factor)
+        collinearity_block_id = str(_row_value(row, "collinearity_block_id", "") or "")
+        collinearity_orientation = str(_row_value(row, "collinearity_orientation", "") or "")
+        collinearity_color_mode = str(_row_value(row, "collinearity_color_mode", "") or "").lower()
+        if collinearity_block_id and collinearity_color_mode == "orientation":
+            dynamic_fill_color = self.collinearity_orientation_colors.get(
+                collinearity_orientation,
+                dynamic_fill_color,
+            )
+        return dynamic_fill_color, factor
+
+    def generate_linear_match_path(self, row: object) -> Path:
+        dynamic_fill_color, factor = self._dynamic_fill_color(row)
+        query_interval = self.layout_index.resolve_interval(
+            self.query_row_index,
+            _row_value(row, "query", ""),
+            _row_value(row, "qstart", 0),
+            _row_value(row, "qend", 0),
+        )
+        subject_interval = self.layout_index.resolve_interval(
+            self.subject_row_index,
+            _row_value(row, "subject", ""),
+            _row_value(row, "sstart", 0),
+            _row_value(row, "send", 0),
+        )
+
+        query_start_x = query_interval.start_x
+        query_end_x = query_interval.end_x
+        subject_start_x = subject_interval.start_x
+        subject_end_x = subject_interval.end_x
+        query_y = 0.0
+        subject_y = self.comparison_height
+
+        match_style = str(getattr(self, "match_style", "ribbon")).lower()
+        if match_style == "curve":
+            match_path_desc = PairWiseMatchGroup.construct_curved_ribbon_path_description(
+                self,
+                query_start_x,
+                query_y,
+                query_end_x,
+                query_y,
+                subject_start_x,
+                subject_y,
+                subject_end_x,
+                subject_y,
+            )
+        else:
+            match_style = "ribbon"
+            match_path_desc = PairWiseMatchGroup.construct_path_description(
+                self,
+                query_start_x,
+                query_y,
+                query_end_x,
+                query_y,
+                subject_start_x,
+                subject_y,
+                subject_end_x,
+                subject_y,
+            )
+        path = Path(
+            d=match_path_desc,
+            fill=dynamic_fill_color,
+            fill_opacity=self.match_fill_opacity,
+            stroke=self.match_stroke_color,
+            stroke_width=self.match_stroke_width,
+            debug=False,
+        )
+        path.attribs["data-pairwise-match-style"] = match_style
+        path.attribs["data-identity-factor"] = f"{factor:.6g}"
+        path.attribs["data-query-row-index"] = str(self.query_row_index)
+        path.attribs["data-subject-row-index"] = str(self.subject_row_index)
+        path.attribs["data-query-record-key"] = query_interval.record.ref.unique_key
+        path.attribs["data-subject-record-key"] = subject_interval.record.ref.unique_key
+        PairWiseMatchGroup.add_optional_metadata_attributes(self, path, row)
+        return path
+
+    def add_elements_to_group(self) -> Group:
+        rows = sorted(self.comparison_df.itertuples(), key=_match_draw_order_key)
+        for row in rows:
+            self.match_group.add(self.generate_linear_match_path(row))
+        return self.match_group
+
+    def get_group(self) -> Group:
+        return self.match_group
+
+
+__all__ = ["PairWiseMatchGroup", "RowWiseMatchGroup"]
 
 

@@ -45,6 +45,8 @@ ruler_on_axis = false
 align_center = false
 keep_definition_left_aligned = false
 normalize_length = false
+record_gap = 24
+record_label_gap = 8
 [canvas.linear.default_cds_height]
   short = 80
   long = 20

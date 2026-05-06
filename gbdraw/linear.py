@@ -10,20 +10,30 @@ from pathlib import Path
 from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .io.colors import load_default_colors, read_color_table
-from .io.genome import load_gbks, load_gff_fasta
+from .io.genome import load_gbk_rows, load_gbks, load_gff_fasta, load_gff_fasta_rows
 from .io.regions import apply_region_specs, parse_region_specs
 from .config.toml import load_config_toml
 from .render.export import parse_formats, save_figure
-from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[reportMissingImports]
+from .api.diagram import assemble_linear_diagram_from_records, assemble_linear_diagram_from_rows  # type: ignore[reportMissingImports]
 from .analysis.collinearity import (
     LosslessCollinearityParameters,
     build_orthogroup_collinearity_blocks,
+    build_orthogroup_collinearity_blocks_from_rows,
     convert_collinearity_blocks_to_comparisons,
     normalize_collinearity_anchor_mode,
     normalize_collinearity_search_scope,
 )
-from .analysis.protein_colinearity import PROTEIN_BLASTP_MODES
+from .analysis.protein_colinearity import (
+    PROTEIN_BLASTP_MODES,
+    build_pairwise_protein_blastp_comparisons_from_rows,
+    build_rbh_orthogroup_protein_blastp_comparisons_from_rows,
+)
 from .io.collinearity import parse_native_collinearity_tsv, write_native_collinearity_tsv
+from .layout.linear_rows import (
+    adjacent_record_pair_to_linear_row_pair,
+    clone_rows_for_rendering,
+    flatten_linear_rows,
+)
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from .labels.filtering import (
@@ -199,6 +209,12 @@ def _get_args(args) -> argparse.Namespace:
         help="input BLAST result file in tab-separated format (-outfmt 6 or 7) (optional)",
         type=str,
         nargs='*')
+    parser.add_argument(
+        '--linear-row-model',
+        dest='linear_row_model',
+        help='Linear row model: record keeps one SeqRecord per row; source draws one input source per row.',
+        choices=["record", "source"],
+        default="record")
     parser.add_argument(
         '--losatp_bin',
         '--losatp-bin',
@@ -742,6 +758,14 @@ def _get_args(args) -> argparse.Namespace:
         help='Comparison block height (optional; float; optional; default: 60 (pixels, 96 dpi))',
         type=float)
     parser.add_argument(
+        '--record_gap',
+        help='Horizontal gap between records within a source row in source row-model mode (px; default: 24).',
+        type=float)
+    parser.add_argument(
+        '--record_label_gap',
+        help='Gap between a record segment axis and its segment label in source row-model mode (px; default: 8).',
+        type=float)
+    parser.add_argument(
         '--scale_style',
         help='Style for the length scale (default: "bar"; "bar", "ruler")',
         type=str,
@@ -848,6 +872,10 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--depth_small_tick_interval must be > 0")
     if args.depth_tick_font_size is not None and args.depth_tick_font_size <= 0:
         parser.error("--depth_tick_font_size must be > 0")
+    if args.record_gap is not None and args.record_gap < 0:
+        parser.error("--record_gap must be >= 0")
+    if args.record_label_gap is not None and args.record_label_gap < 0:
+        parser.error("--record_label_gap must be >= 0")
     if args.collinear_min_anchors <= 0:
         parser.error("--collinear_min_anchors must be > 0")
     if args.collinear_max_unit_gap < 0:
@@ -900,6 +928,7 @@ def linear_main(cmd_args) -> None:
             "WARNING: The -i/--input option is deprecated and will be removed in a future version. Please use --gbk instead.")  
     out_file_prefix: str = args.output
     blast_files: str = args.blast
+    linear_row_model: str = str(args.linear_row_model or "record")
     protein_blastp_mode: str = str(args.protein_blastp_mode or "none")
     losatp_bin: str = args.losatp_bin
     protein_blastp_max_hits: int = args.protein_blastp_max_hits
@@ -959,6 +988,8 @@ def linear_main(cmd_args) -> None:
     feature_shapes = parse_feature_shape_overrides(args.feature_shape)
     feature_height: Optional[float] = args.feature_height
     comparison_height: Optional[float] = args.comparison_height
+    record_gap: Optional[float] = args.record_gap
+    record_label_gap: Optional[float] = args.record_label_gap
 
     out_formats: list[str] = parse_formats(args.format)
     out_formats = handle_output_formats(out_formats)
@@ -1094,7 +1125,9 @@ def linear_main(cmd_args) -> None:
         legend_box_size=legend_box_size,
         legend_font_size=legend_font_size,
         pairwise_match_style=pairwise_match_style,
-        normalize_length=normalize_length
+        normalize_length=normalize_length,
+        record_gap=record_gap,
+        record_label_gap=record_label_gap
         )
 
     def _normalize_list(values, target_len, fill_value=""):
@@ -1121,38 +1154,60 @@ def linear_main(cmd_args) -> None:
         logger.error("ERROR: Invalid reverse_complement value: %s", value)
         raise ValidationError(f"Invalid reverse_complement value: {value}")
 
+    rows = None
     if args.gbk:
         file_count = len(args.gbk)
         record_selectors = _normalize_list(args.record_id, file_count, "")
         reverse_flags_raw = _normalize_list(args.reverse_complement, file_count, "")
         reverse_flags = [_parse_bool(v) for v in reverse_flags_raw]
-        records = load_gbks(
-            args.gbk,
-            "linear",
-            load_comparison,
-            record_selectors=record_selectors,
-            reverse_flags=reverse_flags,
-        )
+        if linear_row_model == "source":
+            rows = load_gbk_rows(
+                args.gbk,
+                record_selectors=record_selectors,
+                reverse_flags=reverse_flags,
+                row_labels=args.record_label or None,
+            )
+            records = [record for row in rows for record in row.records]
+        else:
+            records = load_gbks(
+                args.gbk,
+                "linear",
+                load_comparison,
+                record_selectors=record_selectors,
+                reverse_flags=reverse_flags,
+            )
     elif args.gff and args.fasta:
         file_count = len(args.gff)
         record_selectors = _normalize_list(args.record_id, file_count, "")
         reverse_flags_raw = _normalize_list(args.reverse_complement, file_count, "")
         reverse_flags = [_parse_bool(v) for v in reverse_flags_raw]
-        records = load_gff_fasta(
-            args.gff,
-            args.fasta,
-            "linear",
-            selected_features_set,
-            keep_all_features=bool(feature_table_path),
-            load_comparison=load_comparison,
-            record_selectors=record_selectors,
-            reverse_flags=reverse_flags,
-        )
+        if linear_row_model == "source":
+            rows = load_gff_fasta_rows(
+                args.gff,
+                args.fasta,
+                selected_features_set=selected_features_set,
+                keep_all_features=bool(feature_table_path),
+                record_selectors=record_selectors,
+                reverse_flags=reverse_flags,
+                row_labels=args.record_label or None,
+            )
+            records = [record for row in rows for record in row.records]
+        else:
+            records = load_gff_fasta(
+                args.gff,
+                args.fasta,
+                "linear",
+                selected_features_set,
+                keep_all_features=bool(feature_table_path),
+                load_comparison=load_comparison,
+                record_selectors=record_selectors,
+                reverse_flags=reverse_flags,
+            )
     else:
         logger.error("A critical error occurred with input file arguments.")
         raise ValidationError("Invalid input file arguments.")
     record_labels = args.record_label or []
-    if record_labels:
+    if record_labels and linear_row_model == "record":
         if len(record_labels) > len(records):
             logger.warning(
                 "WARNING: More --record_label values were provided than records loaded; extra labels will be ignored."
@@ -1173,89 +1228,200 @@ def linear_main(cmd_args) -> None:
         except ValueError as exc:
             logger.error(f"ERROR: {exc}")
             raise ValidationError(str(exc)) from exc
+        if rows is not None:
+            rebuilt_rows = []
+            cursor = 0
+            for row in rows:
+                row_count = len(row.records)
+                row_records = tuple(records[cursor: cursor + row_count])
+                cursor += row_count
+                rebuilt_rows.append(
+                    type(row)(
+                        row_index=row.row_index,
+                        source_id=row.source_id,
+                        source_path=row.source_path,
+                        label=row.label,
+                        records=row_records,
+                    )
+                )
+            rows = rebuilt_rows
         if blast_files:
             logger.warning(
                 "WARNING: Region cropping is enabled; ensure BLAST coordinates match the cropped regions (and reverse complements if specified)."
             )
-    if protein_blastp_mode != "none" and len(records) < 2:
-        raise ValidationError("--protein_blastp_mode requires at least two linear records.")
-    if collinear_blocks_path and len(records) < 2:
-        raise ValidationError("--collinear_blocks requires at least two linear records.")
+    source_analysis_rows = None
+    source_analysis_records = None
+    if rows is not None and (protein_blastp_mode != "none" or collinear_blocks_path):
+        source_analysis_rows, _source_id_map = clone_rows_for_rendering(rows)
+        source_analysis_records = flatten_linear_rows(source_analysis_rows)
+    analysis_record_count = len(source_analysis_records) if source_analysis_records is not None else len(records)
+    analysis_row_count = len(source_analysis_rows) if source_analysis_rows is not None else analysis_record_count
+    if protein_blastp_mode != "none" and analysis_row_count < 2:
+        raise ValidationError("--protein_blastp_mode requires at least two linear records or source rows.")
+    if collinear_blocks_path and analysis_row_count < 2:
+        raise ValidationError("--collinear_blocks requires at least two linear records or source rows.")
     collinearity_comparisons: list[DataFrame] | None = None
     if collinear_blocks_path:
         collinearity_result = parse_native_collinearity_tsv(
             collinear_blocks_path,
-            records,
+            source_analysis_records if source_analysis_records is not None else records,
             params=collinearity_params,
             unit_mode=collinear_unit_mode,
         )
-        collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
-            collinearity_result,
-            records=records,
-            color_mode=collinear_color_mode,
+        if source_analysis_rows is not None:
+            collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
+                collinearity_result,
+                record_ids=[record.id for record in source_analysis_records or []],
+                color_mode=collinear_color_mode,
+                pair_index_by_record_pair=adjacent_record_pair_to_linear_row_pair(source_analysis_rows),
+                comparison_pair_count=len(source_analysis_rows) - 1,
+            )
+        else:
+            collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
+                collinearity_result,
+                records=records,
+                color_mode=collinear_color_mode,
+            )
+    elif protein_blastp_mode == "pairwise" and source_analysis_rows is not None:
+        protein_blastp_result = build_pairwise_protein_blastp_comparisons_from_rows(
+            source_analysis_rows,
+            losatp_bin=losatp_bin,
+            max_hits=protein_blastp_max_hits,
+            candidate_limit=protein_blastp_candidate_limit,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
         )
-    elif protein_blastp_mode == "collinear":
-        collinearity_result = build_orthogroup_collinearity_blocks(
-            records,
+        collinearity_comparisons = protein_blastp_result.comparisons
+    elif protein_blastp_mode == "orthogroup" and source_analysis_rows is not None:
+        protein_blastp_result = build_rbh_orthogroup_protein_blastp_comparisons_from_rows(
+            source_analysis_rows,
             losatp_bin=losatp_bin,
             candidate_limit=protein_blastp_candidate_limit,
             evalue=evalue,
             bitscore=bitscore,
             identity=identity,
             alignment_length=alignment_length,
-            params=collinearity_params,
-            unit_mode=collinear_unit_mode,
-            edge_mode=collinear_anchor_mode,
-            search_scope=collinear_search_scope,
         )
-        collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
-            collinearity_result,
-            records=records,
-            color_mode=collinear_color_mode,
-        )
+        collinearity_comparisons = protein_blastp_result.comparisons
+    elif protein_blastp_mode == "collinear":
+        if source_analysis_rows is not None:
+            collinearity_result = build_orthogroup_collinearity_blocks_from_rows(
+                source_analysis_rows,
+                losatp_bin=losatp_bin,
+                candidate_limit=protein_blastp_candidate_limit,
+                evalue=evalue,
+                bitscore=bitscore,
+                identity=identity,
+                alignment_length=alignment_length,
+                params=collinearity_params,
+                unit_mode=collinear_unit_mode,
+                edge_mode=collinear_anchor_mode,
+                search_scope=collinear_search_scope,
+            )
+            collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
+                collinearity_result,
+                record_ids=[record.id for record in source_analysis_records or []],
+                color_mode=collinear_color_mode,
+                pair_index_by_record_pair=adjacent_record_pair_to_linear_row_pair(source_analysis_rows),
+                comparison_pair_count=len(source_analysis_rows) - 1,
+            )
+        else:
+            collinearity_result = build_orthogroup_collinearity_blocks(
+                records,
+                losatp_bin=losatp_bin,
+                candidate_limit=protein_blastp_candidate_limit,
+                evalue=evalue,
+                bitscore=bitscore,
+                identity=identity,
+                alignment_length=alignment_length,
+                params=collinearity_params,
+                unit_mode=collinear_unit_mode,
+                edge_mode=collinear_anchor_mode,
+                search_scope=collinear_search_scope,
+            )
+            collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
+                collinearity_result,
+                records=records,
+                color_mode=collinear_color_mode,
+            )
     if save_collinear_blocks_path:
         Path(save_collinear_blocks_path).write_text(
             write_native_collinearity_tsv(collinearity_result),
             encoding="utf-8",
         )
     # Use raw records to avoid collapsing lengths when IDs are duplicated.
-    longest_genome: int = max(len(record.seq) for record in records)
+    if rows is not None:
+        longest_genome = max(sum(len(record.seq) for record in row.records) for row in rows)
+    else:
+        longest_genome = max(len(record.seq) for record in records)
     cfg = GbdrawConfig.from_dict(config_dict)
     window, step = calculate_window_step(longest_genome, cfg, manual_window, manual_step)
 
-    canvas = assemble_linear_diagram_from_records(
-        records=records,
-        blast_files=blast_files,
-        config_dict=config_dict,
-        color_table=color_table,
-        default_colors=default_colors,
-        selected_features_set=selected_features_set,
-        feature_table=feature_table,
-        feature_shapes=feature_shapes or None,
-        output_prefix=out_file_prefix,
-        legend=legend,
-        dinucleotide=dinucleotide,
-        window=window,
-        step=step,
-        depth_window=depth_window,
-        depth_step=depth_step,
-        depth_files=depth_files,
-        plot_title=plot_title,
-        plot_title_position=plot_title_position,
-        plot_title_font_size=plot_title_font_size,
-        protein_comparisons=collinearity_comparisons,
-        protein_blastp_mode="none" if collinearity_comparisons is not None else protein_blastp_mode,
-        losatp_bin=losatp_bin,
-        protein_blastp_max_hits=protein_blastp_max_hits,
-        protein_blastp_candidate_limit=protein_blastp_candidate_limit,
-        align_orthogroup_feature=align_orthogroup_feature or None,
-        pairwise_match_style=pairwise_match_style,
-        evalue=evalue,
-        bitscore=bitscore,
-        identity=identity,
-        alignment_length=alignment_length,
-        cfg=cfg,
-    )
+    if rows is not None:
+        canvas = assemble_linear_diagram_from_rows(
+            rows=rows,
+            blast_files=blast_files,
+            config_dict=config_dict,
+            color_table=color_table,
+            default_colors=default_colors,
+            selected_features_set=selected_features_set,
+            feature_table=feature_table,
+            feature_shapes=feature_shapes or None,
+            output_prefix=out_file_prefix,
+            legend=legend,
+            dinucleotide=dinucleotide,
+            window=window,
+            step=step,
+            depth_window=depth_window,
+            depth_step=depth_step,
+            depth_files=depth_files,
+            plot_title=plot_title,
+            plot_title_position=plot_title_position,
+            plot_title_font_size=plot_title_font_size,
+            pairwise_match_style=pairwise_match_style,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+            comparison_dataframes=collinearity_comparisons,
+            cfg=cfg,
+        )
+    else:
+        canvas = assemble_linear_diagram_from_records(
+            records=records,
+            blast_files=blast_files,
+            config_dict=config_dict,
+            color_table=color_table,
+            default_colors=default_colors,
+            selected_features_set=selected_features_set,
+            feature_table=feature_table,
+            feature_shapes=feature_shapes or None,
+            output_prefix=out_file_prefix,
+            legend=legend,
+            dinucleotide=dinucleotide,
+            window=window,
+            step=step,
+            depth_window=depth_window,
+            depth_step=depth_step,
+            depth_files=depth_files,
+            plot_title=plot_title,
+            plot_title_position=plot_title_position,
+            plot_title_font_size=plot_title_font_size,
+            protein_comparisons=collinearity_comparisons,
+            protein_blastp_mode="none" if collinearity_comparisons is not None else protein_blastp_mode,
+            losatp_bin=losatp_bin,
+            protein_blastp_max_hits=protein_blastp_max_hits,
+            protein_blastp_candidate_limit=protein_blastp_candidate_limit,
+            align_orthogroup_feature=align_orthogroup_feature or None,
+            pairwise_match_style=pairwise_match_style,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+            cfg=cfg,
+        )
     save_figure(canvas, out_formats)
 
 

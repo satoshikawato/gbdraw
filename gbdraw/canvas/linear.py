@@ -158,6 +158,8 @@ class LinearCanvasConfigurator:
         self.align_center: bool = cfg.canvas.linear.align_center
         self.keep_definition_left_aligned: bool = cfg.canvas.linear.keep_definition_left_aligned
         self.normalize_length: bool = cfg.canvas.linear.normalize_length
+        self.record_gap: float = cfg.canvas.linear.record_gap
+        self.record_label_gap: float = cfg.canvas.linear.record_label_gap
         _label_setting = cfg.canvas.show_labels
         if isinstance(_label_setting, str):
             self.show_labels = _label_setting in ["all", "first"]

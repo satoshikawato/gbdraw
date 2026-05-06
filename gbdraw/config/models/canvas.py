@@ -88,6 +88,8 @@ class LinearCanvasConfig:
     align_center: bool
     keep_definition_left_aligned: bool
     normalize_length: bool
+    record_gap: float
+    record_label_gap: float
     default_cds_height: LinearCanvasDefaultCdsHeightConfig
     arrow_length_parameter: LinearCanvasArrowLengthParameterConfig
 
@@ -136,6 +138,8 @@ class LinearCanvasConfig:
             align_center=bool(d["align_center"]),
             keep_definition_left_aligned=bool(d.get("keep_definition_left_aligned", False)),
             normalize_length=bool(d["normalize_length"]),
+            record_gap=float(d.get("record_gap", 24.0)),
+            record_label_gap=float(d.get("record_label_gap", 8.0)),
             default_cds_height=LinearCanvasDefaultCdsHeightConfig.from_dict(d["default_cds_height"]),
             arrow_length_parameter=LinearCanvasArrowLengthParameterConfig.from_dict(d["arrow_length_parameter"]),
         )

@@ -37,6 +37,11 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.layout.linear_rows import (  # type: ignore[reportMissingImports]
+    LinearInputRow,
+    adjacent_record_pair_to_linear_row_pair,
+    linear_row_record_index_groups,
+)
 
 CollinearityOrientation = Literal["plus", "minus"]
 CollinearityBlockKind = Literal["syntenic", "cluster", "singleton"]
@@ -2029,6 +2034,7 @@ def build_orthogroup_collinearity_blocks_from_hits(
     edge_mode: CollinearityAnchorMode | str = "rbh",
     search_scope: CollinearitySearchScope | str = "adjacent",
     reverse_hits_by_pair: Sequence[DataFrame] | None = None,
+    display_pairs: Sequence[tuple[int, int]] | None = None,
 ) -> CollinearityResult:
     """Call lossless Orthogroup-sourced collinearity blocks from filtered hits."""
 
@@ -2037,11 +2043,21 @@ def build_orthogroup_collinearity_blocks_from_hits(
     normalized_edge_mode = normalize_collinearity_anchor_mode(str(edge_mode))
     normalized_search_scope = normalize_collinearity_search_scope(str(search_scope))
     record_count = len(records) if records is not None else len(extraction.proteins_by_record)
-    directional_tables = _filter_hit_tables_by_search_scope(
-        directional_tables,
-        record_count=record_count,
-        scope=normalized_search_scope,
+    display_pair_set = (
+        {
+            (min(int(query_index), int(subject_index)), max(int(query_index), int(subject_index)))
+            for query_index, subject_index in display_pairs
+            if int(query_index) != int(subject_index)
+        }
+        if display_pairs is not None
+        else None
     )
+    if display_pair_set is None:
+        directional_tables = _filter_hit_tables_by_search_scope(
+            directional_tables,
+            record_count=record_count,
+            scope=normalized_search_scope,
+        )
     if normalized_edge_mode == "rbh":
         edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
             directional_tables,
@@ -2049,7 +2065,14 @@ def build_orthogroup_collinearity_blocks_from_hits(
             record_count=record_count,
         )
         orthogroups = edge_selection.orthogroups
-        adjacent_edges_by_pair = edge_selection.adjacent_display_edges_by_pair
+        if display_pair_set is None:
+            adjacent_edges_by_pair = edge_selection.adjacent_display_edges_by_pair
+        else:
+            adjacent_edges_by_pair = {
+                pair: table
+                for pair, table in edge_selection.all_edges_by_pair.items()
+                if pair in display_pair_set
+            }
     else:
         edge_tables = _select_orthogroup_edges(directional_tables, edge_mode=normalized_edge_mode)
         orthogroups = build_orthogroups_from_protein_hits(
@@ -2057,13 +2080,23 @@ def build_orthogroup_collinearity_blocks_from_hits(
             extraction.protein_map,
             include_singletons=False,
         )
-        adjacent_edges_by_pair = {
-            pair: table
-            for pair, table in edge_tables.items()
-            if int(pair[1]) == int(pair[0]) + 1
-        }
-        for query_index in range(max(0, record_count - 1)):
-            adjacent_edges_by_pair.setdefault((query_index, query_index + 1), _empty_hits())
+        if display_pair_set is None:
+            adjacent_edges_by_pair = {
+                pair: table
+                for pair, table in edge_tables.items()
+                if int(pair[1]) == int(pair[0]) + 1
+            }
+            for query_index in range(max(0, record_count - 1)):
+                adjacent_edges_by_pair.setdefault((query_index, query_index + 1), _empty_hits())
+        else:
+            adjacent_edges_by_pair = {
+                pair: table
+                for pair, table in edge_tables.items()
+                if pair in display_pair_set
+            }
+    if display_pair_set is not None:
+        for pair in sorted(display_pair_set):
+            adjacent_edges_by_pair.setdefault(pair, _empty_hits())
     anchors = orthogroup_edges_to_lossless_collinearity_anchors(
         adjacent_edges_by_pair,
         extraction.protein_map,
@@ -2092,6 +2125,49 @@ def _validate_collinearity_extraction(
             "no CDS proteins were found in: "
             + ", ".join(empty_record_ids)
         )
+
+
+def _validate_row_collinearity_extraction(
+    rows: Sequence[LinearInputRow],
+    index_groups: Sequence[Sequence[int]],
+    extraction: ProteinExtractionResult,
+) -> None:
+    empty_row_labels: list[str] = []
+    for row_position, record_indices in enumerate(index_groups):
+        if any(
+            record_index < len(extraction.proteins_by_record)
+            and bool(extraction.proteins_by_record[record_index])
+            for record_index in record_indices
+        ):
+            continue
+        row = rows[row_position] if row_position < len(rows) else None
+        empty_row_labels.append(str(getattr(row, "label", "") or f"row {row_position + 1}"))
+    if empty_row_labels:
+        raise ValidationError(
+            "protein_blastp_mode='collinear' requires at least one CDS protein in each source row; "
+            "no CDS proteins were found in: "
+            + ", ".join(empty_row_labels)
+        )
+
+
+def _iter_row_search_record_pairs(
+    index_groups: Sequence[Sequence[int]],
+    *,
+    scope: CollinearitySearchScope | str,
+) -> tuple[tuple[int, int], ...]:
+    normalized_scope = normalize_collinearity_search_scope(str(scope))
+    pairs: list[tuple[int, int]] = []
+    row_count = len(index_groups)
+    for query_row_index in range(max(0, row_count - 1)):
+        if normalized_scope == "adjacent":
+            subject_row_indices = range(query_row_index + 1, min(row_count, query_row_index + 2))
+        else:
+            subject_row_indices = range(query_row_index + 1, row_count)
+        for subject_row_index in subject_row_indices:
+            for query_record_index in index_groups[query_row_index]:
+                for subject_record_index in index_groups[subject_row_index]:
+                    pairs.append((int(query_record_index), int(subject_record_index)))
+    return tuple(pairs)
 
 
 def build_orthogroup_collinearity_blocks(
@@ -2169,6 +2245,89 @@ def build_orthogroup_collinearity_blocks(
         unit_mode=unit_mode,
         edge_mode=normalized_edge_mode,
         search_scope=normalized_search_scope,
+    )
+
+
+def build_orthogroup_collinearity_blocks_from_rows(
+    rows: Sequence[LinearInputRow],
+    *,
+    losatp_bin: str = "losat",
+    candidate_limit: int | None = None,
+    evalue: float = 1e-5,
+    bitscore: float = 50.0,
+    identity: float = 70.0,
+    alignment_length: int = 0,
+    params: CollinearityParameters | LosslessCollinearityParameters | None = None,
+    unit_mode: CollinearityUnitMode | str = "auto",
+    edge_mode: CollinearityAnchorMode | str = "rbh",
+    search_scope: CollinearitySearchScope | str = "adjacent",
+    runner: LosatpRunner | None = None,
+) -> CollinearityResult:
+    """Run LOSATP evidence searches across source-row record pairs and call blocks."""
+
+    row_list = list(rows)
+    if len(row_list) < 2:
+        raise ValidationError("protein_blastp_mode='collinear' requires at least two source rows")
+    lossless_params = _lossless_params_from_legacy(params)
+    normalized_edge_mode = normalize_collinearity_anchor_mode(str(edge_mode))
+    normalized_search_scope = normalize_collinearity_search_scope(str(search_scope))
+    records, index_groups = linear_row_record_index_groups(row_list)
+    extraction = extract_cds_proteins(records)
+    _validate_row_collinearity_extraction(row_list, index_groups, extraction)
+
+    search_candidate_limit = (
+        candidate_limit
+        if candidate_limit is not None or normalized_edge_mode == "all"
+        else 1
+    )
+    directional_tables: dict[tuple[int, int], DataFrame] = {}
+    for query_index, subject_index in _iter_row_search_record_pairs(
+        index_groups,
+        scope=normalized_search_scope,
+    ):
+        query_fasta = proteins_to_fasta(extraction.proteins_by_record[query_index])
+        subject_fasta = proteins_to_fasta(extraction.proteins_by_record[subject_index])
+        if not query_fasta or not subject_fasta:
+            continue
+        forward_hits = _run_losatp_search(
+            query_fasta,
+            subject_fasta,
+            losatp_bin=losatp_bin,
+            candidate_limit=search_candidate_limit,
+            runner=runner,
+        )
+        directional_tables[(query_index, subject_index)] = filter_protein_hits_by_thresholds(
+            forward_hits,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+        )
+        if normalized_edge_mode == "rbh":
+            reverse_hits = _run_losatp_search(
+                subject_fasta,
+                query_fasta,
+                losatp_bin=losatp_bin,
+                candidate_limit=search_candidate_limit,
+                runner=runner,
+            )
+            directional_tables[(subject_index, query_index)] = filter_protein_hits_by_thresholds(
+                reverse_hits,
+                evalue=evalue,
+                bitscore=bitscore,
+                identity=identity,
+                alignment_length=alignment_length,
+            )
+
+    return build_orthogroup_collinearity_blocks_from_hits(
+        directional_tables,
+        extraction,
+        records=records,
+        params=lossless_params,
+        unit_mode=unit_mode,
+        edge_mode=normalized_edge_mode,
+        search_scope=normalized_search_scope,
+        display_pairs=tuple(adjacent_record_pair_to_linear_row_pair(row_list)),
     )
 
 
@@ -2280,6 +2439,8 @@ def convert_collinearity_blocks_to_comparisons(
     records: Sequence[SeqRecord] | None = None,
     record_ids: Sequence[str] | None = None,
     color_mode: CollinearityColorMode | str = "orientation",
+    pair_index_by_record_pair: Mapping[tuple[int, int], int] | None = None,
+    comparison_pair_count: int | None = None,
 ) -> list[DataFrame]:
     """Convert accepted blocks into existing linear comparison rows.
 
@@ -2296,26 +2457,55 @@ def convert_collinearity_blocks_to_comparisons(
     else:
         for block in result.blocks:
             record_count = max(record_count, int(block.query_record_index) + 1, int(block.subject_record_index) + 1)
-    if record_count < 2:
+    if comparison_pair_count is not None:
+        pair_count = max(0, int(comparison_pair_count))
+    elif pair_index_by_record_pair is not None:
+        pair_count = (
+            max((int(pair_index) for pair_index in pair_index_by_record_pair.values()), default=-1)
+            + 1
+        )
+    else:
+        pair_count = max(0, record_count - 1)
+    if pair_count <= 0:
         return []
 
-    rows_by_pair: list[list[dict[str, object]]] = [[] for _ in range(record_count - 1)]
+    normalized_pair_index_by_record_pair = (
+        {
+            (int(query_index), int(subject_index)): int(pair_index)
+            for (query_index, subject_index), pair_index in pair_index_by_record_pair.items()
+        }
+        if pair_index_by_record_pair is not None
+        else None
+    )
+    rows_by_pair: list[list[dict[str, object]]] = [[] for _ in range(pair_count)]
     for block in result.blocks:
-        pair_index = int(block.query_record_index)
-        if int(block.subject_record_index) != pair_index + 1:
-            raise ValidationError("Collinearity rendering supports adjacent record pairs only.")
+        query_record_index = int(block.query_record_index)
+        subject_record_index = int(block.subject_record_index)
+        if normalized_pair_index_by_record_pair is None:
+            pair_index = query_record_index
+            if subject_record_index != pair_index + 1:
+                raise ValidationError("Collinearity rendering supports adjacent record pairs only.")
+        else:
+            pair_lookup_key = (query_record_index, subject_record_index)
+            if pair_lookup_key not in normalized_pair_index_by_record_pair:
+                raise ValidationError(
+                    "Collinearity rendering supports record pairs from adjacent source rows only."
+                )
+            pair_index = normalized_pair_index_by_record_pair[pair_lookup_key]
+            if pair_index < 0 or pair_index >= pair_count:
+                raise ValidationError("Collinearity pair index is outside the comparison frame range.")
         if not block.anchors:
             continue
         first_anchor = block.anchors[0]
         query_name = (
-            resolved_record_ids[first_anchor.query_record_index]
-            if first_anchor.query_record_index < len(resolved_record_ids)
-            else str(first_anchor.query_record_index + 1)
+            resolved_record_ids[query_record_index]
+            if query_record_index < len(resolved_record_ids)
+            else str(query_record_index + 1)
         )
         subject_name = (
-            resolved_record_ids[first_anchor.subject_record_index]
-            if first_anchor.subject_record_index < len(resolved_record_ids)
-            else str(first_anchor.subject_record_index + 1)
+            resolved_record_ids[subject_record_index]
+            if subject_record_index < len(resolved_record_ids)
+            else str(subject_record_index + 1)
         )
         query_start, query_end = _coordinate_span(block.anchors, "query_start", "query_end")
         subject_min, subject_max = _coordinate_span(block.anchors, "subject_start", "subject_end")
@@ -2387,6 +2577,7 @@ __all__ = [
     "build_orthogroup_collinearity_anchors",
     "build_orthogroup_collinearity_blocks",
     "build_orthogroup_collinearity_blocks_from_hits",
+    "build_orthogroup_collinearity_blocks_from_rows",
     "call_collinearity_blocks",
     "calculate_collinearity_block_evalue",
     "cluster_lossless_collinearity_anchors",

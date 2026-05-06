@@ -26,8 +26,11 @@ from ...render.groups.linear import (  # type: ignore[reportMissingImports]
     GcContentGroup,
     GcSkewGroup,
     PairWiseMatchGroup,
+    RowWiseMatchGroup,
     SeqRecordGroup,
 )
+from ...exceptions import ValidationError
+from ...layout.linear_rows import LinearLayoutIndex
 from .positioning import (
     position_depth_group,
     position_gc_content_group,
@@ -215,6 +218,41 @@ def add_comparison_on_linear_canvas(
     return canvas
 
 
+def add_row_comparison_on_linear_canvas(
+    canvas: Drawing,
+    comparisons,
+    canvas_config: LinearCanvasConfigurator,
+    blast_config,
+    layout_index: LinearLayoutIndex,
+    comparison_offsets: list,
+    actual_comparison_heights: list,
+) -> Drawing:
+    """Adds row-aware comparison groups for adjacent source rows."""
+
+    if len(comparisons) > max(0, len(layout_index.rows) - 1):
+        raise ValidationError(
+            f"Too many comparison sources ({len(comparisons)}) for "
+            f"{len(layout_index.rows)} source rows."
+        )
+
+    for comparison_index, comparison in enumerate(comparisons):
+        if comparison_index >= len(comparison_offsets):
+            break
+        match_group: Group = RowWiseMatchGroup(
+            canvas_config,
+            comparison,
+            actual_comparison_heights[comparison_index],
+            comparison_index,
+            comparison_index + 1,
+            blast_config,
+            layout_index,
+            track_id=f"comparison{comparison_index + 1}",
+        ).get_group()
+        match_group.translate(canvas_config.horizontal_offset, comparison_offsets[comparison_index])
+        canvas.add(match_group)
+    return canvas
+
+
 def add_length_bar_on_linear_canvas(
     canvas: Drawing, canvas_config: LinearCanvasConfigurator, config_dict: dict, scale_group, legend_group
 ) -> Drawing:
@@ -245,6 +283,7 @@ __all__ = [
     "add_gc_skew_group",
     "add_record_definition_group",
     "add_comparison_on_linear_canvas",
+    "add_row_comparison_on_linear_canvas",
     "add_length_bar_on_linear_canvas",
     "add_legends_on_linear_canvas",
 ]

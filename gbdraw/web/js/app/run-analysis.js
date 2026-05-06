@@ -93,22 +93,26 @@ const wrapFastaSequence = (sequence) => {
   for (let i = 0; i < sequence.length; i += 60) lines.push(sequence.slice(i, i + 60));
   return lines.join('\n');
 };
-const buildFastaText = (record) => `>${record.id}\n${wrapFastaSequence(record.sequence)}\n`;
-const selectParsedRecord = (records, selectorRaw) => {
+const buildFastaRecordText = (record) => `>${record.id}\n${wrapFastaSequence(record.sequence)}\n`;
+const buildFastaText = (records) => {
+  const recordList = Array.isArray(records) ? records : [records];
+  return recordList.map((record) => buildFastaRecordText(record)).join('');
+};
+const selectParsedRecords = (records, selectorRaw, { includeAllByDefault = false } = {}) => {
   if (!records.length) throw new Error('No records found');
   const selector = normalizeRecordSelectorText(selectorRaw);
-  if (!selector) return records[0];
+  if (!selector) return includeAllByDefault ? records : [records[0]];
   if (selector.startsWith('#')) {
     const idx = Number(selector.slice(1).trim()) - 1;
     if (!Number.isInteger(idx) || idx < 0 || idx >= records.length) {
       throw new Error(`Record selector ${selector} is out of range (loaded ${records.length} record(s)).`);
     }
-    return records[idx];
+    return [records[idx]];
   }
   const matches = records.filter((record) => record.id === selector);
   if (matches.length === 0) throw new Error(`Record selector '${selector}' did not match any record ID.`);
   if (matches.length > 1) throw new Error(`Record selector '${selector}' matched multiple records. Use #index to disambiguate.`);
-  return matches[0];
+  return matches;
 };
 const parseFastaRecordsFast = (text) => {
   const records = [];
@@ -215,17 +219,21 @@ const logPostGbdrawTimings = (entries) => {
   });
   console.groupEnd();
 };
-const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector, reverseFlag }) => {
+const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector, reverseFlag, rowModel }) => {
   if (typeof text !== 'string' && !file?.text) {
     throw new Error('Input file is not available for browser FASTA extraction.');
   }
   const sourceText = typeof text === 'string' ? text : await file.text();
   const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
-  const selected = selectParsedRecord(records, recordSelector);
-  const transformed = applyLosatSequenceTransforms(selected, regionSpec, reverseFlag);
+  const includeAllByDefault = String(rowModel || 'record').trim().toLowerCase() === 'source';
+  const selectedRecords = selectParsedRecords(records, recordSelector, { includeAllByDefault });
+  const transformedRecords = selectedRecords.map((record) => applyLosatSequenceTransforms(record, regionSpec, reverseFlag));
+  const firstRecord = transformedRecords[0];
   return {
-    fasta: buildFastaText(transformed),
-    recordId: transformed.id
+    fasta: buildFastaText(transformedRecords),
+    recordId: firstRecord?.id || '',
+    recordIds: transformedRecords.map((record) => record.id),
+    recordCount: transformedRecords.length
   };
 };
 const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -839,7 +847,8 @@ export const createRunAnalysis = ({
         hide_length: false,
         orthogroup_alignment: false,
         pairwise_match_style: false,
-        keep_definition_left_aligned: false
+        keep_definition_left_aligned: false,
+        linear_row_model: false
       };
       return linearLabelSupportCache;
     }
@@ -867,6 +876,7 @@ json.dumps({
   "orthogroup_alignment": "--align_orthogroup_feature" in _source,
   "pairwise_match_style": "--pairwise_match_style" in _source,
   "keep_definition_left_aligned": "--keep_definition_left_aligned" in _source,
+  "linear_row_model": "--linear-row-model" in _source,
 })
       `);
       linearLabelSupportCache = JSON.parse(String(raw));
@@ -889,7 +899,8 @@ json.dumps({
         hide_length: false,
         orthogroup_alignment: false,
         pairwise_match_style: false,
-        keep_definition_left_aligned: false
+        keep_definition_left_aligned: false,
+        linear_row_model: false
       };
     }
     return linearLabelSupportCache;
@@ -1636,11 +1647,15 @@ json.dumps({
         const useLosat = blastSource.value === 'losat';
         const useProteinBlastp = useLosat && losatProgram.value === 'blastp';
         const blastpMode = normalizeBlastpMode(losat.blastp?.mode);
+        const linearRowModel = String(form.linear_row_model || 'record').trim().toLowerCase() === 'source'
+          ? 'source'
+          : 'record';
+        form.linear_row_model = linearRowModel;
         const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
         const selectedOrthogroupTarget = String(selectedOrthogroupAlignmentFeature.value || '').trim();
         const wantsOrthogroupAlignmentOption =
-          useOrthogroupBlastp && lInputType.value === 'gb' && selectedOrthogroupTarget !== '';
+          useOrthogroupBlastp && linearRowModel === 'record' && lInputType.value === 'gb' && selectedOrthogroupTarget !== '';
         adv.min_bitscore = normalizeBlastThresholdNumber(
           adv.min_bitscore,
           DEFAULT_LINEAR_BLAST_FILTERS.bitscore
@@ -1736,6 +1751,7 @@ json.dumps({
         const wantsHideLengthOption = adv.linear_show_length === false;
         const wantsPairwiseMatchStyleOption = normalizedPairwiseMatchStyle !== 'ribbon';
         const wantsKeepDefinitionLeftAlignedOption = form.keep_definition_left_aligned === true;
+        const wantsLinearRowModelOption = linearRowModel === 'source';
         const wantsRulerOnAxisOption =
           Boolean(form.linear_ruler_on_axis) &&
           form.scale_style === 'ruler' &&
@@ -1757,7 +1773,8 @@ json.dumps({
           wantsHideLengthOption ||
           wantsPairwiseMatchStyleOption ||
           wantsOrthogroupAlignmentOption ||
-          wantsKeepDefinitionLeftAlignedOption
+          wantsKeepDefinitionLeftAlignedOption ||
+          wantsLinearRowModelOption
         ) {
           if (wantsPlacementOption && !linearLabelSupport.placement) {
             throw new Error("Current gbdraw wheel does not support --label_placement. Rebuild and redeploy the web wheel.");
@@ -1807,7 +1824,11 @@ json.dumps({
           if (wantsKeepDefinitionLeftAlignedOption && !linearLabelSupport.keep_definition_left_aligned) {
             throw new Error("Current gbdraw wheel does not support --keep_definition_left_aligned. Rebuild and redeploy the web wheel.");
           }
+          if (wantsLinearRowModelOption && !linearLabelSupport.linear_row_model) {
+            throw new Error("Current gbdraw wheel does not support --linear-row-model. Rebuild and redeploy the web wheel.");
+          }
         }
+        if (wantsLinearRowModelOption) args.push('--linear-row-model', linearRowModel);
         if (wantsPlotTitleOption) args.push('--plot_title', normalizedPlotTitle);
         if (wantsPlotTitlePositionOption) args.push('--plot_title_position', normalizedPlotTitlePosition);
         if (wantsPlotTitleFontSizeOption) args.push('--plot_title_font_size', String(normalizedPlotTitleFontSize));
@@ -1919,7 +1940,7 @@ json.dumps({
         const fastaCache = new Map();
         const fastaHashCache = new Map();
         const linearFileTextCache = new WeakMap();
-        let extractFirstFasta = null;
+        let extractLosatFasta = null;
         let extractProteinFasta = null;
         let convertProteinBlast = null;
         if (useOrthogroupBlastp) {
@@ -1962,13 +1983,13 @@ json.dumps({
             extractProteinFasta = pyodide.globals.get('extract_cds_protein_fasta');
             convertProteinBlast = pyodide.globals.get('convert_losatp_blastp_pairs_to_genomic_payload');
           } else {
-            extractFirstFasta = pyodide.globals.get('extract_first_fasta');
+            extractLosatFasta = pyodide.globals.get('extract_losat_fasta');
           }
         } else {
           losatCacheInfo.value = [];
         }
 
-        const getSeqEntry = async (idx) => {
+        const getSeqEntry = async (idx, options = {}) => {
           if (fastaCache.has(idx)) return fastaCache.get(idx);
           const startedAt = getNow();
           const path = lInputType.value === 'gb'
@@ -1983,11 +2004,14 @@ json.dumps({
           const regionSpec = regionSpecs[idx]?.file || null;
           const recordSelector = recordSelectors[idx] ?? '';
           const reverseFlag = reverseFlags[idx] ? '1' : '0';
+          const recordIndexOffset = Number.isInteger(options.recordIndexOffset)
+            ? options.recordIndexOffset
+            : idx;
           const sourceFile = lInputType.value === 'gb'
             ? linearSeqs[idx]?.gb
             : (useProteinBlastp ? linearSeqs[idx]?.gff : linearSeqs[idx]?.fasta);
           const sourceText = sourceFile ? linearFileTextCache.get(sourceFile) : null;
-          const persistentCacheKey = JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
+          const persistentCacheKey = JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag, rowModel: linearRowModel });
           const usePersistentFastaCache = !useProteinBlastp;
           const cachedEntry = sourceFile && usePersistentFastaCache
             ? getCachedFastaExtraction(sourceFile, persistentCacheKey)
@@ -1999,12 +2023,14 @@ json.dumps({
           } else {
             if (useProteinBlastp) {
               const res = JSON.parse(
-                extractProteinFasta(path, fmt, pairedFastaPath, regionSpec, recordSelector, reverseFlag, idx)
+                extractProteinFasta(path, fmt, pairedFastaPath, regionSpec, recordSelector, reverseFlag, recordIndexOffset, linearRowModel)
               );
               if (res.error) throw new Error(res.error);
               entry = {
                 fasta: res.fasta,
                 recordId: res.record_id || `seq_${idx + 1}`,
+                recordIds: Array.isArray(res.record_ids) ? res.record_ids : [],
+                recordCount: Number.isInteger(Number(res.record_count)) ? Number(res.record_count) : 1,
                 proteinMap: res.protein_map || {},
                 proteinCount: res.protein_count || 0
               };
@@ -2017,15 +2043,18 @@ json.dumps({
                   fmt,
                   regionSpec,
                   recordSelector,
-                  reverseFlag
+                  reverseFlag,
+                  rowModel: linearRowModel
                 });
                 if (losatTiming) losatTiming.fastaJsExtractions += 1;
               } catch (fastError) {
-                const res = JSON.parse(extractFirstFasta(path, fmt, regionSpec, recordSelector, reverseFlag));
+                const res = JSON.parse(extractLosatFasta(path, fmt, regionSpec, recordSelector, reverseFlag, linearRowModel));
                 if (res.error) throw new Error(res.error);
                 entry = {
                   fasta: res.fasta,
-                  recordId: res.record_id || `seq_${idx + 1}`
+                  recordId: res.record_id || `seq_${idx + 1}`,
+                  recordIds: Array.isArray(res.record_ids) ? res.record_ids : [],
+                  recordCount: Number.isInteger(Number(res.record_count)) ? Number(res.record_count) : 1
                 };
                 if (losatTiming) {
                   losatTiming.fastaPyodideFallbacks += 1;
@@ -2158,6 +2187,14 @@ json.dumps({
         });
 
         if (useLosat) {
+          if (useProteinBlastp && linearRowModel === 'source') {
+            setProcessingStatus('Extracting source-row proteins...');
+            let nextRecordIndexOffset = 0;
+            for (let i = 0; i < linearSeqs.length; i += 1) {
+              const entry = await getSeqEntry(i, { recordIndexOffset: nextRecordIndexOffset });
+              nextRecordIndexOffset += Math.max(1, Number(entry.recordCount) || 1);
+            }
+          }
           setProcessingStatus('Preparing LOSAT jobs...');
           const losatPairs = [];
           const losatJobs = [];
@@ -2302,7 +2339,8 @@ json.dumps({
                 losat.blastp.collinearMaxDiagonalDrift,
                 0,
                 0,
-                collinearSearchScope
+                collinearSearchScope,
+                linearRowModel
               )
             );
             if (convertedPayload.error) throw new Error(convertedPayload.error);
@@ -2363,8 +2401,8 @@ json.dumps({
             }
           }
         }
-        if (extractFirstFasta) {
-          extractFirstFasta.destroy();
+        if (extractLosatFasta) {
+          extractLosatFasta.destroy();
         }
         if (extractProteinFasta) {
           extractProteinFasta.destroy();

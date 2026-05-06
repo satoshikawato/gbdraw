@@ -1064,6 +1064,30 @@ def test_linear_cli_rejects_negative_collinear_block_evalue() -> None:
 
 
 @pytest.mark.linear
+def test_web_losat_fasta_helper_source_row_exports_all_records(tmp_path: Path) -> None:
+    helpers_js = Path("gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
+    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
+    namespace: dict[str, object] = {}
+    exec(helper_source, namespace)
+
+    fasta_path = tmp_path / "source.fasta"
+    fasta_path.write_text(">NC_001\nATGC\n>NC_002\nATGCGG\n", encoding="utf-8")
+
+    source_result = json.loads(
+        str(namespace["extract_losat_fasta"](str(fasta_path), "fasta", None, None, None, "source"))
+    )
+    record_result = json.loads(
+        str(namespace["extract_losat_fasta"](str(fasta_path), "fasta", None, None, None, "record"))
+    )
+
+    assert source_result["record_ids"] == ["NC_001", "NC_002"]
+    assert ">NC_001\n" in source_result["fasta"]
+    assert ">NC_002\n" in source_result["fasta"]
+    assert record_result["record_ids"] == ["NC_001"]
+    assert ">NC_002\n" not in record_result["fasta"]
+
+
+@pytest.mark.linear
 def test_web_losatp_blastp_payload_helper_returns_collinear_rows() -> None:
     class JsNull:
         def __str__(self) -> str:
@@ -1359,6 +1383,79 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope() -> No
 
 
 @pytest.mark.linear
+def test_web_losatp_blastp_payload_helper_supports_source_row_collinear_pairs() -> None:
+    helpers_js = Path("gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
+    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
+    namespace: dict[str, object] = {}
+    exec(helper_source, namespace)
+
+    hits = pd.DataFrame.from_records([_hit_row("qa0", "sb0")], columns=COMPARISON_COLUMNS)
+    payload = [
+        {
+            "pairIndex": 0,
+            "queryIndex": 0,
+            "subjectIndex": 1,
+            "blastText": hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
+            "queryProteinMap": {
+                "qa0": _web_protein_entry(
+                    "qa0",
+                    record_index=0,
+                    record_id="src_a:1:chr1",
+                    feature_index=0,
+                    start=0,
+                    end=9,
+                ),
+                "qa1": _web_protein_entry(
+                    "qa1",
+                    record_index=1,
+                    record_id="src_a:2:chr2",
+                    feature_index=0,
+                    start=0,
+                    end=9,
+                ),
+            },
+            "subjectProteinMap": {
+                "sb0": _web_protein_entry(
+                    "sb0",
+                    record_index=2,
+                    record_id="src_b:1:chr1",
+                    feature_index=0,
+                    start=0,
+                    end=9,
+                )
+            },
+        }
+    ]
+
+    raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+        json.dumps(payload),
+        "collinear",
+        5,
+        50,
+        "1e-5",
+        0,
+        0,
+        1,
+        0,
+        "cds",
+        "orientation",
+        "one_to_one",
+        50,
+        25,
+        25,
+        1,
+        2,
+        "adjacent",
+        "source",
+    )
+    result = json.loads(str(raw_result))
+
+    assert "error" not in result
+    assert result["pairs"][0]["rows"][0]["query"] == "src_a:1:chr1"
+    assert result["pairs"][0]["rows"][0]["subject"] == "src_b:1:chr1"
+
+
+@pytest.mark.linear
 def test_collinearity_comparison_rows_use_block_spans() -> None:
     result = CollinearityResult(
         blocks=(
@@ -1399,6 +1496,34 @@ def test_collinearity_comparison_rows_use_block_spans() -> None:
     assert rows.loc["block_minus", "sstart"] == 29
     assert rows.loc["block_minus", "send"] == 1
     assert rows.loc["block_plus", "collinearity_block_evalue"] == pytest.approx(1e-9)
+
+
+@pytest.mark.linear
+def test_collinearity_comparison_rows_accept_source_row_record_pairs() -> None:
+    result = CollinearityResult(
+        blocks=(
+            CollinearityBlock(
+                block_id="block_source_pair",
+                query_record_index=0,
+                subject_record_index=2,
+                orientation="plus",
+                score=50.0,
+                anchors=(_anchor(0, 0),),
+            ),
+        )
+    )
+
+    comparisons = convert_collinearity_blocks_to_comparisons(
+        result,
+        record_ids=["src_a:1:chr1", "src_a:2:chr2", "src_b:1:chr1"],
+        pair_index_by_record_pair={(0, 2): 0, (1, 2): 0},
+        comparison_pair_count=1,
+    )
+
+    assert len(comparisons) == 1
+    row = comparisons[0].iloc[0]
+    assert row["query"] == "src_a:1:chr1"
+    assert row["subject"] == "src_b:1:chr1"
 
 
 @pytest.mark.linear

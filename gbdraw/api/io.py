@@ -8,9 +8,12 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
 from gbdraw.io.genome import (  # type: ignore[reportMissingImports]
+    load_gbk_rows as _load_gbk_rows,
     load_gbks as _load_gbks,
+    load_gff_fasta_rows as _load_gff_fasta_rows,
     load_gff_fasta as _load_gff_fasta,
 )
+from gbdraw.layout.linear_rows import LinearInputRow  # type: ignore[reportMissingImports]
 from gbdraw.io.record_select import (  # type: ignore[reportMissingImports]
     RecordSelector,
     parse_record_selector as _parse_record_selector,
@@ -45,6 +48,26 @@ def load_gbks(
         raise ValidationError(str(exc)) from exc
 
 
+def load_gbk_rows(
+    gbk_list: Sequence[str],
+    *,
+    record_selectors: list[str] | None = None,
+    reverse_flags: list[bool] | None = None,
+    row_labels: list[str] | None = None,
+) -> list[LinearInputRow]:
+    """Load GenBank files as source rows for linear source row-model diagrams."""
+
+    try:
+        return _load_gbk_rows(
+            list(gbk_list),
+            record_selectors=record_selectors,
+            reverse_flags=reverse_flags,
+            row_labels=row_labels,
+        )
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+
+
 def load_gff_fasta(
     gff_list: Sequence[str],
     fasta_list: Sequence[str],
@@ -67,6 +90,32 @@ def load_gff_fasta(
             load_comparison=load_comparison,
             record_selectors=record_selectors,
             reverse_flags=reverse_flags,
+        )
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+
+
+def load_gff_fasta_rows(
+    gff_list: Sequence[str],
+    fasta_list: Sequence[str],
+    *,
+    selected_features_set=None,
+    keep_all_features: bool = False,
+    record_selectors: list[str] | None = None,
+    reverse_flags: list[bool] | None = None,
+    row_labels: list[str] | None = None,
+) -> list[LinearInputRow]:
+    """Load GFF3/FASTA pairs as source rows for linear source row-model diagrams."""
+
+    try:
+        return _load_gff_fasta_rows(
+            list(gff_list),
+            list(fasta_list),
+            selected_features_set=selected_features_set,
+            keep_all_features=keep_all_features,
+            record_selectors=record_selectors,
+            reverse_flags=reverse_flags,
+            row_labels=row_labels,
         )
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc
@@ -121,10 +170,13 @@ def apply_region_specs(
 
 
 __all__ = [
+    "LinearInputRow",
     "RegionSpec",
     "RecordSelector",
     "apply_region_specs",
+    "load_gbk_rows",
     "load_gbks",
+    "load_gff_fasta_rows",
     "load_gff_fasta",
     "parse_record_selector",
     "parse_record_selectors",

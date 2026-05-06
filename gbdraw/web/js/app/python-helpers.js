@@ -173,10 +173,16 @@ def run_gbdraw_wrapper(mode, args, virtual_blast_files_json=None):
             results.append({"name": fname, "content": f.read()})
     return json.dumps(results)
 
-def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, reverse_flag=None):
-    """Extract the first record as FASTA for LOSAT input."""
+def _records_to_fasta(records):
     from Bio import SeqIO
     from io import StringIO
+    handle = StringIO()
+    SeqIO.write(records, handle, "fasta")
+    return handle.getvalue()
+
+def extract_losat_fasta(path, fmt, region_spec=None, record_selector=None, reverse_flag=None, row_model="record"):
+    """Extract FASTA for LOSAT input."""
+    from Bio import SeqIO
     from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
     try:
         fmt_map = {"genbank": "genbank", "fasta": "fasta"}
@@ -192,7 +198,8 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
                 selector_raw = None
         selector = parse_record_selector(selector_raw)
         if selector is None:
-            records = [records[0]]
+            if str(row_model or "record").strip().lower() != "source":
+                records = [records[0]]
         else:
             records = select_record(records, selector)
         reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
@@ -200,14 +207,20 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
         if region_spec:
             from gbdraw.io.regions import apply_region_specs, parse_region_specs
             records = apply_region_specs(records, parse_region_specs([region_spec]))
-        record = records[0]
-        handle = StringIO()
-        SeqIO.write(record, handle, "fasta")
-        return json.dumps({"fasta": handle.getvalue(), "record_id": record.id})
+        return json.dumps({
+            "fasta": _records_to_fasta(records),
+            "record_id": records[0].id,
+            "record_ids": [record.id for record in records],
+            "record_count": len(records),
+        })
     except StopIteration:
         return json.dumps({"error": "No records found"})
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
+
+def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, reverse_flag=None):
+    """Extract the first record as FASTA for LOSAT input."""
+    return extract_losat_fasta(path, fmt, region_spec, record_selector, reverse_flag, "record")
 
 def _normalize_web_record_selector(record_selector):
     if record_selector is None:
@@ -217,14 +230,60 @@ def _normalize_web_record_selector(record_selector):
         return None
     return selector_raw
 
-def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None):
+def _load_linear_records_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, row_model="record"):
     from Bio import SeqIO
     from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
     from gbdraw.io.regions import apply_region_specs, parse_region_specs
 
     selector = parse_record_selector(_normalize_web_record_selector(record_selector))
     reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
-    if fmt == "genbank":
+    normalized_row_model = str(row_model or "record").strip().lower()
+    if normalized_row_model == "source":
+        if fmt == "genbank":
+            from gbdraw.io.genome import load_gbk_rows
+            rows = load_gbk_rows(
+                [path],
+                record_selectors=[_normalize_web_record_selector(record_selector) or ""],
+                reverse_flags=[reverse],
+            )
+        elif fmt == "gff":
+            if not fasta_path:
+                raise ValueError("GFF3 protein extraction requires a FASTA path.")
+            from gbdraw.io.genome import load_gff_fasta_rows
+            rows = load_gff_fasta_rows(
+                [path],
+                [fasta_path],
+                selected_features_set=["CDS"],
+                keep_all_features=True,
+                record_selectors=[_normalize_web_record_selector(record_selector) or ""],
+                reverse_flags=[reverse],
+            )
+        else:
+            raise ValueError(f"Unsupported format: {fmt}")
+        if region_spec:
+            cropped_records = apply_region_specs(
+                [record for row in rows for record in row.records],
+                parse_region_specs([region_spec]),
+            )
+            rebuilt_rows = []
+            cursor = 0
+            for row in rows:
+                count = len(row.records)
+                rebuilt_rows.append(
+                    type(row)(
+                        row_index=row.row_index,
+                        source_id=row.source_id,
+                        source_path=row.source_path,
+                        label=row.label,
+                        records=tuple(cropped_records[cursor: cursor + count]),
+                    )
+                )
+                cursor += count
+            rows = rebuilt_rows
+        from gbdraw.layout.linear_rows import clone_rows_for_rendering, flatten_linear_rows
+        render_rows, _id_map = clone_rows_for_rendering(rows)
+        records = flatten_linear_rows(render_rows)
+    elif fmt == "genbank":
         records = list(SeqIO.parse(path, "genbank"))
         if not records:
             raise ValueError("No records found")
@@ -246,11 +305,11 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
         )
     else:
         raise ValueError(f"Unsupported format: {fmt}")
-    if region_spec:
+    if region_spec and normalized_row_model != "source":
         records = apply_region_specs(records, parse_region_specs([region_spec]))
     if not records:
         raise ValueError("No records found")
-    return records[0]
+    return records
 
 def _serialize_cds_protein(protein):
     return {
@@ -277,35 +336,38 @@ def _serialize_cds_protein(protein):
         "gene_parent_id": getattr(protein, "gene_parent_id", None),
     }
 
-def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None):
+def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, row_model="record"):
     """Extract CDS proteins and coordinate metadata for LOSATP blastp."""
     try:
         from gbdraw.analysis.protein_colinearity import extract_cds_proteins, proteins_to_fasta
 
-        record = _load_single_linear_record_for_proteins(
+        records = _load_linear_records_for_proteins(
             path,
             fmt,
             fasta_path=fasta_path,
             region_spec=region_spec,
             record_selector=record_selector,
             reverse_flag=reverse_flag,
+            row_model=row_model,
         )
         record_index_offset = int(record_index) if record_index is not None else 0
         result = extract_cds_proteins(
-            [record],
+            records,
             record_index_offset=record_index_offset,
             prefer_source_ids=False,
         )
-        proteins = result.proteins_by_record[0] if result.proteins_by_record else []
+        proteins = [protein for record_proteins in result.proteins_by_record for protein in record_proteins]
         if not proteins:
-            return json.dumps({"error": f"No CDS proteins found in {record.id}"})
+            return json.dumps({"error": "No CDS proteins found in selected record(s)"})
         protein_map = {
             protein.protein_id: _serialize_cds_protein(protein)
             for protein in proteins
         }
         return json.dumps({
             "fasta": proteins_to_fasta(proteins),
-            "record_id": record.id,
+            "record_id": records[0].id,
+            "record_ids": [record.id for record in records],
+            "record_count": len(records),
             "protein_count": len(proteins),
             "protein_map": protein_map,
         })
@@ -514,6 +576,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     collinear_max_conflicts_in_merge_gap=1,
     collinear_max_paralog_links_per_orthogroup=2,
     collinear_search_scope="adjacent",
+    linear_row_model="record",
 ):
     """Convert LOSATP blastp outputs for pairwise display or RBH orthogroups."""
     try:
@@ -539,10 +602,12 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         normalized_mode = str(mode or "pairwise").strip().lower()
         if normalized_mode not in {"pairwise", "orthogroup", "collinear"}:
             normalized_mode = "pairwise"
+        source_row_model = str(linear_row_model or "record").strip().lower() == "source"
 
         pair_items = []
         combined_protein_map = {}
         protein_maps_for_extraction = []
+        record_row_by_index = {}
         for idx, item in enumerate(raw_pairs):
             if not isinstance(item, dict):
                 continue
@@ -570,8 +635,74 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     "subject_map": subject_map,
                 }
             )
+            for protein in query_map.values():
+                record_row_by_index[int(protein.record_index)] = query_index
+            for protein in subject_map.values():
+                record_row_by_index[int(protein.record_index)] = subject_index
             combined_protein_map.update(query_map)
             combined_protein_map.update(subject_map)
+
+        def _split_hits_by_record_pair(hits, query_map, subject_map):
+            grouped = {}
+            missing_ids = set()
+            for row in hits.itertuples(index=False):
+                query_id = str(getattr(row, "query"))
+                subject_id = str(getattr(row, "subject"))
+                query_protein = query_map.get(query_id)
+                subject_protein = subject_map.get(subject_id)
+                if query_protein is None:
+                    missing_ids.add(query_id)
+                if subject_protein is None:
+                    missing_ids.add(subject_id)
+                if query_protein is None or subject_protein is None:
+                    continue
+                key = (int(query_protein.record_index), int(subject_protein.record_index))
+                grouped.setdefault(key, []).append(
+                    {column: getattr(row, column) for column in COMPARISON_COLUMNS}
+                )
+            if missing_ids:
+                raise ValueError(
+                    "LOSATP blastp output contains unknown protein IDs: "
+                    + ", ".join(sorted(missing_ids))
+                )
+            return {
+                key: pd.DataFrame.from_records(rows, columns=COMPARISON_COLUMNS)
+                for key, rows in grouped.items()
+            }
+
+        def _concat_tables(frames):
+            non_empty = [frame for frame in frames if frame is not None and not frame.empty]
+            if not non_empty:
+                return pd.DataFrame(columns=COMPARISON_COLUMNS)
+            return pd.concat(non_empty, ignore_index=True)
+
+        def _source_directional_tables():
+            tables = {}
+            for item in pair_items:
+                for pair_key, table in _split_hits_by_record_pair(
+                    item["hits"],
+                    item["query_map"],
+                    item["subject_map"],
+                ).items():
+                    if pair_key in tables:
+                        tables[pair_key] = _concat_tables([tables[pair_key], table])
+                    else:
+                        tables[pair_key] = table
+            return tables
+
+        source_row_count = (
+            max([0] + [int(item["query_index"]) + 1 for item in pair_items] + [int(item["subject_index"]) + 1 for item in pair_items])
+            if source_row_model
+            else 0
+        )
+
+        def _source_pair_index_by_record_pair():
+            mapping = {}
+            for query_record_index, query_row_index in record_row_by_index.items():
+                for subject_record_index, subject_row_index in record_row_by_index.items():
+                    if int(subject_row_index) == int(query_row_index) + 1:
+                        mapping[(int(query_record_index), int(subject_record_index))] = int(query_row_index)
+            return mapping
 
         if normalized_mode == "collinear":
             extraction = _build_web_protein_extraction(protein_maps_for_extraction)
@@ -595,12 +726,19 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 return str(value).strip()
             anchor_mode = _collinear_text(collinear_anchor_mode, "rbh").lower().replace("-", "_")
             search_scope = _collinear_text(collinear_search_scope, "adjacent").lower().replace("-", "_")
-            directional_tables = {}
-            for item in pair_items:
-                query_index = int(item["query_index"])
-                subject_index = int(item["subject_index"])
-                if query_index != subject_index:
-                    directional_tables[(query_index, subject_index)] = item["hits"]
+            if source_row_model:
+                directional_tables = _source_directional_tables()
+                pair_index_by_record_pair = _source_pair_index_by_record_pair()
+                display_pairs = tuple(pair_index_by_record_pair)
+            else:
+                directional_tables = {}
+                for item in pair_items:
+                    query_index = int(item["query_index"])
+                    subject_index = int(item["subject_index"])
+                    if query_index != subject_index:
+                        directional_tables[(query_index, subject_index)] = item["hits"]
+                pair_index_by_record_pair = None
+                display_pairs = None
             params = LosslessCollinearityParameters(
                 min_anchors=_collinear_int(collinear_min_anchors, 1),
                 max_unit_gap=_collinear_int(collinear_max_gene_gap, 0),
@@ -613,11 +751,14 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 unit_mode="cds",
                 edge_mode=anchor_mode,
                 search_scope=search_scope,
+                display_pairs=display_pairs,
             )
             converted_frames = convert_collinearity_blocks_to_comparisons(
                 collinearity_result,
                 record_ids=record_ids,
                 color_mode=_collinear_text(collinear_color_mode, "orientation"),
+                pair_index_by_record_pair=pair_index_by_record_pair,
+                comparison_pair_count=(source_row_count - 1) if source_row_model else None,
             )
             converted_pairs = []
             for pair_index, converted in enumerate(converted_frames):
@@ -701,7 +842,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             (item["query_index"], item["subject_index"]): item
             for item in pair_items
         }
-        directional_tables = {
+        directional_tables = _source_directional_tables() if source_row_model else {
             pair: item["hits"]
             for pair, item in hits_by_direction.items()
         }
@@ -712,6 +853,42 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         orthogroups = edge_selection.orthogroups
 
         converted_pairs = []
+        if source_row_model:
+            frames_by_pair_index = [[] for _ in range(max(0, source_row_count - 1))]
+            for query_index, subject_index in sorted(edge_selection.all_edges_by_pair):
+                query_row_index = record_row_by_index.get(int(query_index))
+                subject_row_index = record_row_by_index.get(int(subject_index))
+                if query_row_index is None or subject_row_index is None:
+                    continue
+                if int(subject_row_index) != int(query_row_index) + 1:
+                    continue
+                converted = convert_pair_protein_hits_to_genomic_links(
+                    edge_selection.all_edges_by_pair[(query_index, subject_index)],
+                    combined_protein_map,
+                    combined_protein_map,
+                    orthogroups=orthogroups,
+                )
+                frames_by_pair_index[int(query_row_index)].append(converted)
+            for pair_index, frames in enumerate(frames_by_pair_index):
+                converted = pd.concat([frame for frame in frames if frame is not None and not frame.empty], ignore_index=True) if any(frame is not None and not frame.empty for frame in frames) else pd.DataFrame(columns=COMPARISON_COLUMNS)
+                handle = StringIO()
+                converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(
+                    handle,
+                    sep=chr(9),
+                    header=False,
+                    index=False,
+                    lineterminator=chr(10),
+                )
+                converted_pairs.append(
+                    {
+                        "pair_index": pair_index,
+                        "tsv": handle.getvalue(),
+                        "rows": _dataframe_json_rows(converted),
+                        "hit_count": int(converted.shape[0]),
+                    }
+                )
+            return json.dumps({"pairs": converted_pairs, "orthogroups": _serialize_orthogroups_payload(orthogroups)})
+
         for query_index, subject_index in sorted(edge_selection.adjacent_display_edges_by_pair):
             display_hits = edge_selection.adjacent_display_edges_by_pair[(query_index, subject_index)]
             forward = hits_by_direction.get((query_index, subject_index))

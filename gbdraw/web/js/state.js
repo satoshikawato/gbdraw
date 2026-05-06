@@ -292,6 +292,7 @@ const form = reactive({
   linear_track_layout: 'middle',
   legend: 'left',
   scale_style: 'bar',
+  linear_row_model: 'record',
   linear_ruler_on_axis: false,
   labels_mode: 'none',
   show_labels_linear: 'none',

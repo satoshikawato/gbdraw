@@ -108,7 +108,10 @@ class DefinitionGroup:
 
         metadata = infer_record_source_metadata(self.record)
         self.replicon_label = str(metadata.replicon or "").strip()
-        self.accession_label = self.track_id
+        accession_override = None
+        if getattr(self.record, "annotations", None):
+            accession_override = self.record.annotations.get("gbdraw_accession_label")
+        self.accession_label = str(accession_override or self.track_id)
 
         self.record_length: int = len(self.record.seq)
         if self._is_region_applied():

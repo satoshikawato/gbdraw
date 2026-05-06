@@ -15,6 +15,7 @@ import gbdraw.linear as linear_cli_module
 from gbdraw.analysis.protein_colinearity import (
     build_orthogroups_from_protein_hits,
     build_pairwise_protein_blastp_comparisons,
+    build_pairwise_protein_blastp_comparisons_from_rows,
     build_rbh_orthogroup_protein_blastp_comparisons,
     cap_hits_per_query,
     convert_pair_protein_hits_to_genomic_links,
@@ -28,6 +29,7 @@ from gbdraw.analysis.protein_colinearity import (
     select_reciprocal_best_hits,
     select_top_hits_per_query,
 )
+from gbdraw.layout.linear_rows import make_linear_input_row
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.api.options import DiagramOptions
 from gbdraw.diagrams.linear.orthogroup_alignment import (
@@ -355,6 +357,51 @@ def test_select_best_hits_per_query_avoids_secondary_paralog_merge() -> None:
 
     assert selected[["query", "subject"]].to_records(index=False).tolist() == [
         ("a", "b1")
+    ]
+
+
+@pytest.mark.linear
+def test_source_row_pairwise_protein_mode_searches_all_segments() -> None:
+    rows = [
+        make_linear_input_row(
+            row_index=0,
+            source_id="src_a",
+            source_path="a.gbk",
+            label="A",
+            records=[
+                _record("a_chr1", features=[_cds(0, 9)]),
+                _record("a_chr2", features=[_cds(9, 18)]),
+            ],
+        ),
+        make_linear_input_row(
+            row_index=1,
+            source_id="src_b",
+            source_path="b.gbk",
+            label="B",
+            records=[_record("b_chr1", features=[_cds(0, 9)])],
+        ),
+    ]
+
+    def fake_runner(query_fasta: str, _subject_fasta: str) -> pd.DataFrame:
+        if "gbd_r0001_cds000001" in query_fasta:
+            rows = [_hit_row("gbd_r0001_cds000001", "gbd_r0003_cds000001")]
+        else:
+            rows = [_hit_row("gbd_r0002_cds000001", "gbd_r0003_cds000001")]
+        return pd.DataFrame.from_records(rows, columns=COMPARISON_COLUMNS)
+
+    result = build_pairwise_protein_blastp_comparisons_from_rows(
+        rows,
+        runner=fake_runner,
+        bitscore=50,
+        evalue=1e-5,
+        identity=0,
+        alignment_length=0,
+    )
+
+    assert len(result.comparisons) == 1
+    assert result.comparisons[0][["query", "subject"]].to_records(index=False).tolist() == [
+        ("a_chr1", "b_chr1"),
+        ("a_chr2", "b_chr1"),
     ]
 
 

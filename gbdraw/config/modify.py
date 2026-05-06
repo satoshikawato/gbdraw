@@ -94,6 +94,8 @@ def modify_config_dict(
     legend_box_size=None,
     legend_font_size=None,
     normalize_length=None,
+    record_gap=None,
+    record_label_gap=None,
 ) -> dict:
 
     cfg = GbdrawConfig.from_dict(config_dict)
@@ -274,6 +276,8 @@ def modify_config_dict(
         "plot_title_font_size": "objects.definition.circular.plot_title_font_size",
         "circular_definition_font_interval": "objects.definition.circular.interval",
         "normalize_length": "canvas.linear.normalize_length",
+        "record_gap": "canvas.linear.record_gap",
+        "record_label_gap": "canvas.linear.record_label_gap",
     }
 
     for param, path in mapping.items():

@@ -22,6 +22,11 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.features.colors import compute_feature_hash
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.layout.linear_rows import (  # type: ignore[reportMissingImports]
+    LinearInputRow,
+    linear_row_record_index_groups,
+    record_index_to_linear_row_index,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1398,6 +1403,69 @@ def _empty_comparison_hits() -> DataFrame:
     return pd.DataFrame(columns=COMPARISON_COLUMNS)
 
 
+def _empty_losatp_comparisons() -> DataFrame:
+    return pd.DataFrame(columns=LOSATP_COMPARISON_COLUMNS)
+
+
+def _concat_losatp_comparisons(frames: Sequence[DataFrame]) -> DataFrame:
+    if not frames:
+        return _empty_losatp_comparisons()
+    non_empty = [frame for frame in frames if frame is not None and not frame.empty]
+    if not non_empty:
+        return _empty_losatp_comparisons()
+    return pd.concat(non_empty, ignore_index=True)
+
+
+def _validate_row_extraction_has_proteins(
+    rows: Sequence[LinearInputRow],
+    index_groups: Sequence[Sequence[int]],
+    extraction: ProteinExtractionResult,
+    *,
+    option_name: str,
+) -> None:
+    empty_rows: list[str] = []
+    for row_position, record_indices in enumerate(index_groups):
+        has_proteins = any(
+            record_index < len(extraction.proteins_by_record)
+            and bool(extraction.proteins_by_record[record_index])
+            for record_index in record_indices
+        )
+        if not has_proteins:
+            row = rows[row_position] if row_position < len(rows) else None
+            empty_rows.append(str(getattr(row, "label", "") or f"row {row_position + 1}"))
+    if empty_rows:
+        raise ValidationError(
+            f"{option_name} requires at least one CDS protein in each source row; "
+            "no CDS proteins were found in: "
+            + ", ".join(empty_rows)
+        )
+
+
+def _record_pair_tables_to_row_comparisons(
+    record_pair_tables: Mapping[tuple[int, int], DataFrame],
+    extraction: ProteinExtractionResult,
+    row_index_by_record: Mapping[int, int],
+    *,
+    row_count: int,
+    orthogroups: OrthogroupResult | None,
+) -> list[DataFrame]:
+    frames_by_row_pair: list[list[DataFrame]] = [[] for _ in range(max(0, int(row_count) - 1))]
+    for query_record_index, subject_record_index in sorted(record_pair_tables):
+        query_row_index = row_index_by_record.get(int(query_record_index))
+        subject_row_index = row_index_by_record.get(int(subject_record_index))
+        if query_row_index is None or subject_row_index is None:
+            continue
+        if subject_row_index != query_row_index + 1:
+            continue
+        converted = convert_protein_hits_to_genomic_links(
+            record_pair_tables[(query_record_index, subject_record_index)],
+            extraction.protein_map,
+            orthogroups=orthogroups,
+        )
+        frames_by_row_pair[query_row_index].append(converted)
+    return [_concat_losatp_comparisons(frames) for frames in frames_by_row_pair]
+
+
 def select_rbh_orthogroup_edges_from_directional_hits(
     directional_hits_by_pair: Mapping[tuple[int, int], DataFrame],
     protein_map: Mapping[str, CdsProtein],
@@ -1450,6 +1518,159 @@ def select_rbh_orthogroup_edges_from_directional_hits(
         all_edges_by_pair=all_edges_by_pair,
         adjacent_display_edges_by_pair=adjacent_display_edges_by_pair,
     )
+
+
+def build_pairwise_protein_blastp_comparisons_from_rows(
+    rows: Sequence[LinearInputRow],
+    *,
+    losatp_bin: str = "losat",
+    max_hits: int = 5,
+    candidate_limit: int | None = None,
+    evalue: float = 1e-5,
+    bitscore: float = 50.0,
+    identity: float = 70.0,
+    alignment_length: int = 0,
+    runner: LosatpRunner | None = None,
+) -> ProteinBlastpResult:
+    """Generate LOSATP blastp display comparisons for adjacent source rows."""
+
+    row_list = list(rows)
+    if len(row_list) < 2:
+        raise ValidationError("protein_blastp_mode='pairwise' requires at least two source rows")
+    _validate_max_hits(max_hits)
+    _validate_candidate_limit(candidate_limit)
+    if int(alignment_length) < 0:
+        raise ValidationError("alignment_length must be >= 0")
+
+    records, index_groups = linear_row_record_index_groups(row_list)
+    extraction = extract_cds_proteins(records)
+    _validate_row_extraction_has_proteins(
+        row_list,
+        index_groups,
+        extraction,
+        option_name="protein_blastp_mode='pairwise'",
+    )
+
+    comparisons: list[DataFrame] = []
+    for row_index in range(len(index_groups) - 1):
+        row_frames: list[DataFrame] = []
+        for query_record_index in index_groups[row_index]:
+            query_proteins = extraction.proteins_by_record[query_record_index]
+            if not query_proteins:
+                continue
+            query_fasta = proteins_to_fasta(query_proteins)
+            for subject_record_index in index_groups[row_index + 1]:
+                subject_proteins = extraction.proteins_by_record[subject_record_index]
+                if not subject_proteins:
+                    continue
+                protein_hits = _run_losatp_search(
+                    query_fasta,
+                    proteins_to_fasta(subject_proteins),
+                    losatp_bin=losatp_bin,
+                    candidate_limit=candidate_limit,
+                    runner=runner,
+                )
+                filtered_hits = filter_protein_hits_by_thresholds(
+                    protein_hits,
+                    evalue=evalue,
+                    bitscore=bitscore,
+                    identity=identity,
+                    alignment_length=alignment_length,
+                )
+                display_hits = select_top_hits_per_query(filtered_hits, max_hits=max_hits)
+                row_frames.append(
+                    convert_protein_hits_to_genomic_links(
+                        display_hits,
+                        extraction.protein_map,
+                        orthogroups=None,
+                    )
+                )
+        comparisons.append(_concat_losatp_comparisons(row_frames))
+    return ProteinBlastpResult(comparisons=comparisons, orthogroups=None)
+
+
+def build_rbh_orthogroup_protein_blastp_comparisons_from_rows(
+    rows: Sequence[LinearInputRow],
+    *,
+    losatp_bin: str = "losat",
+    candidate_limit: int | None = None,
+    evalue: float = 1e-5,
+    bitscore: float = 50.0,
+    identity: float = 70.0,
+    alignment_length: int = 0,
+    runner: LosatpRunner | None = None,
+) -> ProteinBlastpResult:
+    """Infer RBH orthogroups and return adjacent source-row display links."""
+
+    row_list = list(rows)
+    if len(row_list) < 2:
+        raise ValidationError("protein_blastp_mode='orthogroup' requires at least two source rows")
+    _validate_candidate_limit(candidate_limit)
+    if int(alignment_length) < 0:
+        raise ValidationError("alignment_length must be >= 0")
+
+    records, index_groups = linear_row_record_index_groups(row_list)
+    extraction = extract_cds_proteins(records)
+    _validate_row_extraction_has_proteins(
+        row_list,
+        index_groups,
+        extraction,
+        option_name="protein_blastp_mode='orthogroup'",
+    )
+
+    search_candidate_limit = candidate_limit if candidate_limit is not None else 1
+    directional_hits_by_pair: dict[tuple[int, int], DataFrame] = {}
+    for row_index in range(len(index_groups) - 1):
+        for query_record_index in index_groups[row_index]:
+            query_fasta = proteins_to_fasta(extraction.proteins_by_record[query_record_index])
+            if not query_fasta:
+                continue
+            for subject_record_index in index_groups[row_index + 1]:
+                subject_fasta = proteins_to_fasta(extraction.proteins_by_record[subject_record_index])
+                if not subject_fasta:
+                    continue
+                forward_hits = _run_losatp_search(
+                    query_fasta,
+                    subject_fasta,
+                    losatp_bin=losatp_bin,
+                    candidate_limit=search_candidate_limit,
+                    runner=runner,
+                )
+                reverse_hits = _run_losatp_search(
+                    subject_fasta,
+                    query_fasta,
+                    losatp_bin=losatp_bin,
+                    candidate_limit=search_candidate_limit,
+                    runner=runner,
+                )
+                directional_hits_by_pair[(query_record_index, subject_record_index)] = filter_protein_hits_by_thresholds(
+                    forward_hits,
+                    evalue=evalue,
+                    bitscore=bitscore,
+                    identity=identity,
+                    alignment_length=alignment_length,
+                )
+                directional_hits_by_pair[(subject_record_index, query_record_index)] = filter_protein_hits_by_thresholds(
+                    reverse_hits,
+                    evalue=evalue,
+                    bitscore=bitscore,
+                    identity=identity,
+                    alignment_length=alignment_length,
+                )
+
+    edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits_by_pair,
+        extraction.protein_map,
+        record_count=len(records),
+    )
+    comparisons = _record_pair_tables_to_row_comparisons(
+        edge_selection.all_edges_by_pair,
+        extraction,
+        record_index_to_linear_row_index(row_list),
+        row_count=len(row_list),
+        orthogroups=edge_selection.orthogroups,
+    )
+    return ProteinBlastpResult(comparisons=comparisons, orthogroups=edge_selection.orthogroups)
 
 
 def build_pairwise_protein_blastp_comparisons(
@@ -1633,8 +1854,10 @@ __all__ = [
     "ProteinExtractionResult",
     "build_orthogroups_from_protein_hits",
     "build_pairwise_protein_blastp_comparisons",
+    "build_pairwise_protein_blastp_comparisons_from_rows",
     "build_protein_colinearity_comparisons",
     "build_rbh_orthogroup_protein_blastp_comparisons",
+    "build_rbh_orthogroup_protein_blastp_comparisons_from_rows",
     "cap_hits_per_query",
     "convert_pair_protein_hits_to_genomic_links",
     "convert_protein_hits_to_genomic_links",

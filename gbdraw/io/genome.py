@@ -11,6 +11,7 @@ from Bio.SeqRecord import SeqRecord
 from BCBio import GFF
 
 from .record_select import parse_record_selector, reverse_records, select_record
+from ..layout.linear_rows import LinearInputRow, make_linear_input_row, make_source_id
 from ..exceptions import InputFileError, ParseError, ValidationError
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,14 @@ def _attach_source_annotations(record: SeqRecord, source_file: str) -> None:
         record.annotations["gbdraw_coord_base"] = 1
     if "gbdraw_coord_step" not in record.annotations:
         record.annotations["gbdraw_coord_step"] = 1
+
+
+def _row_label(row_labels: list[str] | None, index: int, source_path: str) -> str:
+    if row_labels and index < len(row_labels):
+        label = str(row_labels[index] or "").strip()
+        if label:
+            return label
+    return os.path.basename(source_path)
 
 
 def load_gbks(
@@ -292,9 +301,160 @@ def load_gff_fasta(
     return record_list
 
 
+def load_gff_fasta_rows(
+    gff_list: List[str],
+    fasta_list: List[str],
+    *,
+    selected_features_set=None,
+    keep_all_features: bool = False,
+    record_selectors: list[str] | None = None,
+    reverse_flags: list[bool] | None = None,
+    row_labels: list[str] | None = None,
+) -> list[LinearInputRow]:
+    """Load paired GFF3/FASTA files as one linear input row per source pair."""
+
+    logger.info("INFO: Loading GFF3/FASTA file(s) as linear source row(s)...")
+    if len(gff_list) != len(fasta_list):
+        logger.error("ERROR: Number of GFF3 files does not match number of FASTA files.")
+        raise ValidationError("Number of GFF3 files does not match number of FASTA files.")
+
+    rows: list[LinearInputRow] = []
+    source_ids: set[str] = set()
+    for file_idx, (gff_file, fasta_file) in enumerate(zip(gff_list, fasta_list)):
+        if not os.path.isfile(gff_file):
+            logger.error(f"ERROR: File does not exist or is not accessible: {gff_file}")
+            raise InputFileError(f"File does not exist or is not accessible: {gff_file}")
+        if not os.path.isfile(fasta_file):
+            logger.error(f"ERROR: File does not exist or is not accessible: {fasta_file}")
+            raise InputFileError(f"File does not exist or is not accessible: {fasta_file}")
+
+        try:
+            logger.info("INFO: Loading GFF3 file {}".format(gff_file))
+            if keep_all_features or selected_features_set is None:
+                gff_records = list(GFF.parse(gff_file))
+            else:
+                feature_types_to_keep = set(selected_features_set)
+                gff_records = [
+                    filter_features_by_type(record, feature_types_to_keep) for record in GFF.parse(gff_file)
+                ]
+            logger.info("INFO: Loading FASTA file {}".format(fasta_file))
+            fasta_records: list[SeqRecord] = list(SeqIO.parse(fasta_file, "fasta"))
+            merged_records = merge_gff_fasta_records(gff_records, fasta_records)
+            selector_raw = record_selectors[file_idx] if record_selectors and file_idx < len(record_selectors) else None
+            selector = parse_record_selector(selector_raw)
+            if selector is not None:
+                merged_records = select_record(merged_records, selector, log=logger)
+            reverse_flag = reverse_flags[file_idx] if reverse_flags and file_idx < len(reverse_flags) else False
+            merged_records = reverse_records(merged_records, reverse_flag, log=logger)
+            for record in merged_records:
+                _attach_source_annotations(record, gff_file)
+                record.annotations["gbdraw_fasta_source_file"] = fasta_file
+                record.annotations["gbdraw_fasta_source_basename"] = os.path.basename(fasta_file)
+            source_id = make_source_id(gff_file, source_ids, file_idx)
+            rows.append(
+                make_linear_input_row(
+                    row_index=len(rows),
+                    source_id=source_id,
+                    source_path=gff_file,
+                    label=_row_label(row_labels, file_idx, gff_file),
+                    records=merged_records,
+                )
+            )
+        except ValueError as e:
+            logger.error(
+                f"ERROR: error parsing GFF3/FASTA files ({gff_file}, {fasta_file}). Error: {e}"
+            )
+            raise ParseError(
+                f"Error parsing GFF3/FASTA files ({gff_file}, {fasta_file})."
+            ) from e
+        except Exception as e:
+            logger.error(
+                f"ERROR: an unexpected error occurred while processing {gff_file} or {fasta_file}: {e}"
+            )
+            raise ParseError(
+                f"Unexpected error while processing {gff_file} or {fasta_file}: {e}"
+            ) from e
+
+    if not rows:
+        logger.error(
+            "ERROR: No valid records were loaded after merging GFF3 and FASTA files. Please check your input files."
+        )
+        raise ValidationError(
+            "No valid records were loaded after merging GFF3 and FASTA files. Please check your input files."
+        )
+    logger.info("INFO:              ... finished loading GFF3/FASTA row(s)")
+    logger.info(f"INFO: Number of source rows loaded to gbdraw: {len(rows)}")
+    return rows
+
+
+def load_gbk_rows(
+    gbk_list: List[str],
+    *,
+    record_selectors: list[str] | None = None,
+    reverse_flags: list[bool] | None = None,
+    row_labels: list[str] | None = None,
+) -> list[LinearInputRow]:
+    """Load GenBank files as one linear input row per source file."""
+
+    rows: list[LinearInputRow] = []
+    source_ids: set[str] = set()
+    logger.info("INFO: Loading GenBank file(s) as linear source row(s)...")
+    for file_idx, gbk_file in enumerate(gbk_list):
+        if not os.path.isfile(gbk_file):
+            logger.error(f"ERROR: File does not exist or is not accessible: {gbk_file}")
+            raise InputFileError(f"File does not exist or is not accessible: {gbk_file}")
+        try:
+            logger.info("INFO: Loading GenBank file {}".format(gbk_file))
+            records_list = list(SeqIO.parse(gbk_file, "genbank"))
+            selector_raw = record_selectors[file_idx] if record_selectors and file_idx < len(record_selectors) else None
+            selector = parse_record_selector(selector_raw)
+            if selector is not None:
+                records_list = select_record(records_list, selector, log=logger)
+            reverse_flag = reverse_flags[file_idx] if reverse_flags and file_idx < len(reverse_flags) else False
+            records_list = reverse_records(records_list, reverse_flag, log=logger)
+            for record in records_list:
+                _attach_source_annotations(record, gbk_file)
+            source_id = make_source_id(gbk_file, source_ids, file_idx)
+            rows.append(
+                make_linear_input_row(
+                    row_index=len(rows),
+                    source_id=source_id,
+                    source_path=gbk_file,
+                    label=_row_label(row_labels, file_idx, gbk_file),
+                    records=records_list,
+                )
+            )
+        except ValueError as e:
+            logger.error(
+                f"ERROR: error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format. Error: {e}"
+            )
+            raise ParseError(
+                f"Error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format."
+            ) from e
+        except Exception as e:
+            logger.error(
+                f"ERROR: an unexpected error occurred while processing {gbk_file}: {e}"
+            )
+            raise ParseError(
+                f"Unexpected error while processing {gbk_file}: {e}"
+            ) from e
+    if not rows:
+        logger.error(
+            "ERROR: No valid GenBank records were loaded. Please check your input files."
+        )
+        raise ValidationError(
+            "No valid GenBank records were loaded. Please check your input files."
+        )
+    logger.info("INFO:              ... finished loading GenBank row(s)")
+    logger.info(f"INFO: Number of source rows loaded to gbdraw: {len(rows)}")
+    return rows
+
+
 __all__ = [
     "load_gbks",
+    "load_gbk_rows",
     "load_gff_fasta",
+    "load_gff_fasta_rows",
     "merge_gff_fasta_records",
     "scan_features_recursive",
     "filter_features_by_type",
