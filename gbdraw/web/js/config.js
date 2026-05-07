@@ -1,4 +1,4 @@
-export const GBDRAW_WHEEL_NAME = "gbdraw-0.11.0b0-py3-none-any.whl";
+export const GBDRAW_WHEEL_NAME = "gbdraw-0.11.0-py3-none-any.whl";
 export const GBDRAW_WHEEL_CACHE_BUST = "20260505-175405";
 export const PYODIDE_INDEX_URL = "./vendor/pyodide/v0.29.0/full/";
 export const PYODIDE_LOCAL_WHEELS = [
