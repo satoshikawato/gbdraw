@@ -1,7 +1,7 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 
-const SESSION_VERSION = 18;
+const SESSION_VERSION = 19;
 const LOSAT_CACHE_SCHEMA = 2;
 
 const isRawLosatCacheEntry = (entry) =>
@@ -28,6 +28,35 @@ const replaceStringMap = (target, source) => {
   Object.entries(cloneStringMap(source)).forEach(([key, value]) => {
     target[key] = value;
   });
+};
+
+const cloneQualifierPriorityRules = (rules) => {
+  const cloned = [];
+  if (!Array.isArray(rules)) return cloned;
+
+  rules.forEach((rule) => {
+    if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return;
+    const feat = String(rule.feat ?? '').trim();
+    const order = String(rule.order ?? '').trim();
+    if (!feat || !order) return;
+
+    const existingIndex = cloned.findIndex((entry) => entry.feat === feat);
+    if (existingIndex >= 0) {
+      cloned[existingIndex].order = order;
+    } else {
+      cloned.push({ feat, order });
+    }
+  });
+
+  return cloned;
+};
+
+const replaceQualifierPriorityRules = (rules) => {
+  state.manualPriorityRules.splice(
+    0,
+    state.manualPriorityRules.length,
+    ...cloneQualifierPriorityRules(rules)
+  );
 };
 
 const safeDeepMerge = (target, source) => {
@@ -194,6 +223,7 @@ const buildConfigData = () => ({
   palette: state.selectedPalette.value,
   paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
   rules: state.manualSpecificRules,
+  qualifierPriorityRules: cloneQualifierPriorityRules(state.manualPriorityRules),
   filterMode: state.filterMode.value,
   whitelist: state.manualWhitelist,
   blacklistText: state.manualBlacklist.value,
@@ -504,6 +534,11 @@ const applyConfigData = (data) => {
         fromFile: !!r.fromFile
       });
     });
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'qualifierPriorityRules')) {
+    replaceQualifierPriorityRules(data.qualifierPriorityRules);
+  } else if (Object.prototype.hasOwnProperty.call(data, 'priorityRules')) {
+    replaceQualifierPriorityRules(data.priorityRules);
   }
   if (data.filterMode) state.filterMode.value = data.filterMode;
   if (data.whitelist && Array.isArray(data.whitelist)) {

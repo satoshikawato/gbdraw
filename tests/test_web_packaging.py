@@ -140,6 +140,13 @@ def test_web_run_analysis_wires_scale_and_tick_font_size_options() -> None:
     assert "args.push('--scale_font_size', adv.scale_font_size);" in source
 
 
+def test_web_config_persists_manual_qualifier_priority_rules() -> None:
+    source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    assert "qualifierPriorityRules: cloneQualifierPriorityRules(state.manualPriorityRules)" in source
+    assert "replaceQualifierPriorityRules(data.qualifierPriorityRules)" in source
+    assert "replaceQualifierPriorityRules(data.priorityRules)" in source
+
+
 @pytest.mark.slow
 def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
     verify_module, _ = ensure_prepared_browser_wheel()
