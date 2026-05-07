@@ -12,7 +12,7 @@ from svgwrite import Drawing
 
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
-from gbdraw.analysis.depth import depth_df, read_depth_tsv
+from gbdraw.analysis.depth import clear_depth_tsv_cache, depth_df, read_depth_tsv
 from gbdraw.api.diagram import (
     assemble_circular_diagram_from_records,
     assemble_circular_diagram_from_record,
@@ -82,6 +82,38 @@ def test_read_depth_tsv_headerless_and_headered(tmp_path: Path) -> None:
         "position": [1, 2],
         "depth": [10.0, 12.0],
     }
+
+
+def test_read_depth_tsv_uses_cache_until_file_changes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    request: pytest.FixtureRequest,
+) -> None:
+    clear_depth_tsv_cache()
+    request.addfinalizer(clear_depth_tsv_cache)
+    depth_file = _write_depth_file(tmp_path / "depth.tsv", "rec1\t1\t10\nrec1\t2\t12\n")
+    real_read_csv = pd.read_csv
+    read_count = 0
+
+    def counting_read_csv(*args, **kwargs):
+        nonlocal read_count
+        read_count += 1
+        return real_read_csv(*args, **kwargs)
+
+    monkeypatch.setattr(pd, "read_csv", counting_read_csv)
+
+    first = read_depth_tsv(str(depth_file))
+    first.loc[0, "depth"] = 999.0
+    second = read_depth_tsv(str(depth_file))
+
+    assert read_count == 1
+    assert second["depth"].tolist() == [10.0, 12.0]
+
+    depth_file.write_text("rec1\t1\t11\nrec1\t2\t12\nrec1\t3\t13\n", encoding="utf-8")
+    refreshed = read_depth_tsv(str(depth_file))
+
+    assert read_count == 2
+    assert refreshed["depth"].tolist() == [11.0, 12.0, 13.0]
 
 
 def test_depth_df_matching_fallback_and_mismatch() -> None:
@@ -804,7 +836,11 @@ def test_circular_cli_depth_options_forward_to_api(
         ]
     )
 
-    assert captured["depth_file"] == str(depth_file)
+    assert captured["depth_table"].to_dict("list") == {
+        "reference_name": ["rec1"],
+        "position": [1],
+        "depth": [10.0],
+    }
     assert captured["depth_window"] == 10
     assert captured["depth_step"] == 5
     assert captured["track_specs"] == ["depth@w=22px"]
@@ -817,6 +853,53 @@ def test_circular_cli_depth_options_forward_to_api(
     assert cfg.objects.depth.tick_font_size == pytest.approx(9)
     assert cfg.objects.depth.normalize is False
     assert cfg.objects.depth.share_axis is True
+
+
+def test_circular_cli_reads_depth_file_once_for_multiple_records(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    records = [_make_record("rec1"), _make_record("rec2")]
+    depth_file = tmp_path / "depth.tsv"
+    depth_file.write_text("rec1\t1\t10\nrec2\t1\t20\n", encoding="utf-8")
+    read_count = 0
+    captured_tables: list[pd.DataFrame | None] = []
+    real_read_depth_tsv = circular_cli_module.read_depth_tsv
+
+    def counting_read_depth_tsv(path: str) -> pd.DataFrame:
+        nonlocal read_count
+        read_count += 1
+        return real_read_depth_tsv(path)
+
+    monkeypatch.setattr(circular_cli_module, "read_depth_tsv", counting_read_depth_tsv)
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, mode: records)
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
+
+    def fake_assemble(*args, **kwargs):
+        captured_tables.append(kwargs.get("depth_table"))
+        return Drawing(filename=str(tmp_path / f"dummy_{len(captured_tables)}.svg"))
+
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+
+    circular_cli_module.circular_main(
+        [
+            "--gbk",
+            "dummy1.gb",
+            "dummy2.gb",
+            "--depth",
+            str(depth_file),
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert read_count == 1
+    assert len(captured_tables) == 2
+    assert captured_tables[0] is captured_tables[1]
 
 
 def test_linear_cli_depth_options_forward_to_api(

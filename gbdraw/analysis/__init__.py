@@ -15,7 +15,7 @@ from .collinearity import (
     normalize_collinearity_anchor_mode,
     normalize_collinearity_search_scope,
 )
-from .depth import depth_df, read_depth_tsv
+from .depth import clear_depth_tsv_cache, depth_df, read_depth_tsv
 
 __all__ = [
     "CollinearityAnchor",
@@ -31,6 +31,7 @@ __all__ = [
     "iter_collinearity_search_pairs",
     "normalize_collinearity_anchor_mode",
     "normalize_collinearity_search_scope",
+    "clear_depth_tsv_cache",
     "depth_df",
     "read_depth_tsv",
 ]

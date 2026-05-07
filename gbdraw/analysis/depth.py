@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
 
@@ -16,6 +17,7 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ParseError, ValidationError  # type: ignore[reportMissingImports]
 
 DEPTH_COLUMNS = ["reference_name", "position", "depth"]
+_DEPTH_TSV_CACHE_MAXSIZE = 8
 
 
 def _is_int_like(value: str) -> bool:
@@ -51,20 +53,26 @@ def _first_line_has_header(path: Path) -> bool:
     return not (_is_int_like(fields[1]) and _is_float_like(fields[2]))
 
 
-def read_depth_tsv(path: str) -> DataFrame:
-    """Read a samtools-depth-like TSV file.
-
-    The expected columns are reference name, 1-based position, and non-negative
-    depth. Headerless files are expected; a single header line is tolerated when
-    the position/depth fields on the first line are non-numeric.
-    """
-
+def _depth_tsv_cache_key(path: str) -> tuple[str, int, int]:
     depth_path = Path(path)
     if not depth_path.exists():
         raise ParseError(f"Depth file does not exist: {path}")
     if not depth_path.is_file():
         raise ParseError(f"Depth path is not a file: {path}")
+    try:
+        file_stat = depth_path.stat()
+    except OSError as exc:
+        raise ParseError(f"Unable to read depth file '{path}': {exc}") from exc
+    try:
+        resolved_path = str(depth_path.resolve())
+    except OSError:
+        resolved_path = str(depth_path.absolute())
+    return resolved_path, int(file_stat.st_mtime_ns), int(file_stat.st_size)
 
+
+@lru_cache(maxsize=_DEPTH_TSV_CACHE_MAXSIZE)
+def _read_depth_tsv_cached(resolved_path: str, mtime_ns: int, size: int) -> DataFrame:
+    depth_path = Path(resolved_path)
     skiprows = 1 if _first_line_has_header(depth_path) else 0
     try:
         depth_table = pd.read_csv(
@@ -81,10 +89,29 @@ def read_depth_tsv(path: str) -> DataFrame:
             },
         )
     except ValueError as exc:
-        raise ParseError(f"Unable to parse depth file '{path}': {exc}") from exc
+        raise ParseError(f"Unable to parse depth file '{resolved_path}': {exc}") from exc
 
     _validate_depth_table(depth_table)
     return depth_table
+
+
+def clear_depth_tsv_cache() -> None:
+    """Clear the process-local cache used by read_depth_tsv."""
+
+    _read_depth_tsv_cached.cache_clear()
+
+
+def read_depth_tsv(path: str) -> DataFrame:
+    """Read a samtools-depth-like TSV file.
+
+    The expected columns are reference name, 1-based position, and non-negative
+    depth. Headerless files are expected; a single header line is tolerated when
+    the position/depth fields on the first line are non-numeric. Parsed files are
+    cached per process and invalidated when file mtime or size changes.
+    """
+
+    resolved_path, mtime_ns, size = _depth_tsv_cache_key(path)
+    return _read_depth_tsv_cached(resolved_path, mtime_ns, size).copy(deep=True)
 
 
 def _normalize_depth_table(depth_table: DataFrame) -> DataFrame:
@@ -225,4 +252,4 @@ def depth_df(
     )
 
 
-__all__ = ["DEPTH_COLUMNS", "depth_df", "read_depth_tsv"]
+__all__ = ["DEPTH_COLUMNS", "clear_depth_tsv_cache", "depth_df", "read_depth_tsv"]

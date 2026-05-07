@@ -7,6 +7,7 @@ import logging
 import math
 from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
+from .analysis.depth import read_depth_tsv  # type: ignore[reportMissingImports]
 from .io.genome import load_gbks, load_gff_fasta
 from .io.colors import load_default_colors, read_color_table
 from .config.toml import load_config_toml
@@ -569,6 +570,7 @@ def circular_main(cmd_args) -> None:
     suppress_skew: bool = args.suppress_skew
     depth_file: str | None = args.depth
     show_depth: bool = bool(args.show_depth or depth_file)
+    depth_table: DataFrame | None = read_depth_tsv(depth_file) if depth_file else None
     depth_color: str | None = args.depth_color
     depth_width: Optional[float] = args.depth_width
     depth_window: Optional[int] = args.depth_window
@@ -790,7 +792,7 @@ def circular_main(cmd_args) -> None:
             step=manual_step,
             depth_window=depth_window,
             depth_step=depth_step,
-            depth_file=depth_file,
+            depth_table=depth_table,
             species=species,
             strain=strain,
             plot_title=plot_title,
@@ -829,7 +831,7 @@ def circular_main(cmd_args) -> None:
                 step=step,
                 depth_window=depth_window,
                 depth_step=depth_step,
-                depth_file=depth_file,
+                depth_table=depth_table,
                 species=species,
                 strain=strain,
                 plot_title=plot_title,
