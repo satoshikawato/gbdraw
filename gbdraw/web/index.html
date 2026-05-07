@@ -368,7 +368,7 @@
                                     <button @click="clearLosatCache" class="btn btn-danger text-xs w-full" :disabled="losatCacheInfo.length === 0">
                                         <i class="ph ph-trash"></i> Clear Cache
                                     </button>
-                                    <p class="text-[10px] text-slate-500 mt-1">Cached results are reused when inputs and settings match.</p>
+                                    <p class="text-[10px] text-slate-500 mt-1">Raw LOSAT results are reused when canonical inputs and settings match.</p>
                                 </div>
                         </div>
                         <div v-if="linearReorderNotice" class="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 flex items-start gap-1.5">
@@ -472,7 +472,7 @@
                                 </div>
                                 <button @click="downloadLosatPair(idx, seq.losat_filename)" class="btn btn-secondary text-xs w-full mt-2"
                                         :disabled="!losatCacheInfo[idx]">
-                                    <i class="ph ph-download-simple"></i> Save LOSAT TSV
+                                    <i class="ph ph-download-simple"></i> Save Raw LOSAT TSV
                                 </button>
                             </div>
                         </div>

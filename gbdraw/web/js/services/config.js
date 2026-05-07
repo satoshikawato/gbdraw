@@ -2,6 +2,13 @@ import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../st
 import { resolveColorToHex } from '../app/color-utils.js';
 
 const SESSION_VERSION = 18;
+const LOSAT_CACHE_SCHEMA = 2;
+
+const isRawLosatCacheEntry = (entry) =>
+  Boolean(entry) &&
+  entry.schema === LOSAT_CACHE_SCHEMA &&
+  entry.kind === 'raw-losat' &&
+  typeof entry.text === 'string';
 
 const cloneColors = (colors) => ({ ...(colors || {}) });
 
@@ -647,20 +654,35 @@ const serializeLosatCache = () => {
   info.forEach((entry, idx) => {
     if (!entry || !entry.key) return;
     const cached = cacheMap.get(entry.key);
-    if (!cached || typeof cached.text !== 'string') return;
+    if (!isRawLosatCacheEntry(cached)) return;
     entries.push({
+      schema: LOSAT_CACHE_SCHEMA,
+      kind: 'raw-losat',
       key: entry.key,
       filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
       display: entry.display !== false,
-      text: cached.text
+      text: cached.text,
+      program: cached.program || '',
+      queryCanonicalHash: cached.queryCanonicalHash || '',
+      subjectCanonicalHash: cached.subjectCanonicalHash || ''
     });
     seen.add(entry.key);
   });
 
   cacheMap.forEach((value, key) => {
     if (seen.has(key)) return;
-    if (!value || typeof value.text !== 'string') return;
-    entries.push({ key, filename: '', display: false, text: value.text });
+    if (!isRawLosatCacheEntry(value)) return;
+    entries.push({
+      schema: LOSAT_CACHE_SCHEMA,
+      kind: 'raw-losat',
+      key,
+      filename: '',
+      display: false,
+      text: value.text,
+      program: value.program || '',
+      queryCanonicalHash: value.queryCanonicalHash || '',
+      subjectCanonicalHash: value.subjectCanonicalHash || ''
+    });
   });
 
   return entries;
@@ -672,8 +694,23 @@ const applyLosatCache = (entries) => {
 
   if (Array.isArray(entries)) {
     entries.forEach((entry, idx) => {
-      if (!entry || !entry.key || typeof entry.text !== 'string') return;
-      map.set(entry.key, { text: entry.text });
+      if (
+        !entry ||
+        entry.schema !== LOSAT_CACHE_SCHEMA ||
+        entry.kind !== 'raw-losat' ||
+        !entry.key ||
+        typeof entry.text !== 'string'
+      ) {
+        return;
+      }
+      map.set(entry.key, {
+        schema: LOSAT_CACHE_SCHEMA,
+        kind: 'raw-losat',
+        text: entry.text,
+        program: entry.program || '',
+        queryCanonicalHash: entry.queryCanonicalHash || '',
+        subjectCanonicalHash: entry.subjectCanonicalHash || ''
+      });
       if (entry.display === false) return;
       info.push({
         key: entry.key,

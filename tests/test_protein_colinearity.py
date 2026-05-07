@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -97,6 +98,7 @@ def _web_protein_entry(
     feature_index: int = 0,
     start: int = 0,
     end: int = 90,
+    strand: int = 1,
     gene: str | None = None,
     product: str | None = None,
     note: str | None = None,
@@ -108,14 +110,26 @@ def _web_protein_entry(
         "record_id": record_id,
         "start": start,
         "end": end,
-        "strand": 1,
+        "strand": strand,
         "label": protein_id,
         "protein_length": 30,
         "feature_svg_id": f"feature_{protein_id}",
+        "feature_type": "CDS",
+        "feature_hash_start": start,
+        "feature_hash_end": end,
+        "feature_hash_strand": strand,
         "gene": gene,
         "product": product,
         "note": note,
     }
+
+
+def _load_web_helper_namespace() -> dict[str, object]:
+    helpers_js = Path("gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
+    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
+    namespace: dict[str, object] = {}
+    exec(helper_source, namespace)
+    return namespace
 
 
 @pytest.mark.linear
@@ -688,6 +702,181 @@ def test_convert_protein_hits_to_genomic_links_only_sets_matching_orthogroup_id(
 
     assert converted.iloc[0]["orthogroup_id"] == "og_1"
     assert converted.iloc[1]["orthogroup_id"] == ""
+
+
+@pytest.mark.linear
+def test_web_losat_nucleotide_display_transform_keeps_orientation() -> None:
+    namespace = _load_web_helper_namespace()
+    raw_tsv = "\n".join(
+        [
+            "\t".join(
+                [
+                    "query",
+                    "subject",
+                    "99.0",
+                    "40",
+                    "0",
+                    "0",
+                    "10",
+                    "20",
+                    "5",
+                    "15",
+                    "1e-20",
+                    "120",
+                ]
+            ),
+            "\t".join(
+                [
+                    "query",
+                    "subject",
+                    "98.0",
+                    "35",
+                    "0",
+                    "0",
+                    "30",
+                    "25",
+                    "40",
+                    "35",
+                    "1e-10",
+                    "100",
+                ]
+            ),
+        ]
+    )
+
+    raw_result = namespace["convert_losat_nucleotide_to_display_tsv"](
+        raw_tsv,
+        json.dumps({"length": 100, "reverse": True}),
+        json.dumps({"length": 80, "reverse": False}),
+    )
+    result = json.loads(str(raw_result))
+
+    assert "error" not in result
+    row = result["rows"][0]
+    assert row["qstart"] == 91
+    assert row["qend"] == 81
+    assert row["sstart"] == 5
+    assert row["send"] == 15
+    assert len(result["rows"]) == 2
+
+
+@pytest.mark.linear
+def test_web_cds_span_transform_maps_reverse_display_span_and_strand() -> None:
+    namespace = _load_web_helper_namespace()
+
+    assert namespace["_web_transform_cds_span"](10, 40, 1, {"length": 100, "reverse": True}) == (60, 90, -1)
+    assert namespace["_web_transform_cds_span"](10, 40, -1, {"length": 100, "reverse": True}) == (60, 90, 1)
+
+
+@pytest.mark.linear
+def test_web_extract_cds_protein_fasta_uses_coordinate_stable_ids(tmp_path: Path) -> None:
+    namespace = _load_web_helper_namespace()
+    record = _record(
+        "record_a",
+        features=[
+            _cds(
+                0,
+                9,
+                qualifiers={
+                    "translation": ["MKT*"],
+                    "locus_tag": ["gene_a"],
+                },
+            )
+        ],
+    )
+    record.annotations["molecule_type"] = "DNA"
+    gb_path = tmp_path / "input.gb"
+    SeqIO.write([record], gb_path, "genbank")
+
+    raw_result = namespace["extract_cds_protein_fasta"](
+        str(gb_path),
+        "genbank",
+        None,
+        None,
+        None,
+        "0",
+        0,
+        "record_a_region",
+    )
+    result = json.loads(str(raw_result))
+
+    assert "error" not in result
+    protein_id = next(iter(result["protein_map"]))
+    assert protein_id.startswith("p_record_a_region_0_9_1_")
+    assert "gbd_r0001_cds000001" not in result["fasta"]
+
+
+@pytest.mark.linear
+def test_web_losatp_pairwise_payload_uses_display_view_transform() -> None:
+    namespace = _load_web_helper_namespace()
+    hits = pd.DataFrame.from_records(
+        [_hit_row("qa", "sb")],
+        columns=COMPARISON_COLUMNS,
+    )
+    payload = {
+        "records": [
+            {
+                "recordIndex": 0,
+                "recordId": "record_a",
+                "proteinMap": {
+                    "qa": _web_protein_entry(
+                        "qa",
+                        record_index=0,
+                        record_id="record_a",
+                        start=0,
+                        end=30,
+                        strand=1,
+                    )
+                },
+                "proteinCacheKey": "record-a-cache",
+                "viewTransform": {"length": 300, "reverse": True},
+            },
+            {
+                "recordIndex": 1,
+                "recordId": "record_b",
+                "proteinMap": {
+                    "sb": _web_protein_entry(
+                        "sb",
+                        record_index=1,
+                        record_id="record_b",
+                        start=100,
+                        end=160,
+                        strand=-1,
+                    )
+                },
+                "proteinCacheKey": "record-b-cache",
+                "viewTransform": {"length": 200, "reverse": False},
+            },
+        ],
+        "pairs": [
+            {
+                "pairIndex": 0,
+                "queryIndex": 0,
+                "subjectIndex": 1,
+                "cacheKey": "pair-a-b",
+                "blastText": hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
+            }
+        ],
+    }
+
+    raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+        json.dumps(payload),
+        "pairwise",
+        1,
+        50,
+        "1e-5",
+        0,
+        0,
+    )
+    result = json.loads(str(raw_result))
+
+    assert "error" not in result
+    row = result["pairs"][0]["rows"][0]
+    assert row["query_protein_id"] == "qa"
+    assert row["qstart"] == 300
+    assert row["qend"] == 271
+    assert row["sstart"] == 160
+    assert row["send"] == 101
 
 
 @pytest.mark.linear

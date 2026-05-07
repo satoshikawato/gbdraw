@@ -74,6 +74,10 @@ class CdsProtein:
     gff_id: str | None = None
     parent_ids: tuple[str, ...] = ()
     gene_parent_id: str | None = None
+    feature_type: str = "CDS"
+    feature_hash_start: int | None = None
+    feature_hash_end: int | None = None
+    feature_hash_strand: int | None = None
 
 
 @dataclass(frozen=True)
@@ -170,6 +174,10 @@ class _CdsProteinCandidate:
     gff_id: str | None
     parent_ids: tuple[str, ...]
     gene_parent_id: str | None
+    feature_type: str
+    feature_hash_start: int | None
+    feature_hash_end: int | None
+    feature_hash_strand: int | None
 
 
 LosatpRunner = Callable[[str, str], DataFrame]
@@ -376,6 +384,16 @@ def _cds_span(feature: SeqFeature) -> tuple[int, int, int | None] | None:
     return start, end, strand
 
 
+def _feature_hash_inputs(feature: SeqFeature) -> tuple[int | None, int | None, int | None]:
+    location = feature.location
+    if location is None:
+        return None, None, None
+    if hasattr(location, "parts") and location.parts:
+        location = location.parts[0]
+    strand = location.strand if location.strand in {-1, 1} else None
+    return int(location.start), int(location.end), strand
+
+
 def extract_cds_proteins(
     records: Sequence[SeqRecord],
     *,
@@ -418,6 +436,7 @@ def extract_cds_proteins(
                 continue
 
             cds_count += 1
+            hash_start, hash_end, hash_strand = _feature_hash_inputs(feature)
             synthetic_protein_id = f"gbd_r{global_record_index + 1:04d}_cds{cds_count:06d}"
             source_protein_id = _first_qualifier(feature, "protein_id")
             fasta_safe_source_id = _fasta_safe_protein_id(source_protein_id)
@@ -467,6 +486,10 @@ def extract_cds_proteins(
                     gff_id=gff_id,
                     parent_ids=parent_ids,
                     gene_parent_id=gene_parent_id,
+                    feature_type=str(feature.type),
+                    feature_hash_start=hash_start,
+                    feature_hash_end=hash_end,
+                    feature_hash_strand=hash_strand,
                 )
             )
 
@@ -509,6 +532,10 @@ def extract_cds_proteins(
                 gff_id=candidate.gff_id,
                 parent_ids=candidate.parent_ids,
                 gene_parent_id=candidate.gene_parent_id,
+                feature_type=candidate.feature_type,
+                feature_hash_start=candidate.feature_hash_start,
+                feature_hash_end=candidate.feature_hash_end,
+                feature_hash_strand=candidate.feature_hash_strand,
             )
             record_proteins.append(cds_protein)
             protein_map[protein_id] = cds_protein

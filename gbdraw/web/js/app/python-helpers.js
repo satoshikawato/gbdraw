@@ -254,7 +254,7 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
         record = records[0]
         handle = StringIO()
         SeqIO.write(record, handle, "fasta")
-        return json.dumps({"fasta": handle.getvalue(), "record_id": record.id})
+        return json.dumps({"fasta": handle.getvalue(), "record_id": record.id, "record_length": len(record.seq)})
     except StopIteration:
         return json.dumps({"error": "No records found"})
     except Exception:
@@ -267,6 +267,130 @@ def _normalize_web_record_selector(record_selector):
     if not selector_raw or selector_raw.lower() in {"none", "null", "jsnull", "undefined", "jsundefined", "-"}:
         return None
     return selector_raw
+
+def _normalize_web_view_transform(view_transform):
+    if isinstance(view_transform, str):
+        text = view_transform.strip()
+        if text:
+            try:
+                view_transform = json.loads(text)
+            except Exception:
+                view_transform = {}
+        else:
+            view_transform = {}
+    if not isinstance(view_transform, dict):
+        view_transform = {}
+    raw_length = view_transform.get("length", 0)
+    try:
+        length = int(raw_length)
+    except Exception:
+        length = 0
+    raw_reverse = view_transform.get("reverse", False)
+    if isinstance(raw_reverse, str):
+        reverse = raw_reverse.strip().lower() in {"1", "true", "yes", "y", "on"}
+    else:
+        reverse = bool(raw_reverse)
+    if reverse and length <= 0:
+        raise ValueError("Reverse display transform requires a positive length.")
+    return {"length": max(0, length), "reverse": reverse}
+
+def _web_transform_blast_pos(position, view_transform):
+    normalized = _normalize_web_view_transform(view_transform)
+    pos = int(position)
+    if not normalized["reverse"]:
+        return pos
+    return int(normalized["length"]) + 1 - pos
+
+def _web_transform_cds_span(start, end, strand, view_transform):
+    normalized = _normalize_web_view_transform(view_transform)
+    start = int(start)
+    end = int(end)
+    if strand in (-1, 1, "-1", "1"):
+        strand = int(strand)
+    else:
+        strand = None
+    if not normalized["reverse"]:
+        return start, end, strand
+    length = int(normalized["length"])
+    display_start = length - end
+    display_end = length - start
+    display_strand = -strand if strand in {-1, 1} else strand
+    return display_start, display_end, display_strand
+
+def _compute_web_feature_svg_id(record_id, feature_type, start, end, strand):
+    import hashlib
+
+    normalized_record_id = str(record_id or "")
+    normalized_type = str(feature_type or "CDS")
+    if normalized_record_id:
+        key = f"{normalized_record_id}:{normalized_type}:{int(start)}:{int(end)}:{strand}"
+    else:
+        key = f"{normalized_type}:{int(start)}:{int(end)}:{strand}"
+    return "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+
+def _display_feature_svg_id_from_data(data, display_start, display_end, display_strand, view_transform):
+    normalized = _normalize_web_view_transform(view_transform)
+    if not normalized["reverse"]:
+        existing = data.get("feature_svg_id")
+        if existing:
+            return existing
+    hash_start = data.get("feature_hash_start")
+    hash_end = data.get("feature_hash_end")
+    hash_strand = data.get("feature_hash_strand")
+    if hash_start is None or hash_end is None:
+        hash_start = data.get("start", display_start)
+        hash_end = data.get("end", display_end)
+        hash_strand = data.get("strand", display_strand)
+    display_hash_start, display_hash_end, display_hash_strand = _web_transform_cds_span(
+        hash_start,
+        hash_end,
+        hash_strand,
+        normalized,
+    )
+    return _compute_web_feature_svg_id(
+        data.get("record_id"),
+        data.get("feature_type") or "CDS",
+        display_hash_start,
+        display_hash_end,
+        display_hash_strand,
+    )
+
+def convert_losat_nucleotide_to_display_tsv(blast_text, query_view_transform=None, subject_view_transform=None):
+    """Transform cached raw LOSAT nucleotide outfmt 6 rows into display coordinates."""
+    try:
+        from io import StringIO
+        import pandas as pd
+        from gbdraw.io.comparisons import COMPARISON_COLUMNS
+
+        data_lines = [
+            line
+            for line in str(blast_text or "").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        if not data_lines:
+            return json.dumps({"tsv": "", "rows": []})
+        df = pd.read_csv(
+            StringIO(chr(10).join(data_lines)),
+            sep=chr(9),
+            names=COMPARISON_COLUMNS,
+        )
+        query_transform = _normalize_web_view_transform(query_view_transform)
+        subject_transform = _normalize_web_view_transform(subject_view_transform)
+        for column in ("qstart", "qend"):
+            df[column] = df[column].map(lambda value: _web_transform_blast_pos(value, query_transform))
+        for column in ("sstart", "send"):
+            df[column] = df[column].map(lambda value: _web_transform_blast_pos(value, subject_transform))
+        handle = StringIO()
+        df.loc[:, list(COMPARISON_COLUMNS)].to_csv(
+            handle,
+            sep=chr(9),
+            header=False,
+            index=False,
+            lineterminator=chr(10),
+        )
+        return json.dumps({"tsv": handle.getvalue(), "rows": _dataframe_json_rows(df)})
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
 
 def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None):
     from Bio import SeqIO
@@ -326,9 +450,41 @@ def _serialize_cds_protein(protein):
         "gff_id": getattr(protein, "gff_id", None),
         "parent_ids": list(getattr(protein, "parent_ids", ()) or ()),
         "gene_parent_id": getattr(protein, "gene_parent_id", None),
+        "feature_type": getattr(protein, "feature_type", "CDS"),
+        "feature_hash_start": getattr(protein, "feature_hash_start", None),
+        "feature_hash_end": getattr(protein, "feature_hash_end", None),
+        "feature_hash_strand": getattr(protein, "feature_hash_strand", None),
     }
 
-def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None):
+def _safe_web_protein_id_token(value):
+    import re
+
+    text = str(value or "").strip()
+    text = re.sub(r"[^A-Za-z0-9_.-]+", "_", text)
+    text = text.strip("._-")
+    return text or "record"
+
+def _with_stable_web_protein_ids(proteins, record_instance_key):
+    from dataclasses import replace
+    import hashlib
+
+    record_key = _safe_web_protein_id_token(record_instance_key)
+    remapped = []
+    used = set()
+    for protein in proteins:
+        strand = protein.strand if protein.strand in {-1, 1} else 0
+        aa_hash = hashlib.sha256(str(protein.sequence or "").encode()).hexdigest()[:12]
+        base_id = f"p_{record_key}_{int(protein.start)}_{int(protein.end)}_{strand}_{aa_hash}"
+        protein_id = base_id
+        suffix = 2
+        while protein_id in used:
+            protein_id = f"{base_id}_{suffix}"
+            suffix += 1
+        used.add(protein_id)
+        remapped.append(replace(protein, protein_id=protein_id))
+    return remapped
+
+def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, record_instance_key=None):
     """Extract CDS proteins and coordinate metadata for LOSATP blastp."""
     try:
         from gbdraw.analysis.protein_colinearity import extract_cds_proteins, proteins_to_fasta
@@ -350,6 +506,10 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
         proteins = result.proteins_by_record[0] if result.proteins_by_record else []
         if not proteins:
             return json.dumps({"error": f"No CDS proteins found in {record.id}"})
+        stable_record_key = record_instance_key
+        if _is_blank_or_js_nullish(stable_record_key):
+            stable_record_key = f"r{record_index_offset + 1:04d}_{record.id}"
+        proteins = _with_stable_web_protein_ids(proteins, stable_record_key)
         protein_map = {
             protein.protein_id: _serialize_cds_protein(protein)
             for protein in proteins
@@ -357,6 +517,7 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
         return json.dumps({
             "fasta": proteins_to_fasta(proteins),
             "record_id": record.id,
+            "record_length": len(record.seq),
             "protein_count": len(proteins),
             "protein_map": protein_map,
         })
@@ -440,6 +601,15 @@ def _build_web_cds_protein_map(raw_map):
         ):
             if optional_field in supported_fields:
                 kwargs[optional_field] = data.get(optional_field)
+        if "feature_type" in supported_fields:
+            kwargs["feature_type"] = str(data.get("feature_type") or "CDS")
+        for optional_int_field in ("feature_hash_start", "feature_hash_end", "feature_hash_strand"):
+            if optional_int_field in supported_fields:
+                raw_value = data.get(optional_int_field)
+                if raw_value is None or raw_value == "":
+                    kwargs[optional_int_field] = None
+                else:
+                    kwargs[optional_int_field] = int(raw_value)
         for tuple_field in ("db_xref", "parent_ids"):
             if tuple_field in supported_fields:
                 raw_values = data.get(tuple_field) or ()
@@ -449,6 +619,36 @@ def _build_web_cds_protein_map(raw_map):
                     kwargs[tuple_field] = (str(raw_values),) if str(raw_values).strip() else ()
         protein_map[str(protein_id)] = CdsProtein(**kwargs)
     return protein_map
+
+def _build_display_web_cds_protein_map(raw_map, view_transform):
+    normalized = _normalize_web_view_transform(view_transform)
+    if not normalized["reverse"]:
+        return _build_web_cds_protein_map(raw_map)
+    display_map = {}
+    if not isinstance(raw_map, dict):
+        return {}
+    for protein_id, data in raw_map.items():
+        if not isinstance(data, dict):
+            continue
+        display_data = dict(data)
+        start, end, strand = _web_transform_cds_span(
+            display_data.get("start", 0),
+            display_data.get("end", 0),
+            display_data.get("strand"),
+            normalized,
+        )
+        display_data["start"] = start
+        display_data["end"] = end
+        display_data["strand"] = strand
+        display_data["feature_svg_id"] = _display_feature_svg_id_from_data(
+            display_data,
+            start,
+            end,
+            strand,
+            normalized,
+        )
+        display_map[str(protein_id)] = display_data
+    return _build_web_cds_protein_map(display_map)
 
 def _build_web_protein_extraction(protein_maps):
     from gbdraw.analysis.protein_colinearity import ProteinExtractionResult
@@ -609,6 +809,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     "record_id": str(record.get("recordId") or ""),
                     "protein_map": record.get("proteinMap") or {},
                     "protein_cache_key": str(record.get("proteinCacheKey") or ""),
+                    "view_transform": _normalize_web_view_transform(record.get("viewTransform") or {}),
                 }
             )
 
@@ -657,7 +858,12 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             str(collinear_max_paralog_links_per_orthogroup),
             str(collinear_search_scope),
             tuple(
-                (item["record_index"], item["protein_cache_key"])
+                (
+                    item["record_index"],
+                    item["protein_cache_key"],
+                    int(item["view_transform"]["length"]),
+                    bool(item["view_transform"]["reverse"]),
+                )
                 for item in sorted(record_payloads, key=lambda current: current["record_index"])
             ),
             tuple(
@@ -679,7 +885,10 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             record_index = int(record["record_index"])
             if record_index in protein_maps_by_record:
                 raise ValueError(f"LOSATP record payload contains duplicate recordIndex {record_index}.")
-            protein_maps_by_record[record_index] = _build_web_cds_protein_map(record["protein_map"])
+            protein_maps_by_record[record_index] = _build_display_web_cds_protein_map(
+                record["protein_map"],
+                record["view_transform"],
+            )
 
         combined_protein_map = {}
         for protein_map in protein_maps_by_record.values():
