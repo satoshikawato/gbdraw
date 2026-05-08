@@ -133,6 +133,184 @@
             }
         }
 
+        @media (max-width: 768px) {
+            body {
+                overflow-x: hidden !important;
+                overflow-y: auto !important;
+            }
+
+            #app {
+                height: auto !important;
+                min-height: 100dvh !important;
+            }
+
+            .app-header {
+                height: auto !important;
+            }
+
+            .app-header-inner {
+                height: auto !important;
+                min-height: 3.5rem !important;
+                padding: 0.5rem 0.75rem !important;
+                flex-wrap: wrap !important;
+                gap: 0.5rem !important;
+            }
+
+            .app-brand {
+                flex: 1 1 auto !important;
+            }
+
+            .app-title {
+                font-size: 1rem !important;
+            }
+
+            .app-tagline,
+            .app-session-label {
+                display: none !important;
+            }
+
+            .app-toolbar {
+                width: 100% !important;
+                flex-wrap: wrap !important;
+                justify-content: space-between !important;
+                gap: 0.4rem !important;
+            }
+
+            .app-file-actions {
+                flex-wrap: wrap !important;
+                gap: 0.25rem !important;
+                order: 2 !important;
+            }
+
+            .app-config-button {
+                width: 2rem !important;
+                height: 2rem !important;
+                padding: 0 !important;
+                justify-content: center !important;
+                font-size: 0 !important;
+            }
+
+            .app-config-button i {
+                font-size: 0.95rem !important;
+            }
+
+            .app-session-actions {
+                flex: 1 1 8rem !important;
+                order: 3 !important;
+            }
+
+            .app-session-button {
+                width: min(100%, 10rem) !important;
+                height: 2rem !important;
+            }
+
+            .mode-switch {
+                order: 1 !important;
+                margin-left: auto !important;
+            }
+
+            .app-mode-button {
+                padding: 0.35rem 0.55rem !important;
+                font-size: 0.75rem !important;
+            }
+
+            .app-main {
+                flex-direction: column !important;
+                gap: 0.75rem !important;
+                height: auto !important;
+                min-height: calc(100dvh - 3.5rem) !important;
+                overflow: visible !important;
+                padding: 0.5rem 0.5rem 6rem !important;
+            }
+
+            .settings-pane {
+                width: 100% !important;
+                height: auto !important;
+                overflow: visible !important;
+            }
+
+            .settings-scroll {
+                overflow: visible !important;
+                padding-right: 0 !important;
+            }
+
+            .generate-bar {
+                position: fixed !important;
+                left: 0 !important;
+                right: 0 !important;
+                bottom: 0 !important;
+                padding: 0.65rem 0.75rem calc(0.65rem + env(safe-area-inset-bottom)) !important;
+                background: rgba(255, 255, 255, 0.96) !important;
+                border-top: 1px solid #e2e8f0 !important;
+                box-shadow: 0 -12px 28px rgba(15, 23, 42, 0.12) !important;
+                z-index: 60 !important;
+            }
+
+            .generate-bar .btn {
+                max-width: 42rem !important;
+                margin: 0 auto !important;
+                padding-top: 0.9rem !important;
+                padding-bottom: 0.9rem !important;
+            }
+
+            .resize-handle {
+                display: none !important;
+            }
+
+            .result-pane {
+                flex: none;
+                height: 72dvh !important;
+                min-height: 26rem !important;
+                overflow: hidden !important;
+            }
+
+            .preview-toolbar {
+                width: 100% !important;
+                margin-right: 0 !important;
+            }
+
+            .preview-toolbar > * {
+                flex: 1 1 auto !important;
+            }
+
+            .preview-controls {
+                left: 0.5rem !important;
+                right: 0.5rem !important;
+                bottom: 0.5rem !important;
+                transform: none !important;
+                justify-content: center !important;
+                flex-wrap: wrap !important;
+            }
+
+            .drag-hint {
+                display: none !important;
+            }
+
+            .right-drawer {
+                width: min(100vw, 360px) !important;
+            }
+
+            .drawer-toggle {
+                top: auto !important;
+                bottom: 5rem !important;
+                transform: none !important;
+            }
+
+            .drawer-toggle.drawer-open {
+                transform: translateX(calc(-1 * min(100vw, 360px))) !important;
+            }
+
+            footer {
+                height: auto !important;
+                padding: 0.5rem 0.75rem calc(5.25rem + env(safe-area-inset-bottom)) !important;
+                flex-wrap: wrap !important;
+                justify-content: flex-start !important;
+                gap: 0.25rem 0.75rem !important;
+                font-size: 0.75rem !important;
+                line-height: 1.35 !important;
+            }
+        }
+
         .btn { @apply font-bold rounded-lg text-base px-4 py-2 shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2; }
         .btn-primary { @apply text-white bg-blue-600 hover:bg-blue-700; }
         .btn-secondary { @apply text-slate-700 bg-white border border-slate-300 hover:bg-slate-50; }
@@ -175,55 +353,55 @@
         <p v-if="processingStatus" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
     </div>
 
-    <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-14 shrink-0">
-        <div class="px-4 h-full flex items-center justify-between">
-            <div class="flex items-center gap-1 min-w-0">
+    <header class="app-header bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-14 shrink-0">
+        <div class="app-header-inner px-4 h-full flex items-center justify-between">
+            <div class="app-brand flex items-center gap-1 min-w-0">
                 <div class="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center font-bold text-lg shadow-md">🧬</div>
-                <h1 class="text-lg font-bold text-slate-800 tracking-tight flex items-center whitespace-nowrap leading-none mt-0.5">
+                <h1 class="app-title text-lg font-bold text-slate-800 tracking-tight flex items-center whitespace-nowrap leading-none mt-0.5">
                     gbdraw
-                    <span class="text-slate-400 text-sm font-normal ml-2">A genome diagram generator for microbes and organelles</span>
+                    <span class="app-tagline text-slate-400 text-sm font-normal ml-2">A genome diagram generator for microbes and organelles</span>
                 </h1>
             </div>
             
-                <div class="flex items-center gap-2 min-w-0">
-                <div class="flex gap-0.5">
-                    <button @click="exportConfig" class="text-[11px] font-bold text-slate-500 hover:text-blue-600 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5">
+                <div class="app-toolbar flex items-center gap-2 min-w-0">
+                <div class="app-file-actions flex gap-0.5">
+                    <button @click="exportConfig" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-blue-600 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5" title="Save Config" aria-label="Save Config">
                         <i class="ph ph-export"></i> Save Config
                     </button>
-                    <button @click="$refs.configInput.click()" class="text-[11px] font-bold text-slate-500 hover:text-blue-600 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5">
+                    <button @click="$refs.configInput.click()" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-blue-600 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5" title="Load Config" aria-label="Load Config">
                         <i class="ph ph-arrow-square-in"></i> Load Config
                     </button>
                     <input type="file" ref="configInput" accept=".json" class="hidden" @change="importConfig">
-                    <button @click="saveSessionWithTitle" class="text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5">
+                    <button @click="saveSessionWithTitle" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5" title="Save Session" aria-label="Save Session">
                         <i class="ph ph-archive"></i> Save Session
                     </button>
-                    <button @click="$refs.sessionInput.click()" class="text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5">
+                    <button @click="$refs.sessionInput.click()" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5" title="Load Session" aria-label="Load Session">
                         <i class="ph ph-archive-tray"></i> Load Session
                     </button>
                     <input type="file" ref="sessionInput" accept=".json" class="hidden" @change="importSession">
                 </div>
-                <div class="flex items-center gap-1 min-w-0">
-                    <span class="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Session</span>
-                    <button @click="editSessionTitle" class="text-[11px] font-semibold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5 w-32 min-w-0 justify-start">
+                <div class="app-session-actions flex items-center gap-1 min-w-0">
+                    <span class="app-session-label text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Session</span>
+                    <button @click="editSessionTitle" class="app-session-button text-[11px] font-semibold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5 w-32 min-w-0 justify-start">
                         <i class="ph ph-pencil-simple"></i>
                         <span class="truncate">{{ sessionTitleLabel }}</span>
                     </button>
                 </div>
 
-                <div class="flex bg-slate-100 p-1 rounded-lg">
-                    <button @click="mode = 'circular'" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-circle"></i> Circular</button>
-                    <button @click="mode = 'linear'" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-ruler"></i> Linear</button>
+                <div class="mode-switch flex bg-slate-100 p-1 rounded-lg">
+                    <button @click="mode = 'circular'" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-circle"></i> Circular</button>
+                    <button @click="mode = 'linear'" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-ruler"></i> Linear</button>
                 </div>
             </div>
         </div>
     </header>
 
-    <main class="flex-grow px-4 py-3 flex overflow-hidden h-[calc(100vh-88px)]">
+    <main class="app-main flex-grow px-4 py-3 flex overflow-hidden h-[calc(100vh-88px)]">
 
-        <div class="flex flex-col h-full overflow-hidden relative shrink-0"
+        <div class="settings-pane flex flex-col h-full overflow-hidden relative shrink-0"
              :style="{ width: sidebarWidth + 'px' }">
             
-            <div class="flex-grow overflow-y-auto custom-scrollbar pr-2 pb-4 space-y-2">
+            <div class="settings-scroll flex-grow overflow-y-auto custom-scrollbar pr-2 pb-4 space-y-2">
                 
                 <div class="card border-l-4 border-l-blue-500">
                     <div class="card-header"><i class="ph ph-folder-open text-xl"></i> Input Genomes</div>
@@ -1499,7 +1677,7 @@
 
             </div>
             
-            <div class="shrink-0 py-4 bg-white/50 backdrop-blur-sm border-t border-slate-100 z-10 relative mt-auto">
+            <div class="generate-bar shrink-0 py-4 bg-white/50 backdrop-blur-sm border-t border-slate-100 z-10 relative mt-auto">
             <button @click="runAnalysis" :disabled="processing || !pyodideReady" 
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
                 <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
@@ -1510,11 +1688,11 @@
         </div>
 
         <!-- Resize Handle -->
-        <div class="w-1 bg-slate-200 hover:bg-blue-400 cursor-col-resize transition-colors shrink-0 mx-2"
+        <div class="resize-handle w-1 bg-slate-200 hover:bg-blue-400 cursor-col-resize transition-colors shrink-0 mx-2"
              @mousedown="startResizing"
              title="Drag to resize"></div>
 
-        <div class="flex-1 space-y-4 flex flex-col h-full overflow-hidden min-w-0">
+        <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-hidden min-w-0">
             
             <div v-if="errorDisplay" class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
                 <div class="text-red-700 font-bold mb-2 flex items-center gap-2"><i class="ph ph-warning-circle"></i> Error Occurred</div>
@@ -1541,7 +1719,7 @@
                             </select>
                         </span>
                     </span>
-                    <div class="flex gap-2 items-center flex-wrap mr-2">
+                    <div class="preview-toolbar flex gap-2 items-center flex-wrap mr-2">
                         <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded border border-green-200">
                             <span class="text-sm font-bold text-green-700">DPI</span>
                             <select v-model="downloadDpi" class="text-sm bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
@@ -1561,7 +1739,7 @@
                 <div class="relative flex-grow overflow-hidden bg-slate-50/30">
 
                     <!-- Zoom and Canvas controls -->
-                    <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
+                    <div class="preview-controls absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
                         <!-- Reset all positions button -->
                         <button v-if="svgContent" @click="resetAllPositions"
                                 class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
@@ -1588,7 +1766,7 @@
                     </div>
 
                     <!-- Drag hint -->
-                    <div v-if="svgContent" class="absolute top-4 left-4 bg-white/90 shadow rounded-lg px-4 py-2 z-20 border border-slate-200">
+                    <div v-if="svgContent" class="drag-hint absolute top-4 left-4 bg-white/90 shadow rounded-lg px-4 py-2 z-20 border border-slate-200">
                         <p class="text-sm text-slate-500 flex items-center gap-2">
                             <i class="ph ph-hand-grabbing text-base"></i> Drag record or legend to reposition
                         </p>
@@ -2160,14 +2338,14 @@
                 <!-- Right-side editor drawer -->
                 <button v-if="svgContent"
                         @click="showRightDrawer ? closeRightDrawer() : openRightDrawerTab(rightDrawerTab || (orthogroupCount > 0 ? 'orthogroups' : 'features'))"
-                        class="absolute right-0 top-1/2 -translate-y-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
-                        :class="{ '-translate-x-[360px]': showRightDrawer }"
+                        class="drawer-toggle absolute right-0 top-1/2 -translate-y-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
+                        :class="{ '-translate-x-[360px] drawer-open': showRightDrawer }"
                         :title="showRightDrawer ? 'Close editor' : 'Open editor'">
                     <i class="ph ph-sidebar-simple text-lg"></i>
                 </button>
 
                 <div v-if="svgContent"
-                     class="absolute right-0 top-0 bottom-0 w-[360px] bg-white border-l border-slate-200 shadow-xl z-10 transition-transform duration-300 flex flex-col"
+                     class="right-drawer absolute right-0 top-0 bottom-0 w-[360px] bg-white border-l border-slate-200 shadow-xl z-10 transition-transform duration-300 flex flex-col"
                      :class="showRightDrawer ? 'translate-x-0' : 'translate-x-full'">
                     <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50">
                         <div class="flex items-center gap-2">
