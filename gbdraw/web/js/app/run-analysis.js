@@ -533,6 +533,7 @@ export const createRunAnalysis = ({
   let pendingReflowReason = 'label-edit';
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
+  let activeLosatAbortController = null;
 
   const getLastLine = (text) => {
     const trimmed = String(text || '').trim();
@@ -571,6 +572,36 @@ export const createRunAnalysis = ({
   const formatJsError = (err) => {
     const message = err?.message ? String(err.message) : String(err || 'Unknown error');
     return { summary: message, details: [] };
+  };
+
+  const getGenerationCancelReason = (signal) =>
+    signal?.reason instanceof Error ? signal.reason : new DiagramGenerationCanceledError();
+
+  const waitForCancelablePromise = (promise, signal) => {
+    if (!signal) return promise;
+    if (signal.aborted) return Promise.reject(getGenerationCancelReason(signal));
+    return new Promise((resolve, reject) => {
+      const cleanup = () => signal.removeEventListener('abort', handleAbort);
+      const handleAbort = () => {
+        cleanup();
+        reject(getGenerationCancelReason(signal));
+      };
+      signal.addEventListener('abort', handleAbort, { once: true });
+      Promise.resolve(promise).then(
+        (value) => {
+          cleanup();
+          if (signal.aborted) {
+            reject(getGenerationCancelReason(signal));
+            return;
+          }
+          resolve(value);
+        },
+        (error) => {
+          cleanup();
+          reject(error);
+        }
+      );
+    });
   };
 
   const buildFeatureExtractionCacheKey = ({ regionSpec, recordSelector, reverseFlag, selectedFeatures }) =>
@@ -1172,6 +1203,8 @@ json.dumps({
     const isReflow = runMode === 'reflow';
     const generationToken = ++latestGenerationToken;
     let keepProcessingStatus = false;
+    let generationAbortController = null;
+    let generationAbortSignal = null;
     const setProcessingStatus = (message) => {
       if (!isReflow) processingStatus.value = String(message || '');
     };
@@ -1192,6 +1225,10 @@ json.dumps({
       }
       return { status: 'error' };
     }
+    generationAbortController =
+      !isReflow && typeof AbortController === 'function' ? new AbortController() : null;
+    generationAbortSignal = generationAbortController?.signal || null;
+    if (!isReflow) activeLosatAbortController = generationAbortController;
     const previousSelectedResultIndex = selectedResultIndex.value;
     const cloneJsonSafe = (value, fallback) => {
       try {
@@ -2427,12 +2464,18 @@ json.dumps({
           }
 
           for (const spec of jobSpecs) {
+            throwIfGenerationCanceled();
             const queryEntry = await getSeqEntry(spec.queryIndex);
+            throwIfGenerationCanceled();
             const subjectEntry = await getSeqEntry(spec.subjectIndex);
+            throwIfGenerationCanceled();
             const losatArgs = buildLosatArgs(spec.queryIndex, spec.subjectIndex);
             const cacheKey = await buildCacheKey(losatArgs, spec.queryIndex, spec.subjectIndex);
+            throwIfGenerationCanceled();
             const queryCanonicalHash = await getSeqHash(spec.queryIndex);
+            throwIfGenerationCanceled();
             const subjectCanonicalHash = await getSeqHash(spec.subjectIndex);
+            throwIfGenerationCanceled();
             if (!queryEntry.sequenceKey || !subjectEntry.sequenceKey) {
               throw new Error('LOSAT sequence cache key was not prepared.');
             }
@@ -2486,16 +2529,20 @@ json.dumps({
           if (losatJobs.length > 0) {
             setProcessingStatus(`Running LOSAT: 0/${losatJobs.length} LOSAT jobs complete`);
             const runtimeWaitStartedAt = getNow();
-            await losatRuntimeWarmup;
+            await waitForCancelablePromise(losatRuntimeWarmup, generationAbortSignal);
+            throwIfGenerationCanceled();
             losatTiming.runtimeWaitMs += getNow() - runtimeWaitStartedAt;
             const executionStartedAt = getNow();
             const losatResults = await runLosatPairsParallel(losatJobs, {
               concurrency: getLosatParallelWorkers(),
               sequences: sequenceEntriesByKey,
+              signal: generationAbortSignal,
               onProgress: ({ completed, total }) => {
+                if (generationAbortSignal?.aborted || generationCancelRequested.value) return;
                 setProcessingStatus(`Running LOSAT: ${completed}/${total} LOSAT jobs complete`);
               }
             });
+            throwIfGenerationCanceled();
             losatTiming.executionMs += getNow() - executionStartedAt;
             losatResults.forEach((result) => {
               const job = losatJobs.find((item) => item.cacheKey === result.cacheKey);
@@ -2513,6 +2560,7 @@ json.dumps({
           }
 
           const blastWriteStartedAt = getNow();
+          throwIfGenerationCanceled();
           if (useProteinBlastp) {
             if (!convertProteinBlast) {
               throw new Error('Current gbdraw wheel does not support LOSATP orthogroup metadata. Rebuild and redeploy the web wheel.');
@@ -2530,6 +2578,7 @@ json.dumps({
             }
             const pairPayloads = [];
             for (const pair of losatPairs) {
+              throwIfGenerationCanceled();
               const cached = cacheMap.get(pair.cacheKey);
               const losatText = isRawLosatCacheEntry(cached) ? cached.text : '';
               pairPayloads.push({
@@ -2594,6 +2643,7 @@ json.dumps({
               throw new Error('Current gbdraw wheel does not support LOSAT display coordinate conversion. Rebuild and redeploy the web wheel.');
             }
             for (const pair of losatPairs) {
+              throwIfGenerationCanceled();
               const cached = cacheMap.get(pair.cacheKey);
               const blastText = isRawLosatCacheEntry(cached) ? cached.text : '';
               const converted = JSON.parse(
@@ -2821,6 +2871,9 @@ json.dumps({
       if (isReflow) {
         labelReflowProcessing.value = false;
       } else {
+        if (activeLosatAbortController === generationAbortController) {
+          activeLosatAbortController = null;
+        }
         if (!keepProcessingStatus) processingStatus.value = '';
         generationCancelRequested.value = false;
         processing.value = false;
@@ -2833,6 +2886,9 @@ json.dumps({
   const cancelRunAnalysis = () => {
     latestGenerationToken += 1;
     generationCancelRequested.value = true;
+    if (activeLosatAbortController && !activeLosatAbortController.signal.aborted) {
+      activeLosatAbortController.abort(new DiagramGenerationCanceledError());
+    }
     if (processing.value) {
       processingStatus.value = 'Canceling generation...';
     }
