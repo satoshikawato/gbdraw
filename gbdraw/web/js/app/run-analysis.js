@@ -1,4 +1,10 @@
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
+import {
+  cancelDiagramGeneration,
+  DiagramGenerationCanceledError,
+  isDiagramGenerationCanceled,
+  runDiagramGeneration
+} from '../services/diagram-generation.js';
 import { buildLabelOverrideTsv } from './feature-editor/label-override-table.js';
 
 const downloadTextFile = (filename, text) => {
@@ -451,6 +457,7 @@ export const createRunAnalysis = ({
     pyodideReady,
     processing,
     processingStatus,
+    generationCancelRequested,
     results,
     selectedResultIndex,
     errorLog,
@@ -525,6 +532,7 @@ export const createRunAnalysis = ({
   let activeReflowRequestId = 0;
   let pendingReflowReason = 'label-edit';
   let featureExtractionRequestId = 0;
+  let latestGenerationToken = 0;
 
   const getLastLine = (text) => {
     const trimmed = String(text || '').trim();
@@ -1162,8 +1170,15 @@ json.dumps({
     if (!pyodide) return { status: 'skipped' };
 
     const isReflow = runMode === 'reflow';
+    const generationToken = ++latestGenerationToken;
+    let keepProcessingStatus = false;
     const setProcessingStatus = (message) => {
       if (!isReflow) processingStatus.value = String(message || '');
+    };
+    const throwIfGenerationCanceled = () => {
+      if (!isReflow && generationCancelRequested.value) {
+        throw new DiagramGenerationCanceledError();
+      }
     };
     if (isReflow && mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
       return { status: 'skipped' };
@@ -1178,6 +1193,63 @@ json.dumps({
       return { status: 'error' };
     }
     const previousSelectedResultIndex = selectedResultIndex.value;
+    const cloneJsonSafe = (value, fallback) => {
+      try {
+        return JSON.parse(JSON.stringify(value));
+      } catch (_err) {
+        return fallback;
+      }
+    };
+    const manualCancelSnapshot = isReflow
+      ? null
+      : {
+          results: Array.isArray(results.value) ? results.value.map((entry) => ({ ...entry })) : [],
+          selectedResultIndex: selectedResultIndex.value,
+          zoom: zoom.value,
+          pairwiseMatchFactors: { ...(pairwiseMatchFactors.value || {}) },
+          addedLegendCaptions: new Set(addedLegendCaptions.value || []),
+          fileLegendCaptions: new Set(fileLegendCaptions.value || []),
+          featureColorOverrides: cloneJsonSafe(featureColorOverrides, {}),
+          legendEntries: cloneJsonSafe(legendEntries.value || [], []),
+          deletedLegendEntries: cloneJsonSafe(deletedLegendEntries.value || [], []),
+          legendColorOverrides: cloneJsonSafe(legendColorOverrides, {}),
+          originalLegendOrder: cloneJsonSafe(originalLegendOrder.value || [], []),
+          originalLegendColors: cloneJsonSafe(originalLegendColors.value || {}, {}),
+          extractedFeatures: cloneJsonSafe(extractedFeatures.value || [], []),
+          editableLabels: cloneJsonSafe(editableLabels.value || [], []),
+          featureExtractionPending: featureExtractionPending.value,
+          featureExtractionError: featureExtractionError.value,
+          featureRecordIds: cloneJsonSafe(featureRecordIds.value || [], []),
+          selectedFeatureRecordIdx: selectedFeatureRecordIdx.value,
+          labelOverrideBuildWarning: labelOverrideBuildWarning.value
+        };
+    const restoreManualCancelSnapshot = () => {
+      if (!manualCancelSnapshot) return;
+      results.value = manualCancelSnapshot.results;
+      selectedResultIndex.value = Math.max(
+        0,
+        Math.min(manualCancelSnapshot.selectedResultIndex, Math.max(0, manualCancelSnapshot.results.length - 1))
+      );
+      zoom.value = manualCancelSnapshot.zoom;
+      pairwiseMatchFactors.value = { ...manualCancelSnapshot.pairwiseMatchFactors };
+      addedLegendCaptions.value = new Set(manualCancelSnapshot.addedLegendCaptions);
+      fileLegendCaptions.value = new Set(manualCancelSnapshot.fileLegendCaptions);
+      Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
+      Object.assign(featureColorOverrides, cloneJsonSafe(manualCancelSnapshot.featureColorOverrides, {}));
+      legendEntries.value = cloneJsonSafe(manualCancelSnapshot.legendEntries, []);
+      deletedLegendEntries.value = cloneJsonSafe(manualCancelSnapshot.deletedLegendEntries, []);
+      Object.keys(legendColorOverrides).forEach((k) => delete legendColorOverrides[k]);
+      Object.assign(legendColorOverrides, cloneJsonSafe(manualCancelSnapshot.legendColorOverrides, {}));
+      originalLegendOrder.value = cloneJsonSafe(manualCancelSnapshot.originalLegendOrder, []);
+      originalLegendColors.value = cloneJsonSafe(manualCancelSnapshot.originalLegendColors, {});
+      extractedFeatures.value = cloneJsonSafe(manualCancelSnapshot.extractedFeatures, []);
+      editableLabels.value = cloneJsonSafe(manualCancelSnapshot.editableLabels, []);
+      featureExtractionPending.value = manualCancelSnapshot.featureExtractionPending;
+      featureExtractionError.value = manualCancelSnapshot.featureExtractionError;
+      featureRecordIds.value = cloneJsonSafe(manualCancelSnapshot.featureRecordIds, []);
+      selectedFeatureRecordIdx.value = manualCancelSnapshot.selectedFeatureRecordIdx;
+      labelOverrideBuildWarning.value = manualCancelSnapshot.labelOverrideBuildWarning;
+    };
     const editableLabelsSnapshot = Array.isArray(editableLabels.value)
       ? editableLabels.value.map((entry) => ({ ...entry }))
       : [];
@@ -1202,6 +1274,7 @@ json.dumps({
       skipPositionReapply.value = true;
     } else {
       featureExtractionRequestId += 1;
+      generationCancelRequested.value = false;
       featureExtractionPending.value = false;
       featureExtractionError.value = null;
       processing.value = true;
@@ -1238,6 +1311,50 @@ json.dumps({
       let recordSelectors = [];
       let reverseFlags = [];
       let virtualBlastFiles = [];
+      const generationFileMap = new Map();
+      const textEncoder = new TextEncoder();
+      const textDecoder = new TextDecoder();
+      const getPayloadName = (path, fallback = 'input') => {
+        const name = String(path || '').split('/').filter(Boolean).pop();
+        return name || fallback;
+      };
+      const toTransferableBuffer = (bytes) => {
+        if (bytes instanceof ArrayBuffer) return bytes;
+        if (ArrayBuffer.isView(bytes)) {
+          const { buffer, byteOffset, byteLength } = bytes;
+          if (byteOffset === 0 && byteLength === buffer.byteLength) return buffer;
+          return buffer.slice(byteOffset, byteOffset + byteLength);
+        }
+        return new Uint8Array(bytes || []).buffer;
+      };
+      const stageGenerationBytes = (path, name, bytes) => {
+        const normalizedPath = String(path || '').trim();
+        if (!normalizedPath) return;
+        generationFileMap.set(normalizedPath, {
+          path: normalizedPath,
+          name: name || getPayloadName(normalizedPath),
+          bytes: toTransferableBuffer(bytes)
+        });
+      };
+      const stageTextFile = (path, text) => {
+        throwIfGenerationCanceled();
+        const bytes = textEncoder.encode(String(text ?? ''));
+        pyodide.FS.writeFile(path, bytes);
+        stageGenerationBytes(path, getPayloadName(path), bytes);
+      };
+      const stageUploadedFile = async (fileObj, path, { cacheText = false, textCache = null } = {}) => {
+        if (!fileObj) return false;
+        throwIfGenerationCanceled();
+        const buffer = await fileObj.arrayBuffer();
+        throwIfGenerationCanceled();
+        const bytes = new Uint8Array(buffer);
+        pyodide.FS.writeFile(path, bytes);
+        if (cacheText && textCache) {
+          textCache.set(fileObj, textDecoder.decode(bytes));
+        }
+        stageGenerationBytes(path, fileObj.name || getPayloadName(path), buffer);
+        return true;
+      };
 
       if (form.prefix && form.prefix.trim() !== '') args.push('-o', form.prefix.trim());
       if (form.species) args.push('--species', form.species);
@@ -1265,7 +1382,7 @@ json.dumps({
 
       let dContent = '';
       for (const [k, v] of Object.entries(activeRunColors)) dContent += `${k}\t${v}\n`;
-      pyodide.FS.writeFile('/combined_d.tsv', dContent);
+      stageTextFile('/combined_d.tsv', dContent);
       args.push('-d', '/combined_d.tsv');
 
       let tContent = '';
@@ -1273,7 +1390,7 @@ json.dumps({
         tContent += `${r.feat}\t${r.qual}\t${r.val}\t${r.color}\t${r.cap}\n`;
       });
       if (tContent.trim() !== '') {
-        pyodide.FS.writeFile('/combined_t.tsv', tContent);
+        stageTextFile('/combined_t.tsv', tContent);
         args.push('-t', '/combined_t.tsv');
       }
 
@@ -1287,7 +1404,7 @@ json.dumps({
           manualWhitelist.forEach((r) => {
             if (r.feat && r.qual) wlContent += `${r.feat}\t${r.qual}\t${r.key}\n`;
           });
-          pyodide.FS.writeFile('/manual_wl.tsv', wlContent);
+          stageTextFile('/manual_wl.tsv', wlContent);
           args.push('--label_whitelist', '/manual_wl.tsv');
         }
       }
@@ -1297,7 +1414,7 @@ json.dumps({
         pContent += `${r.feat}\t${r.order}\n`;
       });
       if (pContent.trim() !== '') {
-        pyodide.FS.writeFile('/priority.tsv', pContent);
+        stageTextFile('/priority.tsv', pContent);
         args.push('--qualifier_priority', '/priority.tsv');
       }
 
@@ -1311,7 +1428,7 @@ json.dumps({
         labelOverrideBuildWarning.value = `${labelOverride.skippedMissingSourceCount} feature override row(s) were skipped due to missing source label context.`;
       }
       if (labelOverride.tsv) {
-        pyodide.FS.writeFile('/web_label_table.tsv', labelOverride.tsv);
+        stageTextFile('/web_label_table.tsv', labelOverride.tsv);
         args.push('--label_table', '/web_label_table.tsv');
       }
       const featureVisibilityRows = [];
@@ -1324,7 +1441,7 @@ json.dumps({
         featureVisibilityRows.push(`*\t*\thash\t^${escapeRegexLiteral(featureId)}$\t${action}`);
       });
       if (featureVisibilityRows.length > 0) {
-        pyodide.FS.writeFile('/web_feature_table.tsv', `${featureVisibilityRows.join('\n')}\n`);
+        stageTextFile('/web_feature_table.tsv', `${featureVisibilityRows.join('\n')}\n`);
         args.push('--feature_table', '/web_feature_table.tsv');
       }
       if (!isReflow) {
@@ -1609,7 +1726,7 @@ json.dumps({
         const hasCircularDepthFile = Boolean(files.c_depth);
         if (form.show_depth) {
           if (!hasCircularDepthFile) throw new Error('Please upload a Depth TSV file or disable Show depth track.');
-          await writeFileToFs(files.c_depth, '/depth.tsv');
+          await stageUploadedFile(files.c_depth, '/depth.tsv');
           args.push('--depth', '/depth.tsv');
           args.push('--show_depth');
           appendDepthStyleArgs();
@@ -1638,12 +1755,12 @@ json.dumps({
 
         if (cInputType.value === 'gb') {
           if (!files.c_gb) throw new Error('Please upload a GenBank file.');
-          await writeFileToFs(files.c_gb, '/input.gb');
+          await stageUploadedFile(files.c_gb, '/input.gb');
           args.push('--gbk', '/input.gb');
         } else {
           if (!files.c_gff || !files.c_fasta) throw new Error('GFF3 and FASTA are required.');
-          await writeFileToFs(files.c_gff, '/input.gff');
-          await writeFileToFs(files.c_fasta, '/input.fasta');
+          await stageUploadedFile(files.c_gff, '/input.gff');
+          await stageUploadedFile(files.c_fasta, '/input.fasta');
           args.push('--gff', '/input.gff', '--fasta', '/input.fasta');
         }
       } else {
@@ -2152,14 +2269,10 @@ json.dumps({
         };
 
         const writeLinearFileToFs = async (fileObj, path, { cacheText = false } = {}) => {
-          if (!fileObj) return false;
-          const buffer = await fileObj.arrayBuffer();
-          const bytes = new Uint8Array(buffer);
-          pyodide.FS.writeFile(path, bytes);
-          if (cacheText) {
-            linearFileTextCache.set(fileObj, new TextDecoder().decode(bytes));
-          }
-          return true;
+          return stageUploadedFile(fileObj, path, {
+            cacheText,
+            textCache: linearFileTextCache
+          });
         };
 
         const getSeqHash = async (idx) => {
@@ -2530,7 +2643,7 @@ json.dumps({
           for (let i = 0; i < linearSeqs.length - 1; i++) {
             const seq = linearSeqs[i];
             if (seq.blast) {
-              await writeFileToFs(seq.blast, `/blast_${i}.txt`);
+              await stageUploadedFile(seq.blast, `/blast_${i}.txt`);
               blastArgs.push(`/blast_${i}.txt`);
             }
           }
@@ -2563,12 +2676,12 @@ json.dumps({
           }
           const depthPaths = [];
           if (depthEntries.length === 1 && linearSeqs.length > 1) {
-            await writeFileToFs(depthEntries[0].file, '/depth.tsv');
+            await stageUploadedFile(depthEntries[0].file, '/depth.tsv');
             depthPaths.push('/depth.tsv');
           } else {
             for (const entry of depthEntries) {
               const depthPath = `/seq_${entry.idx}.depth.tsv`;
-              await writeFileToFs(entry.file, depthPath);
+              await stageUploadedFile(entry.file, depthPath);
               depthPaths.push(depthPath);
             }
           }
@@ -2598,18 +2711,18 @@ json.dumps({
       }
 
       console.log('CMD:', args.join(' '));
+      throwIfGenerationCanceled();
       setProcessingStatus('Rendering SVG...');
       const gbdrawStartedAt = getNow();
-      const jsonResult = pyodide
-        .globals
-        .get('run_gbdraw_wrapper')(
-          mode.value,
-          pyodide.toPy(args.map(String)),
-          virtualBlastFiles.length ? JSON.stringify(virtualBlastFiles) : null
-        );
+      const generationResponse = await runDiagramGeneration({
+        mode: mode.value,
+        args: args.map(String),
+        files: Array.from(generationFileMap.values()),
+        virtualBlastFiles
+      });
       console.info(`gbdraw ${mode.value} wrapper execution: ${formatDuration(getNow() - gbdrawStartedAt)}.`);
       const postGbdrawTimingEntries = [];
-      const res = measureTiming(postGbdrawTimingEntries, 'run-analysis JSON.parse result', () => JSON.parse(jsonResult));
+      const res = generationResponse.results;
       if (res.error) {
         logPostGbdrawTimings(postGbdrawTimingEntries);
         if (isReflow) {
@@ -2618,6 +2731,10 @@ json.dumps({
         }
         errorLog.value = formatPythonError(res.error);
         return { status: 'error' };
+      }
+
+      if (generationToken !== latestGenerationToken) {
+        return { status: 'stale' };
       }
 
       if (isReflow && requestId !== pendingReflowRequestId) {
@@ -2683,6 +2800,17 @@ json.dumps({
       }
       return { status: 'ok' };
     } catch (e) {
+      if (isDiagramGenerationCanceled(e)) {
+        if (isReflow) {
+          labelReflowLastError.value = null;
+        } else {
+          restoreManualCancelSnapshot();
+          errorLog.value = null;
+          processingStatus.value = 'Canceled.';
+          keepProcessingStatus = true;
+        }
+        return { status: 'canceled' };
+      }
       if (isReflow) {
         labelReflowLastError.value = formatJsError(e)?.summary || 'Auto reflow failed';
         return { status: 'error' };
@@ -2693,13 +2821,23 @@ json.dumps({
       if (isReflow) {
         labelReflowProcessing.value = false;
       } else {
-        processingStatus.value = '';
+        if (!keepProcessingStatus) processingStatus.value = '';
+        generationCancelRequested.value = false;
         processing.value = false;
       }
     }
   };
 
   const runAnalysis = async () => runAnalysisInternal({ runMode: 'manual' });
+
+  const cancelRunAnalysis = () => {
+    latestGenerationToken += 1;
+    generationCancelRequested.value = true;
+    if (processing.value) {
+      processingStatus.value = 'Canceling generation...';
+    }
+    return cancelDiagramGeneration();
+  };
 
   const runLabelReflow = async (reason = 'label-edit') => {
     pendingReflowRequestId += 1;
@@ -2754,6 +2892,7 @@ json.dumps({
 
   return {
     runAnalysis,
+    cancelRunAnalysis,
     runLabelReflow,
     refreshCircularRecordOrder,
     downloadLosatCache,

@@ -351,6 +351,12 @@
         <div class="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mb-6"></div>
         <h3 class="text-xl font-bold text-slate-800 animate-pulse">Generating Diagram...</h3>
         <p v-if="processingStatus" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
+        <button @click="cancelGeneration"
+                :disabled="generationCancelRequested"
+                class="btn mt-6 px-5 py-2 text-sm bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-wait flex items-center gap-2">
+            <i :class="generationCancelRequested ? 'ph ph-spinner animate-spin' : 'ph ph-x-circle'"></i>
+            <span v-text="generationCancelRequested ? 'Canceling...' : 'Cancel'"></span>
+        </button>
     </div>
 
     <header class="app-header bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-14 shrink-0">
@@ -1687,7 +1693,7 @@
             <button @click="runAnalysis" :disabled="processing || !pyodideReady" 
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
                 <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
-                <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> Processing...</span>
+                <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
             </button>
             </div>
 

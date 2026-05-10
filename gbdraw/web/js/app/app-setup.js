@@ -2,6 +2,7 @@ import { state, createLinearSeq, reconcileLinearSeqPairData } from '../state.js'
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import { exportConfig, exportSession, importConfig, importSession } from '../services/config.js';
+import { disposeDiagramGenerationWorker } from '../services/diagram-generation.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { createSvgStyles } from './svg-styles.js';
@@ -20,6 +21,7 @@ export const createAppSetup = () => {
     pyodideReady,
     processing,
     processingStatus,
+    generationCancelRequested,
     loadingStatus,
     errorLog,
     sessionTitle,
@@ -170,10 +172,14 @@ export const createAppSetup = () => {
   });
 
   setupGlobalUiEvents({ state, onMounted, onUnmounted });
+  onUnmounted(() => {
+    disposeDiagramGenerationWorker();
+  });
 
   const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions });
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
+    cancelRunAnalysis,
     runLabelReflow,
     refreshCircularRecordOrder,
     downloadLosatCache,
@@ -275,6 +281,10 @@ export const createAppSetup = () => {
   const runAnalysis = async () => {
     cancelDefinitionUpdate();
     return runGeneratedDiagramAnalysis();
+  };
+
+  const cancelGeneration = () => {
+    cancelRunAnalysis();
   };
 
   const orthogroupActions = createOrthogroupEditor({
@@ -737,6 +747,7 @@ export const createAppSetup = () => {
     pyodideReady,
     processing,
     processingStatus,
+    generationCancelRequested,
     loadingStatus,
     errorLog,
     errorDisplay,
@@ -948,6 +959,7 @@ export const createAppSetup = () => {
     resetCanvasPadding,
     downloadDpi,
     runAnalysis,
+    cancelGeneration,
     downloadSVG,
     downloadPNG,
     downloadPDF,
