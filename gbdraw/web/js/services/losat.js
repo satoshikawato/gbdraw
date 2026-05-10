@@ -13,6 +13,32 @@ const resolveWorkerUrl = () => new URL('../workers/losat-worker.js', import.meta
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
 const formatDuration = (startedAt) => `${((getNow() - startedAt) / 1000).toFixed(2)}s`;
 
+const createAbortError = () => {
+  const error = new Error('LOSAT run was canceled.');
+  error.name = 'AbortError';
+  error.canceled = true;
+  return error;
+};
+
+const getAbortReason = (signal) => {
+  const reason = signal?.reason;
+  if (reason instanceof Error) return reason;
+  if (reason !== undefined) {
+    const error = new Error(String(reason));
+    error.name = 'AbortError';
+    error.canceled = true;
+    return error;
+  }
+  return createAbortError();
+};
+
+const throwIfAborted = (signal) => {
+  if (signal?.aborted) throw getAbortReason(signal);
+};
+
+const isAbortError = (error, signal) =>
+  Boolean(signal?.aborted && (error === signal.reason || error?.canceled || error?.name === 'AbortError'));
+
 const loadWasiShim = async () => {
   if (!wasiShimPromise) {
     const wasiShimUrl = resolveAssetUrl(WASI_SHIM_URL);
@@ -153,8 +179,10 @@ export const runLosatPair = async ({
   subjectFasta,
   outfmt = '6',
   extraArgs = [],
-  wasmPath = DEFAULT_WASM_PATH
+  wasmPath = DEFAULT_WASM_PATH,
+  signal
 } = {}) => {
+  throwIfAborted(signal);
   if (!program || !SUPPORTED_PROGRAMS.has(program)) {
     throw new Error('LOSAT program must be blastn, tblastx, or blastp.');
   }
@@ -166,10 +194,11 @@ export const runLosatPair = async ({
     loadWasiShim(),
     loadLosatModule(wasmPath)
   ]);
+  throwIfAborted(signal);
   const { WASI, File, OpenFile, PreopenDirectory, ConsoleStdout } = wasiShim;
 
   if (hasDirectLosatApi(wasmModule)) {
-    return runLosatPairDirect({
+    const text = await runLosatPairDirect({
       program,
       queryFasta,
       subjectFasta,
@@ -178,6 +207,8 @@ export const runLosatPair = async ({
       wasiShim,
       wasmModule
     });
+    throwIfAborted(signal);
+    return text;
   }
 
   const encoder = new TextEncoder();
@@ -211,7 +242,9 @@ export const runLosatPair = async ({
   const instance = await WebAssembly.instantiate(wasmModule, {
     wasi_snapshot_preview1: wasi.wasiImport
   });
+  throwIfAborted(signal);
   const exitCode = wasi.start(instance);
+  throwIfAborted(signal);
 
   const stdoutText = new TextDecoder().decode(concatUint8Arrays(stdoutChunks));
   const stderrText = new TextDecoder().decode(concatUint8Arrays(stderrChunks));
@@ -271,19 +304,26 @@ const materializeJobSequences = (job, sequenceStore) => ({
   subjectFasta: resolveJobSequence(sequenceStore, job.subjectSequenceKey, 'subject')
 });
 
-const runLosatPairsSequential = async (jobs, { onProgress, sequences } = {}) => {
+const runLosatPairsSequential = async (jobs, { onProgress, sequences, signal } = {}) => {
+  throwIfAborted(signal);
   const startedAt = getNow();
   const sequenceStore = normalizeSequenceStore(sequences);
   console.info(`Running ${jobs.length} LOSAT pair${jobs.length === 1 ? '' : 's'} sequentially.`);
   const results = [];
   for (const job of jobs) {
+    throwIfAborted(signal);
     try {
-      const text = await runLosatPair(materializeJobSequences(job, sequenceStore));
+      const text = await runLosatPair({
+        ...materializeJobSequences(job, sequenceStore),
+        signal
+      });
+      throwIfAborted(signal);
       results.push({ ...job, text });
       if (typeof onProgress === 'function') {
         onProgress({ completed: results.length, total: jobs.length, job });
       }
     } catch (error) {
+      if (isAbortError(error, signal)) throw getAbortReason(signal);
       const message = error?.message ? String(error.message) : String(error || 'Unknown LOSAT error');
       throw new Error(`${formatPairErrorPrefix(job)}: ${message}`);
     }
@@ -292,35 +332,47 @@ const runLosatPairsSequential = async (jobs, { onProgress, sequences } = {}) => 
   return results;
 };
 
-const initializeLosatWorker = (worker, payload) =>
+const initializeLosatWorker = (worker, payload, signal) =>
   new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = (callback) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      callback();
+    };
+    const handleAbort = () => {
+      settle(() => reject(getAbortReason(signal)));
+    };
+    const cleanup = () => {
+      worker.removeEventListener('message', handleMessage);
+      worker.removeEventListener('error', handleError);
+      worker.removeEventListener('messageerror', handleMessageError);
+      signal?.removeEventListener?.('abort', handleAbort);
+    };
     const handleMessage = (event) => {
       const data = event.data || {};
       if (data.id !== payload.id || data.type !== 'init') return;
-      worker.removeEventListener('message', handleMessage);
-      worker.removeEventListener('error', handleError);
-      worker.removeEventListener('messageerror', handleMessageError);
       if (data.ok) {
-        resolve(worker);
+        settle(() => resolve(worker));
         return;
       }
-      reject(new Error(data.error || 'LOSAT worker initialization failed'));
+      settle(() => reject(new Error(data.error || 'LOSAT worker initialization failed')));
     };
 
     const handleError = (event) => {
-      worker.removeEventListener('message', handleMessage);
-      worker.removeEventListener('error', handleError);
-      worker.removeEventListener('messageerror', handleMessageError);
-      reject(new Error(event.message || 'LOSAT worker initialization error'));
+      settle(() => reject(new Error(event.message || 'LOSAT worker initialization error')));
     };
 
     const handleMessageError = () => {
-      worker.removeEventListener('message', handleMessage);
-      worker.removeEventListener('error', handleError);
-      worker.removeEventListener('messageerror', handleMessageError);
-      reject(new Error('LOSAT worker initialization message could not be decoded'));
+      settle(() => reject(new Error('LOSAT worker initialization message could not be decoded')));
     };
 
+    if (signal?.aborted) {
+      handleAbort();
+      return;
+    }
+    signal?.addEventListener?.('abort', handleAbort, { once: true });
     worker.addEventListener('message', handleMessage);
     worker.addEventListener('error', handleError);
     worker.addEventListener('messageerror', handleMessageError);
@@ -329,19 +381,22 @@ const initializeLosatWorker = (worker, payload) =>
 
 const runLosatPairsWithWorkers = async (
   jobs,
-  { concurrency, workerUrl, wasmPath, onProgress, sequences } = {}
+  { concurrency, workerUrl, wasmPath, onProgress, sequences, signal } = {}
 ) => {
+  throwIfAborted(signal);
   const workerCount = Math.min(
     jobs.length,
     Math.max(1, Number.isFinite(concurrency) ? Math.floor(concurrency) : getDefaultConcurrency(jobs.length))
   );
   if (workerCount <= 0) return [];
 
+  throwIfAborted(signal);
   const startedAt = getNow();
   const resolvedWorkerUrl = workerUrl || resolveWorkerUrl();
   const resolvedWasmUrl = resolveAssetUrl(wasmPath || DEFAULT_WASM_PATH);
   const resolvedWasiShimUrl = resolveAssetUrl(WASI_SHIM_URL);
   const wasmModule = await loadLosatModule(wasmPath || DEFAULT_WASM_PATH);
+  throwIfAborted(signal);
   const sequencePayload = sequenceStoreToPayload(sequences);
   const results = new Array(jobs.length);
   const workers = [];
@@ -356,23 +411,30 @@ const runLosatPairsWithWorkers = async (
     }
     await Promise.all(
       workers.map((worker, index) =>
-        initializeLosatWorker(worker, {
-          type: 'init',
-          id: `init-${index}-${Date.now()}`,
-          wasmModule,
-          wasmUrl: resolvedWasmUrl,
-          wasiShimUrl: resolvedWasiShimUrl,
-          sequences: sequencePayload
-        })
+        initializeLosatWorker(
+          worker,
+          {
+            type: 'init',
+            id: `init-${index}-${Date.now()}`,
+            wasmModule,
+            wasmUrl: resolvedWasmUrl,
+            wasiShimUrl: resolvedWasiShimUrl,
+            sequences: sequencePayload
+          },
+          signal
+        )
       )
     );
+    throwIfAborted(signal);
   } catch (error) {
     workers.forEach((worker) => worker.terminate());
     throw error;
   }
 
   return new Promise((resolve, reject) => {
+    let handleAbort = null;
     const cleanup = () => {
+      if (handleAbort) signal?.removeEventListener?.('abort', handleAbort);
       workers.forEach((worker) => worker.terminate());
     };
 
@@ -382,6 +444,13 @@ const runLosatPairsWithWorkers = async (
       cleanup();
       reject(error);
     };
+
+    handleAbort = () => fail(getAbortReason(signal));
+    if (signal?.aborted) {
+      handleAbort();
+      return;
+    }
+    signal?.addEventListener?.('abort', handleAbort, { once: true });
 
     const maybeResolve = () => {
       if (settled || completed < jobs.length) return;
@@ -395,6 +464,10 @@ const runLosatPairsWithWorkers = async (
 
     const assignNext = (worker) => {
       if (settled) return;
+      if (signal?.aborted) {
+        fail(getAbortReason(signal));
+        return;
+      }
       if (nextJobIndex >= jobs.length) {
         maybeResolve();
         return;
@@ -415,6 +488,10 @@ const runLosatPairsWithWorkers = async (
 
         if (!data.ok) {
           fail(new Error(`${formatPairErrorPrefix(job)}: ${data.error || 'LOSAT worker failed'}`));
+          return;
+        }
+        if (signal?.aborted) {
+          fail(getAbortReason(signal));
           return;
         }
 
@@ -462,11 +539,12 @@ const runLosatPairsWithWorkers = async (
 export const runLosatPairsParallel = async (jobs, options = {}) => {
   const jobList = Array.isArray(jobs) ? jobs : [];
   if (jobList.length === 0) return [];
-  if (jobList.length === 1) return runLosatPairsSequential(jobList, options);
+  throwIfAborted(options.signal);
 
   try {
     return await runLosatPairsWithWorkers(jobList, options);
   } catch (error) {
+    if (isAbortError(error, options.signal)) throw getAbortReason(options.signal);
     console.warn('LOSAT Worker pool failed; falling back to sequential execution.', error);
     return runLosatPairsSequential(jobList, options);
   }

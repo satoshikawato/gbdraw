@@ -1,9 +1,9 @@
 import {
-  GBDRAW_WHEEL_NAME,
-  GBDRAW_WHEEL_CACHE_BUST,
-  PYODIDE_INDEX_URL,
-  PYODIDE_LOCAL_WHEELS
-} from '../config.js';
+  ensureLocalAsset,
+  resolveGbdrawWheelUrl,
+  resolveLocalDependencyWheelUrls,
+  resolvePyodideIndexUrl
+} from '../services/pyodide-assets.js';
 import { PYTHON_HELPERS } from './python-helpers.js';
 
 export const createPyodideManager = ({ state }) => {
@@ -23,16 +23,6 @@ export const createPyodideManager = ({ state }) => {
   } = state;
   const pyodideRef = { current: null };
 
-  const resolveAssetUrl = (path) => new URL(path, window.location.href).toString();
-
-  const ensureLocalAsset = async (url, label) => {
-    const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
-    if (!response.ok) {
-      throw new Error(`Missing packaged asset: ${label} (${response.status}) at ${url}`);
-    }
-    return url;
-  };
-
   const getPyodide = () => pyodideRef.current;
   const setPyodide = (value) => {
     pyodideRef.current = value;
@@ -46,19 +36,15 @@ export const createPyodideManager = ({ state }) => {
   };
 
   const ensureWheelAvailable = async () => {
-    const wheelBaseUrl = new URL(GBDRAW_WHEEL_NAME, window.location.href);
-    if (GBDRAW_WHEEL_CACHE_BUST) {
-      wheelBaseUrl.searchParams.set('v', GBDRAW_WHEEL_CACHE_BUST);
-    }
-    const wheelUrl = wheelBaseUrl.toString();
-    return ensureLocalAsset(wheelUrl, `gbdraw browser wheel ${GBDRAW_WHEEL_NAME}`);
+    const wheelUrl = resolveGbdrawWheelUrl();
+    return ensureLocalAsset(wheelUrl, 'gbdraw browser wheel');
   };
 
   const ensureLocalDependencyWheels = async () => {
-    const wheelUrls = PYODIDE_LOCAL_WHEELS.map((path) => resolveAssetUrl(path));
+    const wheelUrls = resolveLocalDependencyWheelUrls();
     await Promise.all(
       wheelUrls.map((url, index) =>
-        ensureLocalAsset(url, `Pyodide dependency wheel ${PYODIDE_LOCAL_WHEELS[index]}`)
+        ensureLocalAsset(url, `Pyodide dependency wheel #${index + 1}`)
       )
     );
     return wheelUrls;
@@ -66,7 +52,7 @@ export const createPyodideManager = ({ state }) => {
 
   const initPyodide = async () => {
     try {
-      const pyodideIndexUrl = resolveAssetUrl(PYODIDE_INDEX_URL);
+      const pyodideIndexUrl = resolvePyodideIndexUrl();
       loadingStatus.value = 'Loading local Pyodide runtime...';
       const pyodide = await loadPyodide({
         indexURL: pyodideIndexUrl,

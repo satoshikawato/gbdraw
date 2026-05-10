@@ -12,6 +12,7 @@ const formatTimingMs = (ms) => `${ms.toFixed(1)}ms`;
 const pyodideReady = ref(false);
 const processing = ref(false);
 const processingStatus = ref('');
+const generationCancelRequested = ref(false);
 const loadingStatus = ref('Initializing...');
 const errorLog = ref(null);
 const sessionTitle = ref('');
@@ -789,6 +790,7 @@ export const state = {
   pyodideReady,
   processing,
   processingStatus,
+  generationCancelRequested,
   loadingStatus,
   errorLog,
   sessionTitle,

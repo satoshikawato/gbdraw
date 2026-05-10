@@ -17,6 +17,8 @@
     ">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>gbdraw Web App</title>
+    <link rel="icon" href="./assets/favicon.ico" sizes="any">
+    <link rel="icon" href="./assets/gbdraw-logo.svg" type="image/svg+xml">
     <link rel="stylesheet" href="./vendor/phosphor-icons/regular/style.css">
     <script src="./vendor/vue/vue.global.js"></script>
     <script src="./vendor/tailwindcss/tailwindcss-play.js"></script>
@@ -341,7 +343,7 @@
 <div id="app" class="h-screen flex flex-col relative">
     
     <div v-if="!pyodideReady" class="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center p-4 text-center">
-        <div class="animate-spin text-5xl mb-6">🧬</div>
+        <img src="./assets/gbdraw-logo.svg" alt="" class="animate-spin w-16 h-16 mb-6">
         <h3 class="text-2xl font-bold text-slate-800">Initializing gbdraw...</h3>
         <p class="text-slate-500 mt-2">Loading Python engine and dependencies.</p>
         <p class="text-xs text-slate-400 mt-4 font-mono" v-text="loadingStatus">Loading gbdraw...</p>
@@ -351,12 +353,18 @@
         <div class="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mb-6"></div>
         <h3 class="text-xl font-bold text-slate-800 animate-pulse">Generating Diagram...</h3>
         <p v-if="processingStatus" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
+        <button @click="cancelGeneration"
+                :disabled="generationCancelRequested"
+                class="btn mt-6 px-5 py-2 text-sm bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-wait flex items-center gap-2">
+            <i :class="generationCancelRequested ? 'ph ph-spinner animate-spin' : 'ph ph-x-circle'"></i>
+            <span v-text="generationCancelRequested ? 'Canceling...' : 'Cancel'"></span>
+        </button>
     </div>
 
     <header class="app-header bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-14 shrink-0">
         <div class="app-header-inner px-4 h-full flex items-center justify-between">
             <div class="app-brand flex items-center gap-1 min-w-0">
-                <div class="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center font-bold text-lg shadow-md">🧬</div>
+                <img src="./assets/gbdraw-logo.svg" alt="" class="w-8 h-8 shrink-0">
                 <h1 class="app-title text-lg font-bold text-slate-800 tracking-tight flex items-center whitespace-nowrap leading-none mt-0.5">
                     gbdraw
                     <span class="app-tagline text-slate-400 text-sm font-normal ml-2">A genome diagram generator for microbes and organelles</span>
@@ -1687,7 +1695,7 @@
             <button @click="runAnalysis" :disabled="processing || !pyodideReady" 
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
                 <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
-                <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> Processing...</span>
+                <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
             </button>
             </div>
 
