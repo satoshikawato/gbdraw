@@ -253,6 +253,10 @@ def _assert_packaged_assets() -> None:
     required = [
         WEB_ROOT / "index.html",
         WEB_ROOT / "open-source-notices.html",
+        WEB_ROOT / "assets" / "favicon.ico",
+        WEB_ROOT / "assets" / "gbdraw-logo.svg",
+        WEB_ROOT / "assets" / "gbdraw-logo-title.svg",
+        WEB_ROOT / "assets" / "gbdraw-logo-title.png",
         WEB_ROOT / "js" / "app.js",
         WEB_ROOT / "js" / "services" / "losat.js",
         WEB_ROOT / "js" / "workers" / "losat-worker.js",
@@ -658,6 +662,10 @@ def inspect_wheel(wheel_path: Path) -> None:
     required = {
         "gbdraw/web/index.html",
         "gbdraw/web/open-source-notices.html",
+        "gbdraw/web/assets/favicon.ico",
+        "gbdraw/web/assets/gbdraw-logo.svg",
+        "gbdraw/web/assets/gbdraw-logo-title.svg",
+        "gbdraw/web/assets/gbdraw-logo-title.png",
         "gbdraw/web/js/app.js",
         "gbdraw/web/js/services/losat.js",
         "gbdraw/web/wasm/losat/losat.wasm",
