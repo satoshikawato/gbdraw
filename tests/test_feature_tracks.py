@@ -125,3 +125,22 @@ def test_arrange_feature_tracks_non_stranded_resolve_splits_inner_outer_indices(
     assert arranged["b"].feature_track_id == -1
     assert arranged["c"].feature_track_id == -2
     assert arranged["d"].feature_track_id == 1
+
+
+def test_arrange_feature_tracks_indexes_origin_spanning_features_conservatively() -> None:
+    feature_dict = {
+        "origin": _make_feature("origin", "positive", [(990, 1000), (1, 20)]),
+        "middle": _make_feature("middle", "positive", [(500, 520)]),
+        "left": _make_feature("left", "positive", [(10, 15)]),
+    }
+
+    arranged = arrange_feature_tracks(
+        feature_dict=feature_dict,
+        separate_strands=False,
+        resolve_overlaps=True,
+        genome_length=1000,
+    )
+
+    assert arranged["origin"].feature_track_id == 0
+    assert arranged["middle"].feature_track_id == 0
+    assert arranged["left"].feature_track_id == 1

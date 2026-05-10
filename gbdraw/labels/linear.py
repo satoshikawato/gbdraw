@@ -18,6 +18,7 @@ from ..core.text import calculate_bbox_dimensions  # type: ignore[reportMissingI
 from ..core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
 from ..layout.linear_coords import normalize_position_to_linear_track  # type: ignore[reportMissingImports]
 from ..layout.linear import calculate_feature_position_factors_linear  # type: ignore[reportMissingImports]
+from ..layout.spatial import Aabb, AabbIndex, Interval, IntervalIndex
 
 
 def check_label_overlap(label1, label2):
@@ -41,6 +42,67 @@ def find_lowest_available_track(track_dict, label):
         if not has_overlap:
             return track_num
         track_num += 1
+
+
+def _linear_label_interval(label: dict) -> Interval:
+    return Interval(float(label["start"]), float(label["end"]))
+
+
+def _linear_label_aabb(label: dict) -> Aabb:
+    left, right, top, bottom = calculate_label_bounds(label)
+    return Aabb(left, top, right, bottom)
+
+
+def _external_label_bucket_size(alignment_width: float) -> float:
+    return max(16.0, float(alignment_width) / 256.0)
+
+
+def _above_feature_label_bucket_size(labels: list[dict], min_gap_px: float) -> float:
+    max_extent = max(
+        (
+            max(float(label.get("width_px", 0.0)), float(label.get("height_px", 0.0)))
+            for label in labels
+        ),
+        default=16.0,
+    )
+    return max(16.0, max_extent + float(min_gap_px))
+
+
+def _find_lowest_available_track_indexed(
+    track_dict: dict,
+    track_indexes: dict[str, IntervalIndex],
+    label_by_id: dict[int, dict],
+    label: dict,
+    bucket_size: float,
+) -> int:
+    """Find the lowest non-overlapping external label track using index candidates."""
+    label_interval = _linear_label_interval(label)
+    track_num = 1
+    while True:
+        track_id = f"track_{track_num}"
+        if track_id not in track_dict or not track_dict[track_id]:
+            return track_num
+
+        index = track_indexes.get(track_id)
+        if index is None:
+            candidates = track_dict[track_id]
+        else:
+            candidates = [label_by_id[label_id] for label_id in index.query(label_interval)]
+
+        if not any(check_label_overlap(label, existing_label) for existing_label in candidates):
+            return track_num
+        track_num += 1
+
+
+def _insert_external_label_index(
+    track_indexes: dict[str, IntervalIndex],
+    track_id: str,
+    label_id: int,
+    label: dict,
+    bucket_size: float,
+) -> None:
+    index = track_indexes.setdefault(track_id, IntervalIndex(bucket_size=bucket_size))
+    index.insert(label_id, _linear_label_interval(label))
 
 
 def _anchor_x_values(width_px: float, text_anchor: str) -> tuple[float, float]:
@@ -157,6 +219,8 @@ def _place_linear_label_without_overlap(
     placed: list[dict],
     min_gap_px: float,
     direction: float,
+    placed_index: AabbIndex | None = None,
+    placed_by_id: dict[int, dict] | None = None,
 ) -> bool:
     """Move one linear label away from the axis until its bbox clears placed labels."""
     original_y = float(label["middle_y"])
@@ -164,7 +228,15 @@ def _place_linear_label_without_overlap(
         required_shift = 0.0
         _, _, candidate_top, candidate_bottom = calculate_label_bounds(label)
 
-        for other in placed:
+        if placed_index is None or placed_by_id is None:
+            candidates = placed
+        else:
+            candidates = [
+                placed_by_id[label_id]
+                for label_id in placed_index.query(_linear_label_aabb(label), padding=min_gap_px)
+            ]
+
+        for other in candidates:
             if not _label_bounds_overlap(label, other, min_gap_px):
                 continue
 
@@ -196,11 +268,23 @@ def _resolve_above_feature_label_overlaps(labels: list[dict], min_gap_px: float)
         if not side_labels:
             continue
         placed: list[dict] = []
+        placed_by_id: dict[int, dict] = {}
+        placed_index = AabbIndex(bucket_size=_above_feature_label_bucket_size(side_labels, min_gap_px))
         direction = -1.0 if place_above else 1.0
         for label in sorted(side_labels, key=lambda item: float(item.get("feature_anchor_x", item["middle_x"]))):
-            if _place_linear_label_without_overlap(label, placed, min_gap_px, direction):
+            if _place_linear_label_without_overlap(
+                label,
+                placed,
+                min_gap_px,
+                direction,
+                placed_index=placed_index,
+                placed_by_id=placed_by_id,
+            ):
                 label["leader_line"] = True
                 _update_linear_label_leader_end(label)
+            placed_id = len(placed_by_id)
+            placed_by_id[placed_id] = label
+            placed_index.insert(placed_id, _linear_label_aabb(label))
             placed.append(label)
 
 
@@ -222,6 +306,8 @@ def prepare_label_list_linear(
     embedded_labels = []
     external_labels = []
     track_dict = defaultdict(list)
+    external_track_indexes: dict[str, IntervalIndex] = {}
+    external_label_by_id: dict[int, dict] = {}
     feature_track_positions = {}  # Store feature track positions
     track_layout_normalized = str(track_layout).strip().lower()
     axis_gap_factor = (
@@ -238,6 +324,7 @@ def prepare_label_list_linear(
     font_size = cfg.labels.font_size.linear.for_length_param(length_param)
     linear_label_cfg = cfg.labels.linear
     label_spacing_px = float(cfg.labels.spacing.linear)
+    external_bucket_size = _external_label_bucket_size(alignment_width)
     force_above_feature = linear_label_cfg.placement == "above_feature"
     base_rotation_deg = linear_label_cfg.rotation
     interval = cfg.canvas.dpi
@@ -433,9 +520,24 @@ def prepare_label_list_linear(
             label_entry.update({"middle_y": 0, "is_embedded": False})
 
             # Find lowest track where label can be placed without overlaps
-            best_track = find_lowest_available_track(track_dict, label_entry)
+            best_track = _find_lowest_available_track_indexed(
+                track_dict,
+                external_track_indexes,
+                external_label_by_id,
+                label_entry,
+                external_bucket_size,
+            )
             label_entry["track_id"] = f"track_{best_track}"
             track_dict[f"track_{best_track}"].append(label_entry)
+            external_label_id = len(external_label_by_id)
+            external_label_by_id[external_label_id] = label_entry
+            _insert_external_label_index(
+                external_track_indexes,
+                f"track_{best_track}",
+                external_label_id,
+                label_entry,
+                external_bucket_size,
+            )
 
     # Process embedded labels
     if "track_0" in track_dict:

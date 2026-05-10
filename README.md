@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./gbdraw/web/assets/gbdraw-logo-title.png" alt="gbdraw" width="420">
+</p>
+
 [![Static Badge](https://img.shields.io/badge/gbdraw%20webapp-8A2BE2)](https://gbdraw.app/)
 [![DOI](https://img.shields.io/badge/DOI-10.64898/2026.04.07.716863-blue)](https://doi.org/10.64898/2026.04.07.716863)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/gbdraw/badges/version.svg)](https://anaconda.org/bioconda/gbdraw)

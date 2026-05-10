@@ -18,6 +18,7 @@ from ..core.text import calculate_bbox_dimensions
 from ..core.sequence import determine_length_parameter
 from ..layout.common import calculate_cds_ratio
 from ..layout.circular import calculate_feature_position_factors_circular
+from ..layout.spatial import Aabb, candidate_aabb_pairs
 from ..svg.arrows import calculate_circular_arrow_length
 
 # Keep dense large-font labels from being pushed excessively far from features.
@@ -129,24 +130,79 @@ def minimum_bbox_gap_px(label1: dict, label2: dict, base_margin_px: float | None
     return max(resolved_base_margin_px + resolve_extra, MIN_BBOX_GAP_FLOOR_PX, ratio_gap)
 
 
+def _all_label_pairs(label_count: int) -> set[tuple[int, int]]:
+    return {(idx, jdx) for idx in range(label_count) for jdx in range(idx + 1, label_count)}
+
+
+def _label_pair_index_padding(labels: list[dict], *, use_min_gap: bool) -> float:
+    if not use_min_gap:
+        return 1.0
+    return max((minimum_bbox_gap_px(label, label) for label in labels), default=0.0)
+
+
+def _label_aabb_bucket_size(bboxes: list[Aabb], padding: float) -> float:
+    max_extent = max(
+        (
+            max(bbox.max_x - bbox.min_x, bbox.max_y - bbox.min_y)
+            for bbox in bboxes
+        ),
+        default=16.0,
+    )
+    return max(16.0, min(256.0, max_extent + float(padding)))
+
+
+def _candidate_label_pairs(
+    labels: list[dict],
+    total_length: int,
+    padding: float,
+) -> set[tuple[int, int]]:
+    label_count = len(labels)
+    if label_count < 2:
+        return set()
+
+    bboxes: list[Aabb] = []
+    try:
+        for label in labels:
+            bboxes.append(Aabb(*_label_bbox_rect(label, total_length, margin_px=0.0)))
+    except (KeyError, TypeError, ValueError):
+        return _all_label_pairs(label_count)
+
+    pairs = candidate_aabb_pairs(
+        bboxes,
+        padding=padding,
+        bucket_size=_label_aabb_bucket_size(bboxes, padding),
+    )
+
+    # Preserve explicit angular-neighbor checks even when broad-phase buckets prune aggressively.
+    for idx in range(label_count - 1):
+        pairs.add((idx, idx + 1))
+    if label_count > 2:
+        pairs.add((0, label_count - 1))
+    return pairs
+
+
 def _count_label_overlaps(labels: list[dict], total_length: int, use_min_gap: bool) -> int:
     """Count overlapping label pairs using the existing overlap predicates."""
     overlap_count = 0
-    for idx in range(len(labels)):
-        for jdx in range(idx + 1, len(labels)):
-            label1 = labels[idx]
-            label2 = labels[jdx]
-            if use_min_gap:
-                margin = minimum_bbox_gap_px(label1, label2)
-                y_margin = margin
-                x_margin = margin
-            else:
-                y_margin = 0.1
-                x_margin = 1.0
-            if x_overlap(label1, label2, minimum_margin=x_margin) and y_overlap(
-                label1, label2, total_length, y_margin
-            ):
-                overlap_count += 1
+    candidate_pairs = _candidate_label_pairs(
+        labels,
+        total_length,
+        padding=_label_pair_index_padding(labels, use_min_gap=use_min_gap),
+    )
+    for idx, jdx in sorted(candidate_pairs):
+        label1 = labels[idx]
+        label2 = labels[jdx]
+        if use_min_gap:
+            margin = minimum_bbox_gap_px(label1, label2)
+            y_margin = margin
+            x_margin = margin
+        else:
+            y_margin = 0.1
+            x_margin = 1.0
+        if x_overlap(label1, label2, minimum_margin=x_margin) and y_overlap(
+            label1, label2, total_length, y_margin
+        ):
+            overlap_count += 1
     return overlap_count
 
 
@@ -1822,6 +1878,7 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
     for idx in range(label_count):
         for jdx in range(idx + 1, label_count):
             pair_margins[idx][jdx] = minimum_bbox_gap_px(labels[idx], labels[jdx])
+    max_pair_margin = max((max(row) for row in pair_margins), default=0.0)
 
     min_order_gap_deg = 0.05
     max_pair_steps = max(1, int(max_angle_shift_deg / max(step_deg, 1e-6)))
@@ -1973,12 +2030,13 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
                     break
 
         # Adjacent passes can still miss sparse non-adjacent bbox collisions.
-        for idx in range(len(labels) - 2):
-            for jdx in range(idx + 2, len(labels)):
-                if not _pair_overlaps(labels[idx], labels[jdx], idx, jdx):
-                    continue
-                if _separate_pair(idx, jdx):
-                    changed = True
+        for idx, jdx in sorted(_candidate_label_pairs(labels, total_length, padding=max_pair_margin)):
+            if jdx <= idx + 1:
+                continue
+            if not _pair_overlaps(labels[idx], labels[jdx], idx, jdx):
+                continue
+            if _separate_pair(idx, jdx):
+                changed = True
 
         if not changed:
             break
@@ -2604,6 +2662,7 @@ def improved_label_placement_fc(
         prev_target_unwrapped = target_angle_unwrapped
 
     pair_margins: list[list[float]] = []
+    max_pair_margin = 0.0
 
     def move_label(label, angle):
         new_x = center_x + x_radius * math.cos(math.radians(angle))
@@ -2708,30 +2767,27 @@ def improved_label_placement_fc(
 
     def count_remaining_overlaps() -> int:
         overlap_count_all = 0
-        for i in range(len(labels)):
-            for j in range(i + 1, len(labels)):
-                if check_overlap(labels[i], labels[j], total_length, pair_margin(i, j)):
-                    overlap_count_all += 1
+        for i, j in sorted(_candidate_label_pairs(labels, total_length, padding=max_pair_margin)):
+            if check_overlap(labels[i], labels[j], total_length, pair_margin(i, j)):
+                overlap_count_all += 1
         return overlap_count_all
 
     def count_overlaps_for_label_list(label_list: list[dict], overlap_cap: int | None = None) -> int:
         overlap_count_all = 0
-        for i in range(len(label_list)):
-            for j in range(i + 1, len(label_list)):
-                if check_overlap(label_list[i], label_list[j], total_length, pair_margin(i, j)):
-                    overlap_count_all += 1
-                    if overlap_cap is not None and overlap_count_all > overlap_cap:
-                        return overlap_count_all
+        for i, j in sorted(_candidate_label_pairs(label_list, total_length, padding=max_pair_margin)):
+            if check_overlap(label_list[i], label_list[j], total_length, pair_margin(i, j)):
+                overlap_count_all += 1
+                if overlap_cap is not None and overlap_count_all > overlap_cap:
+                    return overlap_count_all
         return overlap_count_all
 
     def find_overlap_components() -> list[list[int]]:
         n_labels = len(labels)
         adjacency: dict[int, set[int]] = {i: set() for i in range(n_labels)}
-        for i in range(n_labels):
-            for j in range(i + 1, n_labels):
-                if check_overlap(labels[i], labels[j], total_length, pair_margin(i, j)):
-                    adjacency[i].add(j)
-                    adjacency[j].add(i)
+        for i, j in sorted(_candidate_label_pairs(labels, total_length, padding=max_pair_margin)):
+            if check_overlap(labels[i], labels[j], total_length, pair_margin(i, j)):
+                adjacency[i].add(j)
+                adjacency[j].add(i)
 
         components: list[list[int]] = []
         visited: set[int] = set()
@@ -3087,6 +3143,7 @@ def improved_label_placement_fc(
     for i in range(n_labels):
         for j in range(i + 1, n_labels):
             pair_margins[i][j] = minimum_bbox_gap_px(labels[i], labels[j], base_margin_px=base_margin)
+    max_pair_margin = max((max(row) for row in pair_margins), default=0.0)
 
     angle_step = 0.25
     min_order_gap = 0.05

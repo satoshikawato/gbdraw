@@ -74,6 +74,55 @@ def _count_overlaps_with_min_gap(labels: list[dict], total_length: int) -> int:
     return overlaps
 
 
+def test_circular_label_overlap_count_index_matches_full_scan() -> None:
+    total_length = 1000
+    labels = [
+        {
+            "middle": 250,
+            "start_x": 0.0,
+            "start_y": 0.0,
+            "width_px": 40.0,
+            "height_px": 12.0,
+            "is_inner": False,
+        },
+        {
+            "middle": 252,
+            "start_x": 5.0,
+            "start_y": 1.0,
+            "width_px": 40.0,
+            "height_px": 12.0,
+            "is_inner": False,
+        },
+        {
+            "middle": 750,
+            "start_x": 180.0,
+            "start_y": 180.0,
+            "width_px": 40.0,
+            "height_px": 12.0,
+            "is_inner": False,
+        },
+        {
+            "middle": 755,
+            "start_x": 183.0,
+            "start_y": 183.0,
+            "width_px": 40.0,
+            "height_px": 12.0,
+            "is_inner": False,
+        },
+    ]
+
+    assert circular_labels_module._count_label_overlaps(
+        labels,
+        total_length,
+        use_min_gap=False,
+    ) == _count_overlaps(labels, total_length)
+    assert circular_labels_module._count_label_overlaps(
+        labels,
+        total_length,
+        use_min_gap=True,
+    ) == _count_overlaps_with_min_gap(labels, total_length)
+
+
 def _sum_leader_length(labels: list[dict]) -> float:
     return sum(
         math.hypot(
