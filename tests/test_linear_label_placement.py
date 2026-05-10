@@ -18,7 +18,13 @@ from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
 from gbdraw.io.colors import load_default_colors
 from gbdraw.labels.filtering import preprocess_label_filtering
-from gbdraw.labels.linear import calculate_label_bounds, prepare_label_list_linear
+from gbdraw.labels.linear import (
+    _find_lowest_available_track_indexed,
+    _insert_external_label_index,
+    calculate_label_bounds,
+    find_lowest_available_track,
+    prepare_label_list_linear,
+)
 from gbdraw.render.drawers.linear.labels import LabelDrawer
 
 
@@ -586,6 +592,49 @@ def test_linear_external_label_spacing_override_increases_track_gap() -> None:
     assert (default_track_positions[1] - default_track_positions[0]) < (
         wider_track_positions[1] - wider_track_positions[0]
     )
+
+
+@pytest.mark.linear
+def test_linear_external_label_track_index_matches_legacy_scan() -> None:
+    labels = [
+        {"start": 0.0, "end": 50.0},
+        {"start": 20.0, "end": 70.0},
+        {"start": 80.0, "end": 110.0},
+        {"start": 45.0, "end": 90.0},
+        {"start": 112.0, "end": 140.0},
+    ]
+    legacy_tracks: dict[str, list[dict]] = {}
+    indexed_tracks: dict[str, list[dict]] = {}
+    indexed_track_indexes = {}
+    indexed_label_by_id: dict[int, dict] = {}
+    legacy_assignments: list[int] = []
+    indexed_assignments: list[int] = []
+
+    for label in labels:
+        legacy_track = find_lowest_available_track(legacy_tracks, label)
+        legacy_assignments.append(legacy_track)
+        legacy_tracks.setdefault(f"track_{legacy_track}", []).append(label)
+
+        indexed_track = _find_lowest_available_track_indexed(
+            indexed_tracks,
+            indexed_track_indexes,
+            indexed_label_by_id,
+            label,
+            bucket_size=16.0,
+        )
+        indexed_assignments.append(indexed_track)
+        indexed_tracks.setdefault(f"track_{indexed_track}", []).append(label)
+        label_id = len(indexed_label_by_id)
+        indexed_label_by_id[label_id] = label
+        _insert_external_label_index(
+            indexed_track_indexes,
+            f"track_{indexed_track}",
+            label_id,
+            label,
+            bucket_size=16.0,
+        )
+
+    assert indexed_assignments == legacy_assignments
 
 
 @pytest.mark.linear

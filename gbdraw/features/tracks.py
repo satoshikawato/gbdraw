@@ -3,6 +3,7 @@
 
 from typing import Dict, List, Optional, Tuple
 
+from ..layout.spatial import IntervalIndex, split_circular_interval
 from .objects import FeatureObject
 
 
@@ -195,6 +196,92 @@ def find_best_track(
     return track_nums[0]
 
 
+def _feature_interval_bucket_size(genome_length: Optional[int]) -> float:
+    if genome_length is None or int(genome_length) <= 0:
+        return 1000.0
+    return max(1.0, float(genome_length) / 512.0)
+
+
+def _feature_candidates_for_track(
+    feature: dict,
+    track_key: str,
+    track_dict: Dict[str, List[dict]],
+    track_indexes: dict[str, IntervalIndex],
+    feature_by_id: dict[str, dict],
+    genome_length: Optional[int],
+) -> list[dict]:
+    existing_features = track_dict.get(track_key, [])
+    if not existing_features:
+        return []
+
+    index = track_indexes.get(track_key)
+    if index is None:
+        return existing_features
+
+    seen: set[str] = set()
+    candidate_ids: list[str] = []
+    for interval in split_circular_interval(feature["start"], feature["end"], genome_length):
+        for candidate_id in index.query(interval):
+            feature_id = str(candidate_id)
+            if feature_id in seen:
+                continue
+            seen.add(feature_id)
+            candidate_ids.append(feature_id)
+    return [feature_by_id[feature_id] for feature_id in candidate_ids]
+
+
+def _insert_feature_track_index(
+    track_indexes: dict[str, IntervalIndex],
+    track_key: str,
+    feature: dict,
+    genome_length: Optional[int],
+    bucket_size: float,
+) -> None:
+    index = track_indexes.setdefault(track_key, IntervalIndex(bucket_size=bucket_size))
+    for interval in split_circular_interval(feature["start"], feature["end"], genome_length):
+        index.insert(str(feature["id"]), interval)
+
+
+def _find_best_track_indexed(
+    feature: dict,
+    track_dict: Dict[str, List[dict]],
+    track_indexes: dict[str, IntervalIndex],
+    feature_by_id: dict[str, dict],
+    separate_strands: bool,
+    resolve_overlaps: bool,
+    genome_length: Optional[int] = None,
+    max_track: int = 100,
+) -> int:
+    """Find a feature track using index candidates and exact overlap checks."""
+    if not separate_strands:
+        track_nums = [0] if not resolve_overlaps else list(range(0, max_track))
+    else:
+        if not resolve_overlaps:
+            track_nums = [0] if feature["strand"] == "positive" else [-1]
+        elif feature["strand"] == "positive":
+            track_nums = list(range(0, max_track))
+        else:
+            track_nums = list(range(-1, -max_track - 1, -1))
+
+    if resolve_overlaps:
+        for tn in track_nums:
+            key = f"track_{abs(tn)}"
+            if key not in track_dict or not track_dict[key]:
+                return tn
+            candidates = _feature_candidates_for_track(
+                feature,
+                key,
+                track_dict,
+                track_indexes,
+                feature_by_id,
+                genome_length,
+            )
+            if not any(check_feature_overlap(feature, existing, separate_strands, genome_length) for existing in candidates):
+                return tn
+
+    return track_nums[0]
+
+
 def _find_best_track_split_overlaps_by_strand(
     feature: dict,
     center_track: List[dict],
@@ -234,6 +321,53 @@ def _find_best_track_split_overlaps_by_strand(
                 has_overlap = True
                 break
         if not has_overlap:
+            return sign * track_index
+
+    return sign * (max_track - 1)
+
+
+def _find_best_track_split_overlaps_by_strand_indexed(
+    feature: dict,
+    center_track: List[dict],
+    center_track_index: IntervalIndex,
+    outer_tracks: Dict[str, List[dict]],
+    outer_track_indexes: dict[str, IntervalIndex],
+    inner_tracks: Dict[str, List[dict]],
+    inner_track_indexes: dict[str, IntervalIndex],
+    feature_by_id: dict[str, dict],
+    genome_length: Optional[int] = None,
+    max_track: int = 100,
+) -> int:
+    """Find split inner/outer track using index candidates and exact checks."""
+    center_candidates = _feature_candidates_for_track(
+        feature,
+        "track_0",
+        {"track_0": center_track},
+        {"track_0": center_track_index},
+        feature_by_id,
+        genome_length,
+    )
+    if not any(check_feature_overlap(feature, existing, False, genome_length) for existing in center_candidates):
+        return 0
+
+    is_negative = feature["strand"] == "negative"
+    track_dict = inner_tracks if is_negative else outer_tracks
+    track_indexes = inner_track_indexes if is_negative else outer_track_indexes
+    sign = -1 if is_negative else 1
+
+    for track_index in range(1, max_track):
+        key = f"track_{track_index}"
+        if key not in track_dict or not track_dict[key]:
+            return sign * track_index
+        candidates = _feature_candidates_for_track(
+            feature,
+            key,
+            track_dict,
+            track_indexes,
+            feature_by_id,
+            genome_length,
+        )
+        if not any(check_feature_overlap(feature, existing, False, genome_length) for existing in candidates):
             return sign * track_index
 
     return sign * (max_track - 1)
@@ -305,42 +439,88 @@ def arrange_feature_tracks(
     center_track: List[dict] = []
     outer_tracks: Dict[str, List[dict]] = {}
     inner_tracks: Dict[str, List[dict]] = {}
+    bucket_size = _feature_interval_bucket_size(genome_length)
+    pos_track_indexes: dict[str, IntervalIndex] = {}
+    neg_track_indexes: dict[str, IntervalIndex] | None = {} if separate_strands else None
+    center_track_index = IntervalIndex(bucket_size=bucket_size)
+    outer_track_indexes: dict[str, IntervalIndex] = {}
+    inner_track_indexes: dict[str, IntervalIndex] = {}
 
     for feat_id, feat_metrics in sorted_features:
         if split_non_stranded_overlaps:
-            track_num = _find_best_track_split_overlaps_by_strand(
+            track_num = _find_best_track_split_overlaps_by_strand_indexed(
                 feat_metrics,
                 center_track,
+                center_track_index,
                 outer_tracks,
+                outer_track_indexes,
                 inner_tracks,
+                inner_track_indexes,
+                feature_metrics,
                 genome_length=genome_length,
             )
             if track_num == 0:
                 center_track.append(feat_metrics)
+                _insert_feature_track_index(
+                    {"track_0": center_track_index},
+                    "track_0",
+                    feat_metrics,
+                    genome_length,
+                    bucket_size,
+                )
             elif track_num < 0:
                 track_id = f"track_{abs(track_num)}"
                 if track_id not in inner_tracks:
                     inner_tracks[track_id] = []
                 inner_tracks[track_id].append(feat_metrics)
+                _insert_feature_track_index(
+                    inner_track_indexes,
+                    track_id,
+                    feat_metrics,
+                    genome_length,
+                    bucket_size,
+                )
             else:
                 track_id = f"track_{track_num}"
                 if track_id not in outer_tracks:
                     outer_tracks[track_id] = []
                 outer_tracks[track_id].append(feat_metrics)
+                _insert_feature_track_index(
+                    outer_track_indexes,
+                    track_id,
+                    feat_metrics,
+                    genome_length,
+                    bucket_size,
+                )
         else:
             if separate_strands:
                 track_dict = neg_tracks if feat_metrics["strand"] == "negative" else pos_tracks  # type: ignore[assignment]
+                track_indexes = neg_track_indexes if feat_metrics["strand"] == "negative" else pos_track_indexes
             else:
                 track_dict = pos_tracks
+                track_indexes = pos_track_indexes
 
-            track_num = find_best_track(
-                feat_metrics, track_dict, separate_strands, resolve_overlaps, genome_length
+            track_num = _find_best_track_indexed(
+                feat_metrics,
+                track_dict,
+                track_indexes,  # type: ignore[arg-type]
+                feature_metrics,
+                separate_strands,
+                resolve_overlaps,
+                genome_length,
             )
             track_id = f"track_{abs(track_num)}"
 
             if track_id not in track_dict:
                 track_dict[track_id] = []
             track_dict[track_id].append(feat_metrics)
+            _insert_feature_track_index(
+                track_indexes,  # type: ignore[arg-type]
+                track_id,
+                feat_metrics,
+                genome_length,
+                bucket_size,
+            )
 
         feature_dict[feat_id].feature_track_id = track_num
 
