@@ -1,6 +1,8 @@
 include gbdraw/data/color_palettes.toml
 include gbdraw/data/config.toml
 include gbdraw/data/*.ttf
+include gbdraw/web/favicon.ico
+include gbdraw/web/gbdraw-logo.svg
 include gbdraw/web/index.html
 include gbdraw/web/*.whl
 recursive-include gbdraw/web/js *.js

@@ -21,6 +21,8 @@ _BASE_PACKAGE_DATA = [
     "data/color_palettes.toml",
     "data/config.toml",
     "data/*.ttf",
+    "web/favicon.ico",
+    "web/gbdraw-logo.svg",
     "web/index.html",
     "web/open-source-notices.html",
     "web/js/*.js",

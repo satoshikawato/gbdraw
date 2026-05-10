@@ -17,6 +17,8 @@
     ">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>gbdraw Web App</title>
+    <link rel="icon" href="./favicon.ico" sizes="any">
+    <link rel="icon" href="./gbdraw-logo.svg" type="image/svg+xml">
     <link rel="stylesheet" href="./vendor/phosphor-icons/regular/style.css">
     <script src="./vendor/vue/vue.global.js"></script>
     <script src="./vendor/tailwindcss/tailwindcss-play.js"></script>
@@ -116,6 +118,7 @@
         .basic-settings .input-label { font-size: 10px; letter-spacing: 0.04em; }
         .basic-settings .form-input { font-size: 10px; padding: 0.25rem 0.5rem; line-height: 1.2; }
         .basic-settings .form-input.text-xs { font-size: 10px; }
+        .app-logo { width: 2rem; height: 2rem; display: block; object-fit: contain; }
         .feature-popup {
             width: min(720px, calc(100vw - 24px));
             max-height: calc(100vh - 24px);
@@ -356,7 +359,7 @@
     <header class="app-header bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-14 shrink-0">
         <div class="app-header-inner px-4 h-full flex items-center justify-between">
             <div class="app-brand flex items-center gap-1 min-w-0">
-                <div class="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center font-bold text-lg shadow-md">🧬</div>
+                <img src="./gbdraw-logo.svg" alt="" class="app-logo shrink-0" width="32" height="32" aria-hidden="true">
                 <h1 class="app-title text-lg font-bold text-slate-800 tracking-tight flex items-center whitespace-nowrap leading-none mt-0.5">
                     gbdraw
                     <span class="app-tagline text-slate-400 text-sm font-normal ml-2">A genome diagram generator for microbes and organelles</span>
@@ -415,7 +418,6 @@
                             <file-uploader label="GenBank/DDBJ File" v-model="files.c_gb" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
-                            <file-uploader label="GFF3 File" v-model="files.c_gff"></file-uploader>
                             <file-uploader label="GFF3 File" v-model="files.c_gff" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
                             <file-uploader label="FASTA File" v-model="files.c_fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
                         </div>
