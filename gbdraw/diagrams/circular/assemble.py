@@ -1033,6 +1033,7 @@ def _legacy_slot_layout_context(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     feature_track_ratio_factor_override: float | None,
+    precomputed_feature_dict: dict | None = None,
     _tick_track_channel_override: str | None,
 ) -> CircularTrackLayoutContext:
     """Build resolver context from current legacy circular layout defaults."""
@@ -1062,6 +1063,40 @@ def _legacy_slot_layout_context(
     )
     tick_inner, tick_outer = _tick_annulus_for_center(base_radius, tick_ratio_bounds)
     legacy_widths["ticks"] = max(0.0, float(tick_outer) - float(tick_inner))
+    tick_label_offsets: tuple[float, float] | None = None
+    tick_label_bounds = get_circular_tick_label_radius_bounds(
+        center_radius_px=base_radius,
+        total_len=len(gb_record.seq),
+        track_type=str(cfg.canvas.circular.track_type),
+        strandedness=bool(cfg.canvas.strandedness),
+        font_size=float(cfg.objects.ticks.tick_labels.font_size),
+        font_family=str(cfg.objects.text.font_family),
+        dpi=int(canvas_config.dpi),
+        manual_interval=cfg.objects.scale.interval,
+        tick_track_channel_override=_tick_track_channel_override,
+    )
+    if tick_label_bounds is not None:
+        tick_label_offsets = (
+            float(tick_label_bounds[0]) - base_radius,
+            float(tick_label_bounds[1]) - base_radius,
+        )
+
+    feature_band_offsets: tuple[float, float] | None = None
+    if precomputed_feature_dict is not None:
+        feature_band = _compute_feature_band_bounds_px(
+            precomputed_feature_dict,
+            len(gb_record.seq),
+            base_radius_px=base_radius,
+            track_ratio=track_ratio,
+            length_param=length_param,
+            track_ratio_factor=default_feature_ratio_factor,
+            cfg=cfg,
+        )
+        if feature_band is not None:
+            feature_band_offsets = (
+                float(feature_band[0]) - base_radius,
+                float(feature_band[1]) - base_radius,
+            )
 
     for kind in ("depth", "gc_content", "gc_skew"):
         center_px = _default_track_center_radius_px(
@@ -1097,6 +1132,11 @@ def _legacy_slot_layout_context(
         legacy_widths_px=legacy_widths,
         default_gap_px=max(1.0, 0.01 * base_radius),
         auto_start_radius_px=base_radius,
+        feature_band_offsets_px=feature_band_offsets,
+        tick_path_ratio_bounds=tick_ratio_bounds,
+        tick_label_offsets_px=tick_label_offsets,
+        tick_font_size_px=float(cfg.objects.ticks.tick_labels.font_size),
+        tick_axis_padding_px=max(1.0, float(cfg.objects.ticks.tick_width) / 2.0),
     )
 
 
@@ -1106,6 +1146,7 @@ def _draw_resolved_circular_slot(
     *,
     gb_record: SeqRecord,
     canvas_config: CircularCanvasConfigurator,
+    feature_config: FeatureDrawingConfigurator,
     config_dict: dict,
     gc_df: DataFrame,
     gc_config: GcContentConfigurator,
@@ -1114,13 +1155,39 @@ def _draw_resolved_circular_slot(
     depth_config: DepthConfigurator | None,
     cfg: GbdrawConfig,
     dinucleotide_dataframes: dict[str, DataFrame] | None,
-    _tick_track_channel_override: str | None,
+    precomputed_feature_dict: dict | None = None,
+    precalculated_labels: list[dict] | None = None,
+    _tick_track_channel_override: str | None = None,
 ) -> Drawing:
     """Draw one resolved custom slot."""
     renderer = str(resolved_slot.renderer)
-    norm_factor_override = float(resolved_slot.center_radius_px) / float(canvas_config.radius)
-    if renderer == "spacer" or renderer == "features":
+    norm_factor_override = float(resolved_slot.anchor_radius_px) / float(canvas_config.radius)
+    if renderer == "spacer":
         return canvas
+
+    if renderer == "features":
+        base_width = (
+            float(canvas_config.radius)
+            * float(canvas_config.track_ratio)
+            * float(cfg.canvas.circular.track_ratio_factors[str(canvas_config.length_param)][0])
+        )
+        ratio_override = None
+        if base_width > 0 and float(resolved_slot.width_px) > 0:
+            ratio_override = float(resolved_slot.width_px) / (
+                float(canvas_config.radius) * float(canvas_config.track_ratio)
+            )
+        return add_record_group_on_canvas(
+            canvas,
+            gb_record,
+            canvas_config,
+            feature_config,
+            config_dict,
+            cfg=cfg,
+            precomputed_feature_dict=precomputed_feature_dict,
+            precalculated_labels=precalculated_labels,
+            feature_track_ratio_factor_override=ratio_override,
+            feature_anchor_radius_px=float(resolved_slot.anchor_radius_px),
+        )
 
     if renderer == "ticks":
         axis_enabled = _slot_param_bool(resolved_slot.params, "axis", True)
@@ -1131,12 +1198,15 @@ def _draw_resolved_circular_slot(
                 canvas,
                 canvas_config,
                 config_dict,
-                radius_override=float(resolved_slot.center_radius_px),
+                radius_override=float(resolved_slot.anchor_radius_px),
                 cfg=cfg,
             )
         if label_side != "none" or tick_side != "none":
             tick_group_kwargs: dict[str, Any] = {
-                "radius_override": float(resolved_slot.center_radius_px),
+                "radius_override": float(resolved_slot.anchor_radius_px),
+                "label_side": label_side,
+                "tick_side": tick_side,
+                "tick_length_px": float(resolved_slot.width_px) if resolved_slot.width_px > 0 else None,
                 "cfg": cfg,
             }
             if _tick_track_channel_override is not None:
@@ -2067,6 +2137,7 @@ def add_record_on_circular_canvas(
         show_external_labels
         or feature_track_ratio_factor_override is not None
         or core_track_overlap_relayout_enabled
+        or slot_mode
     )
     if should_precompute_feature_dict:
         compute_label_text = show_external_labels
@@ -2170,6 +2241,47 @@ def add_record_on_circular_canvas(
     if axis_ts is None or axis_ts.show:
         axis_radius_px, _ = _resolve_track_center_and_width_with_autorelayout("axis", axis_ts)
 
+    resolved_outer_core_track_annuli: list[tuple[float, float]] = []
+    tick_label_annulus_for_legend_bounds: tuple[float, float] | None = None
+    resolved_track_slots: list[ResolvedCircularTrackSlot] = []
+    resolved_feature_anchor_radius_px: float | None = None
+
+    if slot_mode:
+        context = _legacy_slot_layout_context(
+            gb_record=gb_record,
+            canvas_config=canvas_config,
+            cfg=cfg,
+            feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+            precomputed_feature_dict=precomputed_feature_dict,
+            _tick_track_channel_override=_tick_track_channel_override,
+        )
+        resolved_track_slots = resolve_circular_track_slots(
+            circular_track_slots or [],
+            context=context,
+            legacy_track_specs=track_specs,
+            compatibility_mode=False,
+        )
+        feature_resolved_slot = next(
+            (slot for slot in resolved_track_slots if slot.renderer == "features"),
+            None,
+        )
+        if feature_resolved_slot is not None:
+            resolved_feature_anchor_radius_px = float(feature_resolved_slot.anchor_radius_px)
+        for resolved_slot in resolved_track_slots:
+            if resolved_slot.renderer != "ticks":
+                continue
+            tick_label_annulus = (
+                float(resolved_slot.reserved_inner_radius_px),
+                float(resolved_slot.reserved_outer_radius_px),
+            )
+            if tick_label_annulus_for_legend_bounds is None:
+                tick_label_annulus_for_legend_bounds = tick_label_annulus
+            else:
+                tick_label_annulus_for_legend_bounds = (
+                    min(float(tick_label_annulus_for_legend_bounds[0]), float(tick_label_annulus[0])),
+                    max(float(tick_label_annulus_for_legend_bounds[1]), float(tick_label_annulus[1])),
+                )
+
     # External labels: separate group (label arena). Embedded labels remain in the record group.
     # Add labels BEFORE features so leader lines appear behind features.
     outer_arena: tuple[float, float] | None = None
@@ -2205,7 +2317,11 @@ def add_record_on_circular_canvas(
         precalculated_labels = prepare_label_list(
             precomputed_feature_dict,
             len(gb_record.seq),
-            canvas_config.radius,
+            (
+                float(resolved_feature_anchor_radius_px)
+                if resolved_feature_anchor_radius_px is not None
+                else canvas_config.radius
+            ),
             canvas_config.track_ratio,
             config_dict,
             cfg=cfg,
@@ -2239,20 +2355,25 @@ def add_record_on_circular_canvas(
         )
 
     if show_external_labels:
+        labels_group_kwargs: dict[str, Any] = {
+            "outer_arena": outer_arena,
+            "cfg": cfg,
+            "precomputed_feature_dict": precomputed_feature_dict,
+            "precalculated_labels": precalculated_labels,
+            "feature_track_ratio_factor_override": feature_track_ratio_factor_override,
+        }
+        if resolved_feature_anchor_radius_px is not None:
+            labels_group_kwargs["feature_anchor_radius_px"] = resolved_feature_anchor_radius_px
         canvas = add_labels_group_on_canvas(
             canvas,
             gb_record,
             canvas_config,
             feature_config,
             config_dict,
-            outer_arena=outer_arena,
-            cfg=cfg,
-            precomputed_feature_dict=precomputed_feature_dict,
-            precalculated_labels=precalculated_labels,
-            feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+            **labels_group_kwargs,
         )
 
-    if show_features:
+    if show_features and not slot_mode:
         canvas = add_record_group_on_canvas(
             canvas,
             gb_record,
@@ -2285,51 +2406,6 @@ def add_record_on_circular_canvas(
             config_dict,
             **definition_kwargs,
         )
-
-    resolved_outer_core_track_annuli: list[tuple[float, float]] = []
-    tick_label_annulus_for_legend_bounds: tuple[float, float] | None = None
-    resolved_track_slots: list[ResolvedCircularTrackSlot] = []
-
-    if slot_mode:
-        context = _legacy_slot_layout_context(
-            gb_record=gb_record,
-            canvas_config=canvas_config,
-            cfg=cfg,
-            feature_track_ratio_factor_override=feature_track_ratio_factor_override,
-            _tick_track_channel_override=_tick_track_channel_override,
-        )
-        resolved_track_slots = resolve_circular_track_slots(
-            circular_track_slots or [],
-            context=context,
-            legacy_track_specs=track_specs,
-            compatibility_mode=False,
-        )
-        for resolved_slot in resolved_track_slots:
-            if resolved_slot.renderer != "ticks":
-                continue
-            tick_label_annulus = get_circular_tick_label_radius_bounds(
-                center_radius_px=float(resolved_slot.center_radius_px),
-                total_len=len(gb_record.seq),
-                track_type=str(cfg.canvas.circular.track_type),
-                strandedness=bool(cfg.canvas.strandedness),
-                font_size=float(cfg.objects.ticks.tick_labels.font_size),
-                font_family=str(cfg.objects.text.font_family),
-                dpi=int(canvas_config.dpi),
-                manual_interval=cfg.objects.scale.interval,
-                tick_track_channel_override=_tick_track_channel_override,
-            )
-            if tick_label_annulus is None:
-                continue
-            if tick_label_annulus_for_legend_bounds is None:
-                tick_label_annulus_for_legend_bounds = (
-                    float(tick_label_annulus[0]),
-                    float(tick_label_annulus[1]),
-                )
-            else:
-                tick_label_annulus_for_legend_bounds = (
-                    min(float(tick_label_annulus_for_legend_bounds[0]), float(tick_label_annulus[0])),
-                    max(float(tick_label_annulus_for_legend_bounds[1]), float(tick_label_annulus[1])),
-                )
 
     ticks_ts = ts_by_kind.get("ticks")
     if (not slot_mode) and (ticks_ts is None or ticks_ts.show):
@@ -2479,6 +2555,7 @@ def add_record_on_circular_canvas(
                 resolved_slot,
                 gb_record=gb_record,
                 canvas_config=canvas_config,
+                feature_config=feature_config,
                 config_dict=config_dict,
                 gc_df=gc_df,
                 gc_config=gc_config,
@@ -2487,6 +2564,8 @@ def add_record_on_circular_canvas(
                 depth_config=depth_config,
                 cfg=cfg,
                 dinucleotide_dataframes=dinucleotide_dataframes,
+                precomputed_feature_dict=precomputed_feature_dict,
+                precalculated_labels=precalculated_labels,
                 _tick_track_channel_override=_tick_track_channel_override,
             )
         return canvas

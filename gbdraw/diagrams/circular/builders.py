@@ -231,6 +231,7 @@ def add_record_group_on_canvas(
     precomputed_feature_dict: dict | None = None,
     precalculated_labels: list[dict] | None = None,
     feature_track_ratio_factor_override: float | None = None,
+    feature_anchor_radius_px: float | None = None,
 ) -> Drawing:
     """
     Adds the record group to the canvas.
@@ -255,6 +256,7 @@ def add_record_group_on_canvas(
         precomputed_feature_dict=precomputed_feature_dict,
         precalculated_labels=precalculated_labels,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+        feature_anchor_radius_px=feature_anchor_radius_px,
     ).get_group()
     # Calculate start and end points for the 60-degree arc
 
@@ -302,6 +304,9 @@ def add_tick_group_on_canvas(
     *,
     radius_override: float | None = None,
     tick_track_channel_override: str | None = None,
+    label_side: str = "legacy",
+    tick_side: str = "legacy",
+    tick_length_px: float | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -322,6 +327,9 @@ def add_tick_group_on_canvas(
         config_dict,
         radius=radius_override,
         tick_track_channel_override=tick_track_channel_override,
+        label_side=label_side,
+        tick_side=tick_side,
+        tick_length_px=tick_length_px,
         cfg=cfg or canvas_config._cfg,
     ).get_group()
     tick_group = center_group_on_canvas(tick_group, canvas_config)
@@ -341,6 +349,7 @@ def add_labels_group_on_canvas(
     precomputed_feature_dict: dict | None = None,
     precalculated_labels: list[dict] | None = None,
     feature_track_ratio_factor_override: float | None = None,
+    feature_anchor_radius_px: float | None = None,
 ) -> Drawing:
     """
     Adds the labels group to the canvas.
@@ -366,6 +375,7 @@ def add_labels_group_on_canvas(
         precomputed_feature_dict=precomputed_feature_dict,
         precalculated_labels=precalculated_labels,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+        feature_anchor_radius_px=feature_anchor_radius_px,
     ).get_group()
     labels_group = center_group_on_canvas(labels_group, canvas_config)
     canvas.add(labels_group)

@@ -198,23 +198,45 @@ def generate_circular_tick_paths(
     track_type: str,
     strandedness: bool,
     tick_track_channel_override: str | None = None,
+    tick_side: str = "legacy",
+    tick_length_px: float | None = None,
 ) -> list[Path]:
     """
     Generates SVG path descriptions for tick marks on a circular canvas.
     """
     tick_paths_list: list[Path] = []
-    track_channel = _resolve_tick_track_channel(
-        total_len,
-        tick_track_channel_override=tick_track_channel_override,
-    )
-    ratio = _tick_path_ratio_table(track_channel, track_type, strandedness)
-
-    prox, dist = ratio[size]
+    normalized_side = str(tick_side or "legacy").strip().lower()
+    if normalized_side == "legacy":
+        track_channel = _resolve_tick_track_channel(
+            total_len,
+            tick_track_channel_override=tick_track_channel_override,
+        )
+        ratio = _tick_path_ratio_table(track_channel, track_type, strandedness)
+        prox, dist = ratio[size]
+        prox_radius = radius * prox
+        dist_radius = radius * dist
+    else:
+        if normalized_side in {"none", ""}:
+            return []
+        large_len = float(tick_length_px) if tick_length_px is not None else max(6.0, 0.025 * float(radius))
+        length_px = large_len if size == "large" else max(3.0, large_len * 0.6)
+        if normalized_side == "inside":
+            prox_radius = float(radius)
+            dist_radius = float(radius) - length_px
+        elif normalized_side == "outside":
+            prox_radius = float(radius)
+            dist_radius = float(radius) + length_px
+        elif normalized_side == "both":
+            prox_radius = float(radius) - (length_px / 2.0)
+            dist_radius = float(radius) + (length_px / 2.0)
+        else:
+            prox_radius = float(radius)
+            dist_radius = float(radius) + length_px
     for tick in ticks:
-        prox_x: float = (radius * prox) * math.cos(math.radians(360.0 * (tick / total_len) - 90))
-        prox_y: float = (radius * prox) * math.sin(math.radians(360.0 * (tick / total_len) - 90))
-        dist_x: float = (radius * dist) * math.cos(math.radians(360.0 * (tick / total_len) - 90))
-        dist_y: float = (radius * dist) * math.sin(math.radians(360.0 * (tick / total_len) - 90))
+        prox_x: float = prox_radius * math.cos(math.radians(360.0 * (tick / total_len) - 90))
+        prox_y: float = prox_radius * math.sin(math.radians(360.0 * (tick / total_len) - 90))
+        dist_x: float = dist_radius * math.cos(math.radians(360.0 * (tick / total_len) - 90))
+        dist_y: float = dist_radius * math.sin(math.radians(360.0 * (tick / total_len) - 90))
         tick_path_desc: str = "M " + str(prox_x) + "," + str(prox_y) + " L" + str(dist_x) + "," + str(dist_y) + " z"
         tick_path = Path(d=tick_path_desc, stroke="gray", stroke_width=tick_width)
         tick_paths_list.append(tick_path)
@@ -255,14 +277,28 @@ def generate_circular_tick_labels(
     strandedness: bool,
     dpi: int,
     tick_track_channel_override: str | None = None,
+    label_side: str = "legacy",
+    tick_length_px: float | None = None,
 ) -> list[Text]:
     tick_label_paths_list: list[Text] = []
-    track_channel = _resolve_tick_track_channel(
-        total_len,
-        tick_track_channel_override=tick_track_channel_override,
-    )
-    ratio = _tick_label_ratio_table(track_channel, track_type, strandedness)
-    prox, _ = ratio[size]
+    normalized_side = str(label_side or "legacy").strip().lower()
+    if normalized_side in {"none", ""}:
+        return []
+    if normalized_side == "legacy":
+        track_channel = _resolve_tick_track_channel(
+            total_len,
+            tick_track_channel_override=tick_track_channel_override,
+        )
+        ratio = _tick_label_ratio_table(track_channel, track_type, strandedness)
+        prox, _ = ratio[size]
+        label_radius_base = radius * prox
+    else:
+        large_len = float(tick_length_px) if tick_length_px is not None else max(6.0, 0.025 * float(radius))
+        offset = large_len + float(font_size) * 0.9
+        if normalized_side == "inside":
+            label_radius_base = float(radius) - offset
+        else:
+            label_radius_base = float(radius) + offset
     for tick in ticks:
         angle = 360.0 * (tick / total_len)
         label_text = _format_tick_label_text(tick, total_len)
@@ -274,44 +310,44 @@ def generate_circular_tick_labels(
         label_end = tick + (label_as_feature_length / 2)
         if 0 <= angle < 90:
             param = " 0 0 1 "
-            start_x_1: float = (radius * prox - center_offset) * math.cos(
+            start_x_1: float = (label_radius_base - center_offset) * math.cos(
                 math.radians(360.0 * (label_start / total_len) - 90)
             )
-            start_y_1: float = (radius * prox - center_offset) * math.sin(
+            start_y_1: float = (label_radius_base - center_offset) * math.sin(
                 math.radians(360.0 * (label_start / total_len) - 90)
             )
-            end_x: float = (radius * prox - center_offset) * math.cos(
+            end_x: float = (label_radius_base - center_offset) * math.cos(
                 math.radians(360.0 * (label_end / total_len) - 90)
             )
-            end_y: float = (radius * prox - center_offset) * math.sin(
+            end_y: float = (label_radius_base - center_offset) * math.sin(
                 math.radians(360.0 * (label_end / total_len) - 90)
             )
         if 90 <= angle < 270:
             param = " 1 0 0 "
-            start_x_1 = (radius * prox + center_offset) * math.cos(
+            start_x_1 = (label_radius_base + center_offset) * math.cos(
                 math.radians(360.0 * (label_end / total_len) - 90)
             )
-            start_y_1 = (radius * prox + center_offset) * math.sin(
+            start_y_1 = (label_radius_base + center_offset) * math.sin(
                 math.radians(360.0 * (label_end / total_len) - 90)
             )
-            end_x = (radius * prox + center_offset) * math.cos(
+            end_x = (label_radius_base + center_offset) * math.cos(
                 math.radians(360.0 * (label_start / total_len) - 90)
             )
-            end_y = (radius * prox + center_offset) * math.sin(
+            end_y = (label_radius_base + center_offset) * math.sin(
                 math.radians(360.0 * (label_start / total_len) - 90)
             )
         elif 270 <= angle <= 360:
             param = " 0 0 1 "
-            start_x_1 = (radius * prox - center_offset) * math.cos(
+            start_x_1 = (label_radius_base - center_offset) * math.cos(
                 math.radians(360.0 * (label_start / total_len) - 90)
             )
-            start_y_1 = (radius * prox - center_offset) * math.sin(
+            start_y_1 = (label_radius_base - center_offset) * math.sin(
                 math.radians(360.0 * (label_start / total_len) - 90)
             )
-            end_x = (radius * prox - center_offset) * math.cos(
+            end_x = (label_radius_base - center_offset) * math.cos(
                 math.radians(360.0 * (label_end / total_len) - 90)
             )
-            end_y = (radius * prox - center_offset) * math.sin(
+            end_y = (label_radius_base - center_offset) * math.sin(
                 math.radians(360.0 * (label_end / total_len) - 90)
             )
         label_axis_path_desc: str = (
@@ -320,9 +356,9 @@ def generate_circular_tick_labels(
             + ","
             + str(start_y_1)
             + "A"
-            + str(radius)
+            + str(label_radius_base)
             + ","
-            + str(radius)
+            + str(label_radius_base)
             + param
             + str(end_x)
             + ","

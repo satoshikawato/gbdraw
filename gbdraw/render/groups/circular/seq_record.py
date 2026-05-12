@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import Optional, List, Dict
+from typing import Optional, Dict
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -35,6 +35,7 @@ class SeqRecordGroup:
         precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = None,
         precalculated_labels: Optional[list[dict]] = None,
         feature_track_ratio_factor_override: float | None = None,
+        feature_anchor_radius_px: float | None = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
@@ -68,10 +69,16 @@ class SeqRecordGroup:
         self.precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = precomputed_feature_dict
         self.precalculated_labels: Optional[list[dict]] = precalculated_labels
         self.feature_track_ratio_factor_override = feature_track_ratio_factor_override
+        self.feature_anchor_radius_px = feature_anchor_radius_px
         self.record_group: Group = self.setup_record_group()
 
     def draw_record(self, feature_dict: Dict[str, FeatureObject], record_length: int, group: Group) -> Group:
         label_list = []
+        feature_anchor_radius = (
+            float(self.feature_anchor_radius_px)
+            if self.feature_anchor_radius_px is not None
+            else float(self.canvas_config.radius)
+        )
         if self.show_labels is True:
             # Reuse pre-calculated labels when available to avoid repeating heavy placement work.
             if self.precalculated_labels is not None:
@@ -80,7 +87,7 @@ class SeqRecordGroup:
                 label_list = prepare_label_list(
                     feature_dict,
                     record_length,
-                    self.canvas_config.radius,
+                    feature_anchor_radius,
                     self.track_ratio,
                     self.config_dict,
                     cfg=self._cfg,
@@ -96,7 +103,7 @@ class SeqRecordGroup:
                 feature_object,
                 group,
                 record_length,
-                self.canvas_config.radius,
+                feature_anchor_radius,
                 self.canvas_config.track_ratio,
                 feature_track_ratio_factor,
                 self.track_type,
@@ -111,7 +118,7 @@ class SeqRecordGroup:
                         label,
                         group,
                         record_length,
-                        self.canvas_config.radius,
+                        feature_anchor_radius,
                         self.canvas_config.track_ratio,
                         feature_track_ratio_factor_override=self.feature_track_ratio_factor_override,
                     )

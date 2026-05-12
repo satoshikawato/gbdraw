@@ -92,6 +92,41 @@ def test_resolve_circular_track_slots_preserves_legacy_defaults_in_compatibility
     assert by_id["gc_skew"].width_px == 74.1
 
 
+def test_resolve_circular_track_slots_packs_measured_footprints_without_overlap() -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=390.0,
+        legacy_centers_px={"features": 390.0, "ticks": 390.0},
+        legacy_widths_px={"features": 40.0, "ticks": 12.0, "gc_content": 30.0},
+        default_gap_px=4.0,
+        feature_band_offsets_px=(-55.0, -5.0),
+        tick_path_ratio_bounds=(0.98, 1.0),
+        tick_label_offsets_px=(20.0, 80.0),
+    )
+
+    resolved = resolve_circular_track_slots(
+        [
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(
+                id="ticks",
+                renderer="ticks",
+                params={"label_side": "legacy", "tick_side": "legacy", "axis": True},
+            ),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+        ],
+        context=context,
+    )
+
+    annuli = [
+        (slot.reserved_inner_radius_px, slot.reserved_outer_radius_px)
+        for slot in resolved
+    ]
+    assert resolved[0].anchor_radius_px == 390.0
+    assert resolved[0].draw_inner_radius_px == 335.0
+    for idx, current in enumerate(annuli):
+        for other in annuli[idx + 1:]:
+            assert current[0] >= other[1] or other[0] >= current[1]
+
+
 @pytest.mark.circular
 def test_api_circular_track_slots_render_duplicate_dinucleotide_skew_slots() -> None:
     record = _load_record()

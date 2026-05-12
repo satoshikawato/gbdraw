@@ -38,6 +38,7 @@ class LabelsGroup:
         precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = None,
         precalculated_labels: Optional[list[dict]] = None,
         feature_track_ratio_factor_override: float | None = None,
+        feature_anchor_radius_px: float | None = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
@@ -47,6 +48,7 @@ class LabelsGroup:
         self.precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = precomputed_feature_dict
         self.precalculated_labels: Optional[list[dict]] = precalculated_labels
         self.feature_track_ratio_factor_override = feature_track_ratio_factor_override
+        self.feature_anchor_radius_px = feature_anchor_radius_px
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
 
@@ -92,13 +94,18 @@ class LabelsGroup:
             )
 
         record_length: int = len(self.gb_record.seq)
+        feature_anchor_radius = (
+            float(self.feature_anchor_radius_px)
+            if self.feature_anchor_radius_px is not None
+            else float(self.canvas_config.radius)
+        )
         if self.precalculated_labels is not None:
             label_list = self.precalculated_labels
         else:
             label_list = prepare_label_list(
                 feature_dict,
                 record_length,
-                self.canvas_config.radius,
+                feature_anchor_radius,
                 self.canvas_config.track_ratio,
                 self.config_dict,
                 cfg=self._cfg,
@@ -133,7 +140,7 @@ class LabelsGroup:
             )
             group.add(line_path2)
             # Label text after lines (so it appears on top)
-            group = drawer.draw(label, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)
+            group = drawer.draw(label, group, record_length, feature_anchor_radius, self.canvas_config.track_ratio)
 
         return group
 

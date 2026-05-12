@@ -62,29 +62,6 @@ class CircularTrackSlot:
     params: Mapping[str, Any] = field(default_factory=dict)
 
 
-@dataclass(frozen=True)
-class ResolvedCircularTrackSlot:
-    id: str
-    renderer: str
-    center_radius_px: float
-    width_px: float
-    inner_radius_px: float
-    outer_radius_px: float
-    z: int
-    params: Mapping[str, Any]
-
-
-@dataclass(frozen=True)
-class CircularTrackLayoutContext:
-    """Minimal resolver context independent of the circular assembler."""
-
-    base_radius_px: float
-    legacy_centers_px: Mapping[str, float] = field(default_factory=dict)
-    legacy_widths_px: Mapping[str, float] = field(default_factory=dict)
-    default_gap_px: float = 0.0
-    auto_start_radius_px: float | None = None
-
-
 def _normalize_renderer(raw: str) -> str:
     renderer = str(raw).strip().lower()
     aliases = {
@@ -347,7 +324,7 @@ def _slot_gap_after_px(slot: CircularTrackSlot, context: CircularTrackLayoutCont
     return float(slot.gap_after.resolve(float(context.base_radius_px)))
 
 
-def resolve_circular_track_slots(
+def _resolve_circular_track_slots_legacy(
     slots: Sequence[CircularTrackSlot],
     *,
     context: CircularTrackLayoutContext,
@@ -453,6 +430,7 @@ def resolve_circular_track_slots(
 __all__ = [
     "CircularTrackLayoutContext",
     "CircularTrackRendererName",
+    "CircularSlotFootprint",
     "CircularTrackSlot",
     "ResolvedCircularTrackSlot",
     "SUPPORTED_CIRCULAR_TRACK_RENDERERS",
@@ -462,3 +440,11 @@ __all__ = [
     "parse_circular_track_slots",
     "resolve_circular_track_slots",
 ]
+
+
+from ..diagrams.circular.slot_layout import (  # noqa: E402  # type: ignore[reportMissingImports]
+    CircularSlotFootprint,
+    CircularTrackLayoutContext,
+    ResolvedCircularTrackSlot,
+    resolve_circular_track_slots,
+)
