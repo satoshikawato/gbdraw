@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
@@ -14,8 +15,11 @@ from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.io.colors import load_default_colors
 from gbdraw.tracks import (
+    CircularTrackPlacement,
     CircularTrackLayoutContext,
     CircularTrackSlot,
+    ScalarSpec,
+    TrackSpec,
     TrackSpecParseError,
     default_circular_track_slots,
     parse_circular_track_slot,
@@ -174,6 +178,59 @@ def test_resolve_circular_track_slots_auto_slots_avoid_definition_reserved_band(
     assert min(slot.reserved_inner_radius_px for slot in resolved) >= 35.0 - 1e-6
 
 
+def test_resolve_circular_track_slots_compresses_implicit_numeric_widths_to_fit_definition_guard(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=100.0,
+        legacy_centers_px={"gc_content": 80.0, "gc_skew": 45.0},
+        legacy_widths_px={"gc_content": 30.0, "gc_skew": 30.0},
+        default_gap_px=5.0,
+        reserved_bands_px=((0.0, 45.0),),
+        min_auto_inner_radius_px=45.0,
+    )
+    caplog.set_level(logging.INFO, logger="gbdraw.diagrams.circular.slot_layout")
+
+    resolved = resolve_circular_track_slots(
+        [
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+        ],
+        context=context,
+    )
+    by_id = {slot.id: slot for slot in resolved}
+
+    assert by_id["gc_content"].width_px == pytest.approx(by_id["gc_skew"].width_px)
+    assert by_id["gc_content"].width_px < 30.0
+    assert min(slot.reserved_inner_radius_px for slot in resolved) >= 45.0 - 1e-6
+    assert "Auto-compressed circular numeric track widths" in caplog.text
+
+
+def test_resolve_circular_track_slots_compresses_pinned_implicit_numeric_width_without_moving_center() -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=100.0,
+        legacy_centers_px={"gc_skew": 45.0},
+        legacy_widths_px={"gc_content": 30.0, "gc_skew": 30.0},
+        default_gap_px=5.0,
+        reserved_bands_px=((0.0, 45.0),),
+        min_auto_inner_radius_px=45.0,
+    )
+
+    resolved = resolve_circular_track_slots(
+        [
+            parse_circular_track_slot("gc_content:dinucleotide_content@r=80px"),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+        ],
+        context=context,
+    )
+    by_id = {slot.id: slot for slot in resolved}
+
+    assert by_id["gc_content"].center_radius_px == pytest.approx(80.0)
+    assert by_id["gc_content"].width_px == pytest.approx(by_id["gc_skew"].width_px)
+    assert by_id["gc_content"].width_px < 30.0
+    assert min(slot.reserved_inner_radius_px for slot in resolved) >= 45.0 - 1e-6
+
+
 def test_resolve_circular_track_slots_warns_for_pinned_definition_overlap(caplog: pytest.LogCaptureFixture) -> None:
     slot = parse_circular_track_slot("gc_skew:dinucleotide_skew@r=30px,w=20px")
     context = CircularTrackLayoutContext(
@@ -191,6 +248,26 @@ def test_resolve_circular_track_slots_warns_for_pinned_definition_overlap(caplog
 def test_resolve_circular_track_slots_raises_when_definition_guard_leaves_no_space() -> None:
     context = CircularTrackLayoutContext(
         base_radius_px=100.0,
+        legacy_centers_px={"gc_content": 99.0, "gc_skew": 97.0},
+        legacy_widths_px={"gc_content": 30.0, "gc_skew": 30.0},
+        default_gap_px=5.0,
+        reserved_bands_px=((0.0, 98.0),),
+        min_auto_inner_radius_px=98.0,
+    )
+
+    with pytest.raises(ValueError, match="cannot fit without overlapping the center definition"):
+        resolve_circular_track_slots(
+            [
+                CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+                CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+            ],
+            context=context,
+        )
+
+
+def test_resolve_circular_track_slots_does_not_compress_explicit_numeric_widths() -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=100.0,
         legacy_centers_px={"gc_content": 80.0, "gc_skew": 45.0},
         legacy_widths_px={"gc_content": 30.0, "gc_skew": 30.0},
         default_gap_px=5.0,
@@ -201,10 +278,45 @@ def test_resolve_circular_track_slots_raises_when_definition_guard_leaves_no_spa
     with pytest.raises(ValueError, match="cannot fit without overlapping the center definition"):
         resolve_circular_track_slots(
             [
+                parse_circular_track_slot("gc_content:dinucleotide_content@w=30px"),
+                parse_circular_track_slot("gc_skew:dinucleotide_skew@w=30px"),
+            ],
+            context=context,
+        )
+
+
+def test_resolve_circular_track_slots_does_not_compress_matching_track_spec_widths() -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=100.0,
+        legacy_centers_px={"gc_content": 80.0, "gc_skew": 45.0},
+        legacy_widths_px={"gc_content": 30.0, "gc_skew": 30.0},
+        default_gap_px=5.0,
+        reserved_bands_px=((0.0, 45.0),),
+        min_auto_inner_radius_px=45.0,
+    )
+    track_specs = [
+        TrackSpec(
+            id="gc_content",
+            kind="gc_content",
+            mode="circular",
+            placement=CircularTrackPlacement(width=ScalarSpec(30.0, "px")),
+        ),
+        TrackSpec(
+            id="gc_skew",
+            kind="gc_skew",
+            mode="circular",
+            placement=CircularTrackPlacement(width=ScalarSpec(30.0, "px")),
+        ),
+    ]
+
+    with pytest.raises(ValueError, match="cannot fit without overlapping the center definition"):
+        resolve_circular_track_slots(
+            [
                 CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
                 CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
             ],
             context=context,
+            legacy_track_specs=track_specs,
         )
 
 
