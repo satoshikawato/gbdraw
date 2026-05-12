@@ -58,6 +58,7 @@ class CircularTrackLayoutContext:
     base_radius_px: float
     legacy_centers_px: Mapping[str, float] = field(default_factory=dict)
     legacy_widths_px: Mapping[str, float] = field(default_factory=dict)
+    preferred_layouts_px: Mapping[str, tuple[float, float]] = field(default_factory=dict)
     default_gap_px: float = 0.0
     auto_start_radius_px: float | None = None
     feature_band_offsets_px: tuple[float, float] | None = None
@@ -65,6 +66,8 @@ class CircularTrackLayoutContext:
     tick_label_offsets_px: tuple[float, float] | None = None
     tick_font_size_px: float = 10.0
     tick_axis_padding_px: float = 1.0
+    reserved_bands_px: tuple[tuple[float, float], ...] = ()
+    min_auto_inner_radius_px: float | None = None
 
 
 def _legacy_kind_for_slot(slot: CircularTrackSlot) -> str | None:
@@ -139,6 +142,16 @@ def _legacy_lookup(
     return None
 
 
+def _preferred_layout_lookup(
+    mapping: Mapping[str, tuple[float, float]],
+    slot: CircularTrackSlot,
+) -> tuple[float, float] | None:
+    if slot.id in mapping:
+        center_px, width_px = mapping[slot.id]
+        return float(center_px), float(width_px)
+    return None
+
+
 def _annulus(center_px: float, width_px: float) -> tuple[float, float]:
     half_width = max(0.0, 0.5 * float(width_px))
     inner = float(center_px) - half_width
@@ -156,6 +169,131 @@ def _overlaps(a: tuple[float, float], b: tuple[float, float]) -> bool:
     a_inner, a_outer = sorted((float(a[0]), float(a[1])))
     b_inner, b_outer = sorted((float(b[0]), float(b[1])))
     return a_inner < (b_outer - LAYOUT_EPSILON) and a_outer > (b_inner + LAYOUT_EPSILON)
+
+
+def _normalize_band(band: tuple[float, float]) -> tuple[float, float]:
+    inner, outer = sorted((float(band[0]), float(band[1])))
+    return max(0.0, inner), max(0.0, outer)
+
+
+def _reserved_auto_inner_guard(context: CircularTrackLayoutContext) -> float:
+    guard = 0.0
+    if context.min_auto_inner_radius_px is not None:
+        guard = max(guard, float(context.min_auto_inner_radius_px))
+    for band in context.reserved_bands_px:
+        inner, outer = _normalize_band(band)
+        if inner <= LAYOUT_EPSILON:
+            guard = max(guard, outer)
+    return guard
+
+
+def _auto_pack_error(slot_id: str, *, inner_guard_px: float) -> ValueError:
+    if inner_guard_px > LAYOUT_EPSILON:
+        return ValueError(
+            f"circular track slot '{slot_id}' cannot fit without overlapping the center definition; "
+            "reduce width, remove inner slots, or set an explicit radius."
+        )
+    return ValueError(f"circular track slot '{slot_id}' could not be packed without overlap")
+
+
+def _free_intervals_px(
+    occupied: Sequence[tuple[str, tuple[float, float]]],
+    *,
+    inner_limit_px: float,
+    outer_limit_px: float,
+) -> list[tuple[float, float]]:
+    lower_limit = max(0.0, float(inner_limit_px))
+    upper_limit = max(lower_limit, float(outer_limit_px))
+    intervals: list[tuple[float, float]] = []
+    cursor = lower_limit
+    for _slot_id, raw_band in sorted(occupied, key=lambda item: _normalize_band(item[1])[0]):
+        band_inner, band_outer = _normalize_band(raw_band)
+        if band_outer <= lower_limit + LAYOUT_EPSILON:
+            continue
+        if band_inner >= upper_limit - LAYOUT_EPSILON:
+            break
+        band_inner = max(lower_limit, band_inner)
+        band_outer = min(upper_limit, band_outer)
+        if band_inner > cursor + LAYOUT_EPSILON:
+            intervals.append((cursor, band_inner))
+        cursor = max(cursor, band_outer)
+    if cursor < upper_limit - LAYOUT_EPSILON:
+        intervals.append((cursor, upper_limit))
+    return intervals
+
+
+def _find_auto_gap_footprint(
+    slot: CircularTrackSlot,
+    *,
+    preferred_anchor_px: float,
+    width_px: float,
+    params: Mapping[str, Any],
+    context: CircularTrackLayoutContext,
+    occupied: Sequence[tuple[str, tuple[float, float]]],
+    inner_guard_px: float,
+    explicit_width: bool,
+) -> CircularSlotFootprint | None:
+    outer_limit_px = (
+        float(context.auto_start_radius_px)
+        if context.auto_start_radius_px is not None
+        else float(context.base_radius_px)
+    )
+    gap_px = _slot_gap_after_px(slot, context)
+    candidates: list[tuple[float, CircularSlotFootprint]] = []
+
+    for raw_lower, raw_upper in _free_intervals_px(
+        occupied,
+        inner_limit_px=inner_guard_px,
+        outer_limit_px=outer_limit_px,
+    ):
+        lower = float(raw_lower) + gap_px
+        upper = float(raw_upper) - gap_px
+        if upper < lower - LAYOUT_EPSILON:
+            continue
+
+        seed_anchors = [
+            float(preferred_anchor_px),
+            (lower + upper) / 2.0,
+            lower + (0.5 * float(width_px)),
+            upper - (0.5 * float(width_px)),
+        ]
+        for seed_anchor in seed_anchors:
+            initial = _measure_slot(
+                slot,
+                anchor_radius_px=float(seed_anchor),
+                width_px=float(width_px),
+                params=params,
+                context=context,
+                explicit_anchor=False,
+                explicit_annulus=False,
+                explicit_width=bool(explicit_width),
+            )
+            anchor = float(seed_anchor)
+            if initial.reserved_inner_px < lower:
+                anchor += lower - initial.reserved_inner_px
+            if initial.reserved_outer_px > upper:
+                anchor -= initial.reserved_outer_px - upper
+
+            footprint = _measure_slot(
+                slot,
+                anchor_radius_px=float(anchor),
+                width_px=float(width_px),
+                params=params,
+                context=context,
+                explicit_anchor=False,
+                explicit_annulus=False,
+                explicit_width=bool(explicit_width),
+            )
+            band = (footprint.reserved_inner_px, footprint.reserved_outer_px)
+            if band[0] < lower - LAYOUT_EPSILON or band[1] > upper + LAYOUT_EPSILON:
+                continue
+            if any(_overlaps(band, other_band) for _other_id, other_band in occupied):
+                continue
+            candidates.append((abs(float(anchor) - float(preferred_anchor_px)), footprint))
+
+    if not candidates:
+        return None
+    return min(candidates, key=lambda item: item[0])[1]
 
 
 def _measure_slot(
@@ -332,6 +470,12 @@ def resolve_circular_track_slots(
             width_px = float(slot.width.resolve(base_radius_px))
             explicit_width = True
 
+        preferred_layout = None
+        if center_px is None and not explicit_annulus:
+            preferred_layout = _preferred_layout_lookup(context.preferred_layouts_px, slot)
+            if preferred_layout is not None and width_px is None:
+                width_px = preferred_layout[1]
+
         if width_px is None:
             width_px = _legacy_lookup(context.legacy_widths_px, slot)
         if width_px is None:
@@ -348,6 +492,7 @@ def resolve_circular_track_slots(
             {
                 "slot": slot,
                 "center_px": center_px,
+                "preferred_center_px": preferred_layout[0] if preferred_layout is not None else None,
                 "width_px": max(0.0, float(width_px)),
                 "params": params,
                 "explicit_anchor": bool(explicit_anchor),
@@ -386,7 +531,13 @@ def resolve_circular_track_slots(
             )
         return resolved_compat
 
-    occupied: list[tuple[str, tuple[float, float]]] = []
+    normalized_reserved_bands = tuple(_normalize_band(band) for band in context.reserved_bands_px)
+    inner_guard_px = _reserved_auto_inner_guard(context)
+    occupied: list[tuple[str, tuple[float, float]]] = [
+        (f"reserved:{idx}", band)
+        for idx, band in enumerate(normalized_reserved_bands)
+        if band[1] > band[0] + LAYOUT_EPSILON and band[0] > LAYOUT_EPSILON
+    ]
     resolved_by_id: dict[str, ResolvedCircularTrackSlot] = {}
 
     for entry in entries:
@@ -411,6 +562,12 @@ def resolve_circular_track_slots(
                     slot.id,
                     other_id,
                 )
+        for reserved_band in normalized_reserved_bands:
+            if _overlaps(band, reserved_band):
+                logger.warning(
+                    "Pinned circular track slot '%s' overlaps a reserved circular layout band.",
+                    slot.id,
+                )
         occupied.append((str(slot.id), band))
         resolved_by_id[str(slot.id)] = _resolved_from_footprint(
             slot,
@@ -434,10 +591,13 @@ def resolve_circular_track_slots(
             )
             continue
 
-        preferred_anchor = _legacy_lookup(context.legacy_centers_px, slot)
+        preferred_anchor = entry.get("preferred_center_px")
+        if preferred_anchor is None:
+            preferred_anchor = _legacy_lookup(context.legacy_centers_px, slot)
         if preferred_anchor is None:
             preferred_anchor = cursor_outer - (0.5 * float(entry["width_px"]))
-        anchor = min(float(preferred_anchor), float(cursor_outer))
+        preferred_anchor = float(preferred_anchor)
+        anchor = min(preferred_anchor, float(cursor_outer))
 
         for _ in range(128):
             footprint = _measure_slot(
@@ -450,6 +610,9 @@ def resolve_circular_track_slots(
                 explicit_annulus=False,
                 explicit_width=bool(entry["explicit_width"]),
             )
+            if footprint.reserved_inner_px < (inner_guard_px - LAYOUT_EPSILON):
+                anchor += inner_guard_px - footprint.reserved_inner_px
+                continue
             if footprint.reserved_outer_px > cursor_outer:
                 anchor -= footprint.reserved_outer_px - cursor_outer
                 continue
@@ -463,8 +626,34 @@ def resolve_circular_track_slots(
             nearest_inner = min(float(band[0]) for band in conflicts)
             anchor -= footprint.reserved_outer_px - (nearest_inner - _slot_gap_after_px(slot, context))
         else:
-            raise ValueError(f"circular track slot '{slot.id}' could not be packed without overlap")
+            gap_footprint = _find_auto_gap_footprint(
+                slot,
+                preferred_anchor_px=preferred_anchor,
+                width_px=float(entry["width_px"]),
+                params=entry["params"],
+                context=context,
+                occupied=occupied,
+                inner_guard_px=inner_guard_px,
+                explicit_width=bool(entry["explicit_width"]),
+            )
+            if gap_footprint is None:
+                raise _auto_pack_error(str(slot.id), inner_guard_px=inner_guard_px)
+            footprint = gap_footprint
 
+        if footprint.reserved_inner_px < (inner_guard_px - LAYOUT_EPSILON):
+            gap_footprint = _find_auto_gap_footprint(
+                slot,
+                preferred_anchor_px=preferred_anchor,
+                width_px=float(entry["width_px"]),
+                params=entry["params"],
+                context=context,
+                occupied=occupied,
+                inner_guard_px=inner_guard_px,
+                explicit_width=bool(entry["explicit_width"]),
+            )
+            if gap_footprint is None:
+                raise _auto_pack_error(str(slot.id), inner_guard_px=inner_guard_px)
+            footprint = gap_footprint
         if footprint.reserved_inner_px < -LAYOUT_EPSILON:
             raise ValueError(
                 f"circular track slot '{slot.id}' cannot fit: inner radius is {footprint.reserved_inner_px:.3f}px"
