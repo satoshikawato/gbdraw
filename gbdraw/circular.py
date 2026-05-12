@@ -28,6 +28,7 @@ from .io.record_select import parse_record_selector
 from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
 from .features.visibility import read_feature_visibility_file
 from .exceptions import ValidationError
+from .tracks import circular_track_slots_from_order, parse_circular_track_slots  # type: ignore[reportMissingImports]
 
 from .cli_utils.common import (
     setup_logging,
@@ -391,7 +392,7 @@ def _get_args(args) -> argparse.Namespace:
         default='none',
         choices=['none', 'out', 'both'],
         type=str)
-    
+
     label_list_group = parser.add_mutually_exclusive_group()
     label_list_group.add_argument(
         '--label_whitelist',
@@ -403,7 +404,7 @@ def _get_args(args) -> argparse.Namespace:
         help='Comma-separated keywords or path to a file for label blacklisting (optional); mutually exclusive with --label_whitelist',
         type=str,
         default="")
-        
+
     parser.add_argument(
         '--qualifier_priority',
         help='Path to a TSV file defining qualifier priority for labels (optional)',
@@ -452,6 +453,15 @@ def _get_args(args) -> argparse.Namespace:
         help='Feature track width for circular mode (in px; must be > 0).',
         type=float)
     parser.add_argument(
+        '--circular_track_order',
+        help='Comma-separated circular slot order, e.g. features,ticks,gc_content,gc_skew.',
+        type=str)
+    parser.add_argument(
+        '--circular_track_slot',
+        help='Circular track slot spec: <slot_id>:<renderer>@key=value,key=value. Can be repeated.',
+        action='append',
+        default=[])
+    parser.add_argument(
         '--gc_content_width',
         help='GC content track width for circular mode (in px; must be > 0).',
         type=float)
@@ -475,7 +485,7 @@ def _get_args(args) -> argparse.Namespace:
         '--legend_font_size',
         help='Legend font size (optional; float; default: 20 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb).',
         type=float)
-    
+
     args = parser.parse_args(args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
@@ -515,6 +525,18 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--tick_label_font_size must be > 0")
     if args.circular_label_spacing is not None and args.circular_label_spacing <= 0:
         parser.error("--circular_label_spacing must be > 0")
+    if args.circular_track_order and args.circular_track_slot:
+        parser.error("--circular_track_order cannot be combined with --circular_track_slot")
+    if args.circular_track_order:
+        try:
+            circular_track_slots_from_order(args.circular_track_order)
+        except Exception as exc:
+            parser.error(str(exc))
+    if args.circular_track_slot:
+        try:
+            parse_circular_track_slots(args.circular_track_slot)
+        except Exception as exc:
+            parser.error(str(exc))
     if args.multi_record_min_radius_ratio <= 0 or args.multi_record_min_radius_ratio > 1:
         parser.error("--multi_record_min_radius_ratio must be > 0 and <= 1")
     if not math.isfinite(args.multi_record_column_gap_ratio) or args.multi_record_column_gap_ratio < 0:
@@ -524,7 +546,7 @@ def _get_args(args) -> argparse.Namespace:
     return args
 
 
-    
+
 def circular_main(cmd_args) -> None:
     """
     Main function for generating circular genome diagrams.
@@ -543,7 +565,7 @@ def circular_main(cmd_args) -> None:
     - Plotting the circular diagrams with genomic features and GC-related tracks.
     - Generating output files in specified formats.
     """
-    args: argparse.Namespace = _get_args(cmd_args)   
+    args: argparse.Namespace = _get_args(cmd_args)
     output_prefix = args.output
     dinucleotide: str = args.nt.upper()
     manual_window: int = args.window
@@ -600,6 +622,8 @@ def circular_main(cmd_args) -> None:
     legend_box_size = args.legend_box_size
     legend_font_size = args.legend_font_size
     feature_width: Optional[float] = args.feature_width
+    circular_track_order: str | None = args.circular_track_order
+    circular_track_slot_specs: list[str] = list(args.circular_track_slot or [])
     gc_content_width: Optional[float] = args.gc_content_width
     gc_content_radius: Optional[float] = args.gc_content_radius
     gc_skew_width: Optional[float] = args.gc_skew_width
@@ -627,10 +651,10 @@ def circular_main(cmd_args) -> None:
     inner_label_y_radius_offset: Optional[float] = args.inner_label_y_radius_offset
     if allow_inner_labels and not (suppress_gc and suppress_skew):
 
-        suppress_gc = True 
+        suppress_gc = True
         suppress_skew = True
         logger.warning(
-            "WARNING: --labels both requires suppressing GC and skew tracks. Suppressing GC and skew tracks.")  # 
+            "WARNING: --labels both requires suppressing GC and skew tracks. Suppressing GC and skew tracks.")  #
 
     user_defined_default_colors: str = args.default_colors
     block_stroke_color: Optional[str] = args.block_stroke_color
@@ -638,7 +662,7 @@ def circular_main(cmd_args) -> None:
     axis_stroke_color: Optional[str] = args.axis_stroke_color
     axis_stroke_width: Optional[float] = args.axis_stroke_width
     line_stroke_color: Optional[str] = args.line_stroke_color
-    line_stroke_width: Optional[float] = args.line_stroke_width   
+    line_stroke_width: Optional[float] = args.line_stroke_width
     track_type: str = args.track_type
     strandedness = args.separate_strands
     scale_interval: Optional[int] = args.scale_interval
@@ -654,7 +678,7 @@ def circular_main(cmd_args) -> None:
         logger.warning(
             "WARNING: --resolve_overlaps is ignored when --separate_strands is enabled.")
         resolve_overlaps = False
-    
+
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
     filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
@@ -674,26 +698,26 @@ def circular_main(cmd_args) -> None:
     palette: str = args.palette
     default_colors: Optional[DataFrame] = load_default_colors(
         user_defined_default_colors, palette)
-    
+
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     feature_table: Optional[DataFrame] = read_feature_visibility_file(feature_table_path)
     show_gc, show_skew = suppress_gc_content_and_skew(
         suppress_gc, suppress_skew)
 
     config_dict = modify_config_dict(
-        config_dict, 
-        block_stroke_color=block_stroke_color, 
+        config_dict,
+        block_stroke_color=block_stroke_color,
         block_stroke_width=block_stroke_width,
-        circular_axis_stroke_color=axis_stroke_color, 
-        circular_axis_stroke_width=axis_stroke_width, 
-        line_stroke_color=line_stroke_color, 
-        line_stroke_width=line_stroke_width, 
-        show_labels=show_labels, 
-        track_type=track_type, 
-        strandedness=strandedness, 
+        circular_axis_stroke_color=axis_stroke_color,
+        circular_axis_stroke_width=axis_stroke_width,
+        line_stroke_color=line_stroke_color,
+        line_stroke_width=line_stroke_width,
+        show_labels=show_labels,
+        track_type=track_type,
+        strandedness=strandedness,
         resolve_overlaps=resolve_overlaps,
-        show_gc=show_gc, 
-        show_skew=show_skew, 
+        show_gc=show_gc,
+        show_skew=show_skew,
         show_depth=show_depth,
         depth_color=depth_color,
         depth_min=depth_min,
@@ -722,7 +746,7 @@ def circular_main(cmd_args) -> None:
         circular_label_spacing=circular_label_spacing,
         legend_box_size=legend_box_size,
         legend_font_size=legend_font_size
-    )    
+    )
 
     out_formats: list[str] = parse_formats(args.format)
     out_formats = handle_output_formats(out_formats)
@@ -731,11 +755,20 @@ def circular_main(cmd_args) -> None:
 
 
     cfg = GbdrawConfig.from_dict(config_dict)
+    circular_track_slots_or_none = None
+    if circular_track_slot_specs:
+        circular_track_slots_or_none = circular_track_slot_specs
+    elif circular_track_order:
+        circular_track_slots_or_none = circular_track_slots_from_order(
+            circular_track_order,
+            dinucleotide=dinucleotide,
+        )
+
     track_specs: list[str] = []
     if feature_width is not None:
         track_specs.append(f"features@w={float(feature_width):g}px")
     if depth_width is not None:
-        if not show_depth:
+        if not show_depth and circular_track_slots_or_none is None:
             logger.warning(
                 "WARNING: Depth track is hidden. Ignoring --depth_width."
             )
@@ -744,7 +777,7 @@ def circular_main(cmd_args) -> None:
 
     gc_content_spec_requested = (gc_content_width is not None) or (gc_content_radius is not None)
     if gc_content_spec_requested:
-        if not show_gc:
+        if not show_gc and circular_track_slots_or_none is None:
             logger.warning(
                 "WARNING: GC content track is suppressed. Ignoring --gc_content_width/--gc_content_radius."
             )
@@ -759,7 +792,7 @@ def circular_main(cmd_args) -> None:
 
     gc_skew_spec_requested = (gc_skew_width is not None) or (gc_skew_radius is not None)
     if gc_skew_spec_requested:
-        if not show_skew:
+        if not show_skew and circular_track_slots_or_none is None:
             logger.warning(
                 "WARNING: GC skew track is suppressed. Ignoring --gc_skew_width/--gc_skew_radius."
             )
@@ -806,6 +839,7 @@ def circular_main(cmd_args) -> None:
             multi_record_positions=multi_record_positions or None,
             cfg=cfg,
             track_specs=track_specs_or_none,
+            circular_track_slots=circular_track_slots_or_none,
         )
         save_figure(canvas, out_formats)
     else:
@@ -840,6 +874,7 @@ def circular_main(cmd_args) -> None:
                 keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
                 cfg=cfg,
                 track_specs=track_specs_or_none,
+                circular_track_slots=circular_track_slots_or_none,
             )
             save_figure(canvas, out_formats)
 

@@ -149,6 +149,21 @@ def test_web_run_analysis_wires_scale_and_tick_font_size_options() -> None:
     assert "args.push('--scale_font_size', adv.scale_font_size);" in source
 
 
+def test_web_run_analysis_wires_circular_track_slot_options() -> None:
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+
+    assert "circular_track_slots_enabled" in state_source
+    assert "createDefaultCircularTrackSlots()" in state_source
+    assert "normalizeCircularTrackSlots(state.adv.circular_track_slots" in config_source
+    assert '"circular_track_slot": "--circular_track_slot" in _source' in run_source
+    assert "args.push('--circular_track_slot', buildCircularTrackSlotSpec(slot, adv.nt));" in run_source
+    assert "hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth')" in run_source
+    assert "Custom Track Slots" in index_html
+
+
 def test_web_config_persists_manual_qualifier_priority_rules() -> None:
     source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     assert "qualifierPriorityRules: cloneQualifierPriorityRules(state.manualPriorityRules)" in source

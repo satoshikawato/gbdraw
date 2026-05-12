@@ -3,6 +3,7 @@ import {
   normalizePaletteColors,
   normalizePaletteDefinitions
 } from './app/color-utils.js';
+import { createDefaultCircularTrackSlots } from './app/circular-track-slots.js';
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -385,6 +386,8 @@ const adv = reactive({
   gc_content_radius_circular: null,
   gc_skew_width_circular: null,
   gc_skew_radius_circular: null,
+  circular_track_slots_enabled: false,
+  circular_track_slots: createDefaultCircularTrackSlots(),
   outer_label_x_offset: null,
   outer_label_y_offset: null,
   inner_label_x_offset: null,

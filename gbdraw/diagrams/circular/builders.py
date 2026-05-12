@@ -46,6 +46,7 @@ def add_depth_group_on_canvas(
     *,
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
+    group_id: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Adds the depth coverage group to the canvas."""
@@ -64,6 +65,7 @@ def add_depth_group_on_canvas(
         config_dict,
         canvas_config.track_ids["depth_track"],
         norm_factor_override=norm_factor_override,
+        group_id=group_id,
         cfg=cfg,
     ).get_group()
     depth_group = center_group_on_canvas(depth_group, canvas_config)
@@ -81,6 +83,7 @@ def add_gc_skew_group_on_canvas(
     *,
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
+    group_id: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -111,6 +114,7 @@ def add_gc_skew_group_on_canvas(
         config_dict,
         canvas_config.track_ids["skew_track"],
         norm_factor_override=norm_factor_override,
+        group_id=group_id,
         cfg=cfg,
     ).get_group()
     gc_skew_group = center_group_on_canvas(gc_skew_group, canvas_config)
@@ -128,6 +132,7 @@ def add_gc_content_group_on_canvas(
     *,
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
+    group_id: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -159,6 +164,7 @@ def add_gc_content_group_on_canvas(
         config_dict,
         canvas_config.track_ids["gc_track"],
         norm_factor_override=norm_factor_override,
+        group_id=group_id,
         cfg=cfg,
     ).get_group()
     gc_content_group = center_group_on_canvas(gc_content_group, canvas_config)

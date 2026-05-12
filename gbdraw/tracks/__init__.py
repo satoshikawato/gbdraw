@@ -11,6 +11,18 @@ from .spec import (  # type: ignore[reportMissingImports]
     ScalarSpec,
     TrackSpec,
 )
+from .circular import (  # type: ignore[reportMissingImports]
+    CircularTrackLayoutContext,
+    CircularTrackRendererName,
+    CircularTrackSlot,
+    ResolvedCircularTrackSlot,
+    SUPPORTED_CIRCULAR_TRACK_RENDERERS,
+    circular_track_slots_from_order,
+    default_circular_track_slots,
+    parse_circular_track_slot,
+    parse_circular_track_slots,
+    resolve_circular_track_slots,
+)
 from .parser import (  # type: ignore[reportMissingImports]
     TrackSpecParseError,
     parse_track_spec,
@@ -19,12 +31,22 @@ from .parser import (  # type: ignore[reportMissingImports]
 
 __all__ = [
     "CircularTrackPlacement",
+    "CircularTrackLayoutContext",
+    "CircularTrackRendererName",
+    "CircularTrackSlot",
     "LinearTrackPlacement",
+    "ResolvedCircularTrackSlot",
     "ScalarSpec",
+    "SUPPORTED_CIRCULAR_TRACK_RENDERERS",
     "TrackSpec",
     "TrackSpecParseError",
+    "circular_track_slots_from_order",
+    "default_circular_track_slots",
+    "parse_circular_track_slot",
+    "parse_circular_track_slots",
     "parse_track_spec",
     "parse_track_specs",
+    "resolve_circular_track_slots",
 ]
 
 

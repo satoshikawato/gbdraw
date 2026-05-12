@@ -24,9 +24,10 @@ class DepthGroup:
         config_dict: dict,
         track_id: str | int,
         norm_factor_override: float | None = None,
+        group_id: str | None = None,
         cfg: GbdrawConfig | None = None,
     ) -> None:
-        self.depth_group = Group(id="depth")
+        self.depth_group = Group(id=group_id or "depth")
         self.radius = float(radius)
         self.depth_config = depth_config
         self.gb_record = gb_record

@@ -6,6 +6,11 @@ import {
   runDiagramGeneration
 } from '../services/diagram-generation.js';
 import { buildLabelOverrideTsv } from './feature-editor/label-override-table.js';
+import {
+  buildCircularTrackSlotSpec,
+  hasEnabledCircularTrackRenderer,
+  normalizeCircularTrackSlots
+} from './circular-track-slots.js';
 
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
@@ -1017,7 +1022,8 @@ json.dumps({
         plot_title_font_size: false,
         keep_full_definition_with_plot_title: false,
         tick_label_font_size: false,
-        circular_label_spacing: false
+        circular_label_spacing: false,
+        circular_track_slot: false
       };
       return circularMultiRecordCanvasSupportCache;
     }
@@ -1039,6 +1045,7 @@ json.dumps({
   "keep_full_definition_with_plot_title": "--keep_full_definition_with_plot_title" in _source,
   "tick_label_font_size": "--tick_label_font_size" in _source,
   "circular_label_spacing": "--circular_label_spacing" in _source,
+  "circular_track_slot": "--circular_track_slot" in _source,
 })
       `);
       circularMultiRecordCanvasSupportCache = JSON.parse(String(raw));
@@ -1055,7 +1062,8 @@ json.dumps({
         plot_title_font_size: false,
         keep_full_definition_with_plot_title: false,
         tick_label_font_size: false,
-        circular_label_spacing: false
+        circular_label_spacing: false,
+        circular_track_slot: false
       };
     }
     return circularMultiRecordCanvasSupportCache;
@@ -1565,6 +1573,18 @@ json.dumps({
         const multiCanvasSupport = getCircularMultiRecordCanvasOptionSupport();
         const normalizedCircularPlotTitle = String(form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(adv.plot_title_position);
+        const useCircularTrackSlots = adv.circular_track_slots_enabled === true;
+        const circularTrackSlots = useCircularTrackSlots
+          ? normalizeCircularTrackSlots(adv.circular_track_slots, adv.nt)
+          : [];
+        if (useCircularTrackSlots) {
+          if (!multiCanvasSupport.circular_track_slot) {
+            throw new Error(
+              'Current gbdraw wheel does not support --circular_track_slot. Rebuild and redeploy the web wheel.'
+            );
+          }
+          adv.circular_track_slots.splice(0, adv.circular_track_slots.length, ...circularTrackSlots);
+        }
         const hasPlotTitleFontSize =
           adv.plot_title_font_size !== null &&
           adv.plot_title_font_size !== undefined &&
@@ -1638,8 +1658,10 @@ json.dumps({
         const labelsMode = String(labelsModeRaw || 'none').trim().toLowerCase();
         if (labelsMode === 'out') args.push('--labels');
         if (labelsMode === 'both') args.push('--labels', 'both');
-        if (form.suppress_gc) args.push('--suppress_gc');
-        if (form.suppress_skew) args.push('--suppress_skew');
+        if (!useCircularTrackSlots) {
+          if (form.suppress_gc) args.push('--suppress_gc');
+          if (form.suppress_skew) args.push('--suppress_skew');
+        }
         if (form.multi_record_canvas) {
           if (!multiCanvasSupport.circular) {
             throw new Error(
@@ -1724,7 +1746,7 @@ json.dumps({
         ) {
           args.push('--feature_width', adv.feature_width_circular);
         }
-        if (!form.suppress_gc) {
+        if (!form.suppress_gc || useCircularTrackSlots) {
           if (
             adv.gc_content_width_circular !== null &&
             adv.gc_content_width_circular !== undefined &&
@@ -1742,7 +1764,7 @@ json.dumps({
             args.push('--gc_content_radius', adv.gc_content_radius_circular);
           }
         }
-        if (!form.suppress_skew) {
+        if (!form.suppress_skew || useCircularTrackSlots) {
           if (
             adv.gc_skew_width_circular !== null &&
             adv.gc_skew_width_circular !== undefined &&
@@ -1760,8 +1782,14 @@ json.dumps({
             args.push('--gc_skew_radius', adv.gc_skew_radius_circular);
           }
         }
+        if (useCircularTrackSlots) {
+          circularTrackSlots.forEach((slot) => {
+            args.push('--circular_track_slot', buildCircularTrackSlotSpec(slot, adv.nt));
+          });
+        }
         const hasCircularDepthFile = Boolean(files.c_depth);
-        if (form.show_depth) {
+        const circularSlotNeedsDepth = useCircularTrackSlots && hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth');
+        if (form.show_depth || circularSlotNeedsDepth) {
           if (!hasCircularDepthFile) throw new Error('Please upload a Depth TSV file or disable Show depth track.');
           await stageUploadedFile(files.c_depth, '/depth.tsv');
           args.push('--depth', '/depth.tsv');

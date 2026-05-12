@@ -1,7 +1,8 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
+import { normalizeCircularTrackSlots } from '../app/circular-track-slots.js';
 
-const SESSION_VERSION = 19;
+const SESSION_VERSION = 20;
 const LOSAT_CACHE_SCHEMA = 2;
 
 const isRawLosatCacheEntry = (entry) =>
@@ -448,6 +449,12 @@ const applyConfigData = (data) => {
   state.adv.depth_share_axis = state.adv.depth_share_axis === true;
   state.adv.depth_height = normalizePositiveNumberOrNull(state.adv.depth_height);
   state.adv.depth_width_circular = normalizePositiveNumberOrNull(state.adv.depth_width_circular);
+  state.adv.circular_track_slots_enabled = state.adv.circular_track_slots_enabled === true;
+  state.adv.circular_track_slots.splice(
+    0,
+    state.adv.circular_track_slots.length,
+    ...normalizeCircularTrackSlots(state.adv.circular_track_slots, state.adv.nt)
+  );
   state.adv.depth_window_size = normalizePositiveNumberOrNull(state.adv.depth_window_size);
   state.adv.depth_step_size = normalizePositiveNumberOrNull(state.adv.depth_step_size);
   state.adv.depth_tick_interval = normalizePositiveNumberOrNull(state.adv.depth_tick_interval);

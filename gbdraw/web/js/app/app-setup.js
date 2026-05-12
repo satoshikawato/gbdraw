@@ -13,8 +13,9 @@ import { createLegendLayout } from './legend-layout.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 import { createOrthogroupEditor } from './orthogroups.js';
+import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 
-const { onMounted, onUnmounted, watch, nextTick, computed } = window.Vue;
+const { onMounted, onUnmounted, watch, nextTick, computed, ref } = window.Vue;
 
 export const createAppSetup = () => {
   const {
@@ -176,6 +177,8 @@ export const createAppSetup = () => {
     disposeDiagramGenerationWorker();
   });
 
+  const circularTrackNewRenderer = ref('dinucleotide_skew');
+  const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
   const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions });
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
@@ -784,6 +787,16 @@ export const createAppSetup = () => {
     form,
     adv,
     canUseLinearRulerOnAxis,
+    circularTrackNewRenderer,
+    circularTrackRenderers: circularTrackSlotEditor.circularTrackRenderers,
+    circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
+    resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,
+    addCircularTrackSlot: circularTrackSlotEditor.addCircularTrackSlot,
+    duplicateCircularTrackSlot: circularTrackSlotEditor.duplicateCircularTrackSlot,
+    removeCircularTrackSlot: circularTrackSlotEditor.removeCircularTrackSlot,
+    moveCircularTrackSlot: circularTrackSlotEditor.moveCircularTrackSlot,
+    updateCircularTrackSlotRenderer: circularTrackSlotEditor.updateCircularTrackSlotRenderer,
+    circularTrackSlotCliSpec: circularTrackSlotEditor.circularTrackSlotCliSpec,
     losat,
     losatCacheInfo,
     orthogroups,
