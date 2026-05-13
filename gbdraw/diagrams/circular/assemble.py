@@ -1139,6 +1139,8 @@ def _legacy_slot_layout_context(
         dpi=int(canvas_config.dpi),
         manual_interval=cfg.objects.scale.interval,
         tick_track_channel_override=_tick_track_channel_override,
+        tick_width=float(cfg.objects.ticks.tick_width),
+        length_reference_radius_px=base_radius,
     )
     if tick_label_bounds is not None:
         tick_label_offsets = (
@@ -1220,6 +1222,14 @@ def _legacy_slot_layout_context(
         tick_label_offsets_px=tick_label_offsets,
         tick_labels_hard=bool(tick_labels_hard),
         tick_font_size_px=float(cfg.objects.ticks.tick_labels.font_size),
+        tick_width_px=float(cfg.objects.ticks.tick_width),
+        tick_total_len=len(gb_record.seq),
+        tick_track_type=str(cfg.canvas.circular.track_type),
+        tick_strandedness=bool(cfg.canvas.strandedness),
+        tick_font_family=str(cfg.objects.text.font_family),
+        tick_dpi=int(canvas_config.dpi),
+        tick_manual_interval=cfg.objects.scale.interval,
+        tick_track_channel_override=_tick_track_channel_override,
         reserved_bands_px=tuple(reserved_bands_px),
         min_auto_inner_radius_px=min_auto_inner_radius_px,
         preferred_layouts_px=dict(preferred_layouts_px or {}),

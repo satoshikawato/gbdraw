@@ -9,6 +9,10 @@ from ...tracks.circular import (
     CircularTrackSlot,
 )
 from ...tracks.spec import CircularTrackPlacement, TrackSpec
+from ...svg.circular_ticks import (
+    get_circular_tick_label_radius_bounds,
+    get_circular_tick_path_radius_bounds,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -87,6 +91,14 @@ class CircularTrackLayoutContext:
     tick_label_offsets_px: tuple[float, float] | None = None
     tick_labels_hard: bool = False
     tick_font_size_px: float = 10.0
+    tick_width_px: float = 0.0
+    tick_total_len: int | None = None
+    tick_track_type: str = ""
+    tick_strandedness: bool = True
+    tick_font_family: str = ""
+    tick_dpi: int = 72
+    tick_manual_interval: int | None = None
+    tick_track_channel_override: str | None = None
     reserved_bands_px: tuple[tuple[float, float], ...] = ()
     min_auto_inner_radius_px: float | None = None
 
@@ -416,6 +428,43 @@ def _legacy_tick_label_soft_band(
     return None
 
 
+def _tick_label_soft_band(
+    *,
+    anchor: float,
+    width: float,
+    params: Mapping[str, Any],
+    context: CircularTrackLayoutContext,
+    explicit_width: bool,
+) -> tuple[float, float] | None:
+    label_side = str(params.get("label_side", "legacy")).strip().lower()
+    if label_side in {"none", ""}:
+        return None
+    tick_side = str(params.get("tick_side", "legacy")).strip().lower()
+
+    if context.tick_total_len is not None and context.tick_track_type and context.tick_font_family:
+        tick_length_px = float(width) if explicit_width and width > 0 else None
+        return get_circular_tick_label_radius_bounds(
+            center_radius_px=float(anchor),
+            total_len=int(context.tick_total_len),
+            track_type=str(context.tick_track_type),
+            strandedness=bool(context.tick_strandedness),
+            font_size=float(context.tick_font_size_px),
+            font_family=str(context.tick_font_family),
+            dpi=int(context.tick_dpi),
+            manual_interval=context.tick_manual_interval,
+            tick_track_channel_override=context.tick_track_channel_override,
+            label_side=label_side,
+            tick_side=tick_side,
+            tick_length_px=tick_length_px,
+            tick_width=float(context.tick_width_px),
+            length_reference_radius_px=float(context.base_radius_px),
+        )
+
+    if label_side == "legacy":
+        return _legacy_tick_label_soft_band(anchor, context)
+    return None
+
+
 def _measure_feature_slot(
     *,
     anchor: float,
@@ -460,7 +509,23 @@ def _measure_tick_slot(
 
     inner_ext = 0.0
     outer_ext = 0.0
-    if tick_side == "legacy":
+    if context.tick_total_len is not None and context.tick_track_type:
+        tick_length_px = float(width) if explicit_width and width > 0 else None
+        draw_inner, draw_outer = get_circular_tick_path_radius_bounds(
+            center_radius_px=float(anchor),
+            total_len=int(context.tick_total_len),
+            size="large",
+            track_type=str(context.tick_track_type),
+            strandedness=bool(context.tick_strandedness),
+            tick_track_channel_override=context.tick_track_channel_override,
+            tick_side=tick_side,
+            tick_length_px=tick_length_px,
+            length_reference_radius_px=float(context.base_radius_px),
+        )
+        if tick_side not in {"legacy", "none", ""}:
+            inner_ext = max(0.0, float(anchor) - float(draw_inner))
+            outer_ext = max(0.0, float(draw_outer) - float(anchor))
+    elif tick_side == "legacy":
         if context.tick_path_ratio_bounds is not None:
             draw_inner = float(anchor) * min(context.tick_path_ratio_bounds)
             draw_outer = float(anchor) * max(context.tick_path_ratio_bounds)
@@ -479,16 +544,22 @@ def _measure_tick_slot(
 
     hard_inner, hard_outer = draw_inner, draw_outer
     soft_inner, soft_outer = draw_inner, draw_outer
-    label_pad = max(float(context.tick_font_size_px) * 1.8, 10.0)
-    if label_side == "inside":
-        soft_inner = min(soft_inner, float(anchor) - inner_ext - label_pad)
-    elif label_side == "outside":
-        soft_outer = max(soft_outer, float(anchor) + outer_ext + label_pad)
-    elif label_side == "legacy":
-        label_band = _legacy_tick_label_soft_band(anchor, context)
-        if label_band is not None:
-            soft_inner = min(soft_inner, label_band[0])
-            soft_outer = max(soft_outer, label_band[1])
+    label_band = _tick_label_soft_band(
+        anchor=anchor,
+        width=width,
+        params=params,
+        context=context,
+        explicit_width=explicit_width,
+    )
+    if label_band is not None:
+        soft_inner = min(soft_inner, label_band[0])
+        soft_outer = max(soft_outer, label_band[1])
+    else:
+        label_pad = max(float(context.tick_font_size_px) * 1.8, 10.0)
+        if label_side == "inside":
+            soft_inner = min(soft_inner, float(anchor) - inner_ext - label_pad)
+        elif label_side == "outside":
+            soft_outer = max(soft_outer, float(anchor) + outer_ext + label_pad)
 
     if context.tick_labels_hard:
         hard_inner, hard_outer = soft_inner, soft_outer

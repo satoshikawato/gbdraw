@@ -14,7 +14,14 @@ from gbdraw.api.diagram import assemble_circular_diagram_from_record
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.io.colors import load_default_colors
-from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
+from gbdraw.svg.circular_ticks import (
+    get_circular_tick_label_radius_bounds,
+    get_circular_tick_path_radius_bounds,
+    get_circular_tick_path_ratio_bounds,
+    generate_circular_tick_labels,
+    resolve_circular_tick_label_geometry,
+    set_tick_label_anchor_value,
+)
 from gbdraw.tracks import (
     CircularTrackPlacement,
     CircularTrackLayoutContext,
@@ -623,6 +630,161 @@ def test_tick_label_hard_context_promotes_label_bounds_for_packing() -> None:
     assert by_id["ticks"].reserved_inner_radius_px == pytest.approx(82.0)
     assert by_id["gc_content"].reserved_outer_radius_px <= by_id["ticks"].reserved_inner_radius_px
     assert by_id["gc_content"].center_radius_px == pytest.approx(77.0)
+
+
+def test_legacy_tick_label_bounds_keep_margin_from_tick_path_when_radius_shrinks() -> None:
+    center_radius = 260.0
+    total_len = 5_528_445
+    font_size = 14.0
+    tick_width = 2.0
+
+    tick_inner, _tick_outer = get_circular_tick_path_radius_bounds(
+        center_radius,
+        total_len,
+        "large",
+        "tuckin",
+        True,
+        tick_side="legacy",
+    )
+    label_bounds = get_circular_tick_label_radius_bounds(
+        center_radius_px=center_radius,
+        total_len=total_len,
+        track_type="tuckin",
+        strandedness=True,
+        font_size=font_size,
+        font_family="Liberation Sans",
+        dpi=72,
+        tick_width=tick_width,
+    )
+
+    assert label_bounds is not None
+    expected_margin = max(2.0, font_size * 0.15) + (tick_width / 2.0)
+    assert label_bounds[1] <= tick_inner - expected_margin + 1e-6
+
+
+def test_generated_tick_label_arc_uses_resolved_geometry_radius() -> None:
+    center_radius = 260.0
+    total_len = 5_528_445
+    tick = 1_000_000
+    expected = resolve_circular_tick_label_geometry(
+        center_radius_px=center_radius,
+        total_len=total_len,
+        size="large",
+        tick=tick,
+        label_text="1.0 Mbp",
+        font_size=14.0,
+        font_family="Liberation Sans",
+        track_type="tuckin",
+        strandedness=True,
+        dpi=72,
+        tick_width=2.0,
+    )
+
+    elements = generate_circular_tick_labels(
+        center_radius,
+        total_len,
+        "large",
+        [tick],
+        "none",
+        "black",
+        14.0,
+        "normal",
+        "Liberation Sans",
+        "tuckin",
+        True,
+        72,
+        tick_width=2.0,
+    )
+
+    assert elements
+    match = re.search(r"A([0-9.]+),", elements[0].tostring())
+    assert match is not None
+    assert float(match.group(1)) == pytest.approx(expected.path_radius_px)
+    _expected_anchor, expected_baseline = set_tick_label_anchor_value(total_len, tick)
+    text_svg = elements[1].tostring()
+    assert 'text-anchor="middle"' in text_svg
+    assert f'dominant-baseline="{expected_baseline}"' in text_svg
+    assert 'startOffset="50%"' in text_svg
+
+
+def test_generated_tick_labels_apply_position_dependent_textpath_settings() -> None:
+    total_len = 5_528_445
+    elements = generate_circular_tick_labels(
+        260.0,
+        total_len,
+        "large",
+        [5_000_000, 3_000_000],
+        "none",
+        "black",
+        14.0,
+        "normal",
+        "Liberation Sans",
+        "tuckin",
+        True,
+        72,
+        tick_width=2.0,
+    )
+
+    five_mbp_svg = elements[1].tostring()
+    three_mbp_svg = elements[3].tostring()
+    assert 'text-anchor="middle"' in five_mbp_svg
+    assert 'dominant-baseline="text-after-edge"' in five_mbp_svg
+    assert 'text-anchor="middle"' in three_mbp_svg
+    assert 'dominant-baseline="hanging"' in three_mbp_svg
+
+
+def test_generated_tick_labels_remain_centered_on_left_side_ticks() -> None:
+    total_len = 5_528_445
+    elements = generate_circular_tick_labels(
+        260.0,
+        total_len,
+        "large",
+        [4_500_000],
+        "none",
+        "black",
+        14.0,
+        "normal",
+        "Liberation Sans",
+        "tuckin",
+        True,
+        72,
+        tick_width=2.0,
+    )
+
+    text_svg = elements[1].tostring()
+    assert 'text-anchor="middle"' in text_svg
+    assert 'startOffset="50%"' in text_svg
+
+
+def test_legacy_tick_label_path_radius_is_position_independent_for_equal_track() -> None:
+    center_radius = 260.0
+    total_len = 5_528_445
+    common_kwargs = {
+        "center_radius_px": center_radius,
+        "total_len": total_len,
+        "size": "large",
+        "font_size": 14.0,
+        "font_family": "Liberation Sans",
+        "track_type": "tuckin",
+        "strandedness": True,
+        "dpi": 72,
+        "tick_width": 2.0,
+    }
+
+    five_mbp = resolve_circular_tick_label_geometry(
+        tick=5_000_000,
+        label_text="5.0 Mbp",
+        **common_kwargs,
+    )
+    three_mbp = resolve_circular_tick_label_geometry(
+        tick=3_000_000,
+        label_text="3.0 Mbp",
+        **common_kwargs,
+    )
+
+    assert five_mbp.path_radius_px == pytest.approx(three_mbp.path_radius_px)
+    assert five_mbp.radial_inner_px == pytest.approx(three_mbp.radial_inner_px)
+    assert five_mbp.radial_outer_px == pytest.approx(three_mbp.radial_outer_px)
 
 
 def test_resolve_circular_track_slots_auto_slots_avoid_definition_reserved_band() -> None:

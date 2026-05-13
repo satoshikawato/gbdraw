@@ -82,6 +82,7 @@ class TickGroup:
             tick_track_channel_override=self.tick_track_channel_override,
             tick_side=self.tick_side,
             tick_length_px=self.tick_length_px,
+            length_reference_radius_px=float(self.canvas_config.radius),
         )
         ticks_large_nonzero: list[int] = [x for x in ticks_large if x != 0]
         tick_label_paths_large: list[Text] = generate_circular_tick_labels(
@@ -99,7 +100,10 @@ class TickGroup:
             self.dpi,
             tick_track_channel_override=self.tick_track_channel_override,
             label_side=self.label_side,
+            tick_side=self.tick_side,
             tick_length_px=self.tick_length_px,
+            tick_width=float(self.tick_width),
+            length_reference_radius_px=float(self.canvas_config.radius),
         )
         for tick_path_large in tick_paths_large:
             self.tick_group.add(tick_path_large)
