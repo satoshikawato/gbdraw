@@ -1653,6 +1653,66 @@ def _default_gc_skew_gap_px(
     return min(positive_gaps)
 
 
+def _distributed_lane_specs_between_bounds(
+    *,
+    inner_radius_px: float,
+    outer_radius_px: float,
+    default_widths_outer_to_inner: Sequence[float],
+    desired_gap_px: float,
+    include_outer_boundary_gap: bool = False,
+    fill_available: bool = False,
+) -> list[tuple[float, float]]:
+    """Return outer-to-inner lane specs as (center_px, width_scale)."""
+    lane_count = len(default_widths_outer_to_inner)
+    if lane_count <= 0:
+        return []
+
+    inner = float(inner_radius_px)
+    outer = float(outer_radius_px)
+    if outer < inner:
+        inner, outer = outer, inner
+    available_width = max(0.0, outer - inner)
+
+    default_widths_inner_to_outer = [
+        max(0.0, float(width_px))
+        for width_px in reversed(default_widths_outer_to_inner)
+    ]
+    total_default_width = sum(default_widths_inner_to_outer)
+    if total_default_width <= FEATURE_BAND_EPSILON:
+        return []
+
+    gap_count = lane_count if include_outer_boundary_gap else max(0, lane_count - 1)
+    desired_gap = max(0.0, float(desired_gap_px))
+    if gap_count > 0:
+        compressed_gap_px = min(
+            desired_gap,
+            max(0.0, available_width / (3.0 * float(gap_count))),
+        )
+    else:
+        compressed_gap_px = 0.0
+
+    compressed_width_budget = max(0.0, available_width - (float(gap_count) * compressed_gap_px))
+    if compressed_width_budget < total_default_width - FEATURE_BAND_EPSILON:
+        gap_px = compressed_gap_px
+        width_scale = max(0.0, compressed_width_budget / total_default_width)
+    else:
+        width_scale = 1.0
+        if fill_available and gap_count > 0:
+            gap_px = max(0.0, (available_width - total_default_width) / float(gap_count))
+        else:
+            gap_px = compressed_gap_px
+
+    specs_inner_to_outer: list[tuple[float, float]] = []
+    cursor = inner
+    for width_px in default_widths_inner_to_outer:
+        scaled_width_px = width_px * width_scale
+        center_px = cursor + (0.5 * scaled_width_px)
+        specs_inner_to_outer.append((float(center_px), float(width_scale)))
+        cursor += scaled_width_px + gap_px
+
+    return list(reversed(specs_inner_to_outer))
+
+
 def _resolve_depth_compressed_gc_skew_layout(
     *,
     canvas_config: CircularCanvasConfigurator,
@@ -1759,13 +1819,14 @@ def _resolve_builtin_numeric_slot_preferred_layouts(
     if not numeric_slots:
         return {}
 
-    lane_specs: list[tuple[float, float]] = []
+    default_lanes: list[tuple[float, float, tuple[float, float]]] = []
     has_depth_lane = any(str(slot.renderer) == "depth" for slot in numeric_slots)
-    dinucleotide_lane_count = sum(
-        1
+    dinucleotide_slots = [
+        slot
         for slot in numeric_slots
         if str(slot.renderer) in {"dinucleotide_content", "dinucleotide_skew"}
-    )
+    ]
+    dinucleotide_lane_count = len(dinucleotide_slots)
 
     if has_depth_lane:
         depth_center_px = _default_track_center_radius_px(
@@ -1777,7 +1838,13 @@ def _resolve_builtin_numeric_slot_preferred_layouts(
         if depth_center_px is not None:
             if radius_mapper is not None:
                 depth_center_px = float(radius_mapper(float(depth_center_px)))
-            lane_specs.append((float(depth_center_px), 1.0))
+            default_lanes.append(
+                (
+                    float(depth_center_px),
+                    1.0,
+                    _annulus_from_center_and_width(float(depth_center_px), float(depth_width_px)),
+                )
+            )
             if depth_inner_radius_px is None:
                 depth_inner_radius_px = _annulus_from_center_and_width(
                     float(depth_center_px),
@@ -1817,9 +1884,63 @@ def _resolve_builtin_numeric_slot_preferred_layouts(
             width_scale = 1.0
             if abs(float(default_width_px)) > FEATURE_BAND_EPSILON:
                 width_scale = max(0.0, float(width_px) / float(default_width_px))
-            lane_specs.append((float(center_px), float(width_scale)))
+            default_lanes.append(
+                (
+                    float(center_px),
+                    float(width_scale),
+                    _annulus_from_center_and_width(float(center_px), float(width_px)),
+                )
+            )
 
-    lane_specs.sort(key=lambda item: item[0], reverse=True)
+    default_lanes.sort(key=lambda item: item[0], reverse=True)
+    lane_specs = [(center_px, width_scale) for center_px, width_scale, _annulus in default_lanes]
+
+    if len(numeric_slots) > len(default_lanes) and default_lanes:
+        allocation_annuli = [annulus for _center_px, _width_scale, annulus in default_lanes]
+        canonical_dinucleotide_layout = _default_gc_skew_layout_without_depth(
+            canvas_config=canvas_config,
+            cfg=cfg,
+            show_gc=True,
+            show_skew=True,
+            radius_mapper=radius_mapper,
+        )
+        if has_depth_lane and depth_inner_radius_px is not None:
+            compressed_canonical_layout = _resolve_depth_compressed_gc_skew_layout(
+                canvas_config=canvas_config,
+                cfg=cfg,
+                depth_inner_radius_px=float(depth_inner_radius_px),
+                show_gc=True,
+                show_skew=True,
+                gc_ts=None,
+                skew_ts=None,
+                radius_mapper=radius_mapper,
+            )
+            if compressed_canonical_layout:
+                canonical_dinucleotide_layout = compressed_canonical_layout
+        allocation_annuli.extend(
+            _annulus_from_center_and_width(center_px, width_px)
+            for center_px, width_px in canonical_dinucleotide_layout.values()
+        )
+
+        inner_radius_px = min(float(annulus[0]) for annulus in allocation_annuli)
+        outer_radius_px = max(float(annulus[1]) for annulus in allocation_annuli)
+        lane_specs = _distributed_lane_specs_between_bounds(
+            inner_radius_px=inner_radius_px,
+            outer_radius_px=outer_radius_px,
+            default_widths_outer_to_inner=[
+                _default_numeric_slot_width_px(
+                    slot,
+                    canvas_config=canvas_config,
+                    cfg=cfg,
+                )
+                for slot in numeric_slots
+            ],
+            desired_gap_px=_default_gc_skew_gap_px(
+                canonical_dinucleotide_layout,
+                canvas_config=canvas_config,
+            ),
+            fill_available=True,
+        )
 
     layout: dict[str, tuple[float, float]] = {}
     assigned: list[tuple[str, float, float]] = []

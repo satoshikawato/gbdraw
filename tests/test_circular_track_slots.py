@@ -1661,6 +1661,178 @@ def test_api_circular_track_slots_render_duplicate_dinucleotide_skew_slots() -> 
 
 
 @pytest.mark.circular
+def test_api_circular_track_slots_distribute_extra_dinucleotide_slots_evenly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+
+    record = _load_edl933_record()
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels=False,
+        show_gc=True,
+        show_skew=True,
+        track_type="middle",
+        strandedness=True,
+    )
+    default_colors = load_default_colors("", palette="default")
+    captured: dict[str, tuple[float, float]] = {}
+
+    def capture_numeric_slot(
+        slot_id: str,
+        canvas_config,
+        track_width_override,
+        norm_factor_override,
+    ) -> None:
+        assert track_width_override is not None
+        assert norm_factor_override is not None
+        captured[slot_id] = (
+            float(norm_factor_override) * float(canvas_config.radius),
+            float(track_width_override),
+        )
+
+    def fake_add_gc_content_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        gc_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override)
+        return canvas
+
+    def fake_add_gc_skew_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        skew_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        default_colors=default_colors,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        window=1000,
+        step=1000,
+        circular_track_slots=[
+            *default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
+            "gc_skew_2:dinucleotide_skew@nt=AT",
+        ],
+    )
+
+    assert set(captured) == {"gc_content", "gc_skew", "gc_skew_2"}
+    annuli = {
+        slot_id: (center_px - (0.5 * width_px), center_px + (0.5 * width_px))
+        for slot_id, (center_px, width_px) in captured.items()
+    }
+    widths = [captured[slot_id][1] for slot_id in ("gc_content", "gc_skew", "gc_skew_2")]
+    gaps = [
+        annuli["gc_content"][0] - annuli["gc_skew"][1],
+        annuli["gc_skew"][0] - annuli["gc_skew_2"][1],
+    ]
+
+    assert min(widths) > 30.0
+    assert widths[0] == pytest.approx(widths[1])
+    assert widths[1] == pytest.approx(widths[2])
+    assert gaps[0] == pytest.approx(gaps[1])
+
+
+@pytest.mark.circular
+def test_api_circular_track_slots_distribute_repeated_depth_slots_evenly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+
+    record = _load_edl933_record()
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels=False,
+        show_gc=False,
+        show_skew=False,
+        track_type="middle",
+        strandedness=True,
+    )
+    default_colors = load_default_colors("", palette="default")
+    depth_table = _depth_table(str(record.id))
+    captured: dict[str, tuple[float, float]] = {}
+
+    def fake_add_depth_group_on_canvas(
+        canvas,
+        gb_record,
+        depth_df,
+        canvas_config,
+        depth_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        assert track_width_override is not None
+        assert norm_factor_override is not None
+        captured[str(group_id or "depth")] = (
+            float(norm_factor_override) * float(canvas_config.radius),
+            float(track_width_override),
+        )
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_depth_group_on_canvas", fake_add_depth_group_on_canvas)
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        default_colors=default_colors,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        depth_table=depth_table,
+        window=1000,
+        step=1000,
+        circular_track_slots=[
+            "depth:depth",
+            "depth_2:depth",
+            "depth_3:depth",
+        ],
+    )
+
+    assert set(captured) == {"depth", "depth_2", "depth_3"}
+    annuli = {
+        slot_id: (center_px - (0.5 * width_px), center_px + (0.5 * width_px))
+        for slot_id, (center_px, width_px) in captured.items()
+    }
+    widths = [captured[slot_id][1] for slot_id in ("depth", "depth_2", "depth_3")]
+    gaps = [
+        annuli["depth"][0] - annuli["depth_2"][1],
+        annuli["depth_2"][0] - annuli["depth_3"][1],
+    ]
+
+    assert min(widths) > 20.0
+    assert widths[0] == pytest.approx(widths[1])
+    assert widths[1] == pytest.approx(widths[2])
+    assert gaps[0] == pytest.approx(gaps[1])
+
+
+@pytest.mark.circular
 def test_slot_mode_draws_axis_when_ticks_are_disabled() -> None:
     record = _load_record()
     config_dict = modify_config_dict(
