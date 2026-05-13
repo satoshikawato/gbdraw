@@ -500,6 +500,28 @@ def _resolved_from_footprint(
     )
 
 
+def _warn_soft_annotation_overlaps(resolved_slots: Sequence[ResolvedCircularTrackSlot]) -> None:
+    for slot in resolved_slots:
+        soft_band = _normalize_band((slot.soft_inner_radius_px, slot.soft_outer_radius_px))
+        hard_band = _normalize_band((slot.hard_inner_radius_px, slot.hard_outer_radius_px))
+        if (
+            abs(soft_band[0] - hard_band[0]) <= LAYOUT_EPSILON
+            and abs(soft_band[1] - hard_band[1]) <= LAYOUT_EPSILON
+        ):
+            continue
+
+        for other in resolved_slots:
+            if other.id == slot.id:
+                continue
+            other_hard_band = _normalize_band((other.hard_inner_radius_px, other.hard_outer_radius_px))
+            if _overlaps(soft_band, other_hard_band) and not _overlaps(hard_band, other_hard_band):
+                logger.warning(
+                    "Soft annotation footprint for circular track slot '%s' overlaps hard footprint of slot '%s'.",
+                    slot.id,
+                    other.id,
+                )
+
+
 def _pack_circular_slot_entries(
     entries: Sequence[Mapping[str, Any]],
     *,
@@ -835,12 +857,15 @@ def resolve_circular_track_slots(
                     params=entry["params"],
                 )
             )
+        _warn_soft_annotation_overlaps(resolved_compat)
         return resolved_compat
 
     try:
-        return _pack_circular_slot_entries(entries, context=context, width_scale=1.0)
+        resolved = _pack_circular_slot_entries(entries, context=context, width_scale=1.0)
     except CircularSlotAutoPackError as exc:
-        return _pack_with_auto_numeric_compression(entries, context=context, initial_error=exc)
+        resolved = _pack_with_auto_numeric_compression(entries, context=context, initial_error=exc)
+    _warn_soft_annotation_overlaps(resolved)
+    return resolved
 
 
 __all__ = [

@@ -476,6 +476,55 @@ def test_tick_slot_footprint_does_not_reserve_axis_padding() -> None:
     assert resolved[0].reserved_outer_radius_px == pytest.approx(100.0)
 
 
+def test_tick_label_soft_footprint_warns_without_repacking_data_track(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=100.0,
+        legacy_widths_px={"gc_content": 10.0},
+        default_gap_px=0.0,
+        tick_font_size_px=10.0,
+    )
+    caplog.set_level(logging.WARNING, logger="gbdraw.diagrams.circular.slot_layout")
+
+    resolved = resolve_circular_track_slots(
+        [
+            parse_circular_track_slot("ticks:ticks@r=100px,label_side=inside,tick_side=none"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+        ],
+        context=context,
+    )
+    by_id = {slot.id: slot for slot in resolved}
+
+    assert by_id["ticks"].reserved_inner_radius_px == pytest.approx(100.0)
+    assert by_id["ticks"].soft_inner_radius_px < by_id["gc_content"].reserved_outer_radius_px
+    assert by_id["gc_content"].center_radius_px == pytest.approx(95.0)
+    assert "Soft annotation footprint for circular track slot 'ticks' overlaps hard footprint of slot 'gc_content'" in caplog.text
+
+
+def test_tick_label_hard_context_promotes_label_bounds_for_packing() -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=100.0,
+        legacy_widths_px={"gc_content": 10.0},
+        default_gap_px=0.0,
+        tick_font_size_px=10.0,
+        tick_labels_hard=True,
+    )
+
+    resolved = resolve_circular_track_slots(
+        [
+            parse_circular_track_slot("ticks:ticks@r=100px,label_side=inside,tick_side=none"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+        ],
+        context=context,
+    )
+    by_id = {slot.id: slot for slot in resolved}
+
+    assert by_id["ticks"].reserved_inner_radius_px == pytest.approx(82.0)
+    assert by_id["gc_content"].reserved_outer_radius_px <= by_id["ticks"].reserved_inner_radius_px
+    assert by_id["gc_content"].center_radius_px == pytest.approx(77.0)
+
+
 def test_resolve_circular_track_slots_auto_slots_avoid_definition_reserved_band() -> None:
     context = CircularTrackLayoutContext(
         base_radius_px=100.0,

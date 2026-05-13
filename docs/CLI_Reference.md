@@ -239,7 +239,10 @@ options:
                         <slot_id>:<renderer>@key=value,key=value. Can be
                         repeated; repeated auto slots are packed
                         outer-to-inner. r/ri/ro pin position, w pins width,
-                        and z only controls SVG layering.
+                        and z only controls SVG layering. Default built-in
+                        slots preserve normal circular geometry until order or
+                        geometry fields change. Tick labels are measured for
+                        bounds and warnings, not default data-track repacking.
   --gc_content_width GC_CONTENT_WIDTH
                         GC content track width for circular mode (in px; must
                         be > 0).

@@ -787,7 +787,7 @@
                                     <div class="flex items-center justify-between gap-2">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                             <input type="checkbox" v-model="adv.circular_track_slots_enabled" class="form-checkbox">
-                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Editor order controls auto radial order: top is outside. Tick labels and the center definition reserve radial space. r/ri/ro pin position, w pins width, and z only controls SVG layering."></help-tip></span>
+                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Default rows preserve normal circular geometry until order or geometry fields change. Row order packs auto slots outside to inside. r/ri/ro pin position, w pins width, z only controls SVG layering. Tick labels are measured for bounds and warnings, not default data-track repacking."></help-tip></span>
                                         </label>
                                         <button
                                             type="button"
