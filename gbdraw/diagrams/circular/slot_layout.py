@@ -561,8 +561,7 @@ def _measure_tick_slot(
         elif label_side == "outside":
             soft_outer = max(soft_outer, float(anchor) + outer_ext + label_pad)
 
-    if context.tick_labels_hard:
-        hard_inner, hard_outer = soft_inner, soft_outer
+    hard_inner, hard_outer = soft_inner, soft_outer
     return _make_slot_footprint(
         anchor=anchor,
         draw_inner=draw_inner,
