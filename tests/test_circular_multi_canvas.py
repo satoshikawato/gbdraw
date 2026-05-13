@@ -816,6 +816,7 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
         track_type: str,
         strandedness: bool,
         tick_track_channel_override: str | None = None,
+        **_kwargs: Any,
     ) -> list[Any]:
         captured_tick_path_channels[int(total_len)] = tick_track_channel_override
         return []
@@ -834,6 +835,7 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
         strandedness: bool,
         dpi: int,
         tick_track_channel_override: str | None = None,
+        **_kwargs: Any,
     ) -> list[Any]:
         captured_tick_label_channels[int(total_len)] = tick_track_channel_override
         return []
@@ -897,6 +899,7 @@ def test_circular_tick_label_font_size_reaches_tick_label_generator(
         strandedness: bool,
         dpi: int,
         tick_track_channel_override: str | None = None,
+        **_kwargs: Any,
     ) -> list[Any]:
         captured_font_sizes[int(total_len)] = font_size
         return []

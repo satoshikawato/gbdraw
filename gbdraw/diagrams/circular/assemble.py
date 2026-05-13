@@ -855,30 +855,6 @@ def _track_specs_by_kind(track_specs: list[TrackSpec] | None) -> dict[str, Track
     return out
 
 
-def _track_specs_by_id(track_specs: list[TrackSpec] | None) -> dict[str, TrackSpec]:
-    """Index TrackSpec list by id (first occurrence wins)."""
-    if not track_specs:
-        return {}
-    out: dict[str, TrackSpec] = {}
-    for ts in track_specs:
-        out.setdefault(str(ts.id), ts)
-    return out
-
-
-def _slot_param_bool(params: Mapping[str, Any], key: str, default: bool) -> bool:
-    raw = params.get(key)
-    if raw is None:
-        return bool(default)
-    if isinstance(raw, bool):
-        return raw
-    normalized = str(raw).strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    return bool(default)
-
-
 def _slot_width_ratio_factor(
     slot: CircularTrackSlot | None,
     *,
@@ -898,97 +874,6 @@ def _slot_dinucleotide(slot_or_resolved: CircularTrackSlot | ResolvedCircularTra
     raw = params.get("nt", params.get("dinucleotide", default))
     nt = str(raw or default).upper()
     return nt if len(nt) >= 2 else str(default or "GC").upper()
-
-
-def _slot_has_custom_geometry(slot: CircularTrackSlot) -> bool:
-    if slot.width is not None or slot.gap_after is not None:
-        return True
-    placement = slot.placement
-    if placement is None:
-        return False
-    return any(
-        value is not None
-        for value in (
-            placement.radius,
-            placement.inner_radius,
-            placement.outer_radius,
-            placement.width,
-        )
-    )
-
-
-def _slot_has_custom_render_params(
-    slot: CircularTrackSlot,
-    *,
-    dinucleotide: str = "GC",
-) -> bool:
-    params = dict(slot.params or {})
-    renderer = str(slot.renderer)
-    if "legend_label" in params or "label" in params:
-        return True
-    if renderer == "ticks":
-        allowed = {
-            "placement": "legacy_axis",
-            "label_side": "legacy",
-            "tick_side": "legacy",
-            "axis": True,
-        }
-        for key, value in params.items():
-            if key not in allowed:
-                return True
-            expected = allowed[key]
-            if isinstance(expected, bool):
-                if _slot_param_bool(params, key, expected) != expected:
-                    return True
-            elif str(value).strip().lower() != str(expected).lower():
-                return True
-        return False
-    if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
-        allowed_nt = str(dinucleotide or "GC").upper()
-        for key, value in params.items():
-            if key not in {"nt", "dinucleotide"}:
-                return True
-            if str(value or allowed_nt).upper() != allowed_nt:
-                return True
-        return False
-    return bool(params)
-
-
-def _is_default_legacy_slot_stack(
-    slots: Sequence[CircularTrackSlot] | None,
-    *,
-    show_depth: bool,
-    show_gc: bool,
-    show_skew: bool,
-    dinucleotide: str = "GC",
-) -> bool:
-    if not slots:
-        return False
-
-    active_slots = [slot for slot in slots if slot.enabled]
-    expected: list[tuple[str, str]] = [("features", "features"), ("ticks", "ticks")]
-    if show_depth:
-        expected.append(("depth", "depth"))
-    if show_gc:
-        expected.append(("gc_content", "dinucleotide_content"))
-    if show_skew:
-        expected.append(("gc_skew", "dinucleotide_skew"))
-
-    if len(active_slots) != len(expected):
-        return False
-    if len({str(slot.renderer) for slot in active_slots}) != len(active_slots):
-        return False
-
-    for slot, (expected_id, expected_renderer) in zip(active_slots, expected):
-        if str(slot.id) != expected_id or str(slot.renderer) != expected_renderer:
-            return False
-        if int(slot.z) != 0:
-            return False
-        if _slot_has_custom_geometry(slot):
-            return False
-        if _slot_has_custom_render_params(slot, dinucleotide=dinucleotide):
-            return False
-    return True
 
 
 def _svg_number(value: object, *, default: float = 0.0) -> float:
@@ -1311,7 +1196,6 @@ def _legacy_slot_layout_context(
         tick_path_ratio_bounds=tick_ratio_bounds,
         tick_label_offsets_px=tick_label_offsets,
         tick_font_size_px=float(cfg.objects.ticks.tick_labels.font_size),
-        tick_axis_padding_px=max(1.0, float(cfg.objects.ticks.tick_width) / 2.0),
         reserved_bands_px=tuple(reserved_bands_px),
         min_auto_inner_radius_px=min_auto_inner_radius_px,
         preferred_layouts_px=dict(preferred_layouts_px or {}),
@@ -1368,17 +1252,8 @@ def _draw_resolved_circular_slot(
         )
 
     if renderer == "ticks":
-        axis_enabled = _slot_param_bool(resolved_slot.params, "axis", True)
         label_side = str(resolved_slot.params.get("label_side", "legacy")).strip().lower()
         tick_side = str(resolved_slot.params.get("tick_side", "legacy")).strip().lower()
-        if axis_enabled:
-            canvas = add_axis_group_on_canvas(
-                canvas,
-                canvas_config,
-                config_dict,
-                radius_override=float(resolved_slot.anchor_radius_px),
-                cfg=cfg,
-            )
         if label_side != "none" or tick_side != "none":
             tick_group_kwargs: dict[str, Any] = {
                 "radius_override": float(resolved_slot.anchor_radius_px),
@@ -1567,6 +1442,42 @@ def _default_gc_skew_track_width_px(
     )
 
 
+def _default_depth_track_width_px(
+    *,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+) -> float:
+    length_param = str(canvas_config.length_param)
+    return (
+        float(canvas_config.radius)
+        * float(canvas_config.track_ratio)
+        * float(cfg.canvas.circular.track_ratio_factors[length_param][1])
+        * 0.5
+    )
+
+
+def _default_numeric_slot_width_px(
+    slot: CircularTrackSlot,
+    *,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+) -> float:
+    renderer = str(slot.renderer)
+    if renderer == "depth":
+        return _default_depth_track_width_px(canvas_config=canvas_config, cfg=cfg)
+    if renderer == "dinucleotide_skew":
+        return _default_gc_skew_track_width_px(
+            "gc_skew",
+            canvas_config=canvas_config,
+            cfg=cfg,
+        )
+    return _default_gc_skew_track_width_px(
+        "gc_content",
+        canvas_config=canvas_config,
+        cfg=cfg,
+    )
+
+
 def _default_gc_skew_layout_without_depth(
     *,
     canvas_config: CircularCanvasConfigurator,
@@ -1715,38 +1626,6 @@ def _resolve_depth_compressed_gc_skew_layout(
     return layout
 
 
-def _slot_track_spec(
-    slot: CircularTrackSlot,
-    *,
-    by_id: Mapping[str, TrackSpec],
-    by_kind: Mapping[str, TrackSpec],
-) -> TrackSpec | None:
-    if str(slot.id) in by_id:
-        return by_id[str(slot.id)]
-    if str(slot.id) == "gc_content":
-        return by_kind.get("gc_content")
-    if str(slot.id) == "gc_skew":
-        return by_kind.get("gc_skew")
-    if str(slot.id) in {"features", "ticks", "depth"}:
-        return by_kind.get(str(slot.id))
-    return None
-
-
-def _builtin_numeric_slot(
-    slots: Sequence[CircularTrackSlot],
-    slot_id: str,
-    renderer: str,
-) -> CircularTrackSlot | None:
-    return next(
-        (
-            slot
-            for slot in slots
-            if slot.enabled and str(slot.id) == slot_id and str(slot.renderer) == renderer
-        ),
-        None,
-    )
-
-
 def _resolve_builtin_numeric_slot_preferred_layouts(
     *,
     slots: Sequence[CircularTrackSlot],
@@ -1756,98 +1635,99 @@ def _resolve_builtin_numeric_slot_preferred_layouts(
     definition_reserved_radius_px: float | None,
     track_specs: Sequence[TrackSpec] | None,
 ) -> dict[str, tuple[float, float]]:
-    """Return preferred center/width values for built-in depth/content/skew slots."""
-    by_kind = _track_specs_by_kind(list(track_specs or []))
-    by_id = _track_specs_by_id(list(track_specs or []))
-    layout: dict[str, tuple[float, float]] = {}
+    """Assign built-in numeric lanes by slot order, not by slot id."""
+    del track_specs
 
-    depth_slot = _builtin_numeric_slot(slots, "depth", "depth")
-    depth_ts = _slot_track_spec(depth_slot, by_id=by_id, by_kind=by_kind) if depth_slot is not None else None
-    if depth_slot is not None:
-        depth_center_px, depth_width_px = _resolve_circular_track_center_and_width_px(
-            depth_ts,
-            base_radius_px=float(canvas_config.radius),
+    numeric_slots = [
+        slot
+        for slot in slots
+        if slot.enabled and str(slot.renderer) in {"depth", "dinucleotide_content", "dinucleotide_skew"}
+    ]
+    if not numeric_slots:
+        return {}
+
+    lane_specs: list[tuple[float, float]] = []
+    has_depth_lane = any(str(slot.renderer) == "depth" for slot in numeric_slots)
+    dinucleotide_lane_count = sum(
+        1
+        for slot in numeric_slots
+        if str(slot.renderer) in {"dinucleotide_content", "dinucleotide_skew"}
+    )
+
+    if has_depth_lane:
+        depth_center_px = _default_track_center_radius_px(
+            "depth",
+            canvas_config=canvas_config,
+            cfg=cfg,
         )
-        if depth_center_px is None:
-            depth_center_px = _default_track_center_radius_px(
-                "depth",
-                canvas_config=canvas_config,
-                cfg=cfg,
-            )
-        if depth_width_px is None:
-            depth_width_px = (
-                float(canvas_config.radius)
-                * float(canvas_config.track_ratio)
-                * float(canvas_config.track_ratio_factors[1])
-                * 0.5
-            )
+        depth_width_px = _default_depth_track_width_px(canvas_config=canvas_config, cfg=cfg)
         if depth_center_px is not None:
-            layout["depth"] = (float(depth_center_px), float(depth_width_px))
+            lane_specs.append((float(depth_center_px), 1.0))
             if depth_inner_radius_px is None:
                 depth_inner_radius_px = _annulus_from_center_and_width(
                     float(depth_center_px),
                     float(depth_width_px),
                 )[0]
 
-    gc_slot = _builtin_numeric_slot(slots, "gc_content", "dinucleotide_content")
-    skew_slot = _builtin_numeric_slot(slots, "gc_skew", "dinucleotide_skew")
-    gc_ts = _slot_track_spec(gc_slot, by_id=by_id, by_kind=by_kind) if gc_slot is not None else None
-    skew_ts = _slot_track_spec(skew_slot, by_id=by_id, by_kind=by_kind) if skew_slot is not None else None
-
-    compressed_layout: dict[str, tuple[float, float]] = {}
-    if depth_inner_radius_px is not None:
-        compressed_layout = _resolve_depth_compressed_gc_skew_layout(
+    if dinucleotide_lane_count > 0:
+        lane_count = min(2, dinucleotide_lane_count)
+        default_dinucleotide_layout = _default_gc_skew_layout_without_depth(
             canvas_config=canvas_config,
             cfg=cfg,
-            depth_inner_radius_px=float(depth_inner_radius_px),
-            show_gc=gc_slot is not None,
-            show_skew=skew_slot is not None,
-            gc_ts=gc_ts,
-            skew_ts=skew_ts,
+            show_gc=lane_count >= 1,
+            show_skew=lane_count >= 2,
         )
-
-    for slot, kind, ts in (
-        (gc_slot, "gc_content", gc_ts),
-        (skew_slot, "gc_skew", skew_ts),
-    ):
-        if slot is None:
-            continue
-        if kind in compressed_layout and not _slot_has_custom_geometry(slot):
-            layout[kind] = compressed_layout[kind]
-            continue
-
-        center_px, width_px = _resolve_circular_track_center_and_width_px(
-            ts,
-            base_radius_px=float(canvas_config.radius),
-        )
-        if center_px is None:
-            center_px = _default_track_center_radius_px(
-                kind,
+        dinucleotide_layout = default_dinucleotide_layout
+        if has_depth_lane and depth_inner_radius_px is not None:
+            compressed_layout = _resolve_depth_compressed_gc_skew_layout(
                 canvas_config=canvas_config,
                 cfg=cfg,
+                depth_inner_radius_px=float(depth_inner_radius_px),
+                show_gc=lane_count >= 1,
+                show_skew=lane_count >= 2,
+                gc_ts=None,
+                skew_ts=None,
             )
-        if width_px is None:
-            width_px = _default_gc_skew_track_width_px(
-                kind,
-                canvas_config=canvas_config,
-                cfg=cfg,
-            )
-        if center_px is not None:
-            layout[kind] = (float(center_px), float(width_px))
+            if compressed_layout:
+                dinucleotide_layout = compressed_layout
 
-    if definition_reserved_radius_px is not None and definition_reserved_radius_px > FEATURE_BAND_EPSILON:
-        numeric_keys = [key for key in ("gc_skew", "gc_content") if key in layout]
-        if numeric_keys:
-            inner = min(
-                _annulus_from_center_and_width(layout[key][0], layout[key][1])[0]
-                for key in numeric_keys
-            )
-            if inner < float(definition_reserved_radius_px):
-                shift_px = float(definition_reserved_radius_px) - float(inner)
-                for key in numeric_keys:
-                    center_px, width_px = layout[key]
-                    layout[key] = (float(center_px) + shift_px, float(width_px))
+        for kind, (center_px, width_px) in sorted(
+            dinucleotide_layout.items(),
+            key=lambda item: item[1][0],
+            reverse=True,
+        ):
+            default_width_px = default_dinucleotide_layout.get(kind, (center_px, width_px))[1]
+            width_scale = 1.0
+            if abs(float(default_width_px)) > FEATURE_BAND_EPSILON:
+                width_scale = max(0.0, float(width_px) / float(default_width_px))
+            lane_specs.append((float(center_px), float(width_scale)))
 
+    lane_specs.sort(key=lambda item: item[0], reverse=True)
+
+    layout: dict[str, tuple[float, float]] = {}
+    assigned: list[tuple[str, float, float]] = []
+    for slot, (center_px, width_scale) in zip(numeric_slots, lane_specs):
+        width_px = _default_numeric_slot_width_px(
+            slot,
+            canvas_config=canvas_config,
+            cfg=cfg,
+        )
+        assigned.append((str(slot.id), float(center_px), max(0.0, float(width_px) * float(width_scale))))
+
+    if definition_reserved_radius_px is not None and definition_reserved_radius_px > FEATURE_BAND_EPSILON and assigned:
+        inner = min(
+            _annulus_from_center_and_width(center_px, width_px)[0]
+            for _slot_id, center_px, width_px in assigned
+        )
+        if inner < float(definition_reserved_radius_px):
+            shift_px = float(definition_reserved_radius_px) - float(inner)
+            assigned = [
+                (slot_id, center_px + shift_px, width_px)
+                for slot_id, center_px, width_px in assigned
+            ]
+
+    for slot_id, center_px, width_px in assigned:
+        layout[slot_id] = (float(center_px), float(width_px))
     return layout
 
 
@@ -2394,17 +2274,7 @@ def add_record_on_circular_canvas(
     """
     cfg = cfg or canvas_config._cfg
     ts_by_kind = _track_specs_by_kind(track_specs)
-    effective_circular_track_slots = (
-        None
-        if _is_default_legacy_slot_stack(
-            circular_track_slots,
-            show_depth=bool(canvas_config.show_depth),
-            show_gc=bool(canvas_config.show_gc),
-            show_skew=bool(canvas_config.show_skew),
-            dinucleotide=str(getattr(gc_config, "dinucleotide", "GC")),
-        )
-        else circular_track_slots
-    )
+    effective_circular_track_slots = circular_track_slots
     slot_mode = effective_circular_track_slots is not None
     active_slot_renderers = {
         str(slot.renderer)
@@ -2563,7 +2433,7 @@ def add_record_on_circular_canvas(
 
     axis_ts = ts_by_kind.get("axis")
     axis_radius_px: float | None = None
-    if axis_ts is None or axis_ts.show:
+    if (not slot_mode) and (axis_ts is None or axis_ts.show):
         axis_radius_px, _ = _resolve_track_center_and_width_with_autorelayout("axis", axis_ts)
 
     resolved_outer_core_track_annuli: list[tuple[float, float]] = []
@@ -2699,12 +2569,12 @@ def add_record_on_circular_canvas(
         )
         _sync_canvas_viewbox(canvas, canvas_config)
 
-    if (not slot_mode) and (axis_ts is None or axis_ts.show):
+    if axis_ts is None or axis_ts.show:
         canvas = add_axis_group_on_canvas(
             canvas,
             canvas_config,
             config_dict,
-            radius_override=axis_radius_px,
+            radius_override=None if slot_mode else axis_radius_px,
             cfg=cfg,
         )
 
@@ -3254,17 +3124,7 @@ def assemble_circular_diagram(
 
     # Prefer a pre-parsed config model when available to avoid repeated from_dict() calls.
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
-    effective_circular_track_slots = (
-        None
-        if _is_default_legacy_slot_stack(
-            circular_track_slots,
-            show_depth=bool(canvas_config.show_depth),
-            show_gc=bool(canvas_config.show_gc),
-            show_skew=bool(canvas_config.show_skew),
-            dinucleotide=str(getattr(gc_config, "dinucleotide", "GC")),
-        )
-        else circular_track_slots
-    )
+    effective_circular_track_slots = circular_track_slots
 
     legend_table: dict = {}
     if canvas_config.legend_position != "none":

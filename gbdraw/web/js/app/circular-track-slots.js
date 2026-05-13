@@ -81,7 +81,7 @@ export const createDefaultCircularTrackSlots = ({
     makeSlot({
       id: 'ticks',
       renderer: 'ticks',
-      params: { axis: true, label_side: 'legacy', tick_side: 'legacy' }
+      params: { label_side: 'legacy', tick_side: 'legacy' }
     })
   ];
   if (showDepth) slots.push(makeSlot({ id: 'depth', renderer: 'depth' }));
@@ -119,7 +119,6 @@ export const createCircularTrackSlotForRenderer = (renderer, existingSlots = [],
 
   const params = {};
   if (normalizedRenderer === 'ticks') {
-    params.axis = true;
     params.label_side = 'outside';
     params.tick_side = 'inside';
   } else if (normalizedRenderer === 'dinucleotide_content' || normalizedRenderer === 'dinucleotide_skew') {
@@ -139,9 +138,9 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC') =>
     params.nt = normalizeNt(defaultNt);
   }
   if (renderer === 'ticks') {
+    delete params['axis'];
     if (!normalizeOptionalText(params.label_side)) params.label_side = 'outside';
     if (!normalizeOptionalText(params.tick_side)) params.tick_side = 'inside';
-    if (typeof params.axis !== 'boolean') params.axis = params.axis !== false;
   }
 
   return makeSlot({
@@ -171,11 +170,6 @@ const appendOption = (options, key, value) => {
   options.push(`${key}=${text}`);
 };
 
-const appendBooleanOption = (options, key, value) => {
-  if (typeof value !== 'boolean') return;
-  options.push(`${key}=${value ? 'true' : 'false'}`);
-};
-
 export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC') => {
   const normalized = normalizeCircularTrackSlot(slot, 0, defaultNt);
   const options = [];
@@ -192,7 +186,6 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC') => {
   }
 
   if (normalized.renderer === 'ticks') {
-    appendBooleanOption(options, 'axis', params.axis);
     appendOption(options, 'label_side', params.label_side);
     appendOption(options, 'tick_side', params.tick_side);
   } else if (normalized.renderer === 'dinucleotide_content' || normalized.renderer === 'dinucleotide_skew') {
@@ -276,7 +269,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     slot.renderer = renderer;
     slot.params = cloneParams(slot.params);
     if (renderer === 'ticks') {
-      slot.params.axis = slot.params.axis !== false;
+      delete slot.params['axis'];
       slot.params.label_side = normalizeOptionalText(slot.params.label_side) || 'outside';
       slot.params.tick_side = normalizeOptionalText(slot.params.tick_side) || 'inside';
     } else if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {

@@ -153,6 +153,7 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    slot_source = (WEB_ROOT / "js" / "app" / "circular-track-slots.js").read_text(encoding="utf-8")
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
 
     assert "circular_track_slots_enabled" in state_source
@@ -162,6 +163,8 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "args.push('--circular_track_slot', buildCircularTrackSlotSpec(slot, adv.nt));" in run_source
     assert "hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth')" in run_source
     assert "Custom Track Slots" in index_html
+    assert "params.axis" not in slot_source
+    assert "axis=true" not in slot_source
 
 
 def test_web_config_persists_manual_qualifier_priority_rules() -> None:

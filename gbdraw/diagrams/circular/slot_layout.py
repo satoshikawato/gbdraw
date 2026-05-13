@@ -70,7 +70,6 @@ class CircularTrackLayoutContext:
     tick_path_ratio_bounds: tuple[float, float] | None = None
     tick_label_offsets_px: tuple[float, float] | None = None
     tick_font_size_px: float = 10.0
-    tick_axis_padding_px: float = 1.0
     reserved_bands_px: tuple[tuple[float, float], ...] = ()
     min_auto_inner_radius_px: float | None = None
 
@@ -379,7 +378,6 @@ def _measure_slot(
     if renderer == "ticks":
         label_side = str(params.get("label_side", "legacy")).strip().lower()
         tick_side = str(params.get("tick_side", "legacy")).strip().lower()
-        axis_enabled = _param_bool(params, "axis", True)
         if label_side == "legacy" and tick_side == "legacy":
             if context.tick_path_ratio_bounds is not None:
                 draw_inner = anchor * min(context.tick_path_ratio_bounds)
@@ -411,10 +409,6 @@ def _measure_slot(
             elif label_side == "legacy" and context.tick_label_offsets_px is not None:
                 reserved_inner = min(reserved_inner, anchor + context.tick_label_offsets_px[0])
                 reserved_outer = max(reserved_outer, anchor + context.tick_label_offsets_px[1])
-        if axis_enabled:
-            pad = max(0.0, float(context.tick_axis_padding_px))
-            reserved_inner = min(reserved_inner, anchor - pad)
-            reserved_outer = max(reserved_outer, anchor + pad)
         return CircularSlotFootprint(
             anchor_radius_px=anchor,
             draw_inner_px=max(0.0, draw_inner),
@@ -437,20 +431,6 @@ def _measure_slot(
         explicit_annulus=explicit_annulus,
         explicit_width=explicit_width,
     )
-
-
-def _param_bool(params: Mapping[str, Any], key: str, default: bool) -> bool:
-    raw = params.get(key)
-    if raw is None:
-        return bool(default)
-    if isinstance(raw, bool):
-        return raw
-    normalized = str(raw).strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    return bool(default)
 
 
 def _resolved_from_footprint(
@@ -550,7 +530,7 @@ def _pack_circular_slot_entries(
             continue
 
         preferred_anchor = entry.get("preferred_center_px")
-        if preferred_anchor is None:
+        if preferred_anchor is None and str(slot.renderer) in {"features", "ticks"}:
             preferred_anchor = _legacy_lookup(context.legacy_centers_px, slot)
         if preferred_anchor is None:
             preferred_anchor = cursor_outer - (0.5 * width_px)

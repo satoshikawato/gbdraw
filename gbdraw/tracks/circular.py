@@ -43,6 +43,8 @@ _LEGACY_KIND_BY_RENDERER: dict[str, str] = {
     "dinucleotide_skew": "gc_skew",
 }
 
+_TICK_AXIS_PARAM_ERROR = "ticks slots no longer accept 'axis'; the circular axis is fixed and not a slot"
+
 
 @dataclass(frozen=True)
 class CircularTrackSlot:
@@ -71,6 +73,16 @@ def _normalize_renderer(raw: str) -> str:
         "skew": "dinucleotide_skew",
     }
     return aliases.get(renderer, renderer)
+
+
+def _validate_circular_track_slot_params(
+    *,
+    renderer: str,
+    params: Mapping[str, Any],
+    original: str,
+) -> None:
+    if renderer == "ticks" and any(str(key).strip().lower() == "axis" for key in params):
+        raise TrackSpecParseError(_TICK_AXIS_PARAM_ERROR, original)
 
 
 def _parse_slot_head(head: str, original: str) -> tuple[str, str]:
@@ -163,6 +175,7 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
         placement = replace(placement, z=z)
     if not slot_id:
         raise TrackSpecParseError("missing circular track slot id", original)
+    _validate_circular_track_slot_params(renderer=renderer, params=params, original=original)
 
     return CircularTrackSlot(
         id=slot_id,
@@ -194,6 +207,11 @@ def parse_circular_track_slots(specs: Sequence[str | CircularTrackSlot]) -> list
                 f"unknown circular track renderer '{slot.renderer}'",
                 str(slot.id),
             )
+        _validate_circular_track_slot_params(
+            renderer=str(slot.renderer),
+            params=slot.params,
+            original=str(slot.id),
+        )
         seen.add(slot.id)
         out.append(slot)
     return out
@@ -219,7 +237,7 @@ def default_circular_track_slots(
             CircularTrackSlot(
                 id="ticks",
                 renderer="ticks",
-                params={"placement": "legacy_axis", "label_side": "legacy", "tick_side": "legacy", "axis": True},
+                params={"placement": "legacy_axis", "label_side": "legacy", "tick_side": "legacy"},
             )
         )
     if show_depth:

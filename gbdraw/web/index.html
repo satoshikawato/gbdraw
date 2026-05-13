@@ -787,7 +787,7 @@
                                     <div class="flex items-center justify-between gap-2">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                             <input type="checkbox" v-model="adv.circular_track_slots_enabled" class="form-checkbox">
-                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Default built-in slots preserve the selected legacy track layout. Added, duplicated, or geometry-pinned slots are auto-packed around reserved circular layout space."></help-tip></span>
+                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Numeric slots are assigned radial lanes outside-to-inside by editor order. Added, duplicated, or geometry-pinned slots are auto-packed around reserved circular layout space."></help-tip></span>
                                         </label>
                                         <button
                                             type="button"
@@ -831,11 +831,7 @@
                                                 <input v-model.trim="slot.gapAfter" class="form-input px-1 py-0.5 text-[10px]" placeholder="gap">
                                                 <input type="number" v-model.number="slot.z" class="form-input px-1 py-0.5 text-[10px]" placeholder="z">
                                             </div>
-                                            <div v-if="slot.renderer === 'ticks'" class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-1 items-center">
-                                                <label class="option-label flex items-center gap-1 text-[10px] text-slate-600 cursor-pointer select-none">
-                                                    <input type="checkbox" v-model="slot.params.axis" class="form-checkbox">
-                                                    Axis
-                                                </label>
+                                            <div v-if="slot.renderer === 'ticks'" class="grid grid-cols-2 gap-1 items-center">
                                                 <select v-model="slot.params.label_side" class="form-input px-1 py-0.5 text-[10px]">
                                                     <option value="outside">Labels outside</option>
                                                     <option value="inside">Labels inside</option>

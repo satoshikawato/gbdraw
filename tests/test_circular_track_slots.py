@@ -60,6 +60,12 @@ def _normalize_svg_auto_ids(svg_text: str) -> str:
     return re.sub(r"id\d+", "id_auto", svg_text)
 
 
+def _axis_circle_radius(svg_text: str) -> float:
+    match = re.search(r'<g id="Axis"[^>]*>.*?<circle\b[^>]*\br="([^"]+)"', svg_text, re.S)
+    assert match is not None
+    return float(match.group(1))
+
+
 def test_parse_circular_track_slot_with_duplicate_renderer_params() -> None:
     slot = parse_circular_track_slot(
         "at_skew:dinucleotide_skew@nt=AT,w=24px,r=0.42,z=7,legend_label=AT skew"
@@ -89,6 +95,23 @@ def test_parse_circular_track_slots_normalizes_object_renderer_aliases() -> None
     slots = parse_circular_track_slots([CircularTrackSlot(id="custom_skew", renderer="skew")])
 
     assert slots[0].renderer == "dinucleotide_skew"
+
+
+def test_default_circular_track_slots_do_not_include_tick_axis_param() -> None:
+    slots = default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True)
+    ticks = next(slot for slot in slots if slot.renderer == "ticks")
+
+    assert "axis" not in ticks.params
+
+
+def test_parse_circular_tick_slot_rejects_axis_param() -> None:
+    with pytest.raises(TrackSpecParseError, match="ticks slots no longer accept 'axis'"):
+        parse_circular_track_slot("ticks:ticks@axis=false")
+
+    with pytest.raises(TrackSpecParseError, match="ticks slots no longer accept 'axis'"):
+        parse_circular_track_slots(
+            [CircularTrackSlot(id="ticks", renderer="ticks", params={"axis": True})]
+        )
 
 
 def test_resolve_circular_track_slots_preserves_legacy_defaults_in_compatibility_mode() -> None:
@@ -139,7 +162,7 @@ def test_resolve_circular_track_slots_packs_measured_footprints_without_overlap(
             CircularTrackSlot(
                 id="ticks",
                 renderer="ticks",
-                params={"label_side": "legacy", "tick_side": "legacy", "axis": True},
+                params={"label_side": "legacy", "tick_side": "legacy"},
             ),
             CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
         ],
@@ -155,6 +178,25 @@ def test_resolve_circular_track_slots_packs_measured_footprints_without_overlap(
     for idx, current in enumerate(annuli):
         for other in annuli[idx + 1:]:
             assert current[0] >= other[1] or other[0] >= current[1]
+
+
+def test_tick_slot_footprint_does_not_reserve_axis_padding() -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=100.0,
+        legacy_centers_px={"ticks": 100.0},
+        legacy_widths_px={"ticks": 0.0},
+    )
+
+    resolved = resolve_circular_track_slots(
+        [parse_circular_track_slot("ticks:ticks@label_side=none,tick_side=none")],
+        context=context,
+        compatibility_mode=True,
+    )
+
+    assert resolved[0].draw_inner_radius_px == pytest.approx(100.0)
+    assert resolved[0].draw_outer_radius_px == pytest.approx(100.0)
+    assert resolved[0].reserved_inner_radius_px == pytest.approx(100.0)
+    assert resolved[0].reserved_outer_radius_px == pytest.approx(100.0)
 
 
 def test_resolve_circular_track_slots_auto_slots_avoid_definition_reserved_band() -> None:
@@ -341,21 +383,91 @@ def test_resolve_circular_track_slots_applies_preferred_layouts_by_slot_id_only(
     assert by_id["at_skew"].center_radius_px == pytest.approx(65.0)
 
 
+def test_resolve_circular_track_slots_auto_numeric_order_ignores_legacy_id_centers() -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=100.0,
+        legacy_centers_px={"gc_content": 80.0, "gc_skew": 45.0},
+        legacy_widths_px={"gc_content": 20.0, "gc_skew": 20.0},
+        default_gap_px=5.0,
+        auto_start_radius_px=100.0,
+    )
+
+    resolved = resolve_circular_track_slots(
+        [
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+        ],
+        context=context,
+    )
+
+    assert [slot.id for slot in resolved] == ["gc_skew", "gc_content"]
+    assert resolved[0].center_radius_px > resolved[1].center_radius_px
+    assert resolved[0].center_radius_px == pytest.approx(90.0)
+    assert resolved[1].center_radius_px == pytest.approx(65.0)
+
+
 @pytest.mark.circular
 @pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
-def test_default_custom_slots_match_legacy_track_type_svg(track_type: str) -> None:
+def test_default_custom_slots_use_ordered_legacy_numeric_lanes(
+    monkeypatch: pytest.MonkeyPatch,
+    track_type: str,
+) -> None:
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+
     record = _load_record()
     config_dict = _base_config(track_type=track_type)
     default_colors = load_default_colors("", palette="default")
+    captured: dict[str, tuple[float, float]] = {}
 
-    legacy = assemble_circular_diagram_from_record(
-        record,
-        config_dict=config_dict,
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-    )
-    slotted = assemble_circular_diagram_from_record(
+    def capture_numeric_slot(
+        slot_id: str,
+        canvas_config,
+        track_width_override,
+        norm_factor_override,
+    ) -> None:
+        assert track_width_override is not None
+        assert norm_factor_override is not None
+        captured[slot_id] = (
+            float(norm_factor_override) * float(canvas_config.radius),
+            float(track_width_override),
+        )
+
+    def fake_add_gc_content_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        gc_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override)
+        return canvas
+
+    def fake_add_gc_skew_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        skew_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+
+    assemble_circular_diagram_from_record(
         record,
         config_dict=config_dict,
         default_colors=default_colors,
@@ -364,27 +476,168 @@ def test_default_custom_slots_match_legacy_track_type_svg(track_type: str) -> No
         circular_track_slots=default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
     )
 
-    assert _normalize_svg_auto_ids(slotted.tostring()) == _normalize_svg_auto_ids(legacy.tostring())
+    assert captured["gc_content"][0] > captured["gc_skew"][0]
+    assert captured["gc_content"][1] == pytest.approx(captured["gc_skew"][1])
 
 
 @pytest.mark.circular
-def test_default_custom_slots_with_depth_match_legacy_compressed_gc_skew_layout() -> None:
+def test_reordered_builtin_numeric_slots_follow_slot_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+
     record = _load_record()
     config_dict = _base_config(track_type="middle")
     default_colors = load_default_colors("", palette="default")
-    depth_table = _depth_table(str(record.id))
+    captured: dict[str, tuple[float, float]] = {}
 
-    legacy = assemble_circular_diagram_from_record(
+    def capture_numeric_slot(
+        slot_id: str,
+        canvas_config,
+        track_width_override,
+        norm_factor_override,
+    ) -> None:
+        assert track_width_override is not None
+        assert norm_factor_override is not None
+        captured[slot_id] = (
+            float(norm_factor_override) * float(canvas_config.radius),
+            float(track_width_override),
+        )
+
+    def fake_add_gc_content_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        gc_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override)
+        return canvas
+
+    def fake_add_gc_skew_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        skew_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+
+    assemble_circular_diagram_from_record(
         record,
         config_dict=config_dict,
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
-        depth_table=depth_table,
-        window=100,
-        step=100,
+        circular_track_slots=[
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(
+                id="ticks",
+                renderer="ticks",
+                params={"placement": "legacy_axis", "label_side": "legacy", "tick_side": "legacy"},
+            ),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+        ],
     )
-    slotted = assemble_circular_diagram_from_record(
+
+    assert captured["gc_skew"][0] > captured["gc_content"][0]
+
+
+@pytest.mark.circular
+def test_default_custom_slots_with_depth_use_outer_to_inner_numeric_lanes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+
+    record = _load_record()
+    config_dict = _base_config(track_type="middle")
+    default_colors = load_default_colors("", palette="default")
+    depth_table = _depth_table(str(record.id))
+    captured: dict[str, tuple[float, float]] = {}
+
+    def capture_numeric_slot(
+        slot_id: str,
+        canvas_config,
+        track_width_override,
+        norm_factor_override,
+    ) -> None:
+        assert track_width_override is not None
+        assert norm_factor_override is not None
+        captured[slot_id] = (
+            float(norm_factor_override) * float(canvas_config.radius),
+            float(track_width_override),
+        )
+
+    def fake_add_depth_group_on_canvas(
+        canvas,
+        gb_record,
+        depth_df,
+        canvas_config,
+        depth_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "depth"), canvas_config, track_width_override, norm_factor_override)
+        return canvas
+
+    def fake_add_gc_content_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        gc_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override)
+        return canvas
+
+    def fake_add_gc_skew_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        skew_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_depth_group_on_canvas", fake_add_depth_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+
+    assemble_circular_diagram_from_record(
         record,
         config_dict=config_dict,
         default_colors=default_colors,
@@ -396,7 +649,9 @@ def test_default_custom_slots_with_depth_match_legacy_compressed_gc_skew_layout(
         circular_track_slots=default_circular_track_slots(show_depth=True, show_gc=True, show_skew=True),
     )
 
-    assert _normalize_svg_auto_ids(slotted.tostring()) == _normalize_svg_auto_ids(legacy.tostring())
+    assert captured["depth"][0] > captured["gc_content"][0] > captured["gc_skew"][0]
+    assert captured["depth"][1] < captured["gc_content"][1]
+    assert captured["gc_content"][1] == pytest.approx(captured["gc_skew"][1])
 
 
 @pytest.mark.circular
@@ -528,7 +783,7 @@ def test_api_circular_track_slots_render_duplicate_dinucleotide_skew_slots() -> 
         legend="right",
         circular_track_slots=[
             CircularTrackSlot(id="features", renderer="features"),
-            "ticks:ticks@axis=true",
+            "ticks:ticks",
             "gc_skew:dinucleotide_skew@nt=GC,w=20px",
             "at_skew:dinucleotide_skew@nt=AT,w=20px",
         ],
@@ -539,6 +794,74 @@ def test_api_circular_track_slots_render_duplicate_dinucleotide_skew_slots() -> 
     assert 'id="at_skew"' in svg_text
     assert "GC skew" in svg_text
     assert "AT skew" in svg_text
+
+
+@pytest.mark.circular
+def test_slot_mode_draws_axis_when_ticks_are_disabled() -> None:
+    record = _load_record()
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels=False,
+        show_gc=False,
+        show_skew=False,
+    )
+    default_colors = load_default_colors("", palette="default")
+
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        default_colors=default_colors,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        circular_track_slots=[CircularTrackSlot(id="ticks", renderer="ticks", enabled=False)],
+    )
+
+    assert 'id="Axis"' in canvas.tostring()
+
+
+@pytest.mark.circular
+def test_slot_mode_tick_radius_does_not_move_axis(monkeypatch: pytest.MonkeyPatch) -> None:
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+
+    record = _load_record()
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels=False,
+        show_gc=False,
+        show_skew=False,
+    )
+    default_colors = load_default_colors("", palette="default")
+    captured: dict[str, float | None] = {}
+
+    def fake_add_tick_group_on_canvas(
+        canvas,
+        gb_record,
+        canvas_config,
+        config_dict,
+        *,
+        radius_override=None,
+        tick_track_channel_override=None,
+        label_side="legacy",
+        tick_side="legacy",
+        tick_length_px=None,
+        cfg=None,
+    ):
+        captured["tick_radius"] = radius_override
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
+
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        default_colors=default_colors,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        circular_track_slots=["ticks:ticks@r=250px,w=12px,label_side=none,tick_side=inside"],
+    )
+
+    assert captured["tick_radius"] == pytest.approx(250.0)
+    assert _axis_circle_radius(canvas.tostring()) == pytest.approx(390.0)
 
 
 def test_cli_circular_track_order_forwards_slots(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
