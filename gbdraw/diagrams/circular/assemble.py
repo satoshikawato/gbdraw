@@ -45,6 +45,7 @@ from ...legend.table import prepare_legend_table  # type: ignore[reportMissingIm
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...svg.circular_ticks import (  # type: ignore[reportMissingImports]
     get_circular_tick_label_radius_bounds,
+    get_circular_tick_label_radius_profile,
     get_circular_tick_path_ratio_bounds,
 )
 from ...tracks import (  # type: ignore[reportMissingImports]
@@ -1144,6 +1145,20 @@ def _legacy_slot_layout_context(
             float(tick_label_bounds[0]) - mapped_base_radius,
             float(tick_label_bounds[1]) - mapped_base_radius,
         )
+    tick_label_radius_ratio: float | None = None
+    tick_label_extent_px = 0.0
+    tick_label_profile = get_circular_tick_label_radius_profile(
+        total_len=len(gb_record.seq),
+        track_type=str(cfg.canvas.circular.track_type),
+        strandedness=bool(cfg.canvas.strandedness),
+        font_size=float(cfg.objects.ticks.tick_labels.font_size),
+        font_family=str(cfg.objects.text.font_family),
+        dpi=int(canvas_config.dpi),
+        manual_interval=cfg.objects.scale.interval,
+        tick_track_channel_override=_tick_track_channel_override,
+    )
+    if tick_label_profile is not None:
+        tick_label_radius_ratio, tick_label_extent_px = tick_label_profile
 
     feature_band_offsets: tuple[float, float] | None = None
     if precomputed_feature_dict is not None:
@@ -1200,6 +1215,8 @@ def _legacy_slot_layout_context(
         auto_start_radius_px=base_radius,
         feature_band_offsets_px=feature_band_offsets,
         tick_path_ratio_bounds=tick_ratio_bounds,
+        tick_label_radius_ratio=tick_label_radius_ratio,
+        tick_label_extent_px=tick_label_extent_px,
         tick_label_offsets_px=tick_label_offsets,
         tick_labels_hard=bool(tick_labels_hard),
         tick_font_size_px=float(cfg.objects.ticks.tick_labels.font_size),

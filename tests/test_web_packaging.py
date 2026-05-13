@@ -163,9 +163,9 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "args.push('--circular_track_slot', buildCircularTrackSlotSpec(slot, adv.nt));" in run_source
     assert "hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth')" in run_source
     assert "Custom Track Slots" in index_html
-    assert "Default rows preserve normal circular geometry" in index_html
-    assert "z only controls SVG layering" in index_html
-    assert "not default data-track repacking" in index_html
+    assert "Auto placement packs measured hard footprints" in index_html
+    assert "z only layers SVG" in index_html
+    assert "Legacy tick marks and labels are measured from their drawn radii" in index_html
     assert "params.axis" not in slot_source
     assert "axis=true" not in slot_source
 

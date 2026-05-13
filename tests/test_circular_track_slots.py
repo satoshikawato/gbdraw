@@ -457,6 +457,106 @@ def test_resolve_circular_track_slots_packs_measured_footprints_without_overlap(
             assert current[0] >= other[1] or other[0] >= current[1]
 
 
+def test_measured_packer_places_legacy_ticks_by_hard_footprint_not_anchor() -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=500.0,
+        legacy_centers_px={"ticks": 500.0},
+        legacy_widths_px={"ticks": 10.0, "gc_content": 40.0},
+        preferred_layouts_px={"gc_content": (300.0, 40.0)},
+        default_gap_px=5.0,
+        tick_path_ratio_bounds=(0.84, 0.86),
+    )
+
+    resolved = resolve_circular_track_slots(
+        [
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+            CircularTrackSlot(
+                id="ticks",
+                renderer="ticks",
+                params={"label_side": "legacy", "tick_side": "legacy"},
+            ),
+        ],
+        context=context,
+    )
+    by_id = {slot.id: slot for slot in resolved}
+    cursor_outer = by_id["gc_content"].hard_inner_radius_px - context.default_gap_px
+
+    assert by_id["ticks"].anchor_radius_px > cursor_outer
+    assert by_id["ticks"].hard_outer_radius_px == pytest.approx(cursor_outer)
+    assert by_id["gc_content"].hard_inner_radius_px - by_id["ticks"].hard_outer_radius_px == pytest.approx(5.0)
+
+
+def test_reordered_builtin_gc_ticks_skew_keeps_gc_widths() -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=500.0,
+        legacy_centers_px={"features": 500.0, "ticks": 500.0},
+        legacy_widths_px={
+            "features": 60.0,
+            "ticks": 10.0,
+            "gc_content": 50.0,
+            "gc_skew": 50.0,
+        },
+        preferred_layouts_px={
+            "gc_content": (320.0, 50.0),
+            "gc_skew": (230.0, 50.0),
+        },
+        default_gap_px=5.0,
+        feature_band_offsets_px=(-70.0, -10.0),
+        tick_path_ratio_bounds=(0.84, 0.86),
+    )
+
+    resolved = resolve_circular_track_slots(
+        [
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+            CircularTrackSlot(
+                id="ticks",
+                renderer="ticks",
+                params={"label_side": "legacy", "tick_side": "legacy"},
+            ),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+        ],
+        context=context,
+    )
+    by_id = {slot.id: slot for slot in resolved}
+
+    assert by_id["gc_content"].width_px == pytest.approx(50.0)
+    assert by_id["gc_skew"].width_px == pytest.approx(50.0)
+    assert by_id["gc_content"].hard_inner_radius_px - by_id["ticks"].hard_outer_radius_px == pytest.approx(5.0)
+
+
+def test_legacy_tick_soft_label_bounds_are_remeasured_for_moved_anchor() -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=500.0,
+        legacy_centers_px={"ticks": 500.0},
+        legacy_widths_px={"ticks": 10.0, "gc_content": 40.0},
+        preferred_layouts_px={"gc_content": (300.0, 40.0)},
+        default_gap_px=5.0,
+        tick_path_ratio_bounds=(0.84, 0.86),
+        tick_label_radius_ratio=0.82,
+        tick_label_extent_px=6.0,
+        tick_label_offsets_px=(100.0, 120.0),
+    )
+
+    resolved = resolve_circular_track_slots(
+        [
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+            CircularTrackSlot(
+                id="ticks",
+                renderer="ticks",
+                params={"label_side": "legacy", "tick_side": "legacy"},
+            ),
+        ],
+        context=context,
+    )
+    ticks = {slot.id: slot for slot in resolved}["ticks"]
+    label_center = ticks.anchor_radius_px * 0.82
+
+    assert ticks.soft_inner_radius_px == pytest.approx(min(ticks.hard_inner_radius_px, label_center - 6.0))
+    assert ticks.soft_outer_radius_px == pytest.approx(max(ticks.hard_outer_radius_px, label_center + 6.0))
+    assert ticks.soft_outer_radius_px < ticks.anchor_radius_px + 100.0
+
+
 def test_tick_slot_footprint_does_not_reserve_axis_padding() -> None:
     context = CircularTrackLayoutContext(
         base_radius_px=100.0,
@@ -1030,6 +1130,139 @@ def test_reordered_builtin_numeric_slots_follow_slot_order(
     )
 
     assert captured["gc_skew"][0] > captured["gc_content"][0]
+
+
+@pytest.mark.circular
+def test_edl933_reordered_gc_ticks_skew_uses_measured_tick_footprint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+
+    record = _load_edl933_record()
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels=False,
+        show_gc=True,
+        show_skew=True,
+        track_type="tuckin",
+        strandedness=True,
+    )
+    default_colors = load_default_colors("", palette="default")
+    captured: dict[str, float | tuple[float, float]] = {}
+
+    def fake_add_record_group_on_canvas(canvas, *args, **kwargs):
+        return canvas
+
+    def capture_numeric_slot(
+        slot_id: str,
+        canvas_config,
+        track_width_override,
+        norm_factor_override,
+        cfg,
+    ) -> None:
+        assert track_width_override is not None
+        assert norm_factor_override is not None
+        assert cfg is not None
+        captured[slot_id] = (
+            float(norm_factor_override) * float(canvas_config.radius),
+            float(track_width_override),
+        )
+        captured["default_gc_width"] = (
+            float(canvas_config.radius)
+            * float(canvas_config.track_ratio)
+            * float(cfg.canvas.circular.track_ratio_factors[str(canvas_config.length_param)][1])
+        )
+        captured["default_gap"] = max(1.0, 0.01 * float(canvas_config.radius))
+
+    def fake_add_gc_content_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        gc_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override, cfg)
+        return canvas
+
+    def fake_add_gc_skew_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        skew_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override, cfg)
+        return canvas
+
+    def fake_add_tick_group_on_canvas(
+        canvas,
+        gb_record,
+        canvas_config,
+        config_dict,
+        *,
+        radius_override=None,
+        tick_track_channel_override=None,
+        label_side="legacy",
+        tick_side="legacy",
+        tick_length_px=None,
+        cfg=None,
+    ):
+        assert cfg is not None
+        center = float(radius_override if radius_override is not None else canvas_config.radius)
+        tick_min_ratio, tick_max_ratio = get_circular_tick_path_ratio_bounds(
+            len(gb_record.seq),
+            str(cfg.canvas.circular.track_type),
+            bool(cfg.canvas.strandedness),
+            tick_track_channel_override=tick_track_channel_override,
+        )
+        captured["ticks"] = (center, center * max(float(tick_min_ratio), float(tick_max_ratio)))
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", fake_add_record_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "_definition_reserved_radius_px", lambda *args, **kwargs: 0.0)
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        default_colors=default_colors,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        circular_track_slots=[
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
+            CircularTrackSlot(
+                id="ticks",
+                renderer="ticks",
+                params={"label_side": "legacy", "tick_side": "legacy"},
+            ),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
+        ],
+    )
+
+    gc_center, gc_width = captured["gc_content"]  # type: ignore[misc]
+    _, ticks_hard_outer = captured["ticks"]  # type: ignore[misc]
+
+    assert gc_width == pytest.approx(float(captured["default_gc_width"]))
+    assert captured["gc_skew"][1] == pytest.approx(float(captured["default_gc_width"]))  # type: ignore[index]
+    assert (float(gc_center) - (0.5 * float(gc_width))) - float(ticks_hard_outer) == pytest.approx(
+        float(captured["default_gap"]),
+        abs=0.05,
+    )
 
 
 @pytest.mark.circular

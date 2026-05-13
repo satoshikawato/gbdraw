@@ -237,12 +237,13 @@ options:
   --circular_track_slot CIRCULAR_TRACK_SLOT
                         Circular track slot spec:
                         <slot_id>:<renderer>@key=value,key=value. Can be
-                        repeated; repeated auto slots are packed
-                        outer-to-inner. r/ri/ro pin position, w pins width,
-                        and z only controls SVG layering. Default built-in
-                        slots preserve normal circular geometry until order or
-                        geometry fields change. Tick labels are measured for
-                        bounds and warnings, not default data-track repacking.
+                        repeated; auto rows pack measured hard footprints
+                        outer-to-inner. r/ri/ro pin geometry, w pins width,
+                        and z only controls SVG layering. Slot radius is
+                        renderer input, not always the visual center. Legacy
+                        tick marks and labels are measured from their drawn
+                        radii; GC content/skew widths are preserved unless
+                        hard constraints require compression.
   --gc_content_width GC_CONTENT_WIDTH
                         GC content track width for circular mode (in px; must
                         be > 0).
