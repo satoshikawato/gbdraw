@@ -1191,10 +1191,6 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
 
     default_gc_center = base_radius * float(cfg.canvas.circular.track_dict[length_param]["middle"]["2"])
     default_gc_width = base_radius * base_track_ratio * float(cfg.canvas.circular.track_ratio_factors[length_param][1])
-    default_gc_annulus = (
-        default_gc_center - 0.5 * default_gc_width,
-        default_gc_center + 0.5 * default_gc_width,
-    )
     gc_center = (
         base_radius * float(captured["gc_norm"])
         if captured.get("gc_norm") is not None
@@ -1203,7 +1199,6 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
     gc_width = float(captured["gc_width"]) if captured.get("gc_width") is not None else default_gc_width
     gc_annulus = (gc_center - 0.5 * gc_width, gc_center + 0.5 * gc_width)
 
-    assert _annulus_overlaps_band(default_gc_annulus, tick_label_annulus)
     assert not _annulus_overlaps_band(gc_annulus, tick_label_annulus)
 
     default_skew_center = base_radius * float(cfg.canvas.circular.track_dict[length_param]["middle"]["3"])

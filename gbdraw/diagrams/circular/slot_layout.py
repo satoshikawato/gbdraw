@@ -26,11 +26,21 @@ class CircularSlotFootprint:
     anchor_radius_px: float | None
     draw_inner_px: float
     draw_outer_px: float
-    reserved_inner_px: float
-    reserved_outer_px: float
+    hard_inner_px: float
+    hard_outer_px: float
+    soft_inner_px: float
+    soft_outer_px: float
     explicit_anchor: bool
     explicit_annulus: bool
     explicit_width: bool
+
+    @property
+    def reserved_inner_px(self) -> float:
+        return self.hard_inner_px
+
+    @property
+    def reserved_outer_px(self) -> float:
+        return self.hard_outer_px
 
 
 @dataclass(frozen=True)
@@ -42,6 +52,10 @@ class ResolvedCircularTrackSlot:
     width_px: float
     draw_inner_radius_px: float
     draw_outer_radius_px: float
+    hard_inner_radius_px: float
+    hard_outer_radius_px: float
+    soft_inner_radius_px: float
+    soft_outer_radius_px: float
     reserved_inner_radius_px: float
     reserved_outer_radius_px: float
     z: int
@@ -69,6 +83,7 @@ class CircularTrackLayoutContext:
     feature_band_offsets_px: tuple[float, float] | None = None
     tick_path_ratio_bounds: tuple[float, float] | None = None
     tick_label_offsets_px: tuple[float, float] | None = None
+    tick_labels_hard: bool = False
     tick_font_size_px: float = 10.0
     reserved_bands_px: tuple[tuple[float, float], ...] = ()
     min_auto_inner_radius_px: float | None = None
@@ -189,6 +204,10 @@ def _is_compressible_numeric_width(
         and not bool(explicit_annulus)
         and not bool(explicit_width)
     )
+
+
+def _uses_auto_inner_guard(slot: CircularTrackSlot) -> bool:
+    return str(slot.renderer) in COMPRESSIBLE_NUMERIC_RENDERERS
 
 
 def _entry_width_px(entry: Mapping[str, Any], width_scale: float) -> float:
@@ -374,8 +393,10 @@ def _measure_slot(
             anchor_radius_px=anchor,
             draw_inner_px=draw_inner,
             draw_outer_px=draw_outer,
-            reserved_inner_px=draw_inner,
-            reserved_outer_px=draw_outer,
+            hard_inner_px=draw_inner,
+            hard_outer_px=draw_outer,
+            soft_inner_px=draw_inner,
+            soft_outer_px=draw_outer,
             explicit_anchor=explicit_anchor,
             explicit_annulus=explicit_annulus,
             explicit_width=explicit_width,
@@ -390,10 +411,13 @@ def _measure_slot(
                 draw_outer = anchor * max(context.tick_path_ratio_bounds)
             else:
                 draw_inner, draw_outer = _annulus(anchor, width)
-            reserved_inner, reserved_outer = draw_inner, draw_outer
+            hard_inner, hard_outer = draw_inner, draw_outer
+            soft_inner, soft_outer = draw_inner, draw_outer
             if context.tick_label_offsets_px is not None:
-                reserved_inner = min(reserved_inner, anchor + context.tick_label_offsets_px[0])
-                reserved_outer = max(reserved_outer, anchor + context.tick_label_offsets_px[1])
+                soft_inner = min(soft_inner, anchor + context.tick_label_offsets_px[0])
+                soft_outer = max(soft_outer, anchor + context.tick_label_offsets_px[1])
+            if context.tick_labels_hard:
+                hard_inner, hard_outer = soft_inner, soft_outer
         else:
             tick_len = width if explicit_width and width > 0 else max(6.0, 0.025 * float(context.base_radius_px))
             inner_ext = 0.0
@@ -406,21 +430,26 @@ def _measure_slot(
                 inner_ext = outer_ext = 0.0
             draw_inner = anchor - inner_ext
             draw_outer = anchor + outer_ext
-            reserved_inner, reserved_outer = draw_inner, draw_outer
+            hard_inner, hard_outer = draw_inner, draw_outer
+            soft_inner, soft_outer = draw_inner, draw_outer
             label_pad = max(float(context.tick_font_size_px) * 1.8, 10.0)
             if label_side == "inside":
-                reserved_inner = min(reserved_inner, anchor - inner_ext - label_pad)
+                soft_inner = min(soft_inner, anchor - inner_ext - label_pad)
             elif label_side == "outside":
-                reserved_outer = max(reserved_outer, anchor + outer_ext + label_pad)
+                soft_outer = max(soft_outer, anchor + outer_ext + label_pad)
             elif label_side == "legacy" and context.tick_label_offsets_px is not None:
-                reserved_inner = min(reserved_inner, anchor + context.tick_label_offsets_px[0])
-                reserved_outer = max(reserved_outer, anchor + context.tick_label_offsets_px[1])
+                soft_inner = min(soft_inner, anchor + context.tick_label_offsets_px[0])
+                soft_outer = max(soft_outer, anchor + context.tick_label_offsets_px[1])
+            if context.tick_labels_hard:
+                hard_inner, hard_outer = soft_inner, soft_outer
         return CircularSlotFootprint(
             anchor_radius_px=anchor,
             draw_inner_px=max(0.0, draw_inner),
             draw_outer_px=max(0.0, draw_outer),
-            reserved_inner_px=max(0.0, reserved_inner),
-            reserved_outer_px=max(0.0, reserved_outer),
+            hard_inner_px=max(0.0, hard_inner),
+            hard_outer_px=max(0.0, hard_outer),
+            soft_inner_px=max(0.0, soft_inner),
+            soft_outer_px=max(0.0, soft_outer),
             explicit_anchor=explicit_anchor,
             explicit_annulus=explicit_annulus,
             explicit_width=explicit_width,
@@ -431,8 +460,10 @@ def _measure_slot(
         anchor_radius_px=anchor,
         draw_inner_px=max(0.0, draw_inner),
         draw_outer_px=max(0.0, draw_outer),
-        reserved_inner_px=max(0.0, draw_inner),
-        reserved_outer_px=max(0.0, draw_outer),
+        hard_inner_px=max(0.0, draw_inner),
+        hard_outer_px=max(0.0, draw_outer),
+        soft_inner_px=max(0.0, draw_inner),
+        soft_outer_px=max(0.0, draw_outer),
         explicit_anchor=explicit_anchor,
         explicit_annulus=explicit_annulus,
         explicit_width=explicit_width,
@@ -458,8 +489,12 @@ def _resolved_from_footprint(
         width_px=max(0.0, float(width_px)),
         draw_inner_radius_px=float(footprint.draw_inner_px),
         draw_outer_radius_px=float(footprint.draw_outer_px),
-        reserved_inner_radius_px=float(footprint.reserved_inner_px),
-        reserved_outer_radius_px=float(footprint.reserved_outer_px),
+        hard_inner_radius_px=float(footprint.hard_inner_px),
+        hard_outer_radius_px=float(footprint.hard_outer_px),
+        soft_inner_radius_px=float(footprint.soft_inner_px),
+        soft_outer_radius_px=float(footprint.soft_outer_px),
+        reserved_inner_radius_px=float(footprint.hard_inner_px),
+        reserved_outer_radius_px=float(footprint.hard_outer_px),
         z=int(slot.z),
         params=dict(params),
     )
@@ -542,6 +577,7 @@ def _pack_circular_slot_entries(
             preferred_anchor = cursor_outer - (0.5 * width_px)
         preferred_anchor = float(preferred_anchor)
         anchor = min(preferred_anchor, float(cursor_outer))
+        slot_inner_guard_px = inner_guard_px if _uses_auto_inner_guard(slot) else 0.0
 
         for _ in range(128):
             footprint = _measure_slot(
@@ -554,8 +590,8 @@ def _pack_circular_slot_entries(
                 explicit_annulus=False,
                 explicit_width=bool(entry["explicit_width"]),
             )
-            if footprint.reserved_inner_px < (inner_guard_px - LAYOUT_EPSILON):
-                anchor += inner_guard_px - footprint.reserved_inner_px
+            if footprint.reserved_inner_px < (slot_inner_guard_px - LAYOUT_EPSILON):
+                anchor += slot_inner_guard_px - footprint.reserved_inner_px
                 continue
             if footprint.reserved_outer_px > cursor_outer:
                 anchor -= footprint.reserved_outer_px - cursor_outer
@@ -577,16 +613,16 @@ def _pack_circular_slot_entries(
                 params=entry["params"],
                 context=context,
                 occupied=occupied,
-                inner_guard_px=inner_guard_px,
+                inner_guard_px=slot_inner_guard_px,
                 explicit_width=bool(entry["explicit_width"]),
                 gap_px=gap_after_px,
                 outer_limit_px=cursor_outer,
             )
             if gap_footprint is None:
-                raise _auto_pack_error(str(slot.id), inner_guard_px=inner_guard_px)
+                raise _auto_pack_error(str(slot.id), inner_guard_px=slot_inner_guard_px)
             footprint = gap_footprint
 
-        if footprint.reserved_inner_px < (inner_guard_px - LAYOUT_EPSILON):
+        if footprint.reserved_inner_px < (slot_inner_guard_px - LAYOUT_EPSILON):
             gap_footprint = _find_auto_gap_footprint(
                 slot,
                 preferred_anchor_px=preferred_anchor,
@@ -594,13 +630,13 @@ def _pack_circular_slot_entries(
                 params=entry["params"],
                 context=context,
                 occupied=occupied,
-                inner_guard_px=inner_guard_px,
+                inner_guard_px=slot_inner_guard_px,
                 explicit_width=bool(entry["explicit_width"]),
                 gap_px=gap_after_px,
                 outer_limit_px=cursor_outer,
             )
             if gap_footprint is None:
-                raise _auto_pack_error(str(slot.id), inner_guard_px=inner_guard_px)
+                raise _auto_pack_error(str(slot.id), inner_guard_px=slot_inner_guard_px)
             footprint = gap_footprint
         if footprint.reserved_inner_px < -LAYOUT_EPSILON:
             raise ValueError(
