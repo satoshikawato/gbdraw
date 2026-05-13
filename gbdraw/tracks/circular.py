@@ -402,7 +402,7 @@ def _resolve_circular_track_slots_legacy(
             {
                 "slot": slot,
                 "center_px": center_px,
-                "width_px": max(0.0, float(width_px)),
+                "input_width_px": max(0.0, float(width_px)),
                 "params": params,
             }
         )
@@ -415,7 +415,7 @@ def _resolve_circular_track_slots_legacy(
     resolved: list[ResolvedCircularTrackSlot] = []
     for entry in entries:
         slot = entry["slot"]
-        width_px = float(entry["width_px"])
+        width_px = float(entry["input_width_px"])
         center_px = entry["center_px"]
 
         if center_px is None:
@@ -432,10 +432,13 @@ def _resolve_circular_track_slots_legacy(
             ResolvedCircularTrackSlot(
                 id=str(slot.id),
                 renderer=str(slot.renderer),
+                anchor_radius_px=float(center_px),
                 center_radius_px=float(center_px),
-                width_px=width_px,
-                inner_radius_px=float(inner_px),
-                outer_radius_px=float(outer_px),
+                draw_inner_radius_px=float(inner_px),
+                draw_outer_radius_px=float(outer_px),
+                reserved_inner_radius_px=float(inner_px),
+                reserved_outer_radius_px=float(outer_px),
+                explicit_width=False,
                 z=int(slot.z),
                 params=entry["params"],
             )

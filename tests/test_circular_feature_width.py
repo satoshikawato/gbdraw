@@ -22,7 +22,7 @@ from gbdraw.svg.circular_ticks import (
     get_circular_tick_label_radius_bounds,
     get_circular_tick_path_ratio_bounds,
 )
-from gbdraw.tracks import parse_track_specs
+from gbdraw.tracks import default_circular_track_slots, parse_track_specs
 from svgwrite import Drawing
 
 
@@ -155,6 +155,57 @@ def test_feature_width_override_reaches_feature_drawer(monkeypatch: pytest.Monke
     )
 
     expected_ratio_factor = 96.0 / (cfg.canvas.circular.radius * cfg.canvas.circular.track_ratio)
+    assert captured_ratio_factors
+    assert all(
+        math.isclose(ratio_factor, expected_ratio_factor, rel_tol=1e-6, abs_tol=1e-6)
+        for ratio_factor in captured_ratio_factors
+    )
+
+
+def test_default_custom_feature_slot_preserves_separate_strand_feature_width(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = _load_record()
+    config_dict = _make_config_dict(show_labels=False)
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    captured_ratio_factors: list[float] = []
+
+    def fake_draw(
+        self,
+        feature_object,
+        group,
+        total_length,
+        radius,
+        track_ratio,
+        track_ratio_factor,
+        track_type,
+        strandedness,
+        length_param,
+    ):
+        captured_ratio_factors.append(float(track_ratio_factor))
+        return group
+
+    monkeypatch.setattr(circular_seq_record_group_module.FeatureDrawer, "draw", fake_draw)
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        circular_track_slots=default_circular_track_slots(
+            show_depth=False,
+            show_gc=False,
+            show_skew=False,
+        ),
+    )
+
+    length_param = (
+        "short"
+        if len(record.seq) < int(cfg.labels.length_threshold.circular)
+        else "long"
+    )
+    expected_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
     assert captured_ratio_factors
     assert all(
         math.isclose(ratio_factor, expected_ratio_factor, rel_tol=1e-6, abs_tol=1e-6)

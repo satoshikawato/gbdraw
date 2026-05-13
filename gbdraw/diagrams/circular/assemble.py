@@ -871,6 +871,51 @@ def _slot_width_ratio_factor(
     return float(slot.width.resolve(float(base_radius_px))) / denominator
 
 
+def _feature_track_ratio_factor_from_draw_width(
+    draw_width_px: float,
+    *,
+    precomputed_feature_dict: dict | None,
+    total_length: int,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+) -> float | None:
+    """Convert a measured feature draw band width back to renderer track_ratio_factor."""
+    target_width = max(0.0, float(draw_width_px))
+    if target_width <= FEATURE_BAND_EPSILON:
+        return None
+
+    if precomputed_feature_dict is not None:
+        zero_band = _compute_feature_band_bounds_px(
+            precomputed_feature_dict,
+            total_length,
+            base_radius_px=float(canvas_config.radius),
+            track_ratio=float(canvas_config.track_ratio),
+            length_param=str(canvas_config.length_param),
+            track_ratio_factor=0.0,
+            cfg=cfg,
+        )
+        unit_band = _compute_feature_band_bounds_px(
+            precomputed_feature_dict,
+            total_length,
+            base_radius_px=float(canvas_config.radius),
+            track_ratio=float(canvas_config.track_ratio),
+            length_param=str(canvas_config.length_param),
+            track_ratio_factor=1.0,
+            cfg=cfg,
+        )
+        if zero_band is not None and unit_band is not None:
+            zero_width = abs(float(zero_band[1]) - float(zero_band[0]))
+            unit_width = abs(float(unit_band[1]) - float(unit_band[0]))
+            scalable_width = unit_width - zero_width
+            if scalable_width > FEATURE_BAND_EPSILON:
+                return max(0.0, (target_width - zero_width) / scalable_width)
+
+    denominator = float(canvas_config.radius) * float(canvas_config.track_ratio)
+    if denominator <= FEATURE_BAND_EPSILON:
+        return None
+    return target_width / denominator
+
+
 def _slot_dinucleotide(slot_or_resolved: CircularTrackSlot | ResolvedCircularTrackSlot, default: str) -> str:
     params = getattr(slot_or_resolved, "params", {}) or {}
     raw = params.get("nt", params.get("dinucleotide", default))
@@ -1271,9 +1316,13 @@ def _draw_resolved_circular_slot(
             * float(cfg.canvas.circular.track_ratio_factors[str(canvas_config.length_param)][0])
         )
         ratio_override = None
-        if base_width > 0 and float(resolved_slot.width_px) > 0:
-            ratio_override = float(resolved_slot.width_px) / (
-                float(canvas_config.radius) * float(canvas_config.track_ratio)
+        if base_width > 0 and float(resolved_slot.draw_width_px) > 0:
+            ratio_override = _feature_track_ratio_factor_from_draw_width(
+                float(resolved_slot.draw_width_px),
+                precomputed_feature_dict=precomputed_feature_dict,
+                total_length=len(gb_record.seq),
+                canvas_config=canvas_config,
+                cfg=cfg,
             )
         feature_kwargs: dict[str, Any] = {
             "cfg": cfg,
@@ -1309,7 +1358,9 @@ def _draw_resolved_circular_slot(
                 tick_group_kwargs["label_side"] = label_side
                 tick_group_kwargs["tick_side"] = tick_side
                 tick_group_kwargs["tick_length_px"] = (
-                    float(resolved_slot.width_px) if resolved_slot.width_px > 0 else None
+                    float(resolved_slot.draw_width_px)
+                    if resolved_slot.explicit_width and resolved_slot.draw_width_px > 0
+                    else None
                 )
             if _tick_track_channel_override is not None:
                 tick_group_kwargs["tick_track_channel_override"] = _tick_track_channel_override
@@ -1327,7 +1378,7 @@ def _draw_resolved_circular_slot(
             logger.warning("Skipping circular depth slot '%s' because depth data are unavailable.", resolved_slot.id)
             return canvas
         depth_kwargs: dict[str, Any] = {
-            "track_width_override": float(resolved_slot.width_px),
+            "track_width_override": float(resolved_slot.draw_width_px),
             "norm_factor_override": norm_factor_override,
             "cfg": cfg,
         }
@@ -1361,7 +1412,7 @@ def _draw_resolved_circular_slot(
             )
             return canvas
         gc_kwargs: dict[str, Any] = {
-            "track_width_override": float(resolved_slot.width_px),
+            "track_width_override": float(resolved_slot.draw_width_px),
             "norm_factor_override": norm_factor_override,
             "cfg": cfg,
         }
@@ -1386,7 +1437,7 @@ def _draw_resolved_circular_slot(
             )
             return canvas
         skew_kwargs: dict[str, Any] = {
-            "track_width_override": float(resolved_slot.width_px),
+            "track_width_override": float(resolved_slot.draw_width_px),
             "norm_factor_override": norm_factor_override,
             "cfg": cfg,
         }
@@ -2586,8 +2637,8 @@ def add_record_on_circular_canvas(
         if resolved_slot.renderer != "ticks":
             continue
         tick_label_annulus = (
-            float(resolved_slot.soft_inner_radius_px),
-            float(resolved_slot.soft_outer_radius_px),
+            float(resolved_slot.reserved_inner_radius_px),
+            float(resolved_slot.reserved_outer_radius_px),
         )
         if tick_label_annulus_for_legend_bounds is None:
             tick_label_annulus_for_legend_bounds = tick_label_annulus

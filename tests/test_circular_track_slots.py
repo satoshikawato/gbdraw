@@ -424,9 +424,9 @@ def test_resolve_circular_track_slots_preserves_legacy_defaults_in_compatibility
 
     assert by_id["features"].center_radius_px == 390.0
     assert by_id["gc_content"].center_radius_px == 249.6
-    assert by_id["gc_content"].width_px == 74.1
+    assert by_id["gc_content"].draw_width_px == pytest.approx(74.1)
     assert by_id["gc_skew"].center_radius_px == 171.6
-    assert by_id["gc_skew"].width_px == 74.1
+    assert by_id["gc_skew"].draw_width_px == pytest.approx(74.1)
 
 
 def test_resolve_circular_track_slots_packs_measured_footprints_without_overlap() -> None:
@@ -464,7 +464,7 @@ def test_resolve_circular_track_slots_packs_measured_footprints_without_overlap(
             assert current[0] >= other[1] or other[0] >= current[1]
 
 
-def test_measured_packer_places_legacy_ticks_by_hard_footprint_not_anchor() -> None:
+def test_measured_packer_places_legacy_ticks_by_reserved_footprint_not_anchor() -> None:
     context = CircularTrackLayoutContext(
         base_radius_px=500.0,
         legacy_centers_px={"ticks": 500.0},
@@ -486,11 +486,11 @@ def test_measured_packer_places_legacy_ticks_by_hard_footprint_not_anchor() -> N
         context=context,
     )
     by_id = {slot.id: slot for slot in resolved}
-    cursor_outer = by_id["gc_content"].hard_inner_radius_px - context.default_gap_px
+    cursor_outer = by_id["gc_content"].reserved_inner_radius_px - context.default_gap_px
 
     assert by_id["ticks"].anchor_radius_px > cursor_outer
-    assert by_id["ticks"].hard_outer_radius_px == pytest.approx(cursor_outer)
-    assert by_id["gc_content"].hard_inner_radius_px - by_id["ticks"].hard_outer_radius_px == pytest.approx(5.0)
+    assert by_id["ticks"].reserved_outer_radius_px == pytest.approx(cursor_outer)
+    assert by_id["gc_content"].reserved_inner_radius_px - by_id["ticks"].reserved_outer_radius_px == pytest.approx(5.0)
 
 
 def test_reordered_builtin_gc_ticks_skew_keeps_gc_widths() -> None:
@@ -527,12 +527,12 @@ def test_reordered_builtin_gc_ticks_skew_keeps_gc_widths() -> None:
     )
     by_id = {slot.id: slot for slot in resolved}
 
-    assert by_id["gc_content"].width_px == pytest.approx(50.0)
-    assert by_id["gc_skew"].width_px == pytest.approx(50.0)
-    assert by_id["gc_content"].hard_inner_radius_px - by_id["ticks"].hard_outer_radius_px == pytest.approx(5.0)
+    assert by_id["gc_content"].draw_width_px == pytest.approx(50.0)
+    assert by_id["gc_skew"].draw_width_px == pytest.approx(50.0)
+    assert by_id["gc_content"].reserved_inner_radius_px - by_id["ticks"].reserved_outer_radius_px == pytest.approx(5.0)
 
 
-def test_legacy_tick_soft_label_bounds_are_remeasured_for_moved_anchor() -> None:
+def test_legacy_tick_reserved_label_bounds_are_remeasured_for_moved_anchor() -> None:
     context = CircularTrackLayoutContext(
         base_radius_px=500.0,
         legacy_centers_px={"ticks": 500.0},
@@ -559,9 +559,9 @@ def test_legacy_tick_soft_label_bounds_are_remeasured_for_moved_anchor() -> None
     ticks = {slot.id: slot for slot in resolved}["ticks"]
     label_center = ticks.anchor_radius_px * 0.82
 
-    assert ticks.soft_inner_radius_px == pytest.approx(min(ticks.hard_inner_radius_px, label_center - 6.0))
-    assert ticks.soft_outer_radius_px == pytest.approx(max(ticks.hard_outer_radius_px, label_center + 6.0))
-    assert ticks.soft_outer_radius_px < ticks.anchor_radius_px + 100.0
+    assert ticks.reserved_inner_radius_px == pytest.approx(min(ticks.draw_inner_radius_px, label_center - 6.0))
+    assert ticks.reserved_outer_radius_px == pytest.approx(max(ticks.draw_outer_radius_px, label_center + 6.0))
+    assert ticks.reserved_outer_radius_px < ticks.anchor_radius_px + 100.0
 
 
 def test_tick_slot_footprint_does_not_reserve_axis_padding() -> None:
@@ -601,7 +601,7 @@ def test_tick_label_footprint_repacks_data_track() -> None:
     by_id = {slot.id: slot for slot in resolved}
 
     assert by_id["ticks"].reserved_inner_radius_px == pytest.approx(82.0)
-    assert by_id["ticks"].hard_inner_radius_px == pytest.approx(by_id["ticks"].soft_inner_radius_px)
+    assert by_id["ticks"].draw_inner_radius_px == pytest.approx(100.0)
     assert by_id["gc_content"].reserved_outer_radius_px <= by_id["ticks"].reserved_inner_radius_px
     assert by_id["gc_content"].center_radius_px == pytest.approx(77.0)
 
@@ -827,8 +827,8 @@ def test_resolve_circular_track_slots_compresses_implicit_numeric_widths_to_fit_
     )
     by_id = {slot.id: slot for slot in resolved}
 
-    assert by_id["gc_content"].width_px == pytest.approx(by_id["gc_skew"].width_px)
-    assert by_id["gc_content"].width_px < 30.0
+    assert by_id["gc_content"].draw_width_px == pytest.approx(by_id["gc_skew"].draw_width_px)
+    assert by_id["gc_content"].draw_width_px < 30.0
     assert min(slot.reserved_inner_radius_px for slot in resolved) >= 45.0 - 1e-6
     assert "Auto-compressed circular numeric track widths" in caplog.text
 
@@ -853,8 +853,8 @@ def test_resolve_circular_track_slots_compresses_pinned_implicit_numeric_width_w
     by_id = {slot.id: slot for slot in resolved}
 
     assert by_id["gc_content"].center_radius_px == pytest.approx(80.0)
-    assert by_id["gc_content"].width_px == pytest.approx(by_id["gc_skew"].width_px)
-    assert by_id["gc_content"].width_px < 30.0
+    assert by_id["gc_content"].draw_width_px == pytest.approx(by_id["gc_skew"].draw_width_px)
+    assert by_id["gc_content"].draw_width_px < 30.0
     assert min(slot.reserved_inner_radius_px for slot in resolved) >= 45.0 - 1e-6
 
 
@@ -1034,8 +1034,8 @@ def test_ordered_pack_compression_preserves_order() -> None:
     by_id = {slot.id: slot for slot in resolved}
 
     assert by_id["gc_content"].center_radius_px > by_id["gc_skew"].center_radius_px
-    assert by_id["gc_content"].width_px == pytest.approx(by_id["gc_skew"].width_px)
-    assert by_id["gc_content"].width_px < 25.0
+    assert by_id["gc_content"].draw_width_px == pytest.approx(by_id["gc_skew"].draw_width_px)
+    assert by_id["gc_content"].draw_width_px < 25.0
     assert by_id["gc_skew"].reserved_inner_radius_px >= 20.0 - 1e-6
 
 
@@ -1414,11 +1414,11 @@ def test_edl933_reordered_gc_ticks_skew_uses_measured_tick_footprint(
     )
 
     gc_center, gc_width = captured["gc_content"]  # type: ignore[misc]
-    _, ticks_hard_outer = captured["ticks"]  # type: ignore[misc]
+    _, ticks_reserved_outer = captured["ticks"]  # type: ignore[misc]
 
     assert gc_width == pytest.approx(float(captured["default_gc_width"]))
     assert captured["gc_skew"][1] == pytest.approx(float(captured["default_gc_width"]))  # type: ignore[index]
-    assert (float(gc_center) - (0.5 * float(gc_width))) - float(ticks_hard_outer) == pytest.approx(
+    assert (float(gc_center) - (0.5 * float(gc_width))) - float(ticks_reserved_outer) == pytest.approx(
         float(captured["default_gap"]),
         abs=0.05,
     )

@@ -30,21 +30,19 @@ class CircularSlotFootprint:
     anchor_radius_px: float | None
     draw_inner_px: float
     draw_outer_px: float
-    hard_inner_px: float
-    hard_outer_px: float
-    soft_inner_px: float
-    soft_outer_px: float
+    reserved_inner_px: float
+    reserved_outer_px: float
     explicit_anchor: bool
     explicit_annulus: bool
     explicit_width: bool
 
     @property
-    def reserved_inner_px(self) -> float:
-        return self.hard_inner_px
+    def draw_width_px(self) -> float:
+        return max(0.0, float(self.draw_outer_px) - float(self.draw_inner_px))
 
     @property
-    def reserved_outer_px(self) -> float:
-        return self.hard_outer_px
+    def reserved_width_px(self) -> float:
+        return max(0.0, float(self.reserved_outer_px) - float(self.reserved_inner_px))
 
 
 @dataclass(frozen=True)
@@ -53,15 +51,11 @@ class ResolvedCircularTrackSlot:
     renderer: str
     anchor_radius_px: float
     center_radius_px: float
-    width_px: float
     draw_inner_radius_px: float
     draw_outer_radius_px: float
-    hard_inner_radius_px: float
-    hard_outer_radius_px: float
-    soft_inner_radius_px: float
-    soft_outer_radius_px: float
     reserved_inner_radius_px: float
     reserved_outer_radius_px: float
+    explicit_width: bool
     z: int
     params: Mapping[str, Any]
 
@@ -72,6 +66,14 @@ class ResolvedCircularTrackSlot:
     @property
     def outer_radius_px(self) -> float:
         return self.draw_outer_radius_px
+
+    @property
+    def draw_width_px(self) -> float:
+        return max(0.0, float(self.draw_outer_radius_px) - float(self.draw_inner_radius_px))
+
+    @property
+    def reserved_width_px(self) -> float:
+        return max(0.0, float(self.reserved_outer_radius_px) - float(self.reserved_inner_radius_px))
 
 
 @dataclass(frozen=True)
@@ -224,8 +226,8 @@ def _uses_auto_inner_guard(slot: CircularTrackSlot) -> bool:
     return str(slot.renderer) in COMPRESSIBLE_NUMERIC_RENDERERS
 
 
-def _entry_width_px(entry: Mapping[str, Any], width_scale: float) -> float:
-    width = max(0.0, float(entry["width_px"]))
+def _entry_input_width_px(entry: Mapping[str, Any], width_scale: float) -> float:
+    width = max(0.0, float(entry["input_width_px"]))
     if entry.get("compressible_width"):
         return max(0.0, width * float(width_scale))
     return width
@@ -305,7 +307,7 @@ def _find_auto_gap_footprint(
     slot: CircularTrackSlot,
     *,
     preferred_anchor_px: float,
-    width_px: float,
+    input_width_px: float,
     params: Mapping[str, Any],
     context: CircularTrackLayoutContext,
     occupied: Sequence[tuple[str, tuple[float, float]]],
@@ -340,14 +342,14 @@ def _find_auto_gap_footprint(
         seed_anchors = [
             float(preferred_anchor_px),
             (lower + upper) / 2.0,
-            lower + (0.5 * float(width_px)),
-            upper - (0.5 * float(width_px)),
+            lower + (0.5 * float(input_width_px)),
+            upper - (0.5 * float(input_width_px)),
         ]
         for seed_anchor in seed_anchors:
             initial = _measure_slot(
                 slot,
                 anchor_radius_px=float(seed_anchor),
-                width_px=float(width_px),
+                input_width_px=float(input_width_px),
                 params=params,
                 context=context,
                 explicit_anchor=False,
@@ -363,7 +365,7 @@ def _find_auto_gap_footprint(
             footprint = _measure_slot(
                 slot,
                 anchor_radius_px=float(anchor),
-                width_px=float(width_px),
+                input_width_px=float(input_width_px),
                 params=params,
                 context=context,
                 explicit_anchor=False,
@@ -387,32 +389,27 @@ def _make_slot_footprint(
     anchor: float,
     draw_inner: float,
     draw_outer: float,
-    hard_inner: float,
-    hard_outer: float,
-    soft_inner: float,
-    soft_outer: float,
+    reserved_inner: float,
+    reserved_outer: float,
     explicit_anchor: bool,
     explicit_annulus: bool,
     explicit_width: bool,
 ) -> CircularSlotFootprint:
     draw_inner, draw_outer = sorted((float(draw_inner), float(draw_outer)))
-    hard_inner, hard_outer = sorted((float(hard_inner), float(hard_outer)))
-    soft_inner, soft_outer = sorted((float(soft_inner), float(soft_outer)))
+    reserved_inner, reserved_outer = sorted((float(reserved_inner), float(reserved_outer)))
     return CircularSlotFootprint(
         anchor_radius_px=float(anchor),
         draw_inner_px=max(0.0, draw_inner),
         draw_outer_px=max(0.0, draw_outer),
-        hard_inner_px=max(0.0, hard_inner),
-        hard_outer_px=max(0.0, hard_outer),
-        soft_inner_px=max(0.0, soft_inner),
-        soft_outer_px=max(0.0, soft_outer),
+        reserved_inner_px=max(0.0, reserved_inner),
+        reserved_outer_px=max(0.0, reserved_outer),
         explicit_anchor=explicit_anchor,
         explicit_annulus=explicit_annulus,
         explicit_width=explicit_width,
     )
 
 
-def _legacy_tick_label_soft_band(
+def _legacy_tick_label_reserved_band(
     anchor: float,
     context: CircularTrackLayoutContext,
 ) -> tuple[float, float] | None:
@@ -428,7 +425,7 @@ def _legacy_tick_label_soft_band(
     return None
 
 
-def _tick_label_soft_band(
+def _tick_label_reserved_band(
     *,
     anchor: float,
     width: float,
@@ -461,7 +458,7 @@ def _tick_label_soft_band(
         )
 
     if label_side == "legacy":
-        return _legacy_tick_label_soft_band(anchor, context)
+        return _legacy_tick_label_reserved_band(anchor, context)
     return None
 
 
@@ -484,10 +481,8 @@ def _measure_feature_slot(
         anchor=anchor,
         draw_inner=draw_inner,
         draw_outer=draw_outer,
-        hard_inner=draw_inner,
-        hard_outer=draw_outer,
-        soft_inner=draw_inner,
-        soft_outer=draw_outer,
+        reserved_inner=draw_inner,
+        reserved_outer=draw_outer,
         explicit_anchor=explicit_anchor,
         explicit_annulus=explicit_annulus,
         explicit_width=explicit_width,
@@ -542,9 +537,8 @@ def _measure_tick_slot(
         draw_inner = float(anchor) - inner_ext
         draw_outer = float(anchor) + outer_ext
 
-    hard_inner, hard_outer = draw_inner, draw_outer
-    soft_inner, soft_outer = draw_inner, draw_outer
-    label_band = _tick_label_soft_band(
+    reserved_inner, reserved_outer = draw_inner, draw_outer
+    label_band = _tick_label_reserved_band(
         anchor=anchor,
         width=width,
         params=params,
@@ -552,24 +546,21 @@ def _measure_tick_slot(
         explicit_width=explicit_width,
     )
     if label_band is not None:
-        soft_inner = min(soft_inner, label_band[0])
-        soft_outer = max(soft_outer, label_band[1])
+        reserved_inner = min(reserved_inner, label_band[0])
+        reserved_outer = max(reserved_outer, label_band[1])
     else:
         label_pad = max(float(context.tick_font_size_px) * 1.8, 10.0)
         if label_side == "inside":
-            soft_inner = min(soft_inner, float(anchor) - inner_ext - label_pad)
+            reserved_inner = min(reserved_inner, float(anchor) - inner_ext - label_pad)
         elif label_side == "outside":
-            soft_outer = max(soft_outer, float(anchor) + outer_ext + label_pad)
+            reserved_outer = max(reserved_outer, float(anchor) + outer_ext + label_pad)
 
-    hard_inner, hard_outer = soft_inner, soft_outer
     return _make_slot_footprint(
         anchor=anchor,
         draw_inner=draw_inner,
         draw_outer=draw_outer,
-        hard_inner=hard_inner,
-        hard_outer=hard_outer,
-        soft_inner=soft_inner,
-        soft_outer=soft_outer,
+        reserved_inner=reserved_inner,
+        reserved_outer=reserved_outer,
         explicit_anchor=explicit_anchor,
         explicit_annulus=explicit_annulus,
         explicit_width=explicit_width,
@@ -589,10 +580,8 @@ def _measure_numeric_slot(
         anchor=anchor,
         draw_inner=draw_inner,
         draw_outer=draw_outer,
-        hard_inner=draw_inner,
-        hard_outer=draw_outer,
-        soft_inner=draw_inner,
-        soft_outer=draw_outer,
+        reserved_inner=draw_inner,
+        reserved_outer=draw_outer,
         explicit_anchor=explicit_anchor,
         explicit_annulus=explicit_annulus,
         explicit_width=explicit_width,
@@ -620,7 +609,7 @@ def _measure_slot(
     slot: CircularTrackSlot,
     *,
     anchor_radius_px: float,
-    width_px: float,
+    input_width_px: float,
     params: Mapping[str, Any],
     context: CircularTrackLayoutContext,
     explicit_anchor: bool,
@@ -629,7 +618,7 @@ def _measure_slot(
 ) -> CircularSlotFootprint:
     renderer = str(slot.renderer)
     anchor = float(anchor_radius_px)
-    width = max(0.0, float(width_px))
+    width = max(0.0, float(input_width_px))
 
     if renderer == "features":
         return _measure_feature_slot(
@@ -671,7 +660,6 @@ def _resolved_from_footprint(
     slot: CircularTrackSlot,
     footprint: CircularSlotFootprint,
     *,
-    width_px: float,
     params: Mapping[str, Any],
 ) -> ResolvedCircularTrackSlot:
     anchor = float(footprint.anchor_radius_px if footprint.anchor_radius_px is not None else 0.0)
@@ -683,40 +671,14 @@ def _resolved_from_footprint(
         renderer=str(slot.renderer),
         anchor_radius_px=anchor,
         center_radius_px=center,
-        width_px=max(0.0, float(width_px)),
         draw_inner_radius_px=float(footprint.draw_inner_px),
         draw_outer_radius_px=float(footprint.draw_outer_px),
-        hard_inner_radius_px=float(footprint.hard_inner_px),
-        hard_outer_radius_px=float(footprint.hard_outer_px),
-        soft_inner_radius_px=float(footprint.soft_inner_px),
-        soft_outer_radius_px=float(footprint.soft_outer_px),
-        reserved_inner_radius_px=float(footprint.hard_inner_px),
-        reserved_outer_radius_px=float(footprint.hard_outer_px),
+        reserved_inner_radius_px=float(footprint.reserved_inner_px),
+        reserved_outer_radius_px=float(footprint.reserved_outer_px),
+        explicit_width=bool(footprint.explicit_width),
         z=int(slot.z),
         params=dict(params),
     )
-
-
-def _warn_soft_annotation_overlaps(resolved_slots: Sequence[ResolvedCircularTrackSlot]) -> None:
-    for slot in resolved_slots:
-        soft_band = _normalize_band((slot.soft_inner_radius_px, slot.soft_outer_radius_px))
-        hard_band = _normalize_band((slot.hard_inner_radius_px, slot.hard_outer_radius_px))
-        if (
-            abs(soft_band[0] - hard_band[0]) <= LAYOUT_EPSILON
-            and abs(soft_band[1] - hard_band[1]) <= LAYOUT_EPSILON
-        ):
-            continue
-
-        for other in resolved_slots:
-            if other.id == slot.id:
-                continue
-            other_hard_band = _normalize_band((other.hard_inner_radius_px, other.hard_outer_radius_px))
-            if _overlaps(soft_band, other_hard_band) and not _overlaps(hard_band, other_hard_band):
-                logger.warning(
-                    "Soft annotation footprint for circular track slot '%s' overlaps hard footprint of slot '%s'.",
-                    slot.id,
-                    other.id,
-                )
 
 
 def _pack_circular_slot_entries(
@@ -739,11 +701,11 @@ def _pack_circular_slot_entries(
         if not entry["pinned"]:
             continue
         slot = entry["slot"]
-        width_px = _entry_width_px(entry, width_scale)
+        input_width_px = _entry_input_width_px(entry, width_scale)
         footprint = _measure_slot(
             slot,
             anchor_radius_px=float(entry["center_px"]),
-            width_px=width_px,
+            input_width_px=input_width_px,
             params=entry["params"],
             context=context,
             explicit_anchor=bool(entry["explicit_anchor"]),
@@ -768,7 +730,6 @@ def _pack_circular_slot_entries(
         resolved_by_id[str(slot.id)] = _resolved_from_footprint(
             slot,
             footprint,
-            width_px=width_px,
             params=entry["params"],
         )
 
@@ -779,7 +740,7 @@ def _pack_circular_slot_entries(
     )
     for entry in entries:
         slot = entry["slot"]
-        width_px = _entry_width_px(entry, width_scale)
+        input_width_px = _entry_input_width_px(entry, width_scale)
         gap_after_px = _entry_gap_after_px(entry, context=context, implicit_gap_scale=implicit_gap_scale)
         if entry["pinned"]:
             resolved = resolved_by_id[str(slot.id)]
@@ -793,7 +754,7 @@ def _pack_circular_slot_entries(
         if preferred_anchor is None and str(slot.renderer) in {"features", "ticks"}:
             preferred_anchor = _legacy_lookup(context.legacy_centers_px, slot)
         if preferred_anchor is None:
-            preferred_anchor = cursor_outer - (0.5 * width_px)
+            preferred_anchor = cursor_outer - (0.5 * input_width_px)
         preferred_anchor = float(preferred_anchor)
         anchor = preferred_anchor
         slot_inner_guard_px = inner_guard_px if _uses_auto_inner_guard(slot) else 0.0
@@ -802,7 +763,7 @@ def _pack_circular_slot_entries(
             footprint = _measure_slot(
                 slot,
                 anchor_radius_px=anchor,
-                width_px=width_px,
+                input_width_px=input_width_px,
                 params=entry["params"],
                 context=context,
                 explicit_anchor=False,
@@ -828,7 +789,7 @@ def _pack_circular_slot_entries(
             gap_footprint = _find_auto_gap_footprint(
                 slot,
                 preferred_anchor_px=preferred_anchor,
-                width_px=width_px,
+                input_width_px=input_width_px,
                 params=entry["params"],
                 context=context,
                 occupied=occupied,
@@ -845,7 +806,7 @@ def _pack_circular_slot_entries(
             gap_footprint = _find_auto_gap_footprint(
                 slot,
                 preferred_anchor_px=preferred_anchor,
-                width_px=width_px,
+                input_width_px=input_width_px,
                 params=entry["params"],
                 context=context,
                 occupied=occupied,
@@ -865,7 +826,6 @@ def _pack_circular_slot_entries(
         resolved = _resolved_from_footprint(
             slot,
             footprint,
-            width_px=width_px,
             params=entry["params"],
         )
         resolved_by_id[str(slot.id)] = resolved
@@ -984,21 +944,21 @@ def resolve_circular_track_slots(
             _resolve_placement_center_and_width(placement, base_radius_px=base_radius_px)
         )
         explicit_width = explicit_width or track_spec_explicit_width
-        width_px = placement_width_px
+        input_width_px = placement_width_px
         if slot.width is not None:
-            width_px = float(slot.width.resolve(base_radius_px))
+            input_width_px = float(slot.width.resolve(base_radius_px))
             explicit_width = True
 
         preferred_layout = None
         if center_px is None and not explicit_annulus:
             preferred_layout = _preferred_layout_lookup(context.preferred_layouts_px, slot)
-            if preferred_layout is not None and width_px is None:
-                width_px = preferred_layout[1]
+            if preferred_layout is not None and input_width_px is None:
+                input_width_px = preferred_layout[1]
 
-        if width_px is None:
-            width_px = _legacy_lookup(context.legacy_widths_px, slot)
-        if width_px is None:
-            width_px = 0.0
+        if input_width_px is None:
+            input_width_px = _legacy_lookup(context.legacy_widths_px, slot)
+        if input_width_px is None:
+            input_width_px = 0.0
 
         if center_px is None and (compatibility_mode or explicit_anchor):
             center_px = _legacy_lookup(context.legacy_centers_px, slot)
@@ -1012,7 +972,7 @@ def resolve_circular_track_slots(
                 "slot": slot,
                 "center_px": center_px,
                 "preferred_center_px": preferred_layout[0] if preferred_layout is not None else None,
-                "width_px": max(0.0, float(width_px)),
+                "input_width_px": max(0.0, float(input_width_px)),
                 "params": params,
                 "explicit_anchor": bool(explicit_anchor),
                 "explicit_annulus": bool(explicit_annulus),
@@ -1039,7 +999,7 @@ def resolve_circular_track_slots(
             footprint = _measure_slot(
                 slot,
                 anchor_radius_px=float(center_px),
-                width_px=float(entry["width_px"]),
+                input_width_px=float(entry["input_width_px"]),
                 params=entry["params"],
                 context=context,
                 explicit_anchor=bool(entry["explicit_anchor"]),
@@ -1050,18 +1010,15 @@ def resolve_circular_track_slots(
                 _resolved_from_footprint(
                     slot,
                     footprint,
-                    width_px=float(entry["width_px"]),
                     params=entry["params"],
                 )
             )
-        _warn_soft_annotation_overlaps(resolved_compat)
         return resolved_compat
 
     try:
         resolved = _pack_circular_slot_entries(entries, context=context, width_scale=1.0)
     except CircularSlotAutoPackError as exc:
         resolved = _pack_with_auto_numeric_compression(entries, context=context, initial_error=exc)
-    _warn_soft_annotation_overlaps(resolved)
     return resolved
 
 
