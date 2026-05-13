@@ -82,6 +82,8 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--inner_label_y_radius_offset INNER_LABEL_Y_RADIUS_OFFSET]
               [--scale_interval SCALE_INTERVAL]
               [--feature_width FEATURE_WIDTH]
+              [--circular_track_order CIRCULAR_TRACK_ORDER]
+              [--circular_track_slot CIRCULAR_TRACK_SLOT]
               [--gc_content_width GC_CONTENT_WIDTH]
               [--gc_content_radius GC_CONTENT_RADIUS]
               [--gc_skew_width GC_SKEW_WIDTH]
@@ -228,6 +230,16 @@ options:
   --feature_width FEATURE_WIDTH
                         Feature track width for circular mode (in px; must be
                         > 0).
+  --circular_track_order CIRCULAR_TRACK_ORDER
+                        Comma-separated circular slot order. Auto slots are
+                        packed outer-to-inner by order, for example:
+                        features,ticks,gc_content,gc_skew.
+  --circular_track_slot CIRCULAR_TRACK_SLOT
+                        Circular track slot spec:
+                        <slot_id>:<renderer>@key=value,key=value. Can be
+                        repeated; repeated auto slots are packed
+                        outer-to-inner. r/ri/ro pin position, w pins width,
+                        and z only controls SVG layering.
   --gc_content_width GC_CONTENT_WIDTH
                         GC content track width for circular mode (in px; must
                         be > 0).

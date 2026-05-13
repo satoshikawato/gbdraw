@@ -279,11 +279,17 @@ def _find_auto_gap_footprint(
     inner_guard_px: float,
     explicit_width: bool,
     gap_px: float | None = None,
+    outer_limit_px: float | None = None,
 ) -> CircularSlotFootprint | None:
-    outer_limit_px = (
+    global_outer_limit_px = (
         float(context.auto_start_radius_px)
         if context.auto_start_radius_px is not None
         else float(context.base_radius_px)
+    )
+    ordered_outer_limit_px = (
+        global_outer_limit_px
+        if outer_limit_px is None
+        else min(global_outer_limit_px, float(outer_limit_px))
     )
     gap_px = max(0.0, float(_slot_gap_after_px(slot, context) if gap_px is None else gap_px))
     candidates: list[tuple[float, CircularSlotFootprint]] = []
@@ -291,7 +297,7 @@ def _find_auto_gap_footprint(
     for raw_lower, raw_upper in _free_intervals_px(
         occupied,
         inner_limit_px=inner_guard_px,
-        outer_limit_px=outer_limit_px,
+        outer_limit_px=ordered_outer_limit_px,
     ):
         lower = float(raw_lower) + gap_px
         upper = float(raw_upper) - gap_px
@@ -574,6 +580,7 @@ def _pack_circular_slot_entries(
                 inner_guard_px=inner_guard_px,
                 explicit_width=bool(entry["explicit_width"]),
                 gap_px=gap_after_px,
+                outer_limit_px=cursor_outer,
             )
             if gap_footprint is None:
                 raise _auto_pack_error(str(slot.id), inner_guard_px=inner_guard_px)
@@ -590,6 +597,7 @@ def _pack_circular_slot_entries(
                 inner_guard_px=inner_guard_px,
                 explicit_width=bool(entry["explicit_width"]),
                 gap_px=gap_after_px,
+                outer_limit_px=cursor_outer,
             )
             if gap_footprint is None:
                 raise _auto_pack_error(str(slot.id), inner_guard_px=inner_guard_px)

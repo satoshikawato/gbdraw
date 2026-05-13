@@ -36,6 +36,11 @@ def _load_record():
     return SeqIO.read(str(input_path), "genbank")
 
 
+def _load_edl933_record():
+    input_path = Path(__file__).parent / "test_inputs" / "EDL933.gbk"
+    return SeqIO.read(str(input_path), "genbank")
+
+
 def _base_config(*, track_type: str = "middle"):
     return modify_config_dict(
         load_config_toml("gbdraw.data", "config.toml"),
@@ -404,6 +409,152 @@ def test_resolve_circular_track_slots_auto_numeric_order_ignores_legacy_id_cente
     assert resolved[0].center_radius_px > resolved[1].center_radius_px
     assert resolved[0].center_radius_px == pytest.approx(90.0)
     assert resolved[1].center_radius_px == pytest.approx(65.0)
+
+
+def test_auto_gap_fallback_does_not_place_later_slot_outside_previous_auto_slot() -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=100.0,
+        default_gap_px=0.0,
+        feature_band_offsets_px=(-15.0, 0.0),
+        reserved_bands_px=((0.0, 20.0),),
+        min_auto_inner_radius_px=20.0,
+    )
+
+    with pytest.raises(ValueError, match="cannot fit without overlapping the center definition"):
+        resolve_circular_track_slots(
+            [
+                parse_circular_track_slot("features:features@r=100px"),
+                parse_circular_track_slot("ticks:ticks@r=60px,w=10px,label_side=none,tick_side=inside"),
+                parse_circular_track_slot("gc_content:dinucleotide_content@w=25px"),
+                parse_circular_track_slot("gc_skew:dinucleotide_skew@w=25px"),
+            ],
+            context=context,
+        )
+
+
+def test_ordered_pack_compression_preserves_order() -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=100.0,
+        legacy_widths_px={"gc_content": 25.0, "gc_skew": 25.0},
+        default_gap_px=0.0,
+        feature_band_offsets_px=(-15.0, 0.0),
+        reserved_bands_px=((0.0, 20.0),),
+        min_auto_inner_radius_px=20.0,
+    )
+
+    resolved = resolve_circular_track_slots(
+        [
+            parse_circular_track_slot("features:features@r=100px"),
+            parse_circular_track_slot("ticks:ticks@r=60px,w=10px,label_side=none,tick_side=inside"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+        ],
+        context=context,
+    )
+    by_id = {slot.id: slot for slot in resolved}
+
+    assert by_id["gc_content"].center_radius_px > by_id["gc_skew"].center_radius_px
+    assert by_id["gc_content"].width_px == pytest.approx(by_id["gc_skew"].width_px)
+    assert by_id["gc_content"].width_px < 25.0
+    assert by_id["gc_skew"].reserved_inner_radius_px >= 20.0 - 1e-6
+
+
+def test_explicit_radius_can_override_toolbar_order() -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=100.0,
+        legacy_widths_px={"gc_content": 20.0},
+        default_gap_px=5.0,
+    )
+
+    resolved = resolve_circular_track_slots(
+        [
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+            parse_circular_track_slot("gc_skew:dinucleotide_skew@r=90px,w=10px"),
+        ],
+        context=context,
+    )
+    by_id = {slot.id: slot for slot in resolved}
+
+    assert by_id["gc_skew"].center_radius_px > by_id["gc_content"].center_radius_px
+    assert by_id["gc_skew"].center_radius_px == pytest.approx(90.0)
+
+
+@pytest.mark.circular
+def test_default_custom_slots_tuckin_preserve_numeric_order_with_feature_footprint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+
+    record = _load_edl933_record()
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels=False,
+        show_gc=True,
+        show_skew=True,
+        track_type="tuckin",
+        strandedness=True,
+    )
+    default_colors = load_default_colors("", palette="default")
+    captured: dict[str, tuple[float, float]] = {}
+
+    def capture_numeric_slot(
+        slot_id: str,
+        canvas_config,
+        track_width_override,
+        norm_factor_override,
+    ) -> None:
+        assert track_width_override is not None
+        assert norm_factor_override is not None
+        captured[slot_id] = (
+            float(norm_factor_override) * float(canvas_config.radius),
+            float(track_width_override),
+        )
+
+    def fake_add_gc_content_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        gc_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override)
+        return canvas
+
+    def fake_add_gc_skew_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        skew_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        default_colors=default_colors,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        circular_track_slots=default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
+    )
+
+    assert captured["gc_content"][0] > captured["gc_skew"][0]
 
 
 @pytest.mark.circular
