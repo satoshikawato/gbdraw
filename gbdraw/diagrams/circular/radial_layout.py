@@ -30,6 +30,7 @@ MIN_NUMERIC_WIDTH_PX = 10.0
 MIN_NUMERIC_WIDTH_FRACTION = 0.55
 MIN_SKEW_WIDTH_PX = 12.0
 MIN_SKEW_WIDTH_FRACTION = 0.65
+HARD_MIN_NUMERIC_WIDTH_PX = 4.0
 
 
 @dataclass(frozen=True)
@@ -623,6 +624,10 @@ def _is_auto_numeric_inside_intent(intent: _SlotIntent) -> bool:
     )
 
 
+def _is_explicit_inside_intent(intent: _SlotIntent) -> bool:
+    return str(intent.params.get("side", "")).strip().lower() == "inside"
+
+
 def _min_readable_numeric_width_px(renderer: str, default_width_px: float) -> float:
     width = max(0.0, float(default_width_px))
     if width <= LAYOUT_EPSILON:
@@ -640,6 +645,16 @@ def _min_numeric_width_scale(intents: Sequence[_SlotIntent]) -> float:
             continue
         min_width = _min_readable_numeric_width_px(str(intent.slot.renderer), width)
         min_scale = max(min_scale, min(1.0, min_width / width))
+    return min(1.0, max(0.0, min_scale))
+
+
+def _hard_min_numeric_width_scale(intents: Sequence[_SlotIntent]) -> float:
+    min_scale = 0.0
+    for intent in intents:
+        width = max(0.0, float(intent.width_px))
+        if width <= LAYOUT_EPSILON:
+            continue
+        min_scale = max(min_scale, min(1.0, HARD_MIN_NUMERIC_WIDTH_PX / width))
     return min(1.0, max(0.0, min_scale))
 
 
@@ -727,13 +742,17 @@ def _place_inside(
     base_radius_px: float,
 ) -> tuple[RadialBand, float]:
     width_px = max(0.0, float(intent.width_px))
+    numeric_auto_width = (
+        str(intent.slot.renderer) in NUMERIC_RENDERERS
+        and not intent.explicit_width
+        and not intent.explicit_annulus
+    )
+    explicit_inside = _is_explicit_inside_intent(intent)
+    numeric_hard_inside = str(intent.slot.renderer) in NUMERIC_RENDERERS and explicit_inside
     allow_compress = (
-        _parse_bool_param(intent.params.get("compress"), default=False)
-        or (
-            str(intent.slot.renderer) in NUMERIC_RENDERERS
-            and not intent.explicit_width
-            and not intent.explicit_annulus
-        )
+        numeric_hard_inside
+        or _parse_bool_param(intent.params.get("compress"), default=False)
+        or numeric_auto_width
     )
     exact = _try_place_inside_exact(
         intent,
@@ -747,8 +766,10 @@ def _place_inside(
         return exact
 
     min_width_px = (
-        _min_readable_numeric_width_px(str(intent.slot.renderer), width_px)
-        if str(intent.slot.renderer) in NUMERIC_RENDERERS and not intent.explicit_width and not intent.explicit_annulus
+        min(width_px, HARD_MIN_NUMERIC_WIDTH_PX)
+        if numeric_hard_inside
+        else _min_readable_numeric_width_px(str(intent.slot.renderer), width_px)
+        if numeric_auto_width
         else 0.0
     )
     best_compressed: tuple[RadialBand, float] | None = None
@@ -819,6 +840,7 @@ def _place_numeric_inside_group(
     cursor_outer_px: float,
     guard_px: float,
     base_radius_px: float,
+    hard_inside: bool = False,
 ) -> tuple[list[tuple[_SlotIntent, RadialBand]], float] | None:
     full_layout = _try_place_numeric_inside_group_once(
         intents,
@@ -845,7 +867,8 @@ def _place_numeric_inside_group(
         logger.info("Auto-reduced circular numeric track gaps to fit reserved radial space.")
         return zero_gap_layout
 
-    lower_scale = _min_numeric_width_scale(intents)
+    readable_lower_scale = _min_numeric_width_scale(intents)
+    lower_scale = _hard_min_numeric_width_scale(intents) if hard_inside else readable_lower_scale
     lower_layout = _try_place_numeric_inside_group_once(
         intents,
         occupied=occupied,
@@ -881,10 +904,18 @@ def _place_numeric_inside_group(
         best_layout = layout
 
     if best_scale < 0.999:
-        logger.info(
-            "Auto-compressed circular numeric track widths to %.1f%% to fit reserved radial space.",
-            best_scale * 100.0,
-        )
+        if hard_inside and best_scale < readable_lower_scale - LAYOUT_EPSILON:
+            slot_names = ", ".join(f"'{intent.slot.id}'" for intent in intents)
+            logger.info(
+                "Hard-compressed explicit inside circular numeric track slots %s to %.1f%% to fit reserved radial space.",
+                slot_names,
+                best_scale * 100.0,
+            )
+        else:
+            logger.info(
+                "Auto-compressed circular numeric track widths to %.1f%% to fit reserved radial space.",
+                best_scale * 100.0,
+            )
     return best_layout
 
 
@@ -985,15 +1016,17 @@ def _resolve_tracks(
                 group.append(group_intent)
                 group_end += 1
 
+            hard_inside = any(_is_explicit_inside_intent(item) for item in group)
             group_layout = _place_numeric_inside_group(
                 group,
                 occupied=occupied,
                 cursor_outer_px=inside_cursor,
                 guard_px=guard_px,
                 base_radius_px=base_radius_px,
+                hard_inside=hard_inside,
             )
             if group_layout is None:
-                if any(_parse_bool_param(item.params.get("strict"), default=False) for item in group):
+                if hard_inside or any(_parse_bool_param(item.params.get("strict"), default=False) for item in group):
                     raise _inside_slot_error(group[-1])
                 for group_intent in group:
                     draw_band, outside_cursor = _outside_band_for_intent(
@@ -1034,7 +1067,7 @@ def _resolve_tracks(
                     base_radius_px=base_radius_px,
                 )
             except ValueError:
-                if _parse_bool_param(intent.params.get("strict"), default=False):
+                if _is_explicit_inside_intent(intent) or _parse_bool_param(intent.params.get("strict"), default=False):
                     raise
                 draw_band, outside_cursor = _outside_band_for_intent(
                     intent,

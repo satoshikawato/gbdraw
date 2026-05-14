@@ -1781,6 +1781,120 @@ def test_api_circular_track_slots_distribute_extra_dinucleotide_slots_evenly(
 
 
 @pytest.mark.circular
+def test_api_explicit_inside_duplicate_dinucleotide_skew_stays_inside_when_not_strict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+
+    record = _load_edl933_record()
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels=False,
+        show_gc=True,
+        show_skew=True,
+        track_type="tuckin",
+        strandedness=True,
+    )
+    default_colors = load_default_colors("", palette="default")
+    captured: dict[str, object] = {}
+
+    def capture_numeric_slot(
+        slot_id: str,
+        canvas_config,
+        track_width_override,
+        norm_factor_override,
+    ) -> None:
+        assert track_width_override is not None
+        assert norm_factor_override is not None
+        captured[slot_id] = (
+            float(norm_factor_override) * float(canvas_config.radius),
+            float(track_width_override),
+        )
+        captured["radial_layout"] = canvas_config.circular_radial_layout
+
+    def fake_add_record_group_on_canvas(canvas, *args, **kwargs):
+        return canvas
+
+    def fake_add_tick_group_on_canvas(canvas, *args, **kwargs):
+        return canvas
+
+    def fake_add_gc_content_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        gc_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override)
+        return canvas
+
+    def fake_add_gc_skew_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        skew_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", fake_add_record_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        default_colors=default_colors,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        window=1000,
+        step=1000,
+        circular_track_slots=[
+            *default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
+            "gc_skew_2:dinucleotide_skew@nt=AT,side=inside,compress=true,strict=false",
+        ],
+    )
+
+    assert {"gc_content", "gc_skew", "gc_skew_2", "radial_layout"} <= set(captured)
+    layout = captured["radial_layout"]
+    assert layout.features is not None
+    assert layout.ticks is not None
+
+    annuli = {
+        slot_id: (center_px - (0.5 * width_px), center_px + (0.5 * width_px))
+        for slot_id, (center_px, width_px) in {
+            key: captured[key]
+            for key in ("gc_content", "gc_skew", "gc_skew_2")
+        }.items()
+    }
+    stack_inner = min(layout.features.all_band_px.inner_px, layout.ticks.reserved_band_px.inner_px)
+    reference_outer = max(
+        layout.axis.radius_px,
+        layout.features.all_band_px.outer_px,
+        layout.ticks.reserved_band_px.outer_px,
+    )
+
+    assert max(outer for _inner, outer in annuli.values()) <= stack_inner + 1e-6
+    assert layout.outer_content_radius_px <= reference_outer + 1e-6
+    if layout.definition_reserved_band_px is not None:
+        assert min(inner for inner, _outer in annuli.values()) >= layout.definition_reserved_band_px.outer_px - 1e-6
+
+
+@pytest.mark.circular
 def test_api_circular_track_slots_distribute_repeated_depth_slots_evenly(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
