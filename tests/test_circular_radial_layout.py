@@ -11,6 +11,7 @@ from gbdraw.config.toml import load_config_toml
 from gbdraw.diagrams.circular.radial_layout import build_circular_feature_layout, resolve_circular_radial_layout
 from gbdraw.layout.circular import calculate_feature_position_factors_circular
 from gbdraw.tracks import CircularTrackSlot
+from gbdraw.tracks.spec import ScalarSpec
 
 
 class _Feature:
@@ -132,6 +133,59 @@ def test_radial_numeric_stack_compresses_no_lower_than_readable_minimum() -> Non
     assert by_id["gc_content"].draw_band_px.width_px < 19.0
     assert by_id["at_skew"].draw_band_px.width_px >= 12.35 - 1e-6
     assert min(track.draw_band_px.inner_px for track in layout.tracks) >= 70.0 - 1e-6
+
+
+def test_outside_auto_numeric_width_tracks_inside_auto_compression() -> None:
+    canvas_config, cfg = _small_radial_canvas()
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=[
+            CircularTrackSlot(
+                id="outer_skew",
+                renderer="dinucleotide_skew",
+                params={"side": "outside"},
+            ),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+        ],
+        show_features=False,
+        show_ticks=False,
+        definition_reserved_radius_px=70.0,
+    )
+    by_id = {track.id: track for track in layout.tracks}
+
+    assert by_id["gc_skew"].draw_band_px.width_px < 19.0
+    assert by_id["outer_skew"].draw_band_px.width_px == pytest.approx(
+        by_id["gc_skew"].draw_band_px.width_px
+    )
+
+
+def test_explicit_outside_numeric_width_ignores_inside_auto_compression() -> None:
+    canvas_config, cfg = _small_radial_canvas()
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=[
+            CircularTrackSlot(
+                id="outer_skew",
+                renderer="dinucleotide_skew",
+                width=ScalarSpec(19.0, "px"),
+                params={"side": "outside"},
+            ),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+        ],
+        show_features=False,
+        show_ticks=False,
+        definition_reserved_radius_px=70.0,
+    )
+    by_id = {track.id: track for track in layout.tracks}
+
+    assert by_id["gc_skew"].draw_band_px.width_px < 19.0
+    assert by_id["outer_skew"].draw_band_px.width_px == pytest.approx(19.0)
 
 
 def test_explicit_inside_numeric_group_compresses_below_readable_minimum() -> None:

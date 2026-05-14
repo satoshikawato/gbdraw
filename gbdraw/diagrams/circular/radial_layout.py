@@ -8,7 +8,7 @@ re-deriving placement from track type or legacy track dictionaries.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Mapping, Sequence
 
 from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
@@ -624,6 +624,16 @@ def _is_auto_numeric_inside_intent(intent: _SlotIntent) -> bool:
     )
 
 
+def _is_auto_numeric_outside_intent(intent: _SlotIntent) -> bool:
+    return (
+        intent.channel == "outside"
+        and intent.center_px is None
+        and str(intent.slot.renderer) in NUMERIC_RENDERERS
+        and not bool(intent.explicit_width)
+        and not bool(intent.explicit_annulus)
+    )
+
+
 def _is_explicit_inside_intent(intent: _SlotIntent) -> bool:
     return str(intent.params.get("side", "")).strip().lower() == "inside"
 
@@ -947,6 +957,56 @@ def _resolved_track_from_intent(intent: _SlotIntent, draw_band: RadialBand) -> C
     )
 
 
+def _sync_outside_auto_numeric_widths_to_inside_compression(
+    intents: Sequence[_SlotIntent],
+    resolved_by_id: dict[str, CircularResolvedTrack],
+) -> None:
+    """Apply inside auto-compression scale to matching outside auto numeric tracks."""
+    inside_scales: list[float] = []
+    for intent in intents:
+        if not _is_auto_numeric_inside_intent(intent) or intent.width_px <= LAYOUT_EPSILON:
+            continue
+        track = resolved_by_id.get(str(intent.slot.id))
+        if track is None:
+            continue
+        scale = float(track.draw_band_px.width_px) / max(LAYOUT_EPSILON, float(intent.width_px))
+        if scale < 1.0 - LAYOUT_EPSILON:
+            inside_scales.append(max(0.0, min(1.0, scale)))
+
+    if not inside_scales:
+        return
+
+    width_scale = min(inside_scales)
+    if width_scale >= 1.0 - LAYOUT_EPSILON:
+        return
+
+    for intent in intents:
+        if not _is_auto_numeric_outside_intent(intent) or intent.width_px <= LAYOUT_EPSILON:
+            continue
+        track = resolved_by_id.get(str(intent.slot.id))
+        if track is None:
+            continue
+
+        target_width = max(0.0, float(intent.width_px) * width_scale)
+        current_width = float(track.draw_band_px.width_px)
+        if target_width >= current_width - LAYOUT_EPSILON:
+            continue
+
+        inner_px = float(track.draw_band_px.inner_px)
+        draw_band = RadialBand(inner_px, inner_px + target_width)
+        resolved_by_id[str(intent.slot.id)] = replace(
+            track,
+            anchor_radius_px=draw_band.center_px,
+            draw_band_px=draw_band,
+            reserved_band_px=draw_band,
+        )
+        logger.info(
+            "Auto-compressed outside circular track '%s' to %.3fpx to match inside numeric track compression.",
+            intent.slot.id,
+            target_width,
+        )
+
+
 def _resolve_tracks(
     intents: Sequence[_SlotIntent],
     *,
@@ -1084,6 +1144,8 @@ def _resolve_tracks(
         if intent.channel != "overlay" or _parse_bool_param(intent.params.get("reserve"), default=False):
             occupied.append(reserved_band)
         index += 1
+
+    _sync_outside_auto_numeric_widths_to_inside_compression(intents, resolved_by_id)
 
     return tuple(resolved_by_id[str(intent.slot.id)] for intent in intents if str(intent.slot.id) in resolved_by_id)
 
