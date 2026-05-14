@@ -4,7 +4,6 @@
 import math
 from typing import Literal, Tuple
 
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
 from svgwrite.path import Path  # type: ignore[reportMissingImports]
 from svgwrite.text import Text, TextPath  # type: ignore[reportMissingImports]
 
@@ -80,9 +79,21 @@ class LabelDrawer:
         cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
         # Get track_id from label for overlap resolution
         track_id = label.get("track_id", 0)
-        factors: list[float] = calculate_feature_position_factors_circular(
-            record_length, label["strand"], track_ratio, cds_ratio, offset, self.track_type, self.strandedness, track_id
-        )
+        explicit_center_radius = label.get("feature_center_radius_px")
+        if explicit_center_radius is None:
+            factors: list[float] = calculate_feature_position_factors_circular(
+                record_length,
+                label["strand"],
+                track_ratio,
+                cds_ratio,
+                offset,
+                self.track_type,
+                self.strandedness,
+                track_id,
+            )
+            label_radius = float(radius) * float(factors[1])
+        else:
+            label_radius = float(explicit_center_radius)
         angle = 360.0 * (label["middle"] / record_length)
         font_px = float(str(self.font_size).rstrip("ptpx"))
         _, bbox_h = calculate_bbox_dimensions(label["label_text"], self.font_family, font_px, dpi=96)
@@ -90,54 +101,54 @@ class LabelDrawer:
 
         if 0 <= angle < 90:
             param = " 0 0 1 "
-            start_x_1: float = (radius * factors[1] - center_offset) * math.cos(
+            start_x_1: float = (label_radius - center_offset) * math.cos(
                 math.radians(360.0 * (label["start"] / record_length) - 90)
             )
-            start_y_1: float = (radius * factors[1] - center_offset) * math.sin(
+            start_y_1: float = (label_radius - center_offset) * math.sin(
                 math.radians(360.0 * (label["start"] / record_length) - 90)
             )
-            end_x: float = (radius * factors[1] - center_offset) * math.cos(
+            end_x: float = (label_radius - center_offset) * math.cos(
                 math.radians(360.0 * ((label["end"]) / record_length) - 90)
             )
-            end_y: float = (radius * factors[1] - center_offset) * math.sin(
+            end_y: float = (label_radius - center_offset) * math.sin(
                 math.radians(360.0 * ((label["end"]) / record_length) - 90)
             )
             label_axis_path_desc: str = (
-                "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(radius - center_offset) + "," + str(radius - center_offset) + param + str(end_x) + "," + str(end_y)
+                "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(label_radius - center_offset) + "," + str(label_radius - center_offset) + param + str(end_x) + "," + str(end_y)
             )
         if 90 <= angle < 270:
             param = " 1 0 0 "
-            start_x_1 = (radius * factors[1] + center_offset) * math.cos(
+            start_x_1 = (label_radius + center_offset) * math.cos(
                 math.radians(360.0 * ((label["end"]) / record_length) - 90)
             )
-            start_y_1 = (radius * factors[1] + center_offset) * math.sin(
+            start_y_1 = (label_radius + center_offset) * math.sin(
                 math.radians(360.0 * ((label["end"]) / record_length) - 90)
             )
-            end_x = (radius * factors[1] + center_offset) * math.cos(
+            end_x = (label_radius + center_offset) * math.cos(
                 math.radians(360.0 * (label["start"] / record_length) - 90)
             )
-            end_y = (radius * factors[1] + center_offset) * math.sin(
+            end_y = (label_radius + center_offset) * math.sin(
                 math.radians(360.0 * (label["start"] / record_length) - 90)
             )
             label_axis_path_desc = (
-                "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(radius + center_offset) + "," + str(radius + center_offset) + param + str(end_x) + "," + str(end_y)
+                "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(label_radius + center_offset) + "," + str(label_radius + center_offset) + param + str(end_x) + "," + str(end_y)
             )
         elif 270 <= angle <= 360:
             param = " 0 0 1 "
-            start_x_1 = (radius * factors[1] - center_offset) * math.cos(
+            start_x_1 = (label_radius - center_offset) * math.cos(
                 math.radians(360.0 * (label["start"] / record_length) - 90)
             )
-            start_y_1 = (radius * factors[1] - center_offset) * math.sin(
+            start_y_1 = (label_radius - center_offset) * math.sin(
                 math.radians(360.0 * (label["start"] / record_length) - 90)
             )
-            end_x = (radius * factors[1] - center_offset) * math.cos(
+            end_x = (label_radius - center_offset) * math.cos(
                 math.radians(360.0 * ((label["end"]) / record_length) - 90)
             )
-            end_y = (radius * factors[1] - center_offset) * math.sin(
+            end_y = (label_radius - center_offset) * math.sin(
                 math.radians(360.0 * ((label["end"]) / record_length) - 90)
             )
             label_axis_path_desc = (
-                "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(radius - center_offset) + "," + str(radius - center_offset) + param + str(end_x) + "," + str(end_y)
+                "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(label_radius - center_offset) + "," + str(label_radius - center_offset) + param + str(end_x) + "," + str(end_y)
             )
 
         label_axis_path = Path(d=label_axis_path_desc, stroke="none", fill="none")

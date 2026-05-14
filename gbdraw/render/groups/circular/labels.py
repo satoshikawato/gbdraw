@@ -21,6 +21,7 @@ from ....labels.filtering import preprocess_label_filtering  # type: ignore[repo
 from ....labels.placement import prepare_label_list  # type: ignore[reportMissingImports]
 from ...drawers.circular.labels import LabelDrawer  # type: ignore[reportMissingImports]
 from ....configurators import FeatureDrawingConfigurator  # type: ignore[reportMissingImports]
+from ....diagrams.circular.radial_layout import CircularFeatureLayout  # type: ignore[reportMissingImports]
 
 
 class LabelsGroup:
@@ -49,6 +50,11 @@ class LabelsGroup:
         self.precalculated_labels: Optional[list[dict]] = precalculated_labels
         self.feature_track_ratio_factor_override = feature_track_ratio_factor_override
         self.feature_anchor_radius_px = feature_anchor_radius_px
+        self.feature_layout: CircularFeatureLayout | None = getattr(
+            self.canvas_config,
+            "circular_feature_layout",
+            None,
+        )
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
 
@@ -111,6 +117,7 @@ class LabelsGroup:
                 cfg=self._cfg,
                 outer_arena=self.outer_arena,
                 feature_track_ratio_factor_override=self.feature_track_ratio_factor_override,
+                feature_layout=self.feature_layout,
             )
 
         drawer = LabelDrawer(self.config_dict, cfg=self._cfg)

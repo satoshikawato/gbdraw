@@ -8,6 +8,169 @@ from .arrows import set_arrow_shoulder
 from ..layout.circular import calculate_feature_position_factors_circular
 
 
+def _point_on_radius(radius: float, position: float, total_length: int) -> tuple[float, float]:
+    angle = math.radians(360.0 * (float(position) / float(total_length)) - 90.0)
+    return float(radius) * math.cos(angle), float(radius) * math.sin(angle)
+
+
+def _coord_len_bp(start: int, end: int, total_length: int, *, strand: str = "positive") -> int:
+    if strand == "negative":
+        return (int(start) - int(end)) % int(total_length)
+    return (int(end) - int(start)) % int(total_length)
+
+
+def generate_circular_intron_path_with_radii(
+    coord_dict: Dict[str, Union[str, int]],
+    total_length: int,
+    center_radius_px: float,
+) -> list[str]:
+    coord_strand: str = str(coord_dict["coord_strand"])
+    del coord_strand
+    raw_start = int(coord_dict["coord_start"])
+    raw_end = int(coord_dict["coord_end"])
+    arc_start = raw_start % total_length
+    arc_end = raw_end % total_length
+    coord_len_bp = (arc_end - arc_start) % total_length
+    if raw_start == raw_end + 1:
+        arc_end = (arc_start + 1) % total_length
+        coord_len_bp = 1
+
+    intron_radius = float(center_radius_px)
+    start_x, start_y = _point_on_radius(intron_radius, arc_start, total_length)
+    end_x, end_y = _point_on_radius(intron_radius, arc_end, total_length)
+    segment_param = " 0 0 1 "
+    angle_deg = 360.0 * coord_len_bp / total_length
+    if angle_deg > 20.0:
+        mid_pos = (arc_start + coord_len_bp / 2.0) % total_length
+        mid_x, mid_y = _point_on_radius(intron_radius, mid_pos, total_length)
+        feature_path = (
+            f"M {start_x},{start_y} "
+            f"A{intron_radius},{intron_radius}{segment_param}{mid_x},{mid_y} "
+            f"A{intron_radius},{intron_radius}{segment_param}{end_x},{end_y}"
+        )
+    else:
+        feature_path = f"M {start_x},{start_y}A{intron_radius},{intron_radius}{segment_param}{end_x},{end_y}"
+    return ["line", feature_path]
+
+
+def generate_circular_arrowhead_path_with_radii(
+    coord_dict: Dict[str, Union[str, int]],
+    total_length: int,
+    cds_arrow_length: float,
+    inner_radius_px: float,
+    center_radius_px: float,
+    outer_radius_px: float,
+) -> list[str]:
+    coord_strand = str(coord_dict["coord_strand"])
+    coord_start = int(coord_dict["coord_start"]) % total_length
+    coord_end = int(coord_dict["coord_end"]) % total_length
+    arrow_strand_dict: Dict[str, Tuple[int, int, str, str]] = {
+        "positive": (coord_start, coord_end, " 0 0 1 ", " 0 0 0 "),
+        "negative": (coord_end, coord_start, " 0 0 0 ", " 0 0 1 "),
+    }
+    arrow_start, arrow_end, param_1, param_2 = arrow_strand_dict[coord_strand]
+    arrow_start %= total_length
+    arrow_end %= total_length
+    coord_len_bp = _coord_len_bp(arrow_start, arrow_end, total_length, strand=coord_strand)
+
+    point_x, point_y = _point_on_radius(center_radius_px, arrow_end, total_length)
+    start_x_1, start_y_1 = _point_on_radius(inner_radius_px, arrow_start, total_length)
+    start_x_2, start_y_2 = _point_on_radius(outer_radius_px, arrow_start, total_length)
+
+    if coord_len_bp < cds_arrow_length:
+        feature_path = f"M {start_x_1},{start_y_1} L{point_x},{point_y} L{start_x_2},{start_y_2} z"
+        return ["block", feature_path]
+
+    shoulder = set_arrow_shoulder(coord_strand, arrow_end, cds_arrow_length) % total_length
+    end_x_1, end_y_1 = _point_on_radius(inner_radius_px, shoulder, total_length)
+    end_x_2, end_y_2 = _point_on_radius(outer_radius_px, shoulder, total_length)
+
+    arc_len_bp = coord_len_bp - cds_arrow_length
+    angle_deg = 360.0 * arc_len_bp / total_length
+    if angle_deg > 20.0:
+        if coord_strand == "positive":
+            mid_pos = (arrow_start + arc_len_bp / 2.0) % total_length
+        else:
+            mid_pos = (arrow_start - arc_len_bp / 2.0) % total_length
+        mid_x_1, mid_y_1 = _point_on_radius(inner_radius_px, mid_pos, total_length)
+        mid_x_2, mid_y_2 = _point_on_radius(outer_radius_px, mid_pos, total_length)
+        sweep_flag_1 = param_1.strip().split(" ")[2]
+        sweep_flag_2 = param_2.strip().split(" ")[2]
+        segment_param_1 = f" 0 0 {sweep_flag_1} "
+        segment_param_2 = f" 0 0 {sweep_flag_2} "
+        outer_arc_path = (
+            f"A{inner_radius_px},{inner_radius_px}{segment_param_1}{mid_x_1},{mid_y_1} "
+            f"A{inner_radius_px},{inner_radius_px}{segment_param_1}{end_x_1},{end_y_1}"
+        )
+        inner_arc_path = (
+            f"A{outer_radius_px},{outer_radius_px}{segment_param_2}{mid_x_2},{mid_y_2} "
+            f"A{outer_radius_px},{outer_radius_px}{segment_param_2}{start_x_2},{start_y_2}"
+        )
+        feature_path = (
+            f"M {start_x_1},{start_y_1} {outer_arc_path} L {point_x},{point_y} "
+            f"L {end_x_2},{end_y_2} {inner_arc_path} z"
+        )
+    else:
+        feature_path = (
+            f"M {start_x_1},{start_y_1}"
+            f"A{inner_radius_px},{inner_radius_px}{param_1}{end_x_1},{end_y_1}"
+            f" L{point_x},{point_y} L{end_x_2},{end_y_2}"
+            f"A{outer_radius_px},{outer_radius_px}{param_2}{start_x_2},{start_y_2} z"
+        )
+    return ["block", feature_path]
+
+
+def generate_circular_rectangle_path_with_radii(
+    coord_dict: Dict[str, Union[str, int]],
+    total_length: int,
+    inner_radius_px: float,
+    center_radius_px: float,
+    outer_radius_px: float,
+) -> list[str]:
+    del center_radius_px
+    coord_strand = str(coord_dict["coord_strand"])
+    coord_start = int(coord_dict["coord_start"])
+    coord_end = int(coord_dict["coord_end"])
+    rect_strand_dict = {
+        "positive": (coord_start, coord_end, " 0 0 1 ", " 0 0 0 "),
+        "negative": (coord_end, coord_start, " 0 0 0 ", " 0 0 1 "),
+    }
+    rect_start, rect_end, param_1, param_2 = rect_strand_dict[coord_strand]
+    coord_len_bp = coord_end - coord_start if coord_end >= coord_start else (coord_end - coord_start) + total_length
+    angle_deg = 360.0 * coord_len_bp / total_length
+
+    start_x_1, start_y_1 = _point_on_radius(inner_radius_px, rect_start, total_length)
+    start_x_2, start_y_2 = _point_on_radius(outer_radius_px, rect_start, total_length)
+    end_x_1, end_y_1 = _point_on_radius(inner_radius_px, rect_end, total_length)
+    end_x_2, end_y_2 = _point_on_radius(outer_radius_px, rect_end, total_length)
+
+    if angle_deg > 20.0:
+        mid_pos = (coord_start + coord_len_bp / 2.0) % total_length
+        mid_x_1, mid_y_1 = _point_on_radius(inner_radius_px, mid_pos, total_length)
+        mid_x_2, mid_y_2 = _point_on_radius(outer_radius_px, mid_pos, total_length)
+        sweep_flag_1 = param_1.strip().split(" ")[2]
+        sweep_flag_2 = param_2.strip().split(" ")[2]
+        segment_param_1 = f" 0 0 {sweep_flag_1} "
+        segment_param_2 = f" 0 0 {sweep_flag_2} "
+        outer_arc_path = (
+            f"A{inner_radius_px},{inner_radius_px}{segment_param_1}{mid_x_1},{mid_y_1} "
+            f"A{inner_radius_px},{inner_radius_px}{segment_param_1}{end_x_1},{end_y_1}"
+        )
+        inner_arc_path = (
+            f"A{outer_radius_px},{outer_radius_px}{segment_param_2}{mid_x_2},{mid_y_2} "
+            f"A{outer_radius_px},{outer_radius_px}{segment_param_2}{start_x_2},{start_y_2}"
+        )
+        feature_path = f"M {start_x_1},{start_y_1} {outer_arc_path} L {end_x_2},{end_y_2} {inner_arc_path} z"
+    else:
+        feature_path = (
+            f"M {start_x_1},{start_y_1}"
+            f"A{inner_radius_px},{inner_radius_px}{param_1}{end_x_1},{end_y_1}"
+            f" L{end_x_2},{end_y_2}"
+            f"A{outer_radius_px},{outer_radius_px}{param_2}{start_x_2},{start_y_2} z"
+        )
+    return ["block", feature_path]
+
+
 def generate_circular_intron_path(
     radius: float,
     coord_dict: Dict[str, Union[str, int]],
@@ -432,6 +595,9 @@ def generate_circular_rectangle_path(
 
 __all__ = [
     "generate_circular_arrowhead_path",
+    "generate_circular_arrowhead_path_with_radii",
     "generate_circular_intron_path",
+    "generate_circular_intron_path_with_radii",
     "generate_circular_rectangle_path",
+    "generate_circular_rectangle_path_with_radii",
 ]

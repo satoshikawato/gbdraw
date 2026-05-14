@@ -18,6 +18,7 @@ from ....labels.placement import prepare_label_list  # type: ignore[reportMissin
 from ...drawers.circular.labels import LabelDrawer  # type: ignore[reportMissingImports]
 from ...drawers.circular.features import FeatureDrawer  # type: ignore[reportMissingImports]
 from ....configurators import FeatureDrawingConfigurator  # type: ignore[reportMissingImports]
+from ....diagrams.circular.radial_layout import CircularFeatureLayout  # type: ignore[reportMissingImports]
 
 
 class SeqRecordGroup:
@@ -70,6 +71,11 @@ class SeqRecordGroup:
         self.precalculated_labels: Optional[list[dict]] = precalculated_labels
         self.feature_track_ratio_factor_override = feature_track_ratio_factor_override
         self.feature_anchor_radius_px = feature_anchor_radius_px
+        self.feature_layout: CircularFeatureLayout | None = getattr(
+            self.canvas_config,
+            "circular_feature_layout",
+            None,
+        )
         self.record_group: Group = self.setup_record_group()
 
     def draw_record(self, feature_dict: Dict[str, FeatureObject], record_length: int, group: Group) -> Group:
@@ -92,6 +98,7 @@ class SeqRecordGroup:
                     self.config_dict,
                     cfg=self._cfg,
                     feature_track_ratio_factor_override=self.feature_track_ratio_factor_override,
+                    feature_layout=self.feature_layout,
                 )
         feature_track_ratio_factor = (
             float(self.feature_track_ratio_factor_override)
@@ -99,7 +106,7 @@ class SeqRecordGroup:
             else float(self.track_ratio_factors[0])
         )
         for feature_object in feature_dict.values():
-            group = FeatureDrawer(self.feature_config).draw(
+            group = FeatureDrawer(self.feature_config, self.feature_layout).draw(
                 feature_object,
                 group,
                 record_length,

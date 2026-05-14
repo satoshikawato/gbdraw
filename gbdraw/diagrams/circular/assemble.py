@@ -28,7 +28,6 @@ from ...configurators import (  # type: ignore[reportMissingImports]
 )
 from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
 from ...core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
-from ...features.coordinates import get_strand  # type: ignore[reportMissingImports]
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.factory import create_feature_dict  # type: ignore[reportMissingImports]
 from ...labels.circular import (  # type: ignore[reportMissingImports]
@@ -54,7 +53,6 @@ from ...tracks import (  # type: ignore[reportMissingImports]
     ResolvedCircularTrackSlot,
     TrackSpec,
     default_circular_track_slots,
-    resolve_circular_track_slots,
 )
 
 from .builders import (
@@ -69,6 +67,12 @@ from .builders import (
     add_tick_group_on_canvas,
 )
 from ...render.groups.circular.definition import DefinitionGroup  # type: ignore[reportMissingImports]
+from .radial_layout import (  # type: ignore[reportMissingImports]
+    CircularRadialLayout,
+    CircularResolvedTrack,
+    build_circular_feature_layout,
+    resolve_circular_radial_layout,
+)
 
 
 LEGEND_LABEL_MARGIN_PX = 4.0
@@ -94,6 +98,72 @@ def _sync_canvas_viewbox(canvas: Drawing, canvas_config: CircularCanvasConfigura
     canvas.attribs["width"] = f"{canvas_config.total_width}px"
     canvas.attribs["height"] = f"{canvas_config.total_height}px"
     canvas.attribs["viewBox"] = f"0 0 {canvas_config.total_width} {canvas_config.total_height}"
+
+
+def _resolved_slot_from_radial_track(track: CircularResolvedTrack) -> ResolvedCircularTrackSlot:
+    """Adapt resolved radial tracks to the existing drawing dispatcher."""
+    return ResolvedCircularTrackSlot(
+        id=str(track.id),
+        renderer=str(track.renderer),
+        anchor_radius_px=float(track.draw_band_px.center_px),
+        center_radius_px=float(track.draw_band_px.center_px),
+        draw_inner_radius_px=float(track.draw_band_px.inner_px),
+        draw_outer_radius_px=float(track.draw_band_px.outer_px),
+        reserved_inner_radius_px=float(track.reserved_band_px.inner_px),
+        reserved_outer_radius_px=float(track.reserved_band_px.outer_px),
+        explicit_width=bool(track.explicit_width),
+        z=int(track.z),
+        params=dict(track.params),
+    )
+
+
+def _resolved_slots_from_radial_layout(
+    radial_layout: CircularRadialLayout,
+    layout_slots: Sequence[CircularTrackSlot],
+) -> list[ResolvedCircularTrackSlot]:
+    """Return drawing-dispatch slots for fixed feature/tick bands plus numeric tracks."""
+    slots_by_renderer = {
+        str(slot.renderer): slot
+        for slot in layout_slots
+        if slot.enabled and str(slot.renderer) in {"features", "ticks"}
+    }
+    resolved: list[ResolvedCircularTrackSlot] = []
+    if radial_layout.features is not None and "features" in slots_by_renderer:
+        slot = slots_by_renderer["features"]
+        resolved.append(
+            ResolvedCircularTrackSlot(
+                id=str(slot.id),
+                renderer="features",
+                anchor_radius_px=float(radial_layout.features.anchor_radius_px),
+                center_radius_px=float(radial_layout.features.anchor_radius_px),
+                draw_inner_radius_px=float(radial_layout.features.primary_band_px.inner_px),
+                draw_outer_radius_px=float(radial_layout.features.primary_band_px.outer_px),
+                reserved_inner_radius_px=float(radial_layout.features.all_band_px.inner_px),
+                reserved_outer_radius_px=float(radial_layout.features.all_band_px.outer_px),
+                explicit_width=bool(slot.width is not None),
+                z=int(slot.z),
+                params=dict(slot.params),
+            )
+        )
+    if radial_layout.ticks is not None and "ticks" in slots_by_renderer:
+        slot = slots_by_renderer["ticks"]
+        resolved.append(
+            ResolvedCircularTrackSlot(
+                id=str(slot.id),
+                renderer="ticks",
+                anchor_radius_px=float(radial_layout.ticks.anchor_radius_px),
+                center_radius_px=float(radial_layout.ticks.anchor_radius_px),
+                draw_inner_radius_px=float(radial_layout.ticks.tick_band_px.inner_px),
+                draw_outer_radius_px=float(radial_layout.ticks.tick_band_px.outer_px),
+                reserved_inner_radius_px=float(radial_layout.ticks.reserved_band_px.inner_px),
+                reserved_outer_radius_px=float(radial_layout.ticks.reserved_band_px.outer_px),
+                explicit_width=bool(slot.width is not None),
+                z=int(slot.z),
+                params=dict(slot.params),
+            )
+        )
+    resolved.extend(_resolved_slot_from_radial_track(track) for track in radial_layout.tracks)
+    return resolved
 
 
 def _legend_bbox(canvas_config: CircularCanvasConfigurator, legend_config: LegendDrawingConfigurator) -> tuple[float, float, float, float]:
@@ -1315,14 +1385,15 @@ def _draw_resolved_circular_slot(
             * float(canvas_config.track_ratio)
             * float(cfg.canvas.circular.track_ratio_factors[str(canvas_config.length_param)][0])
         )
+        resolved_feature_width = float(resolved_slot.draw_width_px)
+        radial_layout = getattr(canvas_config, "circular_radial_layout", None)
+        if radial_layout is not None and getattr(radial_layout, "features", None) is not None:
+            resolved_feature_width = float(radial_layout.features.width_px)
         ratio_override = None
-        if base_width > 0 and float(resolved_slot.draw_width_px) > 0:
-            ratio_override = _feature_track_ratio_factor_from_draw_width(
-                float(resolved_slot.draw_width_px),
-                precomputed_feature_dict=precomputed_feature_dict,
-                total_length=len(gb_record.seq),
-                canvas_config=canvas_config,
-                cfg=cfg,
+        if base_width > 0 and resolved_feature_width > 0:
+            ratio_override = resolved_feature_width / max(
+                FEATURE_BAND_EPSILON,
+                float(canvas_config.radius) * float(canvas_config.track_ratio),
             )
         feature_kwargs: dict[str, Any] = {
             "cfg": cfg,
@@ -2022,52 +2093,27 @@ def _compute_feature_band_bounds_px(
     if not feature_dict or total_length <= 0:
         return None
 
-    cds_ratio, offset = calculate_cds_ratio(track_ratio, str(length_param), track_ratio_factor)
-    track_type = cfg.canvas.circular.track_type
-    strandedness = cfg.canvas.strandedness
+    filtered_feature_dict = feature_dict
+    if track_id_whitelist is not None:
+        filtered_feature_dict = {
+            feature_id: feature_object
+            for feature_id, feature_object in feature_dict.items()
+            if int(getattr(feature_object, "feature_track_id", 0)) in track_id_whitelist
+        }
+        if not filtered_feature_dict:
+            return None
 
-    min_inner: float | None = None
-    max_outer: float | None = None
-
-    for feature_object in feature_dict.values():
-        track_id = int(getattr(feature_object, "feature_track_id", 0))
-        if track_id_whitelist is not None and track_id not in track_id_whitelist:
-            continue
-        feature_location_list = list(getattr(feature_object, "location", []))
-        list_of_coordinates = list(getattr(feature_object, "coordinates", []))
-
-        for coordinate_idx, coordinate in enumerate(list_of_coordinates):
-            if (
-                coordinate_idx < len(feature_location_list)
-                and getattr(feature_location_list[coordinate_idx], "kind", None) == "line"
-            ):
-                continue
-
-            coord_start = int(coordinate.start)
-            coord_end = int(coordinate.end)
-            if coord_start == coord_end:
-                continue
-
-            coord_strand = get_strand(coordinate.strand)
-            factors = calculate_feature_position_factors_circular(
-                total_length,
-                coord_strand,
-                track_ratio,
-                cds_ratio,
-                offset,
-                track_type,
-                strandedness,
-                track_id,
-            )
-            inner_px = base_radius_px * min(float(factors[0]), float(factors[2]))
-            outer_px = base_radius_px * max(float(factors[0]), float(factors[2]))
-
-            min_inner = inner_px if min_inner is None else min(min_inner, inner_px)
-            max_outer = outer_px if max_outer is None else max(max_outer, outer_px)
-
-    if min_inner is None or max_outer is None:
+    feature_width_px = float(base_radius_px) * float(track_ratio) * float(track_ratio_factor)
+    feature_layout = build_circular_feature_layout(
+        filtered_feature_dict,
+        axis_radius_px=float(base_radius_px),
+        width_px=feature_width_px,
+        track_type=str(cfg.canvas.circular.track_type),
+        strandedness=bool(cfg.canvas.strandedness),
+    )
+    if feature_layout is None:
         return None
-    return float(min_inner), float(max_outer)
+    return float(feature_layout.all_band_px.inner_px), float(feature_layout.all_band_px.outer_px)
 
 
 def _map_radius_across_feature_bands(
@@ -2583,6 +2629,7 @@ def add_record_on_circular_canvas(
                 base_radius_px=float(canvas_config.radius),
                 base_track_ratio=float(canvas_config.track_ratio),
             )
+    feature_width_override_requested = feature_track_ratio_factor_override is not None
 
     precomputed_feature_dict: dict | None = None
     should_precompute_feature_dict = show_features and (
@@ -2615,84 +2662,6 @@ def add_record_on_circular_canvas(
             compute_label_text=compute_label_text,
         )
 
-    rendered_feature_band_all_tracks: tuple[float, float] | None = None
-    if core_track_overlap_relayout_enabled and precomputed_feature_dict is not None:
-        rendered_feature_track_ratio_factor = (
-            float(feature_track_ratio_factor_override)
-            if feature_track_ratio_factor_override is not None
-            else float(cfg.canvas.circular.track_ratio_factors[str(canvas_config.length_param)][0])
-        )
-        rendered_feature_band_all_tracks = _compute_feature_band_bounds_px(
-            precomputed_feature_dict,
-            len(gb_record.seq),
-            base_radius_px=float(canvas_config.radius),
-            track_ratio=float(canvas_config.track_ratio),
-            length_param=str(canvas_config.length_param),
-            track_ratio_factor=rendered_feature_track_ratio_factor,
-            cfg=cfg,
-        )
-
-    feature_radius_mapper: Callable[[float], float] | None = None
-    _default_primary_feature_band: tuple[float, float] | None = None
-    _overridden_primary_feature_band: tuple[float, float] | None = None
-    auto_relayout_active = False
-    if (
-        show_features
-        and feature_track_ratio_factor_override is not None
-        and precomputed_feature_dict is not None
-    ):
-        feature_radius_mapper, _default_primary_feature_band, _overridden_primary_feature_band = _build_feature_radius_mapper(
-            precomputed_feature_dict,
-            len(gb_record.seq),
-            canvas_config=canvas_config,
-            cfg=cfg,
-            feature_track_ratio_factor_override=float(feature_track_ratio_factor_override),
-        )
-        auto_relayout_active = feature_radius_mapper is not None
-        all_tracks_feature_band = _compute_feature_band_bounds_px(
-            precomputed_feature_dict,
-            len(gb_record.seq),
-            base_radius_px=float(canvas_config.radius),
-            track_ratio=float(canvas_config.track_ratio),
-            length_param=str(canvas_config.length_param),
-            track_ratio_factor=float(feature_track_ratio_factor_override),
-            cfg=cfg,
-        )
-        if all_tracks_feature_band is not None:
-            max_feature_radius = max(abs(float(all_tracks_feature_band[0])), abs(float(all_tracks_feature_band[1])))
-            if _expand_canvas_to_fit_radius(canvas_config, max_feature_radius):
-                _sync_canvas_viewbox(canvas, canvas_config)
-
-    def _resolve_track_center_and_width_with_autorelayout(
-        kind: str, ts: TrackSpec | None
-    ) -> tuple[float | None, float | None]:
-        center_px, width_px = _resolve_circular_track_center_and_width_px(
-            ts,
-            base_radius_px=float(canvas_config.radius),
-        )
-        has_explicit_center = _track_spec_has_explicit_center(ts)
-        should_resolve_default_center = (
-            center_px is None
-            and (auto_relayout_active or (width_px is not None and not has_explicit_center))
-        )
-        if should_resolve_default_center:
-            default_center_px = _default_track_center_radius_px(
-                kind,
-                canvas_config=canvas_config,
-                cfg=cfg,
-            )
-            if default_center_px is not None:
-                if auto_relayout_active and (not has_explicit_center) and feature_radius_mapper is not None:
-                    center_px = float(feature_radius_mapper(default_center_px))
-                else:
-                    center_px = float(default_center_px)
-        return center_px, width_px
-
-    axis_ts = ts_by_kind.get("axis")
-    axis_radius_px: float | None = None
-    if (not user_slot_mode) and (axis_ts is None or axis_ts.show):
-        axis_radius_px, _ = _resolve_track_center_and_width_with_autorelayout("axis", axis_ts)
-
     tick_label_annulus_for_legend_bounds: tuple[float, float] | None = None
     resolved_track_slots: list[ResolvedCircularTrackSlot] = []
     resolved_feature_anchor_radius_px: float | None = None
@@ -2710,50 +2679,39 @@ def add_record_on_circular_canvas(
             plot_title=plot_title,
             definition_profile=definition_profile,
         )
-    definition_guard_radius_px = definition_reserved_radius_px
-    if (not user_slot_mode) and (
-        feature_track_ratio_factor_override is not None or core_track_overlap_relayout_enabled
-    ):
-        definition_guard_radius_px = None
-    reserved_bands_px: tuple[tuple[float, float], ...] = (
-        ((0.0, float(definition_guard_radius_px)),)
-        if definition_guard_radius_px is not None and definition_guard_radius_px > FEATURE_BAND_EPSILON
-        else ()
-    )
-    preferred_layouts_px = _resolve_builtin_numeric_slot_preferred_layouts(
+    radial_layout = resolve_circular_radial_layout(
+        total_length=len(gb_record.seq),
+        canvas_config=canvas_config,
+        cfg=cfg,
         slots=layout_slots,
-        canvas_config=canvas_config,
-        cfg=cfg,
-        depth_inner_radius_px=None,
-        definition_reserved_radius_px=definition_guard_radius_px,
         track_specs=track_specs,
-        radius_mapper=feature_radius_mapper if auto_relayout_active else None,
-    )
-    context = _legacy_slot_layout_context(
-        gb_record=gb_record,
-        canvas_config=canvas_config,
-        cfg=cfg,
+        feature_dict=precomputed_feature_dict,
+        show_features=show_features,
+        show_ticks=show_ticks_track,
+        definition_reserved_radius_px=definition_reserved_radius_px,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
-        precomputed_feature_dict=precomputed_feature_dict,
-        _tick_track_channel_override=_tick_track_channel_override,
-        reserved_bands_px=reserved_bands_px,
-        min_auto_inner_radius_px=definition_guard_radius_px,
-        preferred_layouts_px=preferred_layouts_px,
-        radius_mapper=feature_radius_mapper if auto_relayout_active else None,
-        tick_labels_hard=core_track_overlap_relayout_enabled,
+        tick_track_channel_override=_tick_track_channel_override,
     )
-    resolved_track_slots = resolve_circular_track_slots(
-        layout_slots,
-        context=context,
-        legacy_track_specs=track_specs,
-        compatibility_mode=False,
-    )
-    feature_resolved_slot = next(
-        (slot for slot in resolved_track_slots if slot.renderer == "features"),
-        None,
-    )
-    if feature_resolved_slot is not None:
-        resolved_feature_anchor_radius_px = float(feature_resolved_slot.anchor_radius_px)
+    setattr(canvas_config, "circular_radial_layout", radial_layout)
+    setattr(canvas_config, "circular_feature_layout", radial_layout.features)
+    resolved_track_slots = _resolved_slots_from_radial_layout(radial_layout, layout_slots)
+    if radial_layout.outer_content_radius_px > float(canvas_config.radius):
+        if _expand_canvas_to_fit_radius(canvas_config, radial_layout.outer_content_radius_px):
+            _sync_canvas_viewbox(canvas, canvas_config)
+
+    rendered_feature_band_all_tracks: tuple[float, float] | None = None
+    if radial_layout.features is not None:
+        rendered_feature_band_all_tracks = (
+            float(radial_layout.features.all_band_px.inner_px),
+            float(radial_layout.features.all_band_px.outer_px),
+        )
+        resolved_feature_anchor_radius_px = float(radial_layout.features.anchor_radius_px)
+        feature_track_ratio_factor_override = (
+            float(radial_layout.features.width_px)
+            / max(FEATURE_BAND_EPSILON, float(canvas_config.radius) * float(canvas_config.track_ratio))
+        )
+    axis_radius_px: float | None = float(radial_layout.axis.radius_px)
+    axis_ts = ts_by_kind.get("axis")
     for resolved_slot in resolved_track_slots:
         if resolved_slot.renderer != "ticks":
             continue
@@ -2783,14 +2741,11 @@ def add_record_on_circular_canvas(
             canvas_config=canvas_config,
             cfg=cfg,
         )
-        if auto_relayout_active and (not labels_has_explicit_center) and feature_radius_mapper is not None:
-            default_anchor_px = float(feature_radius_mapper(default_anchor_px))
-            default_arc_outer_px = float(feature_radius_mapper(default_arc_outer_px))
         if default_arc_outer_px < default_anchor_px:
             default_anchor_px, default_arc_outer_px = default_arc_outer_px, default_anchor_px
 
         if labels_center_px is None and labels_width_px is None:
-            if auto_relayout_active and (not labels_has_explicit_center):
+            if feature_width_override_requested and not labels_has_explicit_center:
                 outer_arena = (default_anchor_px, default_arc_outer_px)
         else:
             if labels_center_px is None:
@@ -2814,6 +2769,7 @@ def add_record_on_circular_canvas(
             cfg=cfg,
             outer_arena=outer_arena,
             feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+            feature_layout=radial_layout.features,
         )
         _resolve_label_legend_collisions(
             precalculated_labels,

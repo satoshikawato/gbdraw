@@ -20,6 +20,10 @@ from ..layout.common import calculate_cds_ratio
 from ..layout.circular import calculate_feature_position_factors_circular
 from ..layout.spatial import Aabb, candidate_aabb_pairs
 from ..svg.arrows import calculate_circular_arrow_length
+from ..diagrams.circular.radial_layout import (  # type: ignore[reportMissingImports]
+    CircularFeatureLayout,
+    feature_radius_intervals,
+)
 
 # Keep dense large-font labels from being pushed excessively far from features.
 MIN_BBOX_GAP_RATIO = 0.01
@@ -1236,10 +1240,13 @@ def _build_feature_radius_intervals(
     cfg: GbdrawConfig,
     *,
     feature_track_ratio_factor_override: float | None = None,
+    feature_layout: CircularFeatureLayout | None = None,
 ) -> list[tuple[float, float, float, float]]:
     """Build local genome intervals as (start, end, inner_radius_px, outer_radius_px)."""
     if total_length <= 0:
         return []
+    if feature_layout is not None:
+        return feature_radius_intervals(feature_dict, total_length, feature_layout)
 
     length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
     track_ratio_factor = (
@@ -1309,6 +1316,7 @@ def _build_outer_feature_radius_intervals(
     cfg: GbdrawConfig,
     *,
     feature_track_ratio_factor_override: float | None = None,
+    feature_layout: CircularFeatureLayout | None = None,
 ) -> list[tuple[float, float, float]]:
     """Build local genome intervals as (start, end, outer_radius_px)."""
     detailed_intervals = _build_feature_radius_intervals(
@@ -1318,6 +1326,7 @@ def _build_outer_feature_radius_intervals(
         track_ratio,
         cfg,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+        feature_layout=feature_layout,
     )
     return [(start, end, outer_radius) for start, end, _inner_radius, outer_radius in detailed_intervals]
 
@@ -1330,6 +1339,7 @@ def _build_inner_feature_radius_intervals(
     cfg: GbdrawConfig,
     *,
     feature_track_ratio_factor_override: float | None = None,
+    feature_layout: CircularFeatureLayout | None = None,
 ) -> list[tuple[float, float, float]]:
     """Build local genome intervals as (start, end, inner_radius_px)."""
     detailed_intervals = _build_feature_radius_intervals(
@@ -1339,6 +1349,7 @@ def _build_inner_feature_radius_intervals(
         track_ratio,
         cfg,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+        feature_layout=feature_layout,
     )
     return [(start, end, inner_radius) for start, end, inner_radius, _outer_radius in detailed_intervals]
 
@@ -4539,6 +4550,7 @@ def prepare_label_list(
     *,
     outer_arena: tuple[float, float] | None = None,
     feature_track_ratio_factor_override: float | None = None,
+    feature_layout: CircularFeatureLayout | None = None,
 ):
     cfg = cfg or GbdrawConfig.from_dict(config_dict)
     embedded_labels = []
@@ -4620,9 +4632,18 @@ def prepare_label_list(
 
             # Get track_id for overlap resolution
             track_id = getattr(feature_object, 'feature_track_id', 0)
-            factors: list[float] = calculate_feature_position_factors_circular(
-                total_length, coordinate_strand, track_ratio, cds_ratio, offset, track_type, strandedness, track_id
-            )
+            if feature_layout is None:
+                factors: list[float] = calculate_feature_position_factors_circular(
+                    total_length, coordinate_strand, track_ratio, cds_ratio, offset, track_type, strandedness, track_id
+                )
+                feature_inner_radius = radius * min(float(factors[0]), float(factors[2]))
+                feature_center_radius = radius * float(factors[1])
+                feature_outer_radius = radius * max(float(factors[0]), float(factors[2]))
+            else:
+                lane = feature_layout.lane_for_track_id(int(track_id))
+                feature_inner_radius = float(lane.inner_px)
+                feature_center_radius = float(lane.center_px)
+                feature_outer_radius = float(lane.outer_px)
             # Store track_id in label entry for embedded label drawing
             label_entry["track_id"] = track_id
             bbox_width_px, bbox_height_px = calculate_bbox_dimensions(feature_label_text, font_family, font_size, interval)
@@ -4630,13 +4651,11 @@ def prepare_label_list(
             label_as_feature_length = total_length * (1.1 * bbox_width_px) / (2 * math.pi * radius)
             label_start = label_middle - (label_as_feature_length / 2)
             label_end = label_middle + (label_as_feature_length / 2)
-            feature_middle_x: float = (radius * factors[1]) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
-            feature_middle_y: float = (radius * factors[1]) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
+            feature_middle_x: float = feature_center_radius * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
+            feature_middle_y: float = feature_center_radius * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
             feature_anchor_x: float = feature_middle_x
             feature_anchor_y: float = feature_middle_y
             is_outer_label = (feature_object.strand == "positive") or (allow_inner_labels is False)
-            feature_inner_radius = radius * min(float(factors[0]), float(factors[2]))
-            feature_outer_radius = radius * max(float(factors[0]), float(factors[2]))
             longest_segment_bp = _segment_span_bp(
                 longest_segment_start,
                 longest_segment_end,
@@ -4734,6 +4753,9 @@ def prepare_label_list(
             label_entry["feature_middle_y"] = feature_middle_y
             label_entry["feature_anchor_x"] = feature_anchor_x
             label_entry["feature_anchor_y"] = feature_anchor_y
+            label_entry["feature_inner_radius_px"] = feature_inner_radius
+            label_entry["feature_center_radius_px"] = feature_center_radius
+            label_entry["feature_outer_radius_px"] = feature_outer_radius
             label_entry["width_px"] = bbox_width_px
             label_entry["height_px"] = bbox_height_px
             label_entry["strand"] = coordinate_strand
@@ -4781,6 +4803,7 @@ def prepare_label_list(
             track_ratio,
             cfg,
             feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+            feature_layout=feature_layout,
         )
         feature_inner_radius_intervals = _build_inner_feature_radius_intervals(
             feature_dict,
@@ -4789,6 +4812,7 @@ def prepare_label_list(
             track_ratio,
             cfg,
             feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+            feature_layout=feature_layout,
         )
         outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
             outer_labels_rearranged,

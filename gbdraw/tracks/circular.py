@@ -164,6 +164,10 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
                         placement = replace(placement, outer_radius=ScalarSpec.parse(value))
                 elif key in {"placement"}:
                     params["placement"] = value
+                elif key in {"side", "avoid"}:
+                    params[key] = value
+                elif key in {"compress", "strict", "reserve"}:
+                    params[key] = _parse_bool(value)
                 elif key in {"nt", "dinucleotide"}:
                     params["nt"] = value.upper()
                 else:
