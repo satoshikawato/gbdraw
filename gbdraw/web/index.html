@@ -748,7 +748,7 @@
                             </template>
 
                             <template v-else>
-                                <div>
+                                <div v-if="!adv.circular_track_slots_enabled">
                                     <label class="input-label text-[10px] mb-1">Track Layout <help-tip text="Choose how features are displayed. 'Tuckin' is default and compact. 'Middle' aligns to center, 'Spreadout' separates them."></help-tip></label>
                                     <select v-model="form.track_type" class="form-input text-xs py-1">
                                         <option value="tuckin">Tuckin</option>
@@ -763,7 +763,7 @@
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Circular mode: effective only when Separate Strands is OFF. If Separate Strands is ON, this option is ignored. Track Layout still applies: Tuckin shifts overlap tracks inward, Middle/Spreadout shift them outward."></help-tip></span>
+                                        <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Circular mode: effective only when Separate Strands is OFF. If Separate Strands is ON, this option is ignored. Feature layout still applies: Tuckin shifts overlap tracks inward, Middle/Spreadout shift them outward."></help-tip></span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.multi_record_canvas" class="form-checkbox">
@@ -787,7 +787,7 @@
                                     <div class="flex items-center justify-between gap-2">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                             <input type="checkbox" v-model="adv.circular_track_slots_enabled" class="form-checkbox">
-                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Auto placement packs measured hard footprints by row order. Placement controls whether numeric slots are requested inside, outside, or overlaid; strict inside slots report a fit error instead of silently moving outside. r/ri/ro pin geometry, w pins width, z only layers SVG."></help-tip></span>
+                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Auto placement packs measured hard footprints by row order. Outside slots move above Features, inside slots move below Features, and overlay keeps manual row order. Placement controls whether numeric slots are requested inside, outside, or overlaid; strict inside slots report a fit error instead of silently moving outside. Legacy tick marks and labels are measured from their drawn radii. r/ri/ro pin geometry, w pins width, z only layers SVG and does not control radial order."></help-tip></span>
                                         </label>
                                         <button
                                             type="button"
@@ -836,6 +836,16 @@
                                                 <input v-model.trim="slot.radius" class="form-input px-1 py-0.5 text-[10px]" placeholder="r">
                                                 <input v-model.trim="slot.gapAfter" class="form-input px-1 py-0.5 text-[10px]" placeholder="gap">
                                                 <input type="number" v-model.number="slot.z" class="form-input px-1 py-0.5 text-[10px]" placeholder="z">
+                                            </div>
+                                            <div v-if="slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
+                                                <div>
+                                                    <label class="input-label text-[10px] mb-1">Feature Layout <help-tip text="Circular feature track display mode. This edits the same setting as Track Layout when Custom Track Slots is off."></help-tip></label>
+                                                    <select v-model="form.track_type" class="form-input px-1 py-0.5 text-[10px]">
+                                                        <option value="tuckin">Tuckin</option>
+                                                        <option value="middle">Middle</option>
+                                                        <option value="spreadout">Spreadout</option>
+                                                    </select>
+                                                </div>
                                             </div>
                                             <div v-if="slot.renderer === 'ticks'" class="grid grid-cols-2 gap-1 items-center">
                                                 <select v-model="slot.params.label_side" class="form-input px-1 py-0.5 text-[10px]">

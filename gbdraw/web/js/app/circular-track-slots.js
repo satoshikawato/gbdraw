@@ -52,6 +52,39 @@ const normalizePlacement = (value, fallback = 'inside') => {
   return ['inside', 'outside', 'overlay'].includes(text) ? text : fallback;
 };
 
+export const findFeatureSlotIndex = (slots) => {
+  if (!Array.isArray(slots)) return -1;
+  return slots.findIndex((slot) => slot?.renderer === 'features');
+};
+
+const getSlotPlacement = (slot) => {
+  if (!slot || !PLACEMENT_RENDERERS.has(slot.renderer)) return null;
+  return normalizePlacement(slot.params?.side, 'inside');
+};
+
+const getPlacementInsertionIndex = (slots, placement) => {
+  const featureIndex = findFeatureSlotIndex(slots);
+  if (featureIndex < 0) return Array.isArray(slots) ? slots.length : 0;
+
+  if (placement === 'outside') {
+    let insertIndex = featureIndex;
+    for (let index = 0; index < featureIndex; index += 1) {
+      if (getSlotPlacement(slots[index]) === 'outside') insertIndex = index + 1;
+    }
+    return insertIndex;
+  }
+
+  if (placement === 'inside') {
+    let insertIndex = featureIndex + 1;
+    for (let index = featureIndex + 1; index < slots.length; index += 1) {
+      if (getSlotPlacement(slots[index]) === 'inside') insertIndex = index + 1;
+    }
+    return insertIndex;
+  }
+
+  return slots.length;
+};
+
 const normalizeOptionalBool = (value) => {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'boolean') return value;
@@ -267,6 +300,40 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...normalized);
   };
 
+  const findSlotIndexByIdentity = (slotOrId) => {
+    const slots = state.adv.circular_track_slots;
+    if (slotOrId && typeof slotOrId === 'object') {
+      const objectIndex = slots.findIndex((slot) => slot === slotOrId);
+      if (objectIndex >= 0) return objectIndex;
+    }
+    const slotId = String(
+      slotOrId && typeof slotOrId === 'object'
+        ? slotOrId.id
+        : slotOrId
+    ).trim();
+    if (!slotId) return -1;
+    return slots.findIndex((slot) => String(slot?.id || '').trim() === slotId);
+  };
+
+  const insertSlotRelativeToFeatures = (slot, placement) => {
+    const normalizedPlacement = normalizePlacement(placement);
+    if (normalizedPlacement === 'overlay') {
+      state.adv.circular_track_slots.push(slot);
+      return;
+    }
+    const insertIndex = getPlacementInsertionIndex(state.adv.circular_track_slots, normalizedPlacement);
+    state.adv.circular_track_slots.splice(insertIndex, 0, slot);
+  };
+
+  const moveSlotRelativeToFeatures = (slotOrId, placement) => {
+    const normalizedPlacement = normalizePlacement(placement);
+    if (normalizedPlacement === 'overlay') return;
+    const index = findSlotIndexByIdentity(slotOrId);
+    if (index < 0) return;
+    const [slot] = state.adv.circular_track_slots.splice(index, 1);
+    insertSlotRelativeToFeatures(slot, normalizedPlacement);
+  };
+
   const resetCircularTrackSlotsFromSimpleControls = () => {
     const slots = createDefaultCircularTrackSlots({
       nt: state.adv.nt,
@@ -279,9 +346,12 @@ export const createCircularTrackSlotEditor = ({ state }) => {
 
   const addCircularTrackSlot = (renderer, placement = 'inside') => {
     normalizeSlotsInPlace();
-    state.adv.circular_track_slots.push(
-      createCircularTrackSlotForRenderer(renderer, state.adv.circular_track_slots, state.adv.nt, placement)
-    );
+    const slot = createCircularTrackSlotForRenderer(renderer, state.adv.circular_track_slots, state.adv.nt, placement);
+    if (PLACEMENT_RENDERERS.has(slot.renderer)) {
+      insertSlotRelativeToFeatures(slot, slot.params.side);
+    } else {
+      state.adv.circular_track_slots.push(slot);
+    }
   };
 
   const duplicateCircularTrackSlot = (index) => {
@@ -299,6 +369,9 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     duplicate.z = source.z;
     duplicate.params = cloneParams(source.params);
     state.adv.circular_track_slots.splice(idx + 1, 0, duplicate);
+    if (PLACEMENT_RENDERERS.has(duplicate.renderer)) {
+      moveSlotRelativeToFeatures(duplicate, duplicate.params.side);
+    }
   };
 
   const removeCircularTrackSlot = (index) => {
@@ -330,6 +403,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     if (!slot || !SUPPORTED_RENDERERS.includes(renderer)) return;
     slot.renderer = renderer;
     slot.params = cloneParams(slot.params);
+    let placement = null;
     if (renderer === 'ticks') {
       delete slot.params['axis'];
       slot.params.label_side = normalizeOptionalText(slot.params.label_side) || 'outside';
@@ -340,18 +414,23 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     if (PLACEMENT_RENDERERS.has(renderer) && !normalizeOptionalText(slot.params.side)) {
       applyPlacementDefaults(slot.params, 'inside');
     }
+    if (PLACEMENT_RENDERERS.has(renderer)) {
+      placement = normalizePlacement(slot.params.side);
+    }
     if (!PLACEMENT_RENDERERS.has(renderer)) {
       delete slot.params.side;
       delete slot.params.strict;
       delete slot.params.compress;
       delete slot.params.reserve;
     }
+    if (placement !== null) moveSlotRelativeToFeatures(slot, placement);
   };
 
   const updateCircularTrackSlotPlacement = (slot, placement) => {
     if (!slot || !PLACEMENT_RENDERERS.has(slot.renderer)) return;
     slot.params = cloneParams(slot.params);
     applyPlacementDefaults(slot.params, placement);
+    moveSlotRelativeToFeatures(slot, slot.params.side);
   };
 
   const circularTrackRendererLabel = (renderer) => RENDERER_LABELS[renderer] || renderer;
