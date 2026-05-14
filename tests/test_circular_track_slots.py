@@ -1018,8 +1018,8 @@ def test_ordered_pack_compression_preserves_order() -> None:
         legacy_widths_px={"gc_content": 25.0, "gc_skew": 25.0},
         default_gap_px=0.0,
         feature_band_offsets_px=(-15.0, 0.0),
-        reserved_bands_px=((0.0, 20.0),),
-        min_auto_inner_radius_px=20.0,
+        reserved_bands_px=((0.0, 10.0),),
+        min_auto_inner_radius_px=10.0,
     )
 
     resolved = resolve_circular_track_slots(
@@ -1036,7 +1036,30 @@ def test_ordered_pack_compression_preserves_order() -> None:
     assert by_id["gc_content"].center_radius_px > by_id["gc_skew"].center_radius_px
     assert by_id["gc_content"].draw_width_px == pytest.approx(by_id["gc_skew"].draw_width_px)
     assert by_id["gc_content"].draw_width_px < 25.0
-    assert by_id["gc_skew"].reserved_inner_radius_px >= 20.0 - 1e-6
+    assert by_id["gc_skew"].draw_width_px >= 16.25 - 1e-6
+    assert by_id["gc_skew"].reserved_inner_radius_px >= 10.0 - 1e-6
+
+
+def test_ordered_pack_rejects_numeric_compression_below_readable_minimum() -> None:
+    context = CircularTrackLayoutContext(
+        base_radius_px=100.0,
+        legacy_widths_px={"gc_content": 25.0, "gc_skew": 25.0},
+        default_gap_px=0.0,
+        feature_band_offsets_px=(-15.0, 0.0),
+        reserved_bands_px=((0.0, 20.0),),
+        min_auto_inner_radius_px=20.0,
+    )
+
+    with pytest.raises(ValueError, match="cannot fit without overlapping the center definition"):
+        resolve_circular_track_slots(
+            [
+                parse_circular_track_slot("features:features@r=100px"),
+                parse_circular_track_slot("ticks:ticks@r=60px,w=10px,label_side=none,tick_side=inside"),
+                CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+                CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+            ],
+            context=context,
+        )
 
 
 def test_explicit_radius_can_override_toolbar_order() -> None:

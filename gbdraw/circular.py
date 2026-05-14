@@ -458,7 +458,7 @@ def _get_args(args) -> argparse.Namespace:
         type=str)
     parser.add_argument(
         '--circular_track_slot',
-        help='Circular track slot spec: <slot_id>:<renderer>@key=value,key=value. Can be repeated; auto rows pack measured hard footprints outer-to-inner. r/ri/ro pin geometry, w pins width, z only layers SVG. Slot radius is renderer input; GC/skew widths are preserved unless hard constraints require compression.',
+        help='Circular track slot spec: <slot_id>:<renderer>@key=value,key=value. Can be repeated; auto rows pack measured hard footprints outer-to-inner. r/ri/ro pin geometry, w pins width, z only layers SVG. side=inside|outside|overlay controls placement; strict=true reports inside fit errors instead of falling back outside.',
         action='append',
         default=[])
     parser.add_argument(

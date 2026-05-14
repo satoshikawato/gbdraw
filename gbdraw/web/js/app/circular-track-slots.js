@@ -25,6 +25,13 @@ const DEFAULT_SLOT_IDS = {
   spacer: 'spacer'
 };
 
+const PLACEMENT_RENDERERS = new Set(['dinucleotide_content', 'dinucleotide_skew', 'depth', 'spacer']);
+const PLACEMENT_LABELS = {
+  inside: 'Inside',
+  outside: 'Outside',
+  overlay: 'Overlay'
+};
+
 const normalizeNt = (value, fallback = 'GC') => {
   const text = String(value || '').trim().toUpperCase();
   return text || fallback;
@@ -40,9 +47,38 @@ const normalizeOptionalText = (value) => {
   return text.length > 0 ? text : null;
 };
 
+const normalizePlacement = (value, fallback = 'inside') => {
+  const text = String(value || fallback).trim().toLowerCase();
+  return ['inside', 'outside', 'overlay'].includes(text) ? text : fallback;
+};
+
+const normalizeOptionalBool = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'boolean') return value;
+  const text = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(text)) return true;
+  if (['0', 'false', 'no', 'off'].includes(text)) return false;
+  return null;
+};
+
 const cloneParams = (params = {}) => {
   if (!params || typeof params !== 'object' || Array.isArray(params)) return {};
   return { ...params };
+};
+
+const applyPlacementDefaults = (params, placement = 'inside') => {
+  const side = normalizePlacement(placement);
+  params.side = side;
+  if (side === 'inside') {
+    params.strict = true;
+    params.compress = true;
+  } else if (side === 'outside') {
+    params.strict = false;
+    delete params.compress;
+  } else {
+    params.strict = false;
+    delete params.compress;
+  }
 };
 
 const makeSlot = ({
@@ -102,7 +138,7 @@ export const createDefaultCircularTrackSlots = ({
   return slots;
 };
 
-export const createCircularTrackSlotForRenderer = (renderer, existingSlots = [], nt = 'GC') => {
+export const createCircularTrackSlotForRenderer = (renderer, existingSlots = [], nt = 'GC', placement = 'inside') => {
   const normalizedRenderer = SUPPORTED_RENDERERS.includes(renderer) ? renderer : 'dinucleotide_skew';
   const baseId = DEFAULT_SLOT_IDS[normalizedRenderer] || normalizedRenderer;
   const existingIds = new Set(
@@ -124,6 +160,9 @@ export const createCircularTrackSlotForRenderer = (renderer, existingSlots = [],
   } else if (normalizedRenderer === 'dinucleotide_content' || normalizedRenderer === 'dinucleotide_skew') {
     params.nt = normalizeNt(nt);
   }
+  if (PLACEMENT_RENDERERS.has(normalizedRenderer)) {
+    applyPlacementDefaults(params, placement);
+  }
 
   return makeSlot({ id, renderer: normalizedRenderer, params });
 };
@@ -141,6 +180,23 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC') =>
     delete params['axis'];
     if (!normalizeOptionalText(params.label_side)) params.label_side = 'outside';
     if (!normalizeOptionalText(params.tick_side)) params.tick_side = 'inside';
+  }
+  if (PLACEMENT_RENDERERS.has(renderer)) {
+    if (normalizeOptionalText(params.side)) params.side = normalizePlacement(params.side);
+    const strict = normalizeOptionalBool(params.strict);
+    const compress = normalizeOptionalBool(params.compress);
+    const reserve = normalizeOptionalBool(params.reserve);
+    if (strict === null) delete params.strict;
+    else params.strict = strict;
+    if (compress === null) delete params.compress;
+    else params.compress = compress;
+    if (reserve === null) delete params.reserve;
+    else params.reserve = reserve;
+  } else {
+    delete params.side;
+    delete params.strict;
+    delete params.compress;
+    delete params.reserve;
   }
 
   return makeSlot({
@@ -191,6 +247,12 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC') => {
   } else if (normalized.renderer === 'dinucleotide_content' || normalized.renderer === 'dinucleotide_skew') {
     options.push(`nt=${normalizeNt(params.nt, normalizeNt(defaultNt))}`);
   }
+  if (PLACEMENT_RENDERERS.has(normalized.renderer)) {
+    appendOption(options, 'side', params.side);
+    appendOption(options, 'strict', params.strict);
+    appendOption(options, 'compress', params.compress);
+    appendOption(options, 'reserve', params.reserve);
+  }
   appendOption(options, 'legend_label', params.legend_label);
 
   return `${normalized.id}:${normalized.renderer}${options.length ? `@${options.join(',')}` : ''}`;
@@ -215,10 +277,10 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...slots);
   };
 
-  const addCircularTrackSlot = (renderer) => {
+  const addCircularTrackSlot = (renderer, placement = 'inside') => {
     normalizeSlotsInPlace();
     state.adv.circular_track_slots.push(
-      createCircularTrackSlotForRenderer(renderer, state.adv.circular_track_slots, state.adv.nt)
+      createCircularTrackSlotForRenderer(renderer, state.adv.circular_track_slots, state.adv.nt, placement)
     );
   };
 
@@ -275,9 +337,26 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     } else if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
       slot.params.nt = normalizeNt(slot.params.nt, normalizeNt(state.adv.nt));
     }
+    if (PLACEMENT_RENDERERS.has(renderer) && !normalizeOptionalText(slot.params.side)) {
+      applyPlacementDefaults(slot.params, 'inside');
+    }
+    if (!PLACEMENT_RENDERERS.has(renderer)) {
+      delete slot.params.side;
+      delete slot.params.strict;
+      delete slot.params.compress;
+      delete slot.params.reserve;
+    }
+  };
+
+  const updateCircularTrackSlotPlacement = (slot, placement) => {
+    if (!slot || !PLACEMENT_RENDERERS.has(slot.renderer)) return;
+    slot.params = cloneParams(slot.params);
+    applyPlacementDefaults(slot.params, placement);
   };
 
   const circularTrackRendererLabel = (renderer) => RENDERER_LABELS[renderer] || renderer;
+  const circularTrackPlacementLabel = (placement) => PLACEMENT_LABELS[normalizePlacement(placement)] || PLACEMENT_LABELS.inside;
+  const supportsCircularTrackSlotPlacement = (renderer) => PLACEMENT_RENDERERS.has(renderer);
 
   const circularTrackSlotCliSpec = (slot) => buildCircularTrackSlotSpec(slot, state.adv.nt);
 
@@ -291,6 +370,9 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     removeCircularTrackSlot,
     moveCircularTrackSlot,
     updateCircularTrackSlotRenderer,
+    updateCircularTrackSlotPlacement,
+    circularTrackPlacementLabel,
+    supportsCircularTrackSlotPlacement,
     circularTrackSlotCliSpec
   };
 };

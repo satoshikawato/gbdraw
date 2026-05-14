@@ -178,6 +178,7 @@ export const createAppSetup = () => {
   });
 
   const circularTrackNewRenderer = ref('dinucleotide_skew');
+  const circularTrackNewPlacement = ref('inside');
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
   const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions });
   const {
@@ -788,6 +789,7 @@ export const createAppSetup = () => {
     adv,
     canUseLinearRulerOnAxis,
     circularTrackNewRenderer,
+    circularTrackNewPlacement,
     circularTrackRenderers: circularTrackSlotEditor.circularTrackRenderers,
     circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
     resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,
@@ -796,6 +798,9 @@ export const createAppSetup = () => {
     removeCircularTrackSlot: circularTrackSlotEditor.removeCircularTrackSlot,
     moveCircularTrackSlot: circularTrackSlotEditor.moveCircularTrackSlot,
     updateCircularTrackSlotRenderer: circularTrackSlotEditor.updateCircularTrackSlotRenderer,
+    updateCircularTrackSlotPlacement: circularTrackSlotEditor.updateCircularTrackSlotPlacement,
+    circularTrackPlacementLabel: circularTrackSlotEditor.circularTrackPlacementLabel,
+    supportsCircularTrackSlotPlacement: circularTrackSlotEditor.supportsCircularTrackSlotPlacement,
     circularTrackSlotCliSpec: circularTrackSlotEditor.circularTrackSlotCliSpec,
     losat,
     losatCacheInfo,

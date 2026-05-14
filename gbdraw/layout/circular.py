@@ -14,11 +14,11 @@ def calculate_feature_position_factors_circular(
 ) -> list[float]:
     """
     Calculates position factors for a feature based on its strand orientation on a circular canvas.
-    
+
     The factors determine the inner, middle, and outer radii of the feature arc relative to
-    the base radius. When resolve_overlaps is enabled with strandedness=False, track_id is 
+    the base radius. When resolve_overlaps is enabled with strandedness=False, track_id is
     used to offset features to avoid visual overlap.
-    
+
     Args:
         total_length: Total length of the genome (not used in calculation but kept for API consistency)
         strand: "positive", "negative", or "undefined"
@@ -31,7 +31,7 @@ def calculate_feature_position_factors_circular(
                   - spreadout: displaced outward
                   - middle: positive/undefined displaced outward, negative displaced inward
                   - tuckin: displaced inward
-    
+
     Returns:
         List of three floats [inner_factor, middle_factor, outer_factor] used to calculate
         the actual radii by multiplying with the base radius.
@@ -39,12 +39,12 @@ def calculate_feature_position_factors_circular(
     BASE: float = 1.0
     cds_ratio = float(cds_ratio)
     offset = float(offset)
-    
+
     # Calculate track offset for resolve_overlaps
     # Each track is spaced by cds_ratio * TRACK_SPACING_MULTIPLIER
     TRACK_SPACING_MULTIPLIER = 1.2
     track_offset = abs(track_id) * cds_ratio * TRACK_SPACING_MULTIPLIER
-    
+
     if strandedness is True:
         # With strand separation: resolve_overlaps is NOT supported
         # track_id is ignored
@@ -60,14 +60,14 @@ def calculate_feature_position_factors_circular(
         else:
             factors_positive = [BASE, BASE + cds_ratio * 0.5, BASE + cds_ratio]
             factors_negative = [BASE - cds_ratio, BASE - cds_ratio * 0.5, BASE]
-        
+
         if strand == "positive":
             factors: list[float] = [x + offset for x in factors_positive]
         else:
             factors = [x - offset for x in factors_negative]
-        
+
         return factors
-    
+
     else:
         # No strand separation: resolve_overlaps is supported
         if track_type == "middle":
@@ -85,7 +85,7 @@ def calculate_feature_position_factors_circular(
             if track_id != 0:
                 base_factors = [x + track_offset for x in base_factors]
         elif track_type == "tuckin":
-            base_factors = [BASE - cds_ratio * 1.7, BASE - cds_ratio * 1.2, BASE - cds_ratio * 0.7]
+            base_factors = [BASE - cds_ratio * 1.2, BASE - cds_ratio * 0.7, BASE - cds_ratio * 0.2]
             # resolve_overlaps: push overlapping features INWARD (toward center)
             if track_id != 0:
                 base_factors = [x - track_offset for x in base_factors]

@@ -550,6 +550,25 @@ export const createRunAnalysis = ({
   const normalizeSections = (sections) =>
     sections.filter((section) => section && typeof section.text === 'string' && section.text.trim() !== '');
 
+  const extractCircularTrackSlotError = (err) => {
+    const texts = [
+      err?.message,
+      err?.stderr,
+      err?.stdout,
+      err?.traceback
+    ];
+    for (const text of texts) {
+      const lines = String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      for (const line of lines) {
+        const cleaned = line.replace(/^(ValueError|RuntimeError):\s*/, '');
+        if (/^Circular track slot '.+' cannot fit inside the feature\/tick stack\./.test(cleaned)) {
+          return cleaned;
+        }
+      }
+    }
+    return '';
+  };
+
   const formatPythonError = (err) => {
     if (err && typeof err === 'object') {
       const details = normalizeSections([
@@ -557,12 +576,14 @@ export const createRunAnalysis = ({
         { label: 'STDOUT', text: err.stdout || '' },
         { label: 'Traceback', text: err.traceback || '' }
       ]);
+      const circularTrackSlotError = extractCircularTrackSlotError(err);
       let summary =
+        circularTrackSlotError ||
         (err.type === 'SystemExit' && err.stderr ? getLastLine(err.stderr) : '') ||
         err.message ||
         getLastLine(err.stderr || err.stdout || err.traceback) ||
         'Unknown error';
-      if (err.type && summary && !summary.startsWith(err.type)) {
+      if (!circularTrackSlotError && err.type && summary && !summary.startsWith(err.type)) {
         summary = `${err.type}: ${summary}`;
       }
       return { summary, details };

@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 LAYOUT_EPSILON = 1e-6
 TRACK_SPACING_MULTIPLIER = 1.2
 NUMERIC_RENDERERS = frozenset({"dinucleotide_content", "dinucleotide_skew", "depth"})
+MIN_NUMERIC_WIDTH_PX = 10.0
+MIN_NUMERIC_WIDTH_FRACTION = 0.55
+MIN_SKEW_WIDTH_PX = 12.0
+MIN_SKEW_WIDTH_FRACTION = 0.65
 
 
 @dataclass(frozen=True)
@@ -127,6 +131,7 @@ class _SlotIntent:
     explicit_width: bool
     channel: str
     params: Mapping[str, Any]
+    numeric_group_id: int = 0
 
 
 def band_union(bands: Sequence[RadialBand]) -> RadialBand | None:
@@ -334,7 +339,7 @@ def _feature_lane_center(
     if layout == "spreadout":
         return axis + (0.9 * width) + (abs(track) * step), "combined"
     if layout == "tuckin":
-        return axis - (1.2 * width) - (abs(track) * step), "combined"
+        return axis - (0.7 * width) - (abs(track) * step), "combined"
     if track < 0:
         return axis - (abs(track) * step), "negative"
     if track > 0:
@@ -519,9 +524,14 @@ def _slot_intents(
 ) -> list[_SlotIntent]:
     base_radius = float(canvas_config.radius)
     intents: list[_SlotIntent] = []
+    numeric_group_id = 0
+    previous_auto_numeric = False
     for slot in slots:
         renderer = str(slot.renderer)
         if not slot.enabled or renderer in {"features", "ticks"}:
+            if slot.enabled:
+                previous_auto_numeric = False
+                numeric_group_id += 1
             continue
         ts = _track_spec_for_slot(slot, track_specs)
         if ts is not None and not ts.show:
@@ -553,6 +563,22 @@ def _slot_intents(
             width_px = _default_numeric_width_px(renderer, canvas_config=canvas_config, cfg=cfg)
 
         channel = _normalize_side(params.get("side"), default="inside")
+        auto_numeric = (
+            channel == "inside"
+            and center_px is None
+            and renderer in NUMERIC_RENDERERS
+            and not bool(explicit_width)
+            and not bool(explicit_annulus)
+        )
+        if auto_numeric:
+            if not previous_auto_numeric:
+                numeric_group_id += 1
+            group_id = numeric_group_id
+            previous_auto_numeric = True
+        else:
+            numeric_group_id += 1
+            group_id = numeric_group_id
+            previous_auto_numeric = False
         intents.append(
             _SlotIntent(
                 slot=slot,
@@ -563,6 +589,7 @@ def _slot_intents(
                 explicit_width=bool(explicit_width),
                 channel=channel,
                 params=params,
+                numeric_group_id=group_id,
             )
         )
     return intents
@@ -572,6 +599,55 @@ def _slot_gap_px(slot: CircularTrackSlot, *, base_radius_px: float) -> float:
     if slot.gap_after is None:
         return max(1.0, 0.01 * float(base_radius_px))
     return max(0.0, float(slot.gap_after.resolve(float(base_radius_px))))
+
+
+def _scaled_slot_gap_px(
+    slot: CircularTrackSlot,
+    *,
+    base_radius_px: float,
+    implicit_gap_scale: float,
+) -> float:
+    gap_px = _slot_gap_px(slot, base_radius_px=base_radius_px)
+    if slot.gap_after is not None:
+        return gap_px
+    return max(0.0, gap_px * max(0.0, float(implicit_gap_scale)))
+
+
+def _is_auto_numeric_inside_intent(intent: _SlotIntent) -> bool:
+    return (
+        intent.channel == "inside"
+        and intent.center_px is None
+        and str(intent.slot.renderer) in NUMERIC_RENDERERS
+        and not bool(intent.explicit_width)
+        and not bool(intent.explicit_annulus)
+    )
+
+
+def _min_readable_numeric_width_px(renderer: str, default_width_px: float) -> float:
+    width = max(0.0, float(default_width_px))
+    if width <= LAYOUT_EPSILON:
+        return 0.0
+    if renderer == "dinucleotide_skew":
+        return min(width, max(MIN_SKEW_WIDTH_PX, MIN_SKEW_WIDTH_FRACTION * width))
+    return min(width, max(MIN_NUMERIC_WIDTH_PX, MIN_NUMERIC_WIDTH_FRACTION * width))
+
+
+def _min_numeric_width_scale(intents: Sequence[_SlotIntent]) -> float:
+    min_scale = 0.0
+    for intent in intents:
+        width = max(0.0, float(intent.width_px))
+        if width <= LAYOUT_EPSILON:
+            continue
+        min_width = _min_readable_numeric_width_px(str(intent.slot.renderer), width)
+        min_scale = max(min_scale, min(1.0, min_width / width))
+    return min(1.0, max(0.0, min_scale))
+
+
+def _inside_slot_error(intent: _SlotIntent) -> ValueError:
+    return ValueError(
+        f"Circular track slot '{intent.slot.id}' cannot fit inside the feature/tick stack. "
+        "Reduce numeric track widths, remove another inside slot, or set Placement to Outside."
+    )
 
 
 def _inside_start_outer(occupied: Sequence[RadialBand], *, guard_px: float, axis_radius_px: float) -> float:
@@ -610,25 +686,22 @@ def _free_intervals(
     return intervals
 
 
-def _place_inside(
+def _try_place_inside_exact(
     intent: _SlotIntent,
     *,
     occupied: Sequence[RadialBand],
     cursor_outer_px: float,
     guard_px: float,
     base_radius_px: float,
-) -> tuple[RadialBand, float]:
-    gap_px = _slot_gap_px(intent.slot, base_radius_px=base_radius_px)
-    width_px = max(0.0, float(intent.width_px))
-    allow_compress = (
-        _parse_bool_param(intent.params.get("compress"), default=False)
-        or (
-            str(intent.slot.renderer) in NUMERIC_RENDERERS
-            and not intent.explicit_width
-            and not intent.explicit_annulus
-        )
+    width_px: float,
+    implicit_gap_scale: float = 1.0,
+) -> tuple[RadialBand, float] | None:
+    gap_px = _scaled_slot_gap_px(
+        intent.slot,
+        base_radius_px=base_radius_px,
+        implicit_gap_scale=implicit_gap_scale,
     )
-    best_compressed: tuple[RadialBand, float] | None = None
+    width = max(0.0, float(width_px))
     for raw_lower, raw_upper in sorted(
         _free_intervals(occupied, inner_limit_px=guard_px, outer_limit_px=cursor_outer_px),
         key=lambda interval: interval[1],
@@ -639,10 +712,58 @@ def _place_inside(
         available = max(0.0, upper - lower)
         if available <= LAYOUT_EPSILON:
             continue
-        if width_px <= available + LAYOUT_EPSILON:
-            band = RadialBand(upper - width_px, upper)
+        if width <= available + LAYOUT_EPSILON:
+            band = RadialBand(upper - width, upper)
             return band, float(band.inner_px)
-        if allow_compress and available > LAYOUT_EPSILON:
+    return None
+
+
+def _place_inside(
+    intent: _SlotIntent,
+    *,
+    occupied: Sequence[RadialBand],
+    cursor_outer_px: float,
+    guard_px: float,
+    base_radius_px: float,
+) -> tuple[RadialBand, float]:
+    width_px = max(0.0, float(intent.width_px))
+    allow_compress = (
+        _parse_bool_param(intent.params.get("compress"), default=False)
+        or (
+            str(intent.slot.renderer) in NUMERIC_RENDERERS
+            and not intent.explicit_width
+            and not intent.explicit_annulus
+        )
+    )
+    exact = _try_place_inside_exact(
+        intent,
+        occupied=occupied,
+        cursor_outer_px=cursor_outer_px,
+        guard_px=guard_px,
+        base_radius_px=base_radius_px,
+        width_px=width_px,
+    )
+    if exact is not None:
+        return exact
+
+    min_width_px = (
+        _min_readable_numeric_width_px(str(intent.slot.renderer), width_px)
+        if str(intent.slot.renderer) in NUMERIC_RENDERERS and not intent.explicit_width and not intent.explicit_annulus
+        else 0.0
+    )
+    best_compressed: tuple[RadialBand, float] | None = None
+    for raw_lower, raw_upper in sorted(
+        _free_intervals(occupied, inner_limit_px=guard_px, outer_limit_px=cursor_outer_px),
+        key=lambda interval: interval[1],
+        reverse=True,
+    ):
+        gap_px = _slot_gap_px(intent.slot, base_radius_px=base_radius_px)
+        lower = float(raw_lower) + gap_px
+        upper = float(raw_upper) - gap_px
+        available = max(0.0, upper - lower)
+        if available <= LAYOUT_EPSILON:
+            continue
+        if allow_compress and available >= min_width_px - LAYOUT_EPSILON:
             compressed_width = available
             candidate = RadialBand(upper - compressed_width, upper)
             if best_compressed is None or candidate.outer_px > best_compressed[0].outer_px:
@@ -657,8 +778,141 @@ def _place_inside(
         )
         return band, float(band.inner_px)
 
-    raise ValueError(
-        f"circular track slot '{intent.slot.id}' cannot fit without overlapping the center definition"
+    raise _inside_slot_error(intent)
+
+
+def _try_place_numeric_inside_group_once(
+    intents: Sequence[_SlotIntent],
+    *,
+    occupied: Sequence[RadialBand],
+    cursor_outer_px: float,
+    guard_px: float,
+    base_radius_px: float,
+    width_scale: float,
+    implicit_gap_scale: float,
+) -> tuple[list[tuple[_SlotIntent, RadialBand]], float] | None:
+    local_occupied = list(occupied)
+    local_cursor = float(cursor_outer_px)
+    placed: list[tuple[_SlotIntent, RadialBand]] = []
+    for intent in intents:
+        result = _try_place_inside_exact(
+            intent,
+            occupied=local_occupied,
+            cursor_outer_px=local_cursor,
+            guard_px=guard_px,
+            base_radius_px=base_radius_px,
+            width_px=float(intent.width_px) * max(0.0, float(width_scale)),
+            implicit_gap_scale=implicit_gap_scale,
+        )
+        if result is None:
+            return None
+        band, local_cursor = result
+        local_occupied.append(band)
+        placed.append((intent, band))
+    return placed, local_cursor
+
+
+def _place_numeric_inside_group(
+    intents: Sequence[_SlotIntent],
+    *,
+    occupied: Sequence[RadialBand],
+    cursor_outer_px: float,
+    guard_px: float,
+    base_radius_px: float,
+) -> tuple[list[tuple[_SlotIntent, RadialBand]], float] | None:
+    full_layout = _try_place_numeric_inside_group_once(
+        intents,
+        occupied=occupied,
+        cursor_outer_px=cursor_outer_px,
+        guard_px=guard_px,
+        base_radius_px=base_radius_px,
+        width_scale=1.0,
+        implicit_gap_scale=1.0,
+    )
+    if full_layout is not None:
+        return full_layout
+
+    zero_gap_layout = _try_place_numeric_inside_group_once(
+        intents,
+        occupied=occupied,
+        cursor_outer_px=cursor_outer_px,
+        guard_px=guard_px,
+        base_radius_px=base_radius_px,
+        width_scale=1.0,
+        implicit_gap_scale=0.0,
+    )
+    if zero_gap_layout is not None:
+        logger.info("Auto-reduced circular numeric track gaps to fit reserved radial space.")
+        return zero_gap_layout
+
+    lower_scale = _min_numeric_width_scale(intents)
+    lower_layout = _try_place_numeric_inside_group_once(
+        intents,
+        occupied=occupied,
+        cursor_outer_px=cursor_outer_px,
+        guard_px=guard_px,
+        base_radius_px=base_radius_px,
+        width_scale=lower_scale,
+        implicit_gap_scale=0.0,
+    )
+    if lower_layout is None:
+        return None
+
+    low = lower_scale
+    high = 1.0
+    best_scale = lower_scale
+    best_layout = lower_layout
+    for _ in range(20):
+        mid = (low + high) / 2.0
+        layout = _try_place_numeric_inside_group_once(
+            intents,
+            occupied=occupied,
+            cursor_outer_px=cursor_outer_px,
+            guard_px=guard_px,
+            base_radius_px=base_radius_px,
+            width_scale=mid,
+            implicit_gap_scale=0.0,
+        )
+        if layout is None:
+            high = mid
+            continue
+        low = mid
+        best_scale = mid
+        best_layout = layout
+
+    if best_scale < 0.999:
+        logger.info(
+            "Auto-compressed circular numeric track widths to %.1f%% to fit reserved radial space.",
+            best_scale * 100.0,
+        )
+    return best_layout
+
+
+def _outside_band_for_intent(
+    intent: _SlotIntent,
+    *,
+    outside_cursor_px: float,
+    base_radius_px: float,
+) -> tuple[RadialBand, float]:
+    gap_px = _slot_gap_px(intent.slot, base_radius_px=base_radius_px)
+    draw_band = RadialBand(
+        float(outside_cursor_px) + gap_px,
+        float(outside_cursor_px) + gap_px + float(intent.width_px),
+    )
+    return draw_band, float(draw_band.outer_px)
+
+
+def _resolved_track_from_intent(intent: _SlotIntent, draw_band: RadialBand) -> CircularResolvedTrack:
+    return CircularResolvedTrack(
+        id=str(intent.slot.id),
+        renderer=str(intent.slot.renderer),
+        channel=intent.channel,
+        anchor_radius_px=draw_band.center_px,
+        draw_band_px=draw_band,
+        reserved_band_px=draw_band,
+        z=int(intent.slot.z),
+        params=dict(intent.params),
+        explicit_width=bool(intent.explicit_width),
     )
 
 
@@ -710,13 +964,63 @@ def _resolve_tracks(
     inside_cursor = _inside_start_outer(occupied, guard_px=guard_px, axis_radius_px=axis_radius_px)
     outside_cursor = max([float(band.outer_px) for band in occupied] + [float(axis_radius_px)])
 
-    for intent in intents:
+    index = 0
+    while index < len(intents):
+        intent = intents[index]
         if str(intent.slot.id) in resolved_by_id:
+            index += 1
             continue
+
+        if _is_auto_numeric_inside_intent(intent):
+            group: list[_SlotIntent] = []
+            group_end = index
+            while group_end < len(intents):
+                group_intent = intents[group_end]
+                if str(group_intent.slot.id) in resolved_by_id:
+                    break
+                if not _is_auto_numeric_inside_intent(group_intent):
+                    break
+                if group_intent.numeric_group_id != intent.numeric_group_id:
+                    break
+                group.append(group_intent)
+                group_end += 1
+
+            group_layout = _place_numeric_inside_group(
+                group,
+                occupied=occupied,
+                cursor_outer_px=inside_cursor,
+                guard_px=guard_px,
+                base_radius_px=base_radius_px,
+            )
+            if group_layout is None:
+                if any(_parse_bool_param(item.params.get("strict"), default=False) for item in group):
+                    raise _inside_slot_error(group[-1])
+                for group_intent in group:
+                    draw_band, outside_cursor = _outside_band_for_intent(
+                        group_intent,
+                        outside_cursor_px=outside_cursor,
+                        base_radius_px=base_radius_px,
+                    )
+                    resolved_by_id[str(group_intent.slot.id)] = _resolved_track_from_intent(group_intent, draw_band)
+                    occupied.append(draw_band)
+                    logger.warning(
+                        "Placed circular track slot '%s' outside because the inside channel has no readable radial space.",
+                        group_intent.slot.id,
+                    )
+            else:
+                placed, inside_cursor = group_layout
+                for group_intent, draw_band in placed:
+                    resolved_by_id[str(group_intent.slot.id)] = _resolved_track_from_intent(group_intent, draw_band)
+                    occupied.append(draw_band)
+            index = group_end
+            continue
+
         if intent.channel == "outside":
-            gap_px = _slot_gap_px(intent.slot, base_radius_px=base_radius_px)
-            draw_band = RadialBand(outside_cursor + gap_px, outside_cursor + gap_px + float(intent.width_px))
-            outside_cursor = draw_band.outer_px
+            draw_band, outside_cursor = _outside_band_for_intent(
+                intent,
+                outside_cursor_px=outside_cursor,
+                base_radius_px=base_radius_px,
+            )
         elif intent.channel == "overlay":
             center = float(axis_radius_px)
             draw_band = _band_from_center_width(center, float(intent.width_px))
@@ -732,29 +1036,21 @@ def _resolve_tracks(
             except ValueError:
                 if _parse_bool_param(intent.params.get("strict"), default=False):
                     raise
-                gap_px = _slot_gap_px(intent.slot, base_radius_px=base_radius_px)
-                draw_band = RadialBand(outside_cursor + gap_px, outside_cursor + gap_px + float(intent.width_px))
-                outside_cursor = draw_band.outer_px
+                draw_band, outside_cursor = _outside_band_for_intent(
+                    intent,
+                    outside_cursor_px=outside_cursor,
+                    base_radius_px=base_radius_px,
+                )
                 logger.warning(
                     "Placed circular track slot '%s' outside because the inside channel has no free radial space.",
                     intent.slot.id,
                 )
 
         reserved_band = draw_band
-        track = CircularResolvedTrack(
-            id=str(intent.slot.id),
-            renderer=str(intent.slot.renderer),
-            channel=intent.channel,
-            anchor_radius_px=draw_band.center_px,
-            draw_band_px=draw_band,
-            reserved_band_px=reserved_band,
-            z=int(intent.slot.z),
-            params=dict(intent.params),
-            explicit_width=bool(intent.explicit_width),
-        )
-        resolved_by_id[str(intent.slot.id)] = track
+        resolved_by_id[str(intent.slot.id)] = _resolved_track_from_intent(intent, draw_band)
         if intent.channel != "overlay" or _parse_bool_param(intent.params.get("reserve"), default=False):
             occupied.append(reserved_band)
+        index += 1
 
     return tuple(resolved_by_id[str(intent.slot.id)] for intent in intents if str(intent.slot.id) in resolved_by_id)
 

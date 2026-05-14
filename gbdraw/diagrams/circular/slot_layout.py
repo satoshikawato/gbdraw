@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 
 LAYOUT_EPSILON = 1e-6
 COMPRESSIBLE_NUMERIC_RENDERERS = frozenset({"dinucleotide_content", "dinucleotide_skew", "depth"})
+MIN_NUMERIC_WIDTH_PX = 10.0
+MIN_NUMERIC_WIDTH_FRACTION = 0.55
+MIN_SKEW_WIDTH_PX = 12.0
+MIN_SKEW_WIDTH_FRACTION = 0.65
 
 
 class CircularSlotAutoPackError(ValueError):
@@ -231,6 +235,29 @@ def _entry_input_width_px(entry: Mapping[str, Any], width_scale: float) -> float
     if entry.get("compressible_width"):
         return max(0.0, width * float(width_scale))
     return width
+
+
+def _min_readable_numeric_width_px(renderer: str, default_width_px: float) -> float:
+    width = max(0.0, float(default_width_px))
+    if width <= LAYOUT_EPSILON:
+        return 0.0
+    if renderer == "dinucleotide_skew":
+        return min(width, max(MIN_SKEW_WIDTH_PX, MIN_SKEW_WIDTH_FRACTION * width))
+    return min(width, max(MIN_NUMERIC_WIDTH_PX, MIN_NUMERIC_WIDTH_FRACTION * width))
+
+
+def _min_numeric_width_scale(entries: Sequence[Mapping[str, Any]]) -> float:
+    min_scale = 0.0
+    for entry in entries:
+        if not entry.get("compressible_width"):
+            continue
+        width = max(0.0, float(entry["input_width_px"]))
+        if width <= LAYOUT_EPSILON:
+            continue
+        slot = entry["slot"]
+        min_width = _min_readable_numeric_width_px(str(slot.renderer), width)
+        min_scale = max(min_scale, min(1.0, min_width / width))
+    return min(1.0, max(0.0, min_scale))
 
 
 def _entry_gap_after_px(
@@ -861,7 +888,7 @@ def _pack_with_auto_numeric_compression(
     if not any(bool(entry.get("compressible_width")) for entry in entries):
         raise initial_error
 
-    lower_scale = 0.05
+    lower_scale = _min_numeric_width_scale(entries)
     lower_zero_gap_layout = _try_pack_circular_slot_entries(
         entries,
         context=context,
