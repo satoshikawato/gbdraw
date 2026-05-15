@@ -398,6 +398,58 @@ def test_no_custom_and_default_custom_slots_match_depth_gc_skew_compression(
     _assert_geometry_matches(default_custom, no_custom)
 
 
+def test_custom_slot_mode_honors_ticks_before_features_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+
+    record = _load_record()
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels=False,
+        show_gc=False,
+        show_skew=False,
+        track_type="tuckin",
+        strandedness=True,
+    )
+    default_colors = load_default_colors("", palette="default")
+    captured: dict[str, object] = {}
+
+    def fake_add_record_group_on_canvas(canvas, *args, **kwargs):
+        canvas_config = args[1]
+        captured["radial_layout"] = canvas_config.circular_radial_layout
+        return canvas
+
+    def fake_add_tick_group_on_canvas(canvas, *args, **kwargs):
+        canvas_config = args[1]
+        captured["radial_layout"] = canvas_config.circular_radial_layout
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", fake_add_record_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        default_colors=default_colors,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        circular_track_slots=[
+            CircularTrackSlot(
+                id="ticks",
+                renderer="ticks",
+                params={"label_side": "legacy", "tick_side": "legacy"},
+            ),
+            CircularTrackSlot(id="features", renderer="features"),
+        ],
+    )
+
+    layout = captured["radial_layout"]
+    assert layout.features is not None
+    assert layout.ticks is not None
+    assert layout.ticks.reserved_band_px.inner_px > layout.features.all_band_px.outer_px
+
+
 def test_resolve_circular_track_slots_preserves_legacy_defaults_in_compatibility_mode() -> None:
     context = CircularTrackLayoutContext(
         base_radius_px=390.0,

@@ -166,6 +166,27 @@ def _resolved_slots_from_radial_layout(
     return resolved
 
 
+def _should_honor_custom_core_slot_order(
+    layout_slots: Sequence[CircularTrackSlot],
+) -> bool:
+    renderers = [
+        str(slot.renderer)
+        for slot in layout_slots
+        if slot.enabled
+    ]
+    if "features" not in renderers or "ticks" not in renderers:
+        return False
+    feature_index = renderers.index("features")
+    ticks_index = renderers.index("ticks")
+    if ticks_index < feature_index:
+        return True
+    core_end = max(feature_index, ticks_index)
+    return (
+        feature_index < ticks_index
+        and any(renderer not in {"features", "ticks"} for renderer in renderers[:core_end])
+    )
+
+
 def _legend_bbox(canvas_config: CircularCanvasConfigurator, legend_config: LegendDrawingConfigurator) -> tuple[float, float, float, float]:
     """Return legend bbox on canvas as (min_x, min_y, max_x, max_y)."""
     min_x = float(canvas_config.legend_offset_x)
@@ -2691,6 +2712,10 @@ def add_record_on_circular_canvas(
         definition_reserved_radius_px=definition_reserved_radius_px,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
         tick_track_channel_override=_tick_track_channel_override,
+        honor_core_slot_order=(
+            user_slot_mode
+            and _should_honor_custom_core_slot_order(layout_slots)
+        ),
     )
     setattr(canvas_config, "circular_radial_layout", radial_layout)
     setattr(canvas_config, "circular_feature_layout", radial_layout.features)

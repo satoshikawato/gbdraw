@@ -422,6 +422,7 @@ def _tick_layout_from_slot(
     tick_slot: CircularTrackSlot | None,
     tick_ts: TrackSpec | None,
     tick_track_channel_override: str | None = None,
+    anchor_radius_override: float | None = None,
 ) -> CircularTickLayout | None:
     if tick_ts is not None and not tick_ts.show:
         return None
@@ -452,7 +453,13 @@ def _tick_layout_from_slot(
             width_px = slot_width
             explicit_width = slot_explicit_width
 
-    anchor = float(center_px) if explicit_anchor and center_px is not None else float(axis_radius_px)
+    anchor = (
+        float(anchor_radius_override)
+        if anchor_radius_override is not None
+        else float(center_px)
+        if explicit_anchor and center_px is not None
+        else float(axis_radius_px)
+    )
     label_side = str(params.get("label_side", "legacy")).strip().lower()
     tick_side = str(params.get("tick_side", "legacy")).strip().lower()
     tick_length_px = float(width_px) if explicit_width and width_px is not None and width_px > 0 else None
@@ -498,6 +505,162 @@ def _tick_layout_from_slot(
         tick_band_px=tick_band,
         label_band_px=label_band,
         reserved_band_px=reserved,
+    )
+
+
+def _ordered_slot_layout_context(
+    *,
+    total_length: int,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+    feature_layout: CircularFeatureLayout | None,
+    tick_layout: CircularTickLayout | None,
+    definition_reserved_radius_px: float | None,
+    tick_track_channel_override: str | None,
+):
+    from .slot_layout import CircularTrackLayoutContext
+
+    base_radius = float(canvas_config.radius)
+    legacy_widths: dict[str, float] = {
+        "depth": _default_numeric_width_px("depth", canvas_config=canvas_config, cfg=cfg),
+        "gc_content": _default_numeric_width_px("dinucleotide_content", canvas_config=canvas_config, cfg=cfg),
+        "dinucleotide_content": _default_numeric_width_px("dinucleotide_content", canvas_config=canvas_config, cfg=cfg),
+        "gc_skew": _default_numeric_width_px("dinucleotide_skew", canvas_config=canvas_config, cfg=cfg),
+        "dinucleotide_skew": _default_numeric_width_px("dinucleotide_skew", canvas_config=canvas_config, cfg=cfg),
+    }
+    feature_band_offsets: tuple[float, float] | None = None
+    if feature_layout is not None:
+        legacy_widths["features"] = float(feature_layout.width_px)
+        feature_band_offsets = (
+            float(feature_layout.all_band_px.inner_px) - float(feature_layout.anchor_radius_px),
+            float(feature_layout.all_band_px.outer_px) - float(feature_layout.anchor_radius_px),
+        )
+    if tick_layout is not None:
+        legacy_widths["ticks"] = float(tick_layout.tick_band_px.width_px)
+
+    reserved_bands: tuple[tuple[float, float], ...] = ()
+    min_auto_inner_radius_px: float | None = None
+    if definition_reserved_radius_px is not None and definition_reserved_radius_px > LAYOUT_EPSILON:
+        reserved_bands = ((0.0, float(definition_reserved_radius_px)),)
+        min_auto_inner_radius_px = float(definition_reserved_radius_px)
+
+    return CircularTrackLayoutContext(
+        base_radius_px=base_radius,
+        legacy_centers_px={"features": base_radius, "ticks": base_radius},
+        legacy_widths_px=legacy_widths,
+        default_gap_px=max(1.0, 0.01 * base_radius),
+        auto_start_radius_px=base_radius,
+        feature_band_offsets_px=feature_band_offsets,
+        tick_total_len=int(total_length),
+        tick_track_type=str(cfg.canvas.circular.track_type),
+        tick_strandedness=bool(cfg.canvas.strandedness),
+        tick_font_size_px=float(cfg.objects.ticks.tick_labels.font_size),
+        tick_font_family=str(cfg.objects.text.font_family),
+        tick_dpi=int(canvas_config.dpi),
+        tick_manual_interval=cfg.objects.scale.interval,
+        tick_track_channel_override=tick_track_channel_override,
+        tick_width_px=float(cfg.objects.ticks.tick_width),
+        reserved_bands_px=reserved_bands,
+        min_auto_inner_radius_px=min_auto_inner_radius_px,
+    )
+
+
+def _resolve_ordered_custom_radial_layout(
+    *,
+    total_length: int,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+    slots: Sequence[CircularTrackSlot],
+    track_specs: Sequence[TrackSpec] | None,
+    feature_dict: Mapping[str, Any] | None,
+    feature_layout: CircularFeatureLayout | None,
+    tick_layout: CircularTickLayout | None,
+    definition_reserved_radius_px: float | None,
+    axis: CircularAxisLayout,
+    tick_track_channel_override: str | None,
+) -> CircularRadialLayout:
+    from .slot_layout import resolve_circular_track_slots
+
+    context = _ordered_slot_layout_context(
+        total_length=int(total_length),
+        canvas_config=canvas_config,
+        cfg=cfg,
+        feature_layout=feature_layout,
+        tick_layout=tick_layout,
+        definition_reserved_radius_px=definition_reserved_radius_px,
+        tick_track_channel_override=tick_track_channel_override,
+    )
+    resolved_slots = resolve_circular_track_slots(
+        slots,
+        context=context,
+        legacy_track_specs=track_specs,
+        compatibility_mode=False,
+    )
+
+    feature_resolved = next((slot for slot in resolved_slots if slot.renderer == "features"), None)
+    if feature_layout is not None and feature_resolved is not None:
+        feature_layout = build_circular_feature_layout(
+            feature_dict,
+            axis_radius_px=float(axis.radius_px),
+            width_px=float(feature_layout.width_px),
+            track_type=str(cfg.canvas.circular.track_type),
+            strandedness=bool(cfg.canvas.strandedness),
+            anchor_radius_px=float(feature_resolved.anchor_radius_px),
+        )
+
+    tick_resolved = next((slot for slot in resolved_slots if slot.renderer == "ticks"), None)
+    if tick_layout is not None and tick_resolved is not None:
+        tick_layout = _tick_layout_from_slot(
+            axis_radius_px=float(axis.radius_px),
+            total_length=int(total_length),
+            canvas_config=canvas_config,
+            cfg=cfg,
+            tick_slot=next((slot for slot in slots if slot.enabled and str(slot.renderer) == "ticks"), None),
+            tick_ts=_track_specs_by_match(track_specs)[1].get("ticks"),
+            tick_track_channel_override=tick_track_channel_override,
+            anchor_radius_override=float(tick_resolved.anchor_radius_px),
+        )
+
+    tracks: list[CircularResolvedTrack] = []
+    for slot in resolved_slots:
+        renderer = str(slot.renderer)
+        if renderer in {"features", "ticks"}:
+            continue
+        draw_band = RadialBand(slot.draw_inner_radius_px, slot.draw_outer_radius_px)
+        reserved_band = RadialBand(slot.reserved_inner_radius_px, slot.reserved_outer_radius_px)
+        tracks.append(
+            CircularResolvedTrack(
+                id=str(slot.id),
+                renderer=renderer,
+                channel=str(slot.params.get("side", "inside")),
+                anchor_radius_px=float(slot.anchor_radius_px),
+                draw_band_px=draw_band,
+                reserved_band_px=reserved_band,
+                z=int(slot.z),
+                params=dict(slot.params),
+                explicit_width=bool(slot.explicit_width),
+            )
+        )
+
+    definition_band = (
+        RadialBand(0.0, float(definition_reserved_radius_px))
+        if definition_reserved_radius_px is not None and definition_reserved_radius_px > LAYOUT_EPSILON
+        else None
+    )
+    outer_content_radius = max(
+        [float(axis.radius_px)]
+        + ([float(definition_band.outer_px)] if definition_band is not None else [])
+        + ([float(feature_layout.all_band_px.outer_px)] if feature_layout is not None else [])
+        + ([float(tick_layout.reserved_band_px.outer_px)] if tick_layout is not None else [])
+        + [float(track.reserved_band_px.outer_px) for track in tracks]
+    )
+    return CircularRadialLayout(
+        axis=axis,
+        features=feature_layout,
+        ticks=tick_layout,
+        tracks=tuple(tracks),
+        definition_reserved_band_px=definition_band,
+        outer_content_radius_px=float(outer_content_radius),
     )
 
 
@@ -1163,6 +1326,7 @@ def resolve_circular_radial_layout(
     definition_reserved_radius_px: float | None = None,
     feature_track_ratio_factor_override: float | None = None,
     tick_track_channel_override: str | None = None,
+    honor_core_slot_order: bool = False,
 ) -> CircularRadialLayout:
     axis_ts = _track_specs_by_match(track_specs)[1].get("axis")
     axis_radius_px = float(canvas_config.radius)
@@ -1218,6 +1382,21 @@ def resolve_circular_radial_layout(
             cfg=cfg,
             tick_slot=slots_by_renderer.get("ticks"),
             tick_ts=ticks_ts,
+            tick_track_channel_override=tick_track_channel_override,
+        )
+
+    if honor_core_slot_order:
+        return _resolve_ordered_custom_radial_layout(
+            total_length=int(total_length),
+            canvas_config=canvas_config,
+            cfg=cfg,
+            slots=slots,
+            track_specs=track_specs,
+            feature_dict=feature_dict,
+            feature_layout=feature_layout,
+            tick_layout=tick_layout,
+            definition_reserved_radius_px=definition_reserved_radius_px,
+            axis=axis,
             tick_track_channel_override=tick_track_channel_override,
         )
 

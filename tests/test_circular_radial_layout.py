@@ -98,6 +98,48 @@ def test_tuckin_combined_overlap_position_factors_still_move_inward() -> None:
     assert factors == pytest.approx([0.64, 0.69, 0.74])
 
 
+def test_custom_core_slot_order_places_ticks_outside_features() -> None:
+    canvas_config, cfg = _small_radial_canvas()
+    layout = resolve_circular_radial_layout(
+        total_length=5_500_000,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=[
+            CircularTrackSlot(id="ticks", renderer="ticks"),
+            CircularTrackSlot(id="features", renderer="features"),
+        ],
+        feature_dict={"a": _Feature(0)},
+        show_features=True,
+        show_ticks=True,
+        honor_core_slot_order=True,
+    )
+
+    assert layout.features is not None
+    assert layout.ticks is not None
+    assert layout.ticks.reserved_band_px.inner_px > layout.features.all_band_px.outer_px
+
+
+def test_custom_core_slot_order_keeps_default_feature_then_ticks_order() -> None:
+    canvas_config, cfg = _small_radial_canvas()
+    layout = resolve_circular_radial_layout(
+        total_length=5_500_000,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=[
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(id="ticks", renderer="ticks"),
+        ],
+        feature_dict={"a": _Feature(0)},
+        show_features=True,
+        show_ticks=True,
+        honor_core_slot_order=True,
+    )
+
+    assert layout.features is not None
+    assert layout.ticks is not None
+    assert layout.features.all_band_px.inner_px > layout.ticks.reserved_band_px.outer_px
+
+
 def _small_radial_canvas() -> tuple[CircularCanvasConfigurator, GbdrawConfig]:
     config_dict = modify_config_dict(
         load_config_toml("gbdraw.data", "config.toml"),
