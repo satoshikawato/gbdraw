@@ -7,6 +7,8 @@
 
 **Goal:** use tables and styling options for fine-grained control over colors, labels, and plot appearance.
 
+In circular simple layout, `--track_type` selects a preset (`tuckin`, `middle`, or `spreadout`). When you use Custom Track Slots, slot radius, width, order, and tick/label sides are explicit; the circular axis stays fixed and cannot be moved or hidden with a circular `axis` TrackSpec.
+
 ## Part 1: Advanced Color Control
 
 `gbdraw` supports two complementary table formats:

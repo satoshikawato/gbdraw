@@ -57,6 +57,16 @@ class LabelsGroup:
         )
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
+        self.track_type = getattr(self.canvas_config, "circular_track_preset", cfg.canvas.circular.track_type)
+        self.feature_lane_direction = getattr(self.canvas_config, "circular_feature_lane_direction", None)
+        if self.feature_lane_direction is None:
+            preset = str(self.track_type).strip().lower()
+            if preset == "middle":
+                self.feature_lane_direction = "split"
+            elif preset == "spreadout":
+                self.feature_lane_direction = "outside"
+            else:
+                self.feature_lane_direction = "inside"
 
         raw_show_labels = cfg.canvas.show_labels
         self.show_labels = (raw_show_labels != "none") if isinstance(raw_show_labels, str) else bool(raw_show_labels)
@@ -65,7 +75,7 @@ class LabelsGroup:
         self.split_overlaps_by_strand = (
             bool(self.resolve_overlaps)
             and (not bool(self.canvas_config.strandedness))
-            and str(cfg.canvas.circular.track_type).strip().lower() == "middle"
+            and str(self.feature_lane_direction).strip().lower() == "split"
         )
         self.label_stroke_width = cfg.labels.stroke_width.for_length_param(self.canvas_config.length_param)
         self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
@@ -118,6 +128,8 @@ class LabelsGroup:
                 outer_arena=self.outer_arena,
                 feature_track_ratio_factor_override=self.feature_track_ratio_factor_override,
                 feature_layout=self.feature_layout,
+                track_preset=self.track_type,
+                feature_lane_direction=str(self.feature_lane_direction),
             )
 
         drawer = LabelDrawer(self.config_dict, cfg=self._cfg)

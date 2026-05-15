@@ -2,6 +2,8 @@
 # Gallery
 This gallery showcases representative `gbdraw` outputs and the commands used to generate them. For shorter copy-paste examples, see [Recipes](./RECIPES.md).
 
+For circular examples, `--track_type` names the simple-layout preset. Custom Track Slots use explicit geometry instead, and the circular axis remains fixed.
+
 
 #### Majaniviruses Multi-Genome Comparison
 

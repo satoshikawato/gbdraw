@@ -19,6 +19,7 @@ from ...svg.circular_ticks import (  # type: ignore[reportMissingImports]
     get_circular_tick_label_radius_bounds,
     get_circular_tick_path_radius_bounds,
 )
+from .presets import normalize_circular_track_preset  # type: ignore[reportMissingImports]
 
 
 logger = logging.getLogger(__name__)
@@ -165,6 +166,68 @@ def _normalize_side(raw: object, default: str = "inside") -> str:
     return default
 
 
+def _normalize_feature_lane_direction(raw: object, default: str = "inside") -> str:
+    direction = str(raw or default).strip().lower()
+    if direction in {"inside", "outside", "split"}:
+        return direction
+    logger.warning("Unknown circular feature lane direction '%s'; using '%s'.", raw, default)
+    return default
+
+
+def _lane_direction_from_legacy_track_type(track_type: str | None) -> str:
+    preset = normalize_circular_track_preset(track_type)
+    if preset == "middle":
+        return "split"
+    if preset == "spreadout":
+        return "outside"
+    return "inside"
+
+
+def _tick_side_or_default(raw: object, default: str) -> str:
+    side = str(raw or default).strip().lower()
+    if side == "legacy":
+        return default
+    if side in {"inside", "outside", "both", "none", ""}:
+        return side
+    logger.warning("Unknown circular tick side '%s'; using '%s'.", raw, default)
+    return default
+
+
+def _tick_preset_from_params(params: Mapping[str, Any]) -> str:
+    raw = params.get("preset", params.get("track_preset", "tuckin"))
+    return normalize_circular_track_preset(str(raw))
+
+
+def _tick_preset_from_slots(slots: Sequence[CircularTrackSlot]) -> str:
+    for slot in slots:
+        if slot.enabled and str(slot.renderer) == "ticks":
+            return _tick_preset_from_params(slot.params)
+    return "tuckin"
+
+
+def _feature_lane_direction_from_slot(
+    feature_slot: CircularTrackSlot | None,
+    *,
+    feature_ts: TrackSpec | None = None,
+    default: str = "inside",
+) -> str:
+    params: dict[str, Any] = {}
+    if feature_slot is not None:
+        params.update(feature_slot.params)
+    if feature_ts is not None and feature_ts.params:
+        params.update(feature_ts.params)
+    return _normalize_feature_lane_direction(
+        params.get("lane_direction", params.get("lanes", default)),
+        default=default,
+    )
+
+
+def _reject_circular_axis_track_specs(track_specs: Sequence[TrackSpec] | None) -> None:
+    for ts in track_specs or []:
+        if str(ts.kind) == "axis" or str(ts.id) == "axis":
+            raise ValueError("Circular axis is fixed and is not configurable with TrackSpec.")
+
+
 def _parse_bool_param(value: object, default: bool = False) -> bool:
     if value is None:
         return default
@@ -176,6 +239,12 @@ def _parse_bool_param(value: object, default: bool = False) -> bool:
     if normalized in {"0", "false", "no", "off"}:
         return False
     return default
+
+
+def _slot_is_preset_generated(slot: CircularTrackSlot | None) -> bool:
+    if slot is None:
+        return False
+    return _parse_bool_param(slot.params.get("_preset_generated"), default=False)
 
 
 def _track_specs_by_match(track_specs: Sequence[TrackSpec] | None) -> tuple[dict[str, TrackSpec], dict[str, TrackSpec]]:
@@ -267,6 +336,7 @@ def _feature_width_from_specs(
     )
 
     width_px: float | None = None
+    track_spec_has_width = False
     if feature_ts is not None and isinstance(feature_ts.placement, CircularTrackPlacement):
         _center, spec_width, _explicit_anchor, _explicit_annulus, explicit_width = _resolve_placement_center_and_width(
             feature_ts.placement,
@@ -274,8 +344,9 @@ def _feature_width_from_specs(
         )
         if explicit_width and spec_width is not None:
             width_px = float(spec_width)
+            track_spec_has_width = True
 
-    if feature_slot is not None:
+    if feature_slot is not None and not (_slot_is_preset_generated(feature_slot) and track_spec_has_width):
         if feature_slot.width is not None:
             width_px = float(feature_slot.width.resolve(base_radius))
         elif feature_slot.placement is not None:
@@ -314,22 +385,22 @@ def _feature_lane_center(
     *,
     axis_radius_px: float,
     width_px: float,
-    track_type: str,
+    lane_direction: str,
     strandedness: bool,
     track_id: int,
 ) -> tuple[float, str]:
     width = max(0.0, float(width_px))
     step = width * TRACK_SPACING_MULTIPLIER
     axis = float(axis_radius_px)
-    layout = str(track_type or "middle").strip().lower()
+    layout = _normalize_feature_lane_direction(lane_direction, default="inside")
     track = int(track_id)
 
     if strandedness:
-        if layout == "spreadout":
+        if layout == "outside":
             if track < 0:
                 return axis + (0.9 * width) + ((abs(track) - 1) * step), "negative"
             return axis + (1.9 * width) + (max(0, track) * step), "positive"
-        if layout == "tuckin":
+        if layout == "inside":
             if track < 0:
                 return axis - (2.0 * width) - ((abs(track) - 1) * step), "negative"
             return axis - (1.0 * width) - (max(0, track) * step), "positive"
@@ -337,10 +408,10 @@ def _feature_lane_center(
             return axis - (0.5 * width) - ((abs(track) - 1) * step), "negative"
         return axis + (0.5 * width) + (max(0, track) * step), "positive"
 
-    if layout == "spreadout":
+    if layout == "outside":
         return axis + (0.9 * width) + (abs(track) * step), "combined"
-    if layout == "tuckin":
-        return axis - (0.7 * width) - (abs(track) * step), "combined"
+    if layout == "inside":
+        return axis - (0.75 * width) - (abs(track) * step), "combined"
     if track < 0:
         return axis - (abs(track) * step), "negative"
     if track > 0:
@@ -353,12 +424,18 @@ def build_circular_feature_layout(
     *,
     axis_radius_px: float,
     width_px: float,
-    track_type: str,
+    track_type: str | None = None,
+    lane_direction: str | None = None,
     strandedness: bool,
     anchor_radius_px: float | None = None,
 ) -> CircularFeatureLayout | None:
     width = max(0.0, float(width_px))
     anchor = float(axis_radius_px if anchor_radius_px is None else anchor_radius_px)
+    direction = (
+        _normalize_feature_lane_direction(lane_direction)
+        if lane_direction is not None
+        else _lane_direction_from_legacy_track_type(track_type)
+    )
     track_ids: set[int] = {0}
     if feature_dict:
         track_ids = {
@@ -371,7 +448,7 @@ def build_circular_feature_layout(
         center, strand_group = _feature_lane_center(
             axis_radius_px=anchor,
             width_px=width,
-            track_type=track_type,
+            lane_direction=direction,
             strandedness=strandedness,
             track_id=int(track_id),
         )
@@ -433,6 +510,7 @@ def _tick_layout_from_slot(
         params.update(tick_slot.params)
     if tick_ts is not None and tick_ts.params:
         params.update(tick_ts.params)
+    tick_preset = _tick_preset_from_params(params)
 
     center_px, width_px, explicit_anchor, _explicit_annulus, explicit_width = _resolve_track_spec_center_and_width(
         tick_ts,
@@ -443,13 +521,15 @@ def _tick_layout_from_slot(
             tick_slot.placement,
             base_radius_px=base_radius,
         )
-        if slot_center is not None:
+        slot_generated = _slot_is_preset_generated(tick_slot)
+        track_spec_has_placement = tick_ts is not None and isinstance(tick_ts.placement, CircularTrackPlacement)
+        if slot_center is not None and not (slot_generated and track_spec_has_placement):
             center_px = slot_center
             explicit_anchor = slot_explicit_anchor
-        if tick_slot.width is not None:
+        if tick_slot.width is not None and not (slot_generated and track_spec_has_placement):
             width_px = float(tick_slot.width.resolve(base_radius))
             explicit_width = True
-        elif slot_width is not None:
+        elif slot_width is not None and not (slot_generated and track_spec_has_placement):
             width_px = slot_width
             explicit_width = slot_explicit_width
 
@@ -460,8 +540,8 @@ def _tick_layout_from_slot(
         if explicit_anchor and center_px is not None
         else float(axis_radius_px)
     )
-    label_side = str(params.get("label_side", "legacy")).strip().lower()
-    tick_side = str(params.get("tick_side", "legacy")).strip().lower()
+    label_side = _tick_side_or_default(params.get("label_side"), "inside")
+    tick_side = _tick_side_or_default(params.get("tick_side"), "inside")
     tick_length_px = float(width_px) if explicit_width and width_px is not None and width_px > 0 else None
 
     if tick_side in {"none", ""}:
@@ -471,7 +551,7 @@ def _tick_layout_from_slot(
             center_radius_px=anchor,
             total_len=total_length,
             size="large",
-            track_type=str(cfg.canvas.circular.track_type),
+            track_type=tick_preset,
             strandedness=bool(cfg.canvas.strandedness),
             tick_track_channel_override=tick_track_channel_override,
             tick_side=tick_side,
@@ -484,7 +564,7 @@ def _tick_layout_from_slot(
     label_bounds = get_circular_tick_label_radius_bounds(
         center_radius_px=anchor,
         total_len=total_length,
-        track_type=str(cfg.canvas.circular.track_type),
+        track_type=tick_preset,
         strandedness=bool(cfg.canvas.strandedness),
         font_size=float(cfg.objects.ticks.tick_labels.font_size),
         font_family=str(cfg.objects.text.font_family),
@@ -517,6 +597,7 @@ def _ordered_slot_layout_context(
     tick_layout: CircularTickLayout | None,
     definition_reserved_radius_px: float | None,
     tick_track_channel_override: str | None,
+    tick_preset: str,
 ):
     from .slot_layout import CircularTrackLayoutContext
 
@@ -552,7 +633,7 @@ def _ordered_slot_layout_context(
         auto_start_radius_px=base_radius,
         feature_band_offsets_px=feature_band_offsets,
         tick_total_len=int(total_length),
-        tick_track_type=str(cfg.canvas.circular.track_type),
+        tick_track_type=tick_preset,
         tick_strandedness=bool(cfg.canvas.strandedness),
         tick_font_size_px=float(cfg.objects.ticks.tick_labels.font_size),
         tick_font_family=str(cfg.objects.text.font_family),
@@ -589,6 +670,7 @@ def _resolve_ordered_custom_radial_layout(
         tick_layout=tick_layout,
         definition_reserved_radius_px=definition_reserved_radius_px,
         tick_track_channel_override=tick_track_channel_override,
+        tick_preset=_tick_preset_from_slots(slots),
     )
     resolved_slots = resolve_circular_track_slots(
         slots,
@@ -603,7 +685,10 @@ def _resolve_ordered_custom_radial_layout(
             feature_dict,
             axis_radius_px=float(axis.radius_px),
             width_px=float(feature_layout.width_px),
-            track_type=str(cfg.canvas.circular.track_type),
+            lane_direction=_feature_lane_direction_from_slot(
+                next((slot for slot in slots if slot.enabled and str(slot.renderer) == "features"), None),
+                default="inside",
+            ),
             strandedness=bool(cfg.canvas.strandedness),
             anchor_radius_px=float(feature_resolved.anchor_radius_px),
         )
@@ -713,14 +798,16 @@ def _slot_intents(
             slot.placement,
             base_radius_px=base_radius,
         )
-        if slot_center is not None:
+        slot_generated = _slot_is_preset_generated(slot)
+        track_spec_has_placement = ts is not None and isinstance(ts.placement, CircularTrackPlacement)
+        if slot_center is not None and not (slot_generated and track_spec_has_placement):
             center_px = slot_center
             explicit_anchor = slot_explicit_anchor
             explicit_annulus = slot_explicit_annulus
-        if slot_width is not None:
+        if slot_width is not None and not (slot_generated and track_spec_has_placement):
             width_px = slot_width
             explicit_width = slot_explicit_width
-        if slot.width is not None:
+        if slot.width is not None and not (slot_generated and track_spec_has_placement):
             width_px = float(slot.width.resolve(base_radius))
             explicit_width = True
         if width_px is None:
@@ -1328,15 +1415,8 @@ def resolve_circular_radial_layout(
     tick_track_channel_override: str | None = None,
     honor_core_slot_order: bool = False,
 ) -> CircularRadialLayout:
-    axis_ts = _track_specs_by_match(track_specs)[1].get("axis")
+    _reject_circular_axis_track_specs(track_specs)
     axis_radius_px = float(canvas_config.radius)
-    axis_center_px, _axis_width_px, axis_explicit, _axis_annulus, _axis_explicit_width = _resolve_track_spec_center_and_width(
-        axis_ts,
-        base_radius_px=float(canvas_config.radius),
-    )
-    if axis_explicit and axis_center_px is not None:
-        axis_radius_px = float(axis_center_px)
-
     axis = CircularAxisLayout(
         radius_px=axis_radius_px,
         stroke_width_px=float(cfg.objects.axis.circular.stroke_width.for_length_param(str(canvas_config.length_param))),
@@ -1368,7 +1448,11 @@ def resolve_circular_radial_layout(
             feature_dict,
             axis_radius_px=axis_radius_px,
             width_px=feature_width_px,
-            track_type=str(cfg.canvas.circular.track_type),
+            lane_direction=_feature_lane_direction_from_slot(
+                slots_by_renderer.get("features"),
+                feature_ts=features_ts,
+                default="inside",
+            ),
             strandedness=bool(cfg.canvas.strandedness),
             anchor_radius_px=feature_anchor_px,
         )

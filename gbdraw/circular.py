@@ -377,8 +377,9 @@ def _get_args(args) -> argparse.Namespace:
         action='store_true')
     parser.add_argument(
         '--track_type',
-        help='Track type (default: "tuckin"; "tuckin", "middle", "spreadout")',
+        help='Circular preset for legacy/simple layout. Ignored when explicit --circular_track_slot layouts are supplied.',
         type=str,
+        choices=['tuckin', 'middle', 'spreadout'],
         default="tuckin")
     parser.add_argument(
         '--resolve_overlaps',

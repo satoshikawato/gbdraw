@@ -199,13 +199,14 @@ class LabelDrawer:
         radius,
         track_ratio,
         feature_track_ratio_factor_override: float | None = None,
+        track_preset: str | None = None,
     ):
         cfg = self._cfg
         length_threshold = cfg.labels.length_threshold.circular
         length_param = determine_length_parameter(record_length, length_threshold)
         self.font_size = cfg.labels.font_size.for_length_param(length_param)
         self.font_family = cfg.objects.text.font_family
-        self.track_type = cfg.canvas.circular.track_type
+        self.track_type = str(track_preset or label.get("track_preset") or cfg.canvas.circular.track_type)
         self.strandedness = cfg.canvas.strandedness
         if label["is_embedded"] is True:
             group = self.embed_label(

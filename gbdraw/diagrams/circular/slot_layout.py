@@ -452,6 +452,15 @@ def _legacy_tick_label_reserved_band(
     return None
 
 
+def _explicit_tick_side(raw: object, default: str) -> str:
+    side = str(raw or default).strip().lower()
+    if side == "legacy":
+        return default
+    if side in {"inside", "outside", "both", "none", ""}:
+        return side
+    return default
+
+
 def _tick_label_reserved_band(
     *,
     anchor: float,
@@ -460,10 +469,10 @@ def _tick_label_reserved_band(
     context: CircularTrackLayoutContext,
     explicit_width: bool,
 ) -> tuple[float, float] | None:
-    label_side = str(params.get("label_side", "legacy")).strip().lower()
+    label_side = _explicit_tick_side(params.get("label_side"), "inside")
     if label_side in {"none", ""}:
         return None
-    tick_side = str(params.get("tick_side", "legacy")).strip().lower()
+    tick_side = _explicit_tick_side(params.get("tick_side"), "inside")
 
     if context.tick_total_len is not None and context.tick_track_type and context.tick_font_family:
         tick_length_px = float(width) if explicit_width and width > 0 else None
@@ -484,8 +493,6 @@ def _tick_label_reserved_band(
             length_reference_radius_px=float(context.base_radius_px),
         )
 
-    if label_side == "legacy":
-        return _legacy_tick_label_reserved_band(anchor, context)
     return None
 
 
@@ -526,8 +533,8 @@ def _measure_tick_slot(
     explicit_annulus: bool,
     explicit_width: bool,
 ) -> CircularSlotFootprint:
-    label_side = str(params.get("label_side", "legacy")).strip().lower()
-    tick_side = str(params.get("tick_side", "legacy")).strip().lower()
+    label_side = _explicit_tick_side(params.get("label_side"), "inside")
+    tick_side = _explicit_tick_side(params.get("tick_side"), "inside")
 
     inner_ext = 0.0
     outer_ext = 0.0

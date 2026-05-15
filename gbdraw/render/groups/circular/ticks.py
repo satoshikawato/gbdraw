@@ -30,6 +30,7 @@ class TickGroup:
         label_side: str = "legacy",
         tick_side: str = "legacy",
         tick_length_px: float | None = None,
+        track_preset: str | None = None,
         cfg: GbdrawConfig | None = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
@@ -47,7 +48,10 @@ class TickGroup:
         self.font_weight = ticks_config.tick_labels.font_weight
         self.manual_interval = cfg.objects.scale.interval
         self.font_family = cfg.objects.text.font_family
-        self.track_type = cfg.canvas.circular.track_type
+        self.track_type = str(
+            track_preset
+            or getattr(self.canvas_config, "circular_track_preset", cfg.canvas.circular.track_type)
+        )
         self.separate_strands = cfg.canvas.strandedness
         normalized_tick_channel = str(tick_track_channel_override or "").strip().lower()
         self.tick_track_channel_override = (

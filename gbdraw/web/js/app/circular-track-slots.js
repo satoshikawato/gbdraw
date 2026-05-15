@@ -32,6 +32,25 @@ const PLACEMENT_LABELS = {
   overlay: 'Overlay'
 };
 
+export const CIRCULAR_TRACK_PRESETS = ['tuckin', 'middle', 'spreadout'];
+
+export const normalizeCircularTrackPreset = (value, fallback = 'tuckin') => {
+  const text = String(value || fallback).trim().toLowerCase();
+  return CIRCULAR_TRACK_PRESETS.includes(text) ? text : fallback;
+};
+
+const laneDirectionForPreset = (preset) => {
+  const normalized = normalizeCircularTrackPreset(preset);
+  if (normalized === 'middle') return 'split';
+  if (normalized === 'spreadout') return 'outside';
+  return 'inside';
+};
+
+const normalizeLaneDirection = (value, fallback = 'inside') => {
+  const text = String(value || fallback).trim().toLowerCase();
+  return ['inside', 'outside', 'split'].includes(text) ? text : fallback;
+};
+
 const normalizeNt = (value, fallback = 'GC') => {
   const text = String(value || '').trim().toUpperCase();
   return text || fallback;
@@ -142,15 +161,24 @@ export const createDefaultCircularTrackSlots = ({
   nt = 'GC',
   showDepth = false,
   showGc = true,
-  showSkew = true
+  showSkew = true,
+  preset = 'tuckin'
 } = {}) => {
   const normalizedNt = normalizeNt(nt);
+  const normalizedPreset = normalizeCircularTrackPreset(preset);
   const slots = [
-    makeSlot({ id: 'features', renderer: 'features' }),
+    makeSlot({
+      id: 'features',
+      renderer: 'features',
+      radius: '1',
+      params: { lane_direction: laneDirectionForPreset(normalizedPreset) }
+    }),
     makeSlot({
       id: 'ticks',
       renderer: 'ticks',
-      params: { label_side: 'legacy', tick_side: 'legacy' }
+      radius: '1',
+      width: '0.02',
+      params: { label_side: 'outside', tick_side: 'inside', preset: normalizedPreset }
     })
   ];
   if (showDepth) slots.push(makeSlot({ id: 'depth', renderer: 'depth' }));
@@ -211,8 +239,13 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC') =>
   }
   if (renderer === 'ticks') {
     delete params['axis'];
-    if (!normalizeOptionalText(params.label_side)) params.label_side = 'outside';
-    if (!normalizeOptionalText(params.tick_side)) params.tick_side = 'inside';
+    if (!normalizeOptionalText(params.label_side) || params.label_side === 'legacy') params.label_side = 'outside';
+    if (!normalizeOptionalText(params.tick_side) || params.tick_side === 'legacy') params.tick_side = 'inside';
+    params.preset = normalizeCircularTrackPreset(params.preset);
+  }
+  if (renderer === 'features') {
+    params.lane_direction = normalizeLaneDirection(params.lane_direction || params.lanes);
+    delete params.lanes;
   }
   if (PLACEMENT_RENDERERS.has(renderer)) {
     if (normalizeOptionalText(params.side)) params.side = normalizePlacement(params.side);
@@ -277,6 +310,9 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC') => {
   if (normalized.renderer === 'ticks') {
     appendOption(options, 'label_side', params.label_side);
     appendOption(options, 'tick_side', params.tick_side);
+    appendOption(options, 'preset', params.preset);
+  } else if (normalized.renderer === 'features') {
+    appendOption(options, 'lane_direction', params.lane_direction);
   } else if (normalized.renderer === 'dinucleotide_content' || normalized.renderer === 'dinucleotide_skew') {
     options.push(`nt=${normalizeNt(params.nt, normalizeNt(defaultNt))}`);
   }
@@ -339,9 +375,34 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       nt: state.adv.nt,
       showDepth: Boolean(state.form.show_depth),
       showGc: !state.form.suppress_gc,
-      showSkew: !state.form.suppress_skew
+      showSkew: !state.form.suppress_skew,
+      preset: state.form.track_type
     });
     state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...slots);
+  };
+
+  const applyCircularTrackPreset = (preset) => {
+    const normalizedPreset = normalizeCircularTrackPreset(preset);
+    const current = JSON.stringify(normalizeCircularTrackSlots(state.adv.circular_track_slots, state.adv.nt));
+    const replacement = createDefaultCircularTrackSlots({
+      nt: state.adv.nt,
+      showDepth: Boolean(state.form.show_depth),
+      showGc: !state.form.suppress_gc,
+      showSkew: !state.form.suppress_skew,
+      preset: normalizedPreset
+    });
+    const next = JSON.stringify(normalizeCircularTrackSlots(replacement, state.adv.nt));
+    if (
+      current !== next &&
+      Array.isArray(state.adv.circular_track_slots) &&
+      state.adv.circular_track_slots.length > 0 &&
+      typeof window !== 'undefined' &&
+      !window.confirm('Replace the current custom circular track slots with this preset?')
+    ) {
+      return;
+    }
+    state.form.track_type = normalizedPreset;
+    state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...replacement);
   };
 
   const addCircularTrackSlot = (renderer, placement = 'inside') => {
@@ -408,6 +469,9 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       delete slot.params['axis'];
       slot.params.label_side = normalizeOptionalText(slot.params.label_side) || 'outside';
       slot.params.tick_side = normalizeOptionalText(slot.params.tick_side) || 'inside';
+      slot.params.preset = normalizeCircularTrackPreset(slot.params.preset || state.form.track_type);
+    } else if (renderer === 'features') {
+      slot.params.lane_direction = normalizeLaneDirection(slot.params.lane_direction || laneDirectionForPreset(state.form.track_type));
     } else if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
       slot.params.nt = normalizeNt(slot.params.nt, normalizeNt(state.adv.nt));
     }
@@ -444,6 +508,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     circularTrackRendererLabel,
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     resetCircularTrackSlotsFromSimpleControls,
+    applyCircularTrackPreset,
     addCircularTrackSlot,
     duplicateCircularTrackSlot,
     removeCircularTrackSlot,

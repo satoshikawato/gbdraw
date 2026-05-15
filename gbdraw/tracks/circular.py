@@ -235,13 +235,19 @@ def default_circular_track_slots(
     slots: list[CircularTrackSlot] = []
     nt = str(dinucleotide or "GC").upper()
     if show_features:
-        slots.append(CircularTrackSlot(id="features", renderer="features"))
+        slots.append(
+            CircularTrackSlot(
+                id="features",
+                renderer="features",
+                params={"lane_direction": "inside"},
+            )
+        )
     if show_ticks:
         slots.append(
             CircularTrackSlot(
                 id="ticks",
                 renderer="ticks",
-                params={"placement": "legacy_axis", "label_side": "legacy", "tick_side": "legacy"},
+                params={"label_side": "outside", "tick_side": "inside"},
             )
         )
     if show_depth:

@@ -6,7 +6,7 @@
 
 # Tutorial 1: Customizing Your Plot
 
-**Goal:** learn the basic styling controls for circular plots: palettes, track layout, centered definition text, titles, and labels.
+**Goal:** learn the basic styling controls for circular plots: palettes, track presets, centered definition text, titles, and labels.
 
 ## 1. Change the Color Scheme
 
@@ -25,14 +25,16 @@ gbdraw circular \
 
 See [color_palette_examples.md](../../examples/color_palette_examples.md) for the full palette list.
 
-## 2. Choose a Circular Layout
+## 2. Choose a Circular Preset
 
 Two options control the overall look of a circular plot:
 
-- `--track_type`: `tuckin`, `middle`, or `spreadout`
+- `--track_type`: preset name, `tuckin`, `middle`, or `spreadout`
 - `--separate_strands`: split forward and reverse features into different tracks
 
-`tuckin` is the default and most compact. `middle` is often easier to label. `spreadout` gives the most visual separation.
+`tuckin` is the default and most compact. `middle` is often easier to label. `spreadout` gives the most visual separation. In Custom Track Slots mode, slot radius, width, order, and placement are explicit, and `--track_type` no longer changes that geometry.
+
+The circular axis radius is fixed at `canvas.circular.radius`; it cannot be moved or hidden with a circular `axis` TrackSpec.
 
 ![track_layout_separate_strands.png](../../examples/track_layout_separate_strands.png)
 

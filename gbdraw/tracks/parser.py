@@ -91,6 +91,11 @@ def parse_track_spec(raw: str, *, mode: LayoutMode) -> TrackSpec:
 
     # NOTE: we keep this permissive for now; unknown kinds can be represented as "custom".
     kind_norm = kind.lower()
+    if mode == "circular" and kind_norm == "axis":
+        raise TrackSpecParseError(
+            "Circular axis is fixed and is not configurable with TrackSpec.",
+            original,
+        )
     kind_typed: TrackKind = kind_norm if kind_norm in TrackKind.__args__ else "custom"  # type: ignore[attr-defined]
 
     placement: CircularTrackPlacement | LinearTrackPlacement | None = None
@@ -108,6 +113,10 @@ def parse_track_spec(raw: str, *, mode: LayoutMode) -> TrackSpec:
                 elif key in {"z", "z_index", "zindex"}:
                     params["z"] = int(v)
                 elif mode == "circular":
+                    if kind_norm == "ticks" and key == "axis":
+                        raise ValueError(
+                            "ticks@axis is invalid; the circular axis is fixed and is not owned by ticks"
+                        )
                     if placement is None or not isinstance(placement, CircularTrackPlacement):
                         placement = CircularTrackPlacement()
                     if key in {"r", "radius"}:

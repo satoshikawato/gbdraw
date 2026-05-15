@@ -1636,7 +1636,10 @@ json.dumps({
             args.push('--feature_shape', assignment);
           });
         }
-        args.push('--track_type', form.track_type, '-l', form.legend);
+        if (!useCircularTrackSlots) {
+          args.push('--track_type', form.track_type);
+        }
+        args.push('-l', form.legend);
         const wantsCircularPlotTitleOption = normalizedCircularPlotTitle.length > 0;
         if (wantsCircularPlotTitleOption) {
           if (!multiCanvasSupport.plot_title) {

@@ -64,8 +64,8 @@ def test_tuckin_combined_feature_lane_sits_close_to_axis() -> None:
     )
 
     assert layout is not None
-    assert layout.lanes_by_track_id[0].center_px == pytest.approx(390.0 - (0.7 * 74.1))
-    assert layout.lanes_by_track_id[0].outer_px == pytest.approx(390.0 - (0.2 * 74.1))
+    assert layout.lanes_by_track_id[0].center_px == pytest.approx(390.0 - (0.75 * 74.1))
+    assert layout.lanes_by_track_id[0].outer_px == pytest.approx(390.0 - (0.25 * 74.1))
 
 
 def test_tuckin_combined_feature_position_factors_sit_close_to_axis() -> None:

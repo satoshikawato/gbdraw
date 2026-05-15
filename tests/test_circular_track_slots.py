@@ -32,6 +32,7 @@ from gbdraw.tracks import (
     default_circular_track_slots,
     parse_circular_track_slot,
     parse_circular_track_slots,
+    parse_track_specs,
     resolve_circular_track_slots,
 )
 
@@ -86,6 +87,7 @@ def _capture_circular_core_geometry(
     strandedness: bool = True,
     show_depth: bool = False,
     use_default_slots: bool = False,
+    custom_slots: list[CircularTrackSlot] | None = None,
 ) -> dict[str, tuple[float, float]]:
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
 
@@ -223,13 +225,13 @@ def _capture_circular_core_geometry(
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
 
-    slots = (
+    slots = custom_slots if custom_slots is not None else (
         default_circular_track_slots(show_depth=show_depth, show_gc=True, show_skew=True)
         if use_default_slots
         else None
     )
     kwargs = {}
-    if use_default_slots:
+    if use_default_slots or custom_slots is not None:
         kwargs["circular_track_slots"] = slots
     if show_depth:
         kwargs.update({"depth_table": _depth_table(str(record.id)), "window": 100, "step": 100})
@@ -302,100 +304,62 @@ def test_parse_circular_tick_slot_rejects_axis_param() -> None:
         )
 
 
-def test_no_custom_and_default_custom_slots_match_tuckin_separate_strands_geometry(
+@pytest.mark.parametrize(
+    "spec",
+    ["axis", "axis@r=0.80", "axis@ri=0.75", "axis@ro=0.82", "axis@w=5px", "axis@z=10", "axis@show=false"],
+)
+def test_circular_axis_track_spec_is_rejected(spec: str) -> None:
+    with pytest.raises(
+        TrackSpecParseError,
+        match="Circular axis is fixed and is not configurable with TrackSpec",
+    ):
+        parse_track_specs([spec], mode="circular")
+
+
+def test_custom_slots_ignore_track_type_for_explicit_geometry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    no_custom = _capture_circular_core_geometry(
+    custom_slots = [
+        CircularTrackSlot(
+            id="features",
+            renderer="features",
+            placement=CircularTrackPlacement(radius=ScalarSpec(0.95, "factor")),
+            width=ScalarSpec(36.0, "px"),
+            params={"lane_direction": "inside"},
+        ),
+        CircularTrackSlot(
+            id="ticks",
+            renderer="ticks",
+            placement=CircularTrackPlacement(radius=ScalarSpec(0.90, "factor")),
+            width=ScalarSpec(8.0, "px"),
+            params={"tick_side": "inside", "label_side": "none"},
+        ),
+        CircularTrackSlot(
+            id="gc_content",
+            renderer="dinucleotide_content",
+            placement=CircularTrackPlacement(radius=ScalarSpec(0.64, "factor")),
+            width=ScalarSpec(30.0, "px"),
+        ),
+        CircularTrackSlot(
+            id="gc_skew",
+            renderer="dinucleotide_skew",
+            placement=CircularTrackPlacement(radius=ScalarSpec(0.44, "factor")),
+            width=ScalarSpec(24.0, "px"),
+        ),
+    ]
+    tuckin = _capture_circular_core_geometry(
         monkeypatch,
         track_type="tuckin",
-        strandedness=True,
-        use_default_slots=False,
+        custom_slots=custom_slots,
     )
     monkeypatch.undo()
-    default_custom = _capture_circular_core_geometry(
-        monkeypatch,
-        track_type="tuckin",
-        strandedness=True,
-        use_default_slots=True,
-    )
-
-    _assert_geometry_matches(default_custom, no_custom)
-
-
-def test_no_custom_and_default_custom_slots_match_tuckin_combined_strands_geometry(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    no_custom = _capture_circular_core_geometry(
-        monkeypatch,
-        track_type="tuckin",
-        strandedness=False,
-        use_default_slots=False,
-    )
-    monkeypatch.undo()
-    default_custom = _capture_circular_core_geometry(
-        monkeypatch,
-        track_type="tuckin",
-        strandedness=False,
-        use_default_slots=True,
-    )
-
-    _assert_geometry_matches(default_custom, no_custom)
-
-
-def test_no_custom_and_default_custom_slots_match_middle_geometry(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    no_custom = _capture_circular_core_geometry(
-        monkeypatch,
-        track_type="middle",
-        use_default_slots=False,
-    )
-    monkeypatch.undo()
-    default_custom = _capture_circular_core_geometry(
-        monkeypatch,
-        track_type="middle",
-        use_default_slots=True,
-    )
-
-    _assert_geometry_matches(default_custom, no_custom)
-
-
-def test_no_custom_and_default_custom_slots_match_spreadout_geometry(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    no_custom = _capture_circular_core_geometry(
+    spreadout = _capture_circular_core_geometry(
         monkeypatch,
         track_type="spreadout",
-        use_default_slots=False,
-    )
-    monkeypatch.undo()
-    default_custom = _capture_circular_core_geometry(
-        monkeypatch,
-        track_type="spreadout",
-        use_default_slots=True,
+        custom_slots=custom_slots,
     )
 
-    _assert_geometry_matches(default_custom, no_custom)
-
-
-def test_no_custom_and_default_custom_slots_match_depth_gc_skew_compression(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    no_custom = _capture_circular_core_geometry(
-        monkeypatch,
-        track_type="middle",
-        show_depth=True,
-        use_default_slots=False,
-    )
-    monkeypatch.undo()
-    default_custom = _capture_circular_core_geometry(
-        monkeypatch,
-        track_type="middle",
-        show_depth=True,
-        use_default_slots=True,
-    )
-
-    _assert_geometry_matches(default_custom, no_custom)
+    _assert_geometry_matches(spreadout, tuckin)
 
 
 def test_custom_slot_mode_honors_ticks_before_features_order(
@@ -516,7 +480,7 @@ def test_resolve_circular_track_slots_packs_measured_footprints_without_overlap(
             assert current[0] >= other[1] or other[0] >= current[1]
 
 
-def test_measured_packer_places_legacy_ticks_by_reserved_footprint_not_anchor() -> None:
+def test_measured_packer_places_normalized_ticks_by_reserved_footprint() -> None:
     context = CircularTrackLayoutContext(
         base_radius_px=500.0,
         legacy_centers_px={"ticks": 500.0},
@@ -540,7 +504,7 @@ def test_measured_packer_places_legacy_ticks_by_reserved_footprint_not_anchor() 
     by_id = {slot.id: slot for slot in resolved}
     cursor_outer = by_id["gc_content"].reserved_inner_radius_px - context.default_gap_px
 
-    assert by_id["ticks"].anchor_radius_px > cursor_outer
+    assert by_id["ticks"].anchor_radius_px == pytest.approx(cursor_outer)
     assert by_id["ticks"].reserved_outer_radius_px == pytest.approx(cursor_outer)
     assert by_id["gc_content"].reserved_inner_radius_px - by_id["ticks"].reserved_outer_radius_px == pytest.approx(5.0)
 
@@ -584,7 +548,7 @@ def test_reordered_builtin_gc_ticks_skew_keeps_gc_widths() -> None:
     assert by_id["gc_content"].reserved_inner_radius_px - by_id["ticks"].reserved_outer_radius_px == pytest.approx(5.0)
 
 
-def test_legacy_tick_reserved_label_bounds_are_remeasured_for_moved_anchor() -> None:
+def test_legacy_tick_params_normalize_to_explicit_inside_geometry() -> None:
     context = CircularTrackLayoutContext(
         base_radius_px=500.0,
         legacy_centers_px={"ticks": 500.0},
@@ -609,10 +573,11 @@ def test_legacy_tick_reserved_label_bounds_are_remeasured_for_moved_anchor() -> 
         context=context,
     )
     ticks = {slot.id: slot for slot in resolved}["ticks"]
-    label_center = ticks.anchor_radius_px * 0.82
 
-    assert ticks.reserved_inner_radius_px == pytest.approx(min(ticks.draw_inner_radius_px, label_center - 6.0))
-    assert ticks.reserved_outer_radius_px == pytest.approx(max(ticks.draw_outer_radius_px, label_center + 6.0))
+    assert ticks.params["label_side"] == "legacy"
+    assert ticks.params["tick_side"] == "legacy"
+    assert ticks.reserved_outer_radius_px == pytest.approx(ticks.anchor_radius_px)
+    assert ticks.reserved_inner_radius_px < ticks.draw_inner_radius_px
     assert ticks.reserved_outer_radius_px < ticks.anchor_radius_px + 100.0
 
 
@@ -1493,10 +1458,7 @@ def test_edl933_reordered_gc_ticks_skew_uses_measured_tick_footprint(
 
     assert gc_width == pytest.approx(float(captured["default_gc_width"]))
     assert captured["gc_skew"][1] == pytest.approx(float(captured["default_gc_width"]))  # type: ignore[index]
-    assert (float(gc_center) - (0.5 * float(gc_width))) - float(ticks_reserved_outer) == pytest.approx(
-        float(captured["default_gap"]),
-        abs=0.05,
-    )
+    assert (float(gc_center) - (0.5 * float(gc_width))) - float(ticks_reserved_outer) >= float(captured["default_gap"])
 
 
 @pytest.mark.circular

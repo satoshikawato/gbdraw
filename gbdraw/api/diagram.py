@@ -98,7 +98,6 @@ _SUPPORTED_CIRCULAR_TRACK_KINDS = {
     "gc_skew",
     "definition",
     "ticks",
-    "axis",
     "legend",
     "labels",
 }
@@ -1758,6 +1757,10 @@ def assemble_circular_diagram_from_record(
                 raise ValidationError(
                     f"TrackSpec mode '{ts.mode}' is not supported for circular diagrams."
                 )
+            if str(ts.kind) == "axis" or str(ts.id) == "axis":
+                raise ValidationError(
+                    "Circular axis is fixed and is not configurable with TrackSpec."
+                )
             if str(ts.kind) not in _SUPPORTED_CIRCULAR_TRACK_KINDS:
                 logger.warning(
                     "TrackSpec kind '%s' is not supported for circular diagrams yet; it will be ignored.",
@@ -2137,6 +2140,10 @@ def assemble_circular_diagram_from_records(
             if ts.mode != "circular":
                 raise ValidationError(
                     f"TrackSpec mode '{ts.mode}' is not supported for circular diagrams."
+                )
+            if str(ts.kind) == "axis" or str(ts.id) == "axis":
+                raise ValidationError(
+                    "Circular axis is fixed and is not configurable with TrackSpec."
                 )
             if str(ts.kind) not in _SUPPORTED_CIRCULAR_TRACK_KINDS:
                 logger.warning(

@@ -52,7 +52,6 @@ from ...tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
     ResolvedCircularTrackSlot,
     TrackSpec,
-    default_circular_track_slots,
 )
 
 from .builders import (
@@ -73,6 +72,12 @@ from .radial_layout import (  # type: ignore[reportMissingImports]
     build_circular_feature_layout,
     resolve_circular_radial_layout,
 )
+from .presets import (  # type: ignore[reportMissingImports]
+    CircularPresetContext,
+    circular_feature_lane_direction_for_preset,
+    circular_track_slots_for_preset,
+    normalize_circular_track_preset,
+)
 
 
 LEGEND_LABEL_MARGIN_PX = 4.0
@@ -91,6 +96,33 @@ GC_SKEW_TRACK_ORDER_INNER_TO_OUTER = ("gc_skew", "gc_content")
 
 
 logger = logging.getLogger(__name__)
+
+
+def _circular_preset_for_layout(
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+) -> str:
+    raw = getattr(canvas_config, "circular_track_preset", None)
+    if raw is None:
+        raw = cfg.canvas.circular.track_type
+    return normalize_circular_track_preset(str(raw))
+
+
+def _lane_direction_for_feature_slot(
+    feature_slot: CircularTrackSlot | None,
+    *,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+) -> str:
+    if feature_slot is not None:
+        raw = feature_slot.params.get("lane_direction", feature_slot.params.get("lanes"))
+        if raw is not None:
+            direction = str(raw).strip().lower()
+            if direction in {"inside", "outside", "split"}:
+                return direction
+    return circular_feature_lane_direction_for_preset(
+        _circular_preset_for_layout(canvas_config, cfg)
+    )
 
 
 def _sync_canvas_viewbox(canvas: Drawing, canvas_config: CircularCanvasConfigurator) -> None:
@@ -774,7 +806,7 @@ def _default_feature_outer_radius_px(
         float(canvas_config.track_ratio),
         cds_ratio,
         offset,
-        str(cfg.canvas.circular.track_type),
+        _circular_preset_for_layout(canvas_config, cfg),
         bool(cfg.canvas.strandedness),
         0,
     )
@@ -784,7 +816,7 @@ def _default_feature_outer_radius_px(
         float(canvas_config.track_ratio),
         cds_ratio,
         offset,
-        str(cfg.canvas.circular.track_type),
+        _circular_preset_for_layout(canvas_config, cfg),
         bool(cfg.canvas.strandedness),
         0,
     )
@@ -1258,7 +1290,7 @@ def _legacy_slot_layout_context(
 
     tick_ratio_bounds = get_circular_tick_path_ratio_bounds(
         len(gb_record.seq),
-        str(cfg.canvas.circular.track_type),
+        _circular_preset_for_layout(canvas_config, cfg),
         bool(cfg.canvas.strandedness),
         tick_track_channel_override=_tick_track_channel_override,
     )
@@ -1268,7 +1300,7 @@ def _legacy_slot_layout_context(
     tick_label_bounds = get_circular_tick_label_radius_bounds(
         center_radius_px=mapped_base_radius,
         total_len=len(gb_record.seq),
-        track_type=str(cfg.canvas.circular.track_type),
+        track_type=_circular_preset_for_layout(canvas_config, cfg),
         strandedness=bool(cfg.canvas.strandedness),
         font_size=float(cfg.objects.ticks.tick_labels.font_size),
         font_family=str(cfg.objects.text.font_family),
@@ -1287,7 +1319,7 @@ def _legacy_slot_layout_context(
     tick_label_extent_px = 0.0
     tick_label_profile = get_circular_tick_label_radius_profile(
         total_len=len(gb_record.seq),
-        track_type=str(cfg.canvas.circular.track_type),
+        track_type=_circular_preset_for_layout(canvas_config, cfg),
         strandedness=bool(cfg.canvas.strandedness),
         font_size=float(cfg.objects.ticks.tick_labels.font_size),
         font_family=str(cfg.objects.text.font_family),
@@ -1360,7 +1392,7 @@ def _legacy_slot_layout_context(
         tick_font_size_px=float(cfg.objects.ticks.tick_labels.font_size),
         tick_width_px=float(cfg.objects.ticks.tick_width),
         tick_total_len=len(gb_record.seq),
-        tick_track_type=str(cfg.canvas.circular.track_type),
+        tick_track_type=_circular_preset_for_layout(canvas_config, cfg),
         tick_strandedness=bool(cfg.canvas.strandedness),
         tick_font_family=str(cfg.objects.text.font_family),
         tick_dpi=int(canvas_config.dpi),
@@ -1439,8 +1471,8 @@ def _draw_resolved_circular_slot(
         )
 
     if renderer == "ticks":
-        label_side = str(resolved_slot.params.get("label_side", "legacy")).strip().lower()
-        tick_side = str(resolved_slot.params.get("tick_side", "legacy")).strip().lower()
+        label_side = str(resolved_slot.params.get("label_side", "inside")).strip().lower()
+        tick_side = str(resolved_slot.params.get("tick_side", "inside")).strip().lower()
         if label_side != "none" or tick_side != "none":
             tick_group_kwargs: dict[str, Any] = {
                 "radius_override": float(resolved_slot.anchor_radius_px),
@@ -1456,6 +1488,9 @@ def _draw_resolved_circular_slot(
                 )
             if _tick_track_channel_override is not None:
                 tick_group_kwargs["tick_track_channel_override"] = _tick_track_channel_override
+            previous_preset = getattr(canvas_config, "circular_track_preset", None)
+            if use_slot_tick_options and "preset" in resolved_slot.params:
+                setattr(canvas_config, "circular_track_preset", str(resolved_slot.params["preset"]))
             canvas = add_tick_group_on_canvas(
                 canvas,
                 gb_record,
@@ -1463,6 +1498,14 @@ def _draw_resolved_circular_slot(
                 config_dict,
                 **tick_group_kwargs,
             )
+            if use_slot_tick_options and "preset" in resolved_slot.params:
+                if previous_preset is None:
+                    try:
+                        delattr(canvas_config, "circular_track_preset")
+                    except AttributeError:
+                        pass
+                else:
+                    setattr(canvas_config, "circular_track_preset", previous_preset)
         return canvas
 
     if renderer == "depth":
@@ -1699,7 +1742,7 @@ def _default_gc_skew_layout_without_depth(
         return {}
 
     length_param = str(canvas_config.length_param)
-    track_type = str(cfg.canvas.circular.track_type)
+    track_type = _circular_preset_for_layout(canvas_config, cfg)
     track_dict = cfg.canvas.circular.track_dict[length_param][track_type]
     layout: dict[str, tuple[float, float]] = {}
     for kind, track_id in track_ids.items():
@@ -2109,6 +2152,7 @@ def _compute_feature_band_bounds_px(
     track_ratio_factor: float,
     cfg: GbdrawConfig,
     track_id_whitelist: set[int] | None = None,
+    preset: str | None = None,
 ) -> tuple[float, float] | None:
     """Compute (inner_radius_px, outer_radius_px) over all drawn feature blocks."""
     if not feature_dict or total_length <= 0:
@@ -2129,7 +2173,9 @@ def _compute_feature_band_bounds_px(
         filtered_feature_dict,
         axis_radius_px=float(base_radius_px),
         width_px=feature_width_px,
-        track_type=str(cfg.canvas.circular.track_type),
+        lane_direction=circular_feature_lane_direction_for_preset(
+            normalize_circular_track_preset(preset or cfg.canvas.circular.track_type)
+        ),
         strandedness=bool(cfg.canvas.strandedness),
     )
     if feature_layout is None:
@@ -2252,7 +2298,7 @@ def _default_track_center_radius_px(
         return None
 
     length_param = str(canvas_config.length_param)
-    track_type = str(cfg.canvas.circular.track_type)
+    track_type = _circular_preset_for_layout(canvas_config, cfg)
     norm_factor = float(cfg.canvas.circular.track_dict[length_param][track_type][str(track_id)])
     return float(canvas_config.radius) * norm_factor
 
@@ -2264,7 +2310,7 @@ def _default_outer_label_arena(
 ) -> tuple[float, float]:
     """Return default (anchor_radius_px, arc_outer_radius_px) for outer labels."""
     length_param = str(canvas_config.length_param)
-    track_type = str(cfg.canvas.circular.track_type)
+    track_type = _circular_preset_for_layout(canvas_config, cfg)
     strands = "separate" if cfg.canvas.strandedness else "single"
     base_radius = float(canvas_config.radius)
 
@@ -2600,6 +2646,12 @@ def add_record_on_circular_canvas(
     show_gc_track = bool(canvas_config.show_gc and (gc_ts is None or gc_ts.show))
     show_skew_track = bool(canvas_config.show_skew and (skew_ts is None or skew_ts.show))
     show_ticks_track = ticks_ts is None or ticks_ts.show
+    circular_preset = (
+        "tuckin"
+        if user_slot_mode
+        else normalize_circular_track_preset(cfg.canvas.circular.track_type)
+    )
+    setattr(canvas_config, "circular_track_preset", circular_preset)
 
     if user_slot_mode:
         show_features = "features" in user_active_slot_renderers and (
@@ -2608,13 +2660,20 @@ def add_record_on_circular_canvas(
         layout_slots = list(effective_circular_track_slots or [])
     else:
         show_features = features_ts is None or features_ts.show
-        layout_slots = default_circular_track_slots(
-            show_features=show_features,
-            show_ticks=show_ticks_track,
-            show_depth=show_depth_track,
-            show_gc=show_gc_track,
-            show_skew=show_skew_track,
-            dinucleotide=str(getattr(gc_config, "dinucleotide", "GC")),
+        layout_slots = circular_track_slots_for_preset(
+            circular_preset,
+            CircularPresetContext(
+                cfg=cfg,
+                canvas_config=canvas_config,
+                total_length=len(gb_record.seq),
+                strandedness=bool(cfg.canvas.strandedness),
+                show_features=show_features,
+                show_ticks=show_ticks_track,
+                show_depth=show_depth_track,
+                show_gc=show_gc_track,
+                show_skew=show_skew_track,
+                dinucleotide=str(getattr(gc_config, "dinucleotide", "GC")),
+            ),
         )
     feature_slot = next(
         (
@@ -2624,6 +2683,17 @@ def add_record_on_circular_canvas(
         ),
         None,
     )
+    if user_slot_mode and feature_slot is not None:
+        slot_preset = feature_slot.params.get("preset", feature_slot.params.get("track_preset"))
+        if slot_preset is not None:
+            circular_preset = normalize_circular_track_preset(str(slot_preset))
+            setattr(canvas_config, "circular_track_preset", circular_preset)
+    feature_lane_direction = _lane_direction_for_feature_slot(
+        feature_slot,
+        canvas_config=canvas_config,
+        cfg=cfg,
+    )
+    setattr(canvas_config, "circular_feature_lane_direction", feature_lane_direction)
 
     show_external_labels = show_labels_base and (labels_ts is None or labels_ts.show) and show_features
     core_track_overlap_relayout_enabled = (
@@ -2634,7 +2704,7 @@ def add_record_on_circular_canvas(
     split_overlaps_by_strand = (
         bool(cfg.canvas.resolve_overlaps)
         and (not bool(cfg.canvas.strandedness))
-        and str(cfg.canvas.circular.track_type).strip().lower() == "middle"
+        and feature_lane_direction == "split"
     )
 
     feature_track_ratio_factor_override: float | None = None
@@ -2736,7 +2806,6 @@ def add_record_on_circular_canvas(
             / max(FEATURE_BAND_EPSILON, float(canvas_config.radius) * float(canvas_config.track_ratio))
         )
     axis_radius_px: float | None = float(radial_layout.axis.radius_px)
-    axis_ts = ts_by_kind.get("axis")
     for resolved_slot in resolved_track_slots:
         if resolved_slot.renderer != "ticks":
             continue
@@ -2795,6 +2864,8 @@ def add_record_on_circular_canvas(
             outer_arena=outer_arena,
             feature_track_ratio_factor_override=feature_track_ratio_factor_override,
             feature_layout=radial_layout.features,
+            track_preset=_circular_preset_for_layout(canvas_config, cfg),
+            feature_lane_direction=feature_lane_direction,
         )
         _resolve_label_legend_collisions(
             precalculated_labels,
@@ -2813,14 +2884,13 @@ def add_record_on_circular_canvas(
         )
         _sync_canvas_viewbox(canvas, canvas_config)
 
-    if axis_ts is None or axis_ts.show:
-        canvas = add_axis_group_on_canvas(
-            canvas,
-            canvas_config,
-            config_dict,
-            radius_override=None if user_slot_mode else axis_radius_px,
-            cfg=cfg,
-        )
+    canvas = add_axis_group_on_canvas(
+        canvas,
+        canvas_config,
+        config_dict,
+        radius_override=None,
+        cfg=cfg,
+    )
 
     if show_external_labels:
         labels_group_kwargs: dict[str, Any] = {
@@ -2876,7 +2946,6 @@ def add_record_on_circular_canvas(
                 precalculated_labels=precalculated_labels,
                 _tick_track_channel_override=_tick_track_channel_override,
                 use_slot_group_id=False,
-                use_slot_tick_options=False,
                 use_feature_anchor_override=False,
             )
 
@@ -2924,7 +2993,6 @@ def add_record_on_circular_canvas(
                 precalculated_labels=precalculated_labels,
                 _tick_track_channel_override=_tick_track_channel_override,
                 use_slot_group_id=False,
-                use_slot_tick_options=False,
                 use_feature_anchor_override=False,
             )
 

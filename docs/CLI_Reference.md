@@ -186,8 +186,9 @@ options:
                         "bottom"; default: "none").
   --separate_strands    Separate strands (default: False).
   --track_type TRACK_TYPE
-                        Track type (default: "tuckin"; "tuckin", "middle",
-                        "spreadout")
+                        Circular preset for legacy/simple layout. Choices:
+                        "tuckin", "middle", "spreadout". Ignored when
+                        explicit --circular_track_slot layouts are supplied.
   --resolve_overlaps    Resolve overlapping features by placing them on
                         separate tracks (default: False). Useful for plasmid
                         visualization.

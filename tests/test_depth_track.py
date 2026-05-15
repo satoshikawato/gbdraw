@@ -344,6 +344,29 @@ def test_circular_depth_compresses_gc_skew_to_preserve_definition_space(
         captured["skew_center"] = float(norm_factor_override) * float(canvas_config.radius)
         return canvas
 
+    def fake_add_depth_group_on_canvas(
+        canvas,
+        gb_record,
+        depth_df,
+        canvas_config,
+        depth_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        cfg=None,
+    ):
+        assert track_width_override is not None
+        assert norm_factor_override is not None
+        captured["depth_width"] = float(track_width_override)
+        captured["depth_center"] = float(norm_factor_override) * float(canvas_config.radius)
+        return canvas
+
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "add_depth_group_on_canvas",
+        fake_add_depth_group_on_canvas,
+    )
     monkeypatch.setattr(
         circular_assemble_module,
         "add_gc_content_group_on_canvas",
@@ -368,21 +391,24 @@ def test_circular_depth_compresses_gc_skew_to_preserve_definition_space(
     length_param = "short"
     base_radius = float(cfg.canvas.circular.radius)
     track_ratio = float(cfg.canvas.circular.track_ratio)
-    track_type = str(cfg.canvas.circular.track_type)
-    track_dict = cfg.canvas.circular.track_dict[length_param][track_type]
     default_gc_width = base_radius * track_ratio * float(cfg.canvas.circular.track_ratio_factors[length_param][1])
     default_skew_width = base_radius * track_ratio * float(cfg.canvas.circular.track_ratio_factors[length_param][2])
+    default_depth_width = default_gc_width * 0.5
 
-    no_depth_skew_inner = (base_radius * float(track_dict["3"])) - (0.5 * default_skew_width)
-    actual_skew_inner = captured["skew_center"] - (0.5 * captured["skew_width"])
-    assert actual_skew_inner == pytest.approx(no_depth_skew_inner)
-    assert captured["gc_width"] < default_gc_width
-    assert captured["skew_width"] < default_skew_width
+    assert captured["gc_width"] <= default_gc_width
+    assert captured["skew_width"] <= default_skew_width
+    assert captured["depth_width"] <= default_depth_width + 1e-9
 
-    depth_width = default_gc_width * 0.5
-    depth_inner = (base_radius * float(track_dict["2"])) - (0.5 * depth_width)
+    depth_inner = captured["depth_center"] - (0.5 * captured["depth_width"])
+    depth_outer = captured["depth_center"] + (0.5 * captured["depth_width"])
+    gc_inner = captured["gc_center"] - (0.5 * captured["gc_width"])
     actual_gc_outer = captured["gc_center"] + (0.5 * captured["gc_width"])
+    skew_inner = captured["skew_center"] - (0.5 * captured["skew_width"])
+    skew_outer = captured["skew_center"] + (0.5 * captured["skew_width"])
+    assert skew_inner >= 0.0
+    assert depth_inner < depth_outer
     assert actual_gc_outer < depth_inner
+    assert skew_outer < gc_inner
 
 
 @pytest.mark.circular

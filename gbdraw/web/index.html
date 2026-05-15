@@ -749,7 +749,7 @@
 
                             <template v-else>
                                 <div v-if="!adv.circular_track_slots_enabled">
-                                    <label class="input-label text-[10px] mb-1">Track Layout <help-tip text="Choose how features are displayed. 'Tuckin' is default and compact. 'Middle' aligns to center, 'Spreadout' separates them."></help-tip></label>
+                                    <label class="input-label text-[10px] mb-1">Track Preset <help-tip text="Applies a preset circular track arrangement. Custom Track Slots expose explicit radius, width, and order controls."></help-tip></label>
                                     <select v-model="form.track_type" class="form-input text-xs py-1">
                                         <option value="tuckin">Tuckin</option>
                                         <option value="middle">Middle</option>
@@ -787,7 +787,7 @@
                                     <div class="flex items-center justify-between gap-2">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                             <input type="checkbox" v-model="adv.circular_track_slots_enabled" class="form-checkbox">
-                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Auto placement packs measured hard footprints by row order. Outside slots move above Features, inside slots move below Features, and overlay keeps manual row order. Placement controls whether numeric slots are requested inside, outside, or overlaid; strict inside slots report a fit error instead of silently moving outside. Legacy tick marks and labels are measured from their drawn radii. r/ri/ro pin geometry, w pins width, z only layers SVG and does not control radial order."></help-tip></span>
+                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Edit explicit circular slot geometry. The axis is fixed; radius, width, order, placement, and z apply to slots only."></help-tip></span>
                                         </label>
                                         <button
                                             type="button"
@@ -801,6 +801,11 @@
                                         </button>
                                     </div>
                                     <div v-if="adv.circular_track_slots_enabled" class="space-y-1.5">
+                                        <div class="grid grid-cols-3 gap-1">
+                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="applyCircularTrackPreset('tuckin')">Apply Tuckin</button>
+                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="applyCircularTrackPreset('middle')">Apply Middle</button>
+                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="applyCircularTrackPreset('spreadout')">Apply Spreadout</button>
+                                        </div>
                                         <div
                                             v-for="(slot, idx) in adv.circular_track_slots"
                                             :key="`circular-slot-${slot.id}-${idx}`"
@@ -831,35 +836,32 @@
                                                     <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(idx)" title="Remove"><i class="ph ph-trash"></i></button>
                                                 </div>
                                             </div>
-                                            <div class="grid grid-cols-4 gap-1">
+                                            <div class="grid grid-cols-6 gap-1">
                                                 <input v-model.trim="slot.width" class="form-input px-1 py-0.5 text-[10px]" placeholder="w">
                                                 <input v-model.trim="slot.radius" class="form-input px-1 py-0.5 text-[10px]" placeholder="r">
+                                                <input v-model.trim="slot.innerRadius" class="form-input px-1 py-0.5 text-[10px]" placeholder="ri">
+                                                <input v-model.trim="slot.outerRadius" class="form-input px-1 py-0.5 text-[10px]" placeholder="ro">
                                                 <input v-model.trim="slot.gapAfter" class="form-input px-1 py-0.5 text-[10px]" placeholder="gap">
                                                 <input type="number" v-model.number="slot.z" class="form-input px-1 py-0.5 text-[10px]" placeholder="z">
                                             </div>
                                             <div v-if="slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
-                                                <div>
-                                                    <label class="input-label text-[10px] mb-1">Feature Layout <help-tip text="Circular feature track display mode. This edits the same setting as Track Layout when Custom Track Slots is off."></help-tip></label>
-                                                    <select v-model="form.track_type" class="form-input px-1 py-0.5 text-[10px]">
-                                                        <option value="tuckin">Tuckin</option>
-                                                        <option value="middle">Middle</option>
-                                                        <option value="spreadout">Spreadout</option>
-                                                    </select>
-                                                </div>
+                                                <select v-model="slot.params.lane_direction" class="form-input px-1 py-0.5 text-[10px]">
+                                                    <option value="inside">Lanes inside</option>
+                                                    <option value="split">Lanes split</option>
+                                                    <option value="outside">Lanes outside</option>
+                                                </select>
                                             </div>
                                             <div v-if="slot.renderer === 'ticks'" class="grid grid-cols-2 gap-1 items-center">
                                                 <select v-model="slot.params.label_side" class="form-input px-1 py-0.5 text-[10px]">
                                                     <option value="outside">Labels outside</option>
                                                     <option value="inside">Labels inside</option>
                                                     <option value="none">No labels</option>
-                                                    <option value="legacy">Legacy labels</option>
                                                 </select>
                                                 <select v-model="slot.params.tick_side" class="form-input px-1 py-0.5 text-[10px]">
                                                     <option value="outside">Ticks outside</option>
                                                     <option value="inside">Ticks inside</option>
                                                     <option value="both">Ticks both</option>
                                                     <option value="none">No ticks</option>
-                                                    <option value="legacy">Legacy ticks</option>
                                                 </select>
                                             </div>
                                             <div v-if="slot.renderer === 'dinucleotide_content' || slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">

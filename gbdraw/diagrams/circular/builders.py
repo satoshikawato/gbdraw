@@ -307,6 +307,7 @@ def add_tick_group_on_canvas(
     label_side: str = "legacy",
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
+    track_preset: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -330,6 +331,7 @@ def add_tick_group_on_canvas(
         label_side=label_side,
         tick_side=tick_side,
         tick_length_px=tick_length_px,
+        track_preset=track_preset,
         cfg=cfg or canvas_config._cfg,
     ).get_group()
     tick_group = center_group_on_canvas(tick_group, canvas_config)
