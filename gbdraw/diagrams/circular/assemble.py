@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import math
 import copy
-from typing import Any, Optional, Callable, Mapping, Sequence
+from typing import Any, Optional, Callable, Sequence
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -2169,7 +2169,6 @@ def add_record_on_circular_canvas(
             float(radial_layout.features.width_px)
             / max(FEATURE_BAND_EPSILON, float(canvas_config.radius) * float(canvas_config.track_ratio))
         )
-    axis_radius_px: float | None = float(radial_layout.axis.radius_px)
     for resolved_slot in resolved_track_slots:
         if resolved_slot.renderer != "ticks":
             continue
@@ -2270,35 +2269,47 @@ def add_record_on_circular_canvas(
             canvas_config,
             feature_config,
             config_dict,
+            phase="leaders",
             **labels_group_kwargs,
         )
 
-    if show_features and not user_slot_mode:
-        feature_resolved_slot = next(
-            (slot for slot in resolved_track_slots if slot.renderer == "features"),
-            None,
+    drawable_slots = [
+        slot for slot in resolved_track_slots
+        if str(slot.renderer) != "feature_labels"
+    ]
+    for resolved_slot in sorted(drawable_slots, key=lambda item: (int(item.z), int(item.slot_index))):
+        canvas = _draw_resolved_circular_slot(
+            canvas,
+            resolved_slot,
+            gb_record=gb_record,
+            canvas_config=canvas_config,
+            feature_config=feature_config,
+            config_dict=config_dict,
+            gc_df=gc_df,
+            gc_config=gc_config,
+            skew_config=skew_config,
+            depth_df=depth_df,
+            depth_config=depth_config,
+            cfg=cfg,
+            dinucleotide_dataframes=dinucleotide_dataframes,
+            precomputed_feature_dict=precomputed_feature_dict,
+            precalculated_labels=precalculated_labels,
+            _tick_track_channel_override=_tick_track_channel_override,
+            use_slot_group_id=user_slot_mode,
+            use_slot_tick_options=user_slot_mode,
+            use_feature_anchor_override=user_slot_mode,
         )
-        if feature_resolved_slot is not None:
-            canvas = _draw_resolved_circular_slot(
-                canvas,
-                feature_resolved_slot,
-                gb_record=gb_record,
-                canvas_config=canvas_config,
-                feature_config=feature_config,
-                config_dict=config_dict,
-                gc_df=gc_df,
-                gc_config=gc_config,
-                skew_config=skew_config,
-                depth_df=depth_df,
-                depth_config=depth_config,
-                cfg=cfg,
-                dinucleotide_dataframes=dinucleotide_dataframes,
-                precomputed_feature_dict=precomputed_feature_dict,
-                precalculated_labels=precalculated_labels,
-                _tick_track_channel_override=_tick_track_channel_override,
-                use_slot_group_id=False,
-                use_feature_anchor_override=False,
-            )
+
+    if show_external_labels:
+        canvas = add_labels_group_on_canvas(
+            canvas,
+            gb_record,
+            canvas_config,
+            feature_config,
+            config_dict,
+            phase="text",
+            **labels_group_kwargs,
+        )
 
     definition_kwargs: dict[str, Any] = {"cfg": cfg}
     if plot_title is not None:
@@ -2318,33 +2329,6 @@ def add_record_on_circular_canvas(
         config_dict,
         **definition_kwargs,
     )
-
-    if not user_slot_mode:
-        tick_resolved_slot = next(
-            (slot for slot in resolved_track_slots if slot.renderer == "ticks"),
-            None,
-        )
-        if tick_resolved_slot is not None:
-            canvas = _draw_resolved_circular_slot(
-                canvas,
-                tick_resolved_slot,
-                gb_record=gb_record,
-                canvas_config=canvas_config,
-                feature_config=feature_config,
-                config_dict=config_dict,
-                gc_df=gc_df,
-                gc_config=gc_config,
-                skew_config=skew_config,
-                depth_df=depth_df,
-                depth_config=depth_config,
-                cfg=cfg,
-                dinucleotide_dataframes=dinucleotide_dataframes,
-                precomputed_feature_dict=precomputed_feature_dict,
-                precalculated_labels=precalculated_labels,
-                _tick_track_channel_override=_tick_track_channel_override,
-                use_slot_group_id=False,
-                use_feature_anchor_override=False,
-            )
 
     if canvas_config.legend_position != "none":
         if canvas_config.legend_position in {"top", "bottom"}:
@@ -2376,67 +2360,6 @@ def add_record_on_circular_canvas(
                 content_bottom=content_bottom,
             )
         canvas = add_legend_group_on_canvas(canvas, canvas_config, legend_config, legend_table)
-
-    if user_slot_mode:
-        for resolved_slot in sorted(
-            resolved_track_slots,
-            key=lambda item: (
-                int(item.z),
-                next(
-                    (
-                        idx
-                        for idx, slot in enumerate(layout_slots)
-                        if slot.id == item.id
-                    ),
-                    0,
-                ),
-            ),
-        ):
-            canvas = _draw_resolved_circular_slot(
-                canvas,
-                resolved_slot,
-                gb_record=gb_record,
-                canvas_config=canvas_config,
-                feature_config=feature_config,
-                config_dict=config_dict,
-                gc_df=gc_df,
-                gc_config=gc_config,
-                skew_config=skew_config,
-                depth_df=depth_df,
-                depth_config=depth_config,
-                cfg=cfg,
-                dinucleotide_dataframes=dinucleotide_dataframes,
-                precomputed_feature_dict=precomputed_feature_dict,
-                precalculated_labels=precalculated_labels,
-                _tick_track_channel_override=_tick_track_channel_override,
-            )
-        return canvas
-
-    for renderer in ("depth", "dinucleotide_content", "dinucleotide_skew"):
-        for resolved_slot in resolved_track_slots:
-            if str(resolved_slot.renderer) != renderer:
-                continue
-            canvas = _draw_resolved_circular_slot(
-                canvas,
-                resolved_slot,
-                gb_record=gb_record,
-                canvas_config=canvas_config,
-                feature_config=feature_config,
-                config_dict=config_dict,
-                gc_df=gc_df,
-                gc_config=gc_config,
-                skew_config=skew_config,
-                depth_df=depth_df,
-                depth_config=depth_config,
-                cfg=cfg,
-                dinucleotide_dataframes=dinucleotide_dataframes,
-                precomputed_feature_dict=precomputed_feature_dict,
-                precalculated_labels=precalculated_labels,
-                _tick_track_channel_override=_tick_track_channel_override,
-                use_slot_group_id=False,
-                use_slot_tick_options=False,
-                use_feature_anchor_override=False,
-            )
     return canvas
 
 

@@ -312,13 +312,30 @@ def test_circular_track_slot_shortcuts_are_rejected(spec: str) -> None:
     [
         "features:features@ri=0.75",
         "features:features@ro=0.82",
+        "features:features@innerRadius=0.75",
+        "features:features@outerRadius=0.82",
         "gc_skew:dinucleotide_skew@gap=4px",
         "gc_skew:dinucleotide_skew@gap_after=4px",
+        "gc_skew:dinucleotide_skew@gapAfter=4px",
     ],
 )
 def test_circular_track_slot_rejects_obsolete_geometry_keys(spec: str) -> None:
     with pytest.raises(CircularTrackSlotParseError, match="no longer supported"):
         parse_circular_track_slot(spec)
+
+
+@pytest.mark.parametrize("param_key", ["side", "radius", "width", "spacing", "gap_after", "inner_radius"])
+def test_normalize_circular_track_slots_rejects_generic_layout_keys_in_params(param_key: str) -> None:
+    with pytest.raises(ValueError, match="generic layout field"):
+        normalize_circular_track_slots(
+            [
+                CircularTrackSlot(
+                    id="gc_content",
+                    renderer="dinucleotide_content",
+                    params={param_key: "inside" if param_key == "side" else "1"},
+                )
+            ]
+        )
 
 
 def test_custom_slots_ignore_track_type_for_explicit_geometry(
@@ -460,7 +477,7 @@ def test_normalize_circular_track_slots_derives_feature_side_from_lane_direction
 
 
 @pytest.mark.circular
-def test_default_custom_slots_tuckin_preserve_numeric_order_with_feature_footprint(
+def test_default_custom_slots_tuckin_raise_when_inside_numeric_tracks_cannot_fit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
@@ -525,16 +542,15 @@ def test_default_custom_slots_tuckin_preserve_numeric_order_with_feature_footpri
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
 
-    assemble_circular_diagram_from_record(
-        record,
-        config_dict=config_dict,
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
-    )
-
-    assert captured["gc_content"][0] < captured["gc_skew"][0]
+    with pytest.raises(Exception, match="cannot fit inside"):
+        assemble_circular_diagram_from_record(
+            record,
+            config_dict=config_dict,
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
+        )
 
 
 @pytest.mark.circular
@@ -1016,7 +1032,7 @@ def test_custom_duplicate_skew_with_depth_tuckin_avoids_definition(
         step=100,
         circular_track_slots=[
             *default_circular_track_slots(show_depth=True, show_gc=True, show_skew=True),
-            "at_skew:dinucleotide_skew@nt=AT,w=20px",
+            "at_skew:dinucleotide_skew@nt=AT,w=20px,side=outside",
         ],
     )
 
@@ -1133,8 +1149,15 @@ def test_api_circular_track_slots_distribute_extra_dinucleotide_slots_evenly(
         window=1000,
         step=1000,
         circular_track_slots=[
-            *default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
-            "gc_skew_2:dinucleotide_skew@nt=AT",
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(
+                id="ticks",
+                renderer="ticks",
+                params={"label_side": "outside", "tick_side": "inside"},
+            ),
+            "gc_content:dinucleotide_content@nt=GC,side=outside",
+            "gc_skew:dinucleotide_skew@nt=GC,side=outside",
+            "gc_skew_2:dinucleotide_skew@nt=AT,side=outside",
         ],
     )
 
@@ -1152,7 +1175,7 @@ def test_api_circular_track_slots_distribute_extra_dinucleotide_slots_evenly(
 
 
 @pytest.mark.circular
-def test_api_explicit_inside_duplicate_dinucleotide_skew_stays_inside_when_not_strict(
+def test_api_explicit_inside_duplicate_dinucleotide_skew_raises_when_no_inside_space(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
@@ -1226,43 +1249,20 @@ def test_api_explicit_inside_duplicate_dinucleotide_skew_stays_inside_when_not_s
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
 
-    assemble_circular_diagram_from_record(
-        record,
-        config_dict=config_dict,
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        window=1000,
-        step=1000,
-        circular_track_slots=[
-            *default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
-            "gc_skew_2:dinucleotide_skew@nt=AT,side=inside,compress=true,strict=false",
-        ],
-    )
-
-    assert {"gc_content", "gc_skew", "gc_skew_2", "radial_layout"} <= set(captured)
-    layout = captured["radial_layout"]
-    assert layout.features is not None
-    assert layout.ticks is not None
-
-    annuli = {
-        slot_id: (center_px - (0.5 * width_px), center_px + (0.5 * width_px))
-        for slot_id, (center_px, width_px) in {
-            key: captured[key]
-            for key in ("gc_content", "gc_skew", "gc_skew_2")
-        }.items()
-    }
-    reference_outer = max(
-        layout.axis.radius_px,
-        layout.features.all_band_px.outer_px,
-        layout.ticks.reserved_band_px.outer_px,
-    )
-
-    slots_by_id = {slot.id: slot for slot in layout.tracks}
-    assert any(slot.side == "outside" for slot in slots_by_id.values())
-    assert layout.outer_content_radius_px >= reference_outer
-    if layout.definition_reserved_band_px is not None:
-        assert min(inner for inner, _outer in annuli.values()) >= layout.definition_reserved_band_px.outer_px - 1e-6
+    with pytest.raises(Exception, match="gc_skew_2.*cannot fit inside"):
+        assemble_circular_diagram_from_record(
+            record,
+            config_dict=config_dict,
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            window=1000,
+            step=1000,
+            circular_track_slots=[
+                *default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
+                "gc_skew_2:dinucleotide_skew@nt=AT,side=inside,compress=true,strict=false",
+            ],
+        )
 
 
 @pytest.mark.circular

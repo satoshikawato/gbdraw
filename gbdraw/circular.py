@@ -461,11 +461,11 @@ def _get_args(args) -> argparse.Namespace:
         type=float)
     parser.add_argument(
         '--circular_track_order',
-        help='Comma-separated circular slot order, outer-to-inner for auto slots, e.g. features,ticks,gc_content,gc_skew.',
+        help='Comma-separated circular slot order. Outside slots are placed axis-adjacent-to-outward; inside slots are placed axis-adjacent-to-inward.',
         type=str)
     parser.add_argument(
         '--circular_track_slot',
-        help='Circular track slot spec: <slot_id>:<renderer>@key=value,key=value. Can be repeated. Use r for center/anchor radius, w for width, spacing for auto gap, side=inside|outside|overlay, and z for SVG layering.',
+        help='Circular track slot spec: <slot_id>:<renderer>@key=value,key=value. Can be repeated. Use r for center/anchor radius, w for width, spacing for the next same-side slot gap, side=inside|outside|overlay, and z for SVG layering.',
         action='append',
         default=[])
     parser.add_argument(

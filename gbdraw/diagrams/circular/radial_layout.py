@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any, Mapping, Sequence, TypeAlias
 
 from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
@@ -854,15 +854,19 @@ def _validate_same_side_order(slots: Sequence[CircularResolvedSlot], spacing_by_
             if slot.side == side and slot.packing_band_px is not None
         ]
         for previous, current in zip(side_slots, side_slots[1:]):
-            if previous.params.get("_preset_generated") and current.params.get("_preset_generated"):
-                continue
             spacing = max(0.0, float(spacing_by_index.get(previous.slot_index, 0.0)))
             if side == "outside":
                 if current.packing_band_px.inner_px < previous.packing_band_px.outer_px + spacing - LAYOUT_EPSILON:
-                    logger.warning("Circular track slot order cannot be honored with the supplied pinned geometry.")
+                    raise ValidationError(
+                        "Circular track slot order cannot be honored with the supplied pinned geometry: "
+                        f"'{current.id}' would overlap or move inside '{previous.id}'."
+                    )
             else:
                 if current.packing_band_px.outer_px > previous.packing_band_px.inner_px - spacing + LAYOUT_EPSILON:
-                    logger.warning("Circular track slot order cannot be honored with the supplied pinned geometry.")
+                    raise ValidationError(
+                        "Circular track slot order cannot be honored with the supplied pinned geometry: "
+                        f"'{current.id}' would overlap or move outside '{previous.id}'."
+                    )
 
 
 def resolve_circular_radial_layout(
@@ -976,58 +980,8 @@ def resolve_circular_radial_layout(
                         break
                     inside_group.append(future)
             if len(inside_group) > 1:
-                try:
-                    resolved_group = _place_inside_auto_group(
-                        inside_group,
-                        occupied=occupied,
-                        axis_radius_px=axis_radius_px,
-                        max_packing_outer_px=inside_max_outer,
-                        feature_dict=feature_dict,
-                        canvas_config=canvas_config,
-                        cfg=cfg,
-                        total_length=int(total_length),
-                        tick_track_channel_override=tick_track_channel_override,
-                    )
-                except ValidationError:
-                    if any(group_intent.strict for group_intent in inside_group):
-                        raise
-                    resolved_group = []
-                    for group_intent in inside_group:
-                        fallback_intent = replace(group_intent, side="outside")
-                        group_resolved = _place_outside_auto(
-                            fallback_intent,
-                            occupied=occupied,
-                            axis_radius_px=axis_radius_px,
-                            min_packing_inner_px=outside_min_inner,
-                            feature_dict=feature_dict,
-                            canvas_config=canvas_config,
-                            cfg=cfg,
-                            total_length=int(total_length),
-                            tick_track_channel_override=tick_track_channel_override,
-                        )
-                        resolved_group.append(group_resolved)
-                        if _slot_reserves(fallback_intent) and group_resolved.reserved_band_px is not None:
-                            occupied.append((fallback_intent.slot_id, group_resolved.reserved_band_px))
-                        if group_resolved.packing_band_px is not None:
-                            outside_min_inner = max(
-                                outside_min_inner,
-                                float(group_resolved.packing_band_px.outer_px) + fallback_intent.spacing_px,
-                            )
-                for group_intent, group_resolved in zip(inside_group, resolved_group):
-                    resolved_by_index[group_intent.slot_index] = group_resolved
-                    if group_resolved.side == "outside":
-                        continue
-                    if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
-                        occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
-                    if group_resolved.packing_band_px is not None:
-                        inside_max_outer = min(
-                            inside_max_outer,
-                            float(group_resolved.packing_band_px.inner_px) - group_intent.spacing_px,
-                        )
-                continue
-            try:
-                resolved = _place_inside_auto(
-                    intent,
+                resolved_group = _place_inside_auto_group(
+                    inside_group,
                     occupied=occupied,
                     axis_radius_px=axis_radius_px,
                     max_packing_outer_px=inside_max_outer,
@@ -1037,21 +991,27 @@ def resolve_circular_radial_layout(
                     total_length=int(total_length),
                     tick_track_channel_override=tick_track_channel_override,
                 )
-            except ValidationError:
-                if intent.strict:
-                    raise
-                fallback_intent = replace(intent, side="outside")
-                resolved = _place_outside_auto(
-                    fallback_intent,
-                    occupied=occupied,
-                    axis_radius_px=axis_radius_px,
-                    min_packing_inner_px=outside_min_inner,
-                    feature_dict=feature_dict,
-                    canvas_config=canvas_config,
-                    cfg=cfg,
-                    total_length=int(total_length),
-                    tick_track_channel_override=tick_track_channel_override,
-                )
+                for group_intent, group_resolved in zip(inside_group, resolved_group):
+                    resolved_by_index[group_intent.slot_index] = group_resolved
+                    if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
+                        occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
+                    if group_resolved.packing_band_px is not None:
+                        inside_max_outer = min(
+                            inside_max_outer,
+                            float(group_resolved.packing_band_px.inner_px) - group_intent.spacing_px,
+                        )
+                continue
+            resolved = _place_inside_auto(
+                intent,
+                occupied=occupied,
+                axis_radius_px=axis_radius_px,
+                max_packing_outer_px=inside_max_outer,
+                feature_dict=feature_dict,
+                canvas_config=canvas_config,
+                cfg=cfg,
+                total_length=int(total_length),
+                tick_track_channel_override=tick_track_channel_override,
+            )
 
         resolved_by_index[intent.slot_index] = resolved
         if _slot_reserves(intent) and resolved.reserved_band_px is not None:

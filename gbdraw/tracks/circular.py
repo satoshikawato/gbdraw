@@ -58,6 +58,11 @@ _OBSOLETE_GEOMETRY_KEYS = {
 }
 
 _OBSOLETE_SPACING_KEYS = {"gap", "gap_after"}
+_OBSOLETE_CAMEL_KEYS = {
+    "gapafter",
+    "innerradius",
+    "outerradius",
+}
 _GENERIC_LAYOUT_KEYS = {
     "side",
     "r",
@@ -212,7 +217,9 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
                     spacing = ScalarSpec.parse(value)
                 elif key in _OBSOLETE_GEOMETRY_KEYS:
                     raise ValueError(f"'{key}' is no longer supported; use r=<radius> with w=<width>")
-                elif key in _OBSOLETE_SPACING_KEYS:
+                elif key in {"innerradius", "outerradius"}:
+                    raise ValueError(f"'{raw_key}' is no longer supported; use r=<radius> with w=<width>")
+                elif key in _OBSOLETE_SPACING_KEYS or key == "gapafter":
                     raise ValueError(f"'{key}' is no longer supported; use spacing=<ScalarSpec>")
                 elif key == "side":
                     side = _normalize_side_value(value)
@@ -348,11 +355,21 @@ def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[N
         if not slot.enabled:
             continue
 
-        params = {
-            str(key): value
-            for key, value in dict(slot.params or {}).items()
-            if str(key).strip().lower() not in _GENERIC_LAYOUT_KEYS
-        }
+        raw_params = {str(key): value for key, value in dict(slot.params or {}).items()}
+        for raw_key in raw_params:
+            key = raw_key.strip()
+            normalized_key = key.lower()
+            if (
+                normalized_key in _OBSOLETE_CAMEL_KEYS
+                or normalized_key in _GENERIC_LAYOUT_KEYS
+                or normalized_key in _OBSOLETE_GEOMETRY_KEYS
+                or normalized_key in _OBSOLETE_SPACING_KEYS
+            ):
+                raise ValueError(
+                    f"circular track slot '{slot.id}' stores generic layout field '{raw_key}' in params; "
+                    "use slot-level radius, width, spacing, side, strict, compress, reserve, and z fields"
+                )
+        params = dict(raw_params)
         side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
         reserve = bool(slot.reserve) if slot.reserve is not None else False
 

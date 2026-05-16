@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
@@ -352,6 +354,7 @@ def add_labels_group_on_canvas(
     precalculated_labels: list[dict] | None = None,
     feature_track_ratio_factor_override: float | None = None,
     feature_anchor_radius_px: float | None = None,
+    phase: Literal["all", "leaders", "text"] = "all",
 ) -> Drawing:
     """
     Adds the labels group to the canvas.
@@ -378,6 +381,7 @@ def add_labels_group_on_canvas(
         precalculated_labels=precalculated_labels,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
         feature_anchor_radius_px=feature_anchor_radius_px,
+        phase=phase,
     ).get_group()
     labels_group = center_group_on_canvas(labels_group, canvas_config)
     canvas.add(labels_group)

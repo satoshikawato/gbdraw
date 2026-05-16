@@ -266,10 +266,6 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC') =>
   const renderer = SUPPORTED_RENDERERS.includes(source.renderer) ? source.renderer : 'dinucleotide_skew';
   const fallbackId = DEFAULT_SLOT_IDS[renderer] || `slot_${index + 1}`;
   const params = cloneParams(source.params);
-  const paramsSide = params.side;
-  const paramsStrict = params.strict;
-  const paramsCompress = params.compress;
-  const paramsReserve = params.reserve;
   [
     'side',
     'strict',
@@ -279,23 +275,17 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC') =>
     'radius',
     'w',
     'width',
-    'spacing',
-    'gap',
-    'gap_after',
-    'inner',
-    'inner_radius',
-    'outer',
-    'outer_radius'
+    'spacing'
   ].forEach((key) => {
     delete params[key];
   });
 
-  let side = normalizeSlotSide(source.side ?? paramsSide ?? 'inside');
-  let strict = normalizeOptionalBool(source.strict ?? paramsStrict);
-  let compress = normalizeOptionalBool(source.compress ?? paramsCompress);
-  let reserve = normalizeOptionalBool(source.reserve ?? paramsReserve);
-  const radius = source.radius ?? source.r ?? null;
-  const spacing = source.spacing ?? source.gapAfter ?? source.gap_after ?? null;
+  let side = normalizeSlotSide(source.side ?? 'inside');
+  let strict = normalizeOptionalBool(source.strict);
+  let compress = normalizeOptionalBool(source.compress);
+  let reserve = normalizeOptionalBool(source.reserve);
+  const radius = source.radius ?? null;
+  const spacing = source.spacing ?? null;
 
   if ((renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') && !normalizeOptionalText(params.nt)) {
     params.nt = normalizeNt(defaultNt);
