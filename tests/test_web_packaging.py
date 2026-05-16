@@ -172,6 +172,33 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "axis=true" not in slot_source
 
 
+def test_web_config_rejects_obsolete_circular_track_slot_import_shapes() -> None:
+    state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+
+    assert "circular_track_slots_schema_version: 2" in state_source
+    assert "const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 2;" in config_source
+    assert "adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION" in config_source
+    assert "validateImportedCircularTrackSlots(data);" in config_source
+    assert "validateImportedCircularTrackSlots(data.config);" in config_source
+    assert "Failed to load config: ${message}" in config_source
+    assert "Failed to load session: ${message}" in config_source
+
+    for obsolete_key in [
+        "gapAfter",
+        "gap_after",
+        "innerRadius",
+        "inner_radius",
+        "outerRadius",
+        "outer_radius",
+        "placement",
+    ]:
+        assert f"'{obsolete_key}'" in config_source
+
+    for obsolete_param_key in ["side", "radius", "width"]:
+        assert f"'{obsolete_param_key}'" in config_source
+
+
 def test_web_config_persists_manual_qualifier_priority_rules() -> None:
     source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     assert "qualifierPriorityRules: cloneQualifierPriorityRules(state.manualPriorityRules)" in source

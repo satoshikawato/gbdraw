@@ -4,6 +4,17 @@ import { normalizeCircularTrackSlots } from '../app/circular-track-slots.js';
 
 const SESSION_VERSION = 21;
 const LOSAT_CACHE_SCHEMA = 2;
+const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 2;
+const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = [
+  'gapAfter',
+  'gap_after',
+  'innerRadius',
+  'inner_radius',
+  'outerRadius',
+  'outer_radius',
+  'placement'
+];
+const OBSOLETE_CIRCULAR_TRACK_SLOT_PARAM_KEYS = ['side', 'radius', 'width'];
 
 const isRawLosatCacheEntry = (entry) =>
   Boolean(entry) &&
@@ -151,6 +162,50 @@ const normalizePositiveNumberOrNull = (value) => {
   }
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+};
+
+const findObsoleteCircularTrackSlotShape = (slots) => {
+  if (!Array.isArray(slots)) return null;
+
+  for (let index = 0; index < slots.length; index += 1) {
+    const slot = slots[index];
+    if (!slot || typeof slot !== 'object' || Array.isArray(slot)) continue;
+
+    for (const key of OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(slot, key)) {
+        return `circular_track_slots[${index}].${key}`;
+      }
+    }
+
+    const params = slot.params;
+    if (!params || typeof params !== 'object' || Array.isArray(params)) continue;
+    for (const key of OBSOLETE_CIRCULAR_TRACK_SLOT_PARAM_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(params, key)) {
+        return `circular_track_slots[${index}].params.${key}`;
+      }
+    }
+  }
+
+  return null;
+};
+
+const validateImportedCircularTrackSlots = (configData = {}) => {
+  const adv = configData && typeof configData === 'object' ? configData.adv : null;
+  if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return;
+  if (!Object.prototype.hasOwnProperty.call(adv, 'circular_track_slots')) return;
+
+  if (adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION) {
+    throw new Error(
+      `Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${CIRCULAR_TRACK_SLOT_SCHEMA_VERSION}.`
+    );
+  }
+
+  const obsoletePath = findObsoleteCircularTrackSlotShape(adv.circular_track_slots);
+  if (obsoletePath) {
+    throw new Error(
+      `Custom Track Slots use obsolete field '${obsoletePath}'. Use slot-level radius, width, spacing, side, strict, compress, and reserve fields.`
+    );
+  }
 };
 
 const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
@@ -449,6 +504,7 @@ const applyConfigData = (data) => {
   state.adv.depth_share_axis = state.adv.depth_share_axis === true;
   state.adv.depth_height = normalizePositiveNumberOrNull(state.adv.depth_height);
   state.adv.depth_width_circular = normalizePositiveNumberOrNull(state.adv.depth_width_circular);
+  state.adv.circular_track_slots_schema_version = CIRCULAR_TRACK_SLOT_SCHEMA_VERSION;
   state.adv.circular_track_slots_enabled = state.adv.circular_track_slots_enabled === true;
   state.adv.circular_track_slots.splice(
     0,
@@ -1077,13 +1133,15 @@ export const importConfig = async (e) => {
       return value;
     });
     state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.form);
+    validateImportedCircularTrackSlots(data);
     applyConfigData(data);
     restorePaletteStateAfterConfigImport();
     alert('Configuration loaded successfully!');
   } catch (err) {
     console.error(err);
     state.suppressCircularMultiRecordDefaults.value = false;
-    alert('Failed to load config: Invalid JSON structure.');
+    const message = err?.message || 'Invalid JSON structure.';
+    alert(`Failed to load config: ${message}`);
   } finally {
     e.target.value = '';
   }
@@ -1143,6 +1201,7 @@ export const importSession = async (e) => {
 
     if (data.config) {
       state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(data.config.form);
+      validateImportedCircularTrackSlots(data.config);
       applyConfigData(data.config);
     }
     restorePaletteStateFromSession(ui);
@@ -1303,7 +1362,8 @@ export const importSession = async (e) => {
   } catch (err) {
     console.error(err);
     state.suppressCircularMultiRecordDefaults.value = false;
-    alert('Failed to load session: Invalid JSON structure.');
+    const message = err?.message || 'Invalid JSON structure.';
+    alert(`Failed to load session: ${message}`);
   } finally {
     e.target.value = '';
   }
