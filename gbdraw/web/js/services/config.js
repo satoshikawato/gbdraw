@@ -2,7 +2,7 @@ import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../st
 import { resolveColorToHex } from '../app/color-utils.js';
 import { normalizeCircularTrackSlots } from '../app/circular-track-slots.js';
 
-const SESSION_VERSION = 20;
+const SESSION_VERSION = 21;
 const LOSAT_CACHE_SCHEMA = 2;
 
 const isRawLosatCacheEntry = (entry) =>

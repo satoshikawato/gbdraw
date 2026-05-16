@@ -48,23 +48,16 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
 from .options import ColorOptions, DiagramOptions, OutputOptions, TrackOptions
 from .render import parse_formats, render_to_bytes, save_figure, save_figure_to
 from .tracks import (  # type: ignore[reportMissingImports]
-    CircularTrackLayoutContext,
-    CircularTrackPlacement,
     CircularTrackRendererName,
+    CircularTrackSide,
     CircularTrackSlot,
-    LinearTrackPlacement,
-    ResolvedCircularTrackSlot,
     ScalarSpec,
     SUPPORTED_CIRCULAR_TRACK_RENDERERS,
-    TrackSpec,
-    TrackSpecParseError,
+    CircularTrackSlotParseError,
     circular_track_slots_from_order,
     default_circular_track_slots,
     parse_circular_track_slot,
     parse_circular_track_slots,
-    parse_track_spec,
-    parse_track_specs,
-    resolve_circular_track_slots,
 )
 
 __all__ = [
@@ -120,23 +113,16 @@ __all__ = [
     "save_figure",
     "save_figure_to",
     # tracks (foundation)
-    "CircularTrackLayoutContext",
-    "CircularTrackPlacement",
     "CircularTrackRendererName",
+    "CircularTrackSide",
     "CircularTrackSlot",
-    "LinearTrackPlacement",
-    "ResolvedCircularTrackSlot",
     "ScalarSpec",
     "SUPPORTED_CIRCULAR_TRACK_RENDERERS",
-    "TrackSpec",
-    "TrackSpecParseError",
+    "CircularTrackSlotParseError",
     "circular_track_slots_from_order",
     "default_circular_track_slots",
     "parse_circular_track_slot",
     "parse_circular_track_slots",
-    "parse_track_spec",
-    "parse_track_specs",
-    "resolve_circular_track_slots",
 ]
 
 

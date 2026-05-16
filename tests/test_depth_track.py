@@ -395,8 +395,8 @@ def test_circular_depth_compresses_gc_skew_to_preserve_definition_space(
     default_skew_width = base_radius * track_ratio * float(cfg.canvas.circular.track_ratio_factors[length_param][2])
     default_depth_width = default_gc_width * 0.5
 
-    assert captured["gc_width"] <= default_gc_width
-    assert captured["skew_width"] <= default_skew_width
+    assert captured["gc_width"] <= default_gc_width + 1e-9
+    assert captured["skew_width"] <= default_skew_width + 1e-9
     assert captured["depth_width"] <= default_depth_width + 1e-9
 
     depth_inner = captured["depth_center"] - (0.5 * captured["depth_width"])
@@ -430,6 +430,7 @@ def test_circular_depth_preserves_explicit_gc_skew_track_specs(
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
         cfg=None,
     ):
         captured["gc_width"] = float(track_width_override)
@@ -446,6 +447,7 @@ def test_circular_depth_preserves_explicit_gc_skew_track_specs(
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
         cfg=None,
     ):
         captured["skew_width"] = float(track_width_override)
@@ -468,7 +470,10 @@ def test_circular_depth_preserves_explicit_gc_skew_track_specs(
         legend="none",
         depth_table=_depth_table("rec1"),
         config_overrides={"show_gc": True, "show_skew": True},
-        track_specs=["gc_content@r=0.44,w=12px", "gc_skew@r=0.24,w=10px"],
+        circular_track_slots=[
+            "gc_content:dinucleotide_content@r=0.44,w=12px",
+            "gc_skew:dinucleotide_skew@r=0.24,w=10px",
+        ],
         window=10,
         step=10,
     )
@@ -869,7 +874,9 @@ def test_circular_cli_depth_options_forward_to_api(
     }
     assert captured["depth_window"] == 10
     assert captured["depth_step"] == 5
-    assert captured["track_specs"] == ["depth@w=22px"]
+    slots = captured["circular_track_slots"]
+    by_id = {slot.id: slot for slot in slots}
+    assert by_id["depth"].width.resolve(390.0) == pytest.approx(22.0)
     cfg = captured["cfg"]
     assert cfg.objects.depth.show_axis is False
     assert cfg.objects.depth.show_ticks is False

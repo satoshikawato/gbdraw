@@ -34,7 +34,7 @@ Two options control the overall look of a circular plot:
 
 `tuckin` is the default and most compact. `middle` is often easier to label. `spreadout` gives the most visual separation. In Custom Track Slots mode, slot radius, width, order, and placement are explicit, and `--track_type` no longer changes that geometry.
 
-The circular axis radius is fixed at `canvas.circular.radius`; it cannot be moved or hidden with a circular `axis` TrackSpec.
+The circular axis radius is fixed at `canvas.circular.radius`; it cannot be moved or hidden with a circular track slot.
 
 ![track_layout_separate_strands.png](../../examples/track_layout_separate_strands.png)
 

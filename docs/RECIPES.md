@@ -54,7 +54,7 @@ gbdraw circular \
 gbdraw circular --gbk genome.gb -o output -f svg --track_type middle --labels
 ```
 
-`--track_type` selects a circular preset in simple/legacy mode. Custom Track Slots use explicit slot geometry instead; the circular axis stays fixed and is not configurable with TrackSpec.
+`--track_type` selects a circular preset in simple mode. Custom Track Slots use explicit slot geometry instead; the circular axis stays fixed and is not configurable as a slot.
 
 ### Show outer and inner labels
 

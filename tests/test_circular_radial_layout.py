@@ -11,7 +11,6 @@ from gbdraw.config.toml import load_config_toml
 from gbdraw.diagrams.circular.radial_layout import build_circular_feature_layout, resolve_circular_radial_layout
 from gbdraw.layout.circular import calculate_feature_position_factors_circular
 from gbdraw.tracks import CircularTrackSlot
-from gbdraw.tracks.spec import ScalarSpec
 
 
 class _Feature:
@@ -111,7 +110,6 @@ def test_custom_core_slot_order_places_ticks_outside_features() -> None:
         feature_dict={"a": _Feature(0)},
         show_features=True,
         show_ticks=True,
-        honor_core_slot_order=True,
     )
 
     assert layout.features is not None
@@ -132,7 +130,6 @@ def test_custom_core_slot_order_keeps_default_feature_then_ticks_order() -> None
         feature_dict={"a": _Feature(0)},
         show_features=True,
         show_ticks=True,
-        honor_core_slot_order=True,
     )
 
     assert layout.features is not None
@@ -155,7 +152,7 @@ def _small_radial_canvas() -> tuple[CircularCanvasConfigurator, GbdrawConfig]:
     return canvas_config, cfg
 
 
-def test_radial_numeric_stack_compresses_no_lower_than_readable_minimum() -> None:
+def test_radial_numeric_stack_places_default_inside_tracks_when_space_allows() -> None:
     canvas_config, cfg = _small_radial_canvas()
     layout = resolve_circular_radial_layout(
         total_length=1000,
@@ -167,212 +164,76 @@ def test_radial_numeric_stack_compresses_no_lower_than_readable_minimum() -> Non
         ],
         show_features=False,
         show_ticks=False,
-        definition_reserved_radius_px=70.0,
+        definition_reserved_radius_px=60.0,
     )
     by_id = {track.id: track for track in layout.tracks}
 
-    assert by_id["gc_content"].draw_band_px.width_px == pytest.approx(by_id["at_skew"].draw_band_px.width_px)
+    assert by_id["gc_content"].draw_band_px.width_px == pytest.approx(19.0)
+    assert by_id["at_skew"].draw_band_px.width_px == pytest.approx(19.0)
+    assert by_id["gc_content"].draw_band_px.inner_px > by_id["at_skew"].draw_band_px.outer_px
+    assert min(track.draw_band_px.inner_px for track in layout.tracks) >= 60.0 - 1e-6
+
+
+def test_radial_numeric_stack_compresses_group_no_lower_than_readable_minimum() -> None:
+    canvas_config, cfg = _small_radial_canvas()
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=[
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", compress=True),
+            CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew", compress=True),
+        ],
+        show_features=False,
+        show_ticks=False,
+        definition_reserved_radius_px=65.0,
+    )
+    by_id = {track.id: track for track in layout.tracks}
+
     assert by_id["gc_content"].draw_band_px.width_px < 19.0
+    assert by_id["at_skew"].draw_band_px.width_px < 19.0
+    assert by_id["gc_content"].draw_band_px.width_px >= 12.35 - 1e-6
     assert by_id["at_skew"].draw_band_px.width_px >= 12.35 - 1e-6
-    assert min(track.draw_band_px.inner_px for track in layout.tracks) >= 70.0 - 1e-6
+    assert min(track.draw_band_px.inner_px for track in layout.tracks) >= 65.0 - 1e-6
 
 
-def test_outside_auto_numeric_width_tracks_inside_auto_compression() -> None:
+def test_radial_numeric_stack_raises_when_readable_minimum_cannot_fit() -> None:
+    canvas_config, cfg = _small_radial_canvas()
+
+    with pytest.raises(Exception, match="Circular track slot 'at_skew' cannot fit inside"):
+        resolve_circular_radial_layout(
+            total_length=1000,
+            canvas_config=canvas_config,
+            cfg=cfg,
+            slots=[
+                CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", compress=True),
+                CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", compress=True, strict=True),
+                CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew", compress=True, strict=True),
+            ],
+            show_features=False,
+            show_ticks=False,
+            definition_reserved_radius_px=70.0,
+        )
+
+
+def test_outside_auto_numeric_width_is_independent_from_inside_compression() -> None:
     canvas_config, cfg = _small_radial_canvas()
     layout = resolve_circular_radial_layout(
         total_length=1000,
         canvas_config=canvas_config,
         cfg=cfg,
         slots=[
-            CircularTrackSlot(
-                id="outer_skew",
-                renderer="dinucleotide_skew",
-                params={"side": "outside"},
-            ),
-            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
-            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+            CircularTrackSlot(id="outer_skew", renderer="dinucleotide_skew", side="outside"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", compress=True),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", compress=True),
         ],
         show_features=False,
         show_ticks=False,
-        definition_reserved_radius_px=70.0,
+        definition_reserved_radius_px=65.0,
     )
     by_id = {track.id: track for track in layout.tracks}
 
-    assert by_id["gc_skew"].draw_band_px.width_px < 19.0
-    assert by_id["outer_skew"].draw_band_px.width_px == pytest.approx(
-        by_id["gc_skew"].draw_band_px.width_px
-    )
-
-
-def test_explicit_outside_numeric_width_ignores_inside_auto_compression() -> None:
-    canvas_config, cfg = _small_radial_canvas()
-    layout = resolve_circular_radial_layout(
-        total_length=1000,
-        canvas_config=canvas_config,
-        cfg=cfg,
-        slots=[
-            CircularTrackSlot(
-                id="outer_skew",
-                renderer="dinucleotide_skew",
-                width=ScalarSpec(19.0, "px"),
-                params={"side": "outside"},
-            ),
-            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
-            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
-        ],
-        show_features=False,
-        show_ticks=False,
-        definition_reserved_radius_px=70.0,
-    )
-    by_id = {track.id: track for track in layout.tracks}
-
-    assert by_id["gc_skew"].draw_band_px.width_px < 19.0
+    assert by_id["outer_skew"].side == "outside"
     assert by_id["outer_skew"].draw_band_px.width_px == pytest.approx(19.0)
-
-
-def test_explicit_inside_numeric_group_compresses_below_readable_minimum() -> None:
-    canvas_config, cfg = _small_radial_canvas()
-    layout = resolve_circular_radial_layout(
-        total_length=1000,
-        canvas_config=canvas_config,
-        cfg=cfg,
-        slots=[
-            CircularTrackSlot(
-                id="gc_content",
-                renderer="dinucleotide_content",
-                params={"side": "inside", "compress": True},
-            ),
-            CircularTrackSlot(
-                id="gc_skew",
-                renderer="dinucleotide_skew",
-                params={"side": "inside", "compress": True},
-            ),
-            CircularTrackSlot(
-                id="at_skew",
-                renderer="dinucleotide_skew",
-                params={"side": "inside", "compress": True},
-            ),
-        ],
-        show_features=False,
-        show_ticks=False,
-        definition_reserved_radius_px=70.0,
-    )
-    by_id = {track.id: track for track in layout.tracks}
-
-    assert set(by_id) == {"gc_content", "gc_skew", "at_skew"}
-    assert all(track.channel == "inside" for track in layout.tracks)
-    assert max(track.draw_band_px.width_px for track in layout.tracks) < 12.35 - 1e-6
-    assert min(track.draw_band_px.inner_px for track in layout.tracks) >= 70.0 - 1e-6
-    assert max(track.draw_band_px.outer_px for track in layout.tracks) <= canvas_config.radius + 1e-6
-    assert layout.outer_content_radius_px <= canvas_config.radius + 1e-6
-
-
-def test_explicit_inside_numeric_group_does_not_fallback_when_not_strict() -> None:
-    canvas_config, cfg = _small_radial_canvas()
-    layout = resolve_circular_radial_layout(
-        total_length=1000,
-        canvas_config=canvas_config,
-        cfg=cfg,
-        slots=[
-            CircularTrackSlot(
-                id="gc_content",
-                renderer="dinucleotide_content",
-                params={"side": "inside", "strict": False, "compress": False},
-            ),
-            CircularTrackSlot(
-                id="gc_skew",
-                renderer="dinucleotide_skew",
-                params={"side": "inside", "strict": False, "compress": False},
-            ),
-            CircularTrackSlot(
-                id="at_skew",
-                renderer="dinucleotide_skew",
-                params={"side": "inside", "strict": False, "compress": False},
-            ),
-        ],
-        show_features=False,
-        show_ticks=False,
-        definition_reserved_radius_px=70.0,
-    )
-
-    assert max(track.draw_band_px.outer_px for track in layout.tracks) <= canvas_config.radius + 1e-6
-    assert min(track.draw_band_px.inner_px for track in layout.tracks) >= 70.0 - 1e-6
-
-
-def test_explicit_inside_numeric_group_raises_below_hard_minimum() -> None:
-    canvas_config, cfg = _small_radial_canvas()
-
-    with pytest.raises(
-        ValueError,
-        match="Circular track slot 'at_skew' cannot fit inside the feature/tick stack.*Placement to Outside",
-    ):
-        resolve_circular_radial_layout(
-            total_length=1000,
-            canvas_config=canvas_config,
-            cfg=cfg,
-            slots=[
-                CircularTrackSlot(
-                    id="gc_content",
-                    renderer="dinucleotide_content",
-                    params={"side": "inside", "compress": True},
-                ),
-                CircularTrackSlot(
-                    id="gc_skew",
-                    renderer="dinucleotide_skew",
-                    params={"side": "inside", "compress": True},
-                ),
-                CircularTrackSlot(
-                    id="at_skew",
-                    renderer="dinucleotide_skew",
-                    params={"side": "inside", "compress": True},
-                ),
-            ],
-            show_features=False,
-            show_ticks=False,
-            definition_reserved_radius_px=89.0,
-        )
-
-
-def test_implicit_numeric_group_keeps_legacy_fallback() -> None:
-    canvas_config, cfg = _small_radial_canvas()
-    layout = resolve_circular_radial_layout(
-        total_length=1000,
-        canvas_config=canvas_config,
-        cfg=cfg,
-        slots=[
-            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
-            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
-            CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew"),
-        ],
-        show_features=False,
-        show_ticks=False,
-        definition_reserved_radius_px=70.0,
-    )
-
-    assert max(track.draw_band_px.outer_px for track in layout.tracks) > canvas_config.radius
-
-
-def test_strict_radial_inside_numeric_stack_reports_layout_error() -> None:
-    canvas_config, cfg = _small_radial_canvas()
-
-    with pytest.raises(ValueError, match="Circular track slot 'at_skew' cannot fit inside the feature/tick stack"):
-        resolve_circular_radial_layout(
-            total_length=1000,
-            canvas_config=canvas_config,
-            cfg=cfg,
-            slots=[
-                CircularTrackSlot(
-                    id="gc_content",
-                    renderer="dinucleotide_content",
-                    params={"side": "inside", "strict": True, "compress": True},
-                ),
-                CircularTrackSlot(
-                    id="at_skew",
-                    renderer="dinucleotide_skew",
-                    params={"side": "inside", "strict": True, "compress": True},
-                ),
-            ],
-            show_features=False,
-            show_ticks=False,
-            definition_reserved_radius_px=93.0,
-        )
+    assert by_id["gc_skew"].draw_band_px.width_px < by_id["outer_skew"].draw_band_px.width_px
+    assert by_id["outer_skew"].draw_band_px.inner_px >= canvas_config.radius

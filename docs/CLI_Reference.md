@@ -239,12 +239,10 @@ options:
                         Circular track slot spec:
                         <slot_id>:<renderer>@key=value,key=value. Can be
                         repeated; auto rows pack measured hard footprints
-                        outer-to-inner. r/ri/ro pin geometry, w pins width,
-                        and z only controls SVG layering. Slot radius is
-                        renderer input, not always the visual center. Legacy
-                        tick marks and labels are measured from their drawn
-                        radii; GC content/skew widths are preserved unless
-                        hard constraints require compression.
+                        outer-to-inner. Use r=<radius>, w=<width>, and
+                        spacing=<scalar>; ri/ro/gap are obsolete. side,
+                        strict, compress, reserve, and z are slot fields.
+                        z only controls SVG layering.
   --gc_content_width GC_CONTENT_WIDTH
                         GC content track width for circular mode (in px; must
                         be > 0).

@@ -799,6 +799,7 @@ export const createAppSetup = () => {
     moveCircularTrackSlot: circularTrackSlotEditor.moveCircularTrackSlot,
     updateCircularTrackSlotRenderer: circularTrackSlotEditor.updateCircularTrackSlotRenderer,
     updateCircularTrackSlotPlacement: circularTrackSlotEditor.updateCircularTrackSlotPlacement,
+    updateCircularTrackFeatureLane: circularTrackSlotEditor.updateCircularTrackFeatureLane,
     circularTrackPlacementLabel: circularTrackSlotEditor.circularTrackPlacementLabel,
     supportsCircularTrackSlotPlacement: circularTrackSlotEditor.supportsCircularTrackSlotPlacement,
     circularTrackSlotCliSpec: circularTrackSlotEditor.circularTrackSlotCliSpec,

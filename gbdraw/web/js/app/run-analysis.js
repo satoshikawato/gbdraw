@@ -1763,6 +1763,7 @@ json.dumps({
           args.push('--circular_label_spacing', adv.circular_label_spacing);
         }
         if (
+          !useCircularTrackSlots &&
           adv.feature_width_circular !== null &&
           adv.feature_width_circular !== undefined &&
           adv.feature_width_circular !== '' &&
@@ -1770,7 +1771,7 @@ json.dumps({
         ) {
           args.push('--feature_width', adv.feature_width_circular);
         }
-        if (!form.suppress_gc || useCircularTrackSlots) {
+        if (!useCircularTrackSlots && !form.suppress_gc) {
           if (
             adv.gc_content_width_circular !== null &&
             adv.gc_content_width_circular !== undefined &&
@@ -1788,7 +1789,7 @@ json.dumps({
             args.push('--gc_content_radius', adv.gc_content_radius_circular);
           }
         }
-        if (!form.suppress_skew || useCircularTrackSlots) {
+        if (!useCircularTrackSlots && !form.suppress_skew) {
           if (
             adv.gc_skew_width_circular !== null &&
             adv.gc_skew_width_circular !== undefined &&
@@ -1820,6 +1821,7 @@ json.dumps({
           args.push('--show_depth');
           appendDepthStyleArgs();
           if (
+            !useCircularTrackSlots &&
             adv.depth_width_circular !== null &&
             adv.depth_width_circular !== undefined &&
             adv.depth_width_circular !== '' &&

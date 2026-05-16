@@ -825,9 +825,9 @@
                                                         </option>
                                                     </select>
                                                     <span
-                                                        v-if="supportsCircularTrackSlotPlacement(slot.renderer) && slot.params.side"
+                                                        v-if="supportsCircularTrackSlotPlacement(slot.renderer) && slot.side"
                                                         class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-600"
-                                                    >{{ circularTrackPlacementLabel(slot.params.side) }}</span>
+                                                    >{{ circularTrackPlacementLabel(slot.side) }}</span>
                                                 </div>
                                                 <div class="flex items-center gap-0.5">
                                                     <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(idx, idx - 1)" :disabled="idx === 0" title="Move up"><i class="ph ph-arrow-up"></i></button>
@@ -836,16 +836,18 @@
                                                     <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(idx)" title="Remove"><i class="ph ph-trash"></i></button>
                                                 </div>
                                             </div>
-                                            <div class="grid grid-cols-6 gap-1">
+                                            <div class="grid grid-cols-4 gap-1">
                                                 <input v-model.trim="slot.width" class="form-input px-1 py-0.5 text-[10px]" placeholder="w">
                                                 <input v-model.trim="slot.radius" class="form-input px-1 py-0.5 text-[10px]" placeholder="r">
-                                                <input v-model.trim="slot.innerRadius" class="form-input px-1 py-0.5 text-[10px]" placeholder="ri">
-                                                <input v-model.trim="slot.outerRadius" class="form-input px-1 py-0.5 text-[10px]" placeholder="ro">
-                                                <input v-model.trim="slot.gapAfter" class="form-input px-1 py-0.5 text-[10px]" placeholder="gap">
+                                                <input v-model.trim="slot.spacing" class="form-input px-1 py-0.5 text-[10px]" placeholder="spacing">
                                                 <input type="number" v-model.number="slot.z" class="form-input px-1 py-0.5 text-[10px]" placeholder="z">
                                             </div>
                                             <div v-if="slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
-                                                <select v-model="slot.params.lane_direction" class="form-input px-1 py-0.5 text-[10px]">
+                                                <select
+                                                    :value="slot.params.lane_direction"
+                                                    @change="updateCircularTrackFeatureLane(slot, $event.target.value)"
+                                                    class="form-input px-1 py-0.5 text-[10px]"
+                                                >
                                                     <option value="inside">Lanes inside</option>
                                                     <option value="split">Lanes split</option>
                                                     <option value="outside">Lanes outside</option>
@@ -870,7 +872,7 @@
                                             </div>
                                             <div v-if="supportsCircularTrackSlotPlacement(slot.renderer)" class="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-1 items-center">
                                                 <select
-                                                    :value="slot.params.side || 'inside'"
+                                                    :value="slot.side || 'inside'"
                                                     @change="updateCircularTrackSlotPlacement(slot, $event.target.value)"
                                                     class="form-input px-1 py-0.5 text-[10px]"
                                                 >
@@ -879,15 +881,15 @@
                                                     <option value="overlay">Overlay</option>
                                                 </select>
                                                 <label class="option-label flex items-center gap-1 text-[10px] text-slate-600">
-                                                    <input type="checkbox" v-model="slot.params.strict" class="form-checkbox">
+                                                    <input type="checkbox" v-model="slot.strict" class="form-checkbox">
                                                     <span>Strict</span>
                                                 </label>
                                                 <label class="option-label flex items-center gap-1 text-[10px] text-slate-600">
-                                                    <input type="checkbox" v-model="slot.params.compress" class="form-checkbox">
+                                                    <input type="checkbox" v-model="slot.compress" class="form-checkbox">
                                                     <span>Compress</span>
                                                 </label>
                                                 <label class="option-label flex items-center gap-1 text-[10px] text-slate-600">
-                                                    <input type="checkbox" v-model="slot.params.reserve" class="form-checkbox">
+                                                    <input type="checkbox" v-model="slot.reserve" class="form-checkbox">
                                                     <span>Reserve</span>
                                                 </label>
                                             </div>

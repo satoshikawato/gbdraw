@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, Mapping, Sequence
 
-from .parser import TrackSpecParseError, _parse_bool, _split_kv_list
-from .spec import CircularTrackPlacement, ScalarSpec, TrackSpec
+from .parsing import CircularTrackSlotParseError, parse_bool, split_kv_list
+from .scalars import ScalarSpec
 
 
 CircularTrackRendererName = Literal[
@@ -15,6 +15,8 @@ CircularTrackRendererName = Literal[
     "depth",
     "spacer",
 ]
+
+CircularTrackSide = Literal["inside", "outside", "overlay"]
 
 SUPPORTED_CIRCULAR_TRACK_RENDERERS: frozenset[str] = frozenset(
     {
@@ -27,7 +29,18 @@ SUPPORTED_CIRCULAR_TRACK_RENDERERS: frozenset[str] = frozenset(
     }
 )
 
-_LEGACY_SLOT_RENDERER_BY_ID: dict[str, str] = {
+NUMERIC_CIRCULAR_TRACK_RENDERERS: frozenset[str] = frozenset(
+    {"dinucleotide_content", "dinucleotide_skew", "depth"}
+)
+
+_RENDERER_ALIASES: dict[str, str] = {
+    "gc_content": "dinucleotide_content",
+    "content": "dinucleotide_content",
+    "gc_skew": "dinucleotide_skew",
+    "skew": "dinucleotide_skew",
+}
+
+_ORDER_RENDERER_BY_ID: dict[str, str] = {
     "features": "features",
     "ticks": "ticks",
     "depth": "depth",
@@ -35,82 +48,122 @@ _LEGACY_SLOT_RENDERER_BY_ID: dict[str, str] = {
     "gc_skew": "dinucleotide_skew",
 }
 
-_LEGACY_KIND_BY_RENDERER: dict[str, str] = {
-    "features": "features",
-    "ticks": "ticks",
-    "depth": "depth",
-    "dinucleotide_content": "gc_content",
-    "dinucleotide_skew": "gc_skew",
+_OBSOLETE_GEOMETRY_KEYS = {
+    "ri",
+    "inner",
+    "inner_radius",
+    "ro",
+    "outer",
+    "outer_radius",
 }
 
-_TICK_AXIS_PARAM_ERROR = "ticks slots no longer accept 'axis'; the circular axis is fixed and not a slot"
+_OBSOLETE_SPACING_KEYS = {"gap", "gap_after"}
+_GENERIC_LAYOUT_KEYS = {
+    "side",
+    "r",
+    "radius",
+    "w",
+    "width",
+    "spacing",
+    "z",
+    "z_index",
+    "zindex",
+    "strict",
+    "compress",
+    "reserve",
+    "enabled",
+    "show",
+    "visible",
+}
+_TICK_SIDE_VALUES = {"inside", "outside", "both", "none"}
+_FEATURE_LANE_VALUES = {"inside", "outside", "split"}
+_SIDE_VALUES = {"inside", "outside", "overlay"}
 
 
 @dataclass(frozen=True)
 class CircularTrackSlot:
-    """One radial slot in a circular diagram.
-
-    `id` identifies the slot instance. `renderer` selects the drawing
-    implementation, so several slots may share a renderer.
-    """
+    """One public radial slot input for a circular diagram."""
 
     id: str
     renderer: CircularTrackRendererName | str
     enabled: bool = True
-    placement: CircularTrackPlacement | None = None
+    side: str | None = None
+    radius: ScalarSpec | None = None
     width: ScalarSpec | None = None
-    gap_after: ScalarSpec | None = None
+    spacing: ScalarSpec | None = None
     z: int = 0
+    strict: bool | None = None
+    compress: bool | None = None
+    reserve: bool | None = None
     params: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class NormalizedCircularTrackSlot:
+    slot_index: int
+    id: str
+    renderer: str
+    enabled: bool
+    side: str
+    radius: ScalarSpec | None
+    width: ScalarSpec | None
+    spacing: ScalarSpec | None
+    z: int
+    strict: bool
+    compress: bool
+    reserve: bool
+    params: Mapping[str, Any]
 
 
 def _normalize_renderer(raw: str) -> str:
     renderer = str(raw).strip().lower()
-    aliases = {
-        "gc_content": "dinucleotide_content",
-        "content": "dinucleotide_content",
-        "gc_skew": "dinucleotide_skew",
-        "skew": "dinucleotide_skew",
-    }
-    return aliases.get(renderer, renderer)
+    return _RENDERER_ALIASES.get(renderer, renderer)
 
 
-def _validate_circular_track_slot_params(
-    *,
-    renderer: str,
-    params: Mapping[str, Any],
-    original: str,
-) -> None:
-    if renderer == "ticks" and any(str(key).strip().lower() == "axis" for key in params):
-        raise TrackSpecParseError(_TICK_AXIS_PARAM_ERROR, original)
+def _normalize_side_value(raw: object, *, field_name: str = "side") -> str:
+    side = str(raw).strip().lower()
+    if side not in _SIDE_VALUES:
+        raise ValueError(f"{field_name} must be one of inside, outside, overlay")
+    return side
+
+
+def _normalize_tick_side(raw: object, *, field_name: str) -> str:
+    side = str(raw).strip().lower()
+    if side not in _TICK_SIDE_VALUES:
+        raise ValueError(f"{field_name} must be one of inside, outside, both, none")
+    return side
+
+
+def _normalize_feature_lane(raw: object) -> str:
+    lane = str(raw).strip().lower()
+    if lane not in _FEATURE_LANE_VALUES:
+        raise ValueError("lane_direction must be one of inside, outside, split")
+    return lane
 
 
 def _parse_slot_head(head: str, original: str) -> tuple[str, str]:
     if ":" not in head:
-        slot_id = head.strip()
-        if not slot_id:
-            raise TrackSpecParseError("missing circular track slot id", original)
-        renderer = _LEGACY_SLOT_RENDERER_BY_ID.get(slot_id, slot_id)
-        return slot_id, renderer
-
+        raise CircularTrackSlotParseError(
+            "circular track slots require '<slot_id>:<renderer>@...'; shortcut slot strings are no longer supported",
+            original,
+        )
     slot_id_raw, renderer_raw = head.split(":", 1)
     slot_id = slot_id_raw.strip()
     renderer = renderer_raw.strip()
     if not slot_id:
-        raise TrackSpecParseError("missing circular track slot id", original)
+        raise CircularTrackSlotParseError("missing circular track slot id", original)
     if not renderer:
-        raise TrackSpecParseError("missing circular track renderer", original)
+        raise CircularTrackSlotParseError("missing circular track renderer", original)
     return slot_id, renderer
 
 
 def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
-    """Parse `<slot_id>:<renderer>@key=value,...` into a slot object."""
+    """Parse `<slot_id>:<renderer>@key=value,...` into a slot input object."""
 
     original = raw
     s = str(raw).strip()
     if not s or s.startswith("#"):
-        raise TrackSpecParseError("empty/comment line", original)
-
+        raise CircularTrackSlotParseError("empty/comment line", original)
     if "#" in s:
         s = s.split("#", 1)[0].strip()
 
@@ -123,18 +176,22 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
     slot_id, renderer_raw = _parse_slot_head(head.strip(), original)
     renderer = _normalize_renderer(renderer_raw)
     if renderer not in SUPPORTED_CIRCULAR_TRACK_RENDERERS:
-        raise TrackSpecParseError(f"unknown circular track renderer '{renderer}'", original)
+        raise CircularTrackSlotParseError(f"unknown circular track renderer '{renderer}'", original)
 
     enabled = True
-    placement: CircularTrackPlacement | None = None
+    side: str | None = None
+    radius: ScalarSpec | None = None
     width: ScalarSpec | None = None
-    gap_after: ScalarSpec | None = None
+    spacing: ScalarSpec | None = None
     z = 0
+    strict: bool | None = None
+    compress: bool | None = None
+    reserve: bool | None = None
     params: dict[str, Any] = {}
 
     if opts:
         try:
-            for raw_key, raw_value in _split_kv_list(opts):
+            for raw_key, raw_value in split_kv_list(opts):
                 key = raw_key.strip().lower()
                 value = raw_value.strip()
                 if key in {"id"}:
@@ -144,53 +201,58 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
                     if renderer not in SUPPORTED_CIRCULAR_TRACK_RENDERERS:
                         raise ValueError(f"unknown circular track renderer '{renderer}'")
                 elif key in {"enabled", "show", "visible"}:
-                    enabled = _parse_bool(value)
+                    enabled = parse_bool(value)
                 elif key in {"z", "z_index", "zindex"}:
                     z = int(value)
-                elif key in {"gap", "gap_after"}:
-                    if value.strip().lower() not in {"", "auto", "legacy", "none"}:
-                        gap_after = ScalarSpec.parse(value)
+                elif key in {"r", "radius"}:
+                    radius = ScalarSpec.parse(value)
                 elif key in {"w", "width"}:
-                    if value.strip().lower() not in {"", "auto", "legacy"}:
-                        width = ScalarSpec.parse(value)
-                elif key in {"r", "radius", "ri", "inner", "inner_radius", "ro", "outer", "outer_radius"}:
-                    if placement is None:
-                        placement = CircularTrackPlacement()
-                    if key in {"r", "radius"}:
-                        placement = replace(placement, radius=ScalarSpec.parse(value))
-                    elif key in {"ri", "inner", "inner_radius"}:
-                        placement = replace(placement, inner_radius=ScalarSpec.parse(value))
-                    else:
-                        placement = replace(placement, outer_radius=ScalarSpec.parse(value))
-                elif key in {"placement"}:
-                    params["placement"] = value
-                elif key in {"side", "avoid"}:
-                    params[key] = value
-                elif key in {"compress", "strict", "reserve"}:
-                    params[key] = _parse_bool(value)
+                    width = ScalarSpec.parse(value)
+                elif key == "spacing":
+                    spacing = ScalarSpec.parse(value)
+                elif key in _OBSOLETE_GEOMETRY_KEYS:
+                    raise ValueError(f"'{key}' is no longer supported; use r=<radius> with w=<width>")
+                elif key in _OBSOLETE_SPACING_KEYS:
+                    raise ValueError(f"'{key}' is no longer supported; use spacing=<ScalarSpec>")
+                elif key == "side":
+                    side = _normalize_side_value(value)
+                elif key == "strict":
+                    strict = parse_bool(value)
+                elif key == "compress":
+                    compress = parse_bool(value)
+                elif key == "reserve":
+                    reserve = parse_bool(value)
                 elif key in {"nt", "dinucleotide"}:
                     params["nt"] = value.upper()
                 else:
                     params[key] = value
+        except CircularTrackSlotParseError:
+            raise
         except Exception as exc:
-            raise TrackSpecParseError(str(exc), original) from exc
+            raise CircularTrackSlotParseError(str(exc), original) from exc
 
-    if placement is not None:
-        placement = replace(placement, z=z)
     if not slot_id:
-        raise TrackSpecParseError("missing circular track slot id", original)
-    _validate_circular_track_slot_params(renderer=renderer, params=params, original=original)
+        raise CircularTrackSlotParseError("missing circular track slot id", original)
 
-    return CircularTrackSlot(
+    slot = CircularTrackSlot(
         id=slot_id,
         renderer=renderer,
         enabled=enabled,
-        placement=placement,
+        side=side,
+        radius=radius,
         width=width,
-        gap_after=gap_after,
+        spacing=spacing,
         z=z,
+        strict=strict,
+        compress=compress,
+        reserve=reserve,
         params=params,
     )
+    try:
+        normalize_circular_track_slots([slot])
+    except Exception as exc:
+        raise CircularTrackSlotParseError(str(exc), original) from exc
+    return slot
 
 
 def parse_circular_track_slots(specs: Sequence[str | CircularTrackSlot]) -> list[CircularTrackSlot]:
@@ -202,23 +264,136 @@ def parse_circular_track_slots(specs: Sequence[str | CircularTrackSlot]) -> list
         if isinstance(item, CircularTrackSlot):
             renderer = _normalize_renderer(str(item.renderer))
             slot = replace(item, renderer=renderer) if renderer != str(item.renderer) else item
+            try:
+                normalize_circular_track_slots([slot])
+            except Exception as exc:
+                raise CircularTrackSlotParseError(str(exc), str(slot.id)) from exc
         else:
             slot = parse_circular_track_slot(str(item))
         if slot.id in seen:
-            raise TrackSpecParseError("duplicate circular track slot id", slot.id)
-        if str(slot.renderer) not in SUPPORTED_CIRCULAR_TRACK_RENDERERS:
-            raise TrackSpecParseError(
-                f"unknown circular track renderer '{slot.renderer}'",
-                str(slot.id),
-            )
-        _validate_circular_track_slot_params(
-            renderer=str(slot.renderer),
-            params=slot.params,
-            original=str(slot.id),
-        )
+            raise CircularTrackSlotParseError("duplicate circular track slot id", slot.id)
         seen.add(slot.id)
         out.append(slot)
+    normalize_circular_track_slots(out)
     return out
+
+
+def _normalized_feature_side_and_params(slot: CircularTrackSlot, params: dict[str, Any]) -> tuple[str, bool, dict[str, Any]]:
+    raw_lane = params.get("lane_direction", params.get("lanes"))
+    raw_side = slot.side
+    reserve = bool(slot.reserve) if slot.reserve is not None else False
+
+    lane: str | None = _normalize_feature_lane(raw_lane) if raw_lane is not None else None
+    side: str | None = _normalize_side_value(raw_side) if raw_side is not None else None
+
+    if lane is None and side is None:
+        lane = "inside"
+        side = "inside"
+    elif lane is None:
+        if side == "inside":
+            lane = "inside"
+        elif side == "outside":
+            lane = "outside"
+        else:
+            lane = "split"
+            reserve = True if slot.reserve is None else reserve
+    elif side is None:
+        if lane == "inside":
+            side = "inside"
+        elif lane == "outside":
+            side = "outside"
+        else:
+            side = "overlay"
+            reserve = True if slot.reserve is None else reserve
+    else:
+        expected = "overlay" if lane == "split" else lane
+        if side != expected:
+            raise ValueError(
+                f"features slot '{slot.id}' has conflicting side={side!r} and lane_direction={lane!r}"
+            )
+        if side == "overlay":
+            reserve = True if slot.reserve is None else reserve
+
+    params.pop("lanes", None)
+    params["lane_direction"] = lane
+    return str(side), reserve, params
+
+
+def _normalized_tick_params(slot: CircularTrackSlot, params: dict[str, Any]) -> dict[str, Any]:
+    if "axis" in {str(key).strip().lower() for key in params}:
+        raise ValueError("ticks slots no longer accept 'axis'; the circular axis is fixed and not a slot")
+    if "label_side" in params:
+        params["label_side"] = _normalize_tick_side(params["label_side"], field_name="label_side")
+    else:
+        params["label_side"] = "inside"
+    if "tick_side" in params:
+        params["tick_side"] = _normalize_tick_side(params["tick_side"], field_name="tick_side")
+    else:
+        params["tick_side"] = "inside"
+    return params
+
+
+def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[NormalizedCircularTrackSlot]:
+    """Validate and normalize slots for the circular radial resolver."""
+
+    normalized: list[NormalizedCircularTrackSlot] = []
+    seen: set[str] = set()
+    for slot_index, slot in enumerate(slots):
+        if slot.id in seen:
+            raise ValueError(f"duplicate circular track slot id: {slot.id}")
+        seen.add(str(slot.id))
+        renderer = _normalize_renderer(str(slot.renderer))
+        if renderer not in SUPPORTED_CIRCULAR_TRACK_RENDERERS:
+            raise ValueError(f"unknown circular track renderer: {slot.renderer}")
+        if not slot.enabled:
+            continue
+
+        params = {
+            str(key): value
+            for key, value in dict(slot.params or {}).items()
+            if str(key).strip().lower() not in _GENERIC_LAYOUT_KEYS
+        }
+        side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
+        reserve = bool(slot.reserve) if slot.reserve is not None else False
+
+        if renderer == "features":
+            side, reserve, params = _normalized_feature_side_and_params(slot, params)
+        elif renderer == "ticks":
+            side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
+            params = _normalized_tick_params(slot, params)
+        elif renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
+            side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
+        elif renderer == "spacer":
+            side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
+
+        compress = bool(slot.compress) if slot.compress is not None else False
+        explicit_anchor = slot.radius is not None
+        if compress:
+            if renderer not in NUMERIC_CIRCULAR_TRACK_RENDERERS:
+                raise ValueError(f"compress is not supported for {renderer} circular slots")
+            if explicit_anchor:
+                raise ValueError("compress is not supported on pinned circular numeric/depth slots")
+            if side != "inside":
+                raise ValueError("compress is valid only for auto inside numeric/depth circular slots")
+
+        normalized.append(
+            NormalizedCircularTrackSlot(
+                slot_index=int(slot_index),
+                id=str(slot.id),
+                renderer=renderer,
+                enabled=True,
+                side=side,
+                radius=slot.radius,
+                width=slot.width,
+                spacing=slot.spacing,
+                z=int(slot.z),
+                strict=bool(slot.strict) if slot.strict is not None else False,
+                compress=compress,
+                reserve=reserve,
+                params=params,
+            )
+        )
+    return normalized
 
 
 def default_circular_track_slots(
@@ -230,7 +405,7 @@ def default_circular_track_slots(
     show_skew: bool = True,
     dinucleotide: str = "GC",
 ) -> list[CircularTrackSlot]:
-    """Return the legacy-compatible default slot list."""
+    """Return the default circular slot input list."""
 
     slots: list[CircularTrackSlot] = []
     nt = str(dinucleotide or "GC").upper()
@@ -239,6 +414,7 @@ def default_circular_track_slots(
             CircularTrackSlot(
                 id="features",
                 renderer="features",
+                side="inside",
                 params={"lane_direction": "inside"},
             )
         )
@@ -247,235 +423,83 @@ def default_circular_track_slots(
             CircularTrackSlot(
                 id="ticks",
                 renderer="ticks",
+                side="inside",
                 params={"label_side": "outside", "tick_side": "inside"},
             )
         )
     if show_depth:
-        slots.append(CircularTrackSlot(id="depth", renderer="depth"))
+        slots.append(CircularTrackSlot(id="depth", renderer="depth", side="inside", compress=True))
     if show_gc:
-        slots.append(CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": nt}))
+        slots.append(CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", side="inside", compress=True, params={"nt": nt}))
     if show_skew:
-        slots.append(CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": nt}))
+        slots.append(CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", side="inside", compress=True, params={"nt": nt}))
     return slots
 
 
-def circular_track_slots_from_order(order: str, *, dinucleotide: str = "GC") -> list[CircularTrackSlot]:
-    """Build slots from a comma-separated legacy/default slot id order."""
+def circular_track_slots_from_order(
+    order: str | Sequence[str],
+    *,
+    show_features: bool = True,
+    show_ticks: bool = True,
+    show_depth: bool = False,
+    show_gc: bool = True,
+    show_skew: bool = True,
+    dinucleotide: str = "GC",
+) -> list[CircularTrackSlot]:
+    """Expand a comma-separated slot order into explicit slot inputs."""
 
-    specs: list[str] = []
+    enabled = {
+        "features": show_features,
+        "ticks": show_ticks,
+        "depth": show_depth,
+        "gc_content": show_gc,
+        "gc_skew": show_skew,
+    }
     nt = str(dinucleotide or "GC").upper()
-    for raw_part in str(order).split(","):
-        part = raw_part.strip()
-        if not part:
-            continue
-        renderer = _LEGACY_SLOT_RENDERER_BY_ID.get(part, _normalize_renderer(part))
-        suffix = ""
-        if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
-            suffix = f"@nt={nt}"
-        specs.append(f"{part}:{renderer}{suffix}")
-    return parse_circular_track_slots(specs)
-
-
-def _legacy_kind_for_slot(slot: CircularTrackSlot) -> str | None:
-    if slot.id in _LEGACY_SLOT_RENDERER_BY_ID:
-        if slot.id == "gc_content":
-            return "gc_content"
-        if slot.id == "gc_skew":
-            return "gc_skew"
-        return slot.id
-    return _LEGACY_KIND_BY_RENDERER.get(str(slot.renderer))
-
-
-def _track_specs_by_match(track_specs: Sequence[TrackSpec] | None) -> tuple[dict[str, TrackSpec], dict[str, TrackSpec]]:
-    by_id: dict[str, TrackSpec] = {}
-    by_kind: dict[str, TrackSpec] = {}
-    for ts in track_specs or []:
-        by_id.setdefault(str(ts.id), ts)
-        by_kind.setdefault(str(ts.kind), ts)
-    return by_id, by_kind
-
-
-def _track_spec_for_slot(
-    slot: CircularTrackSlot,
-    track_specs: Sequence[TrackSpec] | None,
-) -> TrackSpec | None:
-    by_id, by_kind = _track_specs_by_match(track_specs)
-    if slot.id in by_id:
-        return by_id[slot.id]
-    legacy_kind = _legacy_kind_for_slot(slot)
-    if legacy_kind is not None:
-        return by_kind.get(legacy_kind)
-    return None
-
-
-def _resolve_placement_center_and_width(
-    placement: CircularTrackPlacement | None,
-    *,
-    base_radius_px: float,
-) -> tuple[float | None, float | None]:
-    if placement is None:
-        return None, None
-    inner_px = placement.inner_radius.resolve(base_radius_px) if placement.inner_radius is not None else None
-    outer_px = placement.outer_radius.resolve(base_radius_px) if placement.outer_radius is not None else None
-    radius_px = placement.radius.resolve(base_radius_px) if placement.radius is not None else None
-    width_px = placement.width.resolve(base_radius_px) if placement.width is not None else None
-
-    if inner_px is not None and outer_px is not None:
-        if outer_px < inner_px:
-            inner_px, outer_px = outer_px, inner_px
-        return (inner_px + outer_px) / 2.0, outer_px - inner_px
-    return radius_px, width_px
-
-
-def _legacy_lookup(
-    mapping: Mapping[str, float],
-    slot: CircularTrackSlot,
-) -> float | None:
-    if slot.id in mapping:
-        return float(mapping[slot.id])
-    legacy_kind = _legacy_kind_for_slot(slot)
-    if legacy_kind is not None and legacy_kind in mapping:
-        return float(mapping[legacy_kind])
-    if str(slot.renderer) in mapping:
-        return float(mapping[str(slot.renderer)])
-    return None
-
-
-def _annulus(center_px: float, width_px: float) -> tuple[float, float]:
-    half_width = max(0.0, 0.5 * float(width_px))
-    return float(center_px) - half_width, float(center_px) + half_width
-
-
-def _slot_gap_after_px(slot: CircularTrackSlot, context: CircularTrackLayoutContext) -> float:
-    if slot.gap_after is None:
-        return float(context.default_gap_px)
-    return float(slot.gap_after.resolve(float(context.base_radius_px)))
-
-
-def _resolve_circular_track_slots_legacy(
-    slots: Sequence[CircularTrackSlot],
-    *,
-    context: CircularTrackLayoutContext,
-    legacy_track_specs: Sequence[TrackSpec] | None = None,
-    compatibility_mode: bool = False,
-) -> list[ResolvedCircularTrackSlot]:
-    """Resolve circular slots into pixel annuli.
-
-    In compatibility mode, legacy center/width values are preferred for known
-    built-in slots. Outside compatibility mode, slots without an explicit center
-    are packed outer-to-inner in the order provided.
-    """
-
-    active_slots: list[CircularTrackSlot] = []
+    items = order.split(",") if isinstance(order, str) else list(order)
+    slots: list[CircularTrackSlot] = []
     seen: set[str] = set()
-    for slot in slots:
-        if slot.id in seen:
-            raise ValueError(f"duplicate circular track slot id: {slot.id}")
-        seen.add(slot.id)
-        if str(slot.renderer) not in SUPPORTED_CIRCULAR_TRACK_RENDERERS:
-            raise ValueError(f"unknown circular track renderer: {slot.renderer}")
-        if slot.enabled:
-            active_slots.append(slot)
-
-    entries: list[dict[str, Any]] = []
-    base_radius_px = float(context.base_radius_px)
-    for slot in active_slots:
-        ts = _track_spec_for_slot(slot, legacy_track_specs)
-        if ts is not None and not ts.show:
+    for raw in items:
+        slot_id = str(raw).strip()
+        if not slot_id:
             continue
-
-        placement = slot.placement
-        if ts is not None and isinstance(ts.placement, CircularTrackPlacement):
-            placement = ts.placement
-
-        center_px, placement_width_px = _resolve_placement_center_and_width(
-            placement,
-            base_radius_px=base_radius_px,
-        )
-        width_px = placement_width_px
-        if slot.width is not None:
-            width_px = float(slot.width.resolve(base_radius_px))
-
-        if width_px is None:
-            width_px = _legacy_lookup(context.legacy_widths_px, slot)
-        if width_px is None:
-            width_px = 0.0
-
-        if compatibility_mode and center_px is None:
-            center_px = _legacy_lookup(context.legacy_centers_px, slot)
-
-        params = dict(slot.params)
-        if ts is not None and ts.params:
-            params.update(ts.params)
-
-        entries.append(
-            {
-                "slot": slot,
-                "center_px": center_px,
-                "input_width_px": max(0.0, float(width_px)),
-                "params": params,
-            }
-        )
-
-    cursor_outer = (
-        float(context.auto_start_radius_px)
-        if context.auto_start_radius_px is not None
-        else float(context.base_radius_px)
-    )
-    resolved: list[ResolvedCircularTrackSlot] = []
-    for entry in entries:
-        slot = entry["slot"]
-        width_px = float(entry["input_width_px"])
-        center_px = entry["center_px"]
-
-        if center_px is None:
-            center_px = cursor_outer - (0.5 * width_px)
-
-        inner_px, outer_px = _annulus(float(center_px), width_px)
-        if inner_px < -1e-6:
-            raise ValueError(
-                f"circular track slot '{slot.id}' cannot fit: inner radius is {inner_px:.3f}px"
-            )
-        inner_px = max(0.0, inner_px)
-
-        resolved.append(
-            ResolvedCircularTrackSlot(
-                id=str(slot.id),
-                renderer=str(slot.renderer),
-                anchor_radius_px=float(center_px),
-                center_radius_px=float(center_px),
-                draw_inner_radius_px=float(inner_px),
-                draw_outer_radius_px=float(outer_px),
-                reserved_inner_radius_px=float(inner_px),
-                reserved_outer_radius_px=float(outer_px),
-                explicit_width=False,
-                z=int(slot.z),
-                params=entry["params"],
+        if slot_id in seen:
+            raise ValueError(f"duplicate circular slot id in order: {slot_id}")
+        if slot_id not in _ORDER_RENDERER_BY_ID:
+            raise ValueError(f"unknown circular slot id in order: {slot_id}")
+        seen.add(slot_id)
+        if not enabled.get(slot_id, True):
+            continue
+        params: dict[str, Any] = {}
+        renderer = _ORDER_RENDERER_BY_ID[slot_id]
+        if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
+            params["nt"] = nt
+        if renderer == "features":
+            params["lane_direction"] = "inside"
+        if renderer == "ticks":
+            params.update({"label_side": "outside", "tick_side": "inside"})
+        slots.append(
+            CircularTrackSlot(
+                id=slot_id,
+                renderer=renderer,
+                side="inside",
+                compress=renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS,
+                params=params,
             )
         )
-        cursor_outer = min(cursor_outer, float(inner_px) - _slot_gap_after_px(slot, context))
-
-    return resolved
+    return slots
 
 
 __all__ = [
-    "CircularTrackLayoutContext",
     "CircularTrackRendererName",
-    "CircularSlotFootprint",
+    "CircularTrackSide",
     "CircularTrackSlot",
-    "ResolvedCircularTrackSlot",
+    "CircularTrackSlotParseError",
+    "NormalizedCircularTrackSlot",
     "SUPPORTED_CIRCULAR_TRACK_RENDERERS",
     "circular_track_slots_from_order",
     "default_circular_track_slots",
+    "normalize_circular_track_slots",
     "parse_circular_track_slot",
     "parse_circular_track_slots",
-    "resolve_circular_track_slots",
 ]
-
-
-from ..diagrams.circular.slot_layout import (  # noqa: E402  # type: ignore[reportMissingImports]
-    CircularSlotFootprint,
-    CircularTrackLayoutContext,
-    ResolvedCircularTrackSlot,
-    resolve_circular_track_slots,
-)

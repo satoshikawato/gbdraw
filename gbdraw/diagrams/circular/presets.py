@@ -13,7 +13,7 @@ from typing import Literal
 from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...tracks.circular import CircularTrackSlot  # type: ignore[reportMissingImports]
-from ...tracks.spec import CircularTrackPlacement, ScalarSpec  # type: ignore[reportMissingImports]
+from ...tracks.scalars import ScalarSpec  # type: ignore[reportMissingImports]
 from ...svg.circular_ticks import (  # type: ignore[reportMissingImports]
     get_circular_tick_label_radius_bounds,
     get_circular_tick_path_ratio_bounds,
@@ -43,7 +43,7 @@ class CircularPresetContext:
 @dataclass(frozen=True)
 class CircularFeatureSlotDefaults:
     lane_direction: CircularFeatureLaneDirection
-    placement: CircularTrackPlacement | None
+    radius: ScalarSpec | None
     width: ScalarSpec | None
 
 
@@ -125,7 +125,7 @@ def circular_feature_slot_defaults_for_preset(
     lane_direction = circular_feature_lane_direction_for_preset(normalized)
     return CircularFeatureSlotDefaults(
         lane_direction=lane_direction,
-        placement=CircularTrackPlacement(radius=_scalar_factor(1.0)),
+        radius=_scalar_factor(1.0),
         width=_scalar_px(_default_feature_width_px(context)),
     )
 
@@ -167,8 +167,10 @@ def _tick_slot_for_preset(
     return CircularTrackSlot(
         id="ticks",
         renderer="ticks",
-        placement=CircularTrackPlacement(radius=_scalar_factor(anchor_ratio)),
+        side=tick_side,
+        radius=_scalar_factor(anchor_ratio),
         width=_scalar_px(tick_width_px),
+        spacing=_scalar_px(max(1.0, 0.01 * base_radius)),
         params={
             "_preset_generated": True,
             "tick_side": tick_side,
@@ -192,8 +194,11 @@ def circular_track_slots_for_preset(
             CircularTrackSlot(
                 id="features",
                 renderer="features",
-                placement=feature_defaults.placement,
+                side="overlay" if feature_defaults.lane_direction == "split" else feature_defaults.lane_direction,
+                radius=feature_defaults.radius,
                 width=feature_defaults.width,
+                spacing=_scalar_px(max(1.0, 0.01 * float(context.canvas_config.radius))),
+                reserve=True if feature_defaults.lane_direction == "split" else None,
                 params={
                     "_preset_generated": True,
                     "lane_direction": feature_defaults.lane_direction,
