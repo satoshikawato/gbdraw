@@ -106,13 +106,33 @@ def _numeric_slot(
     *,
     slot_id: str,
     renderer: str,
+    preset: CircularTrackPreset,
     context: CircularPresetContext,
     params: dict[str, object] | None = None,
 ) -> CircularTrackSlot:
-    del context
+    track_id_key = {
+        "depth": "depth_track",
+        "gc_content": "gc_track",
+        "gc_skew": "skew_track",
+    }.get(slot_id)
+    track_id = (
+        context.canvas_config.track_ids.get(track_id_key)
+        if track_id_key is not None
+        else None
+    )
+    length_param = str(context.canvas_config.length_param)
+    radius = None
+    if track_id is not None:
+        radius = _scalar_factor(
+            float(context.cfg.canvas.circular.track_dict[length_param][preset][str(track_id)])
+        )
     return CircularTrackSlot(
         id=slot_id,
         renderer=renderer,
+        side="inside",
+        radius=radius,
+        width=_scalar_px(_default_numeric_width_px(renderer, context)),
+        spacing=_scalar_px(max(1.0, 0.01 * float(context.canvas_config.radius))),
         params={"_preset_generated": True, **dict(params or {})},
     )
 
@@ -212,6 +232,7 @@ def circular_track_slots_for_preset(
             _numeric_slot(
                 slot_id="depth",
                 renderer="depth",
+                preset=normalized,
                 context=context,
             )
         )
@@ -220,6 +241,7 @@ def circular_track_slots_for_preset(
             _numeric_slot(
                 slot_id="gc_content",
                 renderer="dinucleotide_content",
+                preset=normalized,
                 context=context,
                 params={"nt": nt},
             )
@@ -229,6 +251,7 @@ def circular_track_slots_for_preset(
             _numeric_slot(
                 slot_id="gc_skew",
                 renderer="dinucleotide_skew",
+                preset=normalized,
                 context=context,
                 params={"nt": nt},
             )

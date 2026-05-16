@@ -13,14 +13,7 @@ from gbdraw.api.diagram import assemble_circular_diagram_from_record
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.io.colors import load_default_colors
-from gbdraw.svg.circular_ticks import (
-    get_circular_tick_label_radius_bounds,
-    get_circular_tick_path_radius_bounds,
-    get_circular_tick_path_ratio_bounds,
-    generate_circular_tick_labels,
-    resolve_circular_tick_label_geometry,
-    set_tick_label_anchor_value,
-)
+from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
 from gbdraw.tracks import (
     CircularTrackSlot,
     CircularTrackSlotParseError,
@@ -42,6 +35,11 @@ def _load_record():
 
 def _load_edl933_record():
     input_path = Path(__file__).parent / "test_inputs" / "EDL933.gbk"
+    return SeqIO.read(str(input_path), "genbank")
+
+
+def _load_mjenmv_record():
+    input_path = Path(__file__).parent / "test_inputs" / "MjeNMV.gb"
     return SeqIO.read(str(input_path), "genbank")
 
 
@@ -474,6 +472,100 @@ def test_normalize_circular_track_slots_derives_feature_side_from_lane_direction
     assert split.side == "overlay"
     assert split.reserve is True
     assert outside.side == "outside"
+
+
+@pytest.mark.circular
+def test_default_preset_slots_keep_legacy_numeric_radii_with_center_definition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+    from gbdraw.config.models import GbdrawConfig
+
+    record = _load_mjenmv_record()
+    config_dict = _base_config(track_type="tuckin")
+    cfg = GbdrawConfig.from_dict(config_dict)
+    default_colors = load_default_colors("", palette="default")
+    captured: dict[str, object] = {}
+
+    def capture_numeric_slot(
+        slot_id: str,
+        canvas_config,
+        track_width_override,
+        norm_factor_override,
+    ) -> None:
+        assert track_width_override is not None
+        assert norm_factor_override is not None
+        captured[slot_id] = (
+            float(norm_factor_override) * float(canvas_config.radius),
+            float(track_width_override),
+        )
+        captured["radius"] = float(canvas_config.radius)
+        captured["length_param"] = str(canvas_config.length_param)
+        captured["track_ids"] = dict(canvas_config.track_ids)
+        captured["definition_reserved"] = circular_assemble_module._definition_reserved_radius_px(
+            record,
+            canvas_config,
+            None,
+            None,
+            config_dict,
+            cfg=cfg,
+            plot_title=None,
+            definition_profile="full",
+        )
+
+    def fake_add_gc_content_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        gc_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override)
+        return canvas
+
+    def fake_add_gc_skew_group_on_canvas(
+        canvas,
+        gb_record,
+        gc_df,
+        canvas_config,
+        skew_config,
+        config_dict,
+        *,
+        track_width_override=None,
+        norm_factor_override=None,
+        group_id=None,
+        cfg=None,
+    ):
+        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        default_colors=default_colors,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+    )
+
+    length_param = str(captured["length_param"])
+    radius = float(captured["radius"])
+    track_ids = captured["track_ids"]
+    assert isinstance(track_ids, dict)
+    track_dict = cfg.canvas.circular.track_dict[length_param]["tuckin"]
+    assert captured["gc_content"][0] == pytest.approx(radius * float(track_dict[str(track_ids["gc_track"])]))  # type: ignore[index]
+    assert captured["gc_skew"][0] == pytest.approx(radius * float(track_dict[str(track_ids["skew_track"])]))  # type: ignore[index]
+
+    gc_center, gc_width = captured["gc_content"]  # type: ignore[misc]
+    assert float(captured["definition_reserved"]) > float(gc_center) - (0.5 * float(gc_width))
 
 
 @pytest.mark.circular

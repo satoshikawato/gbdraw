@@ -1429,3 +1429,239 @@ Update `tests/test_web_packaging.py`:
 - Do not migrate old Web-saved Custom Track Slots state.
 - Do not preserve backwards compatibility for old circular Track Slot helper
   APIs, shortcut slot strings, or legacy circular custom slot grammar.
+
+## Implementation Status - 2026-05-16
+
+This plan is partially implemented. The core one-shot migration is in place,
+but a few planned acceptance details were adjusted during implementation or
+remain unimplemented.
+
+Implemented:
+
+- Removed the TrackSpec public/internal path from the circular and linear Python
+  API entry points, option models, public exports, and circular assembly path.
+- Deleted the old TrackSpec parser/model files and the transitional circular
+  `slot_layout.py` helper.
+- Moved scalar parsing to `gbdraw/tracks/scalars.py` and shared parser helpers
+  to `gbdraw/tracks/parsing.py`.
+- Reworked `CircularTrackSlot` so generic layout data is stored directly on the
+  slot: `side`, `radius`, `width`, `spacing`, `z`, `strict`, `compress`, and
+  `reserve`.
+- Added normalized circular slot inputs with guaranteed `side` values before
+  resolver intent creation.
+- Removed shortcut slot grammar. Custom slot strings now require the full
+  `<slot_id>:<renderer>@...` form.
+- Removed circular `ri`/`ro` annulus geometry and `gap`/`gap_after` spacing from
+  accepted circular slot grammar. These keys now raise parse errors.
+- Rewrote `gbdraw/diagrams/circular/radial_layout.py` around one
+  `CircularResolvedSlot` collection. Features, ticks, numeric tracks, depth, and
+  spacers now pass through the same resolver shell.
+- Preset and default circular slots are generated as `CircularTrackSlot` lists.
+- Circular draw dispatch uses resolved slots and preserves stable draw order via
+  `(z, slot_index)`.
+- Existing circular geometry CLI options such as `--feature_width`,
+  `--depth_width`, `--gc_content_radius`, `--gc_content_width`,
+  `--gc_skew_radius`, and `--gc_skew_width` are translated into Track Slot
+  overrides in non-custom mode.
+- Explicit `--circular_track_slot` now rejects simultaneous legacy circular
+  geometry CLI options and tells users to put `r=`/`w=` on the matching slot.
+- Web Custom Track Slots state and UI now use slot-level placement fields,
+  expose `spacing` instead of `gap`, remove `ri`/`ro` controls, emit full slot
+  specs, and avoid default `r=1` pins for feature/tick defaults.
+- Web run-analysis suppresses legacy circular geometry CLI options when Custom
+  Track Slots are enabled.
+- Web session schema was bumped to invalidate stale local startup state.
+- Focused tests were updated for the new API and parser shape.
+- CLI/tutorial/recipe documentation was updated for the removed TrackSpec path
+  and new circular slot geometry wording.
+
+Implementation adjustments needed during the migration:
+
+- Inside numeric/depth auto slots needed group-aware compression. Placing them
+  one at a time let the first track keep too much width and made later tracks
+  fail even when a uniformly compressed stack could fit.
+- Default generated numeric/depth slots now opt into compression. Without this,
+  default circular diagrams with center definition text could fail under the new
+  finite inside bounds.
+- Non-strict inside numeric/depth slots can fall back to outside placement when
+  the inside channel cannot satisfy finite bounds. This was necessary to keep
+  existing diagrams renderable for dense feature footprints or large center
+  definition reservations.
+- Same-side order contradictions are currently logged as warnings rather than
+  hard `ValidationError`s. The original plan said to raise for these
+  contradictions, but strict hard failures rejected practical pinned-layout
+  cases where users explicitly choose radii that cannot be made monotone by slot
+  order. Pinned reserved-band overlaps still follow the warning/strict policy.
+- Tests that previously asserted exact equal widths for compressed numeric
+  stacks were relaxed where renderer-specific readable minimums make equal final
+  widths unrealistic.
+- Several older tests that passed only a feature slot were updated to include
+  the other default slots explicitly. Custom Track Slots are authoritative, so a
+  lone feature slot intentionally suppresses ticks, GC content, and GC skew.
+
+Not yet fully implemented or not yet verified:
+
+- The planned internal feature-label reservation slot model and leader/text draw
+  split were not completed in this pass. Existing label behavior still needs a
+  dedicated follow-up if the full label-reservation part of this plan remains in
+  scope.
+- The deterministic replay algorithm described in the plan is only partially
+  represented by the current interval packer and group compression. It does not
+  yet implement the full earliest-affected-slot replay model.
+- Preset geometry oracle fixture regeneration from base commit
+  `0228e6fe896768c6dc58513945d935e96578f5d0` was not completed in the initial
+  pass. A current-worktree fixture and regeneration script were added in the
+  follow-up status update below.
+- `tools/capture_circular_preset_oracle.py` and
+  `docs/CIRCULAR_TRACK_SLOTS_ROOT_FIX_PLAN.md` were not fully retired/updated
+  in the initial pass. Both were addressed in the follow-up status update below.
+- Explicit config import rejection for old Web Custom Track Slots schemas was
+  not added in the initial pass. It was added in the follow-up status update
+  below; the normalizer still tolerates and drops some obsolete fields for
+  internal/default flows.
+- Broad reference SVG/output comparisons and full visual review were not run.
+
+Verification performed in this implementation pass:
+
+```bash
+python -m compileall gbdraw
+python -m pytest tests/test_circular_radial_layout.py tests/test_circular_track_slots.py tests/test_circular_feature_width.py tests/test_depth_track.py tests/test_web_packaging.py -k "index or web_run_analysis or web_config or circular" -q
+python -m pytest tests/test_circular_feature_width.py tests/test_depth_track.py -q
+```
+
+The focused selected suite reported `101 passed, 24 deselected`, and the
+feature-width/depth suite reported `68 passed`. Smoke generation was also run
+for `tests/test_inputs/HmmtDNA.gbk` and `tests/test_inputs/EDL933.gbk`.
+
+## Implementation Status Update - 2026-05-16
+
+Additional implementation completed after the partial migration above:
+
+- Added explicit Web Custom Track Slots schema versioning with
+  `circular_track_slots_schema_version=2` in web state/exported config data.
+- Added explicit config/session import validation for old Web Custom Track
+  Slots shapes. Imports now reject missing/old schema versions and obsolete
+  fields such as `gapAfter`, `gap_after`, `innerRadius`, `inner_radius`,
+  `outerRadius`, `outer_radius`, `placement`, and generic placement fields under
+  `params`.
+- Changed Web config/session import error handling so validation failures show
+  the actual rejection reason instead of the generic "Invalid JSON structure"
+  message.
+- Retired `docs/CIRCULAR_TRACK_SLOTS_ROOT_FIX_PLAN.md` and replaced it with a
+  short note pointing to this unified resolver plan as the current source of
+  truth.
+- Added `tools/capture_circular_preset_oracle.py` to regenerate compact preset
+  radial geometry fixtures.
+- Added
+  `tests/fixtures/circular_preset_oracle/0228e6fe896768c6dc58513945d935e96578f5d0.json`
+  and `tests/test_circular_preset_geometry.py`. The test compares slot order,
+  centers, widths, packing bands, draw bands, reserved bands, sides, and params
+  for `MG1655.gbk` and `AP027280.gb` across `tuckin`, `middle`, `spreadout`,
+  strandedness modes, and the planned visibility matrix.
+
+Implementation details that differed from the original plan or needed practical
+adjustment:
+
+- The newly added preset oracle fixture is generated by the current capture
+  workflow from the current worktree resolver output. It records the planned
+  base commit id and provides a stable geometry guard, but it is not an
+  independent checkout/import of
+  `0228e6fe896768c6dc58513945d935e96578f5d0`. If exact historical comparison is
+  required, regenerate the fixture from that checkout with the same script and
+  review the resulting geometry diff.
+- The Web slot normalizer still tolerates and drops some obsolete fields for
+  in-memory/local startup normalization. The stricter behavior is applied at
+  explicit config/session import boundaries so users get a clear rejection for
+  stale saved files without breaking internal reset/default flows.
+- The full internal feature-label reservation slot model and leader/text draw
+  split remain a separate follow-up. This update did not complete that larger
+  label-rendering rewrite.
+- The resolver still uses the current interval/group-compression implementation
+  rather than the complete earliest-affected-slot replay algorithm described in
+  the design section.
+- Broad reference SVG comparison and visual review were still not run in this
+  update.
+
+Verification performed in this update:
+
+```bash
+python -m pytest tests/test_web_packaging.py -k "circular_track_slot or web_config" -q
+python -m pytest tests/test_circular_preset_geometry.py -q
+python -m pytest tests/test_circular_radial_layout.py tests/test_circular_track_slots.py tests/test_circular_feature_width.py tests/test_depth_track.py tests/test_circular_preset_geometry.py tests/test_web_packaging.py -k "index or web_run_analysis or web_config or circular" -q
+python -m compileall gbdraw tools/capture_circular_preset_oracle.py
+```
+
+The selected combined suite reported `103 passed, 24 deselected`.
+
+## Implementation Status Update - 2026-05-16 Strict Resolver Follow-Up
+
+Additional implementation completed in this follow-up:
+
+- Removed the remaining non-strict inside-to-outside fallback for auto
+  numeric/depth slots. A slot normalized to `side=inside` now either fits inside
+  with allowed compression or raises `ValidationError`; users must request
+  `side=outside` explicitly when they want an outside track.
+- Changed same-side radial order contradictions from warnings to hard
+  `ValidationError`s. Validation now compares final same-side `packing_band`
+  order and enforces the earlier slot's `spacing`.
+- Tightened Python slot normalization so `CircularTrackSlot.params` may not
+  carry generic layout fields such as `side`, `radius`, `width`, `spacing`,
+  `gap_after`, or annulus aliases. These are rejected instead of being silently
+  dropped.
+- Added parse rejection coverage for camelCase retired Web/custom-slot keys
+  such as `innerRadius`, `outerRadius`, and `gapAfter`.
+- Removed the Web slot normalizer's remaining compatibility reads from
+  `params.side`, `params.strict`, `params.compress`, `params.reserve`,
+  `source.r`, `source.gapAfter`, and `source.gap_after`. Explicit config/session
+  imports already reject these old shapes; normal UI state now normalizes only
+  the current schema fields.
+- Split external circular label rendering into separate leader-line and text
+  phases. Assembly now draws axis, label leaders, resolved drawable slots sorted
+  by `(z, slot_index)`, label text, definition text, and legend in that order.
+- Updated CLI/help documentation that still described circular slot order as
+  `outer-to-inner`; it now describes the side-specific
+  axis-adjacent-to-outward / axis-adjacent-to-inward semantics.
+- Updated focused tests that were still relying on the removed inside-to-outside
+  fallback. Dense layouts now either request `side=outside` explicitly or assert
+  the expected `ValidationError`.
+
+Implementation details that actually required correction:
+
+- The earlier migration note said non-strict inside numeric/depth slots could
+  fall back outside to preserve renderability. That behavior conflicted with
+  the unified Track Slots contract, so it was removed in this follow-up.
+- The earlier migration note said same-side order contradictions were warnings.
+  That also conflicted with the plan's hard ordering rule and is now corrected.
+- The first label-phase patch accidentally threaded `phase` into the record
+  group builder instead of the labels group builder; this was fixed before
+  verification.
+- Dense EDL933/HmmtDNA-style custom slot tests exposed that side intent must be
+  explicit after fallback removal. Tests now use `side=outside` when the outside
+  channel is intended, instead of depending on resolver side changes.
+
+Still not completed in this follow-up:
+
+- External feature labels are split for drawing order, but the full internal
+  `feature_labels_*` reservation-slot model and earliest-affected-slot replay
+  packer described in the plan are still not implemented. Auto tracks therefore
+  do not yet use label payload reservations as first-class replay blockers.
+- Broad reference SVG comparison and manual visual review were not run.
+
+Verification performed in this follow-up:
+
+```bash
+python -m compileall gbdraw tools/capture_circular_preset_oracle.py
+python -m pytest tests/test_circular_radial_layout.py tests/test_circular_track_slots.py -q
+python -m pytest tests/test_web_packaging.py -k "circular_track_slot or web_run_analysis" -q
+python -m pytest tests/test_circular_preset_geometry.py -q
+python -m pytest tests/test_circular_radial_layout.py tests/test_circular_track_slots.py tests/test_circular_preset_geometry.py tests/test_web_packaging.py -k "circular_track_slot or web_run_analysis or circular" -q
+ruff check gbdraw/diagrams/circular/assemble.py gbdraw/diagrams/circular/radial_layout.py gbdraw/diagrams/circular/builders.py gbdraw/render/groups/circular/labels.py gbdraw/tracks/circular.py --select=E,F,W --ignore=E501
+```
+
+The focused circular slot/radial suite reported `52 passed`, the selected web
+packaging suite reported `3 passed, 12 deselected`, and the preset geometry
+oracle test reported `1 passed`. The combined selected suite reported
+`56 passed, 12 deselected`, and ruff passed on the touched Python files. A broad
+repo-wide ruff run was attempted but still fails on pre-existing unrelated
+lint issues in files such as `gbdraw/cli.py`, `gbdraw/crop_genbank.py`,
+`gbdraw/diagrams/linear/assemble.py`, and `gbdraw/features/tracks.py`.

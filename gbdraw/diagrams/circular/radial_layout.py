@@ -848,12 +848,17 @@ def _place_inside_auto_group(
 
 
 def _validate_same_side_order(slots: Sequence[CircularResolvedSlot], spacing_by_index: Mapping[int, float]) -> None:
+    def is_preset_generated(slot: CircularResolvedSlot) -> bool:
+        return bool(slot.params.get("_preset_generated"))
+
     for side in ("outside", "inside"):
         side_slots = [
             slot for slot in sorted(slots, key=lambda item: item.slot_index)
             if slot.side == side and slot.packing_band_px is not None
         ]
         for previous, current in zip(side_slots, side_slots[1:]):
+            if is_preset_generated(previous) and is_preset_generated(current):
+                continue
             spacing = max(0.0, float(spacing_by_index.get(previous.slot_index, 0.0)))
             if side == "outside":
                 if current.packing_band_px.inner_px < previous.packing_band_px.outer_px + spacing - LAYOUT_EPSILON:
@@ -922,7 +927,8 @@ def resolve_circular_radial_layout(
                 message = f"Pinned circular track slot '{intent.slot_id}' overlaps reserved circular slot '{conflict[0]}'."
                 if intent.strict:
                     raise ValidationError(message)
-                logger.warning(message)
+                if not (bool(intent.params.get("_preset_generated")) and conflict[0] == "definition"):
+                    logger.warning(message)
         resolved_by_index[intent.slot_index] = resolved
         if _slot_reserves(intent) and resolved.reserved_band_px is not None:
             band = resolved.reserved_band_px.expanded(intent.spacing_px) if intent.side == "overlay" else resolved.reserved_band_px
