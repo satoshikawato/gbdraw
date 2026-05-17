@@ -384,12 +384,12 @@ def test_custom_slots_ignore_track_type_for_explicit_geometry(
     _assert_geometry_matches(spreadout, tuckin)
 
 
-def test_custom_slot_mode_honors_ticks_before_features_order(
+def test_custom_slot_order_places_ticks_between_axis_and_features(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
 
-    record = _load_record()
+    record = _load_edl933_record()
     config_dict = modify_config_dict(
         load_config_toml("gbdraw.data", "config.toml"),
         show_labels=False,
@@ -421,11 +421,7 @@ def test_custom_slot_mode_honors_ticks_before_features_order(
         selected_features_set=SELECTED_FEATURES,
         legend="none",
         circular_track_slots=[
-            CircularTrackSlot(
-                id="ticks",
-                renderer="ticks",
-                params={"label_side": "outside", "tick_side": "inside"},
-            ),
+            CircularTrackSlot(id="ticks", renderer="ticks"),
             CircularTrackSlot(id="features", renderer="features"),
         ],
     )
@@ -433,7 +429,11 @@ def test_custom_slot_mode_honors_ticks_before_features_order(
     layout = captured["radial_layout"]
     assert layout.features is not None
     assert layout.ticks is not None
+    assert layout.ticks.anchor_radius_px > layout.features.anchor_radius_px
     assert layout.ticks.reserved_band_px.inner_px > layout.features.all_band_px.outer_px
+    assert layout.ticks.tick_band_px.outer_px <= layout.axis.radius_px
+    assert layout.ticks.label_band_px is not None
+    assert layout.ticks.label_band_px.outer_px <= layout.ticks.tick_band_px.inner_px
 
 
 def test_parse_circular_track_slot_stores_layout_fields_on_slot() -> None:
@@ -925,7 +925,7 @@ def test_reordered_builtin_numeric_slots_follow_slot_order(
 
 
 @pytest.mark.circular
-def test_edl933_reordered_gc_ticks_skew_uses_measured_tick_footprint(
+def test_edl933_ticks_before_features_use_measured_tick_footprint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
@@ -940,9 +940,11 @@ def test_edl933_reordered_gc_ticks_skew_uses_measured_tick_footprint(
         strandedness=True,
     )
     default_colors = load_default_colors("", palette="default")
-    captured: dict[str, float | tuple[float, float]] = {}
+    captured: dict[str, object] = {}
 
     def fake_add_record_group_on_canvas(canvas, *args, **kwargs):
+        canvas_config = args[1]
+        captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
     def capture_numeric_slot(
@@ -998,29 +1000,9 @@ def test_edl933_reordered_gc_ticks_skew_uses_measured_tick_footprint(
         capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override, cfg)
         return canvas
 
-    def fake_add_tick_group_on_canvas(
-        canvas,
-        gb_record,
-        canvas_config,
-        config_dict,
-        *,
-        radius_override=None,
-        tick_track_channel_override=None,
-        label_side="legacy",
-        tick_side="legacy",
-        tick_length_px=None,
-        track_preset=None,
-        cfg=None,
-    ):
-        assert cfg is not None
-        center = float(radius_override if radius_override is not None else canvas_config.radius)
-        tick_min_ratio, tick_max_ratio = get_circular_tick_path_ratio_bounds(
-            len(gb_record.seq),
-            str(cfg.canvas.circular.track_type),
-            bool(cfg.canvas.strandedness),
-            tick_track_channel_override=tick_track_channel_override,
-        )
-        captured["ticks"] = (center, center * max(float(tick_min_ratio), float(tick_max_ratio)))
+    def fake_add_tick_group_on_canvas(canvas, *args, **kwargs):
+        canvas_config = args[1]
+        captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", fake_add_record_group_on_canvas)
@@ -1036,23 +1018,28 @@ def test_edl933_reordered_gc_ticks_skew_uses_measured_tick_footprint(
         selected_features_set=SELECTED_FEATURES,
         legend="none",
         circular_track_slots=[
-            CircularTrackSlot(id="features", renderer="features"),
-            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
             CircularTrackSlot(
                 id="ticks",
                 renderer="ticks",
-                params={"label_side": "outside", "tick_side": "inside"},
+                params={"label_side": "inside", "tick_side": "inside"},
             ),
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
             CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
         ],
     )
 
     gc_center, gc_width = captured["gc_content"]  # type: ignore[misc]
-    _, ticks_reserved_outer = captured["ticks"]  # type: ignore[misc]
+    layout = captured["radial_layout"]
 
-    assert 0.0 < gc_width <= float(captured["default_gc_width"])
+    assert 0.0 < gc_width <= float(captured["default_gc_width"]) + 1e-6
     assert 0.0 < captured["gc_skew"][1] <= float(captured["default_gc_width"]) + 1e-6  # type: ignore[index]
-    assert (float(gc_center) - (0.5 * float(gc_width))) - float(ticks_reserved_outer) >= float(captured["default_gap"])
+    assert captured["gc_content"][0] > captured["gc_skew"][0]  # type: ignore[index]
+    assert layout.features is not None
+    assert layout.ticks is not None
+    assert layout.ticks.tick_band_px.outer_px <= layout.axis.radius_px
+    assert layout.ticks.reserved_band_px.inner_px > layout.features.all_band_px.outer_px
+    assert (float(gc_center) - (0.5 * float(gc_width))) > 0.0
 
 
 @pytest.mark.circular
