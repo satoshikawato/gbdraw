@@ -383,7 +383,7 @@ def _get_args(args) -> argparse.Namespace:
         action='store_true')
     parser.add_argument(
         '--track_type',
-        help='Circular preset for legacy/simple layout. Ignored when explicit --circular_track_slot layouts are supplied.',
+        help='Circular track preset. Custom track slots inherit omitted geometry from this preset.',
         type=str,
         choices=['tuckin', 'middle', 'spreadout'],
         default="tuckin")
@@ -461,11 +461,11 @@ def _get_args(args) -> argparse.Namespace:
         type=float)
     parser.add_argument(
         '--circular_track_order',
-        help='Comma-separated circular slot order. Outside slots are placed axis-adjacent-to-outward; inside slots are placed axis-adjacent-to-inward.',
+        help='Comma-separated circular slot order. Omitted built-in slot geometry inherits --track_type.',
         type=str)
     parser.add_argument(
         '--circular_track_slot',
-        help='Circular track slot spec: <slot_id>:<renderer>@key=value,key=value. Can be repeated. Use r for center/anchor radius, w for width, spacing for the next same-side slot gap, side=inside|outside|overlay, and z for SVG layering.',
+        help='Circular track slot spec: <slot_id>:<renderer>@key=value,key=value. Can be repeated. Omitted built-in slot geometry inherits --track_type; use r, w, spacing, side, strict, compress, reserve, and z for explicit overrides.',
         action='append',
         default=[])
     parser.add_argument(

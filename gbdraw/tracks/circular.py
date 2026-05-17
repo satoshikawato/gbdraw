@@ -431,8 +431,6 @@ def default_circular_track_slots(
             CircularTrackSlot(
                 id="features",
                 renderer="features",
-                side="inside",
-                params={"lane_direction": "inside"},
             )
         )
     if show_ticks:
@@ -440,16 +438,14 @@ def default_circular_track_slots(
             CircularTrackSlot(
                 id="ticks",
                 renderer="ticks",
-                side="inside",
-                params={"label_side": "outside", "tick_side": "inside"},
             )
         )
     if show_depth:
-        slots.append(CircularTrackSlot(id="depth", renderer="depth", side="inside", compress=True))
+        slots.append(CircularTrackSlot(id="depth", renderer="depth"))
     if show_gc:
-        slots.append(CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", side="inside", compress=True, params={"nt": nt}))
+        slots.append(CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": nt}))
     if show_skew:
-        slots.append(CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", side="inside", compress=True, params={"nt": nt}))
+        slots.append(CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": nt}))
     return slots
 
 
@@ -491,16 +487,10 @@ def circular_track_slots_from_order(
         renderer = _ORDER_RENDERER_BY_ID[slot_id]
         if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
             params["nt"] = nt
-        if renderer == "features":
-            params["lane_direction"] = "inside"
-        if renderer == "ticks":
-            params.update({"label_side": "outside", "tick_side": "inside"})
         slots.append(
             CircularTrackSlot(
                 id=slot_id,
                 renderer=renderer,
-                side="inside",
-                compress=renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS,
                 params=params,
             )
         )

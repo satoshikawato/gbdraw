@@ -1596,7 +1596,7 @@ json.dumps({
         const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(adv.plot_title_position);
         const useCircularTrackSlots = adv.circular_track_slots_enabled === true;
         const circularTrackSlots = useCircularTrackSlots
-          ? normalizeCircularTrackSlots(adv.circular_track_slots, adv.nt)
+          ? normalizeCircularTrackSlots(adv.circular_track_slots, adv.nt, form.track_type)
           : [];
         if (useCircularTrackSlots) {
           if (!multiCanvasSupport.circular_track_slot) {
@@ -1636,9 +1636,7 @@ json.dumps({
             args.push('--feature_shape', assignment);
           });
         }
-        if (!useCircularTrackSlots) {
-          args.push('--track_type', form.track_type);
-        }
+        args.push('--track_type', form.track_type);
         args.push('-l', form.legend);
         const wantsCircularPlotTitleOption = normalizedCircularPlotTitle.length > 0;
         if (wantsCircularPlotTitleOption) {
@@ -1809,7 +1807,7 @@ json.dumps({
         }
         if (useCircularTrackSlots) {
           circularTrackSlots.forEach((slot) => {
-            args.push('--circular_track_slot', buildCircularTrackSlotSpec(slot, adv.nt));
+            args.push('--circular_track_slot', buildCircularTrackSlotSpec(slot, adv.nt, form.track_type));
           });
         }
         const hasCircularDepthFile = Boolean(files.c_depth);

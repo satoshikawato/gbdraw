@@ -160,16 +160,20 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "createDefaultCircularTrackSlots()" in state_source
     assert "normalizeCircularTrackSlots(state.adv.circular_track_slots" in config_source
     assert '"circular_track_slot": "--circular_track_slot" in _source' in run_source
-    assert "args.push('--circular_track_slot', buildCircularTrackSlotSpec(slot, adv.nt));" in run_source
+    assert "args.push('--track_type', form.track_type);" in run_source
+    assert "args.push('--circular_track_slot', buildCircularTrackSlotSpec(slot, adv.nt, form.track_type));" in run_source
     assert "if (!useCircularTrackSlots)" in run_source
     assert "hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth')" in run_source
     assert "Custom Track Slots" in index_html
     assert "Track Preset" in index_html
     assert "Apply Tuckin" in index_html
     assert "axis is fixed" in index_html
+    assert "Blank fields inherit the selected preset" in index_html
     assert "Feature Layout" not in index_html
     assert "params.axis" not in slot_source
     assert "axis=true" not in slot_source
+    assert "side = null" in slot_source
+    assert "isLegacyDefaultWebSlotShape" in slot_source
 
 
 def test_web_config_rejects_obsolete_circular_track_slot_import_shapes() -> None:

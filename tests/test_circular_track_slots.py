@@ -642,7 +642,7 @@ def test_default_preset_slots_compress_to_clear_center_definition(
 
 
 @pytest.mark.circular
-def test_default_custom_slots_tuckin_raise_when_inside_numeric_tracks_cannot_fit(
+def test_default_custom_slots_tuckin_inherit_preset_when_inside_numeric_tracks_are_tight(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
@@ -707,6 +707,39 @@ def test_default_custom_slots_tuckin_raise_when_inside_numeric_tracks_cannot_fit
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
 
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        default_colors=default_colors,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        circular_track_slots=default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
+    )
+
+    assert {"gc_content", "gc_skew"} <= set(captured)
+    assert captured["gc_content"][0] > captured["gc_skew"][0]
+
+
+@pytest.mark.circular
+def test_explicit_pure_auto_slots_tuckin_raise_when_inside_numeric_tracks_cannot_fit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+
+    record = _load_edl933_record()
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels=False,
+        show_gc=True,
+        show_skew=True,
+        track_type="tuckin",
+        strandedness=True,
+    )
+    default_colors = load_default_colors("", palette="default")
+
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", lambda *args, **kwargs: args[0])
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", lambda *args, **kwargs: args[0])
+
     with pytest.raises(Exception, match="cannot fit inside"):
         assemble_circular_diagram_from_record(
             record,
@@ -714,7 +747,26 @@ def test_default_custom_slots_tuckin_raise_when_inside_numeric_tracks_cannot_fit
             default_colors=default_colors,
             selected_features_set=SELECTED_FEATURES,
             legend="none",
-            circular_track_slots=default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
+            circular_track_slots=[
+                CircularTrackSlot(id="features", renderer="features"),
+                CircularTrackSlot(id="ticks", renderer="ticks"),
+                CircularTrackSlot(
+                    id="gc_content",
+                    renderer="dinucleotide_content",
+                    side="inside",
+                    width=ScalarSpec(240.0, "px"),
+                    compress=True,
+                    params={"nt": "GC"},
+                ),
+                CircularTrackSlot(
+                    id="gc_skew",
+                    renderer="dinucleotide_skew",
+                    side="inside",
+                    width=ScalarSpec(240.0, "px"),
+                    compress=True,
+                    params={"nt": "GC"},
+                ),
+            ],
         )
 
 
@@ -998,8 +1050,8 @@ def test_edl933_reordered_gc_ticks_skew_uses_measured_tick_footprint(
     gc_center, gc_width = captured["gc_content"]  # type: ignore[misc]
     _, ticks_reserved_outer = captured["ticks"]  # type: ignore[misc]
 
-    assert gc_width == pytest.approx(float(captured["default_gc_width"]))
-    assert captured["gc_skew"][1] == pytest.approx(float(captured["default_gc_width"]))  # type: ignore[index]
+    assert 0.0 < gc_width <= float(captured["default_gc_width"])
+    assert 0.0 < captured["gc_skew"][1] <= float(captured["default_gc_width"]) + 1e-6  # type: ignore[index]
     assert (float(gc_center) - (0.5 * float(gc_width))) - float(ticks_reserved_outer) >= float(captured["default_gap"])
 
 

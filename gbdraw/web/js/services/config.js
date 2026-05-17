@@ -509,7 +509,7 @@ const applyConfigData = (data) => {
   state.adv.circular_track_slots.splice(
     0,
     state.adv.circular_track_slots.length,
-    ...normalizeCircularTrackSlots(state.adv.circular_track_slots, state.adv.nt)
+    ...normalizeCircularTrackSlots(state.adv.circular_track_slots, state.adv.nt, state.form.track_type)
   );
   state.adv.depth_window_size = normalizePositiveNumberOrNull(state.adv.depth_window_size);
   state.adv.depth_step_size = normalizePositiveNumberOrNull(state.adv.depth_step_size);

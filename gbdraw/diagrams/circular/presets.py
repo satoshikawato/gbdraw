@@ -7,12 +7,15 @@ branching on the legacy preset name.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal
+from dataclasses import dataclass, replace
+from typing import Literal, Sequence
 
 from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from ...tracks.circular import CircularTrackSlot  # type: ignore[reportMissingImports]
+from ...tracks.circular import (  # type: ignore[reportMissingImports]
+    CircularTrackSlot,
+    NUMERIC_CIRCULAR_TRACK_RENDERERS,
+)
 from ...tracks.scalars import ScalarSpec  # type: ignore[reportMissingImports]
 from ...svg.circular_ticks import (  # type: ignore[reportMissingImports]
     get_circular_tick_label_radius_bounds,
@@ -24,6 +27,14 @@ CircularTrackPreset = Literal["tuckin", "middle", "spreadout"]
 CircularFeatureLaneDirection = Literal["inside", "split", "outside"]
 
 _VALID_PRESETS: frozenset[str] = frozenset({"tuckin", "middle", "spreadout"})
+_NUMERIC_PRESET_SLOT_IDS: frozenset[str] = frozenset({"depth", "gc_content", "gc_skew"})
+_NON_NUMERIC_PRESET_SLOT_IDS: frozenset[str] = frozenset({"features", "ticks"})
+_RENDERER_ALIASES: dict[str, str] = {
+    "gc_content": "dinucleotide_content",
+    "content": "dinucleotide_content",
+    "gc_skew": "dinucleotide_skew",
+    "skew": "dinucleotide_skew",
+}
 
 
 @dataclass(frozen=True)
@@ -84,6 +95,11 @@ def _scalar_factor(value: float) -> ScalarSpec:
 
 def _scalar_px(value: float) -> ScalarSpec:
     return ScalarSpec(float(value), "px")
+
+
+def _normalized_renderer(raw: object) -> str:
+    renderer = str(raw).strip().lower()
+    return _RENDERER_ALIASES.get(renderer, renderer)
 
 
 def _default_feature_width_px(context: CircularPresetContext) -> float:
@@ -281,6 +297,189 @@ def circular_radial_plan_for_preset(
     )
 
 
+def _slot_requests_pure_auto(slot: CircularTrackSlot, renderer: str) -> bool:
+    """Return True for the legacy explicit auto-packed numeric/depth shape."""
+
+    return (
+        renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
+        and slot.radius is None
+        and slot.compress is True
+        and (slot.side is None or str(slot.side).strip().lower() == "inside")
+    )
+
+
+def _slot_uses_builtin_preset_lane(slot: CircularTrackSlot, renderer: str) -> bool:
+    if renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
+        return str(slot.id) in _NUMERIC_PRESET_SLOT_IDS
+    if renderer in {"features", "ticks"}:
+        return str(slot.id) in _NON_NUMERIC_PRESET_SLOT_IDS
+    return False
+
+
+def _slot_is_blank_unmatched_numeric_duplicate(slot: CircularTrackSlot, renderer: str) -> bool:
+    return (
+        renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
+        and str(slot.id) not in _NUMERIC_PRESET_SLOT_IDS
+        and slot.enabled
+        and slot.side is None
+        and slot.radius is None
+        and slot.width is None
+        and slot.spacing is None
+        and slot.strict is None
+        and slot.compress is None
+        and slot.reserve is None
+    )
+
+
+def _inherited_params_for_slot(
+    slot: CircularTrackSlot,
+    preset_slot: CircularTrackSlot | None,
+) -> dict[str, object]:
+    inherited = dict(preset_slot.params or {}) if preset_slot is not None else {}
+    explicit = dict(slot.params or {})
+
+    # Programmatic callers may still use accepted aliases. Do not let an
+    # inherited canonical key hide an explicit alias supplied by the caller.
+    if "lanes" in explicit and "lane_direction" not in explicit:
+        inherited.pop("lane_direction", None)
+    if "dinucleotide" in explicit and "nt" not in explicit:
+        inherited.pop("nt", None)
+
+    inherited.update(explicit)
+    return inherited
+
+
+def _inherited_width_for_renderer(
+    renderer: str,
+    params_slot: CircularTrackSlot | None,
+    context: CircularPresetContext,
+) -> ScalarSpec | None:
+    if renderer == "features":
+        return _scalar_px(_default_feature_width_px(context))
+    if renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
+        return _scalar_px(_default_numeric_width_px(renderer, context))
+    if params_slot is not None:
+        return params_slot.width
+    return None
+
+
+def _overlay_slot_on_preset_lane(
+    slot: CircularTrackSlot,
+    *,
+    renderer: str,
+    geometry_slot: CircularTrackSlot | None,
+    params_slot: CircularTrackSlot | None,
+    context: CircularPresetContext,
+) -> CircularTrackSlot:
+    params = _inherited_params_for_slot(slot, params_slot)
+    side = slot.side
+    if side is None and not (
+        renderer == "features"
+        and ("lane_direction" in params or "lanes" in params)
+    ):
+        side = geometry_slot.side if geometry_slot is not None else None
+    return replace(
+        slot,
+        renderer=renderer,
+        side=side,
+        radius=slot.radius if slot.radius is not None else (geometry_slot.radius if geometry_slot is not None else None),
+        width=slot.width if slot.width is not None else _inherited_width_for_renderer(renderer, params_slot, context),
+        spacing=slot.spacing if slot.spacing is not None else (geometry_slot.spacing if geometry_slot is not None else None),
+        reserve=slot.reserve if slot.reserve is not None else (params_slot.reserve if params_slot is not None else None),
+        params=params,
+    )
+
+
+def circular_track_slots_from_preset_order(
+    slots: Sequence[CircularTrackSlot],
+    preset: str,
+    context: CircularPresetContext,
+) -> CircularPresetRadialPlan:
+    """Overlay user slot order/overrides onto record-local preset defaults.
+
+    The returned slots are transient render-time inputs. The caller's slot
+    objects remain unchanged, so preset-derived geometry is not persisted back
+    into web/session/API state.
+    """
+
+    normalized_preset = normalize_circular_track_preset(preset)
+    legacy_auto_mode = any(
+        slot.enabled
+        and _slot_requests_pure_auto(slot, _normalized_renderer(slot.renderer))
+        and _slot_uses_builtin_preset_lane(slot, _normalized_renderer(slot.renderer))
+        for slot in slots
+    )
+    if legacy_auto_mode:
+        return CircularPresetRadialPlan(
+            slots=tuple(
+                replace(slot, renderer=_normalized_renderer(slot.renderer))
+                for slot in slots
+            ),
+            preferred_anchor_slot_ids=frozenset(),
+        )
+
+    preset_slots = tuple(circular_track_slots_for_preset(normalized_preset, context))
+    preset_by_id = {str(slot.id): slot for slot in preset_slots}
+    preset_by_renderer: dict[str, CircularTrackSlot] = {}
+    for preset_slot in preset_slots:
+        renderer = _normalized_renderer(preset_slot.renderer)
+        preset_by_renderer.setdefault(renderer, preset_slot)
+
+    renderer_has_blank_unmatched_duplicates: dict[str, bool] = {}
+    for slot in slots:
+        if slot.enabled:
+            renderer = _normalized_renderer(slot.renderer)
+            if _slot_is_blank_unmatched_numeric_duplicate(slot, renderer):
+                renderer_has_blank_unmatched_duplicates[renderer] = True
+
+    geometry_lane_index = 0
+    layout_slots: list[CircularTrackSlot] = []
+    preferred_ids: set[str] = set()
+
+    for slot in slots:
+        renderer = _normalized_renderer(slot.renderer)
+        geometry_slot: CircularTrackSlot | None = None
+        params_slot: CircularTrackSlot | None = None
+        inherited_radius = False
+
+        has_extra_numeric_renderer = bool(renderer_has_blank_unmatched_duplicates.get(renderer, False))
+        if (
+            slot.enabled
+            and not has_extra_numeric_renderer
+            and not _slot_requests_pure_auto(slot, renderer)
+            and _slot_uses_builtin_preset_lane(slot, renderer)
+        ):
+            if geometry_lane_index < len(preset_slots):
+                geometry_slot = preset_slots[geometry_lane_index]
+                geometry_lane_index += 1
+            params_slot = preset_by_id.get(str(slot.id), preset_by_renderer.get(renderer))
+
+        if geometry_slot is not None and slot.radius is None and geometry_slot.radius is not None:
+            inherited_radius = True
+
+        overlaid = _overlay_slot_on_preset_lane(
+            slot,
+            renderer=renderer,
+            geometry_slot=geometry_slot,
+            params_slot=params_slot,
+            context=context,
+        )
+        layout_slots.append(overlaid)
+
+        if (
+            inherited_radius
+            and renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
+            and overlaid.radius is not None
+            and str(overlaid.side or "inside").strip().lower() == "inside"
+        ):
+            preferred_ids.add(str(overlaid.id))
+
+    return CircularPresetRadialPlan(
+        slots=tuple(layout_slots),
+        preferred_anchor_slot_ids=frozenset(preferred_ids),
+    )
+
+
 def circular_label_arena_defaults_for_preset(
     preset: str,
     context: CircularPresetContext,
@@ -300,6 +499,7 @@ __all__ = [
     "circular_feature_lane_direction_for_preset",
     "circular_feature_slot_defaults_for_preset",
     "circular_label_arena_defaults_for_preset",
+    "circular_track_slots_from_preset_order",
     "circular_track_slots_for_preset",
     "normalize_circular_track_preset",
 ]

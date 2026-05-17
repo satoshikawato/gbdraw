@@ -7,7 +7,7 @@
 
 **Goal:** use tables and styling options for fine-grained control over colors, labels, and plot appearance.
 
-In circular simple layout, `--track_type` selects a preset (`tuckin`, `middle`, or `spreadout`). When you use Custom Track Slots, slot radius, width, order, and tick/label sides are explicit; the circular axis stays fixed and cannot be moved or hidden with a circular track slot.
+In circular simple layout, `--track_type` selects a preset (`tuckin`, `middle`, or `spreadout`). Custom Track Slots layer an ordered slot list and explicit overrides on top of that preset. If a built-in slot omits radius, width, spacing, placement, or standard renderer params, those values are inherited from the selected preset for each record. If you provide `r`, `w`, `spacing`, `side`, `compress`, `reserve`, `z`, or renderer params, that slot value wins. A pure auto inside numeric/depth layout is still available by explicitly using `side=inside,compress=true` without `r`. The circular axis stays fixed and cannot be moved or hidden with a circular track slot.
 
 ## Part 1: Advanced Color Control
 

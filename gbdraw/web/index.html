@@ -748,8 +748,8 @@
                             </template>
 
                             <template v-else>
-                                <div v-if="!adv.circular_track_slots_enabled">
-                                    <label class="input-label text-[10px] mb-1">Track Preset <help-tip text="Applies a preset circular track arrangement. Custom Track Slots expose explicit radius, width, and order controls."></help-tip></label>
+                                <div>
+                                    <label class="input-label text-[10px] mb-1">Track Preset <help-tip text="Applies a preset circular track arrangement. Custom Track Slots inherit this preset unless a slot field is edited."></help-tip></label>
                                     <select v-model="form.track_type" class="form-input text-xs py-1">
                                         <option value="tuckin">Tuckin</option>
                                         <option value="middle">Middle</option>
@@ -787,7 +787,7 @@
                                     <div class="flex items-center justify-between gap-2">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                             <input type="checkbox" v-model="adv.circular_track_slots_enabled" class="form-checkbox">
-                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Edit explicit circular slot geometry. The axis is fixed; radius, width, order, placement, and z apply to slots only."></help-tip></span>
+                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Reorder circular tracks and optionally override slot radius, width, placement, and z. Blank fields inherit the selected preset; the axis is fixed."></help-tip></span>
                                         </label>
                                         <button
                                             type="button"
@@ -825,7 +825,7 @@
                                                         </option>
                                                     </select>
                                                     <span
-                                                        v-if="supportsCircularTrackSlotPlacement(slot.renderer) && slot.side"
+                                                        v-if="supportsCircularTrackSlotPlacement(slot.renderer)"
                                                         class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-600"
                                                     >{{ circularTrackPlacementLabel(slot.side) }}</span>
                                                 </div>
@@ -837,9 +837,9 @@
                                                 </div>
                                             </div>
                                             <div class="grid grid-cols-4 gap-1">
-                                                <input v-model.trim="slot.width" class="form-input px-1 py-0.5 text-[10px]" placeholder="w">
-                                                <input v-model.trim="slot.radius" class="form-input px-1 py-0.5 text-[10px]" placeholder="r">
-                                                <input v-model.trim="slot.spacing" class="form-input px-1 py-0.5 text-[10px]" placeholder="spacing">
+                                                <input v-model.trim="slot.width" class="form-input px-1 py-0.5 text-[10px]" placeholder="w (preset)">
+                                                <input v-model.trim="slot.radius" class="form-input px-1 py-0.5 text-[10px]" placeholder="r (preset)">
+                                                <input v-model.trim="slot.spacing" class="form-input px-1 py-0.5 text-[10px]" placeholder="spacing (preset)">
                                                 <input type="number" v-model.number="slot.z" class="form-input px-1 py-0.5 text-[10px]" placeholder="z">
                                             </div>
                                             <div v-if="slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
@@ -848,6 +848,7 @@
                                                     @change="updateCircularTrackFeatureLane(slot, $event.target.value)"
                                                     class="form-input px-1 py-0.5 text-[10px]"
                                                 >
+                                                    <option value="">Preset lanes</option>
                                                     <option value="inside">Lanes inside</option>
                                                     <option value="split">Lanes split</option>
                                                     <option value="outside">Lanes outside</option>
@@ -855,11 +856,13 @@
                                             </div>
                                             <div v-if="slot.renderer === 'ticks'" class="grid grid-cols-2 gap-1 items-center">
                                                 <select v-model="slot.params.label_side" class="form-input px-1 py-0.5 text-[10px]">
+                                                    <option value="">Preset labels</option>
                                                     <option value="outside">Labels outside</option>
                                                     <option value="inside">Labels inside</option>
                                                     <option value="none">No labels</option>
                                                 </select>
                                                 <select v-model="slot.params.tick_side" class="form-input px-1 py-0.5 text-[10px]">
+                                                    <option value="">Preset ticks</option>
                                                     <option value="outside">Ticks outside</option>
                                                     <option value="inside">Ticks inside</option>
                                                     <option value="both">Ticks both</option>
@@ -872,10 +875,11 @@
                                             </div>
                                             <div v-if="supportsCircularTrackSlotPlacement(slot.renderer)" class="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-1 items-center">
                                                 <select
-                                                    :value="slot.side || 'inside'"
+                                                    :value="slot.side || ''"
                                                     @change="updateCircularTrackSlotPlacement(slot, $event.target.value)"
                                                     class="form-input px-1 py-0.5 text-[10px]"
                                                 >
+                                                    <option value="">Preset</option>
                                                     <option value="inside">Inside</option>
                                                     <option value="outside">Outside</option>
                                                     <option value="overlay">Overlay</option>

@@ -232,17 +232,22 @@ options:
                         Feature track width for circular mode (in px; must be
                         > 0).
   --circular_track_order CIRCULAR_TRACK_ORDER
-                        Comma-separated circular slot order. Outside slots
-                        are placed axis-adjacent-to-outward; inside slots are
-                        placed axis-adjacent-to-inward.
+                        Comma-separated circular slot order. Omitted slot
+                        geometry inherits the selected --track_type preset for
+                        each record; explicit slot fields override it.
   --circular_track_slot CIRCULAR_TRACK_SLOT
                         Circular track slot spec:
                         <slot_id>:<renderer>@key=value,key=value. Can be
                         repeated. Use r=<radius>, w=<width>, and
                         spacing=<scalar>; spacing is the gap to the next
                         same-side slot. ri/ro/gap are obsolete. side, strict,
-                        compress, reserve, and z are slot fields. z only
-                        controls SVG layering.
+                        compress, reserve, and z are slot fields. If r, w,
+                        spacing, side, or standard renderer params are
+                        omitted for built-in slots, they inherit the active
+                        --track_type preset at render time. Use explicit
+                        side=inside,compress=true without r for pure auto
+                        inside numeric/depth placement. z only controls SVG
+                        layering.
   --gc_content_width GC_CONTENT_WIDTH
                         GC content track width for circular mode (in px; must
                         be > 0).

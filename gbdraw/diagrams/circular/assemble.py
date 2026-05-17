@@ -69,6 +69,7 @@ from .presets import (  # type: ignore[reportMissingImports]
     CircularPresetContext,
     circular_feature_lane_direction_for_preset,
     circular_radial_plan_for_preset,
+    circular_track_slots_from_preset_order,
     normalize_circular_track_preset,
 )
 
@@ -2035,21 +2036,39 @@ def add_record_on_circular_canvas(
     raw_show_labels = cfg.canvas.show_labels
     show_labels_base = (raw_show_labels != "none") if isinstance(raw_show_labels, str) else bool(raw_show_labels)
     depth_enabled = bool(canvas_config.show_depth and depth_config is not None and depth_df is not None)
-    show_depth_track = bool(depth_enabled)
-    show_gc_track = bool(canvas_config.show_gc)
-    show_skew_track = bool(canvas_config.show_skew)
-    show_ticks_track = True
-    circular_preset = (
-        "tuckin"
-        if user_slot_mode
-        else normalize_circular_track_preset(cfg.canvas.circular.track_type)
-    )
+    if user_slot_mode:
+        show_depth_track = bool("depth" in user_active_slot_renderers and depth_enabled)
+        show_gc_track = bool("dinucleotide_content" in user_active_slot_renderers)
+        show_skew_track = bool("dinucleotide_skew" in user_active_slot_renderers)
+        show_ticks_track = bool("ticks" in user_active_slot_renderers)
+    else:
+        show_depth_track = bool(depth_enabled)
+        show_gc_track = bool(canvas_config.show_gc)
+        show_skew_track = bool(canvas_config.show_skew)
+        show_ticks_track = True
+    circular_preset = normalize_circular_track_preset(cfg.canvas.circular.track_type)
     setattr(canvas_config, "circular_track_preset", circular_preset)
 
     if user_slot_mode:
         show_features = "features" in user_active_slot_renderers
-        layout_slots = list(effective_circular_track_slots or [])
-        preferred_anchor_slot_ids: frozenset[str] = frozenset()
+        radial_plan = circular_track_slots_from_preset_order(
+            list(effective_circular_track_slots or []),
+            circular_preset,
+            CircularPresetContext(
+                cfg=cfg,
+                canvas_config=canvas_config,
+                total_length=len(gb_record.seq),
+                strandedness=bool(cfg.canvas.strandedness),
+                show_features=show_features,
+                show_ticks=show_ticks_track,
+                show_depth=show_depth_track,
+                show_gc=show_gc_track,
+                show_skew=show_skew_track,
+                dinucleotide=str(getattr(gc_config, "dinucleotide", "GC")),
+            ),
+        )
+        layout_slots = list(radial_plan.slots)
+        preferred_anchor_slot_ids = radial_plan.preferred_anchor_slot_ids
     else:
         show_features = True
         radial_plan = circular_radial_plan_for_preset(
@@ -2077,11 +2096,6 @@ def add_record_on_circular_canvas(
         ),
         None,
     )
-    if user_slot_mode and feature_slot is not None:
-        slot_preset = feature_slot.params.get("preset", feature_slot.params.get("track_preset"))
-        if slot_preset is not None:
-            circular_preset = normalize_circular_track_preset(str(slot_preset))
-            setattr(canvas_config, "circular_track_preset", circular_preset)
     feature_lane_direction = _lane_direction_for_feature_slot(
         feature_slot,
         canvas_config=canvas_config,
