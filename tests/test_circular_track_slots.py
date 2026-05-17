@@ -132,6 +132,7 @@ def _capture_circular_core_geometry(
         label_side="legacy",
         tick_side="legacy",
         tick_length_px=None,
+        track_preset=None,
         cfg=None,
     ):
         center = float(radius_override if radius_override is not None else canvas_config.radius)
@@ -475,7 +476,94 @@ def test_normalize_circular_track_slots_derives_feature_side_from_lane_direction
 
 
 @pytest.mark.circular
-def test_default_preset_slots_keep_legacy_numeric_radii_with_center_definition(
+def test_circular_preset_slots_do_not_emit_origin_metadata() -> None:
+    from gbdraw.canvas import CircularCanvasConfigurator
+    from gbdraw.config.models import GbdrawConfig
+    from gbdraw.diagrams.circular.presets import (
+        CircularPresetContext,
+        circular_radial_plan_for_preset,
+        circular_track_slots_for_preset,
+    )
+
+    record = _load_record()
+    config_dict = _base_config(track_type="tuckin")
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_config = CircularCanvasConfigurator("test", config_dict, "none", record, cfg=cfg)
+    context = CircularPresetContext(
+        cfg=cfg,
+        canvas_config=canvas_config,
+        total_length=len(record.seq),
+        strandedness=bool(cfg.canvas.strandedness),
+        show_features=True,
+        show_ticks=True,
+        show_depth=False,
+        show_gc=True,
+        show_skew=True,
+    )
+
+    slots = circular_track_slots_for_preset("tuckin", context)
+    assert all("_preset_generated" not in dict(slot.params) for slot in slots)
+
+    plan = circular_radial_plan_for_preset("tuckin", context)
+    assert {"gc_content", "gc_skew"} <= set(plan.preferred_anchor_slot_ids)
+
+
+@pytest.mark.circular
+def test_default_preset_tick_draw_uses_resolved_tick_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+
+    record = _load_record()
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels=False,
+        show_gc=False,
+        show_skew=False,
+        track_type="spreadout",
+        strandedness=True,
+    )
+    default_colors = load_default_colors("", palette="default")
+    captured: dict[str, object] = {}
+
+    def fake_add_tick_group_on_canvas(
+        canvas,
+        gb_record,
+        canvas_config,
+        config_dict,
+        *,
+        radius_override=None,
+        tick_track_channel_override=None,
+        label_side="legacy",
+        tick_side="legacy",
+        tick_length_px=None,
+        track_preset=None,
+        cfg=None,
+    ):
+        captured["label_side"] = label_side
+        captured["tick_side"] = tick_side
+        captured["tick_length_px"] = tick_length_px
+        captured["track_preset"] = track_preset
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        default_colors=default_colors,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+    )
+
+    assert captured["label_side"] != "legacy"
+    assert captured["tick_side"] != "legacy"
+    assert captured["tick_length_px"] is not None
+    assert captured["track_preset"] == "spreadout"
+
+
+@pytest.mark.circular
+def test_default_preset_slots_compress_to_clear_center_definition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
@@ -488,20 +576,9 @@ def test_default_preset_slots_keep_legacy_numeric_radii_with_center_definition(
     captured: dict[str, object] = {}
 
     def capture_numeric_slot(
-        slot_id: str,
         canvas_config,
-        track_width_override,
-        norm_factor_override,
     ) -> None:
-        assert track_width_override is not None
-        assert norm_factor_override is not None
-        captured[slot_id] = (
-            float(norm_factor_override) * float(canvas_config.radius),
-            float(track_width_override),
-        )
-        captured["radius"] = float(canvas_config.radius)
-        captured["length_param"] = str(canvas_config.length_param)
-        captured["track_ids"] = dict(canvas_config.track_ids)
+        captured["radial_layout"] = canvas_config.circular_radial_layout
         captured["definition_reserved"] = circular_assemble_module._definition_reserved_radius_px(
             record,
             canvas_config,
@@ -526,7 +603,7 @@ def test_default_preset_slots_keep_legacy_numeric_radii_with_center_definition(
         group_id=None,
         cfg=None,
     ):
-        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override)
+        capture_numeric_slot(canvas_config)
         return canvas
 
     def fake_add_gc_skew_group_on_canvas(
@@ -542,7 +619,7 @@ def test_default_preset_slots_keep_legacy_numeric_radii_with_center_definition(
         group_id=None,
         cfg=None,
     ):
-        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
+        capture_numeric_slot(canvas_config)
         return canvas
 
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
@@ -556,16 +633,12 @@ def test_default_preset_slots_keep_legacy_numeric_radii_with_center_definition(
         legend="none",
     )
 
-    length_param = str(captured["length_param"])
-    radius = float(captured["radius"])
-    track_ids = captured["track_ids"]
-    assert isinstance(track_ids, dict)
-    track_dict = cfg.canvas.circular.track_dict[length_param]["tuckin"]
-    assert captured["gc_content"][0] == pytest.approx(radius * float(track_dict[str(track_ids["gc_track"])]))  # type: ignore[index]
-    assert captured["gc_skew"][0] == pytest.approx(radius * float(track_dict[str(track_ids["skew_track"])]))  # type: ignore[index]
-
-    gc_center, gc_width = captured["gc_content"]  # type: ignore[misc]
-    assert float(captured["definition_reserved"]) > float(gc_center) - (0.5 * float(gc_width))
+    layout = captured["radial_layout"]
+    by_id = {track.id: track for track in layout.tracks}  # type: ignore[attr-defined]
+    definition_reserved = float(captured["definition_reserved"])
+    assert by_id["gc_content"].reserved_inner_radius_px >= definition_reserved - 1e-6
+    assert by_id["gc_skew"].reserved_inner_radius_px >= definition_reserved - 1e-6
+    assert by_id["gc_content"].compressed or by_id["gc_skew"].compressed
 
 
 @pytest.mark.circular
@@ -884,6 +957,7 @@ def test_edl933_reordered_gc_ticks_skew_uses_measured_tick_footprint(
         label_side="legacy",
         tick_side="legacy",
         tick_length_px=None,
+        track_preset=None,
         cfg=None,
     ):
         assert cfg is not None
@@ -1480,6 +1554,7 @@ def test_slot_mode_tick_radius_does_not_move_axis(monkeypatch: pytest.MonkeyPatc
         label_side="legacy",
         tick_side="legacy",
         tick_length_px=None,
+        track_preset=None,
         cfg=None,
     ):
         captured["tick_radius"] = radius_override

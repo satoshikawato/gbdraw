@@ -52,6 +52,12 @@ class CircularLabelArenaDefaults:
     preset: CircularTrackPreset
 
 
+@dataclass(frozen=True)
+class CircularPresetRadialPlan:
+    slots: tuple[CircularTrackSlot, ...]
+    preferred_anchor_slot_ids: frozenset[str]
+
+
 def normalize_circular_track_preset(raw: str | None) -> CircularTrackPreset:
     preset = str(raw or "tuckin").strip().lower()
     if preset not in _VALID_PRESETS:
@@ -133,7 +139,7 @@ def _numeric_slot(
         radius=radius,
         width=_scalar_px(_default_numeric_width_px(renderer, context)),
         spacing=_scalar_px(max(1.0, 0.01 * float(context.canvas_config.radius))),
-        params={"_preset_generated": True, **dict(params or {})},
+        params=dict(params or {}),
     )
 
 
@@ -192,7 +198,6 @@ def _tick_slot_for_preset(
         width=_scalar_px(tick_width_px),
         spacing=_scalar_px(max(1.0, 0.01 * base_radius)),
         params={
-            "_preset_generated": True,
             "tick_side": tick_side,
             "label_side": label_side,
             "preset": preset,
@@ -220,7 +225,6 @@ def circular_track_slots_for_preset(
                 spacing=_scalar_px(max(1.0, 0.01 * float(context.canvas_config.radius))),
                 reserve=True if feature_defaults.lane_direction == "split" else None,
                 params={
-                    "_preset_generated": True,
                     "lane_direction": feature_defaults.lane_direction,
                 },
             )
@@ -259,6 +263,24 @@ def circular_track_slots_for_preset(
     return slots
 
 
+def circular_radial_plan_for_preset(
+    preset: str,
+    context: CircularPresetContext,
+) -> CircularPresetRadialPlan:
+    slots = tuple(circular_track_slots_for_preset(preset, context))
+    preferred_ids = frozenset(
+        slot.id
+        for slot in slots
+        if slot.renderer in {"depth", "dinucleotide_content", "dinucleotide_skew"}
+        and slot.side == "inside"
+        and slot.radius is not None
+    )
+    return CircularPresetRadialPlan(
+        slots=slots,
+        preferred_anchor_slot_ids=preferred_ids,
+    )
+
+
 def circular_label_arena_defaults_for_preset(
     preset: str,
     context: CircularPresetContext,
@@ -272,7 +294,9 @@ __all__ = [
     "CircularFeatureSlotDefaults",
     "CircularLabelArenaDefaults",
     "CircularPresetContext",
+    "CircularPresetRadialPlan",
     "CircularTrackPreset",
+    "circular_radial_plan_for_preset",
     "circular_feature_lane_direction_for_preset",
     "circular_feature_slot_defaults_for_preset",
     "circular_label_arena_defaults_for_preset",

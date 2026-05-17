@@ -10,6 +10,12 @@ from svgwrite.shapes import Circle, Line
 from svgwrite.text import Text
 
 from ....configurators import DepthConfigurator
+from ....layout.circular_depth_axis import (
+    DEPTH_AXIS_SMALL_TICK_SIZE_PX,
+    DEPTH_AXIS_STROKE_WIDTH_PX,
+    DEPTH_AXIS_TICK_SIZE_PX,
+    depth_axis_tick_font_size_px,
+)
 from ....svg.circular_tracks import generate_circular_depth_path_desc
 
 
@@ -17,6 +23,7 @@ class DepthDrawer:
     """Draws a depth coverage track on a circular canvas."""
 
     def __init__(self, depth_config: DepthConfigurator) -> None:
+        self._depth_config = depth_config
         self.fill_color: str = depth_config.fill_color
         self.stroke_color: str = depth_config.stroke_color
         self.stroke_width: float = depth_config.stroke_width
@@ -31,9 +38,9 @@ class DepthDrawer:
         self.small_tick_interval: float | None = depth_config.small_tick_interval
         self.tick_font_size: float | None = depth_config.tick_font_size
         self.axis_stroke: str = "#4b5563"
-        self.axis_stroke_width: float = 0.8
-        self.axis_tick_size: float = 3.0
-        self.axis_small_tick_size: float = 2.0
+        self.axis_stroke_width: float = DEPTH_AXIS_STROKE_WIDTH_PX
+        self.axis_tick_size: float = DEPTH_AXIS_TICK_SIZE_PX
+        self.axis_small_tick_size: float = DEPTH_AXIS_SMALL_TICK_SIZE_PX
 
     @staticmethod
     def _format_depth_tick(value: float) -> str:
@@ -179,7 +186,7 @@ class DepthDrawer:
         )
 
         axis_min, axis_max = self._axis_bounds(depth_df)
-        font_size = float(self.tick_font_size) if self.tick_font_size is not None else max(5.0, min(8.0, float(track_width) * 0.22))
+        font_size = depth_axis_tick_font_size_px(self._depth_config, track_width)
         large_tick_values = self._tick_values(axis_min, axis_max)
         for tick_value in self._small_tick_values(axis_min, axis_max, large_tick_values):
             normalized = self._scaled_fraction(tick_value, axis_min, axis_max)

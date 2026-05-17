@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence, TypeAlias
+from typing import Any, Collection, Literal, Mapping, Sequence, TypeAlias
 
 from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ...configurators import DepthConfigurator  # type: ignore[reportMissingImports]
 from ...exceptions import ValidationError  # type: ignore[reportMissingImports]
+from ...layout.circular_depth_axis import (  # type: ignore[reportMissingImports]
+    DepthAxisFootprint,
+    resolve_depth_axis_footprint,
+)
 from ...tracks.circular import (  # type: ignore[reportMissingImports]
     NUMERIC_CIRCULAR_TRACK_RENDERERS,
     CircularTrackSlot,
@@ -30,6 +35,10 @@ MIN_NUMERIC_WIDTH_PX = 10.0
 MIN_NUMERIC_WIDTH_FRACTION = 0.55
 MIN_SKEW_WIDTH_PX = 12.0
 MIN_SKEW_WIDTH_FRACTION = 0.65
+PREFERRED_MIN_NUMERIC_WIDTH_FRACTION = 0.4
+PREFERRED_MIN_SKEW_WIDTH_FRACTION = 0.4
+
+PlacementPolicy = Literal["hard", "preferred", "auto", "overlay"]
 
 
 @dataclass(frozen=True)
@@ -96,6 +105,10 @@ class CircularTickLayout:
     tick_band_px: RadialBand
     label_band_px: RadialBand | None
     reserved_band_px: RadialBand
+    track_preset: str
+    label_side: str
+    tick_side: str
+    tick_length_px: float | None
 
 
 @dataclass(frozen=True)
@@ -186,6 +199,12 @@ class CircularRadialLayout:
 
 
 @dataclass(frozen=True)
+class PlacementWindow:
+    inner_px: float
+    outer_px: float
+
+
+@dataclass(frozen=True)
 class _RadialSlotIntent:
     slot: NormalizedCircularTrackSlot
     slot_index: int
@@ -201,6 +220,7 @@ class _RadialSlotIntent:
     strict: bool
     compress: bool
     reserve: bool
+    placement_policy: PlacementPolicy
     params: Mapping[str, Any]
 
 
@@ -224,6 +244,18 @@ def bands_overlap(a: RadialBand, b: RadialBand) -> bool:
 def _band_from_center_width(center_px: float, width_px: float) -> RadialBand:
     half = max(0.0, float(width_px) / 2.0)
     return RadialBand(float(center_px) - half, float(center_px) + half)
+
+
+def _depth_reserved_band_for_draw_band(
+    draw_band_px: RadialBand,
+    footprint: DepthAxisFootprint | None,
+) -> RadialBand:
+    if footprint is None:
+        return draw_band_px
+    return RadialBand(
+        float(draw_band_px.inner_px) - float(footprint.radial_inner_extra_px),
+        float(draw_band_px.outer_px) + float(footprint.radial_outer_extra_px),
+    )
 
 
 def _lane_direction_from_legacy_track_type(track_type: str | None) -> str:
@@ -403,6 +435,10 @@ def _tick_layout_from_params(
         tick_band_px=tick_band,
         label_band_px=label_band,
         reserved_band_px=reserved,
+        track_preset=tick_preset,
+        label_side=label_side,
+        tick_side=tick_side,
+        tick_length_px=tick_length_px,
     )
 
 
@@ -434,8 +470,10 @@ def _slot_intents(
     *,
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
+    preferred_anchor_slot_ids: Collection[str] = (),
 ) -> list[_RadialSlotIntent]:
     axis_radius_px = float(canvas_config.radius)
+    preferred_ids = {str(slot_id) for slot_id in preferred_anchor_slot_ids}
     intents: list[_RadialSlotIntent] = []
     for slot in normalize_circular_track_slots(slots):
         radius_px = slot.radius.resolve(axis_radius_px) if slot.radius is not None else None
@@ -447,6 +485,26 @@ def _slot_intents(
             if slot.spacing is not None
             else _default_spacing_px(axis_radius_px)
         )
+        explicit_anchor = radius_px is not None
+        placement_policy: PlacementPolicy
+        if slot.side == "overlay":
+            placement_policy = "overlay"
+        elif (
+            slot.id in preferred_ids
+            and explicit_anchor
+            and slot.side == "inside"
+            and slot.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
+        ):
+            placement_policy = "preferred"
+        elif explicit_anchor:
+            placement_policy = "hard"
+        else:
+            if slot.id in preferred_ids:
+                logger.debug(
+                    "Ignoring preferred-anchor intent for circular slot '%s' without an inside numeric/depth radius.",
+                    slot.id,
+                )
+            placement_policy = "auto"
         intents.append(
             _RadialSlotIntent(
                 slot=slot,
@@ -456,13 +514,14 @@ def _slot_intents(
                 side=slot.side,
                 anchor_offset_px=(float(radius_px) - axis_radius_px) if radius_px is not None else None,
                 width_px=max(0.0, float(width_px)),
-                explicit_anchor=radius_px is not None,
+                explicit_anchor=explicit_anchor,
                 explicit_width=slot.width is not None,
                 spacing_px=max(0.0, float(spacing_px)),
                 z=slot.z,
                 strict=slot.strict,
                 compress=slot.compress,
                 reserve=slot.reserve,
+                placement_policy=placement_policy,
                 params=slot.params,
             )
         )
@@ -480,6 +539,7 @@ def _measure_radial_slot(
     cfg: GbdrawConfig,
     total_length: int,
     tick_track_channel_override: str | None,
+    depth_config: DepthConfigurator | None,
     compressed: bool = False,
 ) -> CircularResolvedSlot:
     anchor_radius_px = float(axis_radius_px) + float(anchor_offset_px)
@@ -551,6 +611,12 @@ def _measure_radial_slot(
 
     band = _band_from_center_width(anchor_radius_px, resolved_width)
     draw_band = None if renderer == "spacer" else band
+    reserved_band = band
+    if renderer == "depth" and depth_config is not None:
+        reserved_band = _depth_reserved_band_for_draw_band(
+            band,
+            resolve_depth_axis_footprint(depth_config, resolved_width),
+        )
     return CircularResolvedSlot(
         slot_index=int(intent.slot_index),
         id=intent.slot_id,
@@ -563,7 +629,7 @@ def _measure_radial_slot(
         resolved_width_px=resolved_width,
         packing_band_px=band,
         draw_band_px=draw_band,
-        reserved_band_px=band,
+        reserved_band_px=reserved_band,
         params=dict(intent.params),
         payload=None,
         explicit_anchor=bool(intent.explicit_anchor),
@@ -586,6 +652,15 @@ def _min_readable_numeric_width_px(renderer: str, default_width_px: float) -> fl
     if renderer == "dinucleotide_skew":
         return min(width, max(MIN_SKEW_WIDTH_PX, MIN_SKEW_WIDTH_FRACTION * width))
     return min(width, max(MIN_NUMERIC_WIDTH_PX, MIN_NUMERIC_WIDTH_FRACTION * width))
+
+
+def _min_readable_preferred_width_px(renderer: str, default_width_px: float) -> float:
+    width = max(0.0, float(default_width_px))
+    if width <= LAYOUT_EPSILON:
+        return 0.0
+    if renderer == "dinucleotide_skew":
+        return min(width, max(MIN_SKEW_WIDTH_PX, PREFERRED_MIN_SKEW_WIDTH_FRACTION * width))
+    return min(width, max(MIN_NUMERIC_WIDTH_PX, PREFERRED_MIN_NUMERIC_WIDTH_FRACTION * width))
 
 
 def _candidate_widths(intent: _RadialSlotIntent) -> list[tuple[float, bool]]:
@@ -612,12 +687,13 @@ def _place_outside_auto(
     *,
     occupied: Sequence[tuple[str, RadialBand]],
     axis_radius_px: float,
-    min_packing_inner_px: float,
+    placement_window: PlacementWindow,
     feature_dict: Mapping[str, Any] | None,
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
     tick_track_channel_override: str | None,
+    depth_config: DepthConfigurator | None,
 ) -> CircularResolvedSlot:
     for width_px, compressed in _candidate_widths(intent):
         anchor_offset = max(0.0, float(intent.anchor_offset_px or 0.0))
@@ -632,11 +708,17 @@ def _place_outside_auto(
                 cfg=cfg,
                 total_length=total_length,
                 tick_track_channel_override=tick_track_channel_override,
+                depth_config=depth_config,
                 compressed=compressed,
             )
-            if resolved.packing_band_px is not None and resolved.packing_band_px.inner_px < min_packing_inner_px - LAYOUT_EPSILON:
-                anchor_offset += min_packing_inner_px - float(resolved.packing_band_px.inner_px)
+            if resolved.packing_band_px is not None and resolved.packing_band_px.inner_px < placement_window.inner_px - LAYOUT_EPSILON:
+                anchor_offset += float(placement_window.inner_px) - float(resolved.packing_band_px.inner_px)
                 continue
+            if (
+                resolved.packing_band_px is not None
+                and resolved.packing_band_px.outer_px > placement_window.outer_px + LAYOUT_EPSILON
+            ):
+                break
             if resolved.reserved_band_px is not None:
                 conflict = _reserved_overlap_any(resolved.reserved_band_px, occupied)
                 if conflict is not None:
@@ -683,6 +765,7 @@ def _try_measure_inside_interval(
     cfg: GbdrawConfig,
     total_length: int,
     tick_track_channel_override: str | None,
+    depth_config: DepthConfigurator | None,
     compressed: bool,
 ) -> CircularResolvedSlot | None:
     lower, upper = float(interval[0]), float(interval[1])
@@ -705,6 +788,7 @@ def _try_measure_inside_interval(
                 cfg=cfg,
                 total_length=total_length,
                 tick_track_channel_override=tick_track_channel_override,
+                depth_config=depth_config,
                 compressed=compressed,
             )
             bands = [
@@ -731,12 +815,13 @@ def _place_inside_auto(
     *,
     occupied: Sequence[tuple[str, RadialBand]],
     axis_radius_px: float,
-    max_packing_outer_px: float,
+    placement_window: PlacementWindow,
     feature_dict: Mapping[str, Any] | None,
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
     tick_track_channel_override: str | None,
+    depth_config: DepthConfigurator | None,
 ) -> CircularResolvedSlot:
     for width_px, compressed in _candidate_widths(intent):
         resolved = _place_inside_auto_fixed_width(
@@ -745,17 +830,19 @@ def _place_inside_auto(
             compressed=compressed,
             occupied=occupied,
             axis_radius_px=axis_radius_px,
-            max_packing_outer_px=max_packing_outer_px,
+            placement_window=placement_window,
             feature_dict=feature_dict,
             canvas_config=canvas_config,
             cfg=cfg,
             total_length=total_length,
             tick_track_channel_override=tick_track_channel_override,
+            depth_config=depth_config,
         )
         if resolved is not None:
             return resolved
     raise ValidationError(
-        f"Circular track slot '{intent.slot_id}' cannot fit inside. "
+        f"Circular track slot '{intent.slot_id}' cannot fit inside between "
+        f"{placement_window.inner_px:.1f}px and {placement_window.outer_px:.1f}px. "
         "Move the slot, reduce widths, disable conflicting labels, or use side=outside."
     )
 
@@ -767,15 +854,20 @@ def _place_inside_auto_fixed_width(
     compressed: bool,
     occupied: Sequence[tuple[str, RadialBand]],
     axis_radius_px: float,
-    max_packing_outer_px: float,
+    placement_window: PlacementWindow,
     feature_dict: Mapping[str, Any] | None,
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
     tick_track_channel_override: str | None,
+    depth_config: DepthConfigurator | None,
 ) -> CircularResolvedSlot | None:
-    outer_limit = max(0.0, float(max_packing_outer_px))
-    intervals = _free_intervals(occupied, inner_limit_px=0.0, outer_limit_px=outer_limit)
+    outer_limit = max(0.0, float(placement_window.outer_px))
+    intervals = _free_intervals(
+        occupied,
+        inner_limit_px=float(placement_window.inner_px),
+        outer_limit_px=outer_limit,
+    )
     for interval in sorted(intervals, key=lambda item: item[1], reverse=True):
         resolved = _try_measure_inside_interval(
             intent,
@@ -787,6 +879,7 @@ def _place_inside_auto_fixed_width(
             cfg=cfg,
             total_length=total_length,
             tick_track_channel_override=tick_track_channel_override,
+            depth_config=depth_config,
             compressed=compressed,
         )
         if resolved is None or resolved.reserved_band_px is None:
@@ -801,18 +894,19 @@ def _place_inside_auto_group(
     *,
     occupied: Sequence[tuple[str, RadialBand]],
     axis_radius_px: float,
-    max_packing_outer_px: float,
+    placement_window: PlacementWindow,
     feature_dict: Mapping[str, Any] | None,
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
     total_length: int,
     tick_track_channel_override: str | None,
+    depth_config: DepthConfigurator | None,
 ) -> tuple[CircularResolvedSlot, ...]:
     candidate_lists = [_candidate_widths(intent) for intent in intents]
     max_candidates = max(len(candidates) for candidates in candidate_lists)
     for candidate_index in range(max_candidates):
         working_occupied = list(occupied)
-        working_outer = float(max_packing_outer_px)
+        working_outer = float(placement_window.outer_px)
         resolved_group: list[CircularResolvedSlot] = []
         failed = False
         for intent, candidates in zip(intents, candidate_lists):
@@ -823,12 +917,13 @@ def _place_inside_auto_group(
                 compressed=compressed,
                 occupied=working_occupied,
                 axis_radius_px=axis_radius_px,
-                max_packing_outer_px=working_outer,
+                placement_window=PlacementWindow(float(placement_window.inner_px), working_outer),
                 feature_dict=feature_dict,
                 canvas_config=canvas_config,
                 cfg=cfg,
                 total_length=total_length,
                 tick_track_channel_override=tick_track_channel_override,
+                depth_config=depth_config,
             )
             if resolved is None:
                 failed = True
@@ -842,22 +937,248 @@ def _place_inside_auto_group(
             return tuple(resolved_group)
     first_unplaced = intents[-1].slot_id if intents else "<empty>"
     raise ValidationError(
-        f"Circular track slot '{first_unplaced}' cannot fit inside. "
+        f"Circular track slot '{first_unplaced}' cannot fit inside between "
+        f"{placement_window.inner_px:.1f}px and {placement_window.outer_px:.1f}px. "
         "Move the slot, reduce widths, disable conflicting labels, or use side=outside."
     )
 
 
-def _validate_same_side_order(slots: Sequence[CircularResolvedSlot], spacing_by_index: Mapping[int, float]) -> None:
-    def is_preset_generated(slot: CircularResolvedSlot) -> bool:
-        return bool(slot.params.get("_preset_generated"))
+def _linear_scales_from_1_to_min(min_scale: float, *, steps: int = 8) -> list[float]:
+    lower = max(0.0, min(1.0, float(min_scale)))
+    if lower >= 1.0 - LAYOUT_EPSILON:
+        return [1.0]
+    return [1.0 - ((1.0 - lower) * (idx / float(steps))) for idx in range(0, steps + 1)]
 
+
+def _preferred_group_width_scales(intents: Sequence[_RadialSlotIntent]) -> list[float]:
+    min_scales = [
+        _min_readable_preferred_width_px(intent.renderer, intent.width_px) / intent.width_px
+        for intent in intents
+        if intent.width_px > LAYOUT_EPSILON
+    ]
+    if not min_scales:
+        return [1.0]
+    return _linear_scales_from_1_to_min(min(min_scales), steps=8)
+
+
+def _scaled_preferred_width(intent: _RadialSlotIntent, scale: float) -> float:
+    width = max(0.0, float(intent.width_px))
+    if width <= LAYOUT_EPSILON:
+        return 0.0
+    return max(_min_readable_preferred_width_px(intent.renderer, width), width * float(scale))
+
+
+def _preferred_numeric_group_from(
+    ordered_intents: Sequence[_RadialSlotIntent],
+    start_pos: int,
+    resolved_by_index: Mapping[int, CircularResolvedSlot],
+) -> list[_RadialSlotIntent]:
+    group: list[_RadialSlotIntent] = []
+    for future in ordered_intents[start_pos:]:
+        if future.slot_index in resolved_by_index:
+            break
+        if (
+            future.placement_policy != "preferred"
+            or future.side != "inside"
+            or future.renderer not in NUMERIC_CIRCULAR_TRACK_RENDERERS
+        ):
+            break
+        group.append(future)
+    return group
+
+
+def _group_packing_span(resolved_group: Sequence[CircularResolvedSlot]) -> RadialBand | None:
+    return band_union(
+        [slot.packing_band_px for slot in resolved_group if slot.packing_band_px is not None]
+    )
+
+
+def _group_fits_window_and_order(
+    intents: Sequence[_RadialSlotIntent],
+    resolved_group: Sequence[CircularResolvedSlot],
+    *,
+    occupied: Sequence[tuple[str, RadialBand]],
+    placement_window: PlacementWindow,
+) -> bool:
+    if len(intents) != len(resolved_group):
+        return False
+    span = _group_packing_span(resolved_group)
+    if span is not None:
+        if span.inner_px < placement_window.inner_px - LAYOUT_EPSILON:
+            return False
+        if span.outer_px > placement_window.outer_px + LAYOUT_EPSILON:
+            return False
+
+    for previous_intent, previous, current in zip(intents, resolved_group, resolved_group[1:]):
+        if previous.packing_band_px is None or current.packing_band_px is None:
+            continue
+        if current.packing_band_px.outer_px > previous.packing_band_px.inner_px - previous_intent.spacing_px + LAYOUT_EPSILON:
+            return False
+
+    working_occupied = list(occupied)
+    for intent, resolved in zip(intents, resolved_group):
+        if not _slot_reserves(intent) or resolved.reserved_band_px is None:
+            continue
+        if _reserved_overlap_any(resolved.reserved_band_px, working_occupied) is not None:
+            return False
+        working_occupied.append((intent.slot_id, resolved.reserved_band_px))
+    return True
+
+
+def _try_place_preferred_numeric_group_at_anchors(
+    intents: Sequence[_RadialSlotIntent],
+    *,
+    occupied: Sequence[tuple[str, RadialBand]],
+    placement_window: PlacementWindow,
+    axis_radius_px: float,
+    feature_dict: Mapping[str, Any] | None,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+    total_length: int,
+    tick_track_channel_override: str | None,
+    depth_config: DepthConfigurator | None,
+) -> tuple[CircularResolvedSlot, ...] | None:
+    resolved_group = tuple(
+        _measure_radial_slot(
+            intent,
+            anchor_offset_px=float(intent.anchor_offset_px or 0.0),
+            width_px=float(intent.width_px),
+            axis_radius_px=axis_radius_px,
+            feature_dict=feature_dict,
+            canvas_config=canvas_config,
+            cfg=cfg,
+            total_length=total_length,
+            tick_track_channel_override=tick_track_channel_override,
+            depth_config=depth_config,
+            compressed=False,
+        )
+        for intent in intents
+    )
+    if _group_fits_window_and_order(
+        intents,
+        resolved_group,
+        occupied=occupied,
+        placement_window=placement_window,
+    ):
+        return resolved_group
+    return None
+
+
+def _place_inside_auto_group_with_width_scale(
+    intents: Sequence[_RadialSlotIntent],
+    *,
+    width_scale: float,
+    occupied: Sequence[tuple[str, RadialBand]],
+    placement_window: PlacementWindow,
+    axis_radius_px: float,
+    feature_dict: Mapping[str, Any] | None,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+    total_length: int,
+    tick_track_channel_override: str | None,
+    depth_config: DepthConfigurator | None,
+) -> tuple[CircularResolvedSlot, ...] | None:
+    working_occupied = list(occupied)
+    working_outer = float(placement_window.outer_px)
+    resolved_group: list[CircularResolvedSlot] = []
+    for intent in intents:
+        width_px = _scaled_preferred_width(intent, width_scale)
+        resolved = _place_inside_auto_fixed_width(
+            intent,
+            width_px=width_px,
+            compressed=width_px < float(intent.width_px) - LAYOUT_EPSILON,
+            occupied=working_occupied,
+            axis_radius_px=axis_radius_px,
+            placement_window=PlacementWindow(float(placement_window.inner_px), working_outer),
+            feature_dict=feature_dict,
+            canvas_config=canvas_config,
+            cfg=cfg,
+            total_length=total_length,
+            tick_track_channel_override=tick_track_channel_override,
+            depth_config=depth_config,
+        )
+        if resolved is None:
+            return None
+        resolved_group.append(resolved)
+        if _slot_reserves(intent) and resolved.reserved_band_px is not None:
+            working_occupied.append((intent.slot_id, resolved.reserved_band_px))
+        if resolved.packing_band_px is not None:
+            working_outer = min(working_outer, float(resolved.packing_band_px.inner_px) - intent.spacing_px)
+
+    if _group_fits_window_and_order(
+        intents,
+        resolved_group,
+        occupied=occupied,
+        placement_window=placement_window,
+    ):
+        return tuple(resolved_group)
+    return None
+
+
+def _place_preferred_numeric_group(
+    intents: Sequence[_RadialSlotIntent],
+    *,
+    occupied: Sequence[tuple[str, RadialBand]],
+    placement_window: PlacementWindow,
+    axis_radius_px: float,
+    feature_dict: Mapping[str, Any] | None,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+    total_length: int,
+    tick_track_channel_override: str | None,
+    depth_config: DepthConfigurator | None,
+) -> tuple[CircularResolvedSlot, ...]:
+    anchored = _try_place_preferred_numeric_group_at_anchors(
+        intents,
+        occupied=occupied,
+        placement_window=placement_window,
+        axis_radius_px=axis_radius_px,
+        feature_dict=feature_dict,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        total_length=total_length,
+        tick_track_channel_override=tick_track_channel_override,
+        depth_config=depth_config,
+    )
+    if anchored is not None:
+        return anchored
+
+    for scale in _preferred_group_width_scales(intents):
+        placed = _place_inside_auto_group_with_width_scale(
+            intents,
+            width_scale=scale,
+            occupied=occupied,
+            placement_window=placement_window,
+            axis_radius_px=axis_radius_px,
+            feature_dict=feature_dict,
+            canvas_config=canvas_config,
+            cfg=cfg,
+            total_length=total_length,
+            tick_track_channel_override=tick_track_channel_override,
+            depth_config=depth_config,
+        )
+        if placed is not None:
+            return placed
+
+    group_name = ",".join(intent.slot_id for intent in intents) or "<empty>"
+    raise ValidationError(
+        f"Preferred numeric group '{group_name}' cannot fit inside between "
+        f"{placement_window.inner_px:.1f}px and {placement_window.outer_px:.1f}px."
+    )
+
+
+def _validate_same_side_order(
+    slots: Sequence[CircularResolvedSlot],
+    spacing_by_index: Mapping[int, float],
+    movable_by_index: Mapping[int, bool],
+) -> None:
     for side in ("outside", "inside"):
         side_slots = [
             slot for slot in sorted(slots, key=lambda item: item.slot_index)
             if slot.side == side and slot.packing_band_px is not None
         ]
         for previous, current in zip(side_slots, side_slots[1:]):
-            if is_preset_generated(previous) and is_preset_generated(current):
+            if not bool(movable_by_index.get(previous.slot_index)) and not bool(movable_by_index.get(current.slot_index)):
                 continue
             spacing = max(0.0, float(spacing_by_index.get(previous.slot_index, 0.0)))
             if side == "outside":
@@ -874,6 +1195,65 @@ def _validate_same_side_order(slots: Sequence[CircularResolvedSlot], spacing_by_
                     )
 
 
+def _next_future_hard_slot(
+    ordered_intents: Sequence[_RadialSlotIntent],
+    *,
+    start_pos: int,
+    side: str,
+    resolved_by_index: Mapping[int, CircularResolvedSlot],
+) -> CircularResolvedSlot | None:
+    for future in ordered_intents[start_pos + 1:]:
+        if future.side != side or future.placement_policy != "hard":
+            continue
+        resolved = resolved_by_index.get(future.slot_index)
+        if resolved is not None and resolved.packing_band_px is not None:
+            return resolved
+    return None
+
+
+def _inside_placement_window(
+    ordered_intents: Sequence[_RadialSlotIntent],
+    *,
+    start_pos: int,
+    current_spacing_px: float,
+    inside_max_outer: float,
+    resolved_by_index: Mapping[int, CircularResolvedSlot],
+) -> PlacementWindow:
+    inner_limit = 0.0
+    future_hard = _next_future_hard_slot(
+        ordered_intents,
+        start_pos=start_pos,
+        side="inside",
+        resolved_by_index=resolved_by_index,
+    )
+    if future_hard is not None and future_hard.packing_band_px is not None:
+        inner_limit = max(
+            inner_limit,
+            float(future_hard.packing_band_px.outer_px) + max(0.0, float(current_spacing_px)),
+        )
+    return PlacementWindow(inner_limit, float(inside_max_outer))
+
+
+def _outside_placement_window(
+    ordered_intents: Sequence[_RadialSlotIntent],
+    *,
+    start_pos: int,
+    current_spacing_px: float,
+    outside_min_inner: float,
+    resolved_by_index: Mapping[int, CircularResolvedSlot],
+) -> PlacementWindow:
+    outer_limit = float("inf")
+    future_hard = _next_future_hard_slot(
+        ordered_intents,
+        start_pos=start_pos,
+        side="outside",
+        resolved_by_index=resolved_by_index,
+    )
+    if future_hard is not None and future_hard.packing_band_px is not None:
+        outer_limit = float(future_hard.packing_band_px.inner_px) - max(0.0, float(current_spacing_px))
+    return PlacementWindow(float(outside_min_inner), outer_limit)
+
+
 def resolve_circular_radial_layout(
     *,
     total_length: int,
@@ -886,6 +1266,8 @@ def resolve_circular_radial_layout(
     definition_reserved_radius_px: float | None = None,
     feature_track_ratio_factor_override: float | None = None,
     tick_track_channel_override: str | None = None,
+    preferred_anchor_slot_ids: Collection[str] = (),
+    depth_config: DepthConfigurator | None = None,
 ) -> CircularRadialLayout:
     del show_features, show_ticks, feature_track_ratio_factor_override
     axis_radius_px = float(canvas_config.radius)
@@ -902,13 +1284,24 @@ def resolve_circular_radial_layout(
     if definition_band is not None and definition_band.width_px > LAYOUT_EPSILON:
         occupied.append(("definition", definition_band))
 
-    intents = _slot_intents(slots, canvas_config=canvas_config, cfg=cfg)
+    intents = _slot_intents(
+        slots,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        preferred_anchor_slot_ids=preferred_anchor_slot_ids,
+    )
     resolved_by_index: dict[int, CircularResolvedSlot] = {}
     spacing_by_index = {intent.slot_index: intent.spacing_px for intent in intents}
+    movable_by_index = {
+        intent.slot_index: intent.placement_policy in {"auto", "preferred"}
+        for intent in intents
+    }
 
-    # Fixed anchors and reserving overlays become blockers before auto placement.
+    # Hard anchors and reserving overlays become blockers before movable placement.
     for intent in intents:
-        if not intent.explicit_anchor and not (intent.side == "overlay" and intent.reserve):
+        if intent.placement_policy != "hard" and not (
+            intent.placement_policy == "overlay" and intent.reserve
+        ):
             continue
         anchor_offset = float(intent.anchor_offset_px or 0.0)
         resolved = _measure_radial_slot(
@@ -920,6 +1313,7 @@ def resolve_circular_radial_layout(
             cfg=cfg,
             total_length=int(total_length),
             tick_track_channel_override=tick_track_channel_override,
+            depth_config=depth_config,
         )
         if resolved.reserved_band_px is not None:
             conflict = _reserved_overlap_any(resolved.reserved_band_px, occupied)
@@ -927,8 +1321,7 @@ def resolve_circular_radial_layout(
                 message = f"Pinned circular track slot '{intent.slot_id}' overlaps reserved circular slot '{conflict[0]}'."
                 if intent.strict:
                     raise ValidationError(message)
-                if not (bool(intent.params.get("_preset_generated")) and conflict[0] == "definition"):
-                    logger.warning(message)
+                logger.warning(message)
         resolved_by_index[intent.slot_index] = resolved
         if _slot_reserves(intent) and resolved.reserved_band_px is not None:
             band = resolved.reserved_band_px.expanded(intent.spacing_px) if intent.side == "overlay" else resolved.reserved_band_px
@@ -958,20 +1351,65 @@ def resolve_circular_radial_layout(
                 cfg=cfg,
                 total_length=int(total_length),
                 tick_track_channel_override=tick_track_channel_override,
+                depth_config=depth_config,
             )
         elif intent.side == "outside":
+            placement_window = _outside_placement_window(
+                ordered_intents,
+                start_pos=intent_pos,
+                current_spacing_px=intent.spacing_px,
+                outside_min_inner=outside_min_inner,
+                resolved_by_index=resolved_by_index,
+            )
             resolved = _place_outside_auto(
                 intent,
                 occupied=occupied,
                 axis_radius_px=axis_radius_px,
-                min_packing_inner_px=outside_min_inner,
+                placement_window=placement_window,
                 feature_dict=feature_dict,
                 canvas_config=canvas_config,
                 cfg=cfg,
                 total_length=int(total_length),
                 tick_track_channel_override=tick_track_channel_override,
+                depth_config=depth_config,
             )
         else:
+            preferred_group = _preferred_numeric_group_from(
+                ordered_intents,
+                intent_pos,
+                resolved_by_index,
+            )
+            if preferred_group:
+                placement_window = _inside_placement_window(
+                    ordered_intents,
+                    start_pos=intent_pos + len(preferred_group) - 1,
+                    current_spacing_px=preferred_group[-1].spacing_px,
+                    inside_max_outer=inside_max_outer,
+                    resolved_by_index=resolved_by_index,
+                )
+                resolved_group = _place_preferred_numeric_group(
+                    preferred_group,
+                    occupied=occupied,
+                    placement_window=placement_window,
+                    axis_radius_px=axis_radius_px,
+                    feature_dict=feature_dict,
+                    canvas_config=canvas_config,
+                    cfg=cfg,
+                    total_length=int(total_length),
+                    tick_track_channel_override=tick_track_channel_override,
+                    depth_config=depth_config,
+                )
+                for group_intent, group_resolved in zip(preferred_group, resolved_group):
+                    resolved_by_index[group_intent.slot_index] = group_resolved
+                    if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
+                        occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
+                    if group_resolved.packing_band_px is not None:
+                        inside_max_outer = min(
+                            inside_max_outer,
+                            float(group_resolved.packing_band_px.inner_px) - group_intent.spacing_px,
+                        )
+                continue
+
             inside_group = [intent]
             if intent.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS and intent.compress and not intent.explicit_anchor:
                 for future in ordered_intents[intent_pos + 1:]:
@@ -985,17 +1423,25 @@ def resolve_circular_radial_layout(
                     ):
                         break
                     inside_group.append(future)
+            placement_window = _inside_placement_window(
+                ordered_intents,
+                start_pos=intent_pos + len(inside_group) - 1,
+                current_spacing_px=inside_group[-1].spacing_px,
+                inside_max_outer=inside_max_outer,
+                resolved_by_index=resolved_by_index,
+            )
             if len(inside_group) > 1:
                 resolved_group = _place_inside_auto_group(
                     inside_group,
                     occupied=occupied,
                     axis_radius_px=axis_radius_px,
-                    max_packing_outer_px=inside_max_outer,
+                    placement_window=placement_window,
                     feature_dict=feature_dict,
                     canvas_config=canvas_config,
                     cfg=cfg,
                     total_length=int(total_length),
                     tick_track_channel_override=tick_track_channel_override,
+                    depth_config=depth_config,
                 )
                 for group_intent, group_resolved in zip(inside_group, resolved_group):
                     resolved_by_index[group_intent.slot_index] = group_resolved
@@ -1011,12 +1457,13 @@ def resolve_circular_radial_layout(
                 intent,
                 occupied=occupied,
                 axis_radius_px=axis_radius_px,
-                max_packing_outer_px=inside_max_outer,
+                placement_window=placement_window,
                 feature_dict=feature_dict,
                 canvas_config=canvas_config,
                 cfg=cfg,
                 total_length=int(total_length),
                 tick_track_channel_override=tick_track_channel_override,
+                depth_config=depth_config,
             )
 
         resolved_by_index[intent.slot_index] = resolved
@@ -1030,7 +1477,7 @@ def resolve_circular_radial_layout(
                 inside_max_outer = min(inside_max_outer, float(resolved.packing_band_px.inner_px) - intent.spacing_px)
 
     resolved_slots = tuple(resolved_by_index[index] for index in sorted(resolved_by_index))
-    _validate_same_side_order(resolved_slots, spacing_by_index)
+    _validate_same_side_order(resolved_slots, spacing_by_index, movable_by_index)
     outer_content_radius = max(
         [axis_radius_px]
         + ([definition_band.outer_px] if definition_band is not None else [])

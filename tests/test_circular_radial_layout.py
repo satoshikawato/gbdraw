@@ -8,9 +8,11 @@ from gbdraw.canvas import CircularCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
+from gbdraw.configurators import DepthConfigurator
+from gbdraw.layout.circular_depth_axis import resolve_depth_axis_footprint
 from gbdraw.diagrams.circular.radial_layout import build_circular_feature_layout, resolve_circular_radial_layout
 from gbdraw.layout.circular import calculate_feature_position_factors_circular
-from gbdraw.tracks import CircularTrackSlot
+from gbdraw.tracks import CircularTrackSlot, ScalarSpec
 
 
 class _Feature:
@@ -237,3 +239,107 @@ def test_outside_auto_numeric_width_is_independent_from_inside_compression() -> 
     assert by_id["outer_skew"].draw_band_px.width_px == pytest.approx(19.0)
     assert by_id["gc_skew"].draw_band_px.width_px < by_id["outer_skew"].draw_band_px.width_px
     assert by_id["outer_skew"].draw_band_px.inner_px >= canvas_config.radius
+
+
+def test_user_preset_generated_param_has_no_layout_effect_on_pinned_numeric_slot() -> None:
+    canvas_config, cfg = _small_radial_canvas()
+    base_slot = CircularTrackSlot(
+        id="gc_content",
+        renderer="dinucleotide_content",
+        radius=ScalarSpec(0.5, "factor"),
+        width=ScalarSpec(20.0, "px"),
+    )
+    tagged_slot = CircularTrackSlot(
+        id="gc_content",
+        renderer="dinucleotide_content",
+        radius=ScalarSpec(0.5, "factor"),
+        width=ScalarSpec(20.0, "px"),
+        params={"_preset_generated": True},
+    )
+
+    base = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=[base_slot],
+        show_features=False,
+        show_ticks=False,
+        definition_reserved_radius_px=55.0,
+    ).tracks[0]
+    tagged = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=[tagged_slot],
+        show_features=False,
+        show_ticks=False,
+        definition_reserved_radius_px=55.0,
+    ).tracks[0]
+
+    assert tagged.center_radius_px == pytest.approx(base.center_radius_px)
+    assert tagged.draw_width_px == pytest.approx(base.draw_width_px)
+
+
+def test_depth_reserved_band_includes_axis_radial_footprint_without_depth_df() -> None:
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels=False,
+        show_gc=False,
+        show_skew=False,
+        show_depth=True,
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    record = SimpleNamespace(seq="N" * 1000)
+    canvas_config = CircularCanvasConfigurator("test", config_dict, "none", record, cfg=cfg)
+    canvas_config.radius = 100.0
+    depth_config = DepthConfigurator(10, 10, config_dict, cfg=cfg, show_axis=True, show_ticks=True)
+    width_px = 24.0
+
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=[
+            CircularTrackSlot(
+                id="depth",
+                renderer="depth",
+                radius=ScalarSpec(0.7, "factor"),
+                width=ScalarSpec(width_px, "px"),
+            )
+        ],
+        show_features=False,
+        show_ticks=False,
+        depth_config=depth_config,
+    )
+    depth = layout.tracks[0]
+    footprint = resolve_depth_axis_footprint(depth_config, width_px)
+
+    assert depth.draw_band_px is not None
+    assert depth.reserved_band_px is not None
+    assert depth.draw_band_px.width_px == pytest.approx(width_px)
+    assert depth.reserved_band_px.inner_px == pytest.approx(
+        depth.draw_band_px.inner_px - footprint.radial_inner_extra_px
+    )
+    assert depth.reserved_band_px.outer_px == pytest.approx(
+        depth.draw_band_px.outer_px + footprint.radial_outer_extra_px
+    )
+
+    hidden_axis_config = DepthConfigurator(10, 10, config_dict, cfg=cfg, show_axis=False)
+    hidden_axis_layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=[
+            CircularTrackSlot(
+                id="depth",
+                renderer="depth",
+                radius=ScalarSpec(0.7, "factor"),
+                width=ScalarSpec(width_px, "px"),
+            )
+        ],
+        show_features=False,
+        show_ticks=False,
+        depth_config=hidden_axis_config,
+    )
+    hidden_axis_depth = hidden_axis_layout.tracks[0]
+    assert hidden_axis_depth.reserved_band_px == hidden_axis_depth.draw_band_px

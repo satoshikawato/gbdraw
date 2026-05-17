@@ -61,13 +61,14 @@ from ...render.groups.circular.definition import DefinitionGroup  # type: ignore
 from .radial_layout import (  # type: ignore[reportMissingImports]
     CircularRadialLayout,
     CircularResolvedSlot,
+    CircularTickLayout,
     build_circular_feature_layout,
     resolve_circular_radial_layout,
 )
 from .presets import (  # type: ignore[reportMissingImports]
     CircularPresetContext,
     circular_feature_lane_direction_for_preset,
-    circular_track_slots_for_preset,
+    circular_radial_plan_for_preset,
     normalize_circular_track_preset,
 )
 
@@ -1223,26 +1224,47 @@ def _draw_resolved_circular_slot(
         )
 
     if renderer == "ticks":
-        label_side = str(resolved_slot.params.get("label_side", "inside")).strip().lower()
-        tick_side = str(resolved_slot.params.get("tick_side", "inside")).strip().lower()
+        tick_layout = (
+            resolved_slot.payload
+            if isinstance(resolved_slot.payload, CircularTickLayout)
+            else None
+        )
+        label_side = (
+            str(tick_layout.label_side)
+            if tick_layout is not None
+            else str(resolved_slot.params.get("label_side", "inside"))
+        ).strip().lower()
+        tick_side = (
+            str(tick_layout.tick_side)
+            if tick_layout is not None
+            else str(resolved_slot.params.get("tick_side", "inside"))
+        ).strip().lower()
         if label_side != "none" or tick_side != "none":
             tick_group_kwargs: dict[str, Any] = {
                 "radius_override": float(resolved_slot.anchor_radius_px),
                 "cfg": cfg,
             }
-            if use_slot_tick_options:
+            if use_slot_tick_options or tick_layout is not None:
                 tick_group_kwargs["label_side"] = label_side
                 tick_group_kwargs["tick_side"] = tick_side
                 tick_group_kwargs["tick_length_px"] = (
-                    float(resolved_slot.draw_width_px)
-                    if resolved_slot.explicit_width and resolved_slot.draw_width_px > 0
-                    else None
+                    tick_layout.tick_length_px
+                    if tick_layout is not None
+                    else (
+                        float(resolved_slot.draw_width_px)
+                        if resolved_slot.explicit_width and resolved_slot.draw_width_px > 0
+                        else None
+                    )
+                )
+                tick_group_kwargs["track_preset"] = (
+                    tick_layout.track_preset
+                    if tick_layout is not None
+                    else normalize_circular_track_preset(
+                        str(resolved_slot.params.get("preset", resolved_slot.params.get("track_preset", "tuckin")))
+                    )
                 )
             if _tick_track_channel_override is not None:
                 tick_group_kwargs["tick_track_channel_override"] = _tick_track_channel_override
-            previous_preset = getattr(canvas_config, "circular_track_preset", None)
-            if use_slot_tick_options and "preset" in resolved_slot.params:
-                setattr(canvas_config, "circular_track_preset", str(resolved_slot.params["preset"]))
             canvas = add_tick_group_on_canvas(
                 canvas,
                 gb_record,
@@ -1250,14 +1272,6 @@ def _draw_resolved_circular_slot(
                 config_dict,
                 **tick_group_kwargs,
             )
-            if use_slot_tick_options and "preset" in resolved_slot.params:
-                if previous_preset is None:
-                    try:
-                        delattr(canvas_config, "circular_track_preset")
-                    except AttributeError:
-                        pass
-                else:
-                    setattr(canvas_config, "circular_track_preset", previous_preset)
         return canvas
 
     if renderer == "depth":
@@ -2035,9 +2049,10 @@ def add_record_on_circular_canvas(
     if user_slot_mode:
         show_features = "features" in user_active_slot_renderers
         layout_slots = list(effective_circular_track_slots or [])
+        preferred_anchor_slot_ids: frozenset[str] = frozenset()
     else:
         show_features = True
-        layout_slots = circular_track_slots_for_preset(
+        radial_plan = circular_radial_plan_for_preset(
             circular_preset,
             CircularPresetContext(
                 cfg=cfg,
@@ -2052,6 +2067,8 @@ def add_record_on_circular_canvas(
                 dinucleotide=str(getattr(gc_config, "dinucleotide", "GC")),
             ),
         )
+        layout_slots = list(radial_plan.slots)
+        preferred_anchor_slot_ids = radial_plan.preferred_anchor_slot_ids
     feature_slot = next(
         (
             slot
@@ -2150,6 +2167,8 @@ def add_record_on_circular_canvas(
         definition_reserved_radius_px=definition_reserved_radius_px,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
         tick_track_channel_override=_tick_track_channel_override,
+        preferred_anchor_slot_ids=preferred_anchor_slot_ids,
+        depth_config=depth_config if show_depth_track else None,
     )
     setattr(canvas_config, "circular_radial_layout", radial_layout)
     setattr(canvas_config, "circular_feature_layout", radial_layout.features)

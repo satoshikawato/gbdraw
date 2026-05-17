@@ -18,7 +18,8 @@ from gbdraw.canvas import CircularCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
-from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_track_slots_for_preset
+from gbdraw.configurators import DepthConfigurator
+from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_radial_plan_for_preset
 from gbdraw.diagrams.circular.radial_layout import RadialBand, resolve_circular_radial_layout
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
@@ -128,15 +129,27 @@ def capture_case(
         show_skew=visibility["show_skew"],
         dinucleotide="GC",
     )
-    slots = circular_track_slots_for_preset(preset, context)
+    radial_plan = circular_radial_plan_for_preset(preset, context)
+    depth_config = (
+        DepthConfigurator(
+            1,
+            1,
+            config_dict,
+            cfg=cfg,
+        )
+        if visibility["show_depth"]
+        else None
+    )
     layout = resolve_circular_radial_layout(
         total_length=len(record.seq),
         canvas_config=canvas_config,
         cfg=cfg,
-        slots=slots,
+        slots=radial_plan.slots,
         feature_dict=_feature_dict(record, cfg),
         show_features=True,
         show_ticks=True,
+        preferred_anchor_slot_ids=radial_plan.preferred_anchor_slot_ids,
+        depth_config=depth_config,
     )
     return {
         "input": str(input_path),
