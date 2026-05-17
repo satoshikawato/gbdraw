@@ -353,99 +353,6 @@ def _requested_slot_side(slot: CircularTrackSlot, renderer: str) -> str | None:
     return None
 
 
-def _slot_can_inherit_preset_geometry(
-    slot: CircularTrackSlot,
-    *,
-    renderer: str,
-    geometry_slot: CircularTrackSlot | None,
-) -> bool:
-    if geometry_slot is None:
-        return False
-    requested_side = _requested_slot_side(slot, renderer)
-    if requested_side is None:
-        return True
-    preset_side = str(geometry_slot.side or "inside").strip().lower()
-    return requested_side == preset_side
-
-
-def _slot_requests_inside_or_preset(slot: CircularTrackSlot, renderer: str) -> bool:
-    requested_side = _requested_slot_side(slot, renderer)
-    return requested_side is None or requested_side == "inside"
-
-
-def _ticks_before_inside_features(
-    slots: Sequence[CircularTrackSlot],
-    preset_by_id: dict[str, CircularTrackSlot],
-) -> bool:
-    feature_preset = preset_by_id.get("features")
-    ticks_preset = preset_by_id.get("ticks")
-    if feature_preset is None or ticks_preset is None:
-        return False
-    if str(feature_preset.side or "inside").strip().lower() != "inside":
-        return False
-
-    tick_index: int | None = None
-    feature_index: int | None = None
-    tick_slot: CircularTrackSlot | None = None
-    feature_slot: CircularTrackSlot | None = None
-    for index, slot in enumerate(slots):
-        if not slot.enabled:
-            continue
-        renderer = _normalized_renderer(slot.renderer)
-        if str(slot.id) == "ticks" and renderer == "ticks" and tick_index is None:
-            tick_index = index
-            tick_slot = slot
-        elif str(slot.id) == "features" and renderer == "features" and feature_index is None:
-            feature_index = index
-            feature_slot = slot
-
-    if tick_index is None or feature_index is None or tick_slot is None or feature_slot is None:
-        return False
-    return (
-        tick_index < feature_index
-        and _slot_requests_inside_or_preset(tick_slot, "ticks")
-        and _slot_requests_inside_or_preset(feature_slot, "features")
-    )
-
-
-def _inside_numeric_before_inside_ticks(
-    slots: Sequence[CircularTrackSlot],
-    preset_by_id: dict[str, CircularTrackSlot],
-) -> bool:
-    ticks_preset = preset_by_id.get("ticks")
-    if ticks_preset is None:
-        return False
-    if str(ticks_preset.side or "inside").strip().lower() != "inside":
-        return False
-
-    tick_index: int | None = None
-    tick_slot: CircularTrackSlot | None = None
-    for index, slot in enumerate(slots):
-        if not slot.enabled:
-            continue
-        renderer = _normalized_renderer(slot.renderer)
-        if str(slot.id) == "ticks" and renderer == "ticks":
-            tick_index = index
-            tick_slot = slot
-            break
-
-    if tick_index is None or tick_slot is None:
-        return False
-    if not _slot_requests_inside_or_preset(tick_slot, "ticks"):
-        return False
-
-    for slot in slots[:tick_index]:
-        if not slot.enabled:
-            continue
-        renderer = _normalized_renderer(slot.renderer)
-        if (
-            renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
-            and _slot_requests_inside_or_preset(slot, renderer)
-        ):
-            return True
-    return False
-
-
 def _inherited_params_for_slot(
     slot: CircularTrackSlot,
     preset_slot: CircularTrackSlot | None,
@@ -497,10 +404,20 @@ def _overlay_slot_on_preset_lane(
         slot,
         renderer=renderer,
         side=side,
-        radius=slot.radius if slot.radius is not None else (geometry_slot.radius if geometry_slot is not None else None),
+        radius=slot.radius,
         width=slot.width if slot.width is not None else _inherited_width_for_renderer(renderer, params_slot, context),
         spacing=slot.spacing if slot.spacing is not None else (geometry_slot.spacing if geometry_slot is not None else None),
         reserve=slot.reserve if slot.reserve is not None else (params_slot.reserve if params_slot is not None else None),
+        compress=(
+            slot.compress
+            if (
+                slot.compress is not None
+                or renderer not in NUMERIC_CIRCULAR_TRACK_RENDERERS
+                or slot.radius is not None
+                or str(side or "inside").strip().lower() != "inside"
+            )
+            else True
+        ),
         params=params,
     )
 
@@ -539,8 +456,6 @@ def circular_track_slots_from_preset_order(
     for preset_slot in preset_slots:
         renderer = _normalized_renderer(preset_slot.renderer)
         preset_by_renderer.setdefault(renderer, preset_slot)
-    ticks_before_inside_features = _ticks_before_inside_features(slots, preset_by_id)
-
     renderer_has_blank_unmatched_duplicates: dict[str, bool] = {}
     for slot in slots:
         if slot.enabled:
@@ -550,13 +465,12 @@ def circular_track_slots_from_preset_order(
 
     layout_slots: list[CircularTrackSlot] = []
     preferred_ids: set[str] = set()
-    inside_numeric_before_ticks = _inside_numeric_before_inside_ticks(slots, preset_by_id)
 
     for slot in slots:
         renderer = _normalized_renderer(slot.renderer)
         geometry_slot: CircularTrackSlot | None = None
         params_slot: CircularTrackSlot | None = None
-        inherited_radius = False
+        prefers_numeric_auto_group = False
 
         has_extra_numeric_renderer = bool(renderer_has_blank_unmatched_duplicates.get(renderer, False))
         if (
@@ -566,33 +480,20 @@ def circular_track_slots_from_preset_order(
             and _slot_uses_builtin_preset_lane(slot, renderer)
         ):
             geometry_slot = preset_by_id.get(str(slot.id))
-            # In inside-lane layouts, slot order means radial packing order
-            # from the axis inward. Keep tick marks/labels inside the axis,
-            # but let a ticks-before-features order place them outside the
-            # feature track instead of swapping the two renderers' parameters.
-            if ticks_before_inside_features and str(slot.id) == "ticks" and renderer == "ticks":
-                geometry_slot = preset_by_id.get("features")
-            elif ticks_before_inside_features and str(slot.id) == "features" and renderer == "features":
-                geometry_slot = None
-            elif (
-                inside_numeric_before_ticks
-                and str(slot.id) == "ticks"
-                and renderer == "ticks"
-                and slot.radius is None
-            ):
-                # The tick radius is preset-derived, not user-pinned; let it move
-                # so order-only numeric slots can occupy the outer inside lanes.
-                geometry_slot = None
-            if not _slot_can_inherit_preset_geometry(
-                slot,
-                renderer=renderer,
-                geometry_slot=geometry_slot,
+            requested_side = _requested_slot_side(slot, renderer)
+            if (
+                geometry_slot is not None
+                and requested_side is not None
+                and requested_side != str(geometry_slot.side or "inside").strip().lower()
             ):
                 geometry_slot = None
             params_slot = preset_by_id.get(str(slot.id), preset_by_renderer.get(renderer))
-
-        if geometry_slot is not None and slot.radius is None and geometry_slot.radius is not None:
-            inherited_radius = True
+            prefers_numeric_auto_group = (
+                renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
+                and slot.radius is None
+                and geometry_slot is not None
+                and geometry_slot.radius is not None
+            )
 
         overlaid = _overlay_slot_on_preset_lane(
             slot,
@@ -602,11 +503,8 @@ def circular_track_slots_from_preset_order(
             context=context,
         )
         layout_slots.append(overlaid)
-
         if (
-            inherited_radius
-            and renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
-            and overlaid.radius is not None
+            prefers_numeric_auto_group
             and str(overlaid.side or "inside").strip().lower() == "inside"
         ):
             preferred_ids.add(str(overlaid.id))
