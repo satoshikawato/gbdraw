@@ -408,6 +408,44 @@ def _ticks_before_inside_features(
     )
 
 
+def _inside_numeric_before_inside_ticks(
+    slots: Sequence[CircularTrackSlot],
+    preset_by_id: dict[str, CircularTrackSlot],
+) -> bool:
+    ticks_preset = preset_by_id.get("ticks")
+    if ticks_preset is None:
+        return False
+    if str(ticks_preset.side or "inside").strip().lower() != "inside":
+        return False
+
+    tick_index: int | None = None
+    tick_slot: CircularTrackSlot | None = None
+    for index, slot in enumerate(slots):
+        if not slot.enabled:
+            continue
+        renderer = _normalized_renderer(slot.renderer)
+        if str(slot.id) == "ticks" and renderer == "ticks":
+            tick_index = index
+            tick_slot = slot
+            break
+
+    if tick_index is None or tick_slot is None:
+        return False
+    if not _slot_requests_inside_or_preset(tick_slot, "ticks"):
+        return False
+
+    for slot in slots[:tick_index]:
+        if not slot.enabled:
+            continue
+        renderer = _normalized_renderer(slot.renderer)
+        if (
+            renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
+            and _slot_requests_inside_or_preset(slot, renderer)
+        ):
+            return True
+    return False
+
+
 def _inherited_params_for_slot(
     slot: CircularTrackSlot,
     preset_slot: CircularTrackSlot | None,
@@ -512,6 +550,7 @@ def circular_track_slots_from_preset_order(
 
     layout_slots: list[CircularTrackSlot] = []
     preferred_ids: set[str] = set()
+    inside_numeric_before_ticks = _inside_numeric_before_inside_ticks(slots, preset_by_id)
 
     for slot in slots:
         renderer = _normalized_renderer(slot.renderer)
@@ -534,6 +573,15 @@ def circular_track_slots_from_preset_order(
             if ticks_before_inside_features and str(slot.id) == "ticks" and renderer == "ticks":
                 geometry_slot = preset_by_id.get("features")
             elif ticks_before_inside_features and str(slot.id) == "features" and renderer == "features":
+                geometry_slot = None
+            elif (
+                inside_numeric_before_ticks
+                and str(slot.id) == "ticks"
+                and renderer == "ticks"
+                and slot.radius is None
+            ):
+                # The tick radius is preset-derived, not user-pinned; let it move
+                # so order-only numeric slots can occupy the outer inside lanes.
                 geometry_slot = None
             if not _slot_can_inherit_preset_geometry(
                 slot,

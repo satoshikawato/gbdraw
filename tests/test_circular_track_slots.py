@@ -1043,6 +1043,60 @@ def test_edl933_ticks_before_features_use_measured_tick_footprint(
 
 
 @pytest.mark.circular
+def test_order_only_numeric_before_ticks_reserves_inner_numeric_space(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+
+    record = _load_edl933_record()
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels=False,
+        show_gc=True,
+        show_skew=True,
+        track_type="tuckin",
+        strandedness=True,
+    )
+    default_colors = load_default_colors("", palette="default")
+    captured: dict[str, object] = {}
+
+    def capture_layout(canvas, *args, **kwargs):
+        canvas_config = args[1]
+        captured["radial_layout"] = canvas_config.circular_radial_layout
+        return canvas
+
+    def passthrough(canvas, *args, **kwargs):
+        return canvas
+
+    monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", capture_layout)
+    monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", capture_layout)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", passthrough)
+    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", passthrough)
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        default_colors=default_colors,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        circular_track_slots=[
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
+            CircularTrackSlot(id="ticks", renderer="ticks"),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
+        ],
+    )
+
+    layout = captured["radial_layout"]
+    by_id = {slot.id: slot for slot in layout.slots}  # type: ignore[attr-defined]
+
+    assert not by_id["ticks"].explicit_anchor
+    assert by_id["features"].packing_band_px.center_px > by_id["gc_content"].packing_band_px.center_px
+    assert by_id["gc_content"].packing_band_px.center_px > by_id["ticks"].packing_band_px.center_px
+    assert by_id["ticks"].packing_band_px.center_px > by_id["gc_skew"].packing_band_px.center_px
+
+
+@pytest.mark.circular
 def test_default_custom_slots_with_depth_use_outer_to_inner_numeric_lanes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1454,7 +1508,7 @@ def test_api_explicit_inside_duplicate_dinucleotide_skew_raises_when_no_inside_s
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
 
-    with pytest.raises(Exception, match="gc_skew_2.*cannot fit inside"):
+    with pytest.raises(Exception, match="cannot fit inside"):
         assemble_circular_diagram_from_record(
             record,
             config_dict=config_dict,

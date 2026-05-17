@@ -1211,12 +1211,103 @@ def _next_future_hard_slot(
     return None
 
 
+def _minimum_future_inside_width_px(
+    intent: _RadialSlotIntent,
+    *,
+    axis_radius_px: float,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+    total_length: int,
+    tick_track_channel_override: str | None,
+) -> float:
+    width = max(0.0, float(intent.width_px))
+    if intent.renderer == "ticks":
+        tick_layout = _tick_layout_from_params(
+            axis_radius_px=float(axis_radius_px),
+            total_length=int(total_length),
+            canvas_config=canvas_config,
+            cfg=cfg,
+            params=intent.params,
+            anchor_radius_px=float(axis_radius_px),
+            width_px=width,
+            explicit_width=bool(intent.explicit_width),
+            tick_track_channel_override=tick_track_channel_override,
+        )
+        return max(width, float(tick_layout.reserved_band_px.width_px))
+    if intent.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
+        if intent.placement_policy == "preferred":
+            return _min_readable_preferred_width_px(intent.renderer, width)
+        if intent.compress:
+            return _min_readable_numeric_width_px(intent.renderer, width)
+    return width
+
+
+def _future_unresolved_inside_span_px(
+    ordered_intents: Sequence[_RadialSlotIntent],
+    *,
+    start_pos: int,
+    current_spacing_px: float,
+    axis_radius_px: float,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+    total_length: int,
+    tick_track_channel_override: str | None,
+    resolved_by_index: Mapping[int, CircularResolvedSlot],
+) -> float:
+    span = 0.0
+    spacing_before = max(0.0, float(current_spacing_px))
+    for future in ordered_intents[start_pos + 1:]:
+        if future.slot_index in resolved_by_index:
+            break
+        if future.side != "inside" or future.placement_policy == "hard":
+            break
+        span += spacing_before + _minimum_future_inside_width_px(
+            future,
+            axis_radius_px=axis_radius_px,
+            canvas_config=canvas_config,
+            cfg=cfg,
+            total_length=total_length,
+            tick_track_channel_override=tick_track_channel_override,
+        )
+        spacing_before = max(0.0, float(future.spacing_px))
+    return span
+
+
+def _inner_limit_with_reserved_future_span(
+    occupied: Sequence[tuple[str, RadialBand]],
+    *,
+    inner_limit_px: float,
+    outer_limit_px: float,
+    required_span_px: float,
+) -> float:
+    required = max(0.0, float(required_span_px))
+    inner_limit = max(0.0, float(inner_limit_px))
+    if required <= LAYOUT_EPSILON:
+        return inner_limit
+
+    intervals = _free_intervals(
+        occupied,
+        inner_limit_px=inner_limit,
+        outer_limit_px=float(outer_limit_px),
+    )
+    for lower, upper in sorted(intervals, key=lambda item: item[1], reverse=True):
+        if float(upper) - float(lower) >= required - LAYOUT_EPSILON:
+            return max(inner_limit, float(lower) + required)
+    return max(inner_limit, float(outer_limit_px))
+
+
 def _inside_placement_window(
     ordered_intents: Sequence[_RadialSlotIntent],
     *,
     start_pos: int,
     current_spacing_px: float,
     inside_max_outer: float,
+    occupied: Sequence[tuple[str, RadialBand]],
+    axis_radius_px: float,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+    total_length: int,
+    tick_track_channel_override: str | None,
     resolved_by_index: Mapping[int, CircularResolvedSlot],
 ) -> PlacementWindow:
     inner_limit = 0.0
@@ -1230,6 +1321,27 @@ def _inside_placement_window(
         inner_limit = max(
             inner_limit,
             float(future_hard.packing_band_px.outer_px) + max(0.0, float(current_spacing_px)),
+        )
+    future_span = _future_unresolved_inside_span_px(
+        ordered_intents,
+        start_pos=start_pos,
+        current_spacing_px=current_spacing_px,
+        axis_radius_px=axis_radius_px,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        total_length=total_length,
+        tick_track_channel_override=tick_track_channel_override,
+        resolved_by_index=resolved_by_index,
+    )
+    if future_span > LAYOUT_EPSILON:
+        inner_limit = max(
+            inner_limit,
+            _inner_limit_with_reserved_future_span(
+                occupied,
+                inner_limit_px=inner_limit,
+                outer_limit_px=float(inside_max_outer),
+                required_span_px=future_span,
+            ),
         )
     return PlacementWindow(inner_limit, float(inside_max_outer))
 
@@ -1385,6 +1497,12 @@ def resolve_circular_radial_layout(
                     start_pos=intent_pos + len(preferred_group) - 1,
                     current_spacing_px=preferred_group[-1].spacing_px,
                     inside_max_outer=inside_max_outer,
+                    occupied=occupied,
+                    axis_radius_px=axis_radius_px,
+                    canvas_config=canvas_config,
+                    cfg=cfg,
+                    total_length=int(total_length),
+                    tick_track_channel_override=tick_track_channel_override,
                     resolved_by_index=resolved_by_index,
                 )
                 resolved_group = _place_preferred_numeric_group(
@@ -1428,6 +1546,12 @@ def resolve_circular_radial_layout(
                 start_pos=intent_pos + len(inside_group) - 1,
                 current_spacing_px=inside_group[-1].spacing_px,
                 inside_max_outer=inside_max_outer,
+                occupied=occupied,
+                axis_radius_px=axis_radius_px,
+                canvas_config=canvas_config,
+                cfg=cfg,
+                total_length=int(total_length),
+                tick_track_channel_override=tick_track_channel_override,
                 resolved_by_index=resolved_by_index,
             )
             if len(inside_group) > 1:
