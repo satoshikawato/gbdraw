@@ -49,6 +49,7 @@ class CircularPresetContext:
     show_gc: bool
     show_skew: bool
     dinucleotide: str = "GC"
+    tick_track_channel_override: str | None = None
 
 
 @dataclass(frozen=True)
@@ -181,6 +182,7 @@ def _tick_slot_for_preset(
         int(context.total_length),
         preset,
         bool(context.strandedness),
+        tick_track_channel_override=context.tick_track_channel_override,
     )
     tick_inner_ratio, tick_outer_ratio = sorted((float(tick_inner_ratio), float(tick_outer_ratio)))
     tick_side = "inside" if tick_outer_ratio <= 1.0 else "outside"
@@ -197,6 +199,7 @@ def _tick_slot_for_preset(
         font_family=str(context.cfg.objects.text.font_family),
         dpi=int(context.canvas_config.dpi),
         manual_interval=context.cfg.objects.scale.interval,
+        tick_track_channel_override=context.tick_track_channel_override,
         tick_width=float(context.cfg.objects.ticks.tick_width),
         tick_side=tick_side,
         tick_length_px=tick_width_px,

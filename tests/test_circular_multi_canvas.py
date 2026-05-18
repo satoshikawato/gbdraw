@@ -806,6 +806,7 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
     ]
     captured_tick_path_channels: dict[int, str | None] = {}
     captured_tick_label_channels: dict[int, str | None] = {}
+    captured_tick_label_sides: dict[int, str | None] = {}
 
     def fake_generate_tick_paths(
         radius: float,
@@ -835,9 +836,10 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
         strandedness: bool,
         dpi: int,
         tick_track_channel_override: str | None = None,
-        **_kwargs: Any,
+        **kwargs: Any,
     ) -> list[Any]:
         captured_tick_label_channels[int(total_len)] = tick_track_channel_override
+        captured_tick_label_sides[int(total_len)] = kwargs.get("label_side")
         return []
 
     monkeypatch.setattr(
@@ -862,6 +864,8 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
     assert captured_tick_label_channels[20_000] == "long"
     assert captured_tick_path_channels[120_000] == "long"
     assert captured_tick_label_channels[120_000] == "long"
+    assert captured_tick_label_sides[20_000] == "inside"
+    assert captured_tick_label_sides[120_000] == "inside"
 
     default_short_tick_bounds = get_circular_tick_path_ratio_bounds(
         20_000,

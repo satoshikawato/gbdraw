@@ -528,6 +528,40 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...slots);
   };
 
+  const ensureCircularTrackDepthSlot = () => {
+    normalizeSlotsInPlace();
+    const existingDepthSlot = state.adv.circular_track_slots.find((slot) => slot?.renderer === 'depth');
+    if (existingDepthSlot) {
+      existingDepthSlot.enabled = true;
+      return;
+    }
+
+    const currentSlots = JSON.stringify(normalizeCircularTrackSlots(
+      state.adv.circular_track_slots,
+      state.adv.nt,
+      state.form.track_type
+    ));
+    const simpleSlotsWithoutDepth = JSON.stringify(normalizeCircularTrackSlots(
+      createDefaultCircularTrackSlots({
+        nt: state.adv.nt,
+        showDepth: false,
+        showGc: !state.form.suppress_gc,
+        showSkew: !state.form.suppress_skew,
+        preset: state.form.track_type
+      }),
+      state.adv.nt,
+      state.form.track_type
+    ));
+
+    if (currentSlots === simpleSlotsWithoutDepth) {
+      resetCircularTrackSlotsFromSimpleControls();
+      return;
+    }
+
+    const slot = createCircularTrackSlotForRenderer('depth', state.adv.circular_track_slots, state.adv.nt, 'inside');
+    insertSlotRelativeToFeatures(slot, slot.side);
+  };
+
   const applyCircularTrackPreset = (preset) => {
     const normalizedPreset = normalizeCircularTrackPreset(preset);
     const current = JSON.stringify(normalizeCircularTrackSlots(state.adv.circular_track_slots, state.adv.nt, state.form.track_type));
@@ -671,6 +705,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     circularTrackRendererLabel,
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     resetCircularTrackSlotsFromSimpleControls,
+    ensureCircularTrackDepthSlot,
     applyCircularTrackPreset,
     addCircularTrackSlot,
     duplicateCircularTrackSlot,

@@ -180,6 +180,14 @@ export const createAppSetup = () => {
   const circularTrackNewRenderer = ref('dinucleotide_skew');
   const circularTrackNewPlacement = ref('inside');
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
+  watch(
+    () => [adv.circular_track_slots_enabled, form.show_depth],
+    ([slotsEnabled, showDepth]) => {
+      if (slotsEnabled && showDepth) {
+        circularTrackSlotEditor.ensureCircularTrackDepthSlot();
+      }
+    }
+  );
   const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions });
   const {
     runAnalysis: runGeneratedDiagramAnalysis,

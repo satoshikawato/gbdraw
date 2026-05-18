@@ -154,6 +154,7 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     slot_source = (WEB_ROOT / "js" / "app" / "circular-track-slots.js").read_text(encoding="utf-8")
+    app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
 
     assert "circular_track_slots_enabled" in state_source
@@ -174,6 +175,9 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "axis=true" not in slot_source
     assert "side = null" in slot_source
     assert "isLegacyDefaultWebSlotShape" in slot_source
+    assert "ensureCircularTrackDepthSlot" in slot_source
+    assert "() => [adv.circular_track_slots_enabled, form.show_depth]" in app_setup_source
+    assert "circularTrackSlotEditor.ensureCircularTrackDepthSlot();" in app_setup_source
 
 
 def test_web_config_rejects_obsolete_circular_track_slot_import_shapes() -> None:

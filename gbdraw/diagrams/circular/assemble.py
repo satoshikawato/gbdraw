@@ -2065,6 +2065,7 @@ def add_record_on_circular_canvas(
                 show_gc=show_gc_track,
                 show_skew=show_skew_track,
                 dinucleotide=str(getattr(gc_config, "dinucleotide", "GC")),
+                tick_track_channel_override=_tick_track_channel_override,
             ),
         )
         layout_slots = list(radial_plan.slots)
@@ -2084,6 +2085,7 @@ def add_record_on_circular_canvas(
                 show_gc=show_gc_track,
                 show_skew=show_skew_track,
                 dinucleotide=str(getattr(gc_config, "dinucleotide", "GC")),
+                tick_track_channel_override=_tick_track_channel_override,
             ),
         )
         layout_slots = list(radial_plan.slots)
