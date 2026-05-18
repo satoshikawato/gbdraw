@@ -139,6 +139,47 @@ def test_custom_core_slot_order_keeps_default_feature_then_ticks_order() -> None
     assert layout.features.all_band_px.inner_px > layout.ticks.reserved_band_px.outer_px
 
 
+def test_inside_auto_features_fit_when_anchor_sits_outside_free_interval() -> None:
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_labels=False,
+        track_type="tuckin",
+        strandedness=True,
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    record = SimpleNamespace(seq="N" * 1000)
+    canvas_config = CircularCanvasConfigurator("test", config_dict, "none", record, cfg=cfg)
+    canvas_config.radius = 100.0
+
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=[
+            CircularTrackSlot(
+                id="upper_spacer",
+                renderer="spacer",
+                radius=ScalarSpec(86.0, "px"),
+                width=ScalarSpec(8.0, "px"),
+            ),
+            CircularTrackSlot(
+                id="features",
+                renderer="features",
+                width=ScalarSpec(10.0, "px"),
+            ),
+        ],
+        feature_dict={"plus": _Feature(0), "minus": _Feature(-1)},
+        show_features=True,
+        show_ticks=False,
+        definition_reserved_radius_px=60.0,
+    )
+    by_id = {slot.id: slot for slot in layout.slots}
+
+    assert by_id["features"].reserved_band_px.inner_px == pytest.approx(60.0)
+    assert by_id["features"].reserved_band_px.outer_px <= by_id["upper_spacer"].reserved_band_px.inner_px
+    assert by_id["features"].anchor_radius_px > by_id["features"].reserved_band_px.outer_px
+
+
 def _small_radial_canvas() -> tuple[CircularCanvasConfigurator, GbdrawConfig]:
     config_dict = modify_config_dict(
         load_config_toml("gbdraw.data", "config.toml"),

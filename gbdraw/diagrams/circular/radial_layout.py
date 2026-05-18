@@ -813,6 +813,10 @@ def _try_measure_inside_interval(
             ]
             if not bands:
                 return resolved
+            min_inner = min(float(band.inner_px) for band in bands)
+            if min_inner < lower - LAYOUT_EPSILON:
+                anchor_offset += lower - min_inner
+                continue
             max_outer = max(float(band.outer_px) for band in bands)
             if max_outer > upper + LAYOUT_EPSILON:
                 anchor_offset -= max_outer - upper
@@ -878,7 +882,7 @@ def _place_inside_auto_fixed_width(
     outer_limit = max(0.0, float(placement_window.outer_px))
     intervals = _free_intervals(
         occupied,
-        inner_limit_px=0.0,
+        inner_limit_px=float(placement_window.inner_px),
         outer_limit_px=outer_limit,
     )
     for interval in sorted(intervals, key=lambda item: item[1], reverse=True):
