@@ -31,6 +31,30 @@ const PLACEMENT_LABELS = {
   outside: 'Outer',
   overlay: 'Overlay'
 };
+const PRESET_LABELS = {
+  tuckin: 'Tuckin',
+  middle: 'Middle',
+  spreadout: 'Spreadout'
+};
+const PREVIEW_LENGTH_THRESHOLD_BP = 50000;
+const PREVIEW_RADIUS_PX = 390;
+const PREVIEW_TRACK_RATIO = 0.19;
+const PREVIEW_TRACK_DICT = {
+  short: {
+    spreadout: { 1: 1.0, 2: 0.85, 3: 0.65, 4: 0.45 },
+    middle: { 1: 1.0, 2: 0.75, 3: 0.55, 4: 0.35 },
+    tuckin: { 1: 1.0, 2: 0.64, 3: 0.44, 4: 0.24 }
+  },
+  long: {
+    spreadout: { 1: 1.0, 2: 0.80, 3: 0.60, 4: 0.40 },
+    middle: { 1: 1.0, 2: 0.75, 3: 0.55, 4: 0.35 },
+    tuckin: { 1: 1.0, 2: 0.70, 3: 0.50, 4: 0.30 }
+  }
+};
+const PREVIEW_TRACK_RATIO_FACTORS = {
+  short: [0.50, 1.0, 1.0],
+  long: [0.25, 1.0, 1.0]
+};
 
 export const CIRCULAR_TRACK_PRESETS = ['tuckin', 'middle', 'spreadout'];
 
@@ -87,6 +111,88 @@ const normalizeOptionalPlacement = (value) => {
   if (value === null || value === undefined || value === '') return null;
   return normalizePlacement(value);
 };
+
+const formatPresetName = (preset) => PRESET_LABELS[normalizeCircularTrackPreset(preset)] || PRESET_LABELS.tuckin;
+
+const formatPx = (value) => {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value || '');
+  const rounded = Math.round(number * 10) / 10;
+  return `${Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)}px`;
+};
+
+const formatRatioPx = (ratio) => {
+  const number = Number(ratio);
+  if (!Number.isFinite(number)) return 'auto';
+  return `${number.toFixed(2)}x / ${formatPx(number * PREVIEW_RADIUS_PX)}`;
+};
+
+const laneDirectionLabel = (laneDirection) => {
+  const lane = normalizeLaneDirection(laneDirection);
+  if (lane === 'outside') return 'Outer lanes';
+  if (lane === 'split') return 'Split lanes';
+  return 'Inside lanes';
+};
+
+const rendererUsesNumericDefaults = (renderer) => NUMERIC_RENDERERS.has(renderer);
+
+const previewWidthPxForRenderer = (renderer, lengthParam) => {
+  const base = PREVIEW_RADIUS_PX * PREVIEW_TRACK_RATIO;
+  const factors = PREVIEW_TRACK_RATIO_FACTORS[lengthParam] || PREVIEW_TRACK_RATIO_FACTORS.long;
+  if (renderer === 'features') return base * Number(factors[0]);
+  if (renderer === 'depth') return base * Number(factors[1]) * 0.5;
+  if (renderer === 'dinucleotide_skew') return base * Number(factors[2]);
+  if (renderer === 'ticks') return 0;
+  return base * Number(factors[1]);
+};
+
+const previewSpacingPx = () => Math.max(1.0, 0.01 * PREVIEW_RADIUS_PX);
+
+const getPreviewRecordEntries = (state) => {
+  const recordsRef = state?.circularRecordList;
+  const records = Array.isArray(recordsRef?.value)
+    ? recordsRef.value
+    : (Array.isArray(recordsRef) ? recordsRef : []);
+  return records;
+};
+
+const getPreviewLengthParam = (state) => {
+  const lengths = getPreviewRecordEntries(state)
+    .map((entry) => Number(entry?.record_length ?? entry?.length ?? 0))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  if (lengths.length === 0) return 'long';
+  return Math.max(...lengths) < PREVIEW_LENGTH_THRESHOLD_BP ? 'short' : 'long';
+};
+
+const getBuiltinTrackId = (slot, renderer, state) => {
+  const id = String(slot?.id || '').trim();
+  const showDepth = Boolean(state?.form?.show_depth);
+  const showGc = !Boolean(state?.form?.suppress_gc);
+  const showSkew = !Boolean(state?.form?.suppress_skew);
+
+  if (renderer === 'depth' && id === 'depth' && showDepth) return 2;
+  if (renderer === 'dinucleotide_content' && id === 'gc_content' && showGc) {
+    return showDepth ? 3 : 2;
+  }
+  if (renderer === 'dinucleotide_skew' && id === 'gc_skew' && showSkew) {
+    if (showDepth) return showGc ? 4 : 3;
+    return showGc ? 3 : 2;
+  }
+  return null;
+};
+
+const getPresetRadiusRatio = (slot, renderer, preset, lengthParam, state) => {
+  if (renderer === 'features' && String(slot?.id || '').trim() === 'features') return 1.0;
+  const trackId = getBuiltinTrackId(slot, renderer, state);
+  if (trackId === null) return null;
+  return PREVIEW_TRACK_DICT[lengthParam]?.[normalizeCircularTrackPreset(preset)]?.[trackId] ?? null;
+};
+
+const slotHasManualGeometry = (slot) => (
+  normalizeOptionalText(slot?.width) !== null ||
+  normalizeOptionalText(slot?.radius) !== null ||
+  normalizeOptionalText(slot?.spacing) !== null
+);
 
 export const findFeatureSlotIndex = (slots) => {
   if (!Array.isArray(slots)) return -1;
@@ -714,6 +820,137 @@ export const createCircularTrackSlotEditor = ({ state }) => {
 
   const circularTrackSlotCliSpec = (slot) => buildCircularTrackSlotSpec(slot, state.adv.nt, state.form.track_type);
 
+  const circularTrackPresetSummary = () => {
+    const preset = normalizeCircularTrackPreset(state.form.track_type);
+    const lengthParam = getPreviewLengthParam(state);
+    const lane = laneDirectionForPreset(preset);
+    const pieces = [`features ${laneDirectionLabel(lane)}`];
+    const slotLike = (id, renderer) => ({ id, renderer });
+    if (Boolean(state.form.show_depth)) {
+      const depthRatio = getPresetRadiusRatio(slotLike('depth', 'depth'), 'depth', preset, lengthParam, state);
+      if (depthRatio !== null) pieces.push(`depth r ${depthRatio.toFixed(2)}x`);
+    }
+    if (!Boolean(state.form.suppress_gc)) {
+      const gcRatio = getPresetRadiusRatio(slotLike('gc_content', 'dinucleotide_content'), 'dinucleotide_content', preset, lengthParam, state);
+      if (gcRatio !== null) pieces.push(`GC r ${gcRatio.toFixed(2)}x`);
+    }
+    if (!Boolean(state.form.suppress_skew)) {
+      const skewRatio = getPresetRadiusRatio(slotLike('gc_skew', 'dinucleotide_skew'), 'dinucleotide_skew', preset, lengthParam, state);
+      if (skewRatio !== null) pieces.push(`skew r ${skewRatio.toFixed(2)}x`);
+    }
+    return {
+      label: `${formatPresetName(preset)} preset`,
+      detail: `${lengthParam} defaults: ${pieces.join(' · ')}`,
+    };
+  };
+
+  const makeBadge = (key, label, value, source, title = '') => ({
+    key,
+    label,
+    value,
+    source,
+    title
+  });
+
+  const circularTrackSlotEffectiveBadges = (slot) => {
+    const normalized = normalizeCircularTrackSlot(slot, 0, state.adv.nt, state.form.track_type);
+    const preset = normalizeCircularTrackPreset(state.form.track_type);
+    const lengthParam = getPreviewLengthParam(state);
+    const presetLabel = formatPresetName(preset);
+    const badges = [];
+
+    if (normalizeOptionalText(normalized.radius) !== null) {
+      badges.push(makeBadge('radius', 'r', String(normalized.radius), 'manual', 'Manual radius override'));
+    } else {
+      const ratio = getPresetRadiusRatio(normalized, normalized.renderer, preset, lengthParam, state);
+      const value = ratio === null
+        ? (normalized.renderer === 'ticks' ? 'preset tick band' : 'auto pack')
+        : formatRatioPx(ratio);
+      badges.push(makeBadge('radius', 'r', value, 'preset', `Inherited from ${presetLabel}`));
+    }
+
+    if (normalizeOptionalText(normalized.width) !== null) {
+      badges.push(makeBadge('width', 'w', String(normalized.width), 'manual', 'Manual width override'));
+    } else {
+      const widthPx = previewWidthPxForRenderer(normalized.renderer, lengthParam);
+      const value = normalized.renderer === 'ticks' && widthPx <= 0
+        ? 'preset ticks'
+        : formatPx(widthPx);
+      badges.push(makeBadge('width', 'w', value, 'preset', `Inherited from ${presetLabel}`));
+    }
+
+    if (normalizeOptionalText(normalized.spacing) !== null) {
+      badges.push(makeBadge('spacing', 'gap', String(normalized.spacing), 'manual', 'Manual spacing override'));
+    } else {
+      badges.push(makeBadge('spacing', 'gap', formatPx(previewSpacingPx()), 'preset', `Inherited from ${presetLabel}`));
+    }
+
+    if (normalizeOptionalPlacement(slot?.side) !== null) {
+      badges.push(makeBadge('side', 'side', circularTrackPlacementLabel(slot.side), 'manual', 'Manual placement override'));
+    } else if (normalized.renderer === 'features') {
+      badges.push(makeBadge('side', 'side', circularTrackPlacementLabel(sideForLaneDirection(laneDirectionForPreset(preset))), 'preset', `Inherited from ${presetLabel}`));
+    } else if (normalized.renderer === 'ticks') {
+      badges.push(makeBadge('side', 'side', 'preset ticks', 'preset', `Inherited from ${presetLabel}`));
+    } else {
+      badges.push(makeBadge('side', 'side', 'Inside', 'preset', `Inherited from ${presetLabel}`));
+    }
+
+    if (normalized.renderer === 'features') {
+      const manualLane = normalizeOptionalText(slot?.params?.lane_direction);
+      const lane = manualLane === null ? laneDirectionForPreset(preset) : normalizeLaneDirection(manualLane);
+      badges.push(makeBadge(
+        'lane',
+        'lanes',
+        laneDirectionLabel(lane),
+        manualLane === null ? 'preset' : 'manual',
+        manualLane === null ? `Inherited from ${presetLabel}` : 'Manual lane override'
+      ));
+    }
+
+    if (normalized.renderer === 'ticks') {
+      const manualLabelSide = normalizeOptionalText(slot?.params?.label_side);
+      const manualTickSide = normalizeOptionalText(slot?.params?.tick_side);
+      badges.push(makeBadge(
+        'tick-label-side',
+        'labels',
+        manualLabelSide === null ? 'preset' : String(manualLabelSide),
+        manualLabelSide === null ? 'preset' : 'manual',
+        manualLabelSide === null ? `Inherited from ${presetLabel}` : 'Manual tick label placement'
+      ));
+      badges.push(makeBadge(
+        'tick-side',
+        'ticks',
+        manualTickSide === null ? 'preset' : String(manualTickSide),
+        manualTickSide === null ? 'preset' : 'manual',
+        manualTickSide === null ? `Inherited from ${presetLabel}` : 'Manual tick placement'
+      ));
+    }
+
+    if (rendererUsesNumericDefaults(normalized.renderer)) {
+      const nt = normalizeOptionalText(slot?.params?.nt);
+      if (nt !== null) {
+        badges.push(makeBadge('nt', 'nt', normalizeNt(nt), 'manual', 'Manual dinucleotide override'));
+      }
+    }
+
+    return badges;
+  };
+
+  const circularTrackSlotUsesPresetGeometry = (slot) => {
+    if (!slot || typeof slot !== 'object') return false;
+    if (!SUPPORTED_RENDERERS.includes(slot.renderer)) return false;
+    if (!slotHasManualGeometry(slot)) return true;
+    if (normalizeOptionalPlacement(slot.side) === null) return true;
+    if (slot.renderer === 'features' && normalizeOptionalText(slot.params?.lane_direction) === null) return true;
+    if (slot.renderer === 'ticks') {
+      return (
+        normalizeOptionalText(slot.params?.label_side) === null ||
+        normalizeOptionalText(slot.params?.tick_side) === null
+      );
+    }
+    return false;
+  };
+
   return {
     circularTrackRenderers: SUPPORTED_RENDERERS,
     circularTrackRendererLabel,
@@ -730,6 +967,9 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     updateCircularTrackFeatureLane,
     circularTrackPlacementLabel,
     supportsCircularTrackSlotPlacement,
-    circularTrackSlotCliSpec
+    circularTrackSlotCliSpec,
+    circularTrackPresetSummary,
+    circularTrackSlotEffectiveBadges,
+    circularTrackSlotUsesPresetGeometry
   };
 };

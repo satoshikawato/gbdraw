@@ -806,10 +806,18 @@
                                             <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="applyCircularTrackPreset('middle')">Apply Middle</button>
                                             <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="applyCircularTrackPreset('spreadout')">Apply Spreadout</button>
                                         </div>
+                                        <div class="rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-[10px] leading-snug text-slate-600">
+                                            <div class="flex items-center gap-1 font-semibold text-sky-800">
+                                                <i class="ph ph-eye"></i>
+                                                <span>{{ circularTrackPresetSummary().label }}</span>
+                                            </div>
+                                            <div>{{ circularTrackPresetSummary().detail }}</div>
+                                        </div>
                                         <div
                                             v-for="(slot, idx) in adv.circular_track_slots"
                                             :key="`circular-slot-${slot.id}-${idx}`"
-                                            class="bg-white border border-slate-200 rounded p-1.5 space-y-1"
+                                            class="border rounded p-1.5 space-y-1"
+                                            :class="circularTrackSlotUsesPresetGeometry(slot) ? 'bg-sky-50/40 border-sky-200' : 'bg-white border-slate-200'"
                                         >
                                             <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-1">
                                                 <input type="checkbox" v-model="slot.enabled" class="form-checkbox" :title="slot.enabled ? 'Enabled' : 'Disabled'">
@@ -841,6 +849,21 @@
                                                 <input v-model.trim="slot.radius" class="form-input px-1 py-0.5 text-[10px]" placeholder="r (auto)">
                                                 <input v-model.trim="slot.spacing" class="form-input px-1 py-0.5 text-[10px]" placeholder="spacing (auto)">
                                                 <input type="number" v-model.number="slot.z" class="form-input px-1 py-0.5 text-[10px]" placeholder="z">
+                                            </div>
+                                            <div class="flex flex-wrap gap-1 text-[9px] leading-tight">
+                                                <span
+                                                    v-for="badge in circularTrackSlotEffectiveBadges(slot)"
+                                                    :key="`slot-${slot.id}-${badge.key}`"
+                                                    class="inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-0.5"
+                                                    :class="{
+                                                        'border-amber-200 bg-amber-50 text-amber-800': badge.source === 'manual',
+                                                        'border-sky-200 bg-white text-sky-700': badge.source !== 'manual'
+                                                    }"
+                                                    :title="badge.title"
+                                                >
+                                                    <span class="font-semibold">{{ badge.label }}</span>
+                                                    <span class="truncate">{{ badge.value }}</span>
+                                                </span>
                                             </div>
                                             <div v-if="slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
                                                 <select

@@ -1157,6 +1157,7 @@ def list_genbank_records(gb_path):
                 {
                     "selector": f"#{idx + 1}",
                     "record_id": str(record.id or f"Record_{idx + 1}"),
+                    "record_length": len(record.seq),
                 }
             )
         return json.dumps({"records": payload})

@@ -1212,7 +1212,12 @@ json.dumps({
         if (!selector || seenSelectors.has(selector)) return;
         seenSelectors.add(selector);
         const recordId = String(entry?.record_id ?? '').trim() || `Record_${index + 1}`;
-        nextRecords.push({ selector, record_id: recordId });
+        const recordLength = Number(entry?.record_length ?? 0);
+        nextRecords.push({
+          selector,
+          record_id: recordId,
+          record_length: Number.isFinite(recordLength) && recordLength > 0 ? recordLength : null
+        });
       });
       circularRecordList.value = nextRecords;
       const nextPositions = mergeCircularRecordPositions(nextRecords, adv.multi_record_positions);
