@@ -178,6 +178,11 @@ export const createAppSetup = () => {
   });
 
   const circularTrackNewRenderer = ref('dinucleotide_skew');
+  const circularTrackNewRendererBySection = ref({
+    outer: 'dinucleotide_skew',
+    axis: 'features',
+    inside: 'dinucleotide_skew'
+  });
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
   watch(
     () => [adv.circular_track_slots_enabled, form.show_depth],
@@ -796,19 +801,26 @@ export const createAppSetup = () => {
     adv,
     canUseLinearRulerOnAxis,
     circularTrackNewRenderer,
+    circularTrackNewRendererBySection,
     circularTrackRenderers: circularTrackSlotEditor.circularTrackRenderers,
+    circularTrackRenderersForSection: circularTrackSlotEditor.circularTrackRenderersForSection,
     circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
     resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,
     applyCircularTrackPreset: circularTrackSlotEditor.applyCircularTrackPreset,
     addCircularTrackSlot: circularTrackSlotEditor.addCircularTrackSlot,
+    addCircularTrackSlotToSection: circularTrackSlotEditor.addCircularTrackSlotToSection,
     duplicateCircularTrackSlot: circularTrackSlotEditor.duplicateCircularTrackSlot,
     removeCircularTrackSlot: circularTrackSlotEditor.removeCircularTrackSlot,
     moveCircularTrackSlot: circularTrackSlotEditor.moveCircularTrackSlot,
+    moveCircularTrackSlotInSection: circularTrackSlotEditor.moveCircularTrackSlotInSection,
+    canMoveCircularTrackSlotInSection: circularTrackSlotEditor.canMoveCircularTrackSlotInSection,
     updateCircularTrackSlotRenderer: circularTrackSlotEditor.updateCircularTrackSlotRenderer,
     updateCircularTrackSlotPlacement: circularTrackSlotEditor.updateCircularTrackSlotPlacement,
     updateCircularTrackFeatureLane: circularTrackSlotEditor.updateCircularTrackFeatureLane,
     circularTrackPlacementLabel: circularTrackSlotEditor.circularTrackPlacementLabel,
     supportsCircularTrackSlotPlacement: circularTrackSlotEditor.supportsCircularTrackSlotPlacement,
+    circularTrackSlotSections: circularTrackSlotEditor.circularTrackSlotSections,
+    circularTrackSlotSectionLabel: circularTrackSlotEditor.circularTrackSlotSectionLabel,
     circularTrackSlotCliSpec: circularTrackSlotEditor.circularTrackSlotCliSpec,
     circularTrackPresetSummary: circularTrackSlotEditor.circularTrackPresetSummary,
     circularTrackSlotEffectiveBadges: circularTrackSlotEditor.circularTrackSlotEffectiveBadges,
