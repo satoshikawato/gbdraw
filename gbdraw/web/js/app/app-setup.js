@@ -178,7 +178,6 @@ export const createAppSetup = () => {
   });
 
   const circularTrackNewRenderer = ref('dinucleotide_skew');
-  const circularTrackNewPlacement = ref('inside');
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
   watch(
     () => [adv.circular_track_slots_enabled, form.show_depth],
@@ -797,10 +796,10 @@ export const createAppSetup = () => {
     adv,
     canUseLinearRulerOnAxis,
     circularTrackNewRenderer,
-    circularTrackNewPlacement,
     circularTrackRenderers: circularTrackSlotEditor.circularTrackRenderers,
     circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
     resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,
+    applyCircularTrackPreset: circularTrackSlotEditor.applyCircularTrackPreset,
     addCircularTrackSlot: circularTrackSlotEditor.addCircularTrackSlot,
     duplicateCircularTrackSlot: circularTrackSlotEditor.duplicateCircularTrackSlot,
     removeCircularTrackSlot: circularTrackSlotEditor.removeCircularTrackSlot,

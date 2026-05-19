@@ -28,7 +28,7 @@ const DEFAULT_SLOT_IDS = {
 const NUMERIC_RENDERERS = new Set(['dinucleotide_content', 'dinucleotide_skew', 'depth']);
 const PLACEMENT_LABELS = {
   inside: 'Inside',
-  outside: 'Outside',
+  outside: 'Outer',
   overlay: 'Overlay'
 };
 
@@ -316,7 +316,7 @@ export const createCircularTrackSlotForRenderer = (renderer, existingSlots = [],
   if (normalizedRenderer === 'ticks') {
     params.label_side = 'outside';
     params.tick_side = 'inside';
-  } else if (normalizedRenderer === 'features') {
+  } else if (normalizedRenderer === 'features' && side !== null) {
     params.lane_direction = laneDirectionForSide(side);
   }
   void nt;
@@ -328,7 +328,7 @@ export const createCircularTrackSlotForRenderer = (renderer, existingSlots = [],
     reserve: normalizedRenderer === 'features' && side === 'overlay' ? true : null,
     params
   });
-  applyPlacementDefaults(slot, side);
+  if (side !== null) applyPlacementDefaults(slot, side);
   return slot;
 };
 
@@ -353,6 +353,7 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
   });
 
   let side = inheritsPresetDefaults ? null : normalizeSlotSide(source.side);
+  if (side === 'inside') side = null;
   const strict = inheritsPresetDefaults ? null : normalizeOptionalBool(source.strict);
   let compress = inheritsPresetDefaults ? null : normalizeOptionalBool(source.compress);
   let reserve = inheritsPresetDefaults ? null : normalizeOptionalBool(source.reserve);
@@ -390,9 +391,15 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
       delete params.lanes;
       if (side !== null) params.lane_direction = laneDirectionForSide(side);
     } else {
-      params.lane_direction = normalizeLaneDirection(rawLaneDirection);
-      side = sideForLaneDirection(params.lane_direction);
+      const normalizedLaneDirection = normalizeLaneDirection(rawLaneDirection);
       delete params.lanes;
+      if (normalizedLaneDirection === 'inside') {
+        delete params.lane_direction;
+        side = null;
+      } else {
+        params.lane_direction = normalizedLaneDirection;
+        side = sideForLaneDirection(params.lane_direction);
+      }
     }
     if (side === 'overlay' && reserve === null) reserve = true;
   }
@@ -684,7 +691,14 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       slot.reserve = null;
       return;
     }
-    slot.params.lane_direction = normalizeLaneDirection(explicitLaneDirection);
+    const normalizedLaneDirection = normalizeLaneDirection(explicitLaneDirection);
+    if (normalizedLaneDirection === 'inside') {
+      delete slot.params.lane_direction;
+      slot.side = null;
+      slot.reserve = null;
+      return;
+    }
+    slot.params.lane_direction = normalizedLaneDirection;
     slot.side = sideForLaneDirection(slot.params.lane_direction);
     if (slot.side === 'overlay' && slot.reserve === null) slot.reserve = true;
     moveSlotRelativeToFeatures(slot, slot.side);
@@ -693,7 +707,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   const circularTrackRendererLabel = (renderer) => RENDERER_LABELS[renderer] || renderer;
   const circularTrackPlacementLabel = (placement) => (
     normalizeOptionalPlacement(placement) === null
-      ? 'Preset'
+      ? 'Auto'
       : (PLACEMENT_LABELS[normalizePlacement(placement)] || PLACEMENT_LABELS.inside)
   );
   const supportsCircularTrackSlotPlacement = (renderer) => SUPPORTED_RENDERERS.includes(renderer);
