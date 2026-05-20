@@ -114,27 +114,12 @@ const normalizeOptionalPlacement = (value) => {
 
 const formatPresetName = (preset) => PRESET_LABELS[normalizeCircularTrackPreset(preset)] || PRESET_LABELS.tuckin;
 
-const formatPx = (value) => {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return String(value || '');
-  const rounded = Math.round(number * 10) / 10;
-  return `${Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)}px`;
-};
-
-const formatRatioPx = (ratio) => {
-  const number = Number(ratio);
-  if (!Number.isFinite(number)) return 'auto';
-  return `${number.toFixed(2)}x / ${formatPx(number * PREVIEW_RADIUS_PX)}`;
-};
-
 const laneDirectionLabel = (laneDirection) => {
   const lane = normalizeLaneDirection(laneDirection);
   if (lane === 'outside') return 'feature stack outside axis';
   if (lane === 'split') return 'feature stack centered on axis';
   return 'feature stack inside axis';
 };
-
-const rendererUsesNumericDefaults = (renderer) => NUMERIC_RENDERERS.has(renderer);
 
 const previewWidthPxForRenderer = (renderer, lengthParam) => {
   const base = PREVIEW_RADIUS_PX * PREVIEW_TRACK_RATIO;
@@ -762,103 +747,6 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     };
   };
 
-  const makeBadge = (key, label, value, source, title = '') => ({
-    key,
-    label,
-    value,
-    source,
-    title
-  });
-
-  const circularTrackSlotEffectiveBadges = (slot) => {
-    const normalized = normalizeCircularTrackSlot(slot, 0, state.adv.nt, state.form.track_type);
-    const preset = normalizeCircularTrackPreset(state.form.track_type);
-    const lengthParam = getPreviewLengthParam(state);
-    const presetLabel = formatPresetName(preset);
-    const autoPlacement = circularTrackSlotAutoPlacementFromOrder(slot);
-    const badges = [];
-
-    if (normalizeOptionalText(normalized.radius) !== null) {
-      badges.push(makeBadge('radius', 'r', String(normalized.radius), 'manual', 'Manual radius override'));
-    } else {
-      const ratio = getPresetRadiusRatio(normalized, normalized.renderer, preset, lengthParam, state);
-      const value = ratio === null
-        ? (normalized.renderer === 'ticks' ? 'preset tick band' : 'auto pack')
-        : formatRatioPx(ratio);
-      badges.push(makeBadge('radius', 'r', value, 'preset', `Inherited from ${presetLabel}`));
-    }
-
-    if (normalizeOptionalText(normalized.width) !== null) {
-      badges.push(makeBadge('width', 'w', String(normalized.width), 'manual', 'Manual width override'));
-    } else {
-      const widthPx = previewWidthPxForRenderer(normalized.renderer, lengthParam);
-      const value = normalized.renderer === 'ticks' && widthPx <= 0
-        ? 'preset ticks'
-        : formatPx(widthPx);
-      badges.push(makeBadge('width', 'w', value, 'preset', `Inherited from ${presetLabel}`));
-    }
-
-    if (normalizeOptionalText(normalized.spacing) !== null) {
-      badges.push(makeBadge('spacing', 'gap', String(normalized.spacing), 'manual', 'Manual spacing override'));
-    } else {
-      badges.push(makeBadge('spacing', 'gap', formatPx(previewSpacingPx()), 'preset', `Inherited from ${presetLabel}`));
-    }
-
-    if (normalizeOptionalPlacement(slot?.side) !== null) {
-      badges.push(makeBadge('side', 'side', circularTrackPlacementLabel(slot.side), 'manual', 'Manual placement override'));
-    } else if (normalized.renderer === 'features') {
-      badges.push(makeBadge('side', 'side', circularTrackPlacementLabel(sideForLaneDirection(laneDirectionForPreset(preset))), 'preset', `Inherited from ${presetLabel}`));
-    } else if (autoPlacement !== null) {
-      badges.push(makeBadge('side', 'side', circularTrackPlacementLabel(autoPlacement), 'auto', 'Auto placement from row order'));
-    } else {
-      badges.push(makeBadge('side', 'side', 'Inner stack', 'preset', `Inherited from ${presetLabel}`));
-    }
-
-    if (normalized.renderer === 'features') {
-      const manualLane = normalizeOptionalText(slot?.params?.lane_direction);
-      const lane = manualLane === null ? laneDirectionForPreset(preset) : normalizeLaneDirection(manualLane);
-      badges.push(makeBadge(
-        'lane',
-        'lanes',
-        laneDirectionLabel(lane),
-        manualLane === null ? 'preset' : 'manual',
-        manualLane === null ? `Inherited from ${presetLabel}` : 'Manual lane override'
-      ));
-    }
-
-    if (normalized.renderer === 'ticks') {
-      const manualLabelSide = normalizeOptionalText(slot?.params?.label_side);
-      const manualTickSide = normalizeOptionalText(slot?.params?.tick_side);
-      badges.push(makeBadge(
-        'tick-label-side',
-        'labels',
-        manualLabelSide === null ? (autoPlacement || 'preset') : String(manualLabelSide),
-        manualLabelSide === null ? (autoPlacement === null ? 'preset' : 'auto') : 'manual',
-        manualLabelSide === null
-          ? (autoPlacement === null ? `Inherited from ${presetLabel}` : 'Auto label placement from row order')
-          : 'Manual tick label placement'
-      ));
-      badges.push(makeBadge(
-        'tick-side',
-        'ticks',
-        manualTickSide === null ? (autoPlacement || 'preset') : String(manualTickSide),
-        manualTickSide === null ? (autoPlacement === null ? 'preset' : 'auto') : 'manual',
-        manualTickSide === null
-          ? (autoPlacement === null ? `Inherited from ${presetLabel}` : 'Auto tick placement from row order')
-          : 'Manual tick placement'
-      ));
-    }
-
-    if (rendererUsesNumericDefaults(normalized.renderer)) {
-      const nt = normalizeOptionalText(slot?.params?.nt);
-      if (nt !== null) {
-        badges.push(makeBadge('nt', 'nt', normalizeNt(nt), 'manual', 'Manual dinucleotide override'));
-      }
-    }
-
-    return badges;
-  };
-
   const circularTrackSlotUsesPresetGeometry = (slot) => {
     if (!slot || typeof slot !== 'object') return false;
     if (!SUPPORTED_RENDERERS.includes(slot.renderer)) return false;
@@ -894,7 +782,6 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     circularTrackSlots,
     circularTrackSlotCliSpec,
     circularTrackPresetSummary,
-    circularTrackSlotEffectiveBadges,
     circularTrackSlotUsesPresetGeometry
   };
 };

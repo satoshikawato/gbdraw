@@ -813,7 +813,6 @@ export const createAppSetup = () => {
     circularTrackSlots: circularTrackSlotEditor.circularTrackSlots,
     circularTrackSlotCliSpec: circularTrackSlotEditor.circularTrackSlotCliSpec,
     circularTrackPresetSummary: circularTrackSlotEditor.circularTrackPresetSummary,
-    circularTrackSlotEffectiveBadges: circularTrackSlotEditor.circularTrackSlotEffectiveBadges,
     circularTrackSlotUsesPresetGeometry: circularTrackSlotEditor.circularTrackSlotUsesPresetGeometry,
     losat,
     losatCacheInfo,

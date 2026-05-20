@@ -861,21 +861,6 @@
                                                     <input v-model.trim="entry.slot.spacing" class="form-input px-1 py-0.5 text-[10px]" placeholder="spacing (auto)">
                                                     <input type="number" v-model.number="entry.slot.z" class="form-input px-1 py-0.5 text-[10px]" placeholder="z">
                                                 </div>
-                                                <div class="flex flex-wrap gap-1 text-[9px] leading-tight">
-                                                    <span
-                                                        v-for="badge in circularTrackSlotEffectiveBadges(entry.slot)"
-                                                        :key="`slot-${entry.slot.id}-${badge.key}`"
-                                                        class="inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-0.5"
-                                                        :class="{
-                                                            'border-amber-200 bg-amber-50 text-amber-800': badge.source === 'manual',
-                                                            'border-sky-200 bg-white text-sky-700': badge.source !== 'manual'
-                                                        }"
-                                                        :title="badge.title"
-                                                    >
-                                                        <span class="font-semibold">{{ badge.label }}</span>
-                                                        <span class="truncate">{{ badge.value }}</span>
-                                                    </span>
-                                                </div>
                                                 <div v-if="entry.slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
                                                     <select
                                                         :value="entry.slot.params.lane_direction"

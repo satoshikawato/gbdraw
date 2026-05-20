@@ -1316,6 +1316,38 @@ def test_order_only_numeric_before_ticks_reserves_inner_numeric_space(
 
 
 @pytest.mark.circular
+def test_inside_auto_stack_compresses_numeric_tracks_to_preserve_ticks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    layout = _capture_circular_radial_layout(
+        monkeypatch,
+        track_type="tuckin",
+        input_filename="EDL933.gbk",
+        circular_track_slots=[
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(id="ticks", renderer="ticks"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
+            CircularTrackSlot(id="gc_skew_2", renderer="dinucleotide_skew", params={"nt": "AT"}),
+        ],
+    )
+
+    by_id = {slot.id: slot for slot in layout.slots}  # type: ignore[attr-defined]
+
+    assert not by_id["ticks"].compressed
+    assert by_id["gc_content"].compressed
+    assert by_id["gc_skew"].compressed
+    assert by_id["gc_skew_2"].compressed
+    assert by_id["gc_content"].resolved_width_px < by_id["gc_content"].requested_width_px
+    assert by_id["gc_skew"].resolved_width_px < by_id["gc_skew"].requested_width_px
+    assert by_id["gc_skew_2"].resolved_width_px == pytest.approx(by_id["gc_skew"].resolved_width_px)
+    assert by_id["features"].packing_band_px.center_px > by_id["ticks"].packing_band_px.center_px
+    assert by_id["ticks"].packing_band_px.center_px > by_id["gc_content"].packing_band_px.center_px
+    assert by_id["gc_content"].packing_band_px.center_px > by_id["gc_skew"].packing_band_px.center_px
+    assert by_id["gc_skew"].packing_band_px.center_px > by_id["gc_skew_2"].packing_band_px.center_px
+
+
+@pytest.mark.circular
 def test_default_custom_slots_with_depth_use_outer_to_inner_numeric_lanes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

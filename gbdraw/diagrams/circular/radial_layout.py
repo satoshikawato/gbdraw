@@ -839,6 +839,15 @@ def _min_readable_preferred_width_px(renderer: str, default_width_px: float) -> 
     return min(width, max(MIN_NUMERIC_WIDTH_PX, PREFERRED_MIN_NUMERIC_WIDTH_FRACTION * width))
 
 
+def _min_dense_stack_numeric_width_px(renderer: str, default_width_px: float) -> float:
+    width = max(0.0, float(default_width_px))
+    if width <= LAYOUT_EPSILON:
+        return 0.0
+    if renderer == "dinucleotide_skew":
+        return min(width, MIN_SKEW_WIDTH_PX)
+    return min(width, MIN_NUMERIC_WIDTH_PX)
+
+
 def _candidate_widths(intent: _RadialSlotIntent) -> list[tuple[float, bool]]:
     width = max(0.0, float(intent.width_px))
     if not intent.compress or intent.renderer not in NUMERIC_CIRCULAR_TRACK_RENDERERS:
@@ -1085,7 +1094,76 @@ def _place_inside_auto_fixed_width(
     return None
 
 
-def _place_inside_auto_group(
+def _shrinkable_inside_numeric(intent: _RadialSlotIntent) -> bool:
+    return (
+        intent.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
+        and intent.side == "inside"
+        and intent.compress
+        and not intent.explicit_anchor
+    )
+
+
+def _inside_auto_stack_group_from(
+    ordered_intents: Sequence[_RadialSlotIntent],
+    start_pos: int,
+    resolved_by_index: Mapping[int, CircularResolvedSlot],
+) -> list[_RadialSlotIntent]:
+    group: list[_RadialSlotIntent] = []
+    for future in ordered_intents[start_pos:]:
+        if future.slot_index in resolved_by_index:
+            break
+        if (
+            future.side != "inside"
+            or future.placement_policy != "auto"
+            or future.explicit_anchor
+        ):
+            break
+        group.append(future)
+    return group
+
+
+def _inside_movable_stack_group_from(
+    ordered_intents: Sequence[_RadialSlotIntent],
+    start_pos: int,
+    resolved_by_index: Mapping[int, CircularResolvedSlot],
+) -> list[_RadialSlotIntent]:
+    group: list[_RadialSlotIntent] = []
+    for future in ordered_intents[start_pos:]:
+        if future.slot_index in resolved_by_index:
+            break
+        if future.side != "inside" or future.explicit_anchor:
+            break
+        if future.placement_policy == "auto":
+            group.append(future)
+            continue
+        if future.placement_policy == "preferred" and future.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
+            group.append(future)
+            continue
+        break
+    return group
+
+
+def _inside_auto_stack_width_scales(intents: Sequence[_RadialSlotIntent]) -> list[float]:
+    min_scales = [
+        _min_dense_stack_numeric_width_px(intent.renderer, intent.width_px) / intent.width_px
+        for intent in intents
+        if _shrinkable_inside_numeric(intent) and intent.width_px > LAYOUT_EPSILON
+    ]
+    if not min_scales:
+        return [1.0]
+    return _linear_scales_from_1_to_min(min(min_scales), steps=16)
+
+
+def _scaled_inside_auto_width(intent: _RadialSlotIntent, scale: float) -> tuple[float, bool]:
+    width = max(0.0, float(intent.width_px))
+    if not _shrinkable_inside_numeric(intent) or width <= LAYOUT_EPSILON:
+        return width, False
+    min_width = _min_dense_stack_numeric_width_px(intent.renderer, width)
+    scaled_width = max(min_width, width * float(scale))
+    return scaled_width, scaled_width < width - LAYOUT_EPSILON
+
+
+def _place_inside_auto_stack_group(
     intents: Sequence[_RadialSlotIntent],
     *,
     occupied: Sequence[tuple[str, RadialBand]],
@@ -1098,15 +1176,13 @@ def _place_inside_auto_group(
     tick_track_channel_override: str | None,
     depth_config: DepthConfigurator | None,
 ) -> tuple[CircularResolvedSlot, ...]:
-    candidate_lists = [_candidate_widths(intent) for intent in intents]
-    max_candidates = max(len(candidates) for candidates in candidate_lists)
-    for candidate_index in range(max_candidates):
+    for scale in _inside_auto_stack_width_scales(intents):
         working_occupied = list(occupied)
         working_outer = float(placement_window.outer_px)
         resolved_group: list[CircularResolvedSlot] = []
         failed = False
-        for intent, candidates in zip(intents, candidate_lists):
-            width_px, compressed = candidates[min(candidate_index, len(candidates) - 1)]
+        for intent in intents:
+            width_px, compressed = _scaled_inside_auto_width(intent, scale)
             resolved = _place_inside_auto_fixed_width(
                 intent,
                 width_px=width_px,
@@ -1131,6 +1207,7 @@ def _place_inside_auto_group(
                 working_outer = min(working_outer, float(resolved.packing_band_px.inner_px) - intent.spacing_px)
         if not failed:
             return tuple(resolved_group)
+
     first_unplaced = intents[-1].slot_id if intents else "<empty>"
     raise ValidationError(
         f"Circular track slot '{first_unplaced}' cannot fit inside between "
@@ -1757,19 +1834,13 @@ def resolve_circular_radial_layout(
                         )
                 continue
 
-            inside_group = [intent]
-            if intent.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS and intent.compress and not intent.explicit_anchor:
-                for future in ordered_intents[intent_pos + 1:]:
-                    if future.slot_index in resolved_by_index:
-                        break
-                    if (
-                        future.side != "inside"
-                        or future.explicit_anchor
-                        or future.renderer not in NUMERIC_CIRCULAR_TRACK_RENDERERS
-                        or not future.compress
-                    ):
-                        break
-                    inside_group.append(future)
+            inside_group = _inside_auto_stack_group_from(
+                ordered_intents,
+                intent_pos,
+                resolved_by_index,
+            )
+            if not inside_group:
+                inside_group = [intent]
             placement_window = _inside_placement_window(
                 ordered_intents,
                 start_pos=intent_pos + len(inside_group) - 1,
@@ -1786,18 +1857,55 @@ def resolve_circular_radial_layout(
                 resolved_by_index=resolved_by_index,
             )
             if len(inside_group) > 1:
-                resolved_group = _place_inside_auto_group(
-                    inside_group,
-                    occupied=occupied,
-                    axis_radius_px=axis_radius_px,
-                    placement_window=placement_window,
-                    feature_dict=feature_dict,
-                    canvas_config=canvas_config,
-                    cfg=cfg,
-                    total_length=int(total_length),
-                    tick_track_channel_override=tick_track_channel_override,
-                    depth_config=depth_config,
-                )
+                try:
+                    resolved_group = _place_inside_auto_stack_group(
+                        inside_group,
+                        occupied=occupied,
+                        axis_radius_px=axis_radius_px,
+                        placement_window=placement_window,
+                        feature_dict=feature_dict,
+                        canvas_config=canvas_config,
+                        cfg=cfg,
+                        total_length=int(total_length),
+                        tick_track_channel_override=tick_track_channel_override,
+                        depth_config=depth_config,
+                    )
+                except ValidationError:
+                    fallback_group = _inside_movable_stack_group_from(
+                        ordered_intents,
+                        intent_pos,
+                        resolved_by_index,
+                    )
+                    if len(fallback_group) <= len(inside_group):
+                        raise
+                    fallback_window = _inside_placement_window(
+                        ordered_intents,
+                        start_pos=intent_pos + len(fallback_group) - 1,
+                        current_spacing_px=fallback_group[-1].spacing_px,
+                        inside_max_outer=inside_max_outer,
+                        occupied=occupied,
+                        axis_radius_px=axis_radius_px,
+                        canvas_config=canvas_config,
+                        cfg=cfg,
+                        total_length=int(total_length),
+                        tick_track_channel_override=tick_track_channel_override,
+                        feature_dict=feature_dict,
+                        depth_config=depth_config,
+                        resolved_by_index=resolved_by_index,
+                    )
+                    resolved_group = _place_inside_auto_stack_group(
+                        fallback_group,
+                        occupied=occupied,
+                        axis_radius_px=axis_radius_px,
+                        placement_window=fallback_window,
+                        feature_dict=feature_dict,
+                        canvas_config=canvas_config,
+                        cfg=cfg,
+                        total_length=int(total_length),
+                        tick_track_channel_override=tick_track_channel_override,
+                        depth_config=depth_config,
+                    )
+                    inside_group = fallback_group
                 for group_intent, group_resolved in zip(inside_group, resolved_group):
                     resolved_by_index[group_intent.slot_index] = group_resolved
                     if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
