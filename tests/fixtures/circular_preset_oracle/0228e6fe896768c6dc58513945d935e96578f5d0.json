@@ -5,38 +5,39 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 390.0,
+      "outer_content_radius_px": 428.29999999999995,
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -24.375,
+          "anchor_radius_px": 365.625,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
           "params": {
-            "lane_direction": "inside"
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
           "side": "inside",
@@ -44,39 +45,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -54.60000000000002,
-          "anchor_radius_px": 335.4,
+          "anchor_offset_px": 3.8999999999999773,
+          "anchor_radius_px": 393.9,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 331.5,
-            "inner_px": 327.59999999999997,
-            "outer_px": 335.4,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 331.5,
-            "inner_px": 327.59999999999997,
-            "outer_px": 335.4,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 321.7,
-            "inner_px": 308.0,
-            "outer_px": 335.4,
-            "width_px": 27.399999999999977
+            "center_px": 411.09999999999997,
+            "inner_px": 393.9,
+            "outer_px": 428.29999999999995,
+            "width_px": 34.39999999999998
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         }
@@ -87,38 +88,39 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 390.0,
+      "outer_content_radius_px": 428.29999999999995,
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -24.375,
+          "anchor_radius_px": 365.625,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
           "params": {
-            "lane_direction": "inside"
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
           "side": "inside",
@@ -126,59 +128,59 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -54.60000000000002,
-          "anchor_radius_px": 335.4,
+          "anchor_offset_px": 3.8999999999999773,
+          "anchor_radius_px": 393.9,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 331.5,
-            "inner_px": 327.59999999999997,
-            "outer_px": 335.4,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 331.5,
-            "inner_px": 327.59999999999997,
-            "outer_px": 335.4,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 321.7,
-            "inner_px": 308.0,
-            "outer_px": 335.4,
-            "width_px": 27.399999999999977
+            "center_px": 411.09999999999997,
+            "inner_px": 393.9,
+            "outer_px": 428.29999999999995,
+            "width_px": 34.39999999999998
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
         {
-          "anchor_offset_px": -119.05000000000001,
-          "anchor_radius_px": 270.95,
+          "anchor_offset_px": -117.0,
+          "anchor_radius_px": 273.0,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 270.95,
-            "inner_px": 233.89999999999998,
-            "outer_px": 308.0,
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
             "width_px": 74.10000000000002
           },
           "explicit_anchor": true,
           "explicit_width": true,
           "id": "gc_content",
           "packing_band_px": {
-            "center_px": 270.95,
-            "inner_px": 233.89999999999998,
-            "outer_px": 308.0,
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
             "width_px": 74.10000000000002
           },
           "params": {
@@ -187,9 +189,9 @@
           "renderer": "dinucleotide_content",
           "requested_width_px": 74.1,
           "reserved_band_px": {
-            "center_px": 270.95,
-            "inner_px": 233.89999999999998,
-            "outer_px": 308.0,
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
             "width_px": 74.10000000000002
           },
           "resolved_width_px": 74.1,
@@ -198,22 +200,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -197.05,
-          "anchor_radius_px": 192.95,
+          "anchor_offset_px": -195.0,
+          "anchor_radius_px": 195.0,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 192.95,
-            "inner_px": 155.89999999999998,
-            "outer_px": 230.0,
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
             "width_px": 74.10000000000002
           },
           "explicit_anchor": true,
           "explicit_width": true,
           "id": "gc_skew",
           "packing_band_px": {
-            "center_px": 192.95,
-            "inner_px": 155.89999999999998,
-            "outer_px": 230.0,
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
             "width_px": 74.10000000000002
           },
           "params": {
@@ -222,9 +224,9 @@
           "renderer": "dinucleotide_skew",
           "requested_width_px": 74.1,
           "reserved_band_px": {
-            "center_px": 192.95,
-            "inner_px": 155.89999999999998,
-            "outer_px": 230.0,
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
             "width_px": 74.10000000000002
           },
           "resolved_width_px": 74.1,
@@ -239,38 +241,39 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 390.0,
+      "outer_content_radius_px": 428.29999999999995,
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -24.375,
+          "anchor_radius_px": 365.625,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
           "params": {
-            "lane_direction": "inside"
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
           "side": "inside",
@@ -278,39 +281,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -54.60000000000002,
-          "anchor_radius_px": 335.4,
+          "anchor_offset_px": 3.8999999999999773,
+          "anchor_radius_px": 393.9,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 331.5,
-            "inner_px": 327.59999999999997,
-            "outer_px": 335.4,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 331.5,
-            "inner_px": 327.59999999999997,
-            "outer_px": 335.4,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 321.7,
-            "inner_px": 308.0,
-            "outer_px": 335.4,
-            "width_px": 27.399999999999977
+            "center_px": 411.09999999999997,
+            "inner_px": 393.9,
+            "outer_px": 428.29999999999995,
+            "width_px": 34.39999999999998
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
@@ -424,37 +427,38 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 390.0,
+      "outer_content_radius_px": 428.29999999999995,
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -13.162499999999966,
+          "anchor_radius_px": 376.83750000000003,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "inside"
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
           "resolved_width_px": 18.525,
@@ -463,39 +467,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -39.0,
-          "anchor_radius_px": 351.0,
+          "anchor_offset_px": 3.8999999999999773,
+          "anchor_radius_px": 393.9,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 347.1,
-            "inner_px": 343.2,
-            "outer_px": 351.0,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 347.1,
-            "inner_px": 343.2,
-            "outer_px": 351.0,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 337.3,
-            "inner_px": 323.6,
-            "outer_px": 351.0,
-            "width_px": 27.399999999999977
+            "center_px": 411.09999999999997,
+            "inner_px": 393.9,
+            "outer_px": 428.29999999999995,
+            "width_px": 34.39999999999998
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         }
@@ -506,37 +510,38 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 390.0,
+      "outer_content_radius_px": 428.29999999999995,
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -13.162499999999966,
+          "anchor_radius_px": 376.83750000000003,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "inside"
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
           "resolved_width_px": 18.525,
@@ -545,39 +550,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -39.0,
-          "anchor_radius_px": 351.0,
+          "anchor_offset_px": 3.8999999999999773,
+          "anchor_radius_px": 393.9,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 347.1,
-            "inner_px": 343.2,
-            "outer_px": 351.0,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 347.1,
-            "inner_px": 343.2,
-            "outer_px": 351.0,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 337.3,
-            "inner_px": 323.6,
-            "outer_px": 351.0,
-            "width_px": 27.399999999999977
+            "center_px": 411.09999999999997,
+            "inner_px": 393.9,
+            "outer_px": 428.29999999999995,
+            "width_px": 34.39999999999998
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
@@ -658,37 +663,38 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 390.0,
+      "outer_content_radius_px": 428.29999999999995,
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -13.162499999999966,
+          "anchor_radius_px": 376.83750000000003,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "inside"
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
           "resolved_width_px": 18.525,
@@ -697,39 +703,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -39.0,
-          "anchor_radius_px": 351.0,
+          "anchor_offset_px": 3.8999999999999773,
+          "anchor_radius_px": 393.9,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 347.1,
-            "inner_px": 343.2,
-            "outer_px": 351.0,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 347.1,
-            "inner_px": 343.2,
-            "outer_px": 351.0,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 337.3,
-            "inner_px": 323.6,
-            "outer_px": 351.0,
-            "width_px": 27.399999999999977
+            "center_px": 411.09999999999997,
+            "inner_px": 393.9,
+            "outer_px": 428.29999999999995,
+            "width_px": 34.39999999999998
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
@@ -843,7 +849,7 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 408.525,
+      "outer_content_radius_px": 448.775,
       "preset": "middle",
       "slots": [
         {
@@ -852,29 +858,30 @@
           "compressed": false,
           "draw_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
           "params": {
-            "lane_direction": "split"
+            "lane_direction": "split",
+            "stack_preset": "middle"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
           "resolved_width_px": 18.525,
           "side": "overlay",
@@ -882,39 +889,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -27.299999999999955,
-          "anchor_radius_px": 362.70000000000005,
+          "anchor_offset_px": 24.374999999999943,
+          "anchor_radius_px": 414.37499999999994,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 358.80000000000007,
-            "inner_px": 354.90000000000003,
-            "outer_px": 362.70000000000005,
+            "center_px": 418.275,
+            "inner_px": 414.37499999999994,
+            "outer_px": 422.17499999999995,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 358.80000000000007,
-            "inner_px": 354.90000000000003,
-            "outer_px": 362.70000000000005,
+            "center_px": 418.275,
+            "inner_px": 414.37499999999994,
+            "outer_px": 422.17499999999995,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 349.00000000000006,
-            "inner_px": 335.30000000000007,
-            "outer_px": 362.70000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 431.57499999999993,
+            "inner_px": 414.37499999999994,
+            "outer_px": 448.775,
+            "width_px": 34.400000000000034
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         }
@@ -925,7 +932,7 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 408.525,
+      "outer_content_radius_px": 448.775,
       "preset": "middle",
       "slots": [
         {
@@ -934,29 +941,30 @@
           "compressed": false,
           "draw_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
           "params": {
-            "lane_direction": "split"
+            "lane_direction": "split",
+            "stack_preset": "middle"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
           "resolved_width_px": 18.525,
           "side": "overlay",
@@ -964,39 +972,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -27.299999999999955,
-          "anchor_radius_px": 362.70000000000005,
+          "anchor_offset_px": 24.374999999999943,
+          "anchor_radius_px": 414.37499999999994,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 358.80000000000007,
-            "inner_px": 354.90000000000003,
-            "outer_px": 362.70000000000005,
+            "center_px": 418.275,
+            "inner_px": 414.37499999999994,
+            "outer_px": 422.17499999999995,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 358.80000000000007,
-            "inner_px": 354.90000000000003,
-            "outer_px": 362.70000000000005,
+            "center_px": 418.275,
+            "inner_px": 414.37499999999994,
+            "outer_px": 422.17499999999995,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 349.00000000000006,
-            "inner_px": 335.30000000000007,
-            "outer_px": 362.70000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 431.57499999999993,
+            "inner_px": 414.37499999999994,
+            "outer_px": 448.775,
+            "width_px": 34.400000000000034
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
@@ -1077,7 +1085,7 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 408.525,
+      "outer_content_radius_px": 448.775,
       "preset": "middle",
       "slots": [
         {
@@ -1086,29 +1094,30 @@
           "compressed": false,
           "draw_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
           "params": {
-            "lane_direction": "split"
+            "lane_direction": "split",
+            "stack_preset": "middle"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
           "resolved_width_px": 18.525,
           "side": "overlay",
@@ -1116,39 +1125,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -27.299999999999955,
-          "anchor_radius_px": 362.70000000000005,
+          "anchor_offset_px": 24.374999999999943,
+          "anchor_radius_px": 414.37499999999994,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 358.80000000000007,
-            "inner_px": 354.90000000000003,
-            "outer_px": 362.70000000000005,
+            "center_px": 418.275,
+            "inner_px": 414.37499999999994,
+            "outer_px": 422.17499999999995,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 358.80000000000007,
-            "inner_px": 354.90000000000003,
-            "outer_px": 362.70000000000005,
+            "center_px": 418.275,
+            "inner_px": 414.37499999999994,
+            "outer_px": 422.17499999999995,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 349.00000000000006,
-            "inner_px": 335.30000000000007,
-            "outer_px": 362.70000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 431.57499999999993,
+            "inner_px": 414.37499999999994,
+            "outer_px": 448.775,
+            "width_px": 34.400000000000034
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
@@ -1262,7 +1271,7 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 399.2625,
+      "outer_content_radius_px": 437.5625,
       "preset": "middle",
       "slots": [
         {
@@ -1275,7 +1284,7 @@
             "outer_px": 399.2625,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
@@ -1285,7 +1294,8 @@
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "split"
+            "lane_direction": "split",
+            "stack_preset": "middle"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
@@ -1301,39 +1311,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -15.600000000000023,
-          "anchor_radius_px": 374.4,
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 370.5,
-            "inner_px": 366.59999999999997,
-            "outer_px": 374.4,
+            "center_px": 407.0625,
+            "inner_px": 403.16249999999997,
+            "outer_px": 410.9625,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 370.5,
-            "inner_px": 366.59999999999997,
-            "outer_px": 374.4,
+            "center_px": 407.0625,
+            "inner_px": 403.16249999999997,
+            "outer_px": 410.9625,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 360.7,
-            "inner_px": 347.0,
-            "outer_px": 374.4,
-            "width_px": 27.399999999999977
+            "center_px": 420.36249999999995,
+            "inner_px": 403.16249999999997,
+            "outer_px": 437.5625,
+            "width_px": 34.400000000000034
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         }
@@ -1344,7 +1354,7 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 399.2625,
+      "outer_content_radius_px": 437.5625,
       "preset": "middle",
       "slots": [
         {
@@ -1357,7 +1367,7 @@
             "outer_px": 399.2625,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
@@ -1367,7 +1377,8 @@
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "split"
+            "lane_direction": "split",
+            "stack_preset": "middle"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
@@ -1383,39 +1394,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -15.600000000000023,
-          "anchor_radius_px": 374.4,
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 370.5,
-            "inner_px": 366.59999999999997,
-            "outer_px": 374.4,
+            "center_px": 407.0625,
+            "inner_px": 403.16249999999997,
+            "outer_px": 410.9625,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 370.5,
-            "inner_px": 366.59999999999997,
-            "outer_px": 374.4,
+            "center_px": 407.0625,
+            "inner_px": 403.16249999999997,
+            "outer_px": 410.9625,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 360.7,
-            "inner_px": 347.0,
-            "outer_px": 374.4,
-            "width_px": 27.399999999999977
+            "center_px": 420.36249999999995,
+            "inner_px": 403.16249999999997,
+            "outer_px": 437.5625,
+            "width_px": 34.400000000000034
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
@@ -1496,7 +1507,7 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 399.2625,
+      "outer_content_radius_px": 437.5625,
       "preset": "middle",
       "slots": [
         {
@@ -1509,7 +1520,7 @@
             "outer_px": 399.2625,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
@@ -1519,7 +1530,8 @@
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "split"
+            "lane_direction": "split",
+            "stack_preset": "middle"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
@@ -1535,39 +1547,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -15.600000000000023,
-          "anchor_radius_px": 374.4,
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 370.5,
-            "inner_px": 366.59999999999997,
-            "outer_px": 374.4,
+            "center_px": 407.0625,
+            "inner_px": 403.16249999999997,
+            "outer_px": 410.9625,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 370.5,
-            "inner_px": 366.59999999999997,
-            "outer_px": 374.4,
+            "center_px": 407.0625,
+            "inner_px": 403.16249999999997,
+            "outer_px": 410.9625,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 360.7,
-            "inner_px": 347.0,
-            "outer_px": 374.4,
-            "width_px": 27.399999999999977
+            "center_px": 420.36249999999995,
+            "inner_px": 403.16249999999997,
+            "outer_px": 437.5625,
+            "width_px": 34.400000000000034
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
@@ -1681,38 +1693,39 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 434.46,
+      "outer_content_radius_px": 434.84999999999997,
       "preset": "spreadout",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": 24.375,
+          "anchor_radius_px": 414.375,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
           "params": {
-            "lane_direction": "outside"
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
           "side": "outside",
@@ -1720,22 +1733,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -7.7999999999999545,
+          "anchor_radius_px": 382.20000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
           "params": {
@@ -1746,9 +1759,9 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 376.3,
-            "inner_px": 362.6,
-            "outer_px": 390.0,
+            "center_px": 368.50000000000006,
+            "inner_px": 354.80000000000007,
+            "outer_px": 382.20000000000005,
             "width_px": 27.399999999999977
           },
           "resolved_width_px": 7.800000000000007,
@@ -1763,38 +1776,39 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 434.46,
+      "outer_content_radius_px": 434.84999999999997,
       "preset": "spreadout",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": 24.375,
+          "anchor_radius_px": 414.375,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
           "params": {
-            "lane_direction": "outside"
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
           "side": "outside",
@@ -1802,22 +1816,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -7.7999999999999545,
+          "anchor_radius_px": 382.20000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
           "params": {
@@ -1828,9 +1842,9 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 376.3,
-            "inner_px": 362.6,
-            "outer_px": 390.0,
+            "center_px": 368.50000000000006,
+            "inner_px": 354.80000000000007,
+            "outer_px": 382.20000000000005,
             "width_px": 27.399999999999977
           },
           "resolved_width_px": 7.800000000000007,
@@ -1915,38 +1929,39 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 434.46,
+      "outer_content_radius_px": 434.84999999999997,
       "preset": "spreadout",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": 24.375,
+          "anchor_radius_px": 414.375,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
           "params": {
-            "lane_direction": "outside"
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
           "side": "outside",
@@ -1954,22 +1969,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -7.7999999999999545,
+          "anchor_radius_px": 382.20000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
           "params": {
@@ -1980,9 +1995,9 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 376.3,
-            "inner_px": 362.6,
-            "outer_px": 390.0,
+            "center_px": 368.50000000000006,
+            "inner_px": 354.80000000000007,
+            "outer_px": 382.20000000000005,
             "width_px": 27.399999999999977
           },
           "resolved_width_px": 7.800000000000007,
@@ -2100,37 +2115,38 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 415.935,
+      "outer_content_radius_px": 412.42499999999995,
       "preset": "spreadout",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "outside"
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
           "resolved_width_px": 18.525,
@@ -2139,22 +2155,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -7.7999999999999545,
+          "anchor_radius_px": 382.20000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
           "params": {
@@ -2165,9 +2181,9 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 376.3,
-            "inner_px": 362.6,
-            "outer_px": 390.0,
+            "center_px": 368.50000000000006,
+            "inner_px": 354.80000000000007,
+            "outer_px": 382.20000000000005,
             "width_px": 27.399999999999977
           },
           "resolved_width_px": 7.800000000000007,
@@ -2182,37 +2198,38 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 415.935,
+      "outer_content_radius_px": 412.42499999999995,
       "preset": "spreadout",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "outside"
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
           "resolved_width_px": 18.525,
@@ -2221,22 +2238,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -7.7999999999999545,
+          "anchor_radius_px": 382.20000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
           "params": {
@@ -2247,9 +2264,9 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 376.3,
-            "inner_px": 362.6,
-            "outer_px": 390.0,
+            "center_px": 368.50000000000006,
+            "inner_px": 354.80000000000007,
+            "outer_px": 382.20000000000005,
             "width_px": 27.399999999999977
           },
           "resolved_width_px": 7.800000000000007,
@@ -2334,37 +2351,38 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/MG1655.gbk",
-      "outer_content_radius_px": 415.935,
+      "outer_content_radius_px": 412.42499999999995,
       "preset": "spreadout",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "outside"
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
           "resolved_width_px": 18.525,
@@ -2373,22 +2391,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -7.7999999999999545,
+          "anchor_radius_px": 382.20000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
           "params": {
@@ -2399,9 +2417,9 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 376.3,
-            "inner_px": 362.6,
-            "outer_px": 390.0,
+            "center_px": 368.50000000000006,
+            "inner_px": 354.80000000000007,
+            "outer_px": 382.20000000000005,
             "width_px": 27.399999999999977
           },
           "resolved_width_px": 7.800000000000007,
@@ -2519,38 +2537,39 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 390.0,
+      "outer_content_radius_px": 428.29999999999995,
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -24.375,
+          "anchor_radius_px": 365.625,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
           "params": {
-            "lane_direction": "inside"
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
           "side": "inside",
@@ -2558,39 +2577,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -54.60000000000002,
-          "anchor_radius_px": 335.4,
+          "anchor_offset_px": 3.8999999999999773,
+          "anchor_radius_px": 393.9,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 331.5,
-            "inner_px": 327.59999999999997,
-            "outer_px": 335.4,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 331.5,
-            "inner_px": 327.59999999999997,
-            "outer_px": 335.4,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 321.7,
-            "inner_px": 308.0,
-            "outer_px": 335.4,
-            "width_px": 27.399999999999977
+            "center_px": 411.09999999999997,
+            "inner_px": 393.9,
+            "outer_px": 428.29999999999995,
+            "width_px": 34.39999999999998
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         }
@@ -2601,38 +2620,39 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 390.0,
+      "outer_content_radius_px": 428.29999999999995,
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -24.375,
+          "anchor_radius_px": 365.625,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
           "params": {
-            "lane_direction": "inside"
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
           "side": "inside",
@@ -2640,59 +2660,59 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -54.60000000000002,
-          "anchor_radius_px": 335.4,
+          "anchor_offset_px": 3.8999999999999773,
+          "anchor_radius_px": 393.9,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 331.5,
-            "inner_px": 327.59999999999997,
-            "outer_px": 335.4,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 331.5,
-            "inner_px": 327.59999999999997,
-            "outer_px": 335.4,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 321.7,
-            "inner_px": 308.0,
-            "outer_px": 335.4,
-            "width_px": 27.399999999999977
+            "center_px": 411.09999999999997,
+            "inner_px": 393.9,
+            "outer_px": 428.29999999999995,
+            "width_px": 34.39999999999998
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
         {
-          "anchor_offset_px": -119.05000000000001,
-          "anchor_radius_px": 270.95,
+          "anchor_offset_px": -117.0,
+          "anchor_radius_px": 273.0,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 270.95,
-            "inner_px": 233.89999999999998,
-            "outer_px": 308.0,
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
             "width_px": 74.10000000000002
           },
           "explicit_anchor": true,
           "explicit_width": true,
           "id": "gc_content",
           "packing_band_px": {
-            "center_px": 270.95,
-            "inner_px": 233.89999999999998,
-            "outer_px": 308.0,
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
             "width_px": 74.10000000000002
           },
           "params": {
@@ -2701,9 +2721,9 @@
           "renderer": "dinucleotide_content",
           "requested_width_px": 74.1,
           "reserved_band_px": {
-            "center_px": 270.95,
-            "inner_px": 233.89999999999998,
-            "outer_px": 308.0,
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
             "width_px": 74.10000000000002
           },
           "resolved_width_px": 74.1,
@@ -2712,22 +2732,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -197.05,
-          "anchor_radius_px": 192.95,
+          "anchor_offset_px": -195.0,
+          "anchor_radius_px": 195.0,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 192.95,
-            "inner_px": 155.89999999999998,
-            "outer_px": 230.0,
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
             "width_px": 74.10000000000002
           },
           "explicit_anchor": true,
           "explicit_width": true,
           "id": "gc_skew",
           "packing_band_px": {
-            "center_px": 192.95,
-            "inner_px": 155.89999999999998,
-            "outer_px": 230.0,
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
             "width_px": 74.10000000000002
           },
           "params": {
@@ -2736,9 +2756,9 @@
           "renderer": "dinucleotide_skew",
           "requested_width_px": 74.1,
           "reserved_band_px": {
-            "center_px": 192.95,
-            "inner_px": 155.89999999999998,
-            "outer_px": 230.0,
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
             "width_px": 74.10000000000002
           },
           "resolved_width_px": 74.1,
@@ -2753,38 +2773,39 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 390.0,
+      "outer_content_radius_px": 428.29999999999995,
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -24.375,
+          "anchor_radius_px": 365.625,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
           "params": {
-            "lane_direction": "inside"
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 362.2125,
-            "inner_px": 343.6875,
-            "outer_px": 380.7375,
-            "width_px": 37.05000000000001
+            "center_px": 365.625,
+            "inner_px": 345.15,
+            "outer_px": 386.09999999999997,
+            "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
           "side": "inside",
@@ -2792,39 +2813,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -54.60000000000002,
-          "anchor_radius_px": 335.4,
+          "anchor_offset_px": 3.8999999999999773,
+          "anchor_radius_px": 393.9,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 331.5,
-            "inner_px": 327.59999999999997,
-            "outer_px": 335.4,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 331.5,
-            "inner_px": 327.59999999999997,
-            "outer_px": 335.4,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 321.7,
-            "inner_px": 308.0,
-            "outer_px": 335.4,
-            "width_px": 27.399999999999977
+            "center_px": 411.09999999999997,
+            "inner_px": 393.9,
+            "outer_px": 428.29999999999995,
+            "width_px": 34.39999999999998
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
@@ -2938,37 +2959,38 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 390.0,
+      "outer_content_radius_px": 428.29999999999995,
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -13.162499999999966,
+          "anchor_radius_px": 376.83750000000003,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "inside"
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
           "resolved_width_px": 18.525,
@@ -2977,39 +2999,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -39.0,
-          "anchor_radius_px": 351.0,
+          "anchor_offset_px": 3.8999999999999773,
+          "anchor_radius_px": 393.9,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 347.1,
-            "inner_px": 343.2,
-            "outer_px": 351.0,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 347.1,
-            "inner_px": 343.2,
-            "outer_px": 351.0,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 337.3,
-            "inner_px": 323.6,
-            "outer_px": 351.0,
-            "width_px": 27.399999999999977
+            "center_px": 411.09999999999997,
+            "inner_px": 393.9,
+            "outer_px": 428.29999999999995,
+            "width_px": 34.39999999999998
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         }
@@ -3020,37 +3042,38 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 390.0,
+      "outer_content_radius_px": 428.29999999999995,
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -13.162499999999966,
+          "anchor_radius_px": 376.83750000000003,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "inside"
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
           "resolved_width_px": 18.525,
@@ -3059,39 +3082,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -39.0,
-          "anchor_radius_px": 351.0,
+          "anchor_offset_px": 3.8999999999999773,
+          "anchor_radius_px": 393.9,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 347.1,
-            "inner_px": 343.2,
-            "outer_px": 351.0,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 347.1,
-            "inner_px": 343.2,
-            "outer_px": 351.0,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 337.3,
-            "inner_px": 323.6,
-            "outer_px": 351.0,
-            "width_px": 27.399999999999977
+            "center_px": 411.09999999999997,
+            "inner_px": 393.9,
+            "outer_px": 428.29999999999995,
+            "width_px": 34.39999999999998
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
@@ -3172,37 +3195,38 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 390.0,
+      "outer_content_radius_px": 428.29999999999995,
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -13.162499999999966,
+          "anchor_radius_px": 376.83750000000003,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "inside"
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 376.10625,
-            "inner_px": 366.84375,
-            "outer_px": 385.36875,
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
             "width_px": 18.524999999999977
           },
           "resolved_width_px": 18.525,
@@ -3211,39 +3235,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -39.0,
-          "anchor_radius_px": 351.0,
+          "anchor_offset_px": 3.8999999999999773,
+          "anchor_radius_px": 393.9,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 347.1,
-            "inner_px": 343.2,
-            "outer_px": 351.0,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 347.1,
-            "inner_px": 343.2,
-            "outer_px": 351.0,
+            "center_px": 397.79999999999995,
+            "inner_px": 393.9,
+            "outer_px": 401.7,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 337.3,
-            "inner_px": 323.6,
-            "outer_px": 351.0,
-            "width_px": 27.399999999999977
+            "center_px": 411.09999999999997,
+            "inner_px": 393.9,
+            "outer_px": 428.29999999999995,
+            "width_px": 34.39999999999998
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
@@ -3357,7 +3381,7 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 408.525,
+      "outer_content_radius_px": 448.775,
       "preset": "middle",
       "slots": [
         {
@@ -3366,29 +3390,30 @@
           "compressed": false,
           "draw_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
           "params": {
-            "lane_direction": "split"
+            "lane_direction": "split",
+            "stack_preset": "middle"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
           "resolved_width_px": 18.525,
           "side": "overlay",
@@ -3396,39 +3421,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -27.299999999999955,
-          "anchor_radius_px": 362.70000000000005,
+          "anchor_offset_px": 24.374999999999943,
+          "anchor_radius_px": 414.37499999999994,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 358.80000000000007,
-            "inner_px": 354.90000000000003,
-            "outer_px": 362.70000000000005,
+            "center_px": 418.275,
+            "inner_px": 414.37499999999994,
+            "outer_px": 422.17499999999995,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 358.80000000000007,
-            "inner_px": 354.90000000000003,
-            "outer_px": 362.70000000000005,
+            "center_px": 418.275,
+            "inner_px": 414.37499999999994,
+            "outer_px": 422.17499999999995,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 349.00000000000006,
-            "inner_px": 335.30000000000007,
-            "outer_px": 362.70000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 431.57499999999993,
+            "inner_px": 414.37499999999994,
+            "outer_px": 448.775,
+            "width_px": 34.400000000000034
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         }
@@ -3439,7 +3464,7 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 408.525,
+      "outer_content_radius_px": 448.775,
       "preset": "middle",
       "slots": [
         {
@@ -3448,29 +3473,30 @@
           "compressed": false,
           "draw_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
           "params": {
-            "lane_direction": "split"
+            "lane_direction": "split",
+            "stack_preset": "middle"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
           "resolved_width_px": 18.525,
           "side": "overlay",
@@ -3478,39 +3504,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -27.299999999999955,
-          "anchor_radius_px": 362.70000000000005,
+          "anchor_offset_px": 24.374999999999943,
+          "anchor_radius_px": 414.37499999999994,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 358.80000000000007,
-            "inner_px": 354.90000000000003,
-            "outer_px": 362.70000000000005,
+            "center_px": 418.275,
+            "inner_px": 414.37499999999994,
+            "outer_px": 422.17499999999995,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 358.80000000000007,
-            "inner_px": 354.90000000000003,
-            "outer_px": 362.70000000000005,
+            "center_px": 418.275,
+            "inner_px": 414.37499999999994,
+            "outer_px": 422.17499999999995,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 349.00000000000006,
-            "inner_px": 335.30000000000007,
-            "outer_px": 362.70000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 431.57499999999993,
+            "inner_px": 414.37499999999994,
+            "outer_px": 448.775,
+            "width_px": 34.400000000000034
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
@@ -3591,7 +3617,7 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 408.525,
+      "outer_content_radius_px": 448.775,
       "preset": "middle",
       "slots": [
         {
@@ -3600,29 +3626,30 @@
           "compressed": false,
           "draw_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
           "params": {
-            "lane_direction": "split"
+            "lane_direction": "split",
+            "stack_preset": "middle"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
             "center_px": 390.0,
-            "inner_px": 371.475,
-            "outer_px": 408.525,
-            "width_px": 37.049999999999955
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
           },
           "resolved_width_px": 18.525,
           "side": "overlay",
@@ -3630,39 +3657,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -27.299999999999955,
-          "anchor_radius_px": 362.70000000000005,
+          "anchor_offset_px": 24.374999999999943,
+          "anchor_radius_px": 414.37499999999994,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 358.80000000000007,
-            "inner_px": 354.90000000000003,
-            "outer_px": 362.70000000000005,
+            "center_px": 418.275,
+            "inner_px": 414.37499999999994,
+            "outer_px": 422.17499999999995,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 358.80000000000007,
-            "inner_px": 354.90000000000003,
-            "outer_px": 362.70000000000005,
+            "center_px": 418.275,
+            "inner_px": 414.37499999999994,
+            "outer_px": 422.17499999999995,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 349.00000000000006,
-            "inner_px": 335.30000000000007,
-            "outer_px": 362.70000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 431.57499999999993,
+            "inner_px": 414.37499999999994,
+            "outer_px": 448.775,
+            "width_px": 34.400000000000034
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
@@ -3776,7 +3803,7 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 399.2625,
+      "outer_content_radius_px": 437.5625,
       "preset": "middle",
       "slots": [
         {
@@ -3789,7 +3816,7 @@
             "outer_px": 399.2625,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
@@ -3799,7 +3826,8 @@
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "split"
+            "lane_direction": "split",
+            "stack_preset": "middle"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
@@ -3815,39 +3843,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -15.600000000000023,
-          "anchor_radius_px": 374.4,
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 370.5,
-            "inner_px": 366.59999999999997,
-            "outer_px": 374.4,
+            "center_px": 407.0625,
+            "inner_px": 403.16249999999997,
+            "outer_px": 410.9625,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 370.5,
-            "inner_px": 366.59999999999997,
-            "outer_px": 374.4,
+            "center_px": 407.0625,
+            "inner_px": 403.16249999999997,
+            "outer_px": 410.9625,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 360.7,
-            "inner_px": 347.0,
-            "outer_px": 374.4,
-            "width_px": 27.399999999999977
+            "center_px": 420.36249999999995,
+            "inner_px": 403.16249999999997,
+            "outer_px": 437.5625,
+            "width_px": 34.400000000000034
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         }
@@ -3858,7 +3886,7 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 399.2625,
+      "outer_content_radius_px": 437.5625,
       "preset": "middle",
       "slots": [
         {
@@ -3871,7 +3899,7 @@
             "outer_px": 399.2625,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
@@ -3881,7 +3909,8 @@
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "split"
+            "lane_direction": "split",
+            "stack_preset": "middle"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
@@ -3897,39 +3926,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -15.600000000000023,
-          "anchor_radius_px": 374.4,
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 370.5,
-            "inner_px": 366.59999999999997,
-            "outer_px": 374.4,
+            "center_px": 407.0625,
+            "inner_px": 403.16249999999997,
+            "outer_px": 410.9625,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 370.5,
-            "inner_px": 366.59999999999997,
-            "outer_px": 374.4,
+            "center_px": 407.0625,
+            "inner_px": 403.16249999999997,
+            "outer_px": 410.9625,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 360.7,
-            "inner_px": 347.0,
-            "outer_px": 374.4,
-            "width_px": 27.399999999999977
+            "center_px": 420.36249999999995,
+            "inner_px": 403.16249999999997,
+            "outer_px": 437.5625,
+            "width_px": 34.400000000000034
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
@@ -4010,7 +4039,7 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 399.2625,
+      "outer_content_radius_px": 437.5625,
       "preset": "middle",
       "slots": [
         {
@@ -4023,7 +4052,7 @@
             "outer_px": 399.2625,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
@@ -4033,7 +4062,8 @@
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "split"
+            "lane_direction": "split",
+            "stack_preset": "middle"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
@@ -4049,39 +4079,39 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -15.600000000000023,
-          "anchor_radius_px": 374.4,
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 370.5,
-            "inner_px": 366.59999999999997,
-            "outer_px": 374.4,
+            "center_px": 407.0625,
+            "inner_px": 403.16249999999997,
+            "outer_px": 410.9625,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 370.5,
-            "inner_px": 366.59999999999997,
-            "outer_px": 374.4,
+            "center_px": 407.0625,
+            "inner_px": 403.16249999999997,
+            "outer_px": 410.9625,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
+            "label_side": "outside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_side": "outside"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 360.7,
-            "inner_px": 347.0,
-            "outer_px": 374.4,
-            "width_px": 27.399999999999977
+            "center_px": 420.36249999999995,
+            "inner_px": 403.16249999999997,
+            "outer_px": 437.5625,
+            "width_px": 34.400000000000034
           },
           "resolved_width_px": 7.800000000000007,
-          "side": "inside",
+          "side": "outside",
           "slot_index": 1,
           "z": 0
         },
@@ -4195,38 +4225,39 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 434.46,
+      "outer_content_radius_px": 434.84999999999997,
       "preset": "spreadout",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": 24.375,
+          "anchor_radius_px": 414.375,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
           "params": {
-            "lane_direction": "outside"
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
           "side": "outside",
@@ -4234,22 +4265,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -7.7999999999999545,
+          "anchor_radius_px": 382.20000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
           "params": {
@@ -4260,9 +4291,9 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 376.3,
-            "inner_px": 362.6,
-            "outer_px": 390.0,
+            "center_px": 368.50000000000006,
+            "inner_px": 354.80000000000007,
+            "outer_px": 382.20000000000005,
             "width_px": 27.399999999999977
           },
           "resolved_width_px": 7.800000000000007,
@@ -4277,38 +4308,39 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 434.46,
+      "outer_content_radius_px": 434.84999999999997,
       "preset": "spreadout",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": 24.375,
+          "anchor_radius_px": 414.375,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
           "params": {
-            "lane_direction": "outside"
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
           "side": "outside",
@@ -4316,22 +4348,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -7.7999999999999545,
+          "anchor_radius_px": 382.20000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
           "params": {
@@ -4342,9 +4374,9 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 376.3,
-            "inner_px": 362.6,
-            "outer_px": 390.0,
+            "center_px": 368.50000000000006,
+            "inner_px": 354.80000000000007,
+            "outer_px": 382.20000000000005,
             "width_px": 27.399999999999977
           },
           "resolved_width_px": 7.800000000000007,
@@ -4429,38 +4461,39 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 434.46,
+      "outer_content_radius_px": 434.84999999999997,
       "preset": "spreadout",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": 24.375,
+          "anchor_radius_px": 414.375,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
           "params": {
-            "lane_direction": "outside"
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 415.935,
-            "inner_px": 397.41,
-            "outer_px": 434.46,
-            "width_px": 37.049999999999955
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
           "side": "outside",
@@ -4468,22 +4501,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -7.7999999999999545,
+          "anchor_radius_px": 382.20000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
           "params": {
@@ -4494,9 +4527,9 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 376.3,
-            "inner_px": 362.6,
-            "outer_px": 390.0,
+            "center_px": 368.50000000000006,
+            "inner_px": 354.80000000000007,
+            "outer_px": 382.20000000000005,
             "width_px": 27.399999999999977
           },
           "resolved_width_px": 7.800000000000007,
@@ -4614,37 +4647,38 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 415.935,
+      "outer_content_radius_px": 412.42499999999995,
       "preset": "spreadout",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "outside"
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
           "resolved_width_px": 18.525,
@@ -4653,22 +4687,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -7.7999999999999545,
+          "anchor_radius_px": 382.20000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
           "params": {
@@ -4679,9 +4713,9 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 376.3,
-            "inner_px": 362.6,
-            "outer_px": 390.0,
+            "center_px": 368.50000000000006,
+            "inner_px": 354.80000000000007,
+            "outer_px": 382.20000000000005,
             "width_px": 27.399999999999977
           },
           "resolved_width_px": 7.800000000000007,
@@ -4696,37 +4730,38 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 415.935,
+      "outer_content_radius_px": 412.42499999999995,
       "preset": "spreadout",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "outside"
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
           "resolved_width_px": 18.525,
@@ -4735,22 +4770,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -7.7999999999999545,
+          "anchor_radius_px": 382.20000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
           "params": {
@@ -4761,9 +4796,9 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 376.3,
-            "inner_px": 362.6,
-            "outer_px": 390.0,
+            "center_px": 368.50000000000006,
+            "inner_px": 354.80000000000007,
+            "outer_px": 382.20000000000005,
             "width_px": 27.399999999999977
           },
           "resolved_width_px": 7.800000000000007,
@@ -4848,37 +4883,38 @@
     {
       "axis_radius_px": 390.0,
       "input": "tests/test_inputs/AP027280.gb",
-      "outer_content_radius_px": 415.935,
+      "outer_content_radius_px": 412.42499999999995,
       "preset": "spreadout",
       "slots": [
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "features",
           "packing_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
           "params": {
-            "lane_direction": "outside"
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
           },
           "renderer": "features",
           "requested_width_px": 18.525,
           "reserved_band_px": {
-            "center_px": 406.6725,
-            "inner_px": 397.41,
-            "outer_px": 415.935,
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
             "width_px": 18.524999999999977
           },
           "resolved_width_px": 18.525,
@@ -4887,22 +4923,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": 0.0,
-          "anchor_radius_px": 390.0,
+          "anchor_offset_px": -7.7999999999999545,
+          "anchor_radius_px": 382.20000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
-          "explicit_anchor": true,
+          "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 386.1,
-            "inner_px": 382.2,
-            "outer_px": 390.0,
+            "center_px": 378.30000000000007,
+            "inner_px": 374.40000000000003,
+            "outer_px": 382.20000000000005,
             "width_px": 7.800000000000011
           },
           "params": {
@@ -4913,9 +4949,9 @@
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 376.3,
-            "inner_px": 362.6,
-            "outer_px": 390.0,
+            "center_px": 368.50000000000006,
+            "inner_px": 354.80000000000007,
+            "outer_px": 382.20000000000005,
             "width_px": 27.399999999999977
           },
           "resolved_width_px": 7.800000000000007,

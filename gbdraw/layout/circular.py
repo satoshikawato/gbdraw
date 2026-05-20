@@ -40,59 +40,55 @@ def calculate_feature_position_factors_circular(
     cds_ratio = float(cds_ratio)
     offset = float(offset)
 
-    # Calculate track offset for resolve_overlaps
-    # Each track is spaced by cds_ratio * TRACK_SPACING_MULTIPLIER
-    TRACK_SPACING_MULTIPLIER = 1.2
-    track_offset = abs(track_id) * cds_ratio * TRACK_SPACING_MULTIPLIER
+    lane_width = cds_ratio
+    lane_spacing = 0.01
+    lane_step = lane_width + lane_spacing
+
+    def factors_from_center(center: float) -> list[float]:
+        return [
+            center - (0.5 * lane_width),
+            center,
+            center + (0.5 * lane_width),
+        ]
 
     if strandedness is True:
-        # With strand separation: resolve_overlaps is NOT supported
-        # track_id is ignored
         if track_type == "middle":
-            factors_positive: list[float] = [BASE, BASE + cds_ratio * 0.5, BASE + cds_ratio]
-            factors_negative: list[float] = [BASE - cds_ratio, BASE - cds_ratio * 0.5, BASE]
+            center_positive = BASE + (0.5 * lane_spacing) + (0.5 * lane_width)
+            center_negative = BASE - (0.5 * lane_spacing) - (0.5 * lane_width)
         elif track_type == "spreadout":
-            factors_positive = [BASE + cds_ratio * 1.4, BASE + cds_ratio * 1.9, BASE + cds_ratio * 2.4]
-            factors_negative = [BASE + cds_ratio * 0.4, BASE + cds_ratio * 0.9, BASE + cds_ratio * 1.4]
+            center_positive = BASE + lane_spacing + (0.5 * lane_width)
+            center_negative = center_positive + lane_step
         elif track_type == "tuckin":
-            factors_positive = [BASE - cds_ratio * 1.5, BASE - cds_ratio * 1.0, BASE - cds_ratio * 0.5]
-            factors_negative = [BASE - cds_ratio * 2.5, BASE - cds_ratio * 2.0, BASE - cds_ratio * 1.5]
+            center_positive = BASE - lane_spacing - (0.5 * lane_width)
+            center_negative = center_positive - lane_step
         else:
-            factors_positive = [BASE, BASE + cds_ratio * 0.5, BASE + cds_ratio]
-            factors_negative = [BASE - cds_ratio, BASE - cds_ratio * 0.5, BASE]
+            center_positive = BASE + (0.5 * lane_spacing) + (0.5 * lane_width)
+            center_negative = BASE - (0.5 * lane_spacing) - (0.5 * lane_width)
 
         if strand == "positive":
-            factors: list[float] = [x + offset for x in factors_positive]
+            factors = factors_from_center(center_positive + offset)
         else:
-            factors = [x - offset for x in factors_negative]
+            factors = factors_from_center(center_negative - offset)
 
         return factors
 
     else:
-        # No strand separation: resolve_overlaps is supported
         if track_type == "middle":
-            base_factors = [BASE - cds_ratio * 0.5, BASE, BASE + cds_ratio * 0.5]
             if track_id != 0:
-                # In middle layout, negative strand overlaps are displaced inward while
-                # positive/undefined are displaced outward.
-                if strand == "negative":
-                    base_factors = [x - track_offset for x in base_factors]
+                if int(track_id) < 0 or strand == "negative":
+                    center = BASE - (abs(track_id) * lane_step)
                 else:
-                    base_factors = [x + track_offset for x in base_factors]
+                    center = BASE + (abs(track_id) * lane_step)
+            else:
+                center = BASE
         elif track_type == "spreadout":
-            base_factors = [BASE + cds_ratio * 0.4, BASE + cds_ratio * 0.9, BASE + cds_ratio * 1.4]
-            # resolve_overlaps: push overlapping features OUTWARD
-            if track_id != 0:
-                base_factors = [x + track_offset for x in base_factors]
+            center = BASE + lane_spacing + (0.5 * lane_width) + (abs(track_id) * lane_step)
         elif track_type == "tuckin":
-            base_factors = [BASE - cds_ratio * 1.2, BASE - cds_ratio * 0.7, BASE - cds_ratio * 0.2]
-            # resolve_overlaps: push overlapping features INWARD (toward center)
-            if track_id != 0:
-                base_factors = [x - track_offset for x in base_factors]
+            center = BASE - lane_spacing - (0.5 * lane_width) - (abs(track_id) * lane_step)
         else:
-            base_factors = [BASE - cds_ratio * 0.5, BASE, BASE + cds_ratio * 0.5]
+            center = BASE
 
-        return [x for x in base_factors]
+        return factors_from_center(center)
 
 
 __all__ = ["calculate_feature_position_factors_circular"]

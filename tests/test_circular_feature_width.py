@@ -336,6 +336,7 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         precalculated_labels=None,
         feature_track_ratio_factor_override=None,
         feature_anchor_radius_px=None,
+        **kwargs,
     ):
         captured["labels_outer_arena"] = outer_arena
         captured["labels_feature_ratio"] = feature_track_ratio_factor_override
@@ -453,6 +454,7 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
         precomputed_feature_dict=None,
         precalculated_labels=None,
         feature_track_ratio_factor_override=None,
+        **kwargs,
     ):
         captured["labels_outer_arena"] = outer_arena
         return canvas
@@ -982,7 +984,7 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
         bool(cfg.canvas.strandedness),
     )
     tick_annulus = (ticks_center * tick_min_ratio, ticks_center * tick_max_ratio)
-    assert _annulus_overlaps_band(tick_annulus, widened_band)
+    assert not _annulus_overlaps_band(tick_annulus, widened_band)
 
 
 @pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
@@ -1030,6 +1032,11 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
 
     def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
         captured["ticks"] = radius_override
+        captured["radial_layout"] = canvas_config.circular_radial_layout
+        captured["tick_label_side"] = kwargs.get("label_side")
+        captured["tick_side"] = kwargs.get("tick_side")
+        captured["tick_length_px"] = kwargs.get("tick_length_px")
+        captured["tick_track_channel_override"] = kwargs.get("tick_track_channel_override")
         return canvas
 
     def fake_add_gc_content_group_on_canvas(
@@ -1090,35 +1097,21 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
         legend="none",
     )
 
-    ticks_center = float(captured.get("ticks") if captured.get("ticks") is not None else base_radius)
-    tick_annulus = get_circular_tick_path_radius_bounds(
-        center_radius_px=ticks_center,
-        total_len=len(record.seq),
-        size="large",
-        track_type=str(cfg.canvas.circular.track_type),
-        strandedness=bool(cfg.canvas.strandedness),
-        tick_track_channel_override=captured.get("tick_track_channel_override"),
-        tick_side=str(captured.get("tick_side") or "legacy"),
-        tick_length_px=captured.get("tick_length_px"),
-        length_reference_radius_px=base_radius,
+    tick_layout = captured["radial_layout"].ticks
+    assert tick_layout is not None
+    tick_annulus = (
+        float(tick_layout.tick_band_px.inner_px),
+        float(tick_layout.tick_band_px.outer_px),
     )
     assert not _annulus_overlaps_band(tick_annulus, all_feature_band)
 
-    tick_label_annulus = get_circular_tick_label_radius_bounds(
-        center_radius_px=ticks_center,
-        total_len=len(record.seq),
-        track_type=str(cfg.canvas.circular.track_type),
-        strandedness=bool(cfg.canvas.strandedness),
-        font_size=float(cfg.objects.ticks.tick_labels.font_size),
-        font_family=str(cfg.objects.text.font_family),
-        dpi=int(cfg.canvas.dpi),
-        manual_interval=cfg.objects.scale.interval,
-        tick_track_channel_override=captured.get("tick_track_channel_override"),
-        label_side=str(captured.get("tick_label_side") or "legacy"),
-        tick_side=str(captured.get("tick_side") or "legacy"),
-        tick_length_px=captured.get("tick_length_px"),
-        tick_width=float(cfg.objects.ticks.tick_width),
-        length_reference_radius_px=base_radius,
+    tick_label_annulus = (
+        (
+            float(tick_layout.label_band_px.inner_px),
+            float(tick_layout.label_band_px.outer_px),
+        )
+        if tick_layout.label_band_px is not None
+        else None
     )
     if tick_label_annulus is not None:
         assert not _annulus_overlaps_band(tick_label_annulus, all_feature_band)
@@ -1185,6 +1178,7 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
 
     def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
         captured["ticks"] = radius_override
+        captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
     def fake_add_gc_content_group_on_canvas(
@@ -1329,6 +1323,7 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
 
     def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
         captured["ticks"] = radius_override
+        captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
     def fake_add_gc_content_group_on_canvas(
@@ -1389,24 +1384,21 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
         legend="none",
     )
 
-    tick_min_ratio, tick_max_ratio = get_circular_tick_path_ratio_bounds(
-        len(record.seq),
-        str(cfg.canvas.circular.track_type),
-        bool(cfg.canvas.strandedness),
+    tick_layout = captured["radial_layout"].ticks
+    assert tick_layout is not None
+    tick_annulus = (
+        float(tick_layout.tick_band_px.inner_px),
+        float(tick_layout.tick_band_px.outer_px),
     )
-    ticks_center = float(captured.get("ticks") if captured.get("ticks") is not None else base_radius)
-    tick_annulus = (ticks_center * tick_min_ratio, ticks_center * tick_max_ratio)
     assert not _annulus_overlaps_band(tick_annulus, all_feature_band)
 
-    tick_label_annulus = get_circular_tick_label_radius_bounds(
-        center_radius_px=ticks_center,
-        total_len=len(record.seq),
-        track_type=str(cfg.canvas.circular.track_type),
-        strandedness=bool(cfg.canvas.strandedness),
-        font_size=float(cfg.objects.ticks.tick_labels.font_size),
-        font_family=str(cfg.objects.text.font_family),
-        dpi=int(cfg.canvas.dpi),
-        manual_interval=cfg.objects.scale.interval,
+    tick_label_annulus = (
+        (
+            float(tick_layout.label_band_px.inner_px),
+            float(tick_layout.label_band_px.outer_px),
+        )
+        if tick_layout.label_band_px is not None
+        else None
     )
     if tick_label_annulus is not None:
         assert not _annulus_overlaps_band(tick_label_annulus, all_feature_band)
@@ -1604,6 +1596,7 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
             precomputed_feature_dict=None,
             precalculated_labels=None,
             feature_track_ratio_factor_override=None,
+            **kwargs,
         ):
             captured["outer_arena"] = outer_arena
             return canvas

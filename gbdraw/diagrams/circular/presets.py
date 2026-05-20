@@ -168,7 +168,7 @@ def circular_feature_slot_defaults_for_preset(
     lane_direction = circular_feature_lane_direction_for_preset(normalized)
     return CircularFeatureSlotDefaults(
         lane_direction=lane_direction,
-        radius=_scalar_factor(1.0),
+        radius=None,
         width=_scalar_px(_default_feature_width_px(context)),
     )
 
@@ -185,11 +185,12 @@ def _tick_slot_for_preset(
         tick_track_channel_override=context.tick_track_channel_override,
     )
     tick_inner_ratio, tick_outer_ratio = sorted((float(tick_inner_ratio), float(tick_outer_ratio)))
-    tick_side = "inside" if tick_outer_ratio <= 1.0 else "outside"
-    anchor_ratio = tick_outer_ratio if tick_side == "inside" else tick_inner_ratio
+    stack_side = "inside" if preset == "spreadout" else "outside"
+    tick_side = stack_side
+    anchor_ratio = 1.0
     tick_width_px = max(0.0, (tick_outer_ratio - tick_inner_ratio) * base_radius)
 
-    label_side = "outside"
+    label_side = stack_side
     label_bounds = get_circular_tick_label_radius_bounds(
         center_radius_px=anchor_ratio * base_radius,
         total_len=int(context.total_length),
@@ -201,6 +202,7 @@ def _tick_slot_for_preset(
         manual_interval=context.cfg.objects.scale.interval,
         tick_track_channel_override=context.tick_track_channel_override,
         tick_width=float(context.cfg.objects.ticks.tick_width),
+        label_side=label_side,
         tick_side=tick_side,
         tick_length_px=tick_width_px,
         length_reference_radius_px=base_radius,
@@ -212,8 +214,8 @@ def _tick_slot_for_preset(
     return CircularTrackSlot(
         id="ticks",
         renderer="ticks",
-        side=tick_side,
-        radius=_scalar_factor(anchor_ratio),
+        side=stack_side,
+        radius=None,
         width=_scalar_px(tick_width_px),
         spacing=_scalar_px(max(1.0, 0.01 * base_radius)),
         params={
@@ -245,6 +247,7 @@ def circular_track_slots_for_preset(
                 reserve=True if feature_defaults.lane_direction == "split" else None,
                 params={
                     "lane_direction": feature_defaults.lane_direction,
+                    "stack_preset": normalized,
                 },
             )
         )
@@ -397,6 +400,8 @@ def _overlay_slot_on_preset_lane(
     context: CircularPresetContext,
 ) -> CircularTrackSlot:
     params = _inherited_params_for_slot(slot, params_slot)
+    if slot.side is None and renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS | {"ticks", "spacer"}:
+        params["_stack_side_auto"] = True
     side = slot.side
     if side is None and not (
         renderer == "features"
@@ -438,21 +443,6 @@ def circular_track_slots_from_preset_order(
     """
 
     normalized_preset = normalize_circular_track_preset(preset)
-    legacy_auto_mode = any(
-        slot.enabled
-        and _slot_requests_pure_auto(slot, _normalized_renderer(slot.renderer))
-        and _slot_uses_builtin_preset_lane(slot, _normalized_renderer(slot.renderer))
-        for slot in slots
-    )
-    if legacy_auto_mode:
-        return CircularPresetRadialPlan(
-            slots=tuple(
-                replace(slot, renderer=_normalized_renderer(slot.renderer))
-                for slot in slots
-            ),
-            preferred_anchor_slot_ids=frozenset(),
-        )
-
     preset_slots = tuple(circular_track_slots_for_preset(normalized_preset, context))
     preset_by_id = {str(slot.id): slot for slot in preset_slots}
     preset_by_renderer: dict[str, CircularTrackSlot] = {}

@@ -10,7 +10,11 @@ from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import DepthConfigurator
 from gbdraw.layout.circular_depth_axis import resolve_depth_axis_footprint
-from gbdraw.diagrams.circular.radial_layout import build_circular_feature_layout, resolve_circular_radial_layout
+from gbdraw.diagrams.circular.radial_layout import (
+    build_circular_feature_layout,
+    measure_circular_feature_stack,
+    resolve_circular_radial_layout,
+)
 from gbdraw.layout.circular import calculate_feature_position_factors_circular
 from gbdraw.tracks import CircularTrackSlot, ScalarSpec
 
@@ -18,6 +22,70 @@ from gbdraw.tracks import CircularTrackSlot, ScalarSpec
 class _Feature:
     def __init__(self, track_id: int) -> None:
         self.feature_track_id = track_id
+
+
+@pytest.mark.parametrize(
+    ("preset", "expected_center", "expected_inner", "expected_outer"),
+    [
+        ("tuckin", 93.0, 88.0, 98.0),
+        ("middle", 100.0, 95.0, 105.0),
+        ("spreadout", 107.0, 102.0, 112.0),
+    ],
+)
+def test_feature_stack_metrics_follow_preset_radius_rules(
+    preset: str,
+    expected_center: float,
+    expected_inner: float,
+    expected_outer: float,
+) -> None:
+    metrics = measure_circular_feature_stack(
+        axis_radius_px=100.0,
+        lane_width_px=10.0,
+        lane_spacing_px=2.0,
+        preset=preset,
+        strandedness=False,
+        track_ids=(0,),
+    )
+
+    assert metrics.lane_count == 1
+    assert metrics.band_width_px == pytest.approx(10.0)
+    assert metrics.center_radius_px == pytest.approx(expected_center)
+    assert metrics.inner_radius_px == pytest.approx(expected_inner)
+    assert metrics.outer_radius_px == pytest.approx(expected_outer)
+
+
+def test_stranded_feature_stack_lane_order_is_preset_deterministic() -> None:
+    tuckin = measure_circular_feature_stack(
+        axis_radius_px=100.0,
+        lane_width_px=10.0,
+        lane_spacing_px=2.0,
+        preset="tuckin",
+        strandedness=True,
+        track_ids=(-1, 0),
+    )
+    middle = measure_circular_feature_stack(
+        axis_radius_px=100.0,
+        lane_width_px=10.0,
+        lane_spacing_px=2.0,
+        preset="middle",
+        strandedness=True,
+        track_ids=(-1, 0),
+    )
+    spreadout = measure_circular_feature_stack(
+        axis_radius_px=100.0,
+        lane_width_px=10.0,
+        lane_spacing_px=2.0,
+        preset="spreadout",
+        strandedness=True,
+        track_ids=(-1, 0),
+    )
+
+    assert tuckin.lane_centers_by_track_id[-1] == pytest.approx(81.0)
+    assert tuckin.lane_centers_by_track_id[0] == pytest.approx(93.0)
+    assert middle.lane_centers_by_track_id[-1] == pytest.approx(94.0)
+    assert middle.lane_centers_by_track_id[0] == pytest.approx(106.0)
+    assert spreadout.lane_centers_by_track_id[0] == pytest.approx(107.0)
+    assert spreadout.lane_centers_by_track_id[-1] == pytest.approx(119.0)
 
 
 def test_middle_combined_feature_center_is_axis_radius() -> None:
@@ -65,8 +133,9 @@ def test_tuckin_combined_feature_lane_sits_close_to_axis() -> None:
     )
 
     assert layout is not None
-    assert layout.lanes_by_track_id[0].center_px == pytest.approx(390.0 - (0.75 * 74.1))
-    assert layout.lanes_by_track_id[0].outer_px == pytest.approx(390.0 - (0.25 * 74.1))
+    spacing_px = 0.01 * 390.0
+    assert layout.lanes_by_track_id[0].center_px == pytest.approx(390.0 - spacing_px - (0.5 * 74.1))
+    assert layout.lanes_by_track_id[0].outer_px == pytest.approx(390.0 - spacing_px)
 
 
 def test_tuckin_combined_feature_position_factors_sit_close_to_axis() -> None:
@@ -81,7 +150,7 @@ def test_tuckin_combined_feature_position_factors_sit_close_to_axis() -> None:
         track_id=0,
     )
 
-    assert factors == pytest.approx([0.88, 0.93, 0.98])
+    assert factors == pytest.approx([0.89, 0.94, 0.99])
 
 
 def test_tuckin_combined_overlap_position_factors_still_move_inward() -> None:
@@ -96,10 +165,10 @@ def test_tuckin_combined_overlap_position_factors_still_move_inward() -> None:
         track_id=2,
     )
 
-    assert factors == pytest.approx([0.64, 0.69, 0.74])
+    assert factors == pytest.approx([0.67, 0.72, 0.77])
 
 
-def test_custom_core_slot_order_places_ticks_outside_features() -> None:
+def test_custom_core_slot_order_does_not_move_preset_feature_band() -> None:
     canvas_config, cfg = _small_radial_canvas()
     layout = resolve_circular_radial_layout(
         total_length=5_500_000,
@@ -116,7 +185,8 @@ def test_custom_core_slot_order_places_ticks_outside_features() -> None:
 
     assert layout.features is not None
     assert layout.ticks is not None
-    assert layout.ticks.reserved_band_px.inner_px > layout.features.all_band_px.outer_px
+    assert layout.features.all_band_px.outer_px == pytest.approx(layout.axis.radius_px - 1.0)
+    assert layout.ticks.reserved_band_px.outer_px <= layout.features.all_band_px.inner_px
 
 
 def test_custom_core_slot_order_keeps_default_feature_then_ticks_order() -> None:
@@ -139,7 +209,7 @@ def test_custom_core_slot_order_keeps_default_feature_then_ticks_order() -> None
     assert layout.features.all_band_px.inner_px > layout.ticks.reserved_band_px.outer_px
 
 
-def test_inside_auto_features_fit_when_anchor_sits_outside_free_interval() -> None:
+def test_preset_feature_band_is_reserved_before_pinned_inside_slots() -> None:
     config_dict = modify_config_dict(
         load_config_toml("gbdraw.data", "config.toml"),
         show_labels=False,
@@ -175,9 +245,9 @@ def test_inside_auto_features_fit_when_anchor_sits_outside_free_interval() -> No
     )
     by_id = {slot.id: slot for slot in layout.slots}
 
-    assert by_id["features"].reserved_band_px.inner_px == pytest.approx(60.0)
-    assert by_id["features"].reserved_band_px.outer_px <= by_id["upper_spacer"].reserved_band_px.inner_px
-    assert by_id["features"].anchor_radius_px > by_id["features"].reserved_band_px.outer_px
+    assert by_id["features"].reserved_band_px.inner_px > 60.0
+    assert by_id["features"].reserved_band_px.outer_px == pytest.approx(99.0)
+    assert by_id["upper_spacer"].explicit_anchor is True
 
 
 def _small_radial_canvas() -> tuple[CircularCanvasConfigurator, GbdrawConfig]:

@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from __future__ import annotations
+
 import hashlib
-from typing import Optional, Union, List, Dict
+from typing import TYPE_CHECKING, Optional, Union, List, Dict
 
 from svgwrite.container import Group
 from svgwrite.path import Path
@@ -19,7 +21,9 @@ from ....svg.circular_features import (
     generate_circular_rectangle_path_with_radii,
 )
 from ....svg.arrows import calculate_circular_arrow_length
-from ....diagrams.circular.radial_layout import CircularFeatureLayout
+
+if TYPE_CHECKING:
+    from ....diagrams.circular.radial_layout import CircularFeatureLayout
 
 
 class FeatureDrawer:
@@ -103,7 +107,7 @@ class FeatureDrawer:
     ) -> Group:
         """
         Draw a feature on the circular canvas.
-        
+
         Args:
             feature_object: The feature to draw
             group: SVG group to add the feature to
@@ -114,15 +118,15 @@ class FeatureDrawer:
             track_type: "tuckin", "middle", or "spreadout"
             strandedness: Whether strands are separated
             length_param: Length parameter ("short" or "long")
-        
+
         Returns:
             Updated SVG group with the feature added
         """
         cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
-        
+
         # Get the track_id from the feature for overlap resolution
         track_id = getattr(feature_object, 'feature_track_id', 0)
-        
+
         gene_paths = FeaturePathGenerator(
             radius,
             total_length,
@@ -183,7 +187,7 @@ class FeaturePathGenerator:
     ) -> None:
         """
         Initialize the path generator.
-        
+
         Args:
             radius: Base radius of the circular canvas
             total_length: Total genome length
@@ -246,10 +250,10 @@ class FeaturePathGenerator:
     def generate_circular_gene_path(self, feature_object: FeatureObject):
         """
         Generate SVG path data for a feature.
-        
+
         Args:
             feature_object: The feature to generate paths for
-        
+
         Returns:
             List of [path_type, path_data] pairs
         """

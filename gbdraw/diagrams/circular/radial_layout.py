@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Collection, Literal, Mapping, Sequence, TypeAlias
 
 from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
@@ -78,12 +78,25 @@ class CircularFeatureLane:
 
 
 @dataclass(frozen=True)
+class CircularFeatureStackMetrics:
+    lane_count: int
+    lane_width_px: float
+    lane_spacing_px: float
+    band_width_px: float
+    center_radius_px: float
+    inner_radius_px: float
+    outer_radius_px: float
+    lane_centers_by_track_id: Mapping[int, float]
+
+
+@dataclass(frozen=True)
 class CircularFeatureLayout:
     anchor_radius_px: float
     width_px: float
     lanes_by_track_id: Mapping[int, CircularFeatureLane]
     primary_band_px: RadialBand
     all_band_px: RadialBand
+    stack_metrics: CircularFeatureStackMetrics | None = None
 
     def lane_for_track_id(self, track_id: int) -> CircularFeatureLane:
         if int(track_id) in self.lanes_by_track_id:
@@ -267,42 +280,169 @@ def _lane_direction_from_legacy_track_type(track_type: str | None) -> str:
     return "inside"
 
 
-def _feature_lane_center(
+def _preset_from_lane_direction(lane_direction: str | None) -> str:
+    direction = str(lane_direction or "inside").strip().lower()
+    if direction == "split":
+        return "middle"
+    if direction == "outside":
+        return "spreadout"
+    return "tuckin"
+
+
+def _feature_track_ids(feature_dict: Mapping[str, Any] | None) -> tuple[int, ...]:
+    if not feature_dict:
+        return (0,)
+    track_ids = {
+        int(getattr(feature_object, "feature_track_id", 0))
+        for feature_object in feature_dict.values()
+    }
+    return tuple(sorted(track_ids or {0}))
+
+
+def _feature_lane_strand_group(track_id: int, strandedness: bool) -> str:
+    track = int(track_id)
+    if track < 0:
+        return "negative"
+    if bool(strandedness):
+        return "positive"
+    if track > 0:
+        return "positive"
+    return "combined"
+
+
+def _inside_lane_order(track_ids: Sequence[int], *, strandedness: bool) -> tuple[int, ...]:
+    ids = [int(track_id) for track_id in track_ids]
+    has_negative = any(track_id < 0 for track_id in ids)
+    if bool(strandedness) or has_negative:
+        negative = sorted((track_id for track_id in ids if track_id < 0), key=lambda value: abs(value), reverse=True)
+        positive = sorted((track_id for track_id in ids if track_id >= 0), reverse=True)
+        return tuple(negative + positive)
+    return tuple(sorted(ids, reverse=True))
+
+
+def _outside_lane_order(track_ids: Sequence[int], *, strandedness: bool) -> tuple[int, ...]:
+    ids = [int(track_id) for track_id in track_ids]
+    has_negative = any(track_id < 0 for track_id in ids)
+    if bool(strandedness) or has_negative:
+        positive = sorted((track_id for track_id in ids if track_id >= 0), key=lambda value: (value != 0, value))
+        negative = sorted((track_id for track_id in ids if track_id < 0), key=lambda value: abs(value))
+        return tuple(positive + negative)
+    return tuple(sorted(ids))
+
+
+def _feature_stack_band_width(lane_count: int, lane_width_px: float, lane_spacing_px: float) -> float:
+    count = max(1, int(lane_count))
+    width = max(0.0, float(lane_width_px))
+    spacing = max(0.0, float(lane_spacing_px))
+    return (count * width) + ((count - 1) * spacing)
+
+
+def _single_band_lane_centers(
+    *,
+    ordered_track_ids_inner_to_outer: Sequence[int],
+    center_radius_px: float,
+    lane_width_px: float,
+    lane_spacing_px: float,
+) -> dict[int, float]:
+    ordered = tuple(int(track_id) for track_id in ordered_track_ids_inner_to_outer) or (0,)
+    band_width = _feature_stack_band_width(len(ordered), lane_width_px, lane_spacing_px)
+    step = max(0.0, float(lane_width_px)) + max(0.0, float(lane_spacing_px))
+    first_center = float(center_radius_px) - (0.5 * band_width) + (0.5 * max(0.0, float(lane_width_px)))
+    return {
+        int(track_id): max(0.0, first_center + (idx * step))
+        for idx, track_id in enumerate(ordered)
+    }
+
+
+def measure_circular_feature_stack(
     *,
     axis_radius_px: float,
-    width_px: float,
-    lane_direction: str,
+    lane_width_px: float,
+    lane_spacing_px: float | None = None,
+    preset: str | None = None,
+    lane_direction: str | None = None,
     strandedness: bool,
-    track_id: int,
-) -> tuple[float, str]:
-    width = max(0.0, float(width_px))
-    step = width * TRACK_SPACING_MULTIPLIER
+    track_ids: Sequence[int] = (0,),
+    center_radius_px: float | None = None,
+) -> CircularFeatureStackMetrics:
+    """Measure feature-lane centers from the resolved feature-stack preset."""
+
+    width = max(0.0, float(lane_width_px))
+    spacing = (
+        _default_spacing_px(axis_radius_px)
+        if lane_spacing_px is None
+        else max(0.0, float(lane_spacing_px))
+    )
     axis = float(axis_radius_px)
-    layout = str(lane_direction or "inside").strip().lower()
-    track = int(track_id)
+    ids = tuple(sorted({int(track_id) for track_id in track_ids})) or (0,)
+    lane_count = len(ids)
+    band_width = _feature_stack_band_width(lane_count, width, spacing)
+    normalized_preset = (
+        normalize_circular_track_preset(preset)
+        if preset is not None
+        else normalize_circular_track_preset(_preset_from_lane_direction(lane_direction))
+    )
+    center = float(center_radius_px) if center_radius_px is not None else axis
 
-    if strandedness:
-        if layout == "outside":
-            if track < 0:
-                return axis + (0.9 * width) + ((abs(track) - 1) * step), "negative"
-            return axis + (1.9 * width) + (max(0, track) * step), "positive"
-        if layout == "inside":
-            if track < 0:
-                return axis - (2.0 * width) - ((abs(track) - 1) * step), "negative"
-            return axis - (1.0 * width) - (max(0, track) * step), "positive"
-        if track < 0:
-            return axis - (0.5 * width) - ((abs(track) - 1) * step), "negative"
-        return axis + (0.5 * width) + (max(0, track) * step), "positive"
+    if center_radius_px is None:
+        if normalized_preset == "tuckin":
+            center = axis - spacing - (0.5 * band_width)
+        elif normalized_preset == "spreadout":
+            center = axis + spacing + (0.5 * band_width)
 
-    if layout == "outside":
-        return axis + (0.9 * width) + (abs(track) * step), "combined"
-    if layout == "inside":
-        return axis - (0.75 * width) - (abs(track) * step), "combined"
-    if track < 0:
-        return axis - (abs(track) * step), "negative"
-    if track > 0:
-        return axis + (track * step), "positive"
-    return axis, "combined"
+    lane_centers: dict[int, float]
+    if normalized_preset == "middle":
+        step = width + spacing
+        ids_set = set(ids)
+        has_negative = any(track_id < 0 for track_id in ids)
+        if bool(strandedness) or has_negative:
+            lane_centers = {}
+            split_seed = (0.5 * width) + (0.5 * spacing)
+            for idx, track_id in enumerate(sorted((tid for tid in ids if tid < 0), key=lambda value: abs(value))):
+                lane_centers[int(track_id)] = max(0.0, center - split_seed - (idx * step))
+            for idx, track_id in enumerate(sorted((tid for tid in ids if tid >= 0), key=lambda value: (value != 0, value))):
+                lane_centers[int(track_id)] = max(0.0, center + split_seed + (idx * step))
+            if not lane_centers:
+                lane_centers[0] = max(0.0, center)
+        else:
+            lane_centers = {}
+            anchor_id = 0 if 0 in ids_set else ids[0]
+            lane_centers[int(anchor_id)] = max(0.0, center)
+            for track_id in ids:
+                if track_id == anchor_id:
+                    continue
+                if track_id < 0:
+                    lane_centers[int(track_id)] = max(0.0, center - (abs(track_id) * step))
+                else:
+                    lane_centers[int(track_id)] = max(0.0, center + (abs(track_id) * step))
+    else:
+        ordered = (
+            _outside_lane_order(ids, strandedness=strandedness)
+            if normalized_preset == "spreadout"
+            else _inside_lane_order(ids, strandedness=strandedness)
+        )
+        lane_centers = _single_band_lane_centers(
+            ordered_track_ids_inner_to_outer=ordered,
+            center_radius_px=center,
+            lane_width_px=width,
+            lane_spacing_px=spacing,
+        )
+
+    lane_bands = [
+        RadialBand(center_px - (0.5 * width), center_px + (0.5 * width))
+        for center_px in lane_centers.values()
+    ]
+    all_band = band_union(lane_bands) or RadialBand(center, center)
+    return CircularFeatureStackMetrics(
+        lane_count=lane_count,
+        lane_width_px=width,
+        lane_spacing_px=spacing,
+        band_width_px=band_width,
+        center_radius_px=float(center),
+        inner_radius_px=float(all_band.inner_px),
+        outer_radius_px=float(all_band.outer_px),
+        lane_centers_by_track_id=lane_centers,
+    )
 
 
 def build_circular_feature_layout(
@@ -314,30 +454,31 @@ def build_circular_feature_layout(
     lane_direction: str | None = None,
     strandedness: bool,
     anchor_radius_px: float | None = None,
+    lane_spacing_px: float | None = None,
 ) -> CircularFeatureLayout | None:
     width = max(0.0, float(width_px))
-    anchor = float(axis_radius_px if anchor_radius_px is None else anchor_radius_px)
     direction = (
         str(lane_direction).strip().lower()
         if lane_direction is not None
         else _lane_direction_from_legacy_track_type(track_type)
     )
-    track_ids: set[int] = {0}
-    if feature_dict:
-        track_ids = {
-            int(getattr(feature_object, "feature_track_id", 0))
-            for feature_object in feature_dict.values()
-        } or {0}
+    track_ids = _feature_track_ids(feature_dict)
+    metrics = measure_circular_feature_stack(
+        axis_radius_px=float(axis_radius_px),
+        lane_width_px=width,
+        lane_spacing_px=lane_spacing_px,
+        preset=track_type,
+        lane_direction=direction,
+        strandedness=bool(strandedness),
+        track_ids=track_ids,
+        center_radius_px=anchor_radius_px,
+    )
+    anchor = float(metrics.center_radius_px)
 
     lanes: dict[int, CircularFeatureLane] = {}
     for track_id in sorted(track_ids):
-        center, strand_group = _feature_lane_center(
-            axis_radius_px=anchor,
-            width_px=width,
-            lane_direction=direction,
-            strandedness=strandedness,
-            track_id=int(track_id),
-        )
+        center = float(metrics.lane_centers_by_track_id[int(track_id)])
+        strand_group = _feature_lane_strand_group(int(track_id), bool(strandedness))
         half_width = width / 2.0
         lanes[int(track_id)] = CircularFeatureLane(
             track_id=int(track_id),
@@ -356,6 +497,7 @@ def build_circular_feature_layout(
         lanes_by_track_id=lanes,
         primary_band_px=primary_band,
         all_band_px=all_band,
+        stack_metrics=metrics,
     )
 
 
@@ -546,14 +688,21 @@ def _measure_radial_slot(
     renderer = intent.renderer
 
     if renderer == "features":
+        feature_anchor_radius = anchor_radius_px if intent.explicit_anchor else None
+        feature_preset = intent.params.get("stack_preset", intent.params.get("preset"))
         feature_layout = build_circular_feature_layout(
             feature_dict,
             axis_radius_px=float(axis_radius_px),
             width_px=resolved_width,
+            track_type=str(feature_preset) if feature_preset is not None else None,
             lane_direction=str(intent.params.get("lane_direction", "inside")),
             strandedness=bool(cfg.canvas.strandedness),
-            anchor_radius_px=anchor_radius_px,
+            anchor_radius_px=feature_anchor_radius,
+            lane_spacing_px=float(intent.spacing_px),
         )
+        if feature_layout is not None:
+            anchor_radius_px = float(feature_layout.anchor_radius_px)
+            anchor_offset_px = float(anchor_radius_px) - float(axis_radius_px)
         band = feature_layout.all_band_px if feature_layout is not None else RadialBand(anchor_radius_px, anchor_radius_px)
         draw_band = feature_layout.primary_band_px if feature_layout is not None else band
         return CircularResolvedSlot(
@@ -679,6 +828,20 @@ def _candidate_widths(intent: _RadialSlotIntent) -> list[tuple[float, bool]]:
 
 def _slot_reserves(intent: _RadialSlotIntent) -> bool:
     return intent.side != "overlay" or bool(intent.reserve)
+
+
+def _intent_allows_auto_stack_fallback(intent: _RadialSlotIntent) -> bool:
+    return (
+        bool(intent.params.get("_stack_side_auto", False))
+        and not bool(intent.explicit_anchor)
+        and not bool(intent.strict)
+        and intent.side == "inside"
+        and intent.placement_policy in {"auto", "preferred"}
+    )
+
+
+def _outside_fallback_intent(intent: _RadialSlotIntent) -> _RadialSlotIntent:
+    return replace(intent, side="outside", placement_policy="auto")
 
 
 def _place_outside_auto(
@@ -1193,7 +1356,7 @@ def _validate_same_side_order(
     for side in ("outside", "inside"):
         side_slots = [
             slot for slot in sorted(slots, key=lambda item: item.slot_index)
-            if slot.side == side and slot.packing_band_px is not None
+            if slot.side == side and slot.renderer != "features" and slot.packing_band_px is not None
         ]
         for previous, current in zip(side_slots, side_slots[1:]):
             if not bool(movable_by_index.get(previous.slot_index)) and not bool(movable_by_index.get(current.slot_index)):
@@ -1440,14 +1603,38 @@ def resolve_circular_radial_layout(
         preferred_anchor_slot_ids=preferred_anchor_slot_ids,
     )
     resolved_by_index: dict[int, CircularResolvedSlot] = {}
+    intent_by_index = {intent.slot_index: intent for intent in intents}
     spacing_by_index = {intent.slot_index: intent.spacing_px for intent in intents}
     movable_by_index = {
         intent.slot_index: intent.placement_policy in {"auto", "preferred"}
         for intent in intents
     }
 
+    # The feature stack is the primary circular blocker. Resolve it before
+    # placing custom/numeric tracks so presets stay stable when rows are added.
+    for intent in intents:
+        if intent.renderer != "features":
+            continue
+        resolved = _measure_radial_slot(
+            intent,
+            anchor_offset_px=float(intent.anchor_offset_px or 0.0),
+            axis_radius_px=axis_radius_px,
+            feature_dict=feature_dict,
+            canvas_config=canvas_config,
+            cfg=cfg,
+            total_length=int(total_length),
+            tick_track_channel_override=tick_track_channel_override,
+            depth_config=depth_config,
+        )
+        resolved_by_index[intent.slot_index] = resolved
+        if _slot_reserves(intent) and resolved.reserved_band_px is not None:
+            band = resolved.reserved_band_px.expanded(intent.spacing_px) if intent.side == "overlay" else resolved.reserved_band_px
+            occupied.append((intent.slot_id, band))
+
     # Hard anchors and reserving overlays become blockers before movable placement.
     for intent in intents:
+        if intent.slot_index in resolved_by_index:
+            continue
         if intent.placement_policy != "hard" and not (
             intent.placement_policy == "overlay" and intent.reserve
         ):
@@ -1478,15 +1665,54 @@ def resolve_circular_radial_layout(
 
     outside_min_inner = axis_radius_px
     inside_max_outer = axis_radius_px
+    for slot_index, resolved in resolved_by_index.items():
+        intent = intent_by_index.get(slot_index)
+        if intent is None or resolved.packing_band_px is None:
+            continue
+        if resolved.renderer == "features":
+            outside_min_inner = max(
+                outside_min_inner,
+                max(axis_radius_px, float(resolved.packing_band_px.outer_px)) + intent.spacing_px,
+            )
+            inside_max_outer = min(
+                inside_max_outer,
+                min(axis_radius_px, float(resolved.packing_band_px.inner_px)) - intent.spacing_px,
+            )
+        elif resolved.side == "outside":
+            outside_min_inner = max(outside_min_inner, float(resolved.packing_band_px.outer_px) + intent.spacing_px)
+        elif resolved.side == "inside":
+            inside_max_outer = min(inside_max_outer, float(resolved.packing_band_px.inner_px) - intent.spacing_px)
+
     ordered_intents = sorted(intents, key=lambda item: item.slot_index)
+
+    def place_auto_fallback_outside(group_intents: Sequence[_RadialSlotIntent]) -> None:
+        nonlocal outside_min_inner
+        for original_intent in group_intents:
+            fallback_intent = _outside_fallback_intent(original_intent)
+            fallback_window = PlacementWindow(float(outside_min_inner), float("inf"))
+            group_resolved = _place_outside_auto(
+                fallback_intent,
+                occupied=occupied,
+                axis_radius_px=axis_radius_px,
+                placement_window=fallback_window,
+                feature_dict=feature_dict,
+                canvas_config=canvas_config,
+                cfg=cfg,
+                total_length=int(total_length),
+                tick_track_channel_override=tick_track_channel_override,
+                depth_config=depth_config,
+            )
+            resolved_by_index[original_intent.slot_index] = group_resolved
+            if _slot_reserves(fallback_intent) and group_resolved.reserved_band_px is not None:
+                occupied.append((fallback_intent.slot_id, group_resolved.reserved_band_px))
+            if group_resolved.packing_band_px is not None:
+                outside_min_inner = max(
+                    outside_min_inner,
+                    float(group_resolved.packing_band_px.outer_px) + fallback_intent.spacing_px,
+                )
+
     for intent_pos, intent in enumerate(ordered_intents):
         resolved = resolved_by_index.get(intent.slot_index)
-        if resolved is not None and resolved.packing_band_px is not None:
-            if resolved.side == "outside":
-                outside_min_inner = max(outside_min_inner, float(resolved.packing_band_px.outer_px) + intent.spacing_px)
-            elif resolved.side == "inside":
-                inside_max_outer = min(inside_max_outer, float(resolved.packing_band_px.inner_px) - intent.spacing_px)
-            continue
         if resolved is not None:
             continue
 
@@ -1544,18 +1770,24 @@ def resolve_circular_radial_layout(
                     depth_config=depth_config,
                     resolved_by_index=resolved_by_index,
                 )
-                resolved_group = _place_preferred_numeric_group(
-                    preferred_group,
-                    occupied=occupied,
-                    placement_window=placement_window,
-                    axis_radius_px=axis_radius_px,
-                    feature_dict=feature_dict,
-                    canvas_config=canvas_config,
-                    cfg=cfg,
-                    total_length=int(total_length),
-                    tick_track_channel_override=tick_track_channel_override,
-                    depth_config=depth_config,
-                )
+                try:
+                    resolved_group = _place_preferred_numeric_group(
+                        preferred_group,
+                        occupied=occupied,
+                        placement_window=placement_window,
+                        axis_radius_px=axis_radius_px,
+                        feature_dict=feature_dict,
+                        canvas_config=canvas_config,
+                        cfg=cfg,
+                        total_length=int(total_length),
+                        tick_track_channel_override=tick_track_channel_override,
+                        depth_config=depth_config,
+                    )
+                except ValidationError:
+                    if all(_intent_allows_auto_stack_fallback(group_intent) for group_intent in preferred_group):
+                        place_auto_fallback_outside(preferred_group)
+                        continue
+                    raise
                 for group_intent, group_resolved in zip(preferred_group, resolved_group):
                     resolved_by_index[group_intent.slot_index] = group_resolved
                     if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
@@ -1596,18 +1828,24 @@ def resolve_circular_radial_layout(
                 resolved_by_index=resolved_by_index,
             )
             if len(inside_group) > 1:
-                resolved_group = _place_inside_auto_group(
-                    inside_group,
-                    occupied=occupied,
-                    axis_radius_px=axis_radius_px,
-                    placement_window=placement_window,
-                    feature_dict=feature_dict,
-                    canvas_config=canvas_config,
-                    cfg=cfg,
-                    total_length=int(total_length),
-                    tick_track_channel_override=tick_track_channel_override,
-                    depth_config=depth_config,
-                )
+                try:
+                    resolved_group = _place_inside_auto_group(
+                        inside_group,
+                        occupied=occupied,
+                        axis_radius_px=axis_radius_px,
+                        placement_window=placement_window,
+                        feature_dict=feature_dict,
+                        canvas_config=canvas_config,
+                        cfg=cfg,
+                        total_length=int(total_length),
+                        tick_track_channel_override=tick_track_channel_override,
+                        depth_config=depth_config,
+                    )
+                except ValidationError:
+                    if all(_intent_allows_auto_stack_fallback(group_intent) for group_intent in inside_group):
+                        place_auto_fallback_outside(inside_group)
+                        continue
+                    raise
                 for group_intent, group_resolved in zip(inside_group, resolved_group):
                     resolved_by_index[group_intent.slot_index] = group_resolved
                     if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
@@ -1618,18 +1856,24 @@ def resolve_circular_radial_layout(
                             float(group_resolved.packing_band_px.inner_px) - group_intent.spacing_px,
                         )
                 continue
-            resolved = _place_inside_auto(
-                intent,
-                occupied=occupied,
-                axis_radius_px=axis_radius_px,
-                placement_window=placement_window,
-                feature_dict=feature_dict,
-                canvas_config=canvas_config,
-                cfg=cfg,
-                total_length=int(total_length),
-                tick_track_channel_override=tick_track_channel_override,
-                depth_config=depth_config,
-            )
+            try:
+                resolved = _place_inside_auto(
+                    intent,
+                    occupied=occupied,
+                    axis_radius_px=axis_radius_px,
+                    placement_window=placement_window,
+                    feature_dict=feature_dict,
+                    canvas_config=canvas_config,
+                    cfg=cfg,
+                    total_length=int(total_length),
+                    tick_track_channel_override=tick_track_channel_override,
+                    depth_config=depth_config,
+                )
+            except ValidationError:
+                if _intent_allows_auto_stack_fallback(intent):
+                    place_auto_fallback_outside([intent])
+                    continue
+                raise
 
         resolved_by_index[intent.slot_index] = resolved
         if _slot_reserves(intent) and resolved.reserved_band_px is not None:
