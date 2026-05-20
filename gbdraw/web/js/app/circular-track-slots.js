@@ -788,6 +788,22 @@ export const createCircularTrackSlotEditor = ({ state }) => {
 
   const circularTrackSlotCliSpec = (slot) => buildCircularTrackSlotSpec(slot, state.adv.nt, state.form.track_type);
 
+  const circularTrackSlotAutoPlacementFromOrder = (slot) => {
+    if (!slot || typeof slot !== 'object' || !SUPPORTED_RENDERERS.includes(slot.renderer)) return null;
+    if (slot.enabled === false || slot.renderer === 'features') return null;
+    if (normalizeOptionalPlacement(slot.side) !== null) return null;
+    const slots = Array.isArray(state.adv.circular_track_slots) ? state.adv.circular_track_slots : [];
+    const slotIndex = slots.indexOf(slot);
+    if (slotIndex < 0) return null;
+    const featureIndex = slots.findIndex((entry) => (
+      entry &&
+      entry.enabled !== false &&
+      entry.renderer === 'features'
+    ));
+    if (featureIndex < 0 || featureIndex === slotIndex) return null;
+    return slotIndex < featureIndex ? 'outside' : 'inside';
+  };
+
   const circularTrackPresetSummary = () => {
     const preset = normalizeCircularTrackPreset(state.form.track_type);
     const lengthParam = getPreviewLengthParam(state);
@@ -828,6 +844,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     const preset = normalizeCircularTrackPreset(state.form.track_type);
     const lengthParam = getPreviewLengthParam(state);
     const presetLabel = formatPresetName(preset);
+    const autoPlacement = circularTrackSlotAutoPlacementFromOrder(slot);
     const badges = [];
 
     if (normalizeOptionalText(normalized.radius) !== null) {
@@ -860,8 +877,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       badges.push(makeBadge('side', 'side', circularTrackPlacementLabel(slot.side), 'manual', 'Manual placement override'));
     } else if (normalized.renderer === 'features') {
       badges.push(makeBadge('side', 'side', circularTrackPlacementLabel(sideForLaneDirection(laneDirectionForPreset(preset))), 'preset', `Inherited from ${presetLabel}`));
-    } else if (normalized.renderer === 'ticks') {
-      badges.push(makeBadge('side', 'side', 'preset ticks', 'preset', `Inherited from ${presetLabel}`));
+    } else if (autoPlacement !== null) {
+      badges.push(makeBadge('side', 'side', circularTrackPlacementLabel(autoPlacement), 'auto', 'Auto placement from row order'));
     } else {
       badges.push(makeBadge('side', 'side', 'Inner stack', 'preset', `Inherited from ${presetLabel}`));
     }
@@ -884,16 +901,20 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       badges.push(makeBadge(
         'tick-label-side',
         'labels',
-        manualLabelSide === null ? 'preset' : String(manualLabelSide),
-        manualLabelSide === null ? 'preset' : 'manual',
-        manualLabelSide === null ? `Inherited from ${presetLabel}` : 'Manual tick label placement'
+        manualLabelSide === null ? (autoPlacement || 'preset') : String(manualLabelSide),
+        manualLabelSide === null ? (autoPlacement === null ? 'preset' : 'auto') : 'manual',
+        manualLabelSide === null
+          ? (autoPlacement === null ? `Inherited from ${presetLabel}` : 'Auto label placement from row order')
+          : 'Manual tick label placement'
       ));
       badges.push(makeBadge(
         'tick-side',
         'ticks',
-        manualTickSide === null ? 'preset' : String(manualTickSide),
-        manualTickSide === null ? 'preset' : 'manual',
-        manualTickSide === null ? `Inherited from ${presetLabel}` : 'Manual tick placement'
+        manualTickSide === null ? (autoPlacement || 'preset') : String(manualTickSide),
+        manualTickSide === null ? (autoPlacement === null ? 'preset' : 'auto') : 'manual',
+        manualTickSide === null
+          ? (autoPlacement === null ? `Inherited from ${presetLabel}` : 'Auto tick placement from row order')
+          : 'Manual tick placement'
       ));
     }
 

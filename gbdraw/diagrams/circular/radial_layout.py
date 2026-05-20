@@ -607,6 +607,21 @@ def _default_spacing_px(axis_radius_px: float) -> float:
     return max(1.0, 0.01 * float(axis_radius_px))
 
 
+def _preferred_anchor_radius_px(params: Mapping[str, Any], axis_radius_px: float) -> float | None:
+    raw = params.get("_preferred_anchor_radius")
+    if raw is None:
+        return None
+    if hasattr(raw, "resolve"):
+        try:
+            return float(raw.resolve(float(axis_radius_px)))
+        except (TypeError, ValueError):
+            return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def _slot_intents(
     slots: Sequence[CircularTrackSlot],
     *,
@@ -619,6 +634,16 @@ def _slot_intents(
     intents: list[_RadialSlotIntent] = []
     for slot in normalize_circular_track_slots(slots):
         radius_px = slot.radius.resolve(axis_radius_px) if slot.radius is not None else None
+        preferred_anchor_px = (
+            _preferred_anchor_radius_px(slot.params, axis_radius_px)
+            if (
+                radius_px is None
+                and slot.id in preferred_ids
+                and slot.side == "inside"
+                and slot.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
+            )
+            else None
+        )
         width_px = slot.width.resolve(axis_radius_px) if slot.width is not None else None
         if width_px is None:
             width_px = _default_width_px(slot.renderer, canvas_config=canvas_config, cfg=cfg)
@@ -628,6 +653,7 @@ def _slot_intents(
             else _default_spacing_px(axis_radius_px)
         )
         explicit_anchor = radius_px is not None
+        preferred_anchor_available = radius_px is not None or preferred_anchor_px is not None
         placement_policy: PlacementPolicy
         if slot.side == "overlay":
             placement_policy = "overlay"
@@ -635,6 +661,7 @@ def _slot_intents(
             slot.id in preferred_ids
             and slot.side == "inside"
             and slot.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
+            and preferred_anchor_available
         ):
             placement_policy = "preferred"
         elif explicit_anchor:
@@ -653,7 +680,11 @@ def _slot_intents(
                 slot_id=slot.id,
                 renderer=slot.renderer,
                 side=slot.side,
-                anchor_offset_px=(float(radius_px) - axis_radius_px) if radius_px is not None else None,
+                anchor_offset_px=(
+                    float(radius_px if radius_px is not None else preferred_anchor_px) - axis_radius_px
+                    if (radius_px is not None or preferred_anchor_px is not None)
+                    else None
+                ),
                 width_px=max(0.0, float(width_px)),
                 explicit_anchor=explicit_anchor,
                 explicit_width=slot.width is not None,

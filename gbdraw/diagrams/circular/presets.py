@@ -389,6 +389,25 @@ def _inherited_width_for_renderer(
     return None
 
 
+def _auto_stack_side_from_feature_order(
+    slots: Sequence[CircularTrackSlot],
+) -> dict[int, str]:
+    feature_index: int | None = None
+    for index, slot in enumerate(slots):
+        if slot.enabled and _normalized_renderer(slot.renderer) == "features":
+            feature_index = index
+            break
+    if feature_index is None:
+        return {}
+
+    sides: dict[int, str] = {}
+    for index, slot in enumerate(slots):
+        if not slot.enabled or slot.side is not None or _normalized_renderer(slot.renderer) == "features":
+            continue
+        sides[index] = "outside" if index < feature_index else "inside"
+    return sides
+
+
 def _overlay_slot_on_preset_lane(
     slot: CircularTrackSlot,
     *,
@@ -396,6 +415,7 @@ def _overlay_slot_on_preset_lane(
     geometry_slot: CircularTrackSlot | None,
     params_slot: CircularTrackSlot | None,
     context: CircularPresetContext,
+    auto_stack_side: str | None = None,
 ) -> CircularTrackSlot:
     params = _inherited_params_for_slot(slot, params_slot)
     if slot.side is None and renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS | {"ticks", "spacer"}:
@@ -405,7 +425,21 @@ def _overlay_slot_on_preset_lane(
         renderer == "features"
         and ("lane_direction" in params or "lanes" in params)
     ):
-        side = geometry_slot.side if geometry_slot is not None else None
+        side = auto_stack_side or (geometry_slot.side if geometry_slot is not None else None)
+    if renderer == "ticks" and auto_stack_side is not None:
+        explicit_params = dict(slot.params or {})
+        if "tick_side" not in explicit_params:
+            params["tick_side"] = auto_stack_side
+        if "label_side" not in explicit_params:
+            params["label_side"] = auto_stack_side
+    if (
+        renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
+        and slot.radius is None
+        and geometry_slot is not None
+        and geometry_slot.radius is not None
+        and str(side or "inside").strip().lower() == "inside"
+    ):
+        params["_preferred_anchor_radius"] = geometry_slot.radius
     return replace(
         slot,
         renderer=renderer,
@@ -453,15 +487,17 @@ def circular_track_slots_from_preset_order(
             renderer = _normalized_renderer(slot.renderer)
             if _slot_is_blank_unmatched_numeric_duplicate(slot, renderer):
                 renderer_has_blank_unmatched_duplicates[renderer] = True
+    auto_stack_side_by_index = _auto_stack_side_from_feature_order(slots)
 
     layout_slots: list[CircularTrackSlot] = []
     preferred_ids: set[str] = set()
 
-    for slot in slots:
+    for slot_index, slot in enumerate(slots):
         renderer = _normalized_renderer(slot.renderer)
         geometry_slot: CircularTrackSlot | None = None
         params_slot: CircularTrackSlot | None = None
         prefers_numeric_auto_group = False
+        auto_stack_side = auto_stack_side_by_index.get(slot_index)
 
         has_extra_numeric_renderer = bool(renderer_has_blank_unmatched_duplicates.get(renderer, False))
         if (
@@ -484,6 +520,7 @@ def circular_track_slots_from_preset_order(
                 and slot.radius is None
                 and geometry_slot is not None
                 and geometry_slot.radius is not None
+                and (auto_stack_side is None or auto_stack_side == "inside")
             )
 
         overlaid = _overlay_slot_on_preset_lane(
@@ -492,6 +529,7 @@ def circular_track_slots_from_preset_order(
             geometry_slot=geometry_slot,
             params_slot=params_slot,
             context=context,
+            auto_stack_side=auto_stack_side,
         )
         layout_slots.append(overlaid)
         if (

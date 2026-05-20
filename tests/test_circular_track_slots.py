@@ -457,7 +457,7 @@ def test_default_custom_slots_auto_place_near_preset_without_radius_inheritance(
         )
 
 
-def test_custom_slot_order_places_ticks_inside_preset_feature_band(
+def test_custom_slot_order_places_ticks_outside_feature_band_when_ordered_before_features(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
@@ -502,10 +502,10 @@ def test_custom_slot_order_places_ticks_inside_preset_feature_band(
     layout = captured["radial_layout"]
     assert layout.features is not None
     assert layout.ticks is not None
-    assert layout.ticks.anchor_radius_px < layout.features.anchor_radius_px
-    assert layout.ticks.tick_band_px.outer_px <= layout.features.all_band_px.inner_px
+    assert layout.ticks.anchor_radius_px > layout.features.anchor_radius_px
+    assert layout.ticks.tick_band_px.inner_px >= layout.features.all_band_px.outer_px
     assert layout.ticks.label_band_px is not None
-    assert layout.ticks.label_band_px.outer_px <= layout.features.all_band_px.inner_px
+    assert layout.ticks.label_band_px.inner_px >= layout.features.all_band_px.outer_px
 
 
 def test_parse_circular_track_slot_stores_layout_fields_on_slot() -> None:
@@ -578,6 +578,62 @@ def test_circular_preset_slots_do_not_emit_origin_metadata() -> None:
 
     plan = circular_radial_plan_for_preset("tuckin", context)
     assert {"gc_content", "gc_skew"} <= set(plan.preferred_anchor_slot_ids)
+
+
+@pytest.mark.circular
+def test_blank_builtin_numeric_slots_use_preset_preferred_anchor_without_explicit_radius() -> None:
+    from gbdraw.canvas import CircularCanvasConfigurator
+    from gbdraw.config.models import GbdrawConfig
+    from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_track_slots_from_preset_order
+    from gbdraw.diagrams.circular.radial_layout import resolve_circular_radial_layout
+
+    record = _load_record()
+    config_dict = _base_config(track_type="middle")
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_config = CircularCanvasConfigurator("test", config_dict, "none", record, cfg=cfg)
+    context = CircularPresetContext(
+        cfg=cfg,
+        canvas_config=canvas_config,
+        total_length=len(record.seq),
+        strandedness=bool(cfg.canvas.strandedness),
+        show_features=True,
+        show_ticks=True,
+        show_depth=False,
+        show_gc=True,
+        show_skew=True,
+    )
+
+    plan = circular_track_slots_from_preset_order(
+        default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
+        "middle",
+        context,
+    )
+    plan_by_id = {slot.id: slot for slot in plan.slots}
+
+    assert plan_by_id["gc_content"].radius is None
+    assert plan_by_id["gc_skew"].radius is None
+    assert "_preferred_anchor_radius" in plan_by_id["gc_content"].params
+    assert "_preferred_anchor_radius" in plan_by_id["gc_skew"].params
+
+    layout = resolve_circular_radial_layout(
+        total_length=len(record.seq),
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=plan.slots,
+        preferred_anchor_slot_ids=plan.preferred_anchor_slot_ids,
+    )
+    by_id = {slot.id: slot for slot in layout.slots}
+    length_param = str(canvas_config.length_param)
+    track_dict = cfg.canvas.circular.track_dict[length_param]["middle"]
+
+    assert not by_id["gc_content"].explicit_anchor
+    assert not by_id["gc_skew"].explicit_anchor
+    assert by_id["gc_content"].anchor_radius_px == pytest.approx(
+        float(canvas_config.radius) * float(track_dict["2"])
+    )
+    assert by_id["gc_skew"].anchor_radius_px == pytest.approx(
+        float(canvas_config.radius) * float(track_dict["3"])
+    )
 
 
 @pytest.mark.circular
@@ -1109,7 +1165,7 @@ def test_edl933_ticks_before_features_use_measured_tick_footprint(
     assert captured["gc_content"][0] > captured["gc_skew"][0]  # type: ignore[index]
     assert layout.features is not None
     assert layout.ticks is not None
-    assert layout.ticks.reserved_band_px.outer_px <= layout.features.all_band_px.inner_px
+    assert layout.ticks.reserved_band_px.inner_px >= layout.features.all_band_px.outer_px
     assert (float(gc_center) - (0.5 * float(gc_width))) > 0.0
 
 
@@ -1158,9 +1214,9 @@ def test_inside_order_reserves_stranded_feature_stack_between_numeric_slots(
     by_id = {slot.id: slot for slot in layout.slots}  # type: ignore[attr-defined]
 
     assert by_id["features"].reserved_width_px > by_id["features"].resolved_width_px
-    assert by_id["features"].packing_band_px.center_px > by_id["gc_content"].packing_band_px.center_px
-    assert by_id["ticks"].packing_band_px.center_px > by_id["gc_content"].packing_band_px.center_px
-    assert by_id["gc_content"].packing_band_px.center_px > by_id["gc_skew"].packing_band_px.center_px
+    assert by_id["gc_content"].packing_band_px.center_px > by_id["ticks"].packing_band_px.center_px
+    assert by_id["ticks"].packing_band_px.center_px > by_id["features"].packing_band_px.center_px
+    assert by_id["features"].packing_band_px.center_px > by_id["gc_skew"].packing_band_px.center_px
 
 
 @pytest.mark.circular
@@ -1206,9 +1262,9 @@ def test_order_only_gc_content_falls_back_later_auto_tracks_outside_when_needed(
 
     layout = captured["radial_layout"]
     by_id = {slot.id: slot for slot in layout.slots}  # type: ignore[attr-defined]
-    assert by_id["features"].packing_band_px.center_px > by_id["gc_content"].packing_band_px.center_px
-    assert by_id["gc_skew"].packing_band_px.center_px > by_id["features"].packing_band_px.center_px
-    assert by_id["ticks"].packing_band_px.center_px > by_id["gc_skew"].packing_band_px.center_px
+    assert by_id["gc_content"].packing_band_px.center_px > by_id["features"].packing_band_px.center_px
+    assert by_id["features"].packing_band_px.center_px > by_id["gc_skew"].packing_band_px.center_px
+    assert by_id["gc_skew"].packing_band_px.center_px > by_id["ticks"].packing_band_px.center_px
 
 
 @pytest.mark.circular
