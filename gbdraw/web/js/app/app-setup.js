@@ -179,7 +179,7 @@ export const createAppSetup = () => {
 
   const circularTrackNewRenderer = ref('dinucleotide_skew');
   const circularTrackNewRendererBySection = ref({
-    outer: 'dinucleotide_skew',
+    outer: 'features',
     axis: 'features',
     inside: 'dinucleotide_skew'
   });

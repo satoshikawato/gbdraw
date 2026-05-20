@@ -170,6 +170,9 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "Apply Tuckin" in index_html
     assert "axis is fixed" in index_html
     assert "Blank fields inherit the selected preset" in index_html
+    assert "Outer tracks" in slot_source
+    assert "On-axis tracks" in slot_source
+    assert "Inner tracks" in slot_source
     assert "Feature Layout" not in index_html
     assert "params.axis" not in slot_source
     assert "axis=true" not in slot_source

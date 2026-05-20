@@ -26,48 +26,41 @@ const DEFAULT_SLOT_IDS = {
 };
 
 const NUMERIC_RENDERERS = new Set(['dinucleotide_content', 'dinucleotide_skew', 'depth']);
-const AXIS_RENDERERS = new Set(['features', 'ticks']);
-const STACK_RENDERERS = [
-  'dinucleotide_content',
-  'dinucleotide_skew',
-  'depth',
-  'spacer'
-];
 const SECTION_DEFINITIONS = [
   {
     key: 'outer',
-    label: 'Axis outside tracks',
-    help: 'Tracks placed outside the axis-adjacent feature/tick band.',
-    addLabel: 'Add outside',
-    emptyLabel: 'No outside tracks',
-    renderers: STACK_RENDERERS
+    label: 'Outer tracks',
+    help: 'Tracks placed outside the genome axis.',
+    addLabel: 'Add outer',
+    emptyLabel: 'No outer tracks',
+    renderers: SUPPORTED_RENDERERS
   },
   {
     key: 'axis',
-    label: 'Axis tracks',
-    help: 'Feature and tick tracks that can use Auto, Axis outside, or Overlay placement.',
-    addLabel: 'Add axis',
-    emptyLabel: 'No axis tracks',
-    renderers: ['features', 'ticks']
+    label: 'On-axis tracks',
+    help: 'Tracks that overlap or attach directly to the genome axis.',
+    addLabel: 'Add on-axis',
+    emptyLabel: 'No on-axis tracks',
+    renderers: SUPPORTED_RENDERERS
   },
   {
     key: 'inside',
-    label: 'Inside tracks',
-    help: 'Tracks packed inside the axis-adjacent feature/tick band.',
-    addLabel: 'Add inside',
-    emptyLabel: 'No inside tracks',
-    renderers: STACK_RENDERERS
+    label: 'Inner tracks',
+    help: 'Tracks placed inside the genome axis.',
+    addLabel: 'Add inner',
+    emptyLabel: 'No inner tracks',
+    renderers: SUPPORTED_RENDERERS
   }
 ];
 const SECTION_RANKS = {
-  axis: 0,
-  outer: 1,
+  outer: 0,
+  axis: 1,
   inside: 2
 };
 const PLACEMENT_LABELS = {
-  inside: 'Inside',
+  inside: 'Inner',
   outside: 'Outer',
-  overlay: 'Overlay'
+  overlay: 'On-axis'
 };
 const PRESET_LABELS = {
   tuckin: 'Tuckin',
@@ -237,10 +230,29 @@ const getSlotRenderer = (slot) => {
   return SUPPORTED_RENDERERS.includes(renderer) ? renderer : 'dinucleotide_skew';
 };
 
-const getSlotSectionKey = (slot) => {
+const getSectionKeyForSide = (side) => {
+  if (side === 'outside') return 'outer';
+  if (side === 'overlay') return 'axis';
+  return 'inside';
+};
+
+const getSlotSectionKey = (slot, preset = 'tuckin') => {
   const renderer = getSlotRenderer(slot);
-  if (AXIS_RENDERERS.has(renderer)) return 'axis';
-  return normalizeOptionalPlacement(slot?.side) === 'outside' ? 'outer' : 'inside';
+  const side = normalizeOptionalPlacement(slot?.side);
+  if (side !== null) return getSectionKeyForSide(side);
+
+  if (renderer === 'features') {
+    const rawLane = normalizeOptionalText(slot?.params?.lane_direction ?? slot?.params?.lanes);
+    const lane = rawLane === null ? laneDirectionForPreset(preset) : normalizeLaneDirection(rawLane);
+    return getSectionKeyForSide(sideForLaneDirection(lane));
+  }
+
+  if (renderer === 'ticks') {
+    const tickPreset = normalizeCircularTrackPreset(slot?.params?.preset, preset);
+    return tickPreset === 'spreadout' ? 'axis' : 'inside';
+  }
+
+  return 'inside';
 };
 
 const getSectionDefinition = (sectionKey) => (
@@ -252,13 +264,13 @@ const normalizeRendererForSection = (sectionKey, renderer) => {
   return definition.renderers.includes(renderer) ? renderer : definition.renderers[0];
 };
 
-const orderSlotsForSections = (slots) => {
+const orderSlotsForSections = (slots, preset = 'tuckin') => {
   if (!Array.isArray(slots)) return [];
   return slots
     .map((slot, index) => ({ slot, index }))
     .sort((left, right) => {
-      const leftRank = SECTION_RANKS[getSlotSectionKey(left.slot)] ?? SECTION_RANKS.inside;
-      const rightRank = SECTION_RANKS[getSlotSectionKey(right.slot)] ?? SECTION_RANKS.inside;
+      const leftRank = SECTION_RANKS[getSlotSectionKey(left.slot, preset)] ?? SECTION_RANKS.inside;
+      const rightRank = SECTION_RANKS[getSlotSectionKey(right.slot, preset)] ?? SECTION_RANKS.inside;
       return leftRank === rightRank ? left.index - right.index : leftRank - rightRank;
     })
     .map((entry) => entry.slot);
@@ -283,16 +295,13 @@ const normalizeSlotSide = (value) => normalizeOptionalPlacement(value);
 const applyPlacementDefaults = (slot, placement = 'inside') => {
   if (!slot) return;
   const requestedSide = normalizePlacement(placement);
-  const side = AXIS_RENDERERS.has(getSlotRenderer(slot))
-    ? requestedSide
-    : (requestedSide === 'outside' ? 'outside' : 'inside');
-  slot.side = side;
+  slot.side = requestedSide;
   slot.params = cloneParams(slot.params);
   if (slot.renderer === 'features') {
-    slot.params.lane_direction = laneDirectionForSide(side);
-    if (side === 'overlay' && slot.reserve === null) slot.reserve = true;
+    slot.params.lane_direction = laneDirectionForSide(requestedSide);
+    if (requestedSide === 'overlay' && slot.reserve === null) slot.reserve = true;
   }
-  if ((!NUMERIC_RENDERERS.has(slot.renderer) || side !== 'inside') && slot.compress === true) {
+  if ((!NUMERIC_RENDERERS.has(slot.renderer) || requestedSide !== 'inside') && slot.compress === true) {
     slot.compress = null;
   }
 };
@@ -499,8 +508,6 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
   });
 
   let side = inheritsPresetDefaults ? null : normalizeSlotSide(source.side);
-  if (side === 'inside') side = null;
-  if (!AXIS_RENDERERS.has(renderer) && side === 'overlay') side = null;
   const strict = inheritsPresetDefaults ? null : normalizeOptionalBool(source.strict);
   let compress = inheritsPresetDefaults ? null : normalizeOptionalBool(source.compress);
   let reserve = inheritsPresetDefaults ? null : normalizeOptionalBool(source.reserve);
@@ -541,8 +548,8 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
       const normalizedLaneDirection = normalizeLaneDirection(rawLaneDirection);
       delete params.lanes;
       if (normalizedLaneDirection === 'inside') {
-        delete params.lane_direction;
-        side = null;
+        params.lane_direction = 'inside';
+        side = 'inside';
       } else {
         params.lane_direction = normalizedLaneDirection;
         side = sideForLaneDirection(params.lane_direction);
@@ -577,7 +584,10 @@ export const normalizeCircularTrackSlots = (slots, defaultNt = 'GC', preset = 't
   const base = Array.isArray(slots)
     ? slots
     : createDefaultCircularTrackSlots({ nt: defaultNt, preset });
-  return orderSlotsForSections(base.map((slot, index) => normalizeCircularTrackSlot(slot, index, defaultNt, preset)));
+  return orderSlotsForSections(
+    base.map((slot, index) => normalizeCircularTrackSlot(slot, index, defaultNt, preset)),
+    preset
+  );
 };
 
 const appendOption = (options, key, value) => {
@@ -634,7 +644,11 @@ export const hasEnabledCircularTrackRenderer = (slots, renderer) =>
 export const createCircularTrackSlotEditor = ({ state }) => {
   const normalizeSlotsInPlace = () => {
     const normalized = normalizeCircularTrackSlots(state.adv.circular_track_slots, state.adv.nt, state.form.track_type);
-    state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...orderSlotsForSections(normalized));
+    state.adv.circular_track_slots.splice(
+      0,
+      state.adv.circular_track_slots.length,
+      ...orderSlotsForSections(normalized, state.form.track_type)
+    );
   };
 
   const findSlotIndexByIdentity = (slotOrId) => {
@@ -652,11 +666,11 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     return slots.findIndex((slot) => String(slot?.id || '').trim() === slotId);
   };
 
-  const insertSlotInSection = (slot, sectionKey = getSlotSectionKey(slot)) => {
+  const insertSlotInSection = (slot, sectionKey = getSlotSectionKey(slot, state.form.track_type)) => {
     const targetRank = SECTION_RANKS[getSectionDefinition(sectionKey).key] ?? SECTION_RANKS.inside;
     let insertIndex = 0;
     state.adv.circular_track_slots.forEach((existingSlot, index) => {
-      const rank = SECTION_RANKS[getSlotSectionKey(existingSlot)] ?? SECTION_RANKS.inside;
+      const rank = SECTION_RANKS[getSlotSectionKey(existingSlot, state.form.track_type)] ?? SECTION_RANKS.inside;
       if (rank <= targetRank) insertIndex = index + 1;
     });
     state.adv.circular_track_slots.splice(insertIndex, 0, slot);
@@ -666,7 +680,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     const index = findSlotIndexByIdentity(slotOrId);
     if (index < 0) return;
     const [slot] = state.adv.circular_track_slots.splice(index, 1);
-    insertSlotInSection(slot, getSlotSectionKey(slot));
+    insertSlotInSection(slot, getSlotSectionKey(slot, state.form.track_type));
   };
 
   const resetCircularTrackSlotsFromSimpleControls = () => {
@@ -748,21 +762,15 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     normalizeSlotsInPlace();
     const normalizedSectionKey = getSectionDefinition(sectionKey).key;
     const normalizedRenderer = normalizeRendererForSection(normalizedSectionKey, renderer);
-    const placement = normalizedSectionKey === 'outer' ? 'outside' : 'inside';
+    const placement = normalizedSectionKey === 'outer'
+      ? 'outside'
+      : (normalizedSectionKey === 'axis' ? 'overlay' : 'inside');
     const slot = createCircularTrackSlotForRenderer(
       normalizedRenderer,
       state.adv.circular_track_slots,
       state.adv.nt,
       placement
     );
-    if (normalizedSectionKey === 'axis') {
-      slot.side = null;
-      if (slot.renderer === 'features') {
-        slot.params = cloneParams(slot.params);
-        delete slot.params.lane_direction;
-        slot.reserve = null;
-      }
-    }
     insertSlotInSection(slot, normalizedSectionKey);
   };
 
@@ -812,7 +820,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
 
   const sameSectionSlotIndexes = (sectionKey) => state.adv.circular_track_slots
     .map((slot, index) => ({ slot, index }))
-    .filter((entry) => getSlotSectionKey(entry.slot) === sectionKey)
+    .filter((entry) => getSlotSectionKey(entry.slot, state.form.track_type) === sectionKey)
     .map((entry) => entry.index);
 
   const canMoveCircularTrackSlotInSection = (index, direction) => {
@@ -821,7 +829,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     if (!Number.isInteger(idx) || !Number.isInteger(step) || step === 0) return false;
     const slot = state.adv.circular_track_slots[idx];
     if (!slot) return false;
-    const indexes = sameSectionSlotIndexes(getSlotSectionKey(slot));
+    const indexes = sameSectionSlotIndexes(getSlotSectionKey(slot, state.form.track_type));
     const position = indexes.indexOf(idx);
     return position >= 0 && position + Math.sign(step) >= 0 && position + Math.sign(step) < indexes.length;
   };
@@ -831,7 +839,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     const step = Math.sign(Number(direction));
     if (!canMoveCircularTrackSlotInSection(idx, step)) return;
     const slot = state.adv.circular_track_slots[idx];
-    const indexes = sameSectionSlotIndexes(getSlotSectionKey(slot));
+    const indexes = sameSectionSlotIndexes(getSlotSectionKey(slot, state.form.track_type));
     const position = indexes.indexOf(idx);
     const target = indexes[position + step];
     const [moved] = state.adv.circular_track_slots.splice(idx, 1);
@@ -844,7 +852,6 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     slot.renderer = renderer;
     slot.params = cloneParams(slot.params);
     slot.side = normalizeSlotSide(slot.side);
-    if (!AXIS_RENDERERS.has(renderer) && slot.side === 'overlay') slot.side = null;
     if (renderer === 'ticks') {
       delete slot.params['axis'];
       if (normalizeOptionalText(slot.params.label_side) === null) delete slot.params.label_side;
@@ -863,7 +870,6 @@ export const createCircularTrackSlotEditor = ({ state }) => {
 
   const updateCircularTrackSlotPlacement = (slot, placement) => {
     if (!slot || !SUPPORTED_RENDERERS.includes(slot.renderer)) return;
-    if (!AXIS_RENDERERS.has(slot.renderer)) return;
     if (normalizeOptionalText(placement) === null) {
       slot.side = null;
       if (slot.compress === true) slot.compress = null;
@@ -887,13 +893,15 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       delete slot.params.lane_direction;
       slot.side = null;
       slot.reserve = null;
+      moveSlotToCurrentSection(slot);
       return;
     }
     const normalizedLaneDirection = normalizeLaneDirection(explicitLaneDirection);
     if (normalizedLaneDirection === 'inside') {
-      delete slot.params.lane_direction;
-      slot.side = null;
+      slot.params.lane_direction = 'inside';
+      slot.side = 'inside';
       slot.reserve = null;
+      moveSlotToCurrentSection(slot);
       return;
     }
     slot.params.lane_direction = normalizedLaneDirection;
@@ -908,7 +916,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       ? 'Auto'
       : (PLACEMENT_LABELS[normalizePlacement(placement)] || PLACEMENT_LABELS.inside)
   );
-  const supportsCircularTrackSlotPlacement = (renderer) => AXIS_RENDERERS.has(renderer);
+  const supportsCircularTrackSlotPlacement = (renderer) => SUPPORTED_RENDERERS.includes(renderer);
 
   const circularTrackRenderersForSection = (sectionKey) => [...getSectionDefinition(sectionKey).renderers];
 
@@ -918,11 +926,13 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       : [];
     return SECTION_DEFINITIONS.map((definition) => ({
       ...definition,
-      entries: entries.filter((entry) => getSlotSectionKey(entry.slot) === definition.key)
+      entries: entries.filter((entry) => getSlotSectionKey(entry.slot, state.form.track_type) === definition.key)
     }));
   };
 
-  const circularTrackSlotSectionLabel = (slot) => getSectionDefinition(getSlotSectionKey(slot)).label;
+  const circularTrackSlotSectionLabel = (slot) => getSectionDefinition(
+    getSlotSectionKey(slot, state.form.track_type)
+  ).label;
 
   const circularTrackSlotCliSpec = (slot) => buildCircularTrackSlotSpec(slot, state.adv.nt, state.form.track_type);
 

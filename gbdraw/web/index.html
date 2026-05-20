@@ -887,8 +887,9 @@
                                                         class="form-input px-1 py-0.5 text-[10px]"
                                                     >
                                                         <option value="">Auto lanes</option>
-                                                        <option v-if="entry.slot.params.lane_direction === 'outside'" value="outside">Outer lanes</option>
+                                                        <option value="inside">Inner lanes</option>
                                                         <option value="split">Lanes split</option>
+                                                        <option value="outside">Outer lanes</option>
                                                     </select>
                                                 </div>
                                                 <div v-if="entry.slot.renderer === 'ticks'" class="grid grid-cols-2 gap-1 items-center">
@@ -918,8 +919,9 @@
                                                         class="form-input px-1 py-0.5 text-[10px]"
                                                     >
                                                         <option value="">Auto</option>
-                                                        <option value="outside">Axis outside</option>
-                                                        <option value="overlay">Overlay</option>
+                                                        <option value="outside">Outer</option>
+                                                        <option value="overlay">On-axis</option>
+                                                        <option value="inside">Inner</option>
                                                     </select>
                                                     <span v-else class="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] text-slate-500">{{ circularTrackSlotSectionLabel(entry.slot) }}</span>
                                                     <label class="option-label flex items-center gap-1 text-[10px] text-slate-600">
