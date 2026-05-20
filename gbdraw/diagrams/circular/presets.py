@@ -185,12 +185,11 @@ def _tick_slot_for_preset(
         tick_track_channel_override=context.tick_track_channel_override,
     )
     tick_inner_ratio, tick_outer_ratio = sorted((float(tick_inner_ratio), float(tick_outer_ratio)))
-    stack_side = "inside" if preset == "spreadout" else "outside"
-    tick_side = stack_side
-    anchor_ratio = 1.0
+    tick_side = "inside" if tick_outer_ratio <= 1.0 else "outside"
+    anchor_ratio = tick_outer_ratio if tick_side == "inside" else tick_inner_ratio
     tick_width_px = max(0.0, (tick_outer_ratio - tick_inner_ratio) * base_radius)
 
-    label_side = stack_side
+    label_side = "outside"
     label_bounds = get_circular_tick_label_radius_bounds(
         center_radius_px=anchor_ratio * base_radius,
         total_len=int(context.total_length),
@@ -202,7 +201,6 @@ def _tick_slot_for_preset(
         manual_interval=context.cfg.objects.scale.interval,
         tick_track_channel_override=context.tick_track_channel_override,
         tick_width=float(context.cfg.objects.ticks.tick_width),
-        label_side=label_side,
         tick_side=tick_side,
         tick_length_px=tick_width_px,
         length_reference_radius_px=base_radius,
@@ -214,7 +212,7 @@ def _tick_slot_for_preset(
     return CircularTrackSlot(
         id="ticks",
         renderer="ticks",
-        side=stack_side,
+        side=tick_side,
         radius=None,
         width=_scalar_px(tick_width_px),
         spacing=_scalar_px(max(1.0, 0.01 * base_radius)),

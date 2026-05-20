@@ -1239,18 +1239,13 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
         legend="none",
     )
 
-    tick_center = float(captured.get("ticks") if captured.get("ticks") is not None else base_radius)
-    tick_label_annulus = get_circular_tick_label_radius_bounds(
-        center_radius_px=tick_center,
-        total_len=len(record.seq),
-        track_type=str(cfg.canvas.circular.track_type),
-        strandedness=bool(cfg.canvas.strandedness),
-        font_size=float(cfg.objects.ticks.tick_labels.font_size),
-        font_family=str(cfg.objects.text.font_family),
-        dpi=int(cfg.canvas.dpi),
-        manual_interval=cfg.objects.scale.interval,
+    tick_layout = captured["radial_layout"].ticks
+    assert tick_layout is not None
+    assert tick_layout.label_band_px is not None
+    tick_label_annulus = (
+        float(tick_layout.label_band_px.inner_px),
+        float(tick_layout.label_band_px.outer_px),
     )
-    assert tick_label_annulus is not None
 
     length_param = "short" if len(record.seq) < 50000 else "long"
 
