@@ -348,6 +348,27 @@ def test_outside_auto_numeric_width_is_independent_from_inside_compression() -> 
     assert by_id["outer_skew"].draw_band_px.inner_px >= canvas_config.radius
 
 
+def test_outside_auto_stack_order_is_outermost_first() -> None:
+    canvas_config, cfg = _small_radial_canvas()
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=[
+            CircularTrackSlot(id="outer_content", renderer="dinucleotide_content", side="outside"),
+            CircularTrackSlot(id="middle_skew", renderer="dinucleotide_skew", side="outside"),
+            CircularTrackSlot(id="inner_depth", renderer="depth", side="outside"),
+        ],
+        show_features=False,
+        show_ticks=False,
+    )
+    by_id = {track.id: track for track in layout.tracks}
+
+    assert by_id["outer_content"].draw_band_px.inner_px >= by_id["middle_skew"].draw_band_px.outer_px
+    assert by_id["middle_skew"].draw_band_px.inner_px >= by_id["inner_depth"].draw_band_px.outer_px
+    assert by_id["inner_depth"].draw_band_px.inner_px >= canvas_config.radius
+
+
 def test_user_preset_generated_param_has_no_layout_effect_on_pinned_numeric_slot() -> None:
     canvas_config, cfg = _small_radial_canvas()
     base_slot = CircularTrackSlot(

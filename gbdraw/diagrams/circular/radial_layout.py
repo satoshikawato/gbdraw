@@ -1122,6 +1122,25 @@ def _inside_auto_stack_group_from(
     return group
 
 
+def _outside_auto_stack_group_from(
+    ordered_intents: Sequence[_RadialSlotIntent],
+    start_pos: int,
+    resolved_by_index: Mapping[int, CircularResolvedSlot],
+) -> list[_RadialSlotIntent]:
+    group: list[_RadialSlotIntent] = []
+    for future in ordered_intents[start_pos:]:
+        if future.slot_index in resolved_by_index:
+            break
+        if (
+            future.side != "outside"
+            or future.placement_policy != "auto"
+            or future.explicit_anchor
+        ):
+            break
+        group.append(future)
+    return group
+
+
 def _inside_movable_stack_group_from(
     ordered_intents: Sequence[_RadialSlotIntent],
     start_pos: int,
@@ -1214,6 +1233,47 @@ def _place_inside_auto_stack_group(
         f"{placement_window.inner_px:.1f}px and {placement_window.outer_px:.1f}px. "
         "Move the slot, reduce widths, disable conflicting labels, or use side=outside."
     )
+
+
+def _place_outside_auto_stack_group(
+    intents: Sequence[_RadialSlotIntent],
+    *,
+    occupied: Sequence[tuple[str, RadialBand]],
+    axis_radius_px: float,
+    placement_window: PlacementWindow,
+    feature_dict: Mapping[str, Any] | None,
+    canvas_config: CircularCanvasConfigurator,
+    cfg: GbdrawConfig,
+    total_length: int,
+    tick_track_channel_override: str | None,
+    depth_config: DepthConfigurator | None,
+) -> tuple[CircularResolvedSlot, ...]:
+    working_occupied = list(occupied)
+    working_inner = float(placement_window.inner_px)
+    resolved_by_slot_index: dict[int, CircularResolvedSlot] = {}
+
+    # Outside rows are displayed from outermost to innermost. The packer fills
+    # from the axis outward, so place that visual stack in reverse.
+    for intent in reversed(tuple(intents)):
+        resolved = _place_outside_auto(
+            intent,
+            occupied=working_occupied,
+            axis_radius_px=axis_radius_px,
+            placement_window=PlacementWindow(working_inner, float(placement_window.outer_px)),
+            feature_dict=feature_dict,
+            canvas_config=canvas_config,
+            cfg=cfg,
+            total_length=total_length,
+            tick_track_channel_override=tick_track_channel_override,
+            depth_config=depth_config,
+        )
+        resolved_by_slot_index[intent.slot_index] = resolved
+        if _slot_reserves(intent) and resolved.reserved_band_px is not None:
+            working_occupied.append((intent.slot_id, resolved.reserved_band_px))
+        if resolved.packing_band_px is not None:
+            working_inner = max(working_inner, float(resolved.packing_band_px.outer_px) + intent.spacing_px)
+
+    return tuple(resolved_by_slot_index[intent.slot_index] for intent in intents)
 
 
 def _linear_scales_from_1_to_min(min_scale: float, *, steps: int = 8) -> list[float]:
@@ -1455,10 +1515,10 @@ def _validate_same_side_order(
                 continue
             spacing = max(0.0, float(spacing_by_index.get(previous.slot_index, 0.0)))
             if side == "outside":
-                if current.packing_band_px.inner_px < previous.packing_band_px.outer_px + spacing - LAYOUT_EPSILON:
+                if previous.packing_band_px.inner_px < current.packing_band_px.outer_px + spacing - LAYOUT_EPSILON:
                     raise ValidationError(
                         "Circular track slot order cannot be honored with the supplied pinned geometry: "
-                        f"'{current.id}' would overlap or move inside '{previous.id}'."
+                        f"'{current.id}' would overlap or move outside '{previous.id}'."
                     )
             else:
                 if current.packing_band_px.outer_px > previous.packing_band_px.inner_px - spacing + LAYOUT_EPSILON:
@@ -1770,6 +1830,41 @@ def resolve_circular_radial_layout(
                 depth_config=depth_config,
             )
         elif intent.side == "outside":
+            outside_group = _outside_auto_stack_group_from(
+                ordered_intents,
+                intent_pos,
+                resolved_by_index,
+            )
+            if len(outside_group) > 1:
+                placement_window = _outside_placement_window(
+                    ordered_intents,
+                    start_pos=intent_pos + len(outside_group) - 1,
+                    current_spacing_px=outside_group[-1].spacing_px,
+                    outside_min_inner=outside_min_inner,
+                    resolved_by_index=resolved_by_index,
+                )
+                resolved_group = _place_outside_auto_stack_group(
+                    outside_group,
+                    occupied=occupied,
+                    axis_radius_px=axis_radius_px,
+                    placement_window=placement_window,
+                    feature_dict=feature_dict,
+                    canvas_config=canvas_config,
+                    cfg=cfg,
+                    total_length=int(total_length),
+                    tick_track_channel_override=tick_track_channel_override,
+                    depth_config=depth_config,
+                )
+                for group_intent, group_resolved in zip(outside_group, resolved_group):
+                    resolved_by_index[group_intent.slot_index] = group_resolved
+                    if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
+                        occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
+                    if group_resolved.packing_band_px is not None:
+                        outside_min_inner = max(
+                            outside_min_inner,
+                            float(group_resolved.packing_band_px.outer_px) + group_intent.spacing_px,
+                        )
+                continue
             placement_window = _outside_placement_window(
                 ordered_intents,
                 start_pos=intent_pos,
