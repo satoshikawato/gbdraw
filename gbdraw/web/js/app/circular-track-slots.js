@@ -731,19 +731,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   const circularTrackSlotCliSpec = (slot) => buildCircularTrackSlotSpec(slot, state.adv.nt, state.form.track_type);
 
   const circularTrackSlotAutoPlacementFromOrder = (slot) => {
-    if (!slot || typeof slot !== 'object' || !SUPPORTED_RENDERERS.includes(slot.renderer)) return null;
-    if (slot.enabled === false || slot.renderer === 'features') return null;
-    if (normalizeOptionalPlacement(slot.side) !== null) return null;
-    const slots = Array.isArray(state.adv.circular_track_slots) ? state.adv.circular_track_slots : [];
-    const slotIndex = slots.indexOf(slot);
-    if (slotIndex < 0) return null;
-    const featureIndex = slots.findIndex((entry) => (
-      entry &&
-      entry.enabled !== false &&
-      entry.renderer === 'features'
-    ));
-    if (featureIndex < 0 || featureIndex === slotIndex) return null;
-    return slotIndex < featureIndex ? 'outside' : 'inside';
+    void slot;
+    return null;
   };
 
   const circularTrackPresetSummary = () => {

@@ -457,7 +457,7 @@ def test_default_custom_slots_auto_place_near_preset_without_radius_inheritance(
         )
 
 
-def test_custom_slot_order_places_ticks_outside_feature_band_when_ordered_before_features(
+def test_custom_slot_order_places_ticks_axis_side_of_features_when_ordered_before_features(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
@@ -503,9 +503,9 @@ def test_custom_slot_order_places_ticks_outside_feature_band_when_ordered_before
     assert layout.features is not None
     assert layout.ticks is not None
     assert layout.ticks.anchor_radius_px > layout.features.anchor_radius_px
-    assert layout.ticks.tick_band_px.inner_px >= layout.features.all_band_px.outer_px
+    assert layout.ticks.reserved_band_px.inner_px >= layout.features.all_band_px.outer_px - 1e-6
     assert layout.ticks.label_band_px is not None
-    assert layout.ticks.label_band_px.inner_px >= layout.features.all_band_px.outer_px
+    assert layout.ticks.label_band_px.inner_px >= layout.features.all_band_px.outer_px - 1e-6
 
 
 def test_parse_circular_track_slot_ignores_retired_layout_flags() -> None:
@@ -1159,12 +1159,12 @@ def test_edl933_ticks_before_features_use_measured_tick_footprint(
     assert captured["gc_content"][0] > captured["gc_skew"][0]  # type: ignore[index]
     assert layout.features is not None
     assert layout.ticks is not None
-    assert layout.ticks.reserved_band_px.inner_px >= layout.features.all_band_px.outer_px
+    assert layout.ticks.reserved_band_px.inner_px >= layout.features.all_band_px.outer_px - 1e-6
     assert (float(gc_center) - (0.5 * float(gc_width))) > 0.0
 
 
 @pytest.mark.circular
-def test_inside_order_reserves_stranded_feature_stack_between_numeric_slots(
+def test_inside_order_places_axis_side_tracks_before_features(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
@@ -1208,13 +1208,13 @@ def test_inside_order_reserves_stranded_feature_stack_between_numeric_slots(
     by_id = {slot.id: slot for slot in layout.slots}  # type: ignore[attr-defined]
 
     assert by_id["features"].reserved_width_px > by_id["features"].resolved_width_px
-    assert by_id["gc_content"].packing_band_px.center_px > by_id["ticks"].packing_band_px.center_px
-    assert by_id["ticks"].packing_band_px.center_px > by_id["features"].packing_band_px.center_px
+    assert by_id["ticks"].packing_band_px.center_px > by_id["gc_content"].packing_band_px.center_px
+    assert by_id["gc_content"].packing_band_px.center_px > by_id["features"].packing_band_px.center_px
     assert by_id["features"].packing_band_px.center_px > by_id["gc_skew"].packing_band_px.center_px
 
 
 @pytest.mark.circular
-def test_order_only_gc_content_falls_back_later_auto_tracks_outside_when_needed(
+def test_order_only_gc_content_moves_feature_inward_instead_of_falling_back_outside(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import gbdraw.diagrams.circular.assemble as circular_assemble_module

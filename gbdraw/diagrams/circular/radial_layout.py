@@ -717,7 +717,6 @@ def _measure_radial_slot(
     renderer = intent.renderer
 
     if renderer == "features":
-        feature_anchor_radius = anchor_radius_px if intent.explicit_anchor else None
         feature_preset = intent.params.get("stack_preset", intent.params.get("preset"))
         feature_layout = build_circular_feature_layout(
             feature_dict,
@@ -726,7 +725,7 @@ def _measure_radial_slot(
             track_type=str(feature_preset) if feature_preset is not None else None,
             lane_direction=str(intent.params.get("lane_direction", "inside")),
             strandedness=bool(cfg.canvas.strandedness),
-            anchor_radius_px=feature_anchor_radius,
+            anchor_radius_px=anchor_radius_px,
             lane_spacing_px=float(intent.spacing_px),
         )
         if feature_layout is not None:
@@ -1626,28 +1625,7 @@ def resolve_circular_radial_layout(
         for intent in intents
     }
 
-    # The feature stack is the primary circular blocker. Resolve it before
-    # placing custom/numeric tracks so presets stay stable when rows are added.
-    for intent in intents:
-        if intent.renderer != "features":
-            continue
-        resolved = _measure_radial_slot(
-            intent,
-            anchor_offset_px=float(intent.anchor_offset_px or 0.0),
-            axis_radius_px=axis_radius_px,
-            feature_dict=feature_dict,
-            canvas_config=canvas_config,
-            cfg=cfg,
-            total_length=int(total_length),
-            tick_track_channel_override=tick_track_channel_override,
-            depth_config=depth_config,
-        )
-        resolved_by_index[intent.slot_index] = resolved
-        if _slot_reserves(intent) and resolved.reserved_band_px is not None:
-            band = resolved.reserved_band_px.expanded(intent.spacing_px) if intent.side == "overlay" else resolved.reserved_band_px
-            occupied.append((intent.slot_id, band))
-
-    # Hard anchors and overlays become blockers before movable placement.
+    # Manual anchors and overlays become blockers before movable placement.
     for intent in intents:
         if intent.slot_index in resolved_by_index:
             continue
@@ -1675,8 +1653,8 @@ def resolve_circular_radial_layout(
             band = resolved.reserved_band_px.expanded(intent.spacing_px) if intent.side == "overlay" else resolved.reserved_band_px
             occupied.append((intent.slot_id, band))
 
-    outside_min_inner = axis_radius_px
-    inside_max_outer = axis_radius_px
+    outside_min_inner = axis_radius_px + _default_spacing_px(axis_radius_px)
+    inside_max_outer = axis_radius_px - _default_spacing_px(axis_radius_px)
     for slot_index, resolved in resolved_by_index.items():
         intent = intent_by_index.get(slot_index)
         if intent is None or resolved.packing_band_px is None:

@@ -29,7 +29,6 @@ CircularFeatureLaneDirection = Literal["inside", "split", "outside"]
 _VALID_PRESETS: frozenset[str] = frozenset({"tuckin", "middle", "spreadout"})
 _NUMERIC_PRESET_SLOT_IDS: frozenset[str] = frozenset({"depth", "gc_content", "gc_skew"})
 _NON_NUMERIC_PRESET_SLOT_IDS: frozenset[str] = frozenset({"features", "ticks"})
-_PRESET_SLOT_ORDER: tuple[str, ...] = ("features", "ticks", "depth", "gc_content", "gc_skew")
 _RENDERER_ALIASES: dict[str, str] = {
     "gc_content": "dinucleotide_content",
     "content": "dinucleotide_content",
@@ -385,30 +384,10 @@ def _inherited_width_for_renderer(
 def _auto_stack_side_from_feature_order(
     slots: Sequence[CircularTrackSlot],
 ) -> dict[int, str]:
-    feature_index: int | None = None
-    for index, slot in enumerate(slots):
-        if slot.enabled and _normalized_renderer(slot.renderer) == "features":
-            feature_index = index
-            break
-    if feature_index is None:
-        return {}
-
-    builtin_order = [
-        str(slot.id)
-        for slot in slots
-        if slot.enabled and str(slot.id) in _PRESET_SLOT_ORDER
-    ]
-    expected_order = [slot_id for slot_id in _PRESET_SLOT_ORDER if slot_id in set(builtin_order)]
-    builtin_order_is_default = builtin_order == expected_order
-
-    sides: dict[int, str] = {}
-    for index, slot in enumerate(slots):
-        if not slot.enabled or slot.side is not None or _normalized_renderer(slot.renderer) == "features":
-            continue
-        if builtin_order_is_default and str(slot.id) in _PRESET_SLOT_ORDER:
-            continue
-        sides[index] = "outside" if index < feature_index else "inside"
-    return sides
+    del slots
+    # Row order controls only stacking/order. Placement side comes from the
+    # preset or an explicit side override, not from moving a row in the editor.
+    return {}
 
 
 def _overlay_slot_on_preset_lane(
