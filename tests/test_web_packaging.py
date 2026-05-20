@@ -182,6 +182,9 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "side = null" in slot_source
     assert "isLegacyDefaultWebSlotShape" in slot_source
     assert "ensureCircularTrackDepthSlot" in slot_source
+    assert "Replace the current custom circular track slots with this preset" not in slot_source
+    assert "const preserved = hasCurrentSlots" in slot_source
+    assert "state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...preserved);" in slot_source
     assert "() => [adv.circular_track_slots_enabled, form.show_depth]" in app_setup_source
     assert "circularTrackSlotEditor.ensureCircularTrackDepthSlot();" in app_setup_source
 

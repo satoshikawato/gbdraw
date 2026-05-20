@@ -572,26 +572,19 @@ export const createCircularTrackSlotEditor = ({ state }) => {
 
   const applyCircularTrackPreset = (preset) => {
     const normalizedPreset = normalizeCircularTrackPreset(preset);
-    const current = JSON.stringify(normalizeCircularTrackSlots(state.adv.circular_track_slots, state.adv.nt, state.form.track_type));
-    const replacement = createDefaultCircularTrackSlots({
-      nt: state.adv.nt,
-      showDepth: Boolean(state.form.show_depth),
-      showGc: !state.form.suppress_gc,
-      showSkew: !state.form.suppress_skew,
-      preset: normalizedPreset
-    });
-    const next = JSON.stringify(normalizeCircularTrackSlots(replacement, state.adv.nt, normalizedPreset));
-    if (
-      current !== next &&
-      Array.isArray(state.adv.circular_track_slots) &&
-      state.adv.circular_track_slots.length > 0 &&
-      typeof window !== 'undefined' &&
-      !window.confirm('Replace the current custom circular track slots with this preset?')
-    ) {
-      return;
-    }
+    const currentPreset = normalizeCircularTrackPreset(state.form.track_type);
+    const hasCurrentSlots = Array.isArray(state.adv.circular_track_slots) && state.adv.circular_track_slots.length > 0;
+    const preserved = hasCurrentSlots
+      ? normalizeCircularTrackSlots(state.adv.circular_track_slots, state.adv.nt, currentPreset)
+      : createDefaultCircularTrackSlots({
+        nt: state.adv.nt,
+        showDepth: Boolean(state.form.show_depth),
+        showGc: !state.form.suppress_gc,
+        showSkew: !state.form.suppress_skew,
+        preset: normalizedPreset
+      });
     state.form.track_type = normalizedPreset;
-    state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...replacement);
+    state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...preserved);
   };
 
   const addCircularTrackSlot = (renderer, placement = null) => {
