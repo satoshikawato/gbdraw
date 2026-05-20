@@ -182,6 +182,9 @@ export const createAppSetup = () => {
   watch(
     () => [adv.circular_track_slots_enabled, form.show_depth],
     ([slotsEnabled, showDepth]) => {
+      if (slotsEnabled) {
+        circularTrackSlotEditor.normalizeCircularTrackSlots();
+      }
       if (slotsEnabled && showDepth) {
         circularTrackSlotEditor.ensureCircularTrackDepthSlot();
       }
@@ -811,6 +814,7 @@ export const createAppSetup = () => {
     circularTrackPlacementLabel: circularTrackSlotEditor.circularTrackPlacementLabel,
     supportsCircularTrackSlotPlacement: circularTrackSlotEditor.supportsCircularTrackSlotPlacement,
     circularTrackSlots: circularTrackSlotEditor.circularTrackSlots,
+    circularTrackStackEntries: circularTrackSlotEditor.circularTrackStackEntries,
     circularTrackSlotCliSpec: circularTrackSlotEditor.circularTrackSlotCliSpec,
     circularTrackPresetSummary: circularTrackSlotEditor.circularTrackPresetSummary,
     circularTrackSlotUsesPresetGeometry: circularTrackSlotEditor.circularTrackSlotUsesPresetGeometry,

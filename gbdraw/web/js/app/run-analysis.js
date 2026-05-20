@@ -7,9 +7,9 @@ import {
 } from '../services/diagram-generation.js';
 import { buildLabelOverrideTsv } from './feature-editor/label-override-table.js';
 import {
+  applyCircularTrackOrderPlacements,
   buildCircularTrackSlotSpec,
-  hasEnabledCircularTrackRenderer,
-  normalizeCircularTrackSlots
+  hasEnabledCircularTrackRenderer
 } from './circular-track-slots.js';
 
 const downloadTextFile = (filename, text) => {
@@ -1601,7 +1601,7 @@ json.dumps({
         const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(adv.plot_title_position);
         const useCircularTrackSlots = adv.circular_track_slots_enabled === true;
         const circularTrackSlots = useCircularTrackSlots
-          ? normalizeCircularTrackSlots(adv.circular_track_slots, adv.nt, form.track_type)
+          ? applyCircularTrackOrderPlacements(adv.circular_track_slots, adv.nt, form.track_type)
           : [];
         if (useCircularTrackSlots) {
           if (!multiCanvasSupport.circular_track_slot) {

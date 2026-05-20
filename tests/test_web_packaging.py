@@ -159,23 +159,27 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
 
     assert "circular_track_slots_enabled" in state_source
     assert "createDefaultCircularTrackSlots()" in state_source
-    assert "normalizeCircularTrackSlots(state.adv.circular_track_slots" in config_source
+    assert "applyCircularTrackOrderPlacements(state.adv.circular_track_slots" in config_source
     assert '"circular_track_slot": "--circular_track_slot" in _source' in run_source
     assert "args.push('--track_type', form.track_type);" in run_source
     assert "args.push('--circular_track_slot', buildCircularTrackSlotSpec(slot, adv.nt, form.track_type));" in run_source
+    assert "applyCircularTrackOrderPlacements(adv.circular_track_slots, adv.nt, form.track_type)" in run_source
     assert "if (!useCircularTrackSlots)" in run_source
     assert "hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth')" in run_source
     assert "Custom Track Slots" in index_html
     assert "Track Preset" in index_html
     assert "Apply Tuckin" in index_html
-    assert "axis is fixed" in index_html
-    assert "Blank fields inherit the selected preset" in index_html
-    assert "Ordered track stack" in index_html
+    assert "fixed Axis row shows the boundary" in index_html
+    assert "Radial track stack" in index_html
+    assert "circularTrackStackEntries()" in index_html
+    assert "Moving a row across the Axis updates the generated track placement" in index_html
     assert "Add track" in index_html
     assert "Outer tracks" not in slot_source
     assert "On-axis tracks" not in slot_source
     assert "Inner tracks" not in slot_source
     assert "circularTrackSlots" in slot_source
+    assert "axisIndexForSlots" in slot_source
+    assert "syncSlotPlacementFromSide" in slot_source
     assert "Feature Layout" not in index_html
     assert "params.axis" not in slot_source
     assert "axis=true" not in slot_source
@@ -184,8 +188,9 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "ensureCircularTrackDepthSlot" in slot_source
     assert "Replace the current custom circular track slots with this preset" not in slot_source
     assert "const preserved = hasCurrentSlots" in slot_source
-    assert "state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...preserved);" in slot_source
+    assert "state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...normalized);" in slot_source
     assert "() => [adv.circular_track_slots_enabled, form.show_depth]" in app_setup_source
+    assert "circularTrackSlotEditor.normalizeCircularTrackSlots();" in app_setup_source
     assert "circularTrackSlotEditor.ensureCircularTrackDepthSlot();" in app_setup_source
 
 

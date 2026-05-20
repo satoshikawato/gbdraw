@@ -1,6 +1,6 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
-import { normalizeCircularTrackSlots } from '../app/circular-track-slots.js';
+import { applyCircularTrackOrderPlacements } from '../app/circular-track-slots.js';
 
 const SESSION_VERSION = 21;
 const LOSAT_CACHE_SCHEMA = 2;
@@ -512,7 +512,7 @@ const applyConfigData = (data) => {
   state.adv.circular_track_slots.splice(
     0,
     state.adv.circular_track_slots.length,
-    ...normalizeCircularTrackSlots(state.adv.circular_track_slots, state.adv.nt, state.form.track_type)
+    ...applyCircularTrackOrderPlacements(state.adv.circular_track_slots, state.adv.nt, state.form.track_type)
   );
   state.adv.depth_window_size = normalizePositiveNumberOrNull(state.adv.depth_window_size);
   state.adv.depth_step_size = normalizePositiveNumberOrNull(state.adv.depth_step_size);
