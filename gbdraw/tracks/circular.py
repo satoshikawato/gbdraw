@@ -97,9 +97,6 @@ class CircularTrackSlot:
     width: ScalarSpec | None = None
     spacing: ScalarSpec | None = None
     z: int = 0
-    strict: bool | None = None
-    compress: bool | None = None
-    reserve: bool | None = None
     params: Mapping[str, Any] = field(default_factory=dict)
 
 
@@ -114,7 +111,6 @@ class NormalizedCircularTrackSlot:
     width: ScalarSpec | None
     spacing: ScalarSpec | None
     z: int
-    strict: bool
     compress: bool
     reserve: bool
     params: Mapping[str, Any]
@@ -189,9 +185,6 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
     width: ScalarSpec | None = None
     spacing: ScalarSpec | None = None
     z = 0
-    strict: bool | None = None
-    compress: bool | None = None
-    reserve: bool | None = None
     params: dict[str, Any] = {}
 
     if opts:
@@ -223,12 +216,10 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
                     raise ValueError(f"'{key}' is no longer supported; use spacing=<ScalarSpec>")
                 elif key == "side":
                     side = _normalize_side_value(value)
-                elif key == "strict":
-                    strict = parse_bool(value)
-                elif key == "compress":
-                    compress = parse_bool(value)
-                elif key == "reserve":
-                    reserve = parse_bool(value)
+                elif key in {"strict", "compress", "reserve"}:
+                    # Retired public flags: resolver strictness, compression,
+                    # and reservation are now determined from geometry/side.
+                    continue
                 elif key in {"nt", "dinucleotide"}:
                     params["nt"] = value.upper()
                 else:
@@ -250,9 +241,6 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
         width=width,
         spacing=spacing,
         z=z,
-        strict=strict,
-        compress=compress,
-        reserve=reserve,
         params=params,
     )
     try:
@@ -288,7 +276,7 @@ def parse_circular_track_slots(specs: Sequence[str | CircularTrackSlot]) -> list
 def _normalized_feature_side_and_params(slot: CircularTrackSlot, params: dict[str, Any]) -> tuple[str, bool, dict[str, Any]]:
     raw_lane = params.get("lane_direction", params.get("lanes"))
     raw_side = slot.side
-    reserve = bool(slot.reserve) if slot.reserve is not None else False
+    reserve = False
 
     lane: str | None = _normalize_feature_lane(raw_lane) if raw_lane is not None else None
     side: str | None = _normalize_side_value(raw_side) if raw_side is not None else None
@@ -303,7 +291,7 @@ def _normalized_feature_side_and_params(slot: CircularTrackSlot, params: dict[st
             lane = "outside"
         else:
             lane = "split"
-            reserve = True if slot.reserve is None else reserve
+            reserve = True
     elif side is None:
         if lane == "inside":
             side = "inside"
@@ -311,7 +299,7 @@ def _normalized_feature_side_and_params(slot: CircularTrackSlot, params: dict[st
             side = "outside"
         else:
             side = "overlay"
-            reserve = True if slot.reserve is None else reserve
+            reserve = True
     else:
         expected = "overlay" if lane == "split" else lane
         if side != expected:
@@ -319,7 +307,7 @@ def _normalized_feature_side_and_params(slot: CircularTrackSlot, params: dict[st
                 f"features slot '{slot.id}' has conflicting side={side!r} and lane_direction={lane!r}"
             )
         if side == "overlay":
-            reserve = True if slot.reserve is None else reserve
+            reserve = True
 
     params.pop("lanes", None)
     params["lane_direction"] = lane
@@ -367,11 +355,11 @@ def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[N
             ):
                 raise ValueError(
                     f"circular track slot '{slot.id}' stores generic layout field '{raw_key}' in params; "
-                    "use slot-level radius, width, spacing, side, strict, compress, reserve, and z fields"
+                    "use slot-level radius, width, spacing, side, and z fields"
                 )
         params = dict(raw_params)
         side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
-        reserve = bool(slot.reserve) if slot.reserve is not None else False
+        reserve = side == "overlay"
 
         if renderer == "features":
             side, reserve, params = _normalized_feature_side_and_params(slot, params)
@@ -383,15 +371,13 @@ def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[N
         elif renderer == "spacer":
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
 
-        compress = bool(slot.compress) if slot.compress is not None else False
-        explicit_anchor = slot.radius is not None
-        if compress:
-            if renderer not in NUMERIC_CIRCULAR_TRACK_RENDERERS:
-                raise ValueError(f"compress is not supported for {renderer} circular slots")
-            if explicit_anchor:
-                raise ValueError("compress is not supported on pinned circular numeric/depth slots")
-            if side != "inside":
-                raise ValueError("compress is valid only for auto inside numeric/depth circular slots")
+        auto_compress = bool(params.pop("_auto_compress", False))
+        compress = (
+            renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
+            and side == "inside"
+            and slot.radius is None
+            and (slot.width is None or auto_compress)
+        )
 
         normalized.append(
             NormalizedCircularTrackSlot(
@@ -404,7 +390,6 @@ def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[N
                 width=slot.width,
                 spacing=slot.spacing,
                 z=int(slot.z),
-                strict=bool(slot.strict) if slot.strict is not None else False,
                 compress=compress,
                 reserve=reserve,
                 params=params,

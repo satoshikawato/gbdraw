@@ -508,15 +508,12 @@ def test_custom_slot_order_places_ticks_outside_feature_band_when_ordered_before
     assert layout.ticks.label_band_px.inner_px >= layout.features.all_band_px.outer_px
 
 
-def test_parse_circular_track_slot_stores_layout_fields_on_slot() -> None:
+def test_parse_circular_track_slot_ignores_retired_layout_flags() -> None:
     slot = parse_circular_track_slot(
         "at_skew:dinucleotide_skew@nt=AT,w=24px,spacing=4px,side=inside,strict=true,compress=true,reserve=true,z=7"
     )
 
     assert slot.side == "inside"
-    assert slot.strict is True
-    assert slot.compress is True
-    assert slot.reserve is True
     assert slot.spacing is not None
     assert slot.spacing.resolve(390.0) == pytest.approx(4.0)
     assert "side" not in slot.params
@@ -526,9 +523,8 @@ def test_parse_circular_track_slot_stores_layout_fields_on_slot() -> None:
 
     normalized = normalize_circular_track_slots([slot])[0]
     assert normalized.side == "inside"
-    assert normalized.strict is True
-    assert normalized.compress is True
-    assert normalized.reserve is True
+    assert normalized.compress is False
+    assert normalized.reserve is False
     assert normalized.params["nt"] == "AT"
 
 
@@ -883,7 +879,6 @@ def test_explicit_pure_auto_slots_tuckin_raise_when_inside_numeric_tracks_cannot
                     renderer="dinucleotide_content",
                     side="inside",
                     width=ScalarSpec(240.0, "px"),
-                    compress=True,
                     params={"nt": "GC"},
                 ),
                 CircularTrackSlot(
@@ -891,7 +886,6 @@ def test_explicit_pure_auto_slots_tuckin_raise_when_inside_numeric_tracks_cannot
                     renderer="dinucleotide_skew",
                     side="inside",
                     width=ScalarSpec(240.0, "px"),
-                    compress=True,
                     params={"nt": "GC"},
                 ),
             ],
@@ -1742,8 +1736,16 @@ def test_api_explicit_inside_duplicate_dinucleotide_skew_places_when_space_is_re
         window=1000,
         step=1000,
         circular_track_slots=[
-            *default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
-            "gc_skew_2:dinucleotide_skew@nt=AT,side=inside,compress=true,strict=false",
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(
+                id="ticks",
+                renderer="ticks",
+                side="outside",
+                params={"label_side": "outside", "tick_side": "outside"},
+            ),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
+            "gc_skew_2:dinucleotide_skew@nt=AT,side=inside",
         ],
     )
 

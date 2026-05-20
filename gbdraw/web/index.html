@@ -907,7 +907,7 @@
                                                     <input v-model.trim="entry.slot.params.nt" class="form-input px-1 py-0.5 text-[10px]" placeholder="nt">
                                                     <input v-model.trim="entry.slot.params.legend_label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Legend label">
                                                 </div>
-                                                <div class="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-1 items-center">
+                                                <div class="grid grid-cols-1 gap-1 items-center">
                                                     <select
                                                         v-if="supportsCircularTrackSlotPlacement(entry.slot.renderer)"
                                                         :value="entry.slot.side || ''"
@@ -919,18 +919,6 @@
                                                         <option value="overlay">Axis anchored</option>
                                                         <option value="inside">Inner stack</option>
                                                     </select>
-                                                    <label class="option-label flex items-center gap-1 text-[10px] text-slate-600">
-                                                        <input type="checkbox" v-model="entry.slot.strict" class="form-checkbox">
-                                                        <span>Strict</span>
-                                                    </label>
-                                                    <label class="option-label flex items-center gap-1 text-[10px] text-slate-600">
-                                                        <input type="checkbox" v-model="entry.slot.compress" class="form-checkbox">
-                                                        <span>Compress</span>
-                                                    </label>
-                                                    <label class="option-label flex items-center gap-1 text-[10px] text-slate-600">
-                                                        <input type="checkbox" v-model="entry.slot.reserve" class="form-checkbox">
-                                                        <span>Reserve</span>
-                                                    </label>
                                                 </div>
                                             </div>
                                             <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">

@@ -29,6 +29,7 @@ CircularFeatureLaneDirection = Literal["inside", "split", "outside"]
 _VALID_PRESETS: frozenset[str] = frozenset({"tuckin", "middle", "spreadout"})
 _NUMERIC_PRESET_SLOT_IDS: frozenset[str] = frozenset({"depth", "gc_content", "gc_skew"})
 _NON_NUMERIC_PRESET_SLOT_IDS: frozenset[str] = frozenset({"features", "ticks"})
+_PRESET_SLOT_ORDER: tuple[str, ...] = ("features", "ticks", "depth", "gc_content", "gc_skew")
 _RENDERER_ALIASES: dict[str, str] = {
     "gc_content": "dinucleotide_content",
     "content": "dinucleotide_content",
@@ -242,7 +243,6 @@ def circular_track_slots_for_preset(
                 radius=feature_defaults.radius,
                 width=feature_defaults.width,
                 spacing=_scalar_px(max(1.0, 0.01 * float(context.canvas_config.radius))),
-                reserve=True if feature_defaults.lane_direction == "split" else None,
                 params={
                     "lane_direction": feature_defaults.lane_direction,
                     "stack_preset": normalized,
@@ -302,14 +302,10 @@ def circular_radial_plan_for_preset(
 
 
 def _slot_requests_pure_auto(slot: CircularTrackSlot, renderer: str) -> bool:
-    """Return True for the legacy explicit auto-packed numeric/depth shape."""
+    """Retired compatibility hook; geometry-free built-ins inherit the preset."""
 
-    return (
-        renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
-        and slot.radius is None
-        and slot.compress is True
-        and (slot.side is None or str(slot.side).strip().lower() == "inside")
-    )
+    del slot, renderer
+    return False
 
 
 def _slot_uses_builtin_preset_lane(slot: CircularTrackSlot, renderer: str) -> bool:
@@ -329,9 +325,6 @@ def _slot_is_blank_unmatched_numeric_duplicate(slot: CircularTrackSlot, renderer
         and slot.radius is None
         and slot.width is None
         and slot.spacing is None
-        and slot.strict is None
-        and slot.compress is None
-        and slot.reserve is None
     )
 
 
@@ -400,9 +393,19 @@ def _auto_stack_side_from_feature_order(
     if feature_index is None:
         return {}
 
+    builtin_order = [
+        str(slot.id)
+        for slot in slots
+        if slot.enabled and str(slot.id) in _PRESET_SLOT_ORDER
+    ]
+    expected_order = [slot_id for slot_id in _PRESET_SLOT_ORDER if slot_id in set(builtin_order)]
+    builtin_order_is_default = builtin_order == expected_order
+
     sides: dict[int, str] = {}
     for index, slot in enumerate(slots):
         if not slot.enabled or slot.side is not None or _normalized_renderer(slot.renderer) == "features":
+            continue
+        if builtin_order_is_default and str(slot.id) in _PRESET_SLOT_ORDER:
             continue
         sides[index] = "outside" if index < feature_index else "inside"
     return sides
@@ -435,6 +438,13 @@ def _overlay_slot_on_preset_lane(
     if (
         renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
         and slot.radius is None
+        and slot.width is None
+        and str(side or "inside").strip().lower() == "inside"
+    ):
+        params["_auto_compress"] = True
+    if (
+        renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
+        and slot.radius is None
         and geometry_slot is not None
         and geometry_slot.radius is not None
         and str(side or "inside").strip().lower() == "inside"
@@ -447,17 +457,6 @@ def _overlay_slot_on_preset_lane(
         radius=slot.radius,
         width=slot.width if slot.width is not None else _inherited_width_for_renderer(renderer, params_slot, context),
         spacing=slot.spacing if slot.spacing is not None else (geometry_slot.spacing if geometry_slot is not None else None),
-        reserve=slot.reserve if slot.reserve is not None else (params_slot.reserve if params_slot is not None else None),
-        compress=(
-            slot.compress
-            if (
-                slot.compress is not None
-                or renderer not in NUMERIC_CIRCULAR_TRACK_RENDERERS
-                or slot.radius is not None
-                or str(side or "inside").strip().lower() != "inside"
-            )
-            else True
-        ),
         params=params,
     )
 

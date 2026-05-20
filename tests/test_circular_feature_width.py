@@ -33,9 +33,9 @@ SELECTED_FEATURES = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repea
 def _feature_width_slots(width: str) -> list[str]:
     return [
         f"features:features@w={width}",
-        "ticks:ticks@label_side=outside,tick_side=inside",
-        "gc_content:dinucleotide_content@compress=true",
-        "gc_skew:dinucleotide_skew@compress=true",
+        "ticks:ticks@side=outside,label_side=outside,tick_side=outside",
+        "gc_content:dinucleotide_content",
+        "gc_skew:dinucleotide_skew",
     ]
 
 
@@ -380,7 +380,7 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         config_dict=config_dict,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
-        circular_track_slots=_feature_width_slots("120px"),
+        circular_track_slots=_feature_width_slots("96px"),
     )
 
     assert captured["record_feature_ratio"] is not None
@@ -482,17 +482,17 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
         selected_features_set=SELECTED_FEATURES,
         legend="none",
         circular_track_slots=[
-            "features:features@w=120px",
-            "ticks:ticks@r=0.83,side=outside,label_side=none,tick_side=outside",
-            "gc_content:dinucleotide_content@r=0.74,w=22px",
-            "gc_skew:dinucleotide_skew@r=0.68,w=18px",
+            "features:features@w=75px",
+            "ticks:ticks@r=1.08,side=outside,label_side=none,tick_side=outside",
+            "gc_content:dinucleotide_content@r=0.56,w=22px",
+            "gc_skew:dinucleotide_skew@r=0.48,w=18px",
         ],
     )
 
     assert captured["axis_radius"] is None
-    assert math.isclose(float(captured["ticks_radius"]), 0.83 * base_radius, rel_tol=1e-6, abs_tol=1e-6)
-    assert math.isclose(float(captured["gc_norm"]), 0.74, rel_tol=1e-6, abs_tol=1e-6)
-    assert math.isclose(float(captured["skew_norm"]), 0.68, rel_tol=1e-6, abs_tol=1e-6)
+    assert math.isclose(float(captured["ticks_radius"]), 1.08 * base_radius, rel_tol=1e-6, abs_tol=1e-6)
+    assert math.isclose(float(captured["gc_norm"]), 0.56, rel_tol=1e-6, abs_tol=1e-6)
+    assert math.isclose(float(captured["skew_norm"]), 0.48, rel_tol=1e-6, abs_tol=1e-6)
     assert math.isclose(float(captured["gc_width"]), 22.0, rel_tol=1e-6, abs_tol=1e-6)
     assert math.isclose(float(captured["skew_width"]), 18.0, rel_tol=1e-6, abs_tol=1e-6)
 

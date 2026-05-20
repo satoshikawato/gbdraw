@@ -216,15 +216,6 @@ const slotHasManualGeometry = (slot) => (
   normalizeOptionalText(slot?.spacing) !== null
 );
 
-const normalizeOptionalBool = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value === 'boolean') return value;
-  const text = String(value).trim().toLowerCase();
-  if (['1', 'true', 'yes', 'on'].includes(text)) return true;
-  if (['0', 'false', 'no', 'off'].includes(text)) return false;
-  return null;
-};
-
 const cloneParams = (params = {}) => {
   if (!params || typeof params !== 'object' || Array.isArray(params)) return {};
   return { ...params };
@@ -239,10 +230,6 @@ const applyPlacementDefaults = (slot, placement = 'inside') => {
   slot.params = cloneParams(slot.params);
   if (slot.renderer === 'features') {
     slot.params.lane_direction = laneDirectionForSide(requestedSide);
-    if (requestedSide === 'overlay' && slot.reserve === null) slot.reserve = true;
-  }
-  if ((!NUMERIC_RENDERERS.has(slot.renderer) || requestedSide !== 'inside') && slot.compress === true) {
-    slot.compress = null;
   }
 };
 
@@ -255,9 +242,6 @@ const makeSlot = ({
   spacing = null,
   side = null,
   z = 0,
-  strict = null,
-  compress = null,
-  reserve = null,
   params = {}
 }) => ({
   id,
@@ -268,9 +252,6 @@ const makeSlot = ({
   spacing,
   side: normalizeSlotSide(side),
   z,
-  strict,
-  compress,
-  reserve,
   params: cloneParams(params)
 });
 
@@ -293,8 +274,7 @@ const hasBlankSlotGeometry = (source) =>
 
 const hasDefaultSlotFlags = (source) =>
   source.enabled !== false &&
-  Number(source.z || 0) === 0 &&
-  normalizeOptionalBool(source.strict) === null;
+  Number(source.z || 0) === 0;
 
 const isLegacyDefaultWebSlotShape = (source, renderer, defaultNt = 'GC', preset = 'tuckin') => {
   if (!source || typeof source !== 'object' || Array.isArray(source)) return false;
@@ -303,17 +283,12 @@ const isLegacyDefaultWebSlotShape = (source, renderer, defaultNt = 'GC', preset 
   const normalizedPreset = normalizeCircularTrackPreset(preset);
   const normalizedId = String(source.id || '').trim();
   const side = normalizeOptionalPlacement(source.side);
-  const reserve = normalizeOptionalBool(source.reserve);
-  const compress = normalizeOptionalBool(source.compress);
   const params = cloneParams(source.params);
 
   if (renderer === 'features' && normalizedId === 'features') {
     const laneDirection = laneDirectionForPreset(normalizedPreset);
-    const expectedReserve = laneDirection === 'split' ? true : null;
     return (
       side === sideForLaneDirection(laneDirection) &&
-      reserve === expectedReserve &&
-      compress === null &&
       paramsMatchExactly(params, { lane_direction: laneDirection })
     );
   }
@@ -321,8 +296,6 @@ const isLegacyDefaultWebSlotShape = (source, renderer, defaultNt = 'GC', preset 
   if (renderer === 'ticks' && normalizedId === 'ticks') {
     return (
       side === 'inside' &&
-      reserve === null &&
-      compress === null &&
       paramsMatchExactly(params, {
         label_side: 'outside',
         tick_side: 'inside',
@@ -332,14 +305,12 @@ const isLegacyDefaultWebSlotShape = (source, renderer, defaultNt = 'GC', preset 
   }
 
   if (renderer === 'depth' && normalizedId === 'depth') {
-    return side === 'inside' && reserve === null && compress === true && paramsMatchExactly(params, {});
+    return side === 'inside' && paramsMatchExactly(params, {});
   }
 
   if (renderer === 'dinucleotide_content' && normalizedId === 'gc_content') {
     return (
       side === 'inside' &&
-      reserve === null &&
-      compress === true &&
       paramsMatchExactly(params, { nt: normalizeNt(defaultNt) })
     );
   }
@@ -347,8 +318,6 @@ const isLegacyDefaultWebSlotShape = (source, renderer, defaultNt = 'GC', preset 
   if (renderer === 'dinucleotide_skew' && normalizedId === 'gc_skew') {
     return (
       side === 'inside' &&
-      reserve === null &&
-      compress === true &&
       paramsMatchExactly(params, { nt: normalizeNt(defaultNt) })
     );
   }
@@ -420,7 +389,6 @@ export const createCircularTrackSlotForRenderer = (renderer, existingSlots = [],
     id,
     renderer: normalizedRenderer,
     side,
-    reserve: normalizedRenderer === 'features' && side === 'overlay' ? true : null,
     params
   });
   if (side !== null) applyPlacementDefaults(slot, side);
@@ -448,9 +416,6 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
   });
 
   let side = inheritsPresetDefaults ? null : normalizeSlotSide(source.side);
-  const strict = inheritsPresetDefaults ? null : normalizeOptionalBool(source.strict);
-  let compress = inheritsPresetDefaults ? null : normalizeOptionalBool(source.compress);
-  let reserve = inheritsPresetDefaults ? null : normalizeOptionalBool(source.reserve);
   const radius = source.radius ?? null;
   const spacing = source.spacing ?? null;
 
@@ -495,13 +460,6 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
         side = sideForLaneDirection(params.lane_direction);
       }
     }
-    if (side === 'overlay' && reserve === null) reserve = true;
-  }
-  if (side !== null && !NUMERIC_RENDERERS.has(renderer) && compress === true) {
-    compress = null;
-  }
-  if (!NUMERIC_RENDERERS.has(renderer) || side === 'outside' || side === 'overlay' || normalizeOptionalText(radius)) {
-    if (compress === true) compress = null;
   }
 
   return makeSlot({
@@ -513,9 +471,6 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
     spacing,
     side,
     z: Number.isFinite(Number(source.z)) ? Number(source.z) : 0,
-    strict,
-    compress,
-    reserve,
     params
   });
 };
@@ -544,9 +499,6 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
   appendOption(options, 'r', normalized.radius);
   appendOption(options, 'spacing', normalized.spacing);
   appendOption(options, 'side', normalized.side);
-  appendOption(options, 'strict', normalized.strict);
-  appendOption(options, 'compress', normalized.compress);
-  appendOption(options, 'reserve', normalized.reserve);
   if (Number.isFinite(Number(normalized.z)) && Number(normalized.z) !== 0) {
     options.push(`z=${Number(normalized.z)}`);
   }
@@ -675,9 +627,6 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     duplicate.spacing = source.spacing;
     duplicate.side = source.side;
     duplicate.z = source.z;
-    duplicate.strict = source.strict;
-    duplicate.compress = source.compress;
-    duplicate.reserve = source.reserve;
     duplicate.params = cloneParams(source.params);
     state.adv.circular_track_slots.splice(idx + 1, 0, duplicate);
   };
@@ -728,22 +677,18 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       else slot.params.preset = normalizeCircularTrackPreset(slot.params.preset);
     } else if (renderer === 'features') {
       slot.params.lane_direction = laneDirectionForSide(slot.side);
-      if (slot.side === 'overlay' && slot.reserve === null) slot.reserve = true;
     } else if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
       slot.params.nt = normalizeNt(slot.params.nt, normalizeNt(state.adv.nt));
     }
-    if (!NUMERIC_RENDERERS.has(renderer) && slot.compress === true) slot.compress = null;
   };
 
   const updateCircularTrackSlotPlacement = (slot, placement) => {
     if (!slot || !SUPPORTED_RENDERERS.includes(slot.renderer)) return;
     if (normalizeOptionalText(placement) === null) {
       slot.side = null;
-      if (slot.compress === true) slot.compress = null;
       if (slot.renderer === 'features') {
         slot.params = cloneParams(slot.params);
         delete slot.params.lane_direction;
-        slot.reserve = null;
       }
       return;
     }
@@ -757,19 +702,16 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     if (explicitLaneDirection === null) {
       delete slot.params.lane_direction;
       slot.side = null;
-      slot.reserve = null;
       return;
     }
     const normalizedLaneDirection = normalizeLaneDirection(explicitLaneDirection);
     if (normalizedLaneDirection === 'inside') {
       slot.params.lane_direction = 'inside';
       slot.side = 'inside';
-      slot.reserve = null;
       return;
     }
     slot.params.lane_direction = normalizedLaneDirection;
     slot.side = sideForLaneDirection(slot.params.lane_direction);
-    if (slot.side === 'overlay' && slot.reserve === null) slot.reserve = true;
   };
 
   const circularTrackRendererLabel = (renderer) => RENDERER_LABELS[renderer] || renderer;

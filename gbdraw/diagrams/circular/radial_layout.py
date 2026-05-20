@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any, Collection, Literal, Mapping, Sequence, TypeAlias
 
 from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
@@ -230,7 +230,6 @@ class _RadialSlotIntent:
     explicit_width: bool
     spacing_px: float
     z: int
-    strict: bool
     compress: bool
     reserve: bool
     placement_policy: PlacementPolicy
@@ -690,7 +689,6 @@ def _slot_intents(
                 explicit_width=slot.width is not None,
                 spacing_px=max(0.0, float(spacing_px)),
                 z=slot.z,
-                strict=slot.strict,
                 compress=slot.compress,
                 reserve=slot.reserve,
                 placement_policy=placement_policy,
@@ -858,21 +856,8 @@ def _candidate_widths(intent: _RadialSlotIntent) -> list[tuple[float, bool]]:
 
 
 def _slot_reserves(intent: _RadialSlotIntent) -> bool:
-    return intent.side != "overlay" or bool(intent.reserve)
-
-
-def _intent_allows_auto_stack_fallback(intent: _RadialSlotIntent) -> bool:
-    return (
-        bool(intent.params.get("_stack_side_auto", False))
-        and not bool(intent.explicit_anchor)
-        and not bool(intent.strict)
-        and intent.side == "inside"
-        and intent.placement_policy in {"auto", "preferred"}
-    )
-
-
-def _outside_fallback_intent(intent: _RadialSlotIntent) -> _RadialSlotIntent:
-    return replace(intent, side="outside", placement_policy="auto")
+    del intent
+    return True
 
 
 def _place_outside_auto(
@@ -1662,13 +1647,11 @@ def resolve_circular_radial_layout(
             band = resolved.reserved_band_px.expanded(intent.spacing_px) if intent.side == "overlay" else resolved.reserved_band_px
             occupied.append((intent.slot_id, band))
 
-    # Hard anchors and reserving overlays become blockers before movable placement.
+    # Hard anchors and overlays become blockers before movable placement.
     for intent in intents:
         if intent.slot_index in resolved_by_index:
             continue
-        if intent.placement_policy != "hard" and not (
-            intent.placement_policy == "overlay" and intent.reserve
-        ):
+        if intent.placement_policy not in {"hard", "overlay"}:
             continue
         anchor_offset = float(intent.anchor_offset_px or 0.0)
         resolved = _measure_radial_slot(
@@ -1686,9 +1669,7 @@ def resolve_circular_radial_layout(
             conflict = _reserved_overlap_any(resolved.reserved_band_px, occupied)
             if conflict is not None:
                 message = f"Pinned circular track slot '{intent.slot_id}' overlaps reserved circular slot '{conflict[0]}'."
-                if intent.strict:
-                    raise ValidationError(message)
-                logger.warning(message)
+                raise ValidationError(message)
         resolved_by_index[intent.slot_index] = resolved
         if _slot_reserves(intent) and resolved.reserved_band_px is not None:
             band = resolved.reserved_band_px.expanded(intent.spacing_px) if intent.side == "overlay" else resolved.reserved_band_px
@@ -1715,32 +1696,6 @@ def resolve_circular_radial_layout(
             inside_max_outer = min(inside_max_outer, float(resolved.packing_band_px.inner_px) - intent.spacing_px)
 
     ordered_intents = sorted(intents, key=lambda item: item.slot_index)
-
-    def place_auto_fallback_outside(group_intents: Sequence[_RadialSlotIntent]) -> None:
-        nonlocal outside_min_inner
-        for original_intent in group_intents:
-            fallback_intent = _outside_fallback_intent(original_intent)
-            fallback_window = PlacementWindow(float(outside_min_inner), float("inf"))
-            group_resolved = _place_outside_auto(
-                fallback_intent,
-                occupied=occupied,
-                axis_radius_px=axis_radius_px,
-                placement_window=fallback_window,
-                feature_dict=feature_dict,
-                canvas_config=canvas_config,
-                cfg=cfg,
-                total_length=int(total_length),
-                tick_track_channel_override=tick_track_channel_override,
-                depth_config=depth_config,
-            )
-            resolved_by_index[original_intent.slot_index] = group_resolved
-            if _slot_reserves(fallback_intent) and group_resolved.reserved_band_px is not None:
-                occupied.append((fallback_intent.slot_id, group_resolved.reserved_band_px))
-            if group_resolved.packing_band_px is not None:
-                outside_min_inner = max(
-                    outside_min_inner,
-                    float(group_resolved.packing_band_px.outer_px) + fallback_intent.spacing_px,
-                )
 
     for intent_pos, intent in enumerate(ordered_intents):
         resolved = resolved_by_index.get(intent.slot_index)
@@ -1801,24 +1756,18 @@ def resolve_circular_radial_layout(
                     depth_config=depth_config,
                     resolved_by_index=resolved_by_index,
                 )
-                try:
-                    resolved_group = _place_preferred_numeric_group(
-                        preferred_group,
-                        occupied=occupied,
-                        placement_window=placement_window,
-                        axis_radius_px=axis_radius_px,
-                        feature_dict=feature_dict,
-                        canvas_config=canvas_config,
-                        cfg=cfg,
-                        total_length=int(total_length),
-                        tick_track_channel_override=tick_track_channel_override,
-                        depth_config=depth_config,
-                    )
-                except ValidationError:
-                    if all(_intent_allows_auto_stack_fallback(group_intent) for group_intent in preferred_group):
-                        place_auto_fallback_outside(preferred_group)
-                        continue
-                    raise
+                resolved_group = _place_preferred_numeric_group(
+                    preferred_group,
+                    occupied=occupied,
+                    placement_window=placement_window,
+                    axis_radius_px=axis_radius_px,
+                    feature_dict=feature_dict,
+                    canvas_config=canvas_config,
+                    cfg=cfg,
+                    total_length=int(total_length),
+                    tick_track_channel_override=tick_track_channel_override,
+                    depth_config=depth_config,
+                )
                 for group_intent, group_resolved in zip(preferred_group, resolved_group):
                     resolved_by_index[group_intent.slot_index] = group_resolved
                     if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
@@ -1859,37 +1808,8 @@ def resolve_circular_radial_layout(
                 resolved_by_index=resolved_by_index,
             )
             if len(inside_group) > 1:
-                try:
-                    resolved_group = _place_inside_auto_group(
-                        inside_group,
-                        occupied=occupied,
-                        axis_radius_px=axis_radius_px,
-                        placement_window=placement_window,
-                        feature_dict=feature_dict,
-                        canvas_config=canvas_config,
-                        cfg=cfg,
-                        total_length=int(total_length),
-                        tick_track_channel_override=tick_track_channel_override,
-                        depth_config=depth_config,
-                    )
-                except ValidationError:
-                    if all(_intent_allows_auto_stack_fallback(group_intent) for group_intent in inside_group):
-                        place_auto_fallback_outside(inside_group)
-                        continue
-                    raise
-                for group_intent, group_resolved in zip(inside_group, resolved_group):
-                    resolved_by_index[group_intent.slot_index] = group_resolved
-                    if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
-                        occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
-                    if group_resolved.packing_band_px is not None:
-                        inside_max_outer = min(
-                            inside_max_outer,
-                            float(group_resolved.packing_band_px.inner_px) - group_intent.spacing_px,
-                        )
-                continue
-            try:
-                resolved = _place_inside_auto(
-                    intent,
+                resolved_group = _place_inside_auto_group(
+                    inside_group,
                     occupied=occupied,
                     axis_radius_px=axis_radius_px,
                     placement_window=placement_window,
@@ -1900,11 +1820,28 @@ def resolve_circular_radial_layout(
                     tick_track_channel_override=tick_track_channel_override,
                     depth_config=depth_config,
                 )
-            except ValidationError:
-                if _intent_allows_auto_stack_fallback(intent):
-                    place_auto_fallback_outside([intent])
-                    continue
-                raise
+                for group_intent, group_resolved in zip(inside_group, resolved_group):
+                    resolved_by_index[group_intent.slot_index] = group_resolved
+                    if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
+                        occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
+                    if group_resolved.packing_band_px is not None:
+                        inside_max_outer = min(
+                            inside_max_outer,
+                            float(group_resolved.packing_band_px.inner_px) - group_intent.spacing_px,
+                        )
+                continue
+            resolved = _place_inside_auto(
+                intent,
+                occupied=occupied,
+                axis_radius_px=axis_radius_px,
+                placement_window=placement_window,
+                feature_dict=feature_dict,
+                canvas_config=canvas_config,
+                cfg=cfg,
+                total_length=int(total_length),
+                tick_track_channel_override=tick_track_channel_override,
+                depth_config=depth_config,
+            )
 
         resolved_by_index[intent.slot_index] = resolved
         if _slot_reserves(intent) and resolved.reserved_band_px is not None:

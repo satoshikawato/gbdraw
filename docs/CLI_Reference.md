@@ -240,14 +240,13 @@ options:
                         <slot_id>:<renderer>@key=value,key=value. Can be
                         repeated. Use r=<radius>, w=<width>, and
                         spacing=<scalar>; spacing is the gap to the next
-                        same-side slot. ri/ro/gap are obsolete. side, strict,
-                        compress, reserve, and z are slot fields. If r, w,
-                        spacing, side, or standard renderer params are
+                        same-side slot. ri/ro/gap are obsolete. side and z are
+                        slot fields. If r, w, spacing, side, or standard renderer params are
                         omitted for built-in slots, they inherit the active
-                        --track_type preset at render time. Use explicit
-                        side=inside,compress=true without r for pure auto
-                        inside numeric/depth placement. z only controls SVG
-                        layering.
+                        --track_type preset at render time. Inside numeric/depth
+                        slots with no explicit r or w auto-compress when needed
+                        and never move outside automatically. z only controls
+                        SVG layering.
   --gc_content_width GC_CONTENT_WIDTH
                         GC content track width for circular mode (in px; must
                         be > 0).

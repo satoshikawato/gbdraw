@@ -12,9 +12,12 @@ const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = [
   'inner_radius',
   'outerRadius',
   'outer_radius',
-  'placement'
+  'placement',
+  'strict',
+  'compress',
+  'reserve'
 ];
-const OBSOLETE_CIRCULAR_TRACK_SLOT_PARAM_KEYS = ['side', 'radius', 'width'];
+const OBSOLETE_CIRCULAR_TRACK_SLOT_PARAM_KEYS = ['side', 'radius', 'width', 'strict', 'compress', 'reserve'];
 
 const isRawLosatCacheEntry = (entry) =>
   Boolean(entry) &&
@@ -203,7 +206,7 @@ const validateImportedCircularTrackSlots = (configData = {}) => {
   const obsoletePath = findObsoleteCircularTrackSlotShape(adv.circular_track_slots);
   if (obsoletePath) {
     throw new Error(
-      `Custom Track Slots use obsolete field '${obsoletePath}'. Use slot-level radius, width, spacing, side, strict, compress, and reserve fields.`
+      `Custom Track Slots use obsolete field '${obsoletePath}'. Use slot-level radius, width, spacing, side, and z fields.`
     );
   }
 };

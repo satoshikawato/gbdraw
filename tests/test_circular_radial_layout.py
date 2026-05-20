@@ -229,7 +229,7 @@ def test_preset_feature_band_is_reserved_before_pinned_inside_slots() -> None:
             CircularTrackSlot(
                 id="upper_spacer",
                 renderer="spacer",
-                radius=ScalarSpec(86.0, "px"),
+                radius=ScalarSpec(70.0, "px"),
                 width=ScalarSpec(8.0, "px"),
             ),
             CircularTrackSlot(
@@ -294,8 +294,8 @@ def test_radial_numeric_stack_compresses_group_no_lower_than_readable_minimum() 
         canvas_config=canvas_config,
         cfg=cfg,
         slots=[
-            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", compress=True),
-            CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew", compress=True),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+            CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew"),
         ],
         show_features=False,
         show_ticks=False,
@@ -319,9 +319,9 @@ def test_radial_numeric_stack_raises_when_readable_minimum_cannot_fit() -> None:
             canvas_config=canvas_config,
             cfg=cfg,
             slots=[
-                CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", compress=True),
-                CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", compress=True, strict=True),
-                CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew", compress=True, strict=True),
+                CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+                CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+                CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew"),
             ],
             show_features=False,
             show_ticks=False,
@@ -337,8 +337,8 @@ def test_outside_auto_numeric_width_is_independent_from_inside_compression() -> 
         cfg=cfg,
         slots=[
             CircularTrackSlot(id="outer_skew", renderer="dinucleotide_skew", side="outside"),
-            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", compress=True),
-            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", compress=True),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
         ],
         show_features=False,
         show_ticks=False,
@@ -375,7 +375,7 @@ def test_user_preset_generated_param_has_no_layout_effect_on_pinned_numeric_slot
         slots=[base_slot],
         show_features=False,
         show_ticks=False,
-        definition_reserved_radius_px=55.0,
+        definition_reserved_radius_px=35.0,
     ).tracks[0]
     tagged = resolve_circular_radial_layout(
         total_length=1000,
@@ -384,7 +384,7 @@ def test_user_preset_generated_param_has_no_layout_effect_on_pinned_numeric_slot
         slots=[tagged_slot],
         show_features=False,
         show_ticks=False,
-        definition_reserved_radius_px=55.0,
+        definition_reserved_radius_px=35.0,
     ).tracks[0]
 
     assert tagged.center_radius_px == pytest.approx(base.center_radius_px)
