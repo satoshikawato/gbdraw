@@ -1790,6 +1790,50 @@ def resolve_circular_radial_layout(
                 depth_config=depth_config,
             )
         else:
+            movable_group = _inside_movable_stack_group_from(
+                ordered_intents,
+                intent_pos,
+                resolved_by_index,
+            )
+            if len(movable_group) > 1:
+                placement_window = _inside_placement_window(
+                    ordered_intents,
+                    start_pos=intent_pos + len(movable_group) - 1,
+                    current_spacing_px=movable_group[-1].spacing_px,
+                    inside_max_outer=inside_max_outer,
+                    occupied=occupied,
+                    axis_radius_px=axis_radius_px,
+                    canvas_config=canvas_config,
+                    cfg=cfg,
+                    total_length=int(total_length),
+                    tick_track_channel_override=tick_track_channel_override,
+                    feature_dict=feature_dict,
+                    depth_config=depth_config,
+                    resolved_by_index=resolved_by_index,
+                )
+                resolved_group = _place_inside_auto_stack_group(
+                    movable_group,
+                    occupied=occupied,
+                    axis_radius_px=axis_radius_px,
+                    placement_window=placement_window,
+                    feature_dict=feature_dict,
+                    canvas_config=canvas_config,
+                    cfg=cfg,
+                    total_length=int(total_length),
+                    tick_track_channel_override=tick_track_channel_override,
+                    depth_config=depth_config,
+                )
+                for group_intent, group_resolved in zip(movable_group, resolved_group):
+                    resolved_by_index[group_intent.slot_index] = group_resolved
+                    if _slot_reserves(group_intent) and group_resolved.reserved_band_px is not None:
+                        occupied.append((group_intent.slot_id, group_resolved.reserved_band_px))
+                    if group_resolved.packing_band_px is not None:
+                        inside_max_outer = min(
+                            inside_max_outer,
+                            float(group_resolved.packing_band_px.inner_px) - group_intent.spacing_px,
+                        )
+                continue
+
             preferred_group = _preferred_numeric_group_from(
                 ordered_intents,
                 intent_pos,

@@ -577,7 +577,7 @@ def test_circular_preset_slots_do_not_emit_origin_metadata() -> None:
 
 
 @pytest.mark.circular
-def test_blank_builtin_numeric_slots_use_preset_preferred_anchor_without_explicit_radius() -> None:
+def test_blank_builtin_numeric_slots_reflow_as_movable_stack_without_explicit_radius() -> None:
     from gbdraw.canvas import CircularCanvasConfigurator
     from gbdraw.config.models import GbdrawConfig
     from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_track_slots_from_preset_order
@@ -624,12 +624,17 @@ def test_blank_builtin_numeric_slots_use_preset_preferred_anchor_without_explici
 
     assert not by_id["gc_content"].explicit_anchor
     assert not by_id["gc_skew"].explicit_anchor
-    assert by_id["gc_content"].anchor_radius_px == pytest.approx(
+    assert by_id["gc_content"].anchor_radius_px != pytest.approx(
         float(canvas_config.radius) * float(track_dict["2"])
     )
-    assert by_id["gc_skew"].anchor_radius_px == pytest.approx(
+    assert by_id["gc_skew"].anchor_radius_px != pytest.approx(
         float(canvas_config.radius) * float(track_dict["3"])
     )
+    assert by_id["features"].packing_band_px.center_px > by_id["ticks"].packing_band_px.center_px
+    assert by_id["ticks"].packing_band_px.center_px > by_id["gc_content"].packing_band_px.center_px
+    assert by_id["gc_content"].packing_band_px.center_px > by_id["gc_skew"].packing_band_px.center_px
+    assert by_id["gc_content"].reserved_band_px.outer_px <= by_id["ticks"].reserved_band_px.inner_px + 1e-6
+    assert by_id["gc_skew"].reserved_band_px.outer_px <= by_id["gc_content"].reserved_band_px.inner_px + 1e-6
 
 
 @pytest.mark.circular
@@ -1345,6 +1350,34 @@ def test_inside_auto_stack_compresses_numeric_tracks_to_preserve_ticks(
     assert by_id["ticks"].packing_band_px.center_px > by_id["gc_content"].packing_band_px.center_px
     assert by_id["gc_content"].packing_band_px.center_px > by_id["gc_skew"].packing_band_px.center_px
     assert by_id["gc_skew"].packing_band_px.center_px > by_id["gc_skew_2"].packing_band_px.center_px
+
+
+@pytest.mark.circular
+def test_inside_movable_stack_reflows_preferred_numeric_tracks_after_features(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    layout = _capture_circular_radial_layout(
+        monkeypatch,
+        track_type="tuckin",
+        input_filename="EDL933.gbk",
+        circular_track_slots=[
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
+            CircularTrackSlot(id="ticks", renderer="ticks"),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
+            CircularTrackSlot(id="gc_skew_2", renderer="dinucleotide_skew", params={"nt": "AT"}),
+        ],
+    )
+
+    by_id = {slot.id: slot for slot in layout.slots}  # type: ignore[attr-defined]
+
+    assert by_id["features"].packing_band_px.center_px > by_id["gc_content"].packing_band_px.center_px
+    assert by_id["gc_content"].packing_band_px.center_px > by_id["ticks"].packing_band_px.center_px
+    assert by_id["ticks"].packing_band_px.center_px > by_id["gc_skew"].packing_band_px.center_px
+    assert by_id["gc_skew"].packing_band_px.center_px > by_id["gc_skew_2"].packing_band_px.center_px
+    assert by_id["gc_content"].compressed
+    assert by_id["gc_skew"].compressed
+    assert by_id["gc_skew_2"].compressed
 
 
 @pytest.mark.circular
