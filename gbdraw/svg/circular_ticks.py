@@ -458,6 +458,14 @@ def resolve_circular_tick_label_geometry(
         tick_length_px=tick_length_px,
         length_reference_radius_px=length_reference_radius_px,
     )
+    normalized_label_side = str(label_side or "legacy").strip().lower()
+    normalized_tick_side = str(tick_side or "legacy").strip().lower()
+    if normalized_label_side in {"inside", "outside"} and normalized_tick_side in {"inside", "outside", "both"}:
+        margin_px = _tick_label_margin_px(font_size, tick_width)
+        if normalized_label_side == "inside":
+            path_radius = float(tick_inner) - margin_px - label_outer_offset_px
+        else:
+            path_radius = float(tick_outer) + margin_px + label_inner_offset_px
     if str(tick_side or "legacy").strip().lower() not in {"none", ""}:
         path_radius = _separate_label_path_radius_from_tick_band(
             path_radius=path_radius,
@@ -693,5 +701,4 @@ __all__ = [
     "resolve_circular_tick_label_geometry",
     "set_tick_label_anchor_value",
 ]
-
 
