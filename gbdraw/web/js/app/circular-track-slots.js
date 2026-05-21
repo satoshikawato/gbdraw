@@ -927,8 +927,12 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       state.adv.circular_track_slots.splice(axis, 0, slot);
       state.adv.circular_track_slots_axis_index = axis;
     } else {
-      state.adv.circular_track_slots.splice(axis, 0, slot);
-      state.adv.circular_track_slots_axis_index = axis;
+      const onAxisIndex = state.adv.circular_track_slots.findIndex((candidate) => (
+        effectiveSlotPlacement(candidate, state.form.track_type) === 'overlay'
+      ));
+      const insertIndex = onAxisIndex >= 0 ? onAxisIndex + 1 : axis;
+      state.adv.circular_track_slots.splice(insertIndex, 0, slot);
+      state.adv.circular_track_slots_axis_index = onAxisIndex >= 0 ? onAxisIndex : axis;
     }
     normalizeSlotsInPlace();
   };

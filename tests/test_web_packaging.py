@@ -457,6 +457,52 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
           throw new Error(`Previous on-axis tick was not demoted inside: ${{JSON.stringify(laneSwappedTick)}}`);
         }}
 
+        const featureInsideAcrossAxisState = {{
+          adv: {{
+            nt: 'GC',
+            circular_track_slots_axis_index: 1,
+            circular_track_slots: [
+              {{ id: 'features', renderer: 'features', side: 'outside', params: {{ lane_direction: 'outside' }} }},
+              {{ id: 'ticks', renderer: 'ticks', side: 'overlay', params: {{ tick_label_layout: 'label_out_tick_in' }} }},
+              {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', params: {{ nt: 'GC' }} }},
+              {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'inside', params: {{ nt: 'GC' }} }}
+            ]
+          }},
+          form: {{
+            track_type: 'tuckin',
+            show_depth: false,
+            suppress_gc: false,
+            suppress_skew: false
+          }}
+        }};
+
+        const featureInsideAcrossAxisEditor = createCircularTrackSlotEditor({{ state: featureInsideAcrossAxisState }});
+        featureInsideAcrossAxisEditor.moveCircularTrackSlotInside(0);
+        const featureInsideAcrossAxisIds = featureInsideAcrossAxisState.adv.circular_track_slots.map((slot) => slot.id).join(',');
+        const featureInsideAcrossAxisFeature = featureInsideAcrossAxisState.adv.circular_track_slots.find((slot) => slot.id === 'features');
+        const featureInsideAcrossAxisEntries = featureInsideAcrossAxisEditor.circularTrackStackEntries();
+        if (
+          featureInsideAcrossAxisIds !== 'ticks,features,gc_content,gc_skew' ||
+          featureInsideAcrossAxisState.adv.circular_track_slots_axis_index !== 0 ||
+          featureInsideAcrossAxisFeature?.side !== 'inside' ||
+          featureInsideAcrossAxisFeature?.params?.lane_direction !== 'inside' ||
+          featureInsideAcrossAxisEntries[0]?.slot?.id !== 'ticks' ||
+          featureInsideAcrossAxisEntries[0]?.onAxis !== true ||
+          featureInsideAcrossAxisEntries[1]?.slot?.id !== 'features'
+        ) {{
+          throw new Error(`Feature did not move inside across an on-axis tick: ${{JSON.stringify(featureInsideAcrossAxisState.adv)}} entries=${{JSON.stringify(featureInsideAcrossAxisEntries)}}`);
+        }}
+        const featureInsideAcrossAxisNormalized = applyCircularTrackOrderPlacements(
+          featureInsideAcrossAxisState.adv.circular_track_slots,
+          'GC',
+          'tuckin',
+          featureInsideAcrossAxisState.adv.circular_track_slots_axis_index
+        );
+        const normalizedFeatureInsideAcrossAxisFeature = featureInsideAcrossAxisNormalized.find((slot) => slot.id === 'features');
+        if (normalizedFeatureInsideAcrossAxisFeature?.side !== 'inside' || normalizedFeatureInsideAcrossAxisFeature?.params?.lane_direction !== 'inside') {{
+          throw new Error(`Feature inside placement did not survive final normalization: ${{JSON.stringify(featureInsideAcrossAxisNormalized)}}`);
+        }}
+
         const duplicateAxisSlots = applyCircularTrackOrderPlacements(
           [
             {{ id: 'features', renderer: 'features', side: 'overlay', params: {{ lane_direction: 'split' }} }},
