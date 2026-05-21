@@ -109,6 +109,57 @@
         .help-tip { margin-left: 0.25rem; }
         .option-label .help-tip { margin-left: 0; }
         .input-label-sm { font-size: 10px; letter-spacing: 0.04em; }
+        [v-cloak] { display: none !important; }
+        #app-boot-splash {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8fafc;
+            color: #475569;
+        }
+        #app-boot-splash .boot-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.8rem;
+            padding: 1.5rem;
+            text-align: center;
+        }
+        #app-boot-splash .boot-logo {
+            height: 2.5rem;
+            width: auto;
+        }
+        #app-boot-splash .boot-spinner {
+            width: 2rem;
+            height: 2rem;
+            border: 3px solid #dbeafe;
+            border-top-color: #2563eb;
+            border-radius: 9999px;
+            animation: app-boot-spin 0.8s linear infinite;
+        }
+        @keyframes app-boot-spin {
+            to { transform: rotate(360deg); }
+        }
+        #app-boot-splash .boot-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #334155;
+        }
+        #app-boot-splash .boot-subtitle {
+            font-size: 0.875rem;
+            color: #94a3b8;
+        }
+        #app-boot-splash .boot-status {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+        #app:not([v-cloak]) + #app-boot-splash {
+            display: none;
+        }
         .adv-section-title { font-size: 10px; letter-spacing: 0.04em; }
         .adv-options .input-label { font-size: 10px; letter-spacing: 0.04em; }
         .adv-options .form-input { font-size: 10px; padding: 0.25rem 0.5rem; line-height: 1.2; }
@@ -341,7 +392,7 @@
 </head>
 <body class="antialiased pb-0 overflow-hidden">
 
-<div id="app" class="h-screen flex flex-col relative">
+<div id="app" v-cloak class="h-screen flex flex-col relative">
     
     <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
         <div class="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mb-6"></div>
@@ -2818,6 +2869,21 @@
             Author: <a href="https://researchmap.jp/satoshi_kawato?lang=en" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">Satoshi Kawato</a>
         </span>
     </footer>
+</div>
+
+<div id="app-boot-splash" role="status" aria-live="polite">
+    <div class="boot-card">
+        <img src="./assets/gbdraw-logo-title.png" alt="gbdraw" class="boot-logo">
+        <div class="boot-spinner" aria-hidden="true"></div>
+        <div>
+            <div class="boot-title">Initializing gbdraw...</div>
+            <div class="boot-subtitle">Loading Python engine and dependencies.</div>
+        </div>
+        <div class="boot-status">Loading gbdraw...</div>
+        <noscript>
+            <div class="boot-subtitle">JavaScript is required to run gbdraw.</div>
+        </noscript>
+    </div>
 </div>
 
 <script type="text/x-template" id="help-tip-template">

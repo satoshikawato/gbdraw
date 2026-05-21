@@ -92,6 +92,15 @@ def test_index_uses_title_logo_separately_from_icon_assets() -> None:
     assert '<link rel="icon" href="./assets/gbdraw-logo.svg" type="image/svg+xml">' in index_html
 
 
+def test_index_cloaks_vue_template_until_mount() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    assert '<div id="app" v-cloak' in index_html
+    assert "[v-cloak] { display: none !important; }" in index_html
+    assert 'id="app-boot-splash"' in index_html
+    assert "Initializing gbdraw..." in index_html
+    assert "#app:not([v-cloak]) + #app-boot-splash" in index_html
+
+
 def test_index_includes_preprint_citation() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert "How to cite" in index_html
