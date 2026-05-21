@@ -24,10 +24,10 @@ def _tick_label_kwargs() -> dict:
     }
 
 
-def test_circular_tick_label_anchor_stays_middle_and_baseline_varies_by_angle() -> None:
+def test_circular_tick_label_anchor_stays_middle_and_baseline_uses_edge_values_by_angle() -> None:
     assert set_tick_label_anchor_value(4_641_652, 1_000_000) == ("middle", "text-after-edge")
-    assert set_tick_label_anchor_value(4_641_652, 2_500_000) == ("middle", "hanging")
-    assert set_tick_label_anchor_value(4_641_652, 3_000_000) == ("middle", "hanging")
+    assert set_tick_label_anchor_value(4_641_652, 2_500_000) == ("middle", "text-before-edge")
+    assert set_tick_label_anchor_value(4_641_652, 3_000_000) == ("middle", "text-before-edge")
     assert set_tick_label_anchor_value(4_641_652, 4_500_000) == ("middle", "text-after-edge")
 
 
@@ -81,7 +81,7 @@ def test_circular_tick_label_textpath_uses_middle_anchor() -> None:
     assert 'dominant-baseline="text-after-edge"' in text_elements[0]
     assert 'text-anchor="middle"' in text_elements[1]
     assert 'startOffset="50%"' in text_elements[1]
-    assert 'dominant-baseline="middle"' in text_elements[1]
+    assert 'dominant-baseline="text-before-edge"' in text_elements[1]
     assert 'text-anchor="middle"' in text_elements[2]
     assert 'startOffset="50%"' in text_elements[2]
     assert 'dominant-baseline="text-after-edge"' in text_elements[2]
