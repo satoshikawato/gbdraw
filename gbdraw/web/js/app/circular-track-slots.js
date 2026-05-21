@@ -59,6 +59,7 @@ const TICK_LABEL_LAYOUTS = [
   'label_only'
 ];
 const DEFAULT_TICK_LABEL_LAYOUT = 'label_out_tick_in';
+const DEFAULT_INNER_TICK_LABEL_LAYOUT = 'label_in_tick_out';
 
 export const CIRCULAR_TRACK_PRESETS = ['tuckin', 'middle', 'spreadout'];
 
@@ -129,6 +130,26 @@ const tickLabelLayoutFromSides = (labelSide, tickSide, fallback = DEFAULT_TICK_L
   if (label === 'none' && ['inside', 'outside', 'both'].includes(tick)) return 'tick_only';
   if (['inside', 'outside'].includes(label) && tick === 'none') return 'label_only';
   return fallback;
+};
+
+const defaultPresetTickLabelLayout = () => DEFAULT_INNER_TICK_LABEL_LAYOUT;
+
+const isAutoOrientableTickLabelLayout = (value) => {
+  const layout = normalizeTickLabelLayout(value);
+  return [DEFAULT_TICK_LABEL_LAYOUT, DEFAULT_INNER_TICK_LABEL_LAYOUT].includes(layout);
+};
+
+const syncDefaultTickLayoutsForFeatureRelation = (slots) => {
+  const featureIndex = slots.findIndex((slot) => slot?.enabled !== false && slot?.renderer === 'features');
+  if (featureIndex < 0) return;
+  slots.forEach((slot, index) => {
+    if (!slot || slot.enabled === false || slot.renderer !== 'ticks') return;
+    slot.params = cloneParams(slot.params);
+    if (!isAutoOrientableTickLabelLayout(slot.params.tick_label_layout)) return;
+    slot.params.tick_label_layout = index > featureIndex
+      ? DEFAULT_INNER_TICK_LABEL_LAYOUT
+      : DEFAULT_TICK_LABEL_LAYOUT;
+  });
 };
 
 const formatPresetName = (preset) => PRESET_LABELS[normalizeCircularTrackPreset(preset)] || PRESET_LABELS.tuckin;
@@ -318,6 +339,7 @@ const syncSlotsFromAxisIndex = (slots, axisIndex, preset = 'tuckin') => {
     const side = index < resolvedAxis ? 'outside' : 'inside';
     syncSlotPlacementFromSide(slot, side);
   });
+  syncDefaultTickLayoutsForFeatureRelation(slots);
   return resolvedAxis;
 };
 
@@ -408,12 +430,20 @@ const isLegacyDefaultWebSlotShape = (source, renderer, defaultNt = 'GC', preset 
   }
 
   if (renderer === 'ticks' && normalizedId === 'ticks') {
+    const tickLayout = normalizeTickLabelLayout(params.tick_label_layout);
     return (
       side === 'inside' &&
-      paramsMatchExactly(params, {
-        tick_label_layout: DEFAULT_TICK_LABEL_LAYOUT,
-        preset: normalizedPreset
-      })
+      [DEFAULT_TICK_LABEL_LAYOUT, defaultPresetTickLabelLayout(normalizedPreset)].includes(tickLayout) &&
+      paramsMatchExactly(
+        {
+          ...params,
+          tick_label_layout: DEFAULT_TICK_LABEL_LAYOUT
+        },
+        {
+          tick_label_layout: DEFAULT_TICK_LABEL_LAYOUT,
+          preset: normalizedPreset
+        }
+      )
     );
   }
 
@@ -454,7 +484,10 @@ export const createDefaultCircularTrackSlots = ({
     }),
     makeSlot({
       id: 'ticks',
-      renderer: 'ticks'
+      renderer: 'ticks',
+      params: {
+        tick_label_layout: defaultPresetTickLabelLayout(preset)
+      }
     })
   ];
   if (showDepth) slots.push(makeSlot({ id: 'depth', renderer: 'depth' }));

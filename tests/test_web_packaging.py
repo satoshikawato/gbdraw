@@ -228,7 +228,13 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
     check_path = tmp_path / "check-circular-track-slots.mjs"
     check_path.write_text(
         f"""
-        import {{ applyCircularTrackOrderPlacements, createCircularTrackSlotEditor }} from {module_path.as_uri()!r};
+        import {{ applyCircularTrackOrderPlacements, createDefaultCircularTrackSlots, createCircularTrackSlotEditor }} from {module_path.as_uri()!r};
+
+        const defaultSlots = createDefaultCircularTrackSlots({{ preset: 'tuckin' }});
+        const defaultTick = defaultSlots.find((slot) => slot.id === 'ticks');
+        if (defaultTick?.params?.tick_label_layout !== 'label_in_tick_out') {{
+          throw new Error(`Default Tick layout should point labels inward when Tick is inside Feature: ${{JSON.stringify(defaultTick)}}`);
+        }}
 
         const state = {{
           adv: {{
@@ -247,6 +253,57 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
             suppress_skew: false
           }}
         }};
+
+        const defaultState = {{
+          adv: {{
+            nt: 'GC',
+            circular_track_slots_enabled: false,
+            circular_track_slots_axis_index: null,
+            circular_track_slots: createDefaultCircularTrackSlots({{ preset: 'tuckin' }})
+          }},
+          form: {{
+            track_type: 'tuckin',
+            show_depth: false,
+            suppress_gc: false,
+            suppress_skew: false
+          }}
+        }};
+        const defaultEditor = createCircularTrackSlotEditor({{ state: defaultState }});
+        defaultEditor.setCircularTrackSlotsEnabled(true);
+        const resetTick = defaultState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
+        if (resetTick?.side !== 'inside' || resetTick?.params?.tick_label_layout !== 'label_in_tick_out') {{
+          throw new Error(`Enabling custom slots did not use the inward default Tick layout: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);
+        }}
+
+        const outerTickSlots = applyCircularTrackOrderPlacements(
+          [
+            {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ tick_label_layout: 'label_in_tick_out' }} }},
+            {{ id: 'features', renderer: 'features', side: 'inside', params: {{ lane_direction: 'inside' }} }},
+            {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', params: {{ nt: 'GC' }} }}
+          ],
+          'GC',
+          'tuckin',
+          0
+        );
+        const outerTick = outerTickSlots.find((slot) => slot.id === 'ticks');
+        if (outerTick?.params?.tick_label_layout !== 'label_out_tick_in') {{
+          throw new Error(`Tick outside Feature did not flip labels outward: ${{JSON.stringify(outerTickSlots)}}`);
+        }}
+
+        const manualTickSlots = applyCircularTrackOrderPlacements(
+          [
+            {{ id: 'features', renderer: 'features', side: 'inside', params: {{ lane_direction: 'inside' }} }},
+            {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ tick_label_layout: 'tick_only' }} }},
+            {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', params: {{ nt: 'GC' }} }}
+          ],
+          'GC',
+          'tuckin',
+          0
+        );
+        const manualTick = manualTickSlots.find((slot) => slot.id === 'ticks');
+        if (manualTick?.params?.tick_label_layout !== 'tick_only') {{
+          throw new Error(`Manual Tick layout should not be auto-oriented: ${{JSON.stringify(manualTickSlots)}}`);
+        }}
 
         const editor = createCircularTrackSlotEditor({{ state }});
         if (editor.canMoveCircularTrackSlot(1, -1)) {{
