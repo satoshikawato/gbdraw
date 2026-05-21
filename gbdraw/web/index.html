@@ -343,13 +343,6 @@
 
 <div id="app" class="h-screen flex flex-col relative">
     
-    <div v-if="!pyodideReady" class="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center p-4 text-center">
-        <img src="./assets/gbdraw-logo.svg" alt="" class="animate-spin w-16 h-16 mb-6">
-        <h3 class="text-2xl font-bold text-slate-800">Initializing gbdraw...</h3>
-        <p class="text-slate-500 mt-2">Loading Python engine and dependencies.</p>
-        <p class="text-xs text-slate-400 mt-4 font-mono" v-text="loadingStatus">Loading gbdraw...</p>
-    </div>
-
     <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
         <div class="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mb-6"></div>
         <h3 class="text-xl font-bold text-slate-800 animate-pulse">Generating Diagram...</h3>
@@ -748,8 +741,8 @@
                             </template>
 
                             <template v-else>
-                                <div>
-                                    <label class="input-label text-[10px] mb-1">Track Layout <help-tip text="Choose how features are displayed. 'Tuckin' is default and compact. 'Middle' aligns to center, 'Spreadout' separates them."></help-tip></label>
+                                <div v-if="!adv.circular_track_slots_enabled">
+                                    <label class="input-label text-[10px] mb-1">Track Preset <help-tip text="Applies the live circular track arrangement used while Custom Track Slots is off. Custom Track Slots inherit this preset when enabled."></help-tip></label>
                                     <select v-model="form.track_type" class="form-input text-xs py-1">
                                         <option value="tuckin">Tuckin</option>
                                         <option value="middle">Middle</option>
@@ -763,7 +756,7 @@
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Circular mode: effective only when Separate Strands is OFF. If Separate Strands is ON, this option is ignored. Track Layout still applies: Tuckin shifts overlap tracks inward, Middle/Spreadout shift them outward."></help-tip></span>
+                                        <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Circular mode: effective only when Separate Strands is OFF. If Separate Strands is ON, this option is ignored. Feature layout still applies: Tuckin shifts overlap tracks inward, Middle/Spreadout shift them outward."></help-tip></span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.multi_record_canvas" class="form-checkbox">
@@ -781,6 +774,147 @@
                                         <input type="checkbox" v-model="form.show_depth" class="form-checkbox">
                                         <span class="inline-flex items-center gap-1">Show Depth <help-tip text="Display depth coverage track from the uploaded Depth TSV file."></help-tip></span>
                                     </label>
+                                </div>
+
+                                <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                            <input type="checkbox" :checked="adv.circular_track_slots_enabled" @change="setCircularTrackSlotsEnabled($event.target.checked)" class="form-checkbox">
+                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Edit an explicit circular stack. Rows above Axis render outside, rows below Axis render inside, arrows reorder within the current side, and Move outside/inside crosses the Axis explicitly."></help-tip></span>
+                                        </label>
+                                        <button
+                                            type="button"
+                                            class="btn btn-secondary text-[10px] py-0.5 px-2"
+                                            @click="resetCircularTrackSlotsFromSimpleControls"
+                                            :disabled="!adv.circular_track_slots_enabled"
+                                            title="Replace the current custom stack from current simple controls"
+                                        >
+                                            <i class="ph ph-arrow-counter-clockwise"></i>
+                                            Reset
+                                        </button>
+                                    </div>
+                                    <div v-if="adv.circular_track_slots_enabled" class="space-y-1.5">
+                                        <div class="grid grid-cols-3 gap-1">
+                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('tuckin')" title="Replace the current custom stack with the Tuckin template">Reset to Tuckin</button>
+                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('middle')" title="Replace the current custom stack with the Middle template">Reset to Middle</button>
+                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('spreadout')" title="Replace the current custom stack with the Spreadout template">Reset to Spreadout</button>
+                                        </div>
+                                        <div class="rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-[10px] leading-snug text-slate-600">
+                                            <div class="flex items-center gap-1 font-semibold text-sky-800">
+                                                <i class="ph ph-eye"></i>
+                                                <span>{{ circularTrackPresetSummary().label }}</span>
+                                            </div>
+                                            <div>{{ circularTrackPresetSummary().detail }}</div>
+                                        </div>
+                                        <div class="rounded border border-slate-200 bg-white/70 p-1.5 space-y-1">
+                                            <div class="flex items-center justify-between gap-2 text-[10px]">
+                                                <div class="inline-flex min-w-0 items-center gap-1 font-semibold text-slate-600">
+                                                    <i class="ph ph-stack"></i>
+                                                    <span class="truncate">Radial track stack</span>
+                                                    <help-tip text="Rows above Axis are outside the circular axis; rows below Axis are inside it. Arrow buttons reorder within the current side only. Use Move outside or Move inside to cross the Axis."></help-tip>
+                                                </div>
+                                                <span class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-500">{{ circularTrackSlots().length }}</span>
+                                            </div>
+                                            <div v-if="circularTrackSlots().length === 0" class="rounded border border-dashed border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-400">
+                                                No tracks
+                                            </div>
+                                            <div
+                                                v-for="entry in circularTrackStackEntries()"
+                                                :key="entry.kind === 'axis' ? 'circular-axis-row' : `circular-slot-${entry.slot.id}-${entry.index}`"
+                                            >
+                                                <div
+                                                    v-if="entry.kind === 'axis'"
+                                                    class="flex items-center gap-2 rounded border border-slate-300 bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600"
+                                                >
+                                                    <span class="h-px flex-1 bg-slate-300"></span>
+                                                    <span class="inline-flex items-center gap-1"><i class="ph ph-record"></i> Axis</span>
+                                                    <span class="h-px flex-1 bg-slate-300"></span>
+                                                </div>
+                                                <div
+                                                    v-else
+                                                    class="border rounded p-1.5 space-y-1"
+                                                    :class="entry.onAxis ? 'bg-slate-100 border-slate-300 ring-1 ring-slate-200' : (circularTrackSlotUsesPresetGeometry(entry.slot) ? 'bg-sky-50/40 border-sky-200' : 'bg-white border-slate-200')"
+                                                >
+                                                    <div
+                                                        v-if="entry.onAxis"
+                                                        class="flex items-center gap-2 rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600"
+                                                    >
+                                                        <span class="h-px flex-1 bg-slate-300"></span>
+                                                        <span class="inline-flex items-center gap-1"><i class="ph ph-record"></i> Axis</span>
+                                                        <span class="h-px flex-1 bg-slate-300"></span>
+                                                    </div>
+                                                    <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-1">
+                                                        <input type="checkbox" v-model="entry.slot.enabled" class="form-checkbox" :title="entry.slot.enabled ? 'Enabled' : 'Disabled'">
+                                                        <input v-model.trim="entry.slot.id" class="form-input px-1 py-0.5 text-[10px]" placeholder="slot_id">
+                                                        <select
+                                                            :value="entry.slot.renderer"
+                                                            @change="updateCircularTrackSlotRenderer(entry.slot, $event.target.value)"
+                                                            class="form-input px-1 py-0.5 text-[10px] min-w-0"
+                                                        >
+                                                            <option v-for="renderer in circularTrackRenderers" :key="`slot-renderer-${renderer}`" :value="renderer">
+                                                                {{ circularTrackRendererLabel(renderer) }}
+                                                            </option>
+                                                        </select>
+                                                        <div class="flex items-center gap-0.5">
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index - 1)" :disabled="!canMoveCircularTrackSlot(entry.index, -1)" title="Move outward"><i class="ph ph-arrow-up"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index + 1)" :disabled="!canMoveCircularTrackSlot(entry.index, 1)" title="Move inward"><i class="ph ph-arrow-down"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index)" :disabled="!canMoveCircularTrackSlotOutside(entry.index)" title="Move outside Axis"><i class="ph ph-arrow-line-up"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotInside(entry.index)" :disabled="!canMoveCircularTrackSlotInside(entry.index)" title="Move inside Axis"><i class="ph ph-arrow-line-down"></i></button>
+                                                            <button v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'ticks'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index)" :disabled="!canMoveCircularTrackSlotToAxis(entry.index)" title="Track on Axis"><i class="ph ph-record"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index)" title="Duplicate"><i class="ph ph-copy"></i></button>
+                                                            <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index)" title="Remove"><i class="ph ph-trash"></i></button>
+                                                        </div>
+                                                    </div>
+                                                    <div class="grid grid-cols-4 gap-1">
+                                                        <input v-model.trim="entry.slot.width" class="form-input px-1 py-0.5 text-[10px]" placeholder="w (auto)">
+                                                        <input v-model.trim="entry.slot.radius" class="form-input px-1 py-0.5 text-[10px]" placeholder="r (auto)">
+                                                        <input v-model.trim="entry.slot.spacing" class="form-input px-1 py-0.5 text-[10px]" placeholder="spacing (auto)">
+                                                        <input type="number" v-model.number="entry.slot.z" class="form-input px-1 py-0.5 text-[10px]" placeholder="z">
+                                                    </div>
+                                                    <div v-if="entry.slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
+                                                        <select
+                                                            :value="entry.slot.params.lane_direction"
+                                                            @change="updateCircularTrackFeatureLane(entry.slot, $event.target.value)"
+                                                            class="form-input px-1 py-0.5 text-[10px]"
+                                                        >
+                                                            <option value="">Preset feature position</option>
+                                                            <option value="inside">Feature inside axis</option>
+                                                            <option value="split">Feature on axis</option>
+                                                            <option value="outside">Feature outside axis</option>
+                                                        </select>
+                                                    </div>
+                                                    <div v-if="entry.slot.renderer === 'ticks'" class="grid grid-cols-1 gap-1 items-center">
+                                                        <select v-model="entry.slot.params.tick_label_layout" class="form-input px-1 py-0.5 text-[10px]">
+                                                            <option value="label_out_tick_in">Labels outside / ticks inside</option>
+                                                            <option value="label_in_tick_out">Labels inside / ticks outside</option>
+                                                            <option value="tick_only">Ticks only</option>
+                                                            <option value="label_only">Labels only</option>
+                                                        </select>
+                                                    </div>
+                                                    <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
+                                                        <input v-model.trim="entry.slot.params.nt" class="form-input px-1 py-0.5 text-[10px]" placeholder="nt">
+                                                        <input v-model.trim="entry.slot.params.legend_label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Legend label">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
+                                                <select v-model="circularTrackNewRenderer" class="form-input py-1 text-[10px] min-w-0">
+                                                    <option v-for="renderer in circularTrackRenderers" :key="`new-slot-${renderer}`" :value="renderer">
+                                                        {{ circularTrackRendererLabel(renderer) }}
+                                                    </option>
+                                                </select>
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-secondary text-[10px] py-1 px-2 shrink-0"
+                                                    @click="addCircularTrackSlot(circularTrackNewRenderer)"
+                                                    title="Add track"
+                                                >
+                                                    <i class="ph ph-plus"></i>
+                                                    Add track
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div v-if="form.multi_record_canvas" class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-50 p-2 rounded border border-slate-200">
@@ -1691,11 +1825,15 @@
             </div>
             
             <div class="generate-bar shrink-0 py-4 bg-white/50 backdrop-blur-sm border-t border-slate-100 z-10 relative mt-auto">
-            <button @click="runAnalysis" :disabled="processing || !pyodideReady" 
+            <button @click="runAnalysis" :disabled="processing || !pyodideReady || !diagramGenerationWorkerReady"
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
-                <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
+                <span v-if="!processing && pyodideReady && diagramGenerationWorkerReady" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
+                <span v-else-if="!processing && pyodideReady && diagramGenerationWorkerError" class="flex items-center justify-center gap-2"><i class="ph ph-warning-circle text-xl"></i> Generator Unavailable</span>
+                <span v-else-if="!processing && !pyodideReady" class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> Preparing Python...</span>
+                <span v-else-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> Preparing Generator...</span>
                 <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
             </button>
+            <p v-if="!processing && (!pyodideReady || !diagramGenerationWorkerReady)" :class="['mt-2 text-center text-xs font-mono', diagramGenerationWorkerError || (!pyodideReady && loadingStatus.startsWith('Startup Error')) ? 'text-red-600' : 'text-slate-500']" v-text="pyodideReady ? diagramGenerationWorkerStatus : loadingStatus"></p>
             </div>
 
         </div>

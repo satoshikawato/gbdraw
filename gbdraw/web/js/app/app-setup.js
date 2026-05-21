@@ -2,7 +2,10 @@ import { state, createLinearSeq, reconcileLinearSeqPairData } from '../state.js'
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import { exportConfig, exportSession, importConfig, importSession } from '../services/config.js';
-import { disposeDiagramGenerationWorker } from '../services/diagram-generation.js';
+import {
+  disposeDiagramGenerationWorker,
+  preinitializeDiagramGenerationWorker
+} from '../services/diagram-generation.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { createSvgStyles } from './svg-styles.js';
@@ -13,12 +16,16 @@ import { createLegendLayout } from './legend-layout.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 import { createOrthogroupEditor } from './orthogroups.js';
+import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 
-const { onMounted, onUnmounted, watch, nextTick, computed } = window.Vue;
+const { onMounted, onUnmounted, watch, nextTick, computed, ref } = window.Vue;
 
 export const createAppSetup = () => {
   const {
     pyodideReady,
+    diagramGenerationWorkerReady,
+    diagramGenerationWorkerStatus,
+    diagramGenerationWorkerError,
     processing,
     processingStatus,
     generationCancelRequested,
@@ -176,6 +183,19 @@ export const createAppSetup = () => {
     disposeDiagramGenerationWorker();
   });
 
+  const circularTrackNewRenderer = ref('dinucleotide_skew');
+  const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
+  watch(
+    () => [adv.circular_track_slots_enabled, form.show_depth],
+    ([slotsEnabled, showDepth]) => {
+      if (slotsEnabled) {
+        circularTrackSlotEditor.normalizeCircularTrackSlots();
+      }
+      if (slotsEnabled && showDepth) {
+        circularTrackSlotEditor.ensureCircularTrackDepthSlot();
+      }
+    }
+  );
   const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions });
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
@@ -215,7 +235,22 @@ export const createAppSetup = () => {
     resultsManager,
     runLabelReflow,
     refreshCircularRecordOrder,
-    resetPreviewViewport
+    resetPreviewViewport,
+    prepareDiagramGenerationWorker: async () => {
+      diagramGenerationWorkerReady.value = false;
+      diagramGenerationWorkerError.value = null;
+      diagramGenerationWorkerStatus.value = 'Preparing diagram engine...';
+      try {
+        await preinitializeDiagramGenerationWorker();
+        diagramGenerationWorkerReady.value = true;
+        diagramGenerationWorkerStatus.value = 'Diagram engine ready.';
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        diagramGenerationWorkerError.value = message;
+        diagramGenerationWorkerStatus.value = `Diagram engine failed to start: ${message}`;
+        console.error(error);
+      }
+    }
   });
 
   const {
@@ -745,6 +780,9 @@ export const createAppSetup = () => {
 
   return {
     pyodideReady,
+    diagramGenerationWorkerReady,
+    diagramGenerationWorkerStatus,
+    diagramGenerationWorkerError,
     processing,
     processingStatus,
     generationCancelRequested,
@@ -784,6 +822,33 @@ export const createAppSetup = () => {
     form,
     adv,
     canUseLinearRulerOnAxis,
+    circularTrackNewRenderer,
+    circularTrackRenderers: circularTrackSlotEditor.circularTrackRenderers,
+    circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
+    resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,
+    resetCircularTrackSlotsToPreset: circularTrackSlotEditor.resetCircularTrackSlotsToPreset,
+    applyCircularTrackPreset: circularTrackSlotEditor.applyCircularTrackPreset,
+    setCircularTrackSlotsEnabled: circularTrackSlotEditor.setCircularTrackSlotsEnabled,
+    addCircularTrackSlot: circularTrackSlotEditor.addCircularTrackSlot,
+    duplicateCircularTrackSlot: circularTrackSlotEditor.duplicateCircularTrackSlot,
+    removeCircularTrackSlot: circularTrackSlotEditor.removeCircularTrackSlot,
+    moveCircularTrackSlot: circularTrackSlotEditor.moveCircularTrackSlot,
+    canMoveCircularTrackSlot: circularTrackSlotEditor.canMoveCircularTrackSlot,
+    moveCircularTrackSlotOutside: circularTrackSlotEditor.moveCircularTrackSlotOutside,
+    moveCircularTrackSlotInside: circularTrackSlotEditor.moveCircularTrackSlotInside,
+    moveCircularTrackSlotToAxis: circularTrackSlotEditor.moveCircularTrackSlotToAxis,
+    canMoveCircularTrackSlotOutside: circularTrackSlotEditor.canMoveCircularTrackSlotOutside,
+    canMoveCircularTrackSlotInside: circularTrackSlotEditor.canMoveCircularTrackSlotInside,
+    canMoveCircularTrackSlotToAxis: circularTrackSlotEditor.canMoveCircularTrackSlotToAxis,
+    updateCircularTrackSlotRenderer: circularTrackSlotEditor.updateCircularTrackSlotRenderer,
+    updateCircularTrackSlotPlacement: circularTrackSlotEditor.updateCircularTrackSlotPlacement,
+    updateCircularTrackFeatureLane: circularTrackSlotEditor.updateCircularTrackFeatureLane,
+    supportsCircularTrackSlotPlacement: circularTrackSlotEditor.supportsCircularTrackSlotPlacement,
+    circularTrackSlots: circularTrackSlotEditor.circularTrackSlots,
+    circularTrackStackEntries: circularTrackSlotEditor.circularTrackStackEntries,
+    circularTrackSlotCliSpec: circularTrackSlotEditor.circularTrackSlotCliSpec,
+    circularTrackPresetSummary: circularTrackSlotEditor.circularTrackPresetSummary,
+    circularTrackSlotUsesPresetGeometry: circularTrackSlotEditor.circularTrackSlotUsesPresetGeometry,
     losat,
     losatCacheInfo,
     orthogroups,

@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
@@ -46,6 +48,7 @@ def add_depth_group_on_canvas(
     *,
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
+    group_id: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Adds the depth coverage group to the canvas."""
@@ -64,6 +67,7 @@ def add_depth_group_on_canvas(
         config_dict,
         canvas_config.track_ids["depth_track"],
         norm_factor_override=norm_factor_override,
+        group_id=group_id,
         cfg=cfg,
     ).get_group()
     depth_group = center_group_on_canvas(depth_group, canvas_config)
@@ -81,6 +85,7 @@ def add_gc_skew_group_on_canvas(
     *,
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
+    group_id: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -111,6 +116,7 @@ def add_gc_skew_group_on_canvas(
         config_dict,
         canvas_config.track_ids["skew_track"],
         norm_factor_override=norm_factor_override,
+        group_id=group_id,
         cfg=cfg,
     ).get_group()
     gc_skew_group = center_group_on_canvas(gc_skew_group, canvas_config)
@@ -128,6 +134,7 @@ def add_gc_content_group_on_canvas(
     *,
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
+    group_id: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -159,6 +166,7 @@ def add_gc_content_group_on_canvas(
         config_dict,
         canvas_config.track_ids["gc_track"],
         norm_factor_override=norm_factor_override,
+        group_id=group_id,
         cfg=cfg,
     ).get_group()
     gc_content_group = center_group_on_canvas(gc_content_group, canvas_config)
@@ -225,6 +233,7 @@ def add_record_group_on_canvas(
     precomputed_feature_dict: dict | None = None,
     precalculated_labels: list[dict] | None = None,
     feature_track_ratio_factor_override: float | None = None,
+    feature_anchor_radius_px: float | None = None,
 ) -> Drawing:
     """
     Adds the record group to the canvas.
@@ -249,6 +258,7 @@ def add_record_group_on_canvas(
         precomputed_feature_dict=precomputed_feature_dict,
         precalculated_labels=precalculated_labels,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+        feature_anchor_radius_px=feature_anchor_radius_px,
     ).get_group()
     # Calculate start and end points for the 60-degree arc
 
@@ -296,6 +306,10 @@ def add_tick_group_on_canvas(
     *,
     radius_override: float | None = None,
     tick_track_channel_override: str | None = None,
+    label_side: str = "legacy",
+    tick_side: str = "legacy",
+    tick_length_px: float | None = None,
+    track_preset: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -316,6 +330,10 @@ def add_tick_group_on_canvas(
         config_dict,
         radius=radius_override,
         tick_track_channel_override=tick_track_channel_override,
+        label_side=label_side,
+        tick_side=tick_side,
+        tick_length_px=tick_length_px,
+        track_preset=track_preset,
         cfg=cfg or canvas_config._cfg,
     ).get_group()
     tick_group = center_group_on_canvas(tick_group, canvas_config)
@@ -335,6 +353,8 @@ def add_labels_group_on_canvas(
     precomputed_feature_dict: dict | None = None,
     precalculated_labels: list[dict] | None = None,
     feature_track_ratio_factor_override: float | None = None,
+    feature_anchor_radius_px: float | None = None,
+    phase: Literal["all", "leaders", "text"] = "all",
 ) -> Drawing:
     """
     Adds the labels group to the canvas.
@@ -360,6 +380,8 @@ def add_labels_group_on_canvas(
         precomputed_feature_dict=precomputed_feature_dict,
         precalculated_labels=precalculated_labels,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+        feature_anchor_radius_px=feature_anchor_radius_px,
+        phase=phase,
     ).get_group()
     labels_group = center_group_on_canvas(labels_group, canvas_config)
     canvas.add(labels_group)

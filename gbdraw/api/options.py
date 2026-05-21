@@ -23,7 +23,7 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
 from gbdraw.analysis.collinearity_units import CollinearityUnitMode  # type: ignore[reportMissingImports]
 from gbdraw.analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from gbdraw.tracks import TrackSpec  # type: ignore[reportMissingImports]
+from gbdraw.tracks import CircularTrackSlot  # type: ignore[reportMissingImports]
 
 
 @dataclass(frozen=True)
@@ -41,7 +41,8 @@ class ColorOptions:
 class TrackOptions:
     """Track layout options (currently circular-only)."""
 
-    track_specs: Sequence[str | TrackSpec] | None = None
+    circular_track_slots: Sequence[str | CircularTrackSlot] | None = None
+    circular_track_axis_index: int | None = None
 
 
 @dataclass(frozen=True)

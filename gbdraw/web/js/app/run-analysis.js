@@ -6,6 +6,13 @@ import {
   runDiagramGeneration
 } from '../services/diagram-generation.js';
 import { buildLabelOverrideTsv } from './feature-editor/label-override-table.js';
+import {
+  applyCircularTrackOrderPlacements,
+  buildCircularTrackSlotSpec,
+  clampCircularTrackAxisIndex,
+  hasEnabledCircularTrackRenderer,
+  inferLegacyAxisIndexFromFeature
+} from './circular-track-slots.js';
 
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
@@ -455,6 +462,9 @@ export const createRunAnalysis = ({
 }) => {
   const {
     pyodideReady,
+    diagramGenerationWorkerReady,
+    diagramGenerationWorkerStatus,
+    diagramGenerationWorkerError,
     processing,
     processingStatus,
     generationCancelRequested,
@@ -545,6 +555,25 @@ export const createRunAnalysis = ({
   const normalizeSections = (sections) =>
     sections.filter((section) => section && typeof section.text === 'string' && section.text.trim() !== '');
 
+  const extractCircularTrackSlotError = (err) => {
+    const texts = [
+      err?.message,
+      err?.stderr,
+      err?.stdout,
+      err?.traceback
+    ];
+    for (const text of texts) {
+      const lines = String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      for (const line of lines) {
+        const cleaned = line.replace(/^(ValueError|RuntimeError):\s*/, '');
+        if (/^Circular track slot '.+' cannot fit inside the feature\/tick stack\./.test(cleaned)) {
+          return cleaned;
+        }
+      }
+    }
+    return '';
+  };
+
   const formatPythonError = (err) => {
     if (err && typeof err === 'object') {
       const details = normalizeSections([
@@ -552,12 +581,14 @@ export const createRunAnalysis = ({
         { label: 'STDOUT', text: err.stdout || '' },
         { label: 'Traceback', text: err.traceback || '' }
       ]);
+      const circularTrackSlotError = extractCircularTrackSlotError(err);
       let summary =
+        circularTrackSlotError ||
         (err.type === 'SystemExit' && err.stderr ? getLastLine(err.stderr) : '') ||
         err.message ||
         getLastLine(err.stderr || err.stdout || err.traceback) ||
         'Unknown error';
-      if (err.type && summary && !summary.startsWith(err.type)) {
+      if (!circularTrackSlotError && err.type && summary && !summary.startsWith(err.type)) {
         summary = `${err.type}: ${summary}`;
       }
       return { summary, details };
@@ -1017,7 +1048,9 @@ json.dumps({
         plot_title_font_size: false,
         keep_full_definition_with_plot_title: false,
         tick_label_font_size: false,
-        circular_label_spacing: false
+        circular_label_spacing: false,
+        circular_track_slot: false,
+        circular_track_axis_index: false
       };
       return circularMultiRecordCanvasSupportCache;
     }
@@ -1039,6 +1072,8 @@ json.dumps({
   "keep_full_definition_with_plot_title": "--keep_full_definition_with_plot_title" in _source,
   "tick_label_font_size": "--tick_label_font_size" in _source,
   "circular_label_spacing": "--circular_label_spacing" in _source,
+  "circular_track_slot": "--circular_track_slot" in _source,
+  "circular_track_axis_index": "--circular_track_axis_index" in _source,
 })
       `);
       circularMultiRecordCanvasSupportCache = JSON.parse(String(raw));
@@ -1055,7 +1090,9 @@ json.dumps({
         plot_title_font_size: false,
         keep_full_definition_with_plot_title: false,
         tick_label_font_size: false,
-        circular_label_spacing: false
+        circular_label_spacing: false,
+        circular_track_slot: false,
+        circular_track_axis_index: false
       };
     }
     return circularMultiRecordCanvasSupportCache;
@@ -1183,7 +1220,12 @@ json.dumps({
         if (!selector || seenSelectors.has(selector)) return;
         seenSelectors.add(selector);
         const recordId = String(entry?.record_id ?? '').trim() || `Record_${index + 1}`;
-        nextRecords.push({ selector, record_id: recordId });
+        const recordLength = Number(entry?.record_length ?? 0);
+        nextRecords.push({
+          selector,
+          record_id: recordId,
+          record_length: Number.isFinite(recordLength) && recordLength > 0 ? recordLength : null
+        });
       });
       circularRecordList.value = nextRecords;
       const nextPositions = mergeCircularRecordPositions(nextRecords, adv.multi_record_positions);
@@ -1196,11 +1238,20 @@ json.dumps({
   };
 
   const runAnalysisInternal = async ({ runMode = 'manual', requestId = 0 } = {}) => {
+    const isReflow = runMode === 'reflow';
     if (!pyodideReady.value) return { status: 'skipped' };
+    if (!diagramGenerationWorkerReady.value) {
+      if (!isReflow) {
+        const message = diagramGenerationWorkerError.value
+          ? `Diagram engine is not ready: ${diagramGenerationWorkerError.value}`
+          : diagramGenerationWorkerStatus.value || 'Diagram engine is still preparing.';
+        errorLog.value = formatJsError(new Error(message));
+      }
+      return { status: 'skipped' };
+    }
     const pyodide = getPyodide();
     if (!pyodide) return { status: 'skipped' };
 
-    const isReflow = runMode === 'reflow';
     const generationToken = ++latestGenerationToken;
     let keepProcessingStatus = false;
     let generationAbortController = null;
@@ -1565,6 +1616,39 @@ json.dumps({
         const multiCanvasSupport = getCircularMultiRecordCanvasOptionSupport();
         const normalizedCircularPlotTitle = String(form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(adv.plot_title_position);
+        const useCircularTrackSlots = adv.circular_track_slots_enabled === true;
+        const circularTrackAxisIndex = clampCircularTrackAxisIndex(
+          adv.circular_track_slots_axis_index,
+          Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots.length : 0
+        );
+        const circularTrackSlots = useCircularTrackSlots
+          ? applyCircularTrackOrderPlacements(
+              adv.circular_track_slots,
+              adv.nt,
+              form.track_type,
+              circularTrackAxisIndex
+            )
+          : [];
+        if (useCircularTrackSlots) {
+          if (!multiCanvasSupport.circular_track_slot || !multiCanvasSupport.circular_track_axis_index) {
+            throw new Error(
+              'Current gbdraw wheel does not support --circular_track_slot and --circular_track_axis_index. Rebuild and redeploy the web wheel.'
+            );
+          }
+          adv.circular_track_slots.splice(0, adv.circular_track_slots.length, ...circularTrackSlots);
+          const circularTrackOnAxisIndex = circularTrackSlots.findIndex((slot) => slot?.side === 'overlay');
+          const normalizedCircularTrackAxisIndex = circularTrackOnAxisIndex >= 0
+            ? circularTrackOnAxisIndex
+            : (
+                circularTrackAxisIndex === null
+                  ? inferLegacyAxisIndexFromFeature(circularTrackSlots, form.track_type)
+                  : circularTrackAxisIndex
+              );
+          adv.circular_track_slots_axis_index = clampCircularTrackAxisIndex(
+            normalizedCircularTrackAxisIndex,
+            circularTrackSlots.length
+          );
+        }
         const hasPlotTitleFontSize =
           adv.plot_title_font_size !== null &&
           adv.plot_title_font_size !== undefined &&
@@ -1595,7 +1679,8 @@ json.dumps({
             args.push('--feature_shape', assignment);
           });
         }
-        args.push('--track_type', form.track_type, '-l', form.legend);
+        args.push('--track_type', form.track_type);
+        args.push('-l', form.legend);
         const wantsCircularPlotTitleOption = normalizedCircularPlotTitle.length > 0;
         if (wantsCircularPlotTitleOption) {
           if (!multiCanvasSupport.plot_title) {
@@ -1638,8 +1723,10 @@ json.dumps({
         const labelsMode = String(labelsModeRaw || 'none').trim().toLowerCase();
         if (labelsMode === 'out') args.push('--labels');
         if (labelsMode === 'both') args.push('--labels', 'both');
-        if (form.suppress_gc) args.push('--suppress_gc');
-        if (form.suppress_skew) args.push('--suppress_skew');
+        if (!useCircularTrackSlots) {
+          if (form.suppress_gc) args.push('--suppress_gc');
+          if (form.suppress_skew) args.push('--suppress_skew');
+        }
         if (form.multi_record_canvas) {
           if (!multiCanvasSupport.circular) {
             throw new Error(
@@ -1717,6 +1804,7 @@ json.dumps({
           args.push('--circular_label_spacing', adv.circular_label_spacing);
         }
         if (
+          !useCircularTrackSlots &&
           adv.feature_width_circular !== null &&
           adv.feature_width_circular !== undefined &&
           adv.feature_width_circular !== '' &&
@@ -1724,7 +1812,7 @@ json.dumps({
         ) {
           args.push('--feature_width', adv.feature_width_circular);
         }
-        if (!form.suppress_gc) {
+        if (!useCircularTrackSlots && !form.suppress_gc) {
           if (
             adv.gc_content_width_circular !== null &&
             adv.gc_content_width_circular !== undefined &&
@@ -1742,7 +1830,7 @@ json.dumps({
             args.push('--gc_content_radius', adv.gc_content_radius_circular);
           }
         }
-        if (!form.suppress_skew) {
+        if (!useCircularTrackSlots && !form.suppress_skew) {
           if (
             adv.gc_skew_width_circular !== null &&
             adv.gc_skew_width_circular !== undefined &&
@@ -1760,14 +1848,28 @@ json.dumps({
             args.push('--gc_skew_radius', adv.gc_skew_radius_circular);
           }
         }
+        if (useCircularTrackSlots) {
+          args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));
+          circularTrackSlots.forEach((slot) => {
+            args.push(
+              '--circular_track_slot',
+              buildCircularTrackSlotSpec(slot, adv.nt, form.track_type, {
+                includeSide: false,
+                forceSplitLane: true
+              })
+            );
+          });
+        }
         const hasCircularDepthFile = Boolean(files.c_depth);
-        if (form.show_depth) {
+        const circularSlotNeedsDepth = useCircularTrackSlots && hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth');
+        if (form.show_depth || circularSlotNeedsDepth) {
           if (!hasCircularDepthFile) throw new Error('Please upload a Depth TSV file or disable Show depth track.');
           await stageUploadedFile(files.c_depth, '/depth.tsv');
           args.push('--depth', '/depth.tsv');
           args.push('--show_depth');
           appendDepthStyleArgs();
           if (
+            !useCircularTrackSlots &&
             adv.depth_width_circular !== null &&
             adv.depth_width_circular !== undefined &&
             adv.depth_width_circular !== '' &&

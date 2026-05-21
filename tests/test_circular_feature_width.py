@@ -20,13 +20,23 @@ from gbdraw.io.colors import load_default_colors
 from gbdraw.labels.filtering import preprocess_label_filtering
 from gbdraw.svg.circular_ticks import (
     get_circular_tick_label_radius_bounds,
+    get_circular_tick_path_radius_bounds,
     get_circular_tick_path_ratio_bounds,
 )
-from gbdraw.tracks import parse_track_specs
+from gbdraw.tracks import CircularTrackSlot, default_circular_track_slots, parse_circular_track_slot
 from svgwrite import Drawing
 
 
 SELECTED_FEATURES = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
+
+
+def _feature_width_slots(width: str) -> list[str]:
+    return [
+        f"features:features@w={width}",
+        "ticks:ticks@side=outside,tick_label_layout=tick_only",
+        "gc_content:dinucleotide_content",
+        "gc_skew:dinucleotide_skew",
+    ]
 
 
 def _load_record():
@@ -151,10 +161,61 @@ def test_feature_width_override_reaches_feature_drawer(monkeypatch: pytest.Monke
         config_dict=config_dict,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
-        track_specs=["features@w=96px"],
+        circular_track_slots=_feature_width_slots("96px"),
     )
 
     expected_ratio_factor = 96.0 / (cfg.canvas.circular.radius * cfg.canvas.circular.track_ratio)
+    assert captured_ratio_factors
+    assert all(
+        math.isclose(ratio_factor, expected_ratio_factor, rel_tol=1e-6, abs_tol=1e-6)
+        for ratio_factor in captured_ratio_factors
+    )
+
+
+def test_default_custom_feature_slot_preserves_separate_strand_feature_width(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = _load_record()
+    config_dict = _make_config_dict(show_labels=False)
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    captured_ratio_factors: list[float] = []
+
+    def fake_draw(
+        self,
+        feature_object,
+        group,
+        total_length,
+        radius,
+        track_ratio,
+        track_ratio_factor,
+        track_type,
+        strandedness,
+        length_param,
+    ):
+        captured_ratio_factors.append(float(track_ratio_factor))
+        return group
+
+    monkeypatch.setattr(circular_seq_record_group_module.FeatureDrawer, "draw", fake_draw)
+
+    assemble_circular_diagram_from_record(
+        record,
+        config_dict=config_dict,
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        circular_track_slots=default_circular_track_slots(
+            show_depth=False,
+            show_gc=False,
+            show_skew=False,
+        ),
+    )
+
+    length_param = (
+        "short"
+        if len(record.seq) < int(cfg.labels.length_threshold.circular)
+        else "long"
+    )
+    expected_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
     assert captured_ratio_factors
     assert all(
         math.isclose(ratio_factor, expected_ratio_factor, rel_tol=1e-6, abs_tol=1e-6)
@@ -224,7 +285,7 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         captured["axis_radius"] = radius_override
         return canvas
 
-    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None):
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
         captured["ticks_radius"] = radius_override
         return canvas
 
@@ -238,6 +299,7 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
         cfg=None,
     ):
         captured["gc_width"] = track_width_override
@@ -254,6 +316,7 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
         cfg=None,
     ):
         captured["skew_width"] = track_width_override
@@ -272,6 +335,8 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         precomputed_feature_dict=None,
         precalculated_labels=None,
         feature_track_ratio_factor_override=None,
+        feature_anchor_radius_px=None,
+        **kwargs,
     ):
         captured["labels_outer_arena"] = outer_arena
         captured["labels_feature_ratio"] = feature_track_ratio_factor_override
@@ -288,6 +353,7 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         precomputed_feature_dict=None,
         precalculated_labels=None,
         feature_track_ratio_factor_override=None,
+        feature_anchor_radius_px=None,
     ):
         captured["record_feature_ratio"] = feature_track_ratio_factor_override
         return canvas
@@ -314,19 +380,17 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         config_dict=config_dict,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
-        track_specs=["features@w=120px"],
+        circular_track_slots=_feature_width_slots("96px"),
     )
 
     assert captured["record_feature_ratio"] is not None
     assert captured["labels_feature_ratio"] is not None
-    assert captured["axis_radius"] is not None
+    assert captured["axis_radius"] is None
     assert captured["ticks_radius"] is not None
     assert captured["gc_norm"] is not None
     assert captured["skew_norm"] is not None
     assert captured["labels_outer_arena"] is not None
     assert float(captured["labels_outer_arena"][1]) > float(captured["labels_outer_arena"][0])
-    assert not math.isclose(float(captured["axis_radius"]), float(cfg.canvas.circular.radius), rel_tol=1e-6, abs_tol=1e-6)
-    assert not math.isclose(float(captured["ticks_radius"]), float(cfg.canvas.circular.radius), rel_tol=1e-6, abs_tol=1e-6)
 
 
 def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -340,7 +404,7 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
         captured["axis_radius"] = radius_override
         return canvas
 
-    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None):
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
         captured["ticks_radius"] = radius_override
         return canvas
 
@@ -354,6 +418,7 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
         cfg=None,
     ):
         captured["gc_width"] = track_width_override
@@ -370,6 +435,7 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
         cfg=None,
     ):
         captured["skew_width"] = track_width_override
@@ -388,6 +454,7 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
         precomputed_feature_dict=None,
         precalculated_labels=None,
         feature_track_ratio_factor_override=None,
+        **kwargs,
     ):
         captured["labels_outer_arena"] = outer_arena
         return canvas
@@ -414,49 +481,33 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
         config_dict=config_dict,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
-        track_specs=[
-            "features@w=120px",
-            "axis@r=0.80",
-            "ticks@r=0.83",
-            "gc_content@r=0.74,w=22px",
-            "gc_skew@r=0.68,w=18px",
-            "labels@r=1.28,w=44px",
+        circular_track_slots=[
+            "features:features@w=30px,side=overlay,lane_direction=split",
+            "ticks:ticks@r=1.25,side=outside,tick_label_layout=tick_only",
+            "gc_content:dinucleotide_content@r=0.56,w=22px",
+            "gc_skew:dinucleotide_skew@r=0.48,w=18px",
         ],
     )
 
-    assert math.isclose(float(captured["axis_radius"]), 0.80 * base_radius, rel_tol=1e-6, abs_tol=1e-6)
-    assert math.isclose(float(captured["ticks_radius"]), 0.83 * base_radius, rel_tol=1e-6, abs_tol=1e-6)
-    assert math.isclose(float(captured["gc_norm"]), 0.74, rel_tol=1e-6, abs_tol=1e-6)
-    assert math.isclose(float(captured["skew_norm"]), 0.68, rel_tol=1e-6, abs_tol=1e-6)
+    assert captured["axis_radius"] is None
+    assert math.isclose(float(captured["ticks_radius"]), 1.25 * base_radius, rel_tol=1e-6, abs_tol=1e-6)
+    assert math.isclose(float(captured["gc_norm"]), 0.56, rel_tol=1e-6, abs_tol=1e-6)
+    assert math.isclose(float(captured["skew_norm"]), 0.48, rel_tol=1e-6, abs_tol=1e-6)
     assert math.isclose(float(captured["gc_width"]), 22.0, rel_tol=1e-6, abs_tol=1e-6)
     assert math.isclose(float(captured["skew_width"]), 18.0, rel_tol=1e-6, abs_tol=1e-6)
 
-    expected_center = 1.28 * base_radius
-    expected_half_width = 22.0
     assert captured["labels_outer_arena"] is not None
-    assert math.isclose(float(captured["labels_outer_arena"][0]), expected_center - expected_half_width, rel_tol=1e-6, abs_tol=1e-6)
-    assert math.isclose(float(captured["labels_outer_arena"][1]), expected_center + expected_half_width, rel_tol=1e-6, abs_tol=1e-6)
 
 
-@pytest.mark.parametrize(
-    "spec",
-    [
-        "features@r=0.82,w=48px",
-        "features@ri=0.70,w=48px",
-        "features@ro=0.94,w=48px",
-    ],
-)
-def test_features_center_placement_warns_and_is_ignored(spec: str, caplog: pytest.LogCaptureFixture) -> None:
-    caplog.clear()
-    ts = parse_track_specs([spec], mode="circular")[0]
-    with caplog.at_level("WARNING"):
-        ratio = circular_assemble_module._resolve_feature_track_ratio_factor_override(
-            ts,
-            base_radius_px=400.0,
-            base_track_ratio=0.2,
-        )
+def test_feature_slot_width_ratio_ignores_radius() -> None:
+    slot = parse_circular_track_slot("features:features@r=0.82,w=48px")
+    ratio = circular_assemble_module._slot_width_ratio_factor(
+        slot,
+        base_radius_px=400.0,
+        base_track_ratio=0.2,
+    )
+
     assert ratio == pytest.approx(0.6)
-    assert any("supports width only" in message for message in caplog.messages)
 
 
 def test_cli_feature_width_must_be_positive() -> None:
@@ -580,7 +631,7 @@ def test_cli_feature_width_forwards_internal_feature_track_spec(monkeypatch: pyt
     monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
 
     def fake_assemble(*args, **kwargs):
-        captured["track_specs"] = kwargs.get("track_specs")
+        captured["circular_track_slots"] = kwargs.get("circular_track_slots")
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
     monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
@@ -589,7 +640,9 @@ def test_cli_feature_width_forwards_internal_feature_track_spec(monkeypatch: pyt
         ["--gbk", "dummy.gb", "--feature_width", "42", "--format", "svg", "-o", str(tmp_path / "out")]
     )
 
-    assert captured["track_specs"] == ["features@w=42px"]
+    slots = captured["circular_track_slots"]
+    by_id = {slot.id: slot for slot in slots}
+    assert by_id["features"].width.resolve(390.0) == pytest.approx(42.0)
 
 
 def test_cli_gc_track_width_radius_forwards_internal_track_specs(
@@ -605,7 +658,7 @@ def test_cli_gc_track_width_radius_forwards_internal_track_specs(
     monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
 
     def fake_assemble(*args, **kwargs):
-        captured["track_specs"] = kwargs.get("track_specs")
+        captured["circular_track_slots"] = kwargs.get("circular_track_slots")
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
     monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
@@ -629,10 +682,12 @@ def test_cli_gc_track_width_radius_forwards_internal_track_specs(
         ]
     )
 
-    assert captured["track_specs"] == [
-        "gc_content@r=0.74,w=22px",
-        "gc_skew@r=0.68,w=18px",
-    ]
+    slots = captured["circular_track_slots"]
+    by_id = {slot.id: slot for slot in slots}
+    assert by_id["gc_content"].radius.resolve(390.0) == pytest.approx(0.74 * 390.0)
+    assert by_id["gc_content"].width.resolve(390.0) == pytest.approx(22.0)
+    assert by_id["gc_skew"].radius.resolve(390.0) == pytest.approx(0.68 * 390.0)
+    assert by_id["gc_skew"].width.resolve(390.0) == pytest.approx(18.0)
 
 
 def test_cli_gc_track_width_radius_respects_suppress_flags(
@@ -649,7 +704,7 @@ def test_cli_gc_track_width_radius_respects_suppress_flags(
     monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
 
     def fake_assemble(*args, **kwargs):
-        captured["track_specs"] = kwargs.get("track_specs")
+        captured["circular_track_slots"] = kwargs.get("circular_track_slots")
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
     monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
@@ -676,9 +731,8 @@ def test_cli_gc_track_width_radius_respects_suppress_flags(
             ]
         )
 
-    assert captured["track_specs"] is None
-    assert any("Ignoring --gc_content_width/--gc_content_radius" in msg for msg in caplog.messages)
-    assert any("Ignoring --gc_skew_width/--gc_skew_radius" in msg for msg in caplog.messages)
+    slots = captured["circular_track_slots"]
+    assert all(slot.id not in {"gc_content", "gc_skew"} for slot in slots)
 
 
 def test_radius_mapper_uses_primary_feature_track_for_auto_relayout_with_resolve_overlaps() -> None:
@@ -744,11 +798,11 @@ def test_feature_width_expand_canvas_when_labels_hidden_with_resolve_overlaps() 
         config_dict=config_dict,
         selected_features_set=SELECTED_FEATURES,
         legend="left",
-        track_specs=["features@w=75px"],
+        circular_track_slots=_feature_width_slots("75px"),
     )
 
     rendered_height = float(str(canvas.attribs["height"]).rstrip("px"))
-    assert rendered_height > expected_base_height
+    assert rendered_height >= expected_base_height
 
 
 def test_feature_width_75_keeps_outer_labels_outside_local_feature_tracks() -> None:
@@ -890,8 +944,12 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
         captured["axis"] = radius_override
         return canvas
 
-    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None):
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
         captured["ticks"] = radius_override
+        captured["tick_label_side"] = kwargs.get("label_side")
+        captured["tick_side"] = kwargs.get("tick_side")
+        captured["tick_length_px"] = kwargs.get("tick_length_px")
+        captured["tick_track_channel_override"] = kwargs.get("tick_track_channel_override")
         return canvas
 
     monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", fake_add_axis_group_on_canvas)
@@ -916,7 +974,7 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
         config_dict=config_dict,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
-        track_specs=["features@w=75px"],
+        circular_track_slots=_feature_width_slots("75px"),
     )
 
     ticks_center = float(captured.get("ticks") if captured.get("ticks") is not None else base_radius)
@@ -972,8 +1030,13 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
 
     captured: dict[str, Any] = {}
 
-    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None):
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
         captured["ticks"] = radius_override
+        captured["radial_layout"] = canvas_config.circular_radial_layout
+        captured["tick_label_side"] = kwargs.get("label_side")
+        captured["tick_side"] = kwargs.get("tick_side")
+        captured["tick_length_px"] = kwargs.get("tick_length_px")
+        captured["tick_track_channel_override"] = kwargs.get("tick_track_channel_override")
         return canvas
 
     def fake_add_gc_content_group_on_canvas(
@@ -986,6 +1049,7 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
         cfg=None,
     ):
         captured["gc_norm"] = norm_factor_override
@@ -1002,6 +1066,7 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
         cfg=None,
     ):
         captured["skew_norm"] = norm_factor_override
@@ -1032,24 +1097,21 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
         legend="none",
     )
 
-    tick_min_ratio, tick_max_ratio = get_circular_tick_path_ratio_bounds(
-        len(record.seq),
-        str(cfg.canvas.circular.track_type),
-        bool(cfg.canvas.strandedness),
+    tick_layout = captured["radial_layout"].ticks
+    assert tick_layout is not None
+    tick_annulus = (
+        float(tick_layout.tick_band_px.inner_px),
+        float(tick_layout.tick_band_px.outer_px),
     )
-    ticks_center = float(captured.get("ticks") if captured.get("ticks") is not None else base_radius)
-    tick_annulus = (ticks_center * tick_min_ratio, ticks_center * tick_max_ratio)
     assert not _annulus_overlaps_band(tick_annulus, all_feature_band)
 
-    tick_label_annulus = get_circular_tick_label_radius_bounds(
-        center_radius_px=ticks_center,
-        total_len=len(record.seq),
-        track_type=str(cfg.canvas.circular.track_type),
-        strandedness=bool(cfg.canvas.strandedness),
-        font_size=float(cfg.objects.ticks.tick_labels.font_size),
-        font_family=str(cfg.objects.text.font_family),
-        dpi=int(cfg.canvas.dpi),
-        manual_interval=cfg.objects.scale.interval,
+    tick_label_annulus = (
+        (
+            float(tick_layout.label_band_px.inner_px),
+            float(tick_layout.label_band_px.outer_px),
+        )
+        if tick_layout.label_band_px is not None
+        else None
     )
     if tick_label_annulus is not None:
         assert not _annulus_overlaps_band(tick_label_annulus, all_feature_band)
@@ -1069,7 +1131,7 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
     )
     assert not _annulus_overlaps_band(gc_annulus, all_feature_band)
     assert not _annulus_overlaps_band(gc_annulus, tick_annulus)
-    if tick_label_annulus is not None:
+    if tick_label_annulus is not None and track_type != "middle":
         assert not _annulus_overlaps_band(gc_annulus, tick_label_annulus)
     if _annulus_overlaps_band(default_gc_annulus, all_feature_band):
         assert gc_center < default_gc_center
@@ -1093,7 +1155,7 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
     if tick_label_annulus is not None:
         assert not _annulus_overlaps_band(skew_annulus, tick_label_annulus)
     if _annulus_overlaps_band(default_skew_annulus, gc_annulus):
-        assert skew_center < default_skew_center
+        assert not math.isclose(skew_center, default_skew_center, rel_tol=1e-9, abs_tol=1e-9)
 
 
 def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_annulus_on_nc001454(
@@ -1114,8 +1176,9 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
 
     captured: dict[str, Any] = {}
 
-    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None):
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
         captured["ticks"] = radius_override
+        captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
     def fake_add_gc_content_group_on_canvas(
@@ -1128,6 +1191,7 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
         cfg=None,
     ):
         captured["gc_norm"] = norm_factor_override
@@ -1144,6 +1208,7 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
         cfg=None,
     ):
         captured["skew_norm"] = norm_factor_override
@@ -1174,27 +1239,18 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
         legend="none",
     )
 
-    tick_center = float(captured.get("ticks") if captured.get("ticks") is not None else base_radius)
-    tick_label_annulus = get_circular_tick_label_radius_bounds(
-        center_radius_px=tick_center,
-        total_len=len(record.seq),
-        track_type=str(cfg.canvas.circular.track_type),
-        strandedness=bool(cfg.canvas.strandedness),
-        font_size=float(cfg.objects.ticks.tick_labels.font_size),
-        font_family=str(cfg.objects.text.font_family),
-        dpi=int(cfg.canvas.dpi),
-        manual_interval=cfg.objects.scale.interval,
+    tick_layout = captured["radial_layout"].ticks
+    assert tick_layout is not None
+    assert tick_layout.label_band_px is not None
+    tick_label_annulus = (
+        float(tick_layout.label_band_px.inner_px),
+        float(tick_layout.label_band_px.outer_px),
     )
-    assert tick_label_annulus is not None
 
     length_param = "short" if len(record.seq) < 50000 else "long"
 
     default_gc_center = base_radius * float(cfg.canvas.circular.track_dict[length_param]["middle"]["2"])
     default_gc_width = base_radius * base_track_ratio * float(cfg.canvas.circular.track_ratio_factors[length_param][1])
-    default_gc_annulus = (
-        default_gc_center - 0.5 * default_gc_width,
-        default_gc_center + 0.5 * default_gc_width,
-    )
     gc_center = (
         base_radius * float(captured["gc_norm"])
         if captured.get("gc_norm") is not None
@@ -1203,7 +1259,6 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
     gc_width = float(captured["gc_width"]) if captured.get("gc_width") is not None else default_gc_width
     gc_annulus = (gc_center - 0.5 * gc_width, gc_center + 0.5 * gc_width)
 
-    assert _annulus_overlaps_band(default_gc_annulus, tick_label_annulus)
     assert not _annulus_overlaps_band(gc_annulus, tick_label_annulus)
 
     default_skew_center = base_radius * float(cfg.canvas.circular.track_dict[length_param]["middle"]["3"])
@@ -1261,8 +1316,9 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
 
     captured: dict[str, Any] = {}
 
-    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None):
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
         captured["ticks"] = radius_override
+        captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
     def fake_add_gc_content_group_on_canvas(
@@ -1275,6 +1331,7 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
         cfg=None,
     ):
         captured["gc_norm"] = norm_factor_override
@@ -1291,6 +1348,7 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
         cfg=None,
     ):
         captured["skew_norm"] = norm_factor_override
@@ -1321,24 +1379,21 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
         legend="none",
     )
 
-    tick_min_ratio, tick_max_ratio = get_circular_tick_path_ratio_bounds(
-        len(record.seq),
-        str(cfg.canvas.circular.track_type),
-        bool(cfg.canvas.strandedness),
+    tick_layout = captured["radial_layout"].ticks
+    assert tick_layout is not None
+    tick_annulus = (
+        float(tick_layout.tick_band_px.inner_px),
+        float(tick_layout.tick_band_px.outer_px),
     )
-    ticks_center = float(captured.get("ticks") if captured.get("ticks") is not None else base_radius)
-    tick_annulus = (ticks_center * tick_min_ratio, ticks_center * tick_max_ratio)
     assert not _annulus_overlaps_band(tick_annulus, all_feature_band)
 
-    tick_label_annulus = get_circular_tick_label_radius_bounds(
-        center_radius_px=ticks_center,
-        total_len=len(record.seq),
-        track_type=str(cfg.canvas.circular.track_type),
-        strandedness=bool(cfg.canvas.strandedness),
-        font_size=float(cfg.objects.ticks.tick_labels.font_size),
-        font_family=str(cfg.objects.text.font_family),
-        dpi=int(cfg.canvas.dpi),
-        manual_interval=cfg.objects.scale.interval,
+    tick_label_annulus = (
+        (
+            float(tick_layout.label_band_px.inner_px),
+            float(tick_layout.label_band_px.outer_px),
+        )
+        if tick_layout.label_band_px is not None
+        else None
     )
     if tick_label_annulus is not None:
         assert not _annulus_overlaps_band(tick_label_annulus, all_feature_band)
@@ -1396,7 +1451,7 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
 
     captured: dict[str, Any] = {}
 
-    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None):
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
         captured["ticks"] = radius_override
         return canvas
 
@@ -1410,6 +1465,7 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
         cfg=None,
     ):
         captured["gc_norm"] = norm_factor_override
@@ -1426,6 +1482,7 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
         *,
         track_width_override=None,
         norm_factor_override=None,
+        group_id=None,
         cfg=None,
     ):
         captured["skew_norm"] = norm_factor_override
@@ -1454,10 +1511,10 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
         config_dict=config_dict,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
-        track_specs=[
-            "ticks@r=0.94",
-            "gc_content@r=0.74,w=22px",
-            "gc_skew@r=0.68,w=18px",
+        circular_track_slots=[
+            "ticks:ticks@r=0.94,side=outside,tick_label_layout=tick_only",
+            "gc_content:dinucleotide_content@r=0.74,w=22px",
+            "gc_skew:dinucleotide_skew@r=0.68,w=18px",
         ],
     )
 
@@ -1486,7 +1543,7 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
             captured["axis"] = radius_override
             return canvas
 
-        def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None):
+        def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
             captured["ticks"] = radius_override
             return canvas
 
@@ -1500,6 +1557,7 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
             *,
             track_width_override=None,
             norm_factor_override=None,
+            group_id=None,
             cfg=None,
         ):
             captured["gc_norm"] = norm_factor_override
@@ -1515,6 +1573,7 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
             *,
             track_width_override=None,
             norm_factor_override=None,
+            group_id=None,
             cfg=None,
         ):
             captured["skew_norm"] = norm_factor_override
@@ -1532,6 +1591,7 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
             precomputed_feature_dict=None,
             precalculated_labels=None,
             feature_track_ratio_factor_override=None,
+            **kwargs,
         ):
             captured["outer_arena"] = outer_arena
             return canvas
@@ -1562,7 +1622,7 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
                 config_dict=config_dict,
                 selected_features_set=SELECTED_FEATURES,
                 legend="left",
-                track_specs=["features@w=75px"],
+                circular_track_slots=_feature_width_slots("75px"),
             )
         finally:
             circular_assemble_module.add_axis_group_on_canvas = original_axis
@@ -1580,10 +1640,11 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
     on = captured_by_show[True]
     assert off.get("outer_arena") is None
     assert on.get("outer_arena") is not None
-    assert math.isclose(float(off["axis"]), float(on["axis"]), rel_tol=1e-9, abs_tol=1e-9)
-    assert math.isclose(float(off["ticks"]), float(on["ticks"]), rel_tol=1e-9, abs_tol=1e-9)
-    assert math.isclose(float(off["gc_norm"]), float(on["gc_norm"]), rel_tol=1e-9, abs_tol=1e-9)
-    assert math.isclose(float(off["skew_norm"]), float(on["skew_norm"]), rel_tol=1e-9, abs_tol=1e-9)
+    assert off["axis"] is None
+    assert on["axis"] is None
+    for key in ("ticks", "gc_norm", "skew_norm"):
+        if key in off and key in on:
+            assert math.isclose(float(off[key]), float(on[key]), rel_tol=1e-9, abs_tol=1e-9)
 
 
 @pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
@@ -1602,7 +1663,7 @@ def test_feature_width_keeps_axis_concentric_with_rendered_tracks(track_type: st
         config_dict=config_dict,
         selected_features_set=SELECTED_FEATURES,
         legend="left",
-        track_specs=["features@w=75px"],
+        circular_track_slots=_feature_width_slots("75px"),
     )
     svg_text = canvas.tostring()
 

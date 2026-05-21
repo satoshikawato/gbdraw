@@ -72,7 +72,11 @@ from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImpor
 from gbdraw.features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from gbdraw.legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
 from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup  # type: ignore[reportMissingImports]
-from gbdraw.tracks import TrackSpec, parse_track_specs  # type: ignore[reportMissingImports]
+from gbdraw.tracks import (  # type: ignore[reportMissingImports]
+    CircularTrackSlot,
+    normalize_circular_track_slots_with_axis,
+    parse_circular_track_slots,
+)
 
 DEFAULT_SELECTED_FEATURES = (
     "CDS",
@@ -85,18 +89,6 @@ DEFAULT_SELECTED_FEATURES = (
 )
 
 logger = logging.getLogger(__name__)
-
-_SUPPORTED_CIRCULAR_TRACK_KINDS = {
-    "features",
-    "depth",
-    "gc_content",
-    "gc_skew",
-    "definition",
-    "ticks",
-    "axis",
-    "legend",
-    "labels",
-}
 
 _MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS = {
     "Axis",
@@ -124,6 +116,71 @@ _SVG_NUMBER_PATTERN = re.compile(r"[-+]?(?:\d*\.?\d+)(?:[eE][-+]?\d+)?")
 _SVG_TRANSLATE_PATTERN = re.compile(
     r"translate\(\s*([-+0-9.eE]+)(?:[\s,]+([-+0-9.eE]+))?\s*\)"
 )
+
+
+def _parse_circular_track_slot_inputs(
+    circular_track_slots: Sequence[str | CircularTrackSlot] | None,
+) -> list[CircularTrackSlot] | None:
+    if circular_track_slots is None:
+        return None
+    return parse_circular_track_slots(list(circular_track_slots))
+
+
+def _validate_circular_track_axis_index(
+    circular_track_axis_index: int | None,
+    parsed_circular_track_slots: Sequence[CircularTrackSlot] | None,
+) -> int | None:
+    if circular_track_axis_index is None:
+        return None
+    if parsed_circular_track_slots is None:
+        raise ValidationError("circular_track_axis_index requires circular_track_slots.")
+    if not isinstance(circular_track_axis_index, int):
+        raise ValidationError("circular_track_axis_index must be an integer.")
+    if circular_track_axis_index < 0 or circular_track_axis_index > len(parsed_circular_track_slots):
+        raise ValidationError(
+            f"circular_track_axis_index must be between 0 and the number of circular track slots ({len(parsed_circular_track_slots)})."
+        )
+    try:
+        normalize_circular_track_slots_with_axis(
+            parsed_circular_track_slots,
+            circular_track_axis_index,
+        )
+    except Exception as exc:
+        raise ValidationError(str(exc)) from exc
+    return circular_track_axis_index
+
+
+def _circular_slots_have_renderer(
+    slots: Sequence[CircularTrackSlot] | None,
+    renderer: str,
+) -> bool:
+    return any(slot.enabled and str(slot.renderer) == renderer for slot in (slots or []))
+
+
+def _dinucleotides_from_circular_slots(
+    slots: Sequence[CircularTrackSlot] | None,
+    *,
+    default_nt: str,
+) -> set[str]:
+    nts: set[str] = set()
+    for slot in slots or []:
+        if not slot.enabled or str(slot.renderer) not in {"dinucleotide_content", "dinucleotide_skew"}:
+            continue
+        params = slot.params or {}
+        nt = str(params.get("nt", params.get("dinucleotide", default_nt)) or default_nt).upper()
+        if len(nt) >= 2:
+            nts.add(nt)
+    return nts
+
+
+def _build_circular_dinucleotide_dataframes(
+    record: SeqRecord,
+    *,
+    window: int,
+    step: int,
+    nts: set[str],
+) -> dict[str, DataFrame]:
+    return {nt: skew_df(record, window, step, nt) for nt in sorted(nts)}
 
 
 def _resolve_circular_window_step(
@@ -1618,7 +1675,8 @@ def assemble_circular_diagram_from_record(
     plot_title_position: Literal["none", "top", "bottom"] = "none",
     plot_title_font_size: float | None = None,
     keep_full_definition_with_plot_title: bool = False,
-    track_specs: Sequence[str | TrackSpec] | None = None,
+    circular_track_slots: Sequence[str | CircularTrackSlot] | None = None,
+    circular_track_axis_index: int | None = None,
     _definition_profile: Literal["full", "record_summary", "shared_common"] = "full",
     _tick_track_channel_override: Literal["short", "long"] | None = None,
     _precomputed_depth_df: DataFrame | None = None,
@@ -1690,43 +1748,25 @@ def assemble_circular_diagram_from_record(
         else:
             effective_definition_profile = "full"
 
-    parsed_track_specs: list[TrackSpec] | None = None
-    if track_specs is not None:
-        parsed: list[TrackSpec] = []
-        raw: list[str] = []
-        for item in track_specs:
-            if isinstance(item, TrackSpec):
-                parsed.append(item)
-            else:
-                raw.append(str(item))
-        if raw:
-            parsed.extend(parse_track_specs(raw, mode="circular"))
-        parsed_track_specs = parsed
-
-    if parsed_track_specs:
-        for ts in parsed_track_specs:
-            if ts.mode != "circular":
-                raise ValidationError(
-                    f"TrackSpec mode '{ts.mode}' is not supported for circular diagrams."
-                )
-            if str(ts.kind) not in _SUPPORTED_CIRCULAR_TRACK_KINDS:
-                logger.warning(
-                    "TrackSpec kind '%s' is not supported for circular diagrams yet; it will be ignored.",
-                    ts.kind,
-                )
-
-    ts_by_kind = {str(ts.kind): ts for ts in (parsed_track_specs or [])}
-    legend_ts = ts_by_kind.get("legend")
-    legend_effective = "none" if (legend_ts is not None and not legend_ts.show) else legend
-
-    # Allow track specs to override high-level show flags (used by canvas sizing and track IDs).
-    show_depth = (
-        ts_by_kind.get("depth").show
-        if "depth" in ts_by_kind
-        else cfg.canvas.show_depth
+    parsed_circular_track_slots = _parse_circular_track_slot_inputs(circular_track_slots)
+    circular_track_axis_index = _validate_circular_track_axis_index(
+        circular_track_axis_index,
+        parsed_circular_track_slots,
     )
-    show_gc = ts_by_kind.get("gc_content").show if "gc_content" in ts_by_kind else cfg.canvas.show_gc
-    show_skew = ts_by_kind.get("gc_skew").show if "gc_skew" in ts_by_kind else cfg.canvas.show_skew
+
+    legend_effective = legend
+
+    # Explicit slots override high-level show flags used by canvas sizing.
+    if parsed_circular_track_slots is not None:
+        show_depth = _circular_slots_have_renderer(parsed_circular_track_slots, "depth")
+        show_gc = _circular_slots_have_renderer(parsed_circular_track_slots, "dinucleotide_content")
+        show_skew = _circular_slots_have_renderer(parsed_circular_track_slots, "dinucleotide_skew")
+        if show_depth and resolved_depth_table is None:
+            raise ValidationError("A circular depth track slot requires a depth_table or depth_file.")
+    else:
+        show_depth = cfg.canvas.show_depth
+        show_gc = cfg.canvas.show_gc
+        show_skew = cfg.canvas.show_skew
     canvas_cfg = cfg.canvas
     canvas_cfg = replace(
         canvas_cfg,
@@ -1788,8 +1828,21 @@ def assemble_circular_diagram_from_record(
         else None
     )
 
-    # Circular drawing expects the precomputed GC/skew dataframe, but only when needed.
-    gc_df = skew_df(gb_record, window, step, dinucleotide) if (cfg.canvas.show_gc or cfg.canvas.show_skew) else DataFrame()
+    # Circular drawing expects precomputed dinucleotide dataframes, but only when needed.
+    if parsed_circular_track_slots is not None:
+        requested_nts = _dinucleotides_from_circular_slots(
+            parsed_circular_track_slots,
+            default_nt=dinucleotide,
+        )
+    else:
+        requested_nts = {str(dinucleotide).upper()} if (cfg.canvas.show_gc or cfg.canvas.show_skew) else set()
+    dinucleotide_dataframes = _build_circular_dinucleotide_dataframes(
+        gb_record,
+        window=int(window),
+        step=int(step),
+        nts=requested_nts,
+    )
+    gc_df = dinucleotide_dataframes.get(str(dinucleotide).upper(), DataFrame())
     if cfg.canvas.show_depth and depth_config is not None:
         if _precomputed_depth_df is not None:
             resolved_depth_df = _precomputed_depth_df
@@ -1852,7 +1905,9 @@ def assemble_circular_diagram_from_record(
         depth_df=resolved_depth_df,
         depth_config=depth_config,
         cfg=cfg,
-        track_specs=parsed_track_specs,
+        circular_track_slots=parsed_circular_track_slots,
+        circular_track_axis_index=circular_track_axis_index,
+        dinucleotide_dataframes=dinucleotide_dataframes,
         definition_position="center",
         definition_profile=effective_definition_profile,
         _tick_track_channel_override=_tick_track_channel_override,
@@ -1914,7 +1969,8 @@ def assemble_circular_diagram_from_records(
     multi_record_column_gap_ratio: float = _MULTI_RECORD_COLUMN_GAP_RATIO,
     multi_record_row_gap_ratio: float = _MULTI_RECORD_ROW_GAP_RATIO,
     multi_record_positions: Sequence[str] | None = None,
-    track_specs: Sequence[str | TrackSpec] | None = None,
+    circular_track_slots: Sequence[str | CircularTrackSlot] | None = None,
+    circular_track_axis_index: int | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Build and assemble a circular diagram grid from multiple records."""
@@ -1983,7 +2039,8 @@ def assemble_circular_diagram_from_records(
             plot_title_position=normalized_plot_title_position,
             plot_title_font_size=plot_title_font_size,
             keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
-            track_specs=track_specs,
+            circular_track_slots=circular_track_slots,
+            circular_track_axis_index=circular_track_axis_index,
             cfg=cfg,
         )
 
@@ -2043,38 +2100,24 @@ def assemble_circular_diagram_from_records(
     if resolved_depth_tables is not None:
         resolved_depth_tables = [resolved_depth_tables[idx] for idx in ordered_indices]
 
-    parsed_track_specs: list[TrackSpec] | None = None
-    if track_specs is not None:
-        parsed: list[TrackSpec] = []
-        raw: list[str] = []
-        for item in track_specs:
-            if isinstance(item, TrackSpec):
-                parsed.append(item)
-            else:
-                raw.append(str(item))
-        if raw:
-            parsed.extend(parse_track_specs(raw, mode="circular"))
-        parsed_track_specs = parsed
+    parsed_circular_track_slots = _parse_circular_track_slot_inputs(circular_track_slots)
+    circular_track_axis_index = _validate_circular_track_axis_index(
+        circular_track_axis_index,
+        parsed_circular_track_slots,
+    )
 
-    if parsed_track_specs:
-        for ts in parsed_track_specs:
-            if ts.mode != "circular":
-                raise ValidationError(
-                    f"TrackSpec mode '{ts.mode}' is not supported for circular diagrams."
-                )
-            if str(ts.kind) not in _SUPPORTED_CIRCULAR_TRACK_KINDS:
-                logger.warning(
-                    "TrackSpec kind '%s' is not supported for circular diagrams yet; it will be ignored.",
-                    ts.kind,
-                )
+    legend_effective = legend
 
-    ts_by_kind = {str(ts.kind): ts for ts in (parsed_track_specs or [])}
-    legend_ts = ts_by_kind.get("legend")
-    legend_effective = "none" if (legend_ts is not None and not legend_ts.show) else legend
-
-    show_depth = ts_by_kind.get("depth").show if "depth" in ts_by_kind else cfg.canvas.show_depth
-    show_gc = ts_by_kind.get("gc_content").show if "gc_content" in ts_by_kind else cfg.canvas.show_gc
-    show_skew = ts_by_kind.get("gc_skew").show if "gc_skew" in ts_by_kind else cfg.canvas.show_skew
+    if parsed_circular_track_slots is not None:
+        show_depth = _circular_slots_have_renderer(parsed_circular_track_slots, "depth")
+        show_gc = _circular_slots_have_renderer(parsed_circular_track_slots, "dinucleotide_content")
+        show_skew = _circular_slots_have_renderer(parsed_circular_track_slots, "dinucleotide_skew")
+        if show_depth and resolved_depth_tables is None:
+            raise ValidationError("A circular depth track slot requires depth_tables or depth_files.")
+    else:
+        show_depth = cfg.canvas.show_depth
+        show_gc = cfg.canvas.show_gc
+        show_skew = cfg.canvas.show_skew
     canvas_cfg = replace(
         cfg.canvas,
         show_depth=bool(show_depth and resolved_depth_tables is not None),
@@ -2167,7 +2210,8 @@ def assemble_circular_diagram_from_records(
             strain=strain,
             plot_title=None,
             plot_title_position="none",
-            track_specs=parsed_track_specs,
+            circular_track_slots=parsed_circular_track_slots,
+            circular_track_axis_index=circular_track_axis_index,
             _definition_profile=record_definition_profile,
             _tick_track_channel_override=tick_track_channel_override,
             _precomputed_depth_df=record_depth_dfs[record_index],
@@ -2667,7 +2711,8 @@ def build_circular_diagram(
         ),
         plot_title_font_size=options.plot_title_font_size,
         keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,
-        track_specs=tracks.track_specs if tracks else None,
+        circular_track_slots=tracks.circular_track_slots if tracks else None,
+        circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
         cfg=cfg,
     )
 
@@ -2682,13 +2727,6 @@ def build_linear_diagram(
     options = options or DiagramOptions()
     colors = options.colors
     output = options.output
-    tracks = options.tracks
-
-    if tracks and tracks.track_specs:
-        logger.warning(
-            "Track specs are not supported for linear diagrams yet; ignoring track_specs."
-        )
-
     config_dict: dict | None = None
     cfg: GbdrawConfig | None = None
     config_overrides = options.config_overrides

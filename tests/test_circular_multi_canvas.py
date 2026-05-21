@@ -594,11 +594,21 @@ def test_assemble_circular_diagram_from_records_shared_legend_and_unique_ids() -
 
     all_group_ids = [group.attrib.get("id", "") for group in root.findall(".//svg:g[@id]", ns)]
 
-    for base_id in ("Axis", "tick", "labels", "gc_content"):
+    for base_id in ("Axis", "tick", "gc_content"):
         ids = [gid for gid in all_group_ids if gid == base_id or gid.startswith(f"{base_id}_")]
         assert len(ids) == len(records)
         assert len(ids) == len(set(ids))
         assert all(gid != base_id for gid in ids)
+
+    for record_index in range(len(records)):
+        record_group = root.find(f".//svg:g[@id='record_{record_index}']", ns)
+        assert record_group is not None
+        record_label_ids = {
+            group.attrib.get("id", "")
+            for group in record_group.findall("./svg:g[@id]", ns)
+            if group.attrib.get("id", "").startswith("label_")
+        }
+        assert {"label_leaders", "label_text"}.issubset(record_label_ids)
 
     skew_ids = [
         gid
@@ -806,6 +816,7 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
     ]
     captured_tick_path_channels: dict[int, str | None] = {}
     captured_tick_label_channels: dict[int, str | None] = {}
+    captured_tick_label_sides: dict[int, str | None] = {}
 
     def fake_generate_tick_paths(
         radius: float,
@@ -816,6 +827,7 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
         track_type: str,
         strandedness: bool,
         tick_track_channel_override: str | None = None,
+        **_kwargs: Any,
     ) -> list[Any]:
         captured_tick_path_channels[int(total_len)] = tick_track_channel_override
         return []
@@ -834,8 +846,10 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
         strandedness: bool,
         dpi: int,
         tick_track_channel_override: str | None = None,
+        **kwargs: Any,
     ) -> list[Any]:
         captured_tick_label_channels[int(total_len)] = tick_track_channel_override
+        captured_tick_label_sides[int(total_len)] = kwargs.get("label_side")
         return []
 
     monkeypatch.setattr(
@@ -860,6 +874,8 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
     assert captured_tick_label_channels[20_000] == "long"
     assert captured_tick_path_channels[120_000] == "long"
     assert captured_tick_label_channels[120_000] == "long"
+    assert captured_tick_label_sides[20_000] == "inside"
+    assert captured_tick_label_sides[120_000] == "inside"
 
     default_short_tick_bounds = get_circular_tick_path_ratio_bounds(
         20_000,
@@ -897,6 +913,7 @@ def test_circular_tick_label_font_size_reaches_tick_label_generator(
         strandedness: bool,
         dpi: int,
         tick_track_channel_override: str | None = None,
+        **_kwargs: Any,
     ) -> list[Any]:
         captured_font_sizes[int(total_len)] = font_size
         return []

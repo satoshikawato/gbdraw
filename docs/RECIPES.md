@@ -54,6 +54,21 @@ gbdraw circular \
 gbdraw circular --gbk genome.gb -o output -f svg --track_type middle --labels
 ```
 
+`--track_type` selects a circular preset. Custom Track Slots can reorder tracks while inheriting omitted geometry from that preset; the circular axis stays fixed and is not configurable as a slot.
+
+### Reorder circular tracks without calculating radii
+
+```bash
+gbdraw circular \
+  --gbk genome.gb \
+  -o output \
+  -f svg \
+  --track_type middle \
+  --circular_track_order features,ticks,gc_skew,gc_content
+```
+
+The order list above swaps GC skew and GC content while keeping the record-specific `middle` preset radii, widths, spacing, and tick defaults unless a slot explicitly overrides them.
+
 ### Show outer and inner labels
 
 ```bash

@@ -1,30 +1,36 @@
-"""Multi-track specification (foundation, internal).
+"""Circular track-slot input helpers."""
 
-These data models describe arbitrary track layouts for both linear and circular
-diagrams. They are still experimental. Currently only the circular assembler
-consumes a subset of these specs; linear support will follow in a later release.
-"""
-
-from .spec import (  # type: ignore[reportMissingImports]
-    CircularTrackPlacement,
-    LinearTrackPlacement,
-    ScalarSpec,
-    TrackSpec,
-)
-from .parser import (  # type: ignore[reportMissingImports]
-    TrackSpecParseError,
-    parse_track_spec,
-    parse_track_specs,
+from .scalars import ScalarSpec, ScalarUnit  # type: ignore[reportMissingImports]
+from .circular import (  # type: ignore[reportMissingImports]
+    CircularTrackRendererName,
+    CircularTrackSide,
+    CircularTrackSlot,
+    CircularTrackSlotParseError,
+    NormalizedCircularTrackSlot,
+    SUPPORTED_CIRCULAR_TRACK_RENDERERS,
+    circular_track_slots_with_axis_side,
+    circular_track_slots_from_order,
+    default_circular_track_slots,
+    normalize_circular_track_slots,
+    normalize_circular_track_slots_with_axis,
+    parse_circular_track_slot,
+    parse_circular_track_slots,
 )
 
 __all__ = [
-    "CircularTrackPlacement",
-    "LinearTrackPlacement",
+    "CircularTrackRendererName",
+    "CircularTrackSide",
+    "CircularTrackSlot",
+    "CircularTrackSlotParseError",
+    "NormalizedCircularTrackSlot",
     "ScalarSpec",
-    "TrackSpec",
-    "TrackSpecParseError",
-    "parse_track_spec",
-    "parse_track_specs",
+    "ScalarUnit",
+    "SUPPORTED_CIRCULAR_TRACK_RENDERERS",
+    "circular_track_slots_with_axis_side",
+    "circular_track_slots_from_order",
+    "default_circular_track_slots",
+    "normalize_circular_track_slots",
+    "normalize_circular_track_slots_with_axis",
+    "parse_circular_track_slot",
+    "parse_circular_track_slots",
 ]
-
-

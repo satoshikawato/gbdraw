@@ -1897,7 +1897,7 @@ def test_effective_outer_middle_anchor_clearance_scales_with_feature_width_and_c
     zero_width_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
         resolve_overlaps=True,
         strandedness=False,
-        track_type="middle",
+        lane_direction="split",
         feature_band_width_px=0.0,
     )
     assert math.isclose(zero_width_clearance, base_clearance + 2.0, rel_tol=1e-9, abs_tol=1e-9)
@@ -1905,7 +1905,7 @@ def test_effective_outer_middle_anchor_clearance_scales_with_feature_width_and_c
     small_width_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
         resolve_overlaps=True,
         strandedness=False,
-        track_type="middle",
+        lane_direction="split",
         feature_band_width_px=10.0,
     )
     assert math.isclose(small_width_clearance, base_clearance + 3.0, rel_tol=1e-9, abs_tol=1e-9)
@@ -1913,7 +1913,7 @@ def test_effective_outer_middle_anchor_clearance_scales_with_feature_width_and_c
     capped_width_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
         resolve_overlaps=True,
         strandedness=False,
-        track_type="middle",
+        lane_direction="split",
         feature_band_width_px=80.0,
     )
     assert math.isclose(capped_width_clearance, base_clearance + 4.0, rel_tol=1e-9, abs_tol=1e-9)
@@ -1921,7 +1921,7 @@ def test_effective_outer_middle_anchor_clearance_scales_with_feature_width_and_c
     non_middle_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
         resolve_overlaps=True,
         strandedness=False,
-        track_type="tuckin",
+        lane_direction="inside",
         feature_band_width_px=80.0,
     )
     assert math.isclose(non_middle_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
@@ -1929,7 +1929,7 @@ def test_effective_outer_middle_anchor_clearance_scales_with_feature_width_and_c
     stranded_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
         resolve_overlaps=True,
         strandedness=True,
-        track_type="middle",
+        lane_direction="split",
         feature_band_width_px=80.0,
     )
     assert math.isclose(stranded_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
@@ -1937,7 +1937,7 @@ def test_effective_outer_middle_anchor_clearance_scales_with_feature_width_and_c
     no_resolve_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
         resolve_overlaps=False,
         strandedness=False,
-        track_type="middle",
+        lane_direction="split",
         feature_band_width_px=80.0,
     )
     assert math.isclose(no_resolve_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
@@ -1949,7 +1949,7 @@ def test_effective_outer_text_clearance_scales_with_feature_width_and_caps() -> 
     zero_width_clearance = circular_labels_module._effective_outer_text_clearance_px(
         resolve_overlaps=True,
         strandedness=False,
-        track_type="middle",
+        lane_direction="split",
         feature_band_width_px=0.0,
     )
     assert math.isclose(zero_width_clearance, base_clearance + 1.0, rel_tol=1e-9, abs_tol=1e-9)
@@ -1957,7 +1957,7 @@ def test_effective_outer_text_clearance_scales_with_feature_width_and_caps() -> 
     small_width_clearance = circular_labels_module._effective_outer_text_clearance_px(
         resolve_overlaps=True,
         strandedness=False,
-        track_type="middle",
+        lane_direction="split",
         feature_band_width_px=10.0,
     )
     assert math.isclose(small_width_clearance, base_clearance + 1.5, rel_tol=1e-9, abs_tol=1e-9)
@@ -1965,7 +1965,7 @@ def test_effective_outer_text_clearance_scales_with_feature_width_and_caps() -> 
     capped_width_clearance = circular_labels_module._effective_outer_text_clearance_px(
         resolve_overlaps=True,
         strandedness=False,
-        track_type="middle",
+        lane_direction="split",
         feature_band_width_px=80.0,
     )
     assert math.isclose(capped_width_clearance, base_clearance + 2.0, rel_tol=1e-9, abs_tol=1e-9)
@@ -1973,7 +1973,7 @@ def test_effective_outer_text_clearance_scales_with_feature_width_and_caps() -> 
     non_middle_clearance = circular_labels_module._effective_outer_text_clearance_px(
         resolve_overlaps=True,
         strandedness=False,
-        track_type="tuckin",
+        lane_direction="inside",
         feature_band_width_px=80.0,
     )
     assert math.isclose(non_middle_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
@@ -1981,7 +1981,7 @@ def test_effective_outer_text_clearance_scales_with_feature_width_and_caps() -> 
     stranded_clearance = circular_labels_module._effective_outer_text_clearance_px(
         resolve_overlaps=True,
         strandedness=True,
-        track_type="middle",
+        lane_direction="split",
         feature_band_width_px=80.0,
     )
     assert math.isclose(stranded_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
@@ -1989,7 +1989,7 @@ def test_effective_outer_text_clearance_scales_with_feature_width_and_caps() -> 
     no_resolve_clearance = circular_labels_module._effective_outer_text_clearance_px(
         resolve_overlaps=False,
         strandedness=False,
-        track_type="middle",
+        lane_direction="split",
         feature_band_width_px=80.0,
     )
     assert math.isclose(no_resolve_clearance, base_clearance, rel_tol=1e-9, abs_tol=1e-9)
@@ -2029,7 +2029,7 @@ def test_mjenmv_resolve_overlaps_middle_keeps_wsv134_anchor_outside_wsv133_featu
     expected_anchor_clearance = circular_labels_module._effective_outer_middle_anchor_clearance_px(
         resolve_overlaps=bool(cfg.canvas.resolve_overlaps),
         strandedness=bool(cfg.canvas.strandedness),
-        track_type=str(cfg.canvas.circular.track_type),
+        lane_direction="split",
         feature_band_width_px=feature_band_width_px,
     )
 
@@ -2175,7 +2175,7 @@ def test_hmmtdna_resolve_overlaps_middle_keeps_trna_lys_text_outside_feature_tra
     text_clearance_px = circular_labels_module._effective_outer_text_clearance_px(
         resolve_overlaps=bool(cfg.canvas.resolve_overlaps),
         strandedness=bool(cfg.canvas.strandedness),
-        track_type=str(cfg.canvas.circular.track_type),
+        lane_direction="split",
         feature_band_width_px=feature_band_width_px,
     )
 

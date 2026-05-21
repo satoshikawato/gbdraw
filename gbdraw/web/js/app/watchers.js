@@ -20,7 +20,8 @@ export const setupWatchers = ({
   resultsManager,
   runLabelReflow,
   refreshCircularRecordOrder,
-  resetPreviewViewport
+  resetPreviewViewport,
+  prepareDiagramGenerationWorker
 }) => {
   const {
     manualSpecificRules,
@@ -707,5 +708,9 @@ export const setupWatchers = ({
 
   onMounted(async () => {
     await pyodideManager.initPyodide();
+    await nextTick();
+    if (typeof prepareDiagramGenerationWorker === 'function') {
+      await prepareDiagramGenerationWorker();
+    }
   });
 };

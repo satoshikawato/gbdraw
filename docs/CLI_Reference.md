@@ -82,6 +82,8 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--inner_label_y_radius_offset INNER_LABEL_Y_RADIUS_OFFSET]
               [--scale_interval SCALE_INTERVAL]
               [--feature_width FEATURE_WIDTH]
+              [--circular_track_order CIRCULAR_TRACK_ORDER]
+              [--circular_track_slot CIRCULAR_TRACK_SLOT]
               [--gc_content_width GC_CONTENT_WIDTH]
               [--gc_content_radius GC_CONTENT_RADIUS]
               [--gc_skew_width GC_SKEW_WIDTH]
@@ -184,8 +186,9 @@ options:
                         "bottom"; default: "none").
   --separate_strands    Separate strands (default: False).
   --track_type TRACK_TYPE
-                        Track type (default: "tuckin"; "tuckin", "middle",
-                        "spreadout")
+                        Circular preset for legacy/simple layout. Choices:
+                        "tuckin", "middle", "spreadout". Ignored when
+                        explicit --circular_track_slot layouts are supplied.
   --resolve_overlaps    Resolve overlapping features by placing them on
                         separate tracks (default: False). Useful for plasmid
                         visualization.
@@ -228,6 +231,22 @@ options:
   --feature_width FEATURE_WIDTH
                         Feature track width for circular mode (in px; must be
                         > 0).
+  --circular_track_order CIRCULAR_TRACK_ORDER
+                        Comma-separated circular slot order. Omitted slot
+                        geometry inherits the selected --track_type preset for
+                        each record; explicit slot fields override it.
+  --circular_track_slot CIRCULAR_TRACK_SLOT
+                        Circular track slot spec:
+                        <slot_id>:<renderer>@key=value,key=value. Can be
+                        repeated. Use r=<radius>, w=<width>, and
+                        spacing=<scalar>; spacing is the gap to the next
+                        same-side slot. ri/ro/gap are obsolete. side and z are
+                        slot fields. If r, w, spacing, side, or standard renderer params are
+                        omitted for built-in slots, they inherit the active
+                        --track_type preset at render time. Inside numeric/depth
+                        slots with no explicit r or w auto-compress when needed
+                        and never move outside automatically. z only controls
+                        SVG layering.
   --gc_content_width GC_CONTENT_WIDTH
                         GC content track width for circular mode (in px; must
                         be > 0).

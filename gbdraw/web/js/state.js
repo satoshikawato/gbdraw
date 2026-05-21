@@ -3,6 +3,7 @@ import {
   normalizePaletteColors,
   normalizePaletteDefinitions
 } from './app/color-utils.js';
+import { createDefaultCircularTrackSlots } from './app/circular-track-slots.js';
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -10,6 +11,9 @@ const formatTimingMs = (ms) => `${ms.toFixed(1)}ms`;
 
 // System State
 const pyodideReady = ref(false);
+const diagramGenerationWorkerReady = ref(false);
+const diagramGenerationWorkerStatus = ref('Preparing diagram engine...');
+const diagramGenerationWorkerError = ref(null);
 const processing = ref(false);
 const processingStatus = ref('');
 const generationCancelRequested = ref(false);
@@ -385,6 +389,10 @@ const adv = reactive({
   gc_content_radius_circular: null,
   gc_skew_width_circular: null,
   gc_skew_radius_circular: null,
+  circular_track_slots_enabled: false,
+  circular_track_slots_schema_version: 3,
+  circular_track_slots_axis_index: null,
+  circular_track_slots: createDefaultCircularTrackSlots(),
   outer_label_x_offset: null,
   outer_label_y_offset: null,
   inner_label_x_offset: null,
@@ -788,6 +796,9 @@ const filteredEditableLabels = computed(() => {
 
 export const state = {
   pyodideReady,
+  diagramGenerationWorkerReady,
+  diagramGenerationWorkerStatus,
+  diagramGenerationWorkerError,
   processing,
   processingStatus,
   generationCancelRequested,

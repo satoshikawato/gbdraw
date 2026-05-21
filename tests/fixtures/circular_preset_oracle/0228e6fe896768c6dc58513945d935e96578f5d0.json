@@ -1,0 +1,5036 @@
+{
+  "base_commit": "0228e6fe896768c6dc58513945d935e96578f5d0",
+  "capture_source": "current_worktree",
+  "cases": [
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 390.0,
+      "preset": "tuckin",
+      "slots": [
+        {
+          "anchor_offset_px": -24.374999999999943,
+          "anchor_radius_px": 365.62500000000006,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "params": {
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "resolved_width_px": 18.525,
+          "side": "inside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -56.549999999999955,
+          "anchor_radius_px": 333.45000000000005,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "tuckin",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 328.80000000000007,
+            "inner_px": 316.35,
+            "outer_px": 341.25000000000006,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "features_ticks"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 390.0,
+      "preset": "tuckin",
+      "slots": [
+        {
+          "anchor_offset_px": -24.374999999999943,
+          "anchor_radius_px": 365.62500000000006,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "params": {
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "resolved_width_px": 18.525,
+          "side": "inside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -56.549999999999955,
+          "anchor_radius_px": 333.45000000000005,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "tuckin",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 328.80000000000007,
+            "inner_px": 316.35,
+            "outer_px": 341.25000000000006,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -117.0,
+          "anchor_radius_px": 273.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -195.0,
+          "anchor_radius_px": 195.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 390.0,
+      "preset": "tuckin",
+      "slots": [
+        {
+          "anchor_offset_px": -24.374999999999943,
+          "anchor_radius_px": 365.62500000000006,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "params": {
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "resolved_width_px": 18.525,
+          "side": "inside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -56.549999999999955,
+          "anchor_radius_px": 333.45000000000005,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "tuckin",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 328.80000000000007,
+            "inner_px": 316.35,
+            "outer_px": 341.25000000000006,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -117.0,
+          "anchor_radius_px": 273.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 273.0,
+            "inner_px": 254.475,
+            "outer_px": 291.525,
+            "width_px": 37.04999999999998
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "depth",
+          "packing_band_px": {
+            "center_px": 273.0,
+            "inner_px": 254.475,
+            "outer_px": 291.525,
+            "width_px": 37.04999999999998
+          },
+          "params": {},
+          "renderer": "depth",
+          "requested_width_px": 37.05,
+          "reserved_band_px": {
+            "center_px": 273.0,
+            "inner_px": 250.475,
+            "outer_px": 295.525,
+            "width_px": 45.04999999999998
+          },
+          "resolved_width_px": 37.05,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -195.0,
+          "anchor_radius_px": 195.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -273.0,
+          "anchor_radius_px": 117.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 117.0,
+            "inner_px": 79.95,
+            "outer_px": 154.05,
+            "width_px": 74.10000000000001
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 117.0,
+            "inner_px": 79.95,
+            "outer_px": 154.05,
+            "width_px": 74.10000000000001
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 117.0,
+            "inner_px": 79.95,
+            "outer_px": 154.05,
+            "width_px": 74.10000000000001
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 4,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "depth_gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 390.0,
+      "preset": "tuckin",
+      "slots": [
+        {
+          "anchor_offset_px": -13.162499999999966,
+          "anchor_radius_px": 376.83750000000003,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "inside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -34.12499999999994,
+          "anchor_radius_px": 355.87500000000006,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "tuckin",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 351.225,
+            "inner_px": 338.77500000000003,
+            "outer_px": 363.67500000000007,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "features_ticks"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 390.0,
+      "preset": "tuckin",
+      "slots": [
+        {
+          "anchor_offset_px": -13.162499999999966,
+          "anchor_radius_px": 376.83750000000003,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "inside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -34.12499999999994,
+          "anchor_radius_px": 355.87500000000006,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "tuckin",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 351.225,
+            "inner_px": 338.77500000000003,
+            "outer_px": 363.67500000000007,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -117.0,
+          "anchor_radius_px": 273.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -195.0,
+          "anchor_radius_px": 195.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 390.0,
+      "preset": "tuckin",
+      "slots": [
+        {
+          "anchor_offset_px": -13.162499999999966,
+          "anchor_radius_px": 376.83750000000003,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "inside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -34.12499999999994,
+          "anchor_radius_px": 355.87500000000006,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "tuckin",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 351.225,
+            "inner_px": 338.77500000000003,
+            "outer_px": 363.67500000000007,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -117.0,
+          "anchor_radius_px": 273.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 273.0,
+            "inner_px": 254.475,
+            "outer_px": 291.525,
+            "width_px": 37.04999999999998
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "depth",
+          "packing_band_px": {
+            "center_px": 273.0,
+            "inner_px": 254.475,
+            "outer_px": 291.525,
+            "width_px": 37.04999999999998
+          },
+          "params": {},
+          "renderer": "depth",
+          "requested_width_px": 37.05,
+          "reserved_band_px": {
+            "center_px": 273.0,
+            "inner_px": 250.475,
+            "outer_px": 295.525,
+            "width_px": 45.04999999999998
+          },
+          "resolved_width_px": 37.05,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -195.0,
+          "anchor_radius_px": 195.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -273.0,
+          "anchor_radius_px": 117.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 117.0,
+            "inner_px": 79.95,
+            "outer_px": 154.05,
+            "width_px": 74.10000000000001
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 117.0,
+            "inner_px": 79.95,
+            "outer_px": 154.05,
+            "width_px": 74.10000000000001
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 117.0,
+            "inner_px": 79.95,
+            "outer_px": 154.05,
+            "width_px": 74.10000000000001
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 4,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "depth_gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 410.47499999999997,
+      "preset": "middle",
+      "slots": [
+        {
+          "anchor_offset_px": 0.0,
+          "anchor_radius_px": 390.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "params": {
+            "lane_direction": "split",
+            "stack_preset": "middle"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "resolved_width_px": 18.525,
+          "side": "overlay",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -32.174999999999955,
+          "anchor_radius_px": 357.82500000000005,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "middle",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 353.17500000000007,
+            "inner_px": 340.725,
+            "outer_px": 365.62500000000006,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "features_ticks"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 410.47499999999997,
+      "preset": "middle",
+      "slots": [
+        {
+          "anchor_offset_px": 0.0,
+          "anchor_radius_px": 390.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "params": {
+            "lane_direction": "split",
+            "stack_preset": "middle"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "resolved_width_px": 18.525,
+          "side": "overlay",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -32.174999999999955,
+          "anchor_radius_px": 357.82500000000005,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "middle",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 353.17500000000007,
+            "inner_px": 340.725,
+            "outer_px": 365.62500000000006,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -97.5,
+          "anchor_radius_px": 292.5,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 292.5,
+            "inner_px": 255.45,
+            "outer_px": 329.55,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 292.5,
+            "inner_px": 255.45,
+            "outer_px": 329.55,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 292.5,
+            "inner_px": 255.45,
+            "outer_px": 329.55,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -175.49999999999997,
+          "anchor_radius_px": 214.50000000000003,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 410.47499999999997,
+      "preset": "middle",
+      "slots": [
+        {
+          "anchor_offset_px": 0.0,
+          "anchor_radius_px": 390.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "params": {
+            "lane_direction": "split",
+            "stack_preset": "middle"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "resolved_width_px": 18.525,
+          "side": "overlay",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -32.174999999999955,
+          "anchor_radius_px": 357.82500000000005,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "middle",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 353.17500000000007,
+            "inner_px": 340.725,
+            "outer_px": 365.62500000000006,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -97.5,
+          "anchor_radius_px": 292.5,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 292.5,
+            "inner_px": 273.975,
+            "outer_px": 311.025,
+            "width_px": 37.049999999999955
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "depth",
+          "packing_band_px": {
+            "center_px": 292.5,
+            "inner_px": 273.975,
+            "outer_px": 311.025,
+            "width_px": 37.049999999999955
+          },
+          "params": {},
+          "renderer": "depth",
+          "requested_width_px": 37.05,
+          "reserved_band_px": {
+            "center_px": 292.5,
+            "inner_px": 269.975,
+            "outer_px": 315.025,
+            "width_px": 45.049999999999955
+          },
+          "resolved_width_px": 37.05,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -175.49999999999997,
+          "anchor_radius_px": 214.50000000000003,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -253.5,
+          "anchor_radius_px": 136.5,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 136.5,
+            "inner_px": 99.45,
+            "outer_px": 173.55,
+            "width_px": 74.10000000000001
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 136.5,
+            "inner_px": 99.45,
+            "outer_px": 173.55,
+            "width_px": 74.10000000000001
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 136.5,
+            "inner_px": 99.45,
+            "outer_px": 173.55,
+            "width_px": 74.10000000000001
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 4,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "depth_gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 399.2625,
+      "preset": "middle",
+      "slots": [
+        {
+          "anchor_offset_px": 0.0,
+          "anchor_radius_px": 390.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "split",
+            "stack_preset": "middle"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "overlay",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -20.962499999999977,
+          "anchor_radius_px": 369.0375,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "middle",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 364.38750000000005,
+            "inner_px": 351.9375,
+            "outer_px": 376.83750000000003,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "features_ticks"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 399.2625,
+      "preset": "middle",
+      "slots": [
+        {
+          "anchor_offset_px": 0.0,
+          "anchor_radius_px": 390.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "split",
+            "stack_preset": "middle"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "overlay",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -20.962499999999977,
+          "anchor_radius_px": 369.0375,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "middle",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 364.38750000000005,
+            "inner_px": 351.9375,
+            "outer_px": 376.83750000000003,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -97.5,
+          "anchor_radius_px": 292.5,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 292.5,
+            "inner_px": 255.45,
+            "outer_px": 329.55,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 292.5,
+            "inner_px": 255.45,
+            "outer_px": 329.55,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 292.5,
+            "inner_px": 255.45,
+            "outer_px": 329.55,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -175.49999999999997,
+          "anchor_radius_px": 214.50000000000003,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 399.2625,
+      "preset": "middle",
+      "slots": [
+        {
+          "anchor_offset_px": 0.0,
+          "anchor_radius_px": 390.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "split",
+            "stack_preset": "middle"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "overlay",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -20.962499999999977,
+          "anchor_radius_px": 369.0375,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "middle",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 364.38750000000005,
+            "inner_px": 351.9375,
+            "outer_px": 376.83750000000003,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -97.5,
+          "anchor_radius_px": 292.5,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 292.5,
+            "inner_px": 273.975,
+            "outer_px": 311.025,
+            "width_px": 37.049999999999955
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "depth",
+          "packing_band_px": {
+            "center_px": 292.5,
+            "inner_px": 273.975,
+            "outer_px": 311.025,
+            "width_px": 37.049999999999955
+          },
+          "params": {},
+          "renderer": "depth",
+          "requested_width_px": 37.05,
+          "reserved_band_px": {
+            "center_px": 292.5,
+            "inner_px": 269.975,
+            "outer_px": 315.025,
+            "width_px": 45.049999999999955
+          },
+          "resolved_width_px": 37.05,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -175.49999999999997,
+          "anchor_radius_px": 214.50000000000003,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -253.5,
+          "anchor_radius_px": 136.5,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 136.5,
+            "inner_px": 99.45,
+            "outer_px": 173.55,
+            "width_px": 74.10000000000001
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 136.5,
+            "inner_px": 99.45,
+            "outer_px": 173.55,
+            "width_px": 74.10000000000001
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 136.5,
+            "inner_px": 99.45,
+            "outer_px": 173.55,
+            "width_px": 74.10000000000001
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 4,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "depth_gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 434.84999999999997,
+      "preset": "spreadout",
+      "slots": [
+        {
+          "anchor_offset_px": 24.375,
+          "anchor_radius_px": 414.375,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "params": {
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "resolved_width_px": 18.525,
+          "side": "outside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "spreadout",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 373.65,
+            "inner_px": 361.2,
+            "outer_px": 386.1,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "features_ticks"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 434.84999999999997,
+      "preset": "spreadout",
+      "slots": [
+        {
+          "anchor_offset_px": 24.375,
+          "anchor_radius_px": 414.375,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "params": {
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "resolved_width_px": 18.525,
+          "side": "outside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "spreadout",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 373.65,
+            "inner_px": 361.2,
+            "outer_px": 386.1,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -78.0,
+          "anchor_radius_px": 312.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 312.0,
+            "inner_px": 274.95,
+            "outer_px": 349.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 312.0,
+            "inner_px": 274.95,
+            "outer_px": 349.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 312.0,
+            "inner_px": 274.95,
+            "outer_px": 349.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -156.0,
+          "anchor_radius_px": 234.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 434.84999999999997,
+      "preset": "spreadout",
+      "slots": [
+        {
+          "anchor_offset_px": 24.375,
+          "anchor_radius_px": 414.375,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "params": {
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "resolved_width_px": 18.525,
+          "side": "outside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "spreadout",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 373.65,
+            "inner_px": 361.2,
+            "outer_px": 386.1,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -78.0,
+          "anchor_radius_px": 312.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 312.0,
+            "inner_px": 293.475,
+            "outer_px": 330.525,
+            "width_px": 37.049999999999955
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "depth",
+          "packing_band_px": {
+            "center_px": 312.0,
+            "inner_px": 293.475,
+            "outer_px": 330.525,
+            "width_px": 37.049999999999955
+          },
+          "params": {},
+          "renderer": "depth",
+          "requested_width_px": 37.05,
+          "reserved_band_px": {
+            "center_px": 312.0,
+            "inner_px": 289.475,
+            "outer_px": 334.525,
+            "width_px": 45.049999999999955
+          },
+          "resolved_width_px": 37.05,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -156.0,
+          "anchor_radius_px": 234.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -234.0,
+          "anchor_radius_px": 156.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 156.0,
+            "inner_px": 118.95,
+            "outer_px": 193.05,
+            "width_px": 74.10000000000001
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 156.0,
+            "inner_px": 118.95,
+            "outer_px": 193.05,
+            "width_px": 74.10000000000001
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 156.0,
+            "inner_px": 118.95,
+            "outer_px": 193.05,
+            "width_px": 74.10000000000001
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 4,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "depth_gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 412.42499999999995,
+      "preset": "spreadout",
+      "slots": [
+        {
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "outside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "spreadout",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 373.65,
+            "inner_px": 361.2,
+            "outer_px": 386.1,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "features_ticks"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 412.42499999999995,
+      "preset": "spreadout",
+      "slots": [
+        {
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "outside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "spreadout",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 373.65,
+            "inner_px": 361.2,
+            "outer_px": 386.1,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -78.0,
+          "anchor_radius_px": 312.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 312.0,
+            "inner_px": 274.95,
+            "outer_px": 349.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 312.0,
+            "inner_px": 274.95,
+            "outer_px": 349.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 312.0,
+            "inner_px": 274.95,
+            "outer_px": 349.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -156.0,
+          "anchor_radius_px": 234.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/MG1655.gbk",
+      "outer_content_radius_px": 412.42499999999995,
+      "preset": "spreadout",
+      "slots": [
+        {
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "outside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "spreadout",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 373.65,
+            "inner_px": 361.2,
+            "outer_px": 386.1,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -78.0,
+          "anchor_radius_px": 312.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 312.0,
+            "inner_px": 293.475,
+            "outer_px": 330.525,
+            "width_px": 37.049999999999955
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "depth",
+          "packing_band_px": {
+            "center_px": 312.0,
+            "inner_px": 293.475,
+            "outer_px": 330.525,
+            "width_px": 37.049999999999955
+          },
+          "params": {},
+          "renderer": "depth",
+          "requested_width_px": 37.05,
+          "reserved_band_px": {
+            "center_px": 312.0,
+            "inner_px": 289.475,
+            "outer_px": 334.525,
+            "width_px": 45.049999999999955
+          },
+          "resolved_width_px": 37.05,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -156.0,
+          "anchor_radius_px": 234.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -234.0,
+          "anchor_radius_px": 156.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 156.0,
+            "inner_px": 118.95,
+            "outer_px": 193.05,
+            "width_px": 74.10000000000001
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 156.0,
+            "inner_px": 118.95,
+            "outer_px": 193.05,
+            "width_px": 74.10000000000001
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 156.0,
+            "inner_px": 118.95,
+            "outer_px": 193.05,
+            "width_px": 74.10000000000001
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 4,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "depth_gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 390.0,
+      "preset": "tuckin",
+      "slots": [
+        {
+          "anchor_offset_px": -24.374999999999943,
+          "anchor_radius_px": 365.62500000000006,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "params": {
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "resolved_width_px": 18.525,
+          "side": "inside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -56.549999999999955,
+          "anchor_radius_px": 333.45000000000005,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "tuckin",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 328.80000000000007,
+            "inner_px": 316.35,
+            "outer_px": 341.25000000000006,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "features_ticks"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 390.0,
+      "preset": "tuckin",
+      "slots": [
+        {
+          "anchor_offset_px": -24.374999999999943,
+          "anchor_radius_px": 365.62500000000006,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "params": {
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "resolved_width_px": 18.525,
+          "side": "inside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -56.549999999999955,
+          "anchor_radius_px": 333.45000000000005,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "tuckin",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 328.80000000000007,
+            "inner_px": 316.35,
+            "outer_px": 341.25000000000006,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -117.0,
+          "anchor_radius_px": 273.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -195.0,
+          "anchor_radius_px": 195.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 390.0,
+      "preset": "tuckin",
+      "slots": [
+        {
+          "anchor_offset_px": -24.374999999999943,
+          "anchor_radius_px": 365.62500000000006,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "params": {
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 365.625,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
+            "width_px": 40.94999999999999
+          },
+          "resolved_width_px": 18.525,
+          "side": "inside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -56.549999999999955,
+          "anchor_radius_px": 333.45000000000005,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "tuckin",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 328.80000000000007,
+            "inner_px": 316.35,
+            "outer_px": 341.25000000000006,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -117.0,
+          "anchor_radius_px": 273.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 273.0,
+            "inner_px": 254.475,
+            "outer_px": 291.525,
+            "width_px": 37.04999999999998
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "depth",
+          "packing_band_px": {
+            "center_px": 273.0,
+            "inner_px": 254.475,
+            "outer_px": 291.525,
+            "width_px": 37.04999999999998
+          },
+          "params": {},
+          "renderer": "depth",
+          "requested_width_px": 37.05,
+          "reserved_band_px": {
+            "center_px": 273.0,
+            "inner_px": 250.475,
+            "outer_px": 295.525,
+            "width_px": 45.04999999999998
+          },
+          "resolved_width_px": 37.05,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -195.0,
+          "anchor_radius_px": 195.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -273.0,
+          "anchor_radius_px": 117.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 117.0,
+            "inner_px": 79.95,
+            "outer_px": 154.05,
+            "width_px": 74.10000000000001
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 117.0,
+            "inner_px": 79.95,
+            "outer_px": 154.05,
+            "width_px": 74.10000000000001
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 117.0,
+            "inner_px": 79.95,
+            "outer_px": 154.05,
+            "width_px": 74.10000000000001
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 4,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "depth_gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 390.0,
+      "preset": "tuckin",
+      "slots": [
+        {
+          "anchor_offset_px": -13.162499999999966,
+          "anchor_radius_px": 376.83750000000003,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "inside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -34.12499999999994,
+          "anchor_radius_px": 355.87500000000006,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "tuckin",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 351.225,
+            "inner_px": 338.77500000000003,
+            "outer_px": 363.67500000000007,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "features_ticks"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 390.0,
+      "preset": "tuckin",
+      "slots": [
+        {
+          "anchor_offset_px": -13.162499999999966,
+          "anchor_radius_px": 376.83750000000003,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "inside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -34.12499999999994,
+          "anchor_radius_px": 355.87500000000006,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "tuckin",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 351.225,
+            "inner_px": 338.77500000000003,
+            "outer_px": 363.67500000000007,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -117.0,
+          "anchor_radius_px": 273.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 273.0,
+            "inner_px": 235.95,
+            "outer_px": 310.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -195.0,
+          "anchor_radius_px": 195.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 390.0,
+      "preset": "tuckin",
+      "slots": [
+        {
+          "anchor_offset_px": -13.162499999999966,
+          "anchor_radius_px": 376.83750000000003,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "inside",
+            "stack_preset": "tuckin"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 376.83750000000003,
+            "inner_px": 367.57500000000005,
+            "outer_px": 386.1,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "inside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -34.12499999999994,
+          "anchor_radius_px": 355.87500000000006,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "tuckin",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 351.225,
+            "inner_px": 338.77500000000003,
+            "outer_px": 363.67500000000007,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -117.0,
+          "anchor_radius_px": 273.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 273.0,
+            "inner_px": 254.475,
+            "outer_px": 291.525,
+            "width_px": 37.04999999999998
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "depth",
+          "packing_band_px": {
+            "center_px": 273.0,
+            "inner_px": 254.475,
+            "outer_px": 291.525,
+            "width_px": 37.04999999999998
+          },
+          "params": {},
+          "renderer": "depth",
+          "requested_width_px": 37.05,
+          "reserved_band_px": {
+            "center_px": 273.0,
+            "inner_px": 250.475,
+            "outer_px": 295.525,
+            "width_px": 45.04999999999998
+          },
+          "resolved_width_px": 37.05,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -195.0,
+          "anchor_radius_px": 195.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 195.0,
+            "inner_px": 157.95,
+            "outer_px": 232.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -273.0,
+          "anchor_radius_px": 117.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 117.0,
+            "inner_px": 79.95,
+            "outer_px": 154.05,
+            "width_px": 74.10000000000001
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 117.0,
+            "inner_px": 79.95,
+            "outer_px": 154.05,
+            "width_px": 74.10000000000001
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 117.0,
+            "inner_px": 79.95,
+            "outer_px": 154.05,
+            "width_px": 74.10000000000001
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 4,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "depth_gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 410.47499999999997,
+      "preset": "middle",
+      "slots": [
+        {
+          "anchor_offset_px": 0.0,
+          "anchor_radius_px": 390.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "params": {
+            "lane_direction": "split",
+            "stack_preset": "middle"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "resolved_width_px": 18.525,
+          "side": "overlay",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -32.174999999999955,
+          "anchor_radius_px": 357.82500000000005,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "middle",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 353.17500000000007,
+            "inner_px": 340.725,
+            "outer_px": 365.62500000000006,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "features_ticks"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 410.47499999999997,
+      "preset": "middle",
+      "slots": [
+        {
+          "anchor_offset_px": 0.0,
+          "anchor_radius_px": 390.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "params": {
+            "lane_direction": "split",
+            "stack_preset": "middle"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "resolved_width_px": 18.525,
+          "side": "overlay",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -32.174999999999955,
+          "anchor_radius_px": 357.82500000000005,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "middle",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 353.17500000000007,
+            "inner_px": 340.725,
+            "outer_px": 365.62500000000006,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -97.5,
+          "anchor_radius_px": 292.5,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 292.5,
+            "inner_px": 255.45,
+            "outer_px": 329.55,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 292.5,
+            "inner_px": 255.45,
+            "outer_px": 329.55,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 292.5,
+            "inner_px": 255.45,
+            "outer_px": 329.55,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -175.49999999999997,
+          "anchor_radius_px": 214.50000000000003,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 410.47499999999997,
+      "preset": "middle",
+      "slots": [
+        {
+          "anchor_offset_px": 0.0,
+          "anchor_radius_px": 390.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "params": {
+            "lane_direction": "split",
+            "stack_preset": "middle"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 390.0,
+            "inner_px": 369.52500000000003,
+            "outer_px": 410.47499999999997,
+            "width_px": 40.94999999999993
+          },
+          "resolved_width_px": 18.525,
+          "side": "overlay",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -32.174999999999955,
+          "anchor_radius_px": 357.82500000000005,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "middle",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 353.17500000000007,
+            "inner_px": 340.725,
+            "outer_px": 365.62500000000006,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -97.5,
+          "anchor_radius_px": 292.5,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 292.5,
+            "inner_px": 273.975,
+            "outer_px": 311.025,
+            "width_px": 37.049999999999955
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "depth",
+          "packing_band_px": {
+            "center_px": 292.5,
+            "inner_px": 273.975,
+            "outer_px": 311.025,
+            "width_px": 37.049999999999955
+          },
+          "params": {},
+          "renderer": "depth",
+          "requested_width_px": 37.05,
+          "reserved_band_px": {
+            "center_px": 292.5,
+            "inner_px": 269.975,
+            "outer_px": 315.025,
+            "width_px": 45.049999999999955
+          },
+          "resolved_width_px": 37.05,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -175.49999999999997,
+          "anchor_radius_px": 214.50000000000003,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -253.5,
+          "anchor_radius_px": 136.5,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 136.5,
+            "inner_px": 99.45,
+            "outer_px": 173.55,
+            "width_px": 74.10000000000001
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 136.5,
+            "inner_px": 99.45,
+            "outer_px": 173.55,
+            "width_px": 74.10000000000001
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 136.5,
+            "inner_px": 99.45,
+            "outer_px": 173.55,
+            "width_px": 74.10000000000001
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 4,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "depth_gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 399.2625,
+      "preset": "middle",
+      "slots": [
+        {
+          "anchor_offset_px": 0.0,
+          "anchor_radius_px": 390.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "split",
+            "stack_preset": "middle"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "overlay",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -20.962499999999977,
+          "anchor_radius_px": 369.0375,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "middle",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 364.38750000000005,
+            "inner_px": 351.9375,
+            "outer_px": 376.83750000000003,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "features_ticks"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 399.2625,
+      "preset": "middle",
+      "slots": [
+        {
+          "anchor_offset_px": 0.0,
+          "anchor_radius_px": 390.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "split",
+            "stack_preset": "middle"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "overlay",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -20.962499999999977,
+          "anchor_radius_px": 369.0375,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "middle",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 364.38750000000005,
+            "inner_px": 351.9375,
+            "outer_px": 376.83750000000003,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -97.5,
+          "anchor_radius_px": 292.5,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 292.5,
+            "inner_px": 255.45,
+            "outer_px": 329.55,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 292.5,
+            "inner_px": 255.45,
+            "outer_px": 329.55,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 292.5,
+            "inner_px": 255.45,
+            "outer_px": 329.55,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -175.49999999999997,
+          "anchor_radius_px": 214.50000000000003,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 399.2625,
+      "preset": "middle",
+      "slots": [
+        {
+          "anchor_offset_px": 0.0,
+          "anchor_radius_px": 390.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "split",
+            "stack_preset": "middle"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 390.0,
+            "inner_px": 380.7375,
+            "outer_px": 399.2625,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "overlay",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -20.962499999999977,
+          "anchor_radius_px": 369.0375,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "middle",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 364.38750000000005,
+            "inner_px": 351.9375,
+            "outer_px": 376.83750000000003,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -97.5,
+          "anchor_radius_px": 292.5,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 292.5,
+            "inner_px": 273.975,
+            "outer_px": 311.025,
+            "width_px": 37.049999999999955
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "depth",
+          "packing_band_px": {
+            "center_px": 292.5,
+            "inner_px": 273.975,
+            "outer_px": 311.025,
+            "width_px": 37.049999999999955
+          },
+          "params": {},
+          "renderer": "depth",
+          "requested_width_px": 37.05,
+          "reserved_band_px": {
+            "center_px": 292.5,
+            "inner_px": 269.975,
+            "outer_px": 315.025,
+            "width_px": 45.049999999999955
+          },
+          "resolved_width_px": 37.05,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -175.49999999999997,
+          "anchor_radius_px": 214.50000000000003,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 214.50000000000003,
+            "inner_px": 177.45000000000005,
+            "outer_px": 251.55,
+            "width_px": 74.09999999999997
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -253.5,
+          "anchor_radius_px": 136.5,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 136.5,
+            "inner_px": 99.45,
+            "outer_px": 173.55,
+            "width_px": 74.10000000000001
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 136.5,
+            "inner_px": 99.45,
+            "outer_px": 173.55,
+            "width_px": 74.10000000000001
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 136.5,
+            "inner_px": 99.45,
+            "outer_px": 173.55,
+            "width_px": 74.10000000000001
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 4,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "depth_gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 434.84999999999997,
+      "preset": "spreadout",
+      "slots": [
+        {
+          "anchor_offset_px": 24.375,
+          "anchor_radius_px": 414.375,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "params": {
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "resolved_width_px": 18.525,
+          "side": "outside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "spreadout",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 373.65,
+            "inner_px": 361.2,
+            "outer_px": 386.1,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "features_ticks"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 434.84999999999997,
+      "preset": "spreadout",
+      "slots": [
+        {
+          "anchor_offset_px": 24.375,
+          "anchor_radius_px": 414.375,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "params": {
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "resolved_width_px": 18.525,
+          "side": "outside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "spreadout",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 373.65,
+            "inner_px": 361.2,
+            "outer_px": 386.1,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -78.0,
+          "anchor_radius_px": 312.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 312.0,
+            "inner_px": 274.95,
+            "outer_px": 349.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 312.0,
+            "inner_px": 274.95,
+            "outer_px": 349.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 312.0,
+            "inner_px": 274.95,
+            "outer_px": 349.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -156.0,
+          "anchor_radius_px": 234.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 434.84999999999997,
+      "preset": "spreadout",
+      "slots": [
+        {
+          "anchor_offset_px": 24.375,
+          "anchor_radius_px": 414.375,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "params": {
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 414.375,
+            "inner_px": 393.9,
+            "outer_px": 434.84999999999997,
+            "width_px": 40.94999999999999
+          },
+          "resolved_width_px": 18.525,
+          "side": "outside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "spreadout",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 373.65,
+            "inner_px": 361.2,
+            "outer_px": 386.1,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -78.0,
+          "anchor_radius_px": 312.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 312.0,
+            "inner_px": 293.475,
+            "outer_px": 330.525,
+            "width_px": 37.049999999999955
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "depth",
+          "packing_band_px": {
+            "center_px": 312.0,
+            "inner_px": 293.475,
+            "outer_px": 330.525,
+            "width_px": 37.049999999999955
+          },
+          "params": {},
+          "renderer": "depth",
+          "requested_width_px": 37.05,
+          "reserved_band_px": {
+            "center_px": 312.0,
+            "inner_px": 289.475,
+            "outer_px": 334.525,
+            "width_px": 45.049999999999955
+          },
+          "resolved_width_px": 37.05,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -156.0,
+          "anchor_radius_px": 234.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -234.0,
+          "anchor_radius_px": 156.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 156.0,
+            "inner_px": 118.95,
+            "outer_px": 193.05,
+            "width_px": 74.10000000000001
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 156.0,
+            "inner_px": 118.95,
+            "outer_px": 193.05,
+            "width_px": 74.10000000000001
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 156.0,
+            "inner_px": 118.95,
+            "outer_px": 193.05,
+            "width_px": 74.10000000000001
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 4,
+          "z": 0
+        }
+      ],
+      "strandedness": true,
+      "visibility": "depth_gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 412.42499999999995,
+      "preset": "spreadout",
+      "slots": [
+        {
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "outside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "spreadout",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 373.65,
+            "inner_px": 361.2,
+            "outer_px": 386.1,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "features_ticks"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 412.42499999999995,
+      "preset": "spreadout",
+      "slots": [
+        {
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "outside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "spreadout",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 373.65,
+            "inner_px": 361.2,
+            "outer_px": 386.1,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -78.0,
+          "anchor_radius_px": 312.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 312.0,
+            "inner_px": 274.95,
+            "outer_px": 349.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 312.0,
+            "inner_px": 274.95,
+            "outer_px": 349.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 312.0,
+            "inner_px": 274.95,
+            "outer_px": 349.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -156.0,
+          "anchor_radius_px": 234.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "gc_skew"
+    },
+    {
+      "axis_radius_px": 390.0,
+      "input": "tests/test_inputs/AP027280.gb",
+      "outer_content_radius_px": 412.42499999999995,
+      "preset": "spreadout",
+      "slots": [
+        {
+          "anchor_offset_px": 13.162499999999966,
+          "anchor_radius_px": 403.16249999999997,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "features",
+          "packing_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "params": {
+            "lane_direction": "outside",
+            "stack_preset": "spreadout"
+          },
+          "renderer": "features",
+          "requested_width_px": 18.525,
+          "reserved_band_px": {
+            "center_px": 403.16249999999997,
+            "inner_px": 393.9,
+            "outer_px": 412.42499999999995,
+            "width_px": 18.524999999999977
+          },
+          "resolved_width_px": 18.525,
+          "side": "outside",
+          "slot_index": 0,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "explicit_anchor": false,
+          "explicit_width": true,
+          "id": "ticks",
+          "packing_band_px": {
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
+            "width_px": 7.800000000000011
+          },
+          "params": {
+            "preset": "spreadout",
+            "tick_label_layout": "label_in_tick_out"
+          },
+          "renderer": "ticks",
+          "requested_width_px": 7.800000000000007,
+          "reserved_band_px": {
+            "center_px": 373.65,
+            "inner_px": 361.2,
+            "outer_px": 386.1,
+            "width_px": 24.900000000000034
+          },
+          "resolved_width_px": 7.800000000000007,
+          "side": "inside",
+          "slot_index": 1,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -78.0,
+          "anchor_radius_px": 312.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 312.0,
+            "inner_px": 293.475,
+            "outer_px": 330.525,
+            "width_px": 37.049999999999955
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "depth",
+          "packing_band_px": {
+            "center_px": 312.0,
+            "inner_px": 293.475,
+            "outer_px": 330.525,
+            "width_px": 37.049999999999955
+          },
+          "params": {},
+          "renderer": "depth",
+          "requested_width_px": 37.05,
+          "reserved_band_px": {
+            "center_px": 312.0,
+            "inner_px": 289.475,
+            "outer_px": 334.525,
+            "width_px": 45.049999999999955
+          },
+          "resolved_width_px": 37.05,
+          "side": "inside",
+          "slot_index": 2,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -156.0,
+          "anchor_radius_px": 234.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_content",
+          "packing_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_content",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 234.0,
+            "inner_px": 196.95,
+            "outer_px": 271.05,
+            "width_px": 74.10000000000002
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 3,
+          "z": 0
+        },
+        {
+          "anchor_offset_px": -234.0,
+          "anchor_radius_px": 156.0,
+          "compressed": false,
+          "draw_band_px": {
+            "center_px": 156.0,
+            "inner_px": 118.95,
+            "outer_px": 193.05,
+            "width_px": 74.10000000000001
+          },
+          "explicit_anchor": true,
+          "explicit_width": true,
+          "id": "gc_skew",
+          "packing_band_px": {
+            "center_px": 156.0,
+            "inner_px": 118.95,
+            "outer_px": 193.05,
+            "width_px": 74.10000000000001
+          },
+          "params": {
+            "nt": "GC"
+          },
+          "renderer": "dinucleotide_skew",
+          "requested_width_px": 74.1,
+          "reserved_band_px": {
+            "center_px": 156.0,
+            "inner_px": 118.95,
+            "outer_px": 193.05,
+            "width_px": 74.10000000000001
+          },
+          "resolved_width_px": 74.1,
+          "side": "inside",
+          "slot_index": 4,
+          "z": 0
+        }
+      ],
+      "strandedness": false,
+      "visibility": "depth_gc_skew"
+    }
+  ],
+  "description": "Compact circular preset radial geometry oracle. Run this script from the target checkout when regenerating expected geometry.",
+  "schema": 1
+}

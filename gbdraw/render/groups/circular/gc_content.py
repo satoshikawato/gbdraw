@@ -26,9 +26,10 @@ class GcContentGroup:
         config_dict: dict,
         track_id: str,
         norm_factor_override: float | None = None,
+        group_id: str | None = None,
         cfg: GbdrawConfig | None = None,
     ) -> None:
-        self.gc_group = Group(id="gc_content")
+        self.gc_group = Group(id=group_id or "gc_content")
         self.radius: float = radius
         self.gc_config: GcContentConfigurator = gc_config
         self.gb_record: SeqRecord = gb_record

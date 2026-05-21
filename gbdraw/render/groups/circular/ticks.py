@@ -27,6 +27,10 @@ class TickGroup:
         config_dict: dict,
         radius: float | None = None,
         tick_track_channel_override: str | None = None,
+        label_side: str = "legacy",
+        tick_side: str = "legacy",
+        tick_length_px: float | None = None,
+        track_preset: str | None = None,
         cfg: GbdrawConfig | None = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
@@ -44,12 +48,18 @@ class TickGroup:
         self.font_weight = ticks_config.tick_labels.font_weight
         self.manual_interval = cfg.objects.scale.interval
         self.font_family = cfg.objects.text.font_family
-        self.track_type = cfg.canvas.circular.track_type
+        self.track_type = str(
+            track_preset
+            or getattr(self.canvas_config, "circular_track_preset", cfg.canvas.circular.track_type)
+        )
         self.separate_strands = cfg.canvas.strandedness
         normalized_tick_channel = str(tick_track_channel_override or "").strip().lower()
         self.tick_track_channel_override = (
             normalized_tick_channel if normalized_tick_channel in {"short", "long"} else None
         )
+        self.label_side = str(label_side or "legacy").strip().lower()
+        self.tick_side = str(tick_side or "legacy").strip().lower()
+        self.tick_length_px = tick_length_px
         self.dpi = self.canvas_config.dpi
         self.set_tick_size()
         self.add_elements_to_group()
@@ -74,6 +84,9 @@ class TickGroup:
             self.track_type,
             self.separate_strands,
             tick_track_channel_override=self.tick_track_channel_override,
+            tick_side=self.tick_side,
+            tick_length_px=self.tick_length_px,
+            length_reference_radius_px=float(self.canvas_config.radius),
         )
         ticks_large_nonzero: list[int] = [x for x in ticks_large if x != 0]
         tick_label_paths_large: list[Text] = generate_circular_tick_labels(
@@ -90,6 +103,11 @@ class TickGroup:
             self.separate_strands,
             self.dpi,
             tick_track_channel_override=self.tick_track_channel_override,
+            label_side=self.label_side,
+            tick_side=self.tick_side,
+            tick_length_px=self.tick_length_px,
+            tick_width=float(self.tick_width),
+            length_reference_radius_px=float(self.canvas_config.radius),
         )
         for tick_path_large in tick_paths_large:
             self.tick_group.add(tick_path_large)

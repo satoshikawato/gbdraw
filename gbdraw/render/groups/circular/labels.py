@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Dict
+from typing import Literal, Optional, Dict
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -21,6 +21,7 @@ from ....labels.filtering import preprocess_label_filtering  # type: ignore[repo
 from ....labels.placement import prepare_label_list  # type: ignore[reportMissingImports]
 from ...drawers.circular.labels import LabelDrawer  # type: ignore[reportMissingImports]
 from ....configurators import FeatureDrawingConfigurator  # type: ignore[reportMissingImports]
+from ....diagrams.circular.radial_layout import CircularFeatureLayout  # type: ignore[reportMissingImports]
 
 
 class LabelsGroup:
@@ -38,6 +39,8 @@ class LabelsGroup:
         precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = None,
         precalculated_labels: Optional[list[dict]] = None,
         feature_track_ratio_factor_override: float | None = None,
+        feature_anchor_radius_px: float | None = None,
+        phase: Literal["all", "leaders", "text"] = "all",
     ) -> None:
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
@@ -47,8 +50,25 @@ class LabelsGroup:
         self.precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = precomputed_feature_dict
         self.precalculated_labels: Optional[list[dict]] = precalculated_labels
         self.feature_track_ratio_factor_override = feature_track_ratio_factor_override
+        self.feature_anchor_radius_px = feature_anchor_radius_px
+        self.phase = phase if phase in {"all", "leaders", "text"} else "all"
+        self.feature_layout: CircularFeatureLayout | None = getattr(
+            self.canvas_config,
+            "circular_feature_layout",
+            None,
+        )
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
+        self.track_type = getattr(self.canvas_config, "circular_track_preset", cfg.canvas.circular.track_type)
+        self.feature_lane_direction = getattr(self.canvas_config, "circular_feature_lane_direction", None)
+        if self.feature_lane_direction is None:
+            preset = str(self.track_type).strip().lower()
+            if preset == "middle":
+                self.feature_lane_direction = "split"
+            elif preset == "spreadout":
+                self.feature_lane_direction = "outside"
+            else:
+                self.feature_lane_direction = "inside"
 
         raw_show_labels = cfg.canvas.show_labels
         self.show_labels = (raw_show_labels != "none") if isinstance(raw_show_labels, str) else bool(raw_show_labels)
@@ -57,7 +77,7 @@ class LabelsGroup:
         self.split_overlaps_by_strand = (
             bool(self.resolve_overlaps)
             and (not bool(self.canvas_config.strandedness))
-            and str(cfg.canvas.circular.track_type).strip().lower() == "middle"
+            and str(self.feature_lane_direction).strip().lower() == "split"
         )
         self.label_stroke_width = cfg.labels.stroke_width.for_length_param(self.canvas_config.length_param)
         self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
@@ -66,7 +86,12 @@ class LabelsGroup:
         self.labels_group: Group = self.setup_labels_group()
 
     def setup_labels_group(self) -> Group:
-        group = Group(id="labels")
+        group_id = {
+            "all": "labels",
+            "leaders": "label_leaders",
+            "text": "label_text",
+        }[self.phase]
+        group = Group(id=group_id)
         if not self.show_labels:
             return group
 
@@ -92,18 +117,26 @@ class LabelsGroup:
             )
 
         record_length: int = len(self.gb_record.seq)
+        feature_anchor_radius = (
+            float(self.feature_anchor_radius_px)
+            if self.feature_anchor_radius_px is not None
+            else float(self.canvas_config.radius)
+        )
         if self.precalculated_labels is not None:
             label_list = self.precalculated_labels
         else:
             label_list = prepare_label_list(
                 feature_dict,
                 record_length,
-                self.canvas_config.radius,
+                feature_anchor_radius,
                 self.canvas_config.track_ratio,
                 self.config_dict,
                 cfg=self._cfg,
                 outer_arena=self.outer_arena,
                 feature_track_ratio_factor_override=self.feature_track_ratio_factor_override,
+                feature_layout=self.feature_layout,
+                track_preset=self.track_type,
+                feature_lane_direction=str(self.feature_lane_direction),
             )
 
         drawer = LabelDrawer(self.config_dict, cfg=self._cfg)
@@ -112,28 +145,28 @@ class LabelsGroup:
                 continue
             leader_start_x = label.get("leader_start_x", label["start_x"])
             leader_start_y = label.get("leader_start_y", label["start_y"])
-            # Leader lines first (so they appear behind features)
-            line_path = Line(
-                start=(label["middle_x"], label["middle_y"]),
-                end=(leader_start_x, leader_start_y),
-                stroke=self.label_stroke_color,
-                stroke_width=self.label_stroke_width,
-                stroke_linecap="round",
-            )
-            group.add(line_path)
-            line_path2 = Line(
-                start=(label["middle_x"], label["middle_y"]),
-                end=(
-                    label.get("feature_anchor_x", label["feature_middle_x"]),
-                    label.get("feature_anchor_y", label["feature_middle_y"]),
-                ),
-                stroke=self.label_stroke_color,
-                stroke_width=self.label_stroke_width,
-                stroke_linecap="round",
-            )
-            group.add(line_path2)
-            # Label text after lines (so it appears on top)
-            group = drawer.draw(label, group, record_length, self.canvas_config.radius, self.canvas_config.track_ratio)
+            if self.phase in {"all", "leaders"}:
+                line_path = Line(
+                    start=(label["middle_x"], label["middle_y"]),
+                    end=(leader_start_x, leader_start_y),
+                    stroke=self.label_stroke_color,
+                    stroke_width=self.label_stroke_width,
+                    stroke_linecap="round",
+                )
+                group.add(line_path)
+                line_path2 = Line(
+                    start=(label["middle_x"], label["middle_y"]),
+                    end=(
+                        label.get("feature_anchor_x", label["feature_middle_x"]),
+                        label.get("feature_anchor_y", label["feature_middle_y"]),
+                    ),
+                    stroke=self.label_stroke_color,
+                    stroke_width=self.label_stroke_width,
+                    stroke_linecap="round",
+                )
+                group.add(line_path2)
+            if self.phase in {"all", "text"}:
+                group = drawer.draw(label, group, record_length, feature_anchor_radius, self.canvas_config.track_ratio)
 
         return group
 

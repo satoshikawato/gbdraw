@@ -5,6 +5,7 @@ import sys
 import argparse
 import logging
 import math
+from dataclasses import replace
 from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .analysis.depth import read_depth_tsv  # type: ignore[reportMissingImports]
@@ -28,6 +29,13 @@ from .io.record_select import parse_record_selector
 from .features.shapes import parse_feature_shape_assignment, parse_feature_shape_overrides
 from .features.visibility import read_feature_visibility_file
 from .exceptions import ValidationError
+from .tracks import (  # type: ignore[reportMissingImports]
+    CircularTrackSlot,
+    ScalarSpec,
+    circular_track_slots_from_order,
+    normalize_circular_track_slots_with_axis,
+    parse_circular_track_slots,
+)
 
 from .cli_utils.common import (
     setup_logging,
@@ -376,8 +384,9 @@ def _get_args(args) -> argparse.Namespace:
         action='store_true')
     parser.add_argument(
         '--track_type',
-        help='Track type (default: "tuckin"; "tuckin", "middle", "spreadout")',
+        help='Circular track preset. Custom track slots inherit omitted geometry from this preset.',
         type=str,
+        choices=['tuckin', 'middle', 'spreadout'],
         default="tuckin")
     parser.add_argument(
         '--resolve_overlaps',
@@ -391,7 +400,7 @@ def _get_args(args) -> argparse.Namespace:
         default='none',
         choices=['none', 'out', 'both'],
         type=str)
-    
+
     label_list_group = parser.add_mutually_exclusive_group()
     label_list_group.add_argument(
         '--label_whitelist',
@@ -403,7 +412,7 @@ def _get_args(args) -> argparse.Namespace:
         help='Comma-separated keywords or path to a file for label blacklisting (optional); mutually exclusive with --label_whitelist',
         type=str,
         default="")
-        
+
     parser.add_argument(
         '--qualifier_priority',
         help='Path to a TSV file defining qualifier priority for labels (optional)',
@@ -452,6 +461,20 @@ def _get_args(args) -> argparse.Namespace:
         help='Feature track width for circular mode (in px; must be > 0).',
         type=float)
     parser.add_argument(
+        '--circular_track_order',
+        help='Comma-separated circular slot order. Omitted built-in slot geometry inherits --track_type.',
+        type=str)
+    parser.add_argument(
+        '--circular_track_slot',
+        help='Circular track slot spec: <slot_id>:<renderer>@key=value,key=value. Can be repeated. Omitted built-in slot geometry inherits --track_type; use r, w, spacing, side, and z for explicit overrides. Implicit inside numeric/depth slots auto-compress and never move outside automatically.',
+        action='append',
+        default=[])
+    parser.add_argument(
+        '--circular_track_axis_index',
+        type=int,
+        default=None,
+        help='Axis boundary index for --circular_track_slot order. Slots before this index render outside; slots at or after it render inside.')
+    parser.add_argument(
         '--gc_content_width',
         help='GC content track width for circular mode (in px; must be > 0).',
         type=float)
@@ -475,7 +498,7 @@ def _get_args(args) -> argparse.Namespace:
         '--legend_font_size',
         help='Legend font size (optional; float; default: 20 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb).',
         type=float)
-    
+
     args = parser.parse_args(args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
@@ -515,6 +538,29 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--tick_label_font_size must be > 0")
     if args.circular_label_spacing is not None and args.circular_label_spacing <= 0:
         parser.error("--circular_label_spacing must be > 0")
+    if args.circular_track_order and args.circular_track_slot:
+        parser.error("--circular_track_order cannot be combined with --circular_track_slot")
+    if args.circular_track_axis_index is not None and not (args.circular_track_order or args.circular_track_slot):
+        parser.error("--circular_track_axis_index requires --circular_track_slot or --circular_track_order")
+    circular_track_slots_for_validation: list[CircularTrackSlot] | None = None
+    if args.circular_track_order:
+        try:
+            circular_track_slots_for_validation = circular_track_slots_from_order(args.circular_track_order)
+        except Exception as exc:
+            parser.error(str(exc))
+    if args.circular_track_slot:
+        try:
+            circular_track_slots_for_validation = parse_circular_track_slots(args.circular_track_slot)
+        except Exception as exc:
+            parser.error(str(exc))
+    if args.circular_track_axis_index is not None:
+        try:
+            normalize_circular_track_slots_with_axis(
+                circular_track_slots_for_validation or [],
+                args.circular_track_axis_index,
+            )
+        except Exception as exc:
+            parser.error(str(exc))
     if args.multi_record_min_radius_ratio <= 0 or args.multi_record_min_radius_ratio > 1:
         parser.error("--multi_record_min_radius_ratio must be > 0 and <= 1")
     if not math.isfinite(args.multi_record_column_gap_ratio) or args.multi_record_column_gap_ratio < 0:
@@ -524,7 +570,7 @@ def _get_args(args) -> argparse.Namespace:
     return args
 
 
-    
+
 def circular_main(cmd_args) -> None:
     """
     Main function for generating circular genome diagrams.
@@ -543,7 +589,7 @@ def circular_main(cmd_args) -> None:
     - Plotting the circular diagrams with genomic features and GC-related tracks.
     - Generating output files in specified formats.
     """
-    args: argparse.Namespace = _get_args(cmd_args)   
+    args: argparse.Namespace = _get_args(cmd_args)
     output_prefix = args.output
     dinucleotide: str = args.nt.upper()
     manual_window: int = args.window
@@ -600,6 +646,9 @@ def circular_main(cmd_args) -> None:
     legend_box_size = args.legend_box_size
     legend_font_size = args.legend_font_size
     feature_width: Optional[float] = args.feature_width
+    circular_track_order: str | None = args.circular_track_order
+    circular_track_slot_specs: list[str] = list(args.circular_track_slot or [])
+    circular_track_axis_index: int | None = args.circular_track_axis_index
     gc_content_width: Optional[float] = args.gc_content_width
     gc_content_radius: Optional[float] = args.gc_content_radius
     gc_skew_width: Optional[float] = args.gc_skew_width
@@ -627,10 +676,10 @@ def circular_main(cmd_args) -> None:
     inner_label_y_radius_offset: Optional[float] = args.inner_label_y_radius_offset
     if allow_inner_labels and not (suppress_gc and suppress_skew):
 
-        suppress_gc = True 
+        suppress_gc = True
         suppress_skew = True
         logger.warning(
-            "WARNING: --labels both requires suppressing GC and skew tracks. Suppressing GC and skew tracks.")  # 
+            "WARNING: --labels both requires suppressing GC and skew tracks. Suppressing GC and skew tracks.")  #
 
     user_defined_default_colors: str = args.default_colors
     block_stroke_color: Optional[str] = args.block_stroke_color
@@ -638,7 +687,7 @@ def circular_main(cmd_args) -> None:
     axis_stroke_color: Optional[str] = args.axis_stroke_color
     axis_stroke_width: Optional[float] = args.axis_stroke_width
     line_stroke_color: Optional[str] = args.line_stroke_color
-    line_stroke_width: Optional[float] = args.line_stroke_width   
+    line_stroke_width: Optional[float] = args.line_stroke_width
     track_type: str = args.track_type
     strandedness = args.separate_strands
     scale_interval: Optional[int] = args.scale_interval
@@ -654,7 +703,7 @@ def circular_main(cmd_args) -> None:
         logger.warning(
             "WARNING: --resolve_overlaps is ignored when --separate_strands is enabled.")
         resolve_overlaps = False
-    
+
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
     filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
@@ -674,26 +723,26 @@ def circular_main(cmd_args) -> None:
     palette: str = args.palette
     default_colors: Optional[DataFrame] = load_default_colors(
         user_defined_default_colors, palette)
-    
+
     color_table: Optional[DataFrame] = read_color_table(color_table_path)
     feature_table: Optional[DataFrame] = read_feature_visibility_file(feature_table_path)
     show_gc, show_skew = suppress_gc_content_and_skew(
         suppress_gc, suppress_skew)
 
     config_dict = modify_config_dict(
-        config_dict, 
-        block_stroke_color=block_stroke_color, 
+        config_dict,
+        block_stroke_color=block_stroke_color,
         block_stroke_width=block_stroke_width,
-        circular_axis_stroke_color=axis_stroke_color, 
-        circular_axis_stroke_width=axis_stroke_width, 
-        line_stroke_color=line_stroke_color, 
-        line_stroke_width=line_stroke_width, 
-        show_labels=show_labels, 
-        track_type=track_type, 
-        strandedness=strandedness, 
+        circular_axis_stroke_color=axis_stroke_color,
+        circular_axis_stroke_width=axis_stroke_width,
+        line_stroke_color=line_stroke_color,
+        line_stroke_width=line_stroke_width,
+        show_labels=show_labels,
+        track_type=track_type,
+        strandedness=strandedness,
         resolve_overlaps=resolve_overlaps,
-        show_gc=show_gc, 
-        show_skew=show_skew, 
+        show_gc=show_gc,
+        show_skew=show_skew,
         show_depth=show_depth,
         depth_color=depth_color,
         depth_min=depth_min,
@@ -722,7 +771,7 @@ def circular_main(cmd_args) -> None:
         circular_label_spacing=circular_label_spacing,
         legend_box_size=legend_box_size,
         legend_font_size=legend_font_size
-    )    
+    )
 
     out_formats: list[str] = parse_formats(args.format)
     out_formats = handle_output_formats(out_formats)
@@ -731,48 +780,65 @@ def circular_main(cmd_args) -> None:
 
 
     cfg = GbdrawConfig.from_dict(config_dict)
-    track_specs: list[str] = []
-    if feature_width is not None:
-        track_specs.append(f"features@w={float(feature_width):g}px")
-    if depth_width is not None:
-        if not show_depth:
-            logger.warning(
-                "WARNING: Depth track is hidden. Ignoring --depth_width."
-            )
-        else:
-            track_specs.append(f"depth@w={float(depth_width):g}px")
+    legacy_geometry_requested = any(
+        value is not None
+        for value in (
+            feature_width,
+            depth_width,
+            gc_content_width,
+            gc_content_radius,
+            gc_skew_width,
+            gc_skew_radius,
+        )
+    )
+    if circular_track_slot_specs and legacy_geometry_requested:
+        raise ValidationError(
+            "Legacy circular geometry options cannot be combined with --circular_track_slot; "
+            "put r= and/or w= on the matching circular track slot."
+        )
 
-    gc_content_spec_requested = (gc_content_width is not None) or (gc_content_radius is not None)
-    if gc_content_spec_requested:
-        if not show_gc:
-            logger.warning(
-                "WARNING: GC content track is suppressed. Ignoring --gc_content_width/--gc_content_radius."
-            )
-        else:
-            gc_content_opts: list[str] = []
-            if gc_content_radius is not None:
-                gc_content_opts.append(f"r={float(gc_content_radius):g}")
-            if gc_content_width is not None:
-                gc_content_opts.append(f"w={float(gc_content_width):g}px")
-            if gc_content_opts:
-                track_specs.append(f"gc_content@{','.join(gc_content_opts)}")
+    circular_track_slots_or_none: list[str] | list[CircularTrackSlot] | None = None
+    if circular_track_slot_specs:
+        circular_track_slots_or_none = circular_track_slot_specs
+    elif circular_track_order:
+        circular_track_slots_or_none = circular_track_slots_from_order(
+            circular_track_order,
+            show_depth=show_depth,
+            show_gc=show_gc,
+            show_skew=show_skew,
+            dinucleotide=dinucleotide,
+        )
+    elif legacy_geometry_requested:
+        circular_track_slots_or_none = circular_track_slots_from_order(
+            "features,ticks,depth,gc_content,gc_skew",
+            show_depth=show_depth,
+            show_gc=show_gc,
+            show_skew=show_skew,
+            dinucleotide=dinucleotide,
+        )
 
-    gc_skew_spec_requested = (gc_skew_width is not None) or (gc_skew_radius is not None)
-    if gc_skew_spec_requested:
-        if not show_skew:
-            logger.warning(
-                "WARNING: GC skew track is suppressed. Ignoring --gc_skew_width/--gc_skew_radius."
-            )
-        else:
-            gc_skew_opts: list[str] = []
-            if gc_skew_radius is not None:
-                gc_skew_opts.append(f"r={float(gc_skew_radius):g}")
-            if gc_skew_width is not None:
-                gc_skew_opts.append(f"w={float(gc_skew_width):g}px")
-            if gc_skew_opts:
-                track_specs.append(f"gc_skew@{','.join(gc_skew_opts)}")
-
-    track_specs_or_none = track_specs or None
+    if circular_track_slots_or_none is not None and not circular_track_slot_specs:
+        slots = parse_circular_track_slots(circular_track_slots_or_none)
+        updated_slots: list[CircularTrackSlot] = []
+        for slot in slots:
+            if slot.id == "features" and feature_width is not None:
+                slot = replace(slot, width=ScalarSpec(float(feature_width), "px"))
+            elif slot.id == "depth" and depth_width is not None:
+                slot = replace(slot, width=ScalarSpec(float(depth_width), "px"))
+            elif slot.id == "gc_content":
+                slot = replace(
+                    slot,
+                    radius=ScalarSpec(float(gc_content_radius), "factor") if gc_content_radius is not None else slot.radius,
+                    width=ScalarSpec(float(gc_content_width), "px") if gc_content_width is not None else slot.width,
+                )
+            elif slot.id == "gc_skew":
+                slot = replace(
+                    slot,
+                    radius=ScalarSpec(float(gc_skew_radius), "factor") if gc_skew_radius is not None else slot.radius,
+                    width=ScalarSpec(float(gc_skew_width), "px") if gc_skew_width is not None else slot.width,
+                )
+            updated_slots.append(slot)
+        circular_track_slots_or_none = updated_slots
 
     if multi_record_canvas and len(gb_records) > 1:
         first_accession = gb_records[0].id if gb_records else "out"
@@ -805,7 +871,8 @@ def circular_main(cmd_args) -> None:
             multi_record_row_gap_ratio=multi_record_row_gap_ratio,
             multi_record_positions=multi_record_positions or None,
             cfg=cfg,
-            track_specs=track_specs_or_none,
+            circular_track_slots=circular_track_slots_or_none,
+            circular_track_axis_index=circular_track_axis_index,
         )
         save_figure(canvas, out_formats)
     else:
@@ -839,7 +906,8 @@ def circular_main(cmd_args) -> None:
                 plot_title_font_size=plot_title_font_size,
                 keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
                 cfg=cfg,
-                track_specs=track_specs_or_none,
+                circular_track_slots=circular_track_slots_or_none,
+                circular_track_axis_index=circular_track_axis_index,
             )
             save_figure(canvas, out_formats)
 
