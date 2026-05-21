@@ -285,6 +285,8 @@ const effectiveSlotPlacement = (slot, preset = 'tuckin') => {
 };
 
 export const inferLegacyAxisIndexFromFeature = (slots, preset = 'tuckin') => {
+  const onAxisIndex = slots.findIndex((slot) => effectiveSlotPlacement(slot, preset) === 'overlay');
+  if (onAxisIndex >= 0) return onAxisIndex;
   const featureIndex = slots.findIndex((slot) => slot?.enabled !== false && slot?.renderer === 'features');
   if (featureIndex < 0) {
     const firstInside = slots.findIndex((slot) => normalizePlacement(slot?.side, 'inside') !== 'outside');
@@ -323,9 +325,29 @@ const syncSlotsFromAxisIndex = (slots, axisIndex, preset = 'tuckin') => {
   return resolvedAxis;
 };
 
+const enforceSingleOnAxisSlot = (slots, axisIndex, preset = 'tuckin') => {
+  const onAxisIndices = slots
+    .map((slot, index) => (
+      effectiveSlotPlacement(slot, preset) === 'overlay' ? index : null
+    ))
+    .filter((index) => Number.isInteger(index));
+  if (onAxisIndices.length === 0) {
+    return clampCircularTrackAxisIndex(axisIndex, slots.length) ?? inferLegacyAxisIndexFromFeature(slots, preset);
+  }
+
+  const clampedAxis = clampCircularTrackAxisIndex(axisIndex, slots.length);
+  const keepIndex = onAxisIndices.includes(clampedAxis) ? clampedAxis : onAxisIndices[0];
+  onAxisIndices.forEach((index) => {
+    if (index === keepIndex) return;
+    syncSlotPlacementFromSide(slots[index], index < keepIndex ? 'outside' : 'inside');
+  });
+  return keepIndex;
+};
+
 export const applyCircularTrackOrderPlacements = (slots, defaultNt = 'GC', preset = 'tuckin', axisIndex = null) => {
   const normalized = normalizeCircularTrackSlots(slots, defaultNt, preset);
-  syncSlotsFromAxisIndex(normalized, axisIndex, preset);
+  const resolvedAxis = syncSlotsFromAxisIndex(normalized, axisIndex, preset);
+  enforceSingleOnAxisSlot(normalized, resolvedAxis, preset);
   return normalized;
 };
 
@@ -664,6 +686,11 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     );
     const axis = axisIndexForCurrentSlots(normalized);
     syncSlotsFromAxisIndex(normalized, axis, state.form.track_type);
+    state.adv.circular_track_slots_axis_index = enforceSingleOnAxisSlot(
+      normalized,
+      axis,
+      state.form.track_type
+    );
     state.adv.circular_track_slots.splice(
       0,
       state.adv.circular_track_slots.length,
@@ -871,15 +898,39 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= state.adv.circular_track_slots.length) return;
     normalizeSlotsInPlace();
+    if (idx >= state.adv.circular_track_slots.length) return;
+    const targetPlacement = normalizePlacement(placement);
+
+    if (targetPlacement === 'overlay') {
+      const movedSlot = state.adv.circular_track_slots[idx];
+      if (!movedSlot) return;
+      const movedPreviousPlacement = effectiveSlotPlacement(movedSlot, state.form.track_type);
+      const existingAxisIndex = state.adv.circular_track_slots.findIndex((slot, slotIndex) => (
+        slotIndex !== idx &&
+        effectiveSlotPlacement(slot, state.form.track_type) === 'overlay'
+      ));
+      if (existingAxisIndex >= 0) {
+        const existingAxisSlot = state.adv.circular_track_slots[existingAxisIndex];
+        const demotedPlacement = movedPreviousPlacement === 'overlay' ? 'inside' : movedPreviousPlacement;
+        syncSlotPlacementFromSide(existingAxisSlot, demotedPlacement);
+        syncSlotPlacementFromSide(movedSlot, 'overlay');
+        state.adv.circular_track_slots[existingAxisIndex] = movedSlot;
+        state.adv.circular_track_slots[idx] = existingAxisSlot;
+        state.adv.circular_track_slots_axis_index = existingAxisIndex;
+        normalizeSlotsInPlace();
+        return;
+      }
+    }
+
     let axis = axisIndexForCurrentSlots(state.adv.circular_track_slots);
     const [slot] = state.adv.circular_track_slots.splice(idx, 1);
     if (!slot) return;
     if (idx < axis) axis -= 1;
-    syncSlotPlacementFromSide(slot, placement);
-    if (normalizePlacement(placement) === 'outside') {
+    syncSlotPlacementFromSide(slot, targetPlacement);
+    if (targetPlacement === 'outside') {
       state.adv.circular_track_slots.splice(axis, 0, slot);
       state.adv.circular_track_slots_axis_index = axis + 1;
-    } else if (normalizePlacement(placement) === 'overlay') {
+    } else if (targetPlacement === 'overlay') {
       state.adv.circular_track_slots.splice(axis, 0, slot);
       state.adv.circular_track_slots_axis_index = axis;
     } else {

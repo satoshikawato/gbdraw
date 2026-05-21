@@ -1624,10 +1624,16 @@ json.dumps({
             );
           }
           adv.circular_track_slots.splice(0, adv.circular_track_slots.length, ...circularTrackSlots);
+          const circularTrackOnAxisIndex = circularTrackSlots.findIndex((slot) => slot?.side === 'overlay');
+          const normalizedCircularTrackAxisIndex = circularTrackOnAxisIndex >= 0
+            ? circularTrackOnAxisIndex
+            : (
+                circularTrackAxisIndex === null
+                  ? inferLegacyAxisIndexFromFeature(circularTrackSlots, form.track_type)
+                  : circularTrackAxisIndex
+              );
           adv.circular_track_slots_axis_index = clampCircularTrackAxisIndex(
-            circularTrackAxisIndex === null
-              ? inferLegacyAxisIndexFromFeature(circularTrackSlots, form.track_type)
-              : circularTrackAxisIndex,
+            normalizedCircularTrackAxisIndex,
             circularTrackSlots.length
           );
         }

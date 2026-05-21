@@ -228,7 +228,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
     check_path = tmp_path / "check-circular-track-slots.mjs"
     check_path.write_text(
         f"""
-        import {{ createCircularTrackSlotEditor }} from {module_path.as_uri()!r};
+        import {{ applyCircularTrackOrderPlacements, createCircularTrackSlotEditor }} from {module_path.as_uri()!r};
 
         const state = {{
           adv: {{
@@ -396,6 +396,68 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         const tickAxisSpec = tickAxisEditor.circularTrackSlotCliSpec(axisTick);
         if (!tickAxisSpec.includes('side=overlay') || !tickAxisSpec.includes('label_side=inside') || !tickAxisSpec.includes('tick_side=outside')) {{
           throw new Error(`Tick on-axis CLI spec lost inverted sides: ${{tickAxisSpec}}`);
+        }}
+
+        const axisSwapState = {{
+          adv: {{
+            nt: 'GC',
+            circular_track_slots_axis_index: 0,
+            circular_track_slots: [
+              {{ id: 'features', renderer: 'features', side: 'overlay', params: {{ lane_direction: 'split' }} }},
+              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ label_side: 'inside', tick_side: 'inside' }} }},
+              {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', params: {{ nt: 'GC' }} }},
+              {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'inside', params: {{ nt: 'GC' }} }}
+            ]
+          }},
+          form: {{
+            track_type: 'tuckin',
+            show_depth: false,
+            suppress_gc: false,
+            suppress_skew: false
+          }}
+        }};
+
+        const axisSwapEditor = createCircularTrackSlotEditor({{ state: axisSwapState }});
+        axisSwapEditor.moveCircularTrackSlotToAxis(1);
+        const axisSwapIds = axisSwapState.adv.circular_track_slots.map((slot) => slot.id).join(',');
+        const axisSwapOnAxis = axisSwapState.adv.circular_track_slots.filter((slot) => slot.side === 'overlay').map((slot) => slot.id).join(',');
+        const swappedFeature = axisSwapState.adv.circular_track_slots.find((slot) => slot.id === 'features');
+        const swappedTick = axisSwapState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
+        if (axisSwapIds !== 'ticks,features,gc_content,gc_skew' || axisSwapOnAxis !== 'ticks') {{
+          throw new Error(`Axis swap did not replace the existing on-axis slot: ${{axisSwapIds}} onAxis=${{axisSwapOnAxis}}`);
+        }}
+        if (axisSwapState.adv.circular_track_slots_axis_index !== 0 || swappedFeature?.side !== 'inside' || swappedFeature?.params?.lane_direction !== 'inside') {{
+          throw new Error(`Previous on-axis feature was not demoted inside: ${{JSON.stringify(axisSwapState.adv)}}`);
+        }}
+        if (swappedTick?.params?.label_side !== 'outside' || swappedTick?.params?.tick_side !== 'inside') {{
+          throw new Error(`New on-axis tick defaults were not applied after swap: ${{JSON.stringify(swappedTick)}}`);
+        }}
+
+        axisSwapEditor.updateCircularTrackFeatureLane(swappedFeature, 'split');
+        const laneSwapIds = axisSwapState.adv.circular_track_slots.map((slot) => slot.id).join(',');
+        const laneSwapOnAxis = axisSwapState.adv.circular_track_slots.filter((slot) => slot.side === 'overlay').map((slot) => slot.id).join(',');
+        const laneSwappedTick = axisSwapState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
+        if (laneSwapIds !== 'features,ticks,gc_content,gc_skew' || laneSwapOnAxis !== 'features') {{
+          throw new Error(`Feature lane on-axis selection did not swap with existing tick: ${{laneSwapIds}} onAxis=${{laneSwapOnAxis}}`);
+        }}
+        if (laneSwappedTick?.side !== 'inside' || laneSwappedTick?.params?.label_side !== 'inside' || laneSwappedTick?.params?.tick_side !== 'inside') {{
+          throw new Error(`Previous on-axis tick was not demoted inside: ${{JSON.stringify(laneSwappedTick)}}`);
+        }}
+
+        const duplicateAxisSlots = applyCircularTrackOrderPlacements(
+          [
+            {{ id: 'features', renderer: 'features', side: 'overlay', params: {{ lane_direction: 'split' }} }},
+            {{ id: 'ticks', renderer: 'ticks', side: 'overlay', params: {{ label_side: 'outside', tick_side: 'inside' }} }},
+            {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', params: {{ nt: 'GC' }} }}
+          ],
+          'GC',
+          'tuckin',
+          1
+        );
+        const normalizedOnAxis = duplicateAxisSlots.filter((slot) => slot.side === 'overlay').map((slot) => slot.id).join(',');
+        const normalizedFeature = duplicateAxisSlots.find((slot) => slot.id === 'features');
+        if (normalizedOnAxis !== 'ticks' || normalizedFeature?.side !== 'outside' || normalizedFeature?.params?.lane_direction !== 'outside') {{
+          throw new Error(`Duplicate on-axis normalization did not keep only the preferred slot: ${{JSON.stringify(duplicateAxisSlots)}}`);
         }}
         """,
         encoding="utf-8",
