@@ -394,10 +394,10 @@ def _tick_label_radial_offsets(
     if baseline == "middle":
         half_height = bbox_height / 2.0
         return half_height, half_height
-    if baseline == "hanging":
-        return (0.0, bbox_height) if reverse_path else (bbox_height, 0.0)
+    if baseline == "text-before-edge":
+        return bbox_height, 0.0
     if baseline == "text-after-edge":
-        return (bbox_height, 0.0) if reverse_path else (0.0, bbox_height)
+        return 0.0, bbox_height
     half_height = bbox_height / 2.0
     return half_height, half_height
 
@@ -438,7 +438,7 @@ def resolve_circular_tick_label_geometry(
         return CircularTickLabelGeometry(0.0, 0.0, 0.0, 0.0, 0.0)
 
     bbox_width_px, bbox_height_px = calculate_bbox_dimensions(label_text, font_family, font_size, dpi)
-    _anchor_value, dominant_baseline = set_tick_label_anchor_value(total_len, tick)
+    anchor_value, dominant_baseline = set_tick_label_anchor_value(total_len, tick)
     angle = 360.0 * (tick / total_len)
     reverse_path = 90 <= angle < 270
     path_radius = float(label_radius_base)
@@ -475,7 +475,7 @@ def resolve_circular_tick_label_geometry(
         radial_outer_px=max(0.0, path_radius + label_outer_offset_px),
         bbox_width_px=float(bbox_width_px),
         bbox_height_px=float(bbox_height_px),
-        text_anchor="middle",
+        text_anchor=anchor_value,
         dominant_baseline=dominant_baseline,
     )
 
@@ -523,21 +523,20 @@ def generate_circular_tick_paths(
 
 def set_tick_label_anchor_value(
     total_len: int, tick: float
-) -> tuple[Literal["middle", "start", "end"], Literal["text-after-edge", "middle", "hanging"]]:
+) -> tuple[Literal["middle"], Literal["text-after-edge", "middle", "hanging"]]:
     """
     Determines the anchor and baseline values for tick labels based on their position.
+
+    Tick labels are centered on their tick; only the baseline changes by angle.
     """
+    anchor_value: Literal["middle"] = "middle"
     angle: float = 360.0 * (tick / total_len)
-    if 0 <= angle < 45:
-        anchor_value, baseline_value = "middle", "text-after-edge"
-    elif 45 <= angle < 155:
-        anchor_value, baseline_value = "start", "middle"
-    elif 155 <= angle < 205:
-        anchor_value, baseline_value = "middle", "hanging"
-    elif 205 <= angle < 315:
-        anchor_value, baseline_value = "end", "middle"
+    if 0 <= angle < 90:
+        baseline_value = "text-after-edge"
+    elif 90 <= angle < 270:
+        baseline_value = "text-before-edge"
     else:
-        anchor_value, baseline_value = "middle", "text-after-edge"
+        baseline_value = "text-after-edge"
     return anchor_value, baseline_value
 
 
