@@ -187,34 +187,39 @@ def _tick_slot_for_preset(
         tick_track_channel_override=context.tick_track_channel_override,
     )
     tick_inner_ratio, tick_outer_ratio = sorted((float(tick_inner_ratio), float(tick_outer_ratio)))
-    tick_side = "inside" if tick_outer_ratio <= 1.0 else "outside"
+    placement_side = "inside" if tick_outer_ratio <= 1.0 else "outside"
+    tick_side = placement_side
+    label_side = "outside"
+    if context.show_features and placement_side == "inside":
+        tick_side = "outside"
+        label_side = "inside"
     anchor_ratio = tick_outer_ratio if tick_side == "inside" else tick_inner_ratio
     tick_width_px = max(0.0, (tick_outer_ratio - tick_inner_ratio) * base_radius)
 
-    label_side = "outside"
-    label_bounds = get_circular_tick_label_radius_bounds(
-        center_radius_px=anchor_ratio * base_radius,
-        total_len=int(context.total_length),
-        track_type=preset,
-        strandedness=bool(context.strandedness),
-        font_size=float(context.cfg.objects.ticks.tick_labels.font_size),
-        font_family=str(context.cfg.objects.text.font_family),
-        dpi=int(context.canvas_config.dpi),
-        manual_interval=context.cfg.objects.scale.interval,
-        tick_track_channel_override=context.tick_track_channel_override,
-        tick_width=float(context.cfg.objects.ticks.tick_width),
-        tick_side=tick_side,
-        tick_length_px=tick_width_px,
-        length_reference_radius_px=base_radius,
-    )
-    if label_bounds is not None:
-        label_center = (float(label_bounds[0]) + float(label_bounds[1])) / 2.0
-        label_side = "inside" if label_center < (anchor_ratio * base_radius) else "outside"
+    if not (context.show_features and placement_side == "inside"):
+        label_bounds = get_circular_tick_label_radius_bounds(
+            center_radius_px=anchor_ratio * base_radius,
+            total_len=int(context.total_length),
+            track_type=preset,
+            strandedness=bool(context.strandedness),
+            font_size=float(context.cfg.objects.ticks.tick_labels.font_size),
+            font_family=str(context.cfg.objects.text.font_family),
+            dpi=int(context.canvas_config.dpi),
+            manual_interval=context.cfg.objects.scale.interval,
+            tick_track_channel_override=context.tick_track_channel_override,
+            tick_width=float(context.cfg.objects.ticks.tick_width),
+            tick_side=tick_side,
+            tick_length_px=tick_width_px,
+            length_reference_radius_px=base_radius,
+        )
+        if label_bounds is not None:
+            label_center = (float(label_bounds[0]) + float(label_bounds[1])) / 2.0
+            label_side = "inside" if label_center < (anchor_ratio * base_radius) else "outside"
 
     return CircularTrackSlot(
         id="ticks",
         renderer="ticks",
-        side=tick_side,
+        side=placement_side,
         radius=None,
         width=_scalar_px(tick_width_px),
         spacing=_scalar_px(max(1.0, 0.01 * base_radius)),

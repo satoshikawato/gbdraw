@@ -9,13 +9,13 @@
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": -24.375,
-          "anchor_radius_px": 365.625,
+          "anchor_offset_px": -24.374999999999943,
+          "anchor_radius_px": 365.62500000000006,
           "compressed": false,
           "draw_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "explicit_anchor": false,
@@ -23,8 +23,8 @@
           "id": "features",
           "packing_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "params": {
@@ -35,8 +35,8 @@
           "requested_width_px": 18.525,
           "reserved_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
@@ -45,36 +45,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -52.64999999999998,
-          "anchor_radius_px": 337.35,
+          "anchor_offset_px": -56.549999999999955,
+          "anchor_radius_px": 333.45000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 333.45000000000005,
-            "inner_px": 329.55,
-            "outer_px": 337.35,
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 333.45000000000005,
-            "inner_px": 329.55,
-            "outer_px": 337.35,
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 323.65000000000003,
-            "inner_px": 309.95000000000005,
-            "outer_px": 337.35,
-            "width_px": 27.399999999999977
+            "center_px": 323.6500000000001,
+            "inner_px": 306.05000000000007,
+            "outer_px": 341.25000000000006,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -92,13 +91,13 @@
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": -24.375,
-          "anchor_radius_px": 365.625,
+          "anchor_offset_px": -24.374999999999943,
+          "anchor_radius_px": 365.62500000000006,
           "compressed": false,
           "draw_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "explicit_anchor": false,
@@ -106,8 +105,8 @@
           "id": "features",
           "packing_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "params": {
@@ -118,8 +117,8 @@
           "requested_width_px": 18.525,
           "reserved_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
@@ -128,36 +127,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -52.64999999999998,
-          "anchor_radius_px": 337.35,
+          "anchor_offset_px": -56.549999999999955,
+          "anchor_radius_px": 333.45000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 333.45000000000005,
-            "inner_px": 329.55,
-            "outer_px": 337.35,
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 333.45000000000005,
-            "inner_px": 329.55,
-            "outer_px": 337.35,
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 323.65000000000003,
-            "inner_px": 309.95000000000005,
-            "outer_px": 337.35,
-            "width_px": 27.399999999999977
+            "center_px": 323.6500000000001,
+            "inner_px": 306.05000000000007,
+            "outer_px": 341.25000000000006,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -165,22 +163,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -117.09999999999997,
-          "anchor_radius_px": 272.90000000000003,
+          "anchor_offset_px": -120.99999999999994,
+          "anchor_radius_px": 269.00000000000006,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 272.90000000000003,
-            "inner_px": 235.85000000000002,
-            "outer_px": 309.95000000000005,
+            "center_px": 269.00000000000006,
+            "inner_px": 231.95000000000005,
+            "outer_px": 306.05000000000007,
             "width_px": 74.10000000000002
           },
           "explicit_anchor": true,
           "explicit_width": true,
           "id": "gc_content",
           "packing_band_px": {
-            "center_px": 272.90000000000003,
-            "inner_px": 235.85000000000002,
-            "outer_px": 309.95000000000005,
+            "center_px": 269.00000000000006,
+            "inner_px": 231.95000000000005,
+            "outer_px": 306.05000000000007,
             "width_px": 74.10000000000002
           },
           "params": {
@@ -189,9 +187,9 @@
           "renderer": "dinucleotide_content",
           "requested_width_px": 74.1,
           "reserved_band_px": {
-            "center_px": 272.90000000000003,
-            "inner_px": 235.85000000000002,
-            "outer_px": 309.95000000000005,
+            "center_px": 269.00000000000006,
+            "inner_px": 231.95000000000005,
+            "outer_px": 306.05000000000007,
             "width_px": 74.10000000000002
           },
           "resolved_width_px": 74.1,
@@ -200,22 +198,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -195.09999999999997,
-          "anchor_radius_px": 194.90000000000003,
+          "anchor_offset_px": -198.99999999999994,
+          "anchor_radius_px": 191.00000000000006,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 194.90000000000003,
-            "inner_px": 157.85000000000002,
-            "outer_px": 231.95000000000005,
+            "center_px": 191.00000000000006,
+            "inner_px": 153.95000000000005,
+            "outer_px": 228.05000000000007,
             "width_px": 74.10000000000002
           },
           "explicit_anchor": true,
           "explicit_width": true,
           "id": "gc_skew",
           "packing_band_px": {
-            "center_px": 194.90000000000003,
-            "inner_px": 157.85000000000002,
-            "outer_px": 231.95000000000005,
+            "center_px": 191.00000000000006,
+            "inner_px": 153.95000000000005,
+            "outer_px": 228.05000000000007,
             "width_px": 74.10000000000002
           },
           "params": {
@@ -224,9 +222,9 @@
           "renderer": "dinucleotide_skew",
           "requested_width_px": 74.1,
           "reserved_band_px": {
-            "center_px": 194.90000000000003,
-            "inner_px": 157.85000000000002,
-            "outer_px": 231.95000000000005,
+            "center_px": 191.00000000000006,
+            "inner_px": 153.95000000000005,
+            "outer_px": 228.05000000000007,
             "width_px": 74.10000000000002
           },
           "resolved_width_px": 74.1,
@@ -245,13 +243,13 @@
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": -24.375,
-          "anchor_radius_px": 365.625,
+          "anchor_offset_px": -24.374999999999943,
+          "anchor_radius_px": 365.62500000000006,
           "compressed": false,
           "draw_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "explicit_anchor": false,
@@ -259,8 +257,8 @@
           "id": "features",
           "packing_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "params": {
@@ -271,8 +269,8 @@
           "requested_width_px": 18.525,
           "reserved_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
@@ -281,36 +279,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -52.64999999999998,
-          "anchor_radius_px": 337.35,
+          "anchor_offset_px": -56.549999999999955,
+          "anchor_radius_px": 333.45000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 333.45000000000005,
-            "inner_px": 329.55,
-            "outer_px": 337.35,
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 333.45000000000005,
-            "inner_px": 329.55,
-            "outer_px": 337.35,
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 323.65000000000003,
-            "inner_px": 309.95000000000005,
-            "outer_px": 337.35,
-            "width_px": 27.399999999999977
+            "center_px": 323.6500000000001,
+            "inner_px": 306.05000000000007,
+            "outer_px": 341.25000000000006,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -467,36 +464,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -30.22499999999991,
-          "anchor_radius_px": 359.7750000000001,
+          "anchor_offset_px": -34.12499999999994,
+          "anchor_radius_px": 355.87500000000006,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 355.8750000000001,
-            "inner_px": 351.9750000000001,
-            "outer_px": 359.7750000000001,
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 355.8750000000001,
-            "inner_px": 351.9750000000001,
-            "outer_px": 359.7750000000001,
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 346.0750000000001,
-            "inner_px": 332.3750000000001,
-            "outer_px": 359.7750000000001,
-            "width_px": 27.399999999999977
+            "center_px": 346.07500000000005,
+            "inner_px": 328.475,
+            "outer_px": 363.67500000000007,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -550,36 +546,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -30.22499999999991,
-          "anchor_radius_px": 359.7750000000001,
+          "anchor_offset_px": -34.12499999999994,
+          "anchor_radius_px": 355.87500000000006,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 355.8750000000001,
-            "inner_px": 351.9750000000001,
-            "outer_px": 359.7750000000001,
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 355.8750000000001,
-            "inner_px": 351.9750000000001,
-            "outer_px": 359.7750000000001,
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 346.0750000000001,
-            "inner_px": 332.3750000000001,
-            "outer_px": 359.7750000000001,
-            "width_px": 27.399999999999977
+            "center_px": 346.07500000000005,
+            "inner_px": 328.475,
+            "outer_px": 363.67500000000007,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -703,36 +698,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -30.22499999999991,
-          "anchor_radius_px": 359.7750000000001,
+          "anchor_offset_px": -34.12499999999994,
+          "anchor_radius_px": 355.87500000000006,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 355.8750000000001,
-            "inner_px": 351.9750000000001,
-            "outer_px": 359.7750000000001,
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 355.8750000000001,
-            "inner_px": 351.9750000000001,
-            "outer_px": 359.7750000000001,
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 346.0750000000001,
-            "inner_px": 332.3750000000001,
-            "outer_px": 359.7750000000001,
-            "width_px": 27.399999999999977
+            "center_px": 346.07500000000005,
+            "inner_px": 328.475,
+            "outer_px": 363.67500000000007,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -889,36 +883,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -28.27499999999992,
-          "anchor_radius_px": 361.7250000000001,
+          "anchor_offset_px": -32.174999999999955,
+          "anchor_radius_px": 357.82500000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 357.82500000000005,
-            "inner_px": 353.92500000000007,
-            "outer_px": 361.7250000000001,
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 357.82500000000005,
-            "inner_px": 353.92500000000007,
-            "outer_px": 361.7250000000001,
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
             "center_px": 348.0250000000001,
-            "inner_px": 334.32500000000005,
-            "outer_px": 361.7250000000001,
-            "width_px": 27.400000000000034
+            "inner_px": 330.42500000000007,
+            "outer_px": 365.62500000000006,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -972,36 +965,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -28.27499999999992,
-          "anchor_radius_px": 361.7250000000001,
+          "anchor_offset_px": -32.174999999999955,
+          "anchor_radius_px": 357.82500000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 357.82500000000005,
-            "inner_px": 353.92500000000007,
-            "outer_px": 361.7250000000001,
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 357.82500000000005,
-            "inner_px": 353.92500000000007,
-            "outer_px": 361.7250000000001,
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
             "center_px": 348.0250000000001,
-            "inner_px": 334.32500000000005,
-            "outer_px": 361.7250000000001,
-            "width_px": 27.400000000000034
+            "inner_px": 330.42500000000007,
+            "outer_px": 365.62500000000006,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -1125,36 +1117,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -28.27499999999992,
-          "anchor_radius_px": 361.7250000000001,
+          "anchor_offset_px": -32.174999999999955,
+          "anchor_radius_px": 357.82500000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 357.82500000000005,
-            "inner_px": 353.92500000000007,
-            "outer_px": 361.7250000000001,
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 357.82500000000005,
-            "inner_px": 353.92500000000007,
-            "outer_px": 361.7250000000001,
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
             "center_px": 348.0250000000001,
-            "inner_px": 334.32500000000005,
-            "outer_px": 361.7250000000001,
-            "width_px": 27.400000000000034
+            "inner_px": 330.42500000000007,
+            "outer_px": 365.62500000000006,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -1311,36 +1302,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -17.062499999999943,
-          "anchor_radius_px": 372.93750000000006,
+          "anchor_offset_px": -20.962499999999977,
+          "anchor_radius_px": 369.0375,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 369.0375,
-            "inner_px": 365.13750000000005,
-            "outer_px": 372.93750000000006,
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 369.0375,
-            "inner_px": 365.13750000000005,
-            "outer_px": 372.93750000000006,
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
             "center_px": 359.23750000000007,
-            "inner_px": 345.5375,
-            "outer_px": 372.93750000000006,
-            "width_px": 27.400000000000034
+            "inner_px": 341.63750000000005,
+            "outer_px": 376.83750000000003,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -1394,36 +1384,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -17.062499999999943,
-          "anchor_radius_px": 372.93750000000006,
+          "anchor_offset_px": -20.962499999999977,
+          "anchor_radius_px": 369.0375,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 369.0375,
-            "inner_px": 365.13750000000005,
-            "outer_px": 372.93750000000006,
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 369.0375,
-            "inner_px": 365.13750000000005,
-            "outer_px": 372.93750000000006,
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
             "center_px": 359.23750000000007,
-            "inner_px": 345.5375,
-            "outer_px": 372.93750000000006,
-            "width_px": 27.400000000000034
+            "inner_px": 341.63750000000005,
+            "outer_px": 376.83750000000003,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -1547,36 +1536,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -17.062499999999943,
-          "anchor_radius_px": 372.93750000000006,
+          "anchor_offset_px": -20.962499999999977,
+          "anchor_radius_px": 369.0375,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 369.0375,
-            "inner_px": 365.13750000000005,
-            "outer_px": 372.93750000000006,
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 369.0375,
-            "inner_px": 365.13750000000005,
-            "outer_px": 372.93750000000006,
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
             "center_px": 359.23750000000007,
-            "inner_px": 345.5375,
-            "outer_px": 372.93750000000006,
-            "width_px": 27.400000000000034
+            "inner_px": 341.63750000000005,
+            "outer_px": 376.83750000000003,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -1733,36 +1721,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -7.7999999999999545,
-          "anchor_radius_px": 382.20000000000005,
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "spreadout",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 368.50000000000006,
-            "inner_px": 354.80000000000007,
-            "outer_px": 382.20000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 368.5,
+            "inner_px": 350.9,
+            "outer_px": 386.1,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -1816,36 +1803,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -7.7999999999999545,
-          "anchor_radius_px": 382.20000000000005,
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "spreadout",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 368.50000000000006,
-            "inner_px": 354.80000000000007,
-            "outer_px": 382.20000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 368.5,
+            "inner_px": 350.9,
+            "outer_px": 386.1,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -1969,36 +1955,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -7.7999999999999545,
-          "anchor_radius_px": 382.20000000000005,
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "spreadout",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 368.50000000000006,
-            "inner_px": 354.80000000000007,
-            "outer_px": 382.20000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 368.5,
+            "inner_px": 350.9,
+            "outer_px": 386.1,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -2155,36 +2140,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -7.7999999999999545,
-          "anchor_radius_px": 382.20000000000005,
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "spreadout",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 368.50000000000006,
-            "inner_px": 354.80000000000007,
-            "outer_px": 382.20000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 368.5,
+            "inner_px": 350.9,
+            "outer_px": 386.1,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -2238,36 +2222,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -7.7999999999999545,
-          "anchor_radius_px": 382.20000000000005,
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "spreadout",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 368.50000000000006,
-            "inner_px": 354.80000000000007,
-            "outer_px": 382.20000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 368.5,
+            "inner_px": 350.9,
+            "outer_px": 386.1,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -2391,36 +2374,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -7.7999999999999545,
-          "anchor_radius_px": 382.20000000000005,
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "spreadout",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 368.50000000000006,
-            "inner_px": 354.80000000000007,
-            "outer_px": 382.20000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 368.5,
+            "inner_px": 350.9,
+            "outer_px": 386.1,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -2541,13 +2523,13 @@
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": -24.375,
-          "anchor_radius_px": 365.625,
+          "anchor_offset_px": -24.374999999999943,
+          "anchor_radius_px": 365.62500000000006,
           "compressed": false,
           "draw_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "explicit_anchor": false,
@@ -2555,8 +2537,8 @@
           "id": "features",
           "packing_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "params": {
@@ -2567,8 +2549,8 @@
           "requested_width_px": 18.525,
           "reserved_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
@@ -2577,36 +2559,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -52.64999999999998,
-          "anchor_radius_px": 337.35,
+          "anchor_offset_px": -56.549999999999955,
+          "anchor_radius_px": 333.45000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 333.45000000000005,
-            "inner_px": 329.55,
-            "outer_px": 337.35,
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 333.45000000000005,
-            "inner_px": 329.55,
-            "outer_px": 337.35,
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 323.65000000000003,
-            "inner_px": 309.95000000000005,
-            "outer_px": 337.35,
-            "width_px": 27.399999999999977
+            "center_px": 323.6500000000001,
+            "inner_px": 306.05000000000007,
+            "outer_px": 341.25000000000006,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -2624,13 +2605,13 @@
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": -24.375,
-          "anchor_radius_px": 365.625,
+          "anchor_offset_px": -24.374999999999943,
+          "anchor_radius_px": 365.62500000000006,
           "compressed": false,
           "draw_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "explicit_anchor": false,
@@ -2638,8 +2619,8 @@
           "id": "features",
           "packing_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "params": {
@@ -2650,8 +2631,8 @@
           "requested_width_px": 18.525,
           "reserved_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
@@ -2660,36 +2641,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -52.64999999999998,
-          "anchor_radius_px": 337.35,
+          "anchor_offset_px": -56.549999999999955,
+          "anchor_radius_px": 333.45000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 333.45000000000005,
-            "inner_px": 329.55,
-            "outer_px": 337.35,
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 333.45000000000005,
-            "inner_px": 329.55,
-            "outer_px": 337.35,
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 323.65000000000003,
-            "inner_px": 309.95000000000005,
-            "outer_px": 337.35,
-            "width_px": 27.399999999999977
+            "center_px": 323.6500000000001,
+            "inner_px": 306.05000000000007,
+            "outer_px": 341.25000000000006,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -2697,22 +2677,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -117.09999999999997,
-          "anchor_radius_px": 272.90000000000003,
+          "anchor_offset_px": -120.99999999999994,
+          "anchor_radius_px": 269.00000000000006,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 272.90000000000003,
-            "inner_px": 235.85000000000002,
-            "outer_px": 309.95000000000005,
+            "center_px": 269.00000000000006,
+            "inner_px": 231.95000000000005,
+            "outer_px": 306.05000000000007,
             "width_px": 74.10000000000002
           },
           "explicit_anchor": true,
           "explicit_width": true,
           "id": "gc_content",
           "packing_band_px": {
-            "center_px": 272.90000000000003,
-            "inner_px": 235.85000000000002,
-            "outer_px": 309.95000000000005,
+            "center_px": 269.00000000000006,
+            "inner_px": 231.95000000000005,
+            "outer_px": 306.05000000000007,
             "width_px": 74.10000000000002
           },
           "params": {
@@ -2721,9 +2701,9 @@
           "renderer": "dinucleotide_content",
           "requested_width_px": 74.1,
           "reserved_band_px": {
-            "center_px": 272.90000000000003,
-            "inner_px": 235.85000000000002,
-            "outer_px": 309.95000000000005,
+            "center_px": 269.00000000000006,
+            "inner_px": 231.95000000000005,
+            "outer_px": 306.05000000000007,
             "width_px": 74.10000000000002
           },
           "resolved_width_px": 74.1,
@@ -2732,22 +2712,22 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -195.09999999999997,
-          "anchor_radius_px": 194.90000000000003,
+          "anchor_offset_px": -198.99999999999994,
+          "anchor_radius_px": 191.00000000000006,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 194.90000000000003,
-            "inner_px": 157.85000000000002,
-            "outer_px": 231.95000000000005,
+            "center_px": 191.00000000000006,
+            "inner_px": 153.95000000000005,
+            "outer_px": 228.05000000000007,
             "width_px": 74.10000000000002
           },
           "explicit_anchor": true,
           "explicit_width": true,
           "id": "gc_skew",
           "packing_band_px": {
-            "center_px": 194.90000000000003,
-            "inner_px": 157.85000000000002,
-            "outer_px": 231.95000000000005,
+            "center_px": 191.00000000000006,
+            "inner_px": 153.95000000000005,
+            "outer_px": 228.05000000000007,
             "width_px": 74.10000000000002
           },
           "params": {
@@ -2756,9 +2736,9 @@
           "renderer": "dinucleotide_skew",
           "requested_width_px": 74.1,
           "reserved_band_px": {
-            "center_px": 194.90000000000003,
-            "inner_px": 157.85000000000002,
-            "outer_px": 231.95000000000005,
+            "center_px": 191.00000000000006,
+            "inner_px": 153.95000000000005,
+            "outer_px": 228.05000000000007,
             "width_px": 74.10000000000002
           },
           "resolved_width_px": 74.1,
@@ -2777,13 +2757,13 @@
       "preset": "tuckin",
       "slots": [
         {
-          "anchor_offset_px": -24.375,
-          "anchor_radius_px": 365.625,
+          "anchor_offset_px": -24.374999999999943,
+          "anchor_radius_px": 365.62500000000006,
           "compressed": false,
           "draw_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "explicit_anchor": false,
@@ -2791,8 +2771,8 @@
           "id": "features",
           "packing_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "params": {
@@ -2803,8 +2783,8 @@
           "requested_width_px": 18.525,
           "reserved_band_px": {
             "center_px": 365.625,
-            "inner_px": 345.15,
-            "outer_px": 386.09999999999997,
+            "inner_px": 345.15000000000003,
+            "outer_px": 386.1,
             "width_px": 40.94999999999999
           },
           "resolved_width_px": 18.525,
@@ -2813,36 +2793,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -52.64999999999998,
-          "anchor_radius_px": 337.35,
+          "anchor_offset_px": -56.549999999999955,
+          "anchor_radius_px": 333.45000000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 333.45000000000005,
-            "inner_px": 329.55,
-            "outer_px": 337.35,
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 333.45000000000005,
-            "inner_px": 329.55,
-            "outer_px": 337.35,
+            "center_px": 337.35,
+            "inner_px": 333.45000000000005,
+            "outer_px": 341.25000000000006,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 323.65000000000003,
-            "inner_px": 309.95000000000005,
-            "outer_px": 337.35,
-            "width_px": 27.399999999999977
+            "center_px": 323.6500000000001,
+            "inner_px": 306.05000000000007,
+            "outer_px": 341.25000000000006,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -2999,36 +2978,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -30.22499999999991,
-          "anchor_radius_px": 359.7750000000001,
+          "anchor_offset_px": -34.12499999999994,
+          "anchor_radius_px": 355.87500000000006,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 355.8750000000001,
-            "inner_px": 351.9750000000001,
-            "outer_px": 359.7750000000001,
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 355.8750000000001,
-            "inner_px": 351.9750000000001,
-            "outer_px": 359.7750000000001,
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 346.0750000000001,
-            "inner_px": 332.3750000000001,
-            "outer_px": 359.7750000000001,
-            "width_px": 27.399999999999977
+            "center_px": 346.07500000000005,
+            "inner_px": 328.475,
+            "outer_px": 363.67500000000007,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -3082,36 +3060,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -30.22499999999991,
-          "anchor_radius_px": 359.7750000000001,
+          "anchor_offset_px": -34.12499999999994,
+          "anchor_radius_px": 355.87500000000006,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 355.8750000000001,
-            "inner_px": 351.9750000000001,
-            "outer_px": 359.7750000000001,
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 355.8750000000001,
-            "inner_px": 351.9750000000001,
-            "outer_px": 359.7750000000001,
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 346.0750000000001,
-            "inner_px": 332.3750000000001,
-            "outer_px": 359.7750000000001,
-            "width_px": 27.399999999999977
+            "center_px": 346.07500000000005,
+            "inner_px": 328.475,
+            "outer_px": 363.67500000000007,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -3235,36 +3212,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -30.22499999999991,
-          "anchor_radius_px": 359.7750000000001,
+          "anchor_offset_px": -34.12499999999994,
+          "anchor_radius_px": 355.87500000000006,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 355.8750000000001,
-            "inner_px": 351.9750000000001,
-            "outer_px": 359.7750000000001,
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 355.8750000000001,
-            "inner_px": 351.9750000000001,
-            "outer_px": 359.7750000000001,
+            "center_px": 359.7750000000001,
+            "inner_px": 355.87500000000006,
+            "outer_px": 363.67500000000007,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "tuckin",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 346.0750000000001,
-            "inner_px": 332.3750000000001,
-            "outer_px": 359.7750000000001,
-            "width_px": 27.399999999999977
+            "center_px": 346.07500000000005,
+            "inner_px": 328.475,
+            "outer_px": 363.67500000000007,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -3421,36 +3397,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -28.27499999999992,
-          "anchor_radius_px": 361.7250000000001,
+          "anchor_offset_px": -32.174999999999955,
+          "anchor_radius_px": 357.82500000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 357.82500000000005,
-            "inner_px": 353.92500000000007,
-            "outer_px": 361.7250000000001,
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 357.82500000000005,
-            "inner_px": 353.92500000000007,
-            "outer_px": 361.7250000000001,
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
             "center_px": 348.0250000000001,
-            "inner_px": 334.32500000000005,
-            "outer_px": 361.7250000000001,
-            "width_px": 27.400000000000034
+            "inner_px": 330.42500000000007,
+            "outer_px": 365.62500000000006,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -3504,36 +3479,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -28.27499999999992,
-          "anchor_radius_px": 361.7250000000001,
+          "anchor_offset_px": -32.174999999999955,
+          "anchor_radius_px": 357.82500000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 357.82500000000005,
-            "inner_px": 353.92500000000007,
-            "outer_px": 361.7250000000001,
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 357.82500000000005,
-            "inner_px": 353.92500000000007,
-            "outer_px": 361.7250000000001,
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
             "center_px": 348.0250000000001,
-            "inner_px": 334.32500000000005,
-            "outer_px": 361.7250000000001,
-            "width_px": 27.400000000000034
+            "inner_px": 330.42500000000007,
+            "outer_px": 365.62500000000006,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -3657,36 +3631,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -28.27499999999992,
-          "anchor_radius_px": 361.7250000000001,
+          "anchor_offset_px": -32.174999999999955,
+          "anchor_radius_px": 357.82500000000005,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 357.82500000000005,
-            "inner_px": 353.92500000000007,
-            "outer_px": 361.7250000000001,
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 357.82500000000005,
-            "inner_px": 353.92500000000007,
-            "outer_px": 361.7250000000001,
+            "center_px": 361.725,
+            "inner_px": 357.82500000000005,
+            "outer_px": 365.62500000000006,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
             "center_px": 348.0250000000001,
-            "inner_px": 334.32500000000005,
-            "outer_px": 361.7250000000001,
-            "width_px": 27.400000000000034
+            "inner_px": 330.42500000000007,
+            "outer_px": 365.62500000000006,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -3843,36 +3816,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -17.062499999999943,
-          "anchor_radius_px": 372.93750000000006,
+          "anchor_offset_px": -20.962499999999977,
+          "anchor_radius_px": 369.0375,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 369.0375,
-            "inner_px": 365.13750000000005,
-            "outer_px": 372.93750000000006,
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 369.0375,
-            "inner_px": 365.13750000000005,
-            "outer_px": 372.93750000000006,
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
             "center_px": 359.23750000000007,
-            "inner_px": 345.5375,
-            "outer_px": 372.93750000000006,
-            "width_px": 27.400000000000034
+            "inner_px": 341.63750000000005,
+            "outer_px": 376.83750000000003,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -3926,36 +3898,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -17.062499999999943,
-          "anchor_radius_px": 372.93750000000006,
+          "anchor_offset_px": -20.962499999999977,
+          "anchor_radius_px": 369.0375,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 369.0375,
-            "inner_px": 365.13750000000005,
-            "outer_px": 372.93750000000006,
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 369.0375,
-            "inner_px": 365.13750000000005,
-            "outer_px": 372.93750000000006,
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
             "center_px": 359.23750000000007,
-            "inner_px": 345.5375,
-            "outer_px": 372.93750000000006,
-            "width_px": 27.400000000000034
+            "inner_px": 341.63750000000005,
+            "outer_px": 376.83750000000003,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -4079,36 +4050,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -17.062499999999943,
-          "anchor_radius_px": 372.93750000000006,
+          "anchor_offset_px": -20.962499999999977,
+          "anchor_radius_px": 369.0375,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 369.0375,
-            "inner_px": 365.13750000000005,
-            "outer_px": 372.93750000000006,
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 369.0375,
-            "inner_px": 365.13750000000005,
-            "outer_px": 372.93750000000006,
+            "center_px": 372.9375,
+            "inner_px": 369.0375,
+            "outer_px": 376.83750000000003,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "middle",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
             "center_px": 359.23750000000007,
-            "inner_px": 345.5375,
-            "outer_px": 372.93750000000006,
-            "width_px": 27.400000000000034
+            "inner_px": 341.63750000000005,
+            "outer_px": 376.83750000000003,
+            "width_px": 35.19999999999999
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -4265,36 +4235,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -7.7999999999999545,
-          "anchor_radius_px": 382.20000000000005,
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "spreadout",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 368.50000000000006,
-            "inner_px": 354.80000000000007,
-            "outer_px": 382.20000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 368.5,
+            "inner_px": 350.9,
+            "outer_px": 386.1,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -4348,36 +4317,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -7.7999999999999545,
-          "anchor_radius_px": 382.20000000000005,
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "spreadout",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 368.50000000000006,
-            "inner_px": 354.80000000000007,
-            "outer_px": 382.20000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 368.5,
+            "inner_px": 350.9,
+            "outer_px": 386.1,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -4501,36 +4469,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -7.7999999999999545,
-          "anchor_radius_px": 382.20000000000005,
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "spreadout",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 368.50000000000006,
-            "inner_px": 354.80000000000007,
-            "outer_px": 382.20000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 368.5,
+            "inner_px": 350.9,
+            "outer_px": 386.1,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -4687,36 +4654,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -7.7999999999999545,
-          "anchor_radius_px": 382.20000000000005,
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "spreadout",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 368.50000000000006,
-            "inner_px": 354.80000000000007,
-            "outer_px": 382.20000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 368.5,
+            "inner_px": 350.9,
+            "outer_px": 386.1,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -4770,36 +4736,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -7.7999999999999545,
-          "anchor_radius_px": 382.20000000000005,
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "spreadout",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 368.50000000000006,
-            "inner_px": 354.80000000000007,
-            "outer_px": 382.20000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 368.5,
+            "inner_px": 350.9,
+            "outer_px": 386.1,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",
@@ -4923,36 +4888,35 @@
           "z": 0
         },
         {
-          "anchor_offset_px": -7.7999999999999545,
-          "anchor_radius_px": 382.20000000000005,
+          "anchor_offset_px": -11.699999999999989,
+          "anchor_radius_px": 378.3,
           "compressed": false,
           "draw_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "explicit_anchor": false,
           "explicit_width": true,
           "id": "ticks",
           "packing_band_px": {
-            "center_px": 378.30000000000007,
-            "inner_px": 374.40000000000003,
-            "outer_px": 382.20000000000005,
+            "center_px": 382.20000000000005,
+            "inner_px": 378.3,
+            "outer_px": 386.1,
             "width_px": 7.800000000000011
           },
           "params": {
-            "label_side": "inside",
             "preset": "spreadout",
-            "tick_side": "inside"
+            "tick_label_layout": "label_in_tick_out"
           },
           "renderer": "ticks",
           "requested_width_px": 7.800000000000007,
           "reserved_band_px": {
-            "center_px": 368.50000000000006,
-            "inner_px": 354.80000000000007,
-            "outer_px": 382.20000000000005,
-            "width_px": 27.399999999999977
+            "center_px": 368.5,
+            "inner_px": 350.9,
+            "outer_px": 386.1,
+            "width_px": 35.200000000000045
           },
           "resolved_width_px": 7.800000000000007,
           "side": "inside",

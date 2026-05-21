@@ -677,6 +677,9 @@ def test_circular_preset_slots_do_not_emit_origin_metadata() -> None:
 
     slots = circular_track_slots_for_preset("tuckin", context)
     assert all("_preset_generated" not in dict(slot.params) for slot in slots)
+    ticks = next(slot for slot in slots if slot.id == "ticks")
+    assert ticks.side == "inside"
+    assert ticks.params["tick_label_layout"] == "label_in_tick_out"
 
     plan = circular_radial_plan_for_preset("tuckin", context)
     assert {"gc_content", "gc_skew"} <= set(plan.preferred_anchor_slot_ids)
