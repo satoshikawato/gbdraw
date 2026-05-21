@@ -867,6 +867,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     const idx = Number(index);
     const normalized = normalizedSlotsForCurrentState();
     if (!Number.isInteger(idx) || idx < 0 || idx >= normalized.length) return false;
+    if (effectiveSlotPlacement(normalized[idx], state.form.track_type) === 'overlay') return true;
     return idx >= axisIndexForCurrentSlots(normalized);
   };
 
@@ -874,6 +875,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     const idx = Number(index);
     const normalized = normalizedSlotsForCurrentState();
     if (!Number.isInteger(idx) || idx < 0 || idx >= normalized.length) return false;
+    if (effectiveSlotPlacement(normalized[idx], state.form.track_type) === 'overlay') return true;
     return idx < axisIndexForCurrentSlots(normalized);
   };
 

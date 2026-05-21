@@ -391,10 +391,24 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         if (tickStackEntries[0]?.kind !== 'slot' || tickStackEntries[0]?.onAxis !== true) {{
           throw new Error(`Tick on-axis selection was not embedded in Axis entry: ${{JSON.stringify(tickStackEntries)}}`);
         }}
+        if (!tickAxisEditor.canMoveCircularTrackSlotInside(0)) {{
+          throw new Error('Tick on-axis slot should be movable inside Axis');
+        }}
         axisTick.params.tick_label_layout = 'label_in_tick_out';
         const tickAxisSpec = tickAxisEditor.circularTrackSlotCliSpec(axisTick);
         if (!tickAxisSpec.includes('side=overlay') || !tickAxisSpec.includes('tick_label_layout=label_in_tick_out')) {{
           throw new Error(`Tick on-axis CLI spec lost inverted layout: ${{tickAxisSpec}}`);
+        }}
+        tickAxisEditor.moveCircularTrackSlotInside(0);
+        const demotedAxisTick = tickAxisState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
+        const demotedTickStackEntries = tickAxisEditor.circularTrackStackEntries();
+        if (
+          tickAxisState.adv.circular_track_slots_axis_index !== 0 ||
+          demotedAxisTick?.side !== 'inside' ||
+          demotedTickStackEntries[0]?.kind !== 'axis' ||
+          demotedTickStackEntries[1]?.slot?.id !== 'ticks'
+        ) {{
+          throw new Error(`Tick on-axis slot did not move inside Axis: ${{JSON.stringify(tickAxisState.adv)}} entries=${{JSON.stringify(demotedTickStackEntries)}}`);
         }}
 
         const axisSwapState = {{
