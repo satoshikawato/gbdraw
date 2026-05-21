@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import shutil
 import socket
 import subprocess
 import sys
@@ -168,18 +169,29 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth')" in run_source
     assert "Custom Track Slots" in index_html
     assert "Track Preset" in index_html
-    assert "Apply Tuckin" in index_html
-    assert "fixed Axis row shows the boundary" in index_html
+    assert 'v-if="!adv.circular_track_slots_enabled"' in index_html
+    assert "Reset to Tuckin" in index_html
+    assert "Reset to Middle" in index_html
+    assert "Reset to Spreadout" in index_html
+    assert "Apply Tuckin" not in index_html
+    assert "arrows reorder within the current side" in index_html
     assert "Radial track stack" in index_html
     assert "circularTrackStackEntries()" in index_html
-    assert "Moving a row across the Axis updates the generated track placement" in index_html
+    assert "Use Move outside or Move inside to cross the Axis" in index_html
+    assert "Move outside Axis" in index_html
+    assert "Move inside Axis" in index_html
     assert "Add track" in index_html
     assert "Outer tracks" not in slot_source
     assert "On-axis tracks" not in slot_source
     assert "Inner tracks" not in slot_source
     assert "circularTrackSlots" in slot_source
     assert "axisIndexForSlots" in slot_source
+    assert "effectiveSlotPlacement" in slot_source
+    assert "wouldCircularTrackSlotMoveCrossAxis" in slot_source
     assert "syncSlotPlacementFromSide" in slot_source
+    assert "moveCircularTrackSlotOutside" in slot_source
+    assert "moveCircularTrackSlotInside" in slot_source
+    assert "moveCircularTrackSlotToAxis" in slot_source
     assert "Feature Layout" not in index_html
     assert "params.axis" not in slot_source
     assert "axis=true" not in slot_source
@@ -187,11 +199,137 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "isLegacyDefaultWebSlotShape" in slot_source
     assert "ensureCircularTrackDepthSlot" in slot_source
     assert "Replace the current custom circular track slots with this preset" not in slot_source
-    assert "const preserved = hasCurrentSlots" in slot_source
+    assert "setCircularTrackSlotsEnabled" in slot_source
+    assert "const templateSlots = createDefaultCircularTrackSlots" in slot_source
     assert "state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...normalized);" in slot_source
     assert "() => [adv.circular_track_slots_enabled, form.show_depth]" in app_setup_source
     assert "circularTrackSlotEditor.normalizeCircularTrackSlots();" in app_setup_source
     assert "circularTrackSlotEditor.ensureCircularTrackDepthSlot();" in app_setup_source
+    assert "resetCircularTrackSlotsToPreset: circularTrackSlotEditor.resetCircularTrackSlotsToPreset" in app_setup_source
+    assert "setCircularTrackSlotsEnabled: circularTrackSlotEditor.setCircularTrackSlotsEnabled" in app_setup_source
+    assert "moveCircularTrackSlotOutside: circularTrackSlotEditor.moveCircularTrackSlotOutside" in app_setup_source
+    assert "moveCircularTrackSlotInside: circularTrackSlotEditor.moveCircularTrackSlotInside" in app_setup_source
+    assert "canMoveCircularTrackSlotOutside: circularTrackSlotEditor.canMoveCircularTrackSlotOutside" in app_setup_source
+    assert "canMoveCircularTrackSlotInside: circularTrackSlotEditor.canMoveCircularTrackSlotInside" in app_setup_source
+
+
+def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    source_path = WEB_ROOT / "js" / "app" / "circular-track-slots.js"
+    module_path = tmp_path / "circular-track-slots.mjs"
+    module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+    check_path = tmp_path / "check-circular-track-slots.mjs"
+    check_path.write_text(
+        f"""
+        import {{ createCircularTrackSlotEditor }} from {module_path.as_uri()!r};
+
+        const state = {{
+          adv: {{
+            nt: 'GC',
+            circular_track_slots: [
+              {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'outside', params: {{ nt: 'GC' }} }},
+              {{ id: 'features', renderer: 'features', side: 'inside', params: {{ lane_direction: 'inside' }} }},
+              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ label_side: 'inside', tick_side: 'inside' }} }},
+              {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'inside', params: {{ nt: 'GC' }} }}
+            ]
+          }},
+          form: {{
+            track_type: 'tuckin',
+            show_depth: false,
+            suppress_gc: false,
+            suppress_skew: false
+          }}
+        }};
+
+        const editor = createCircularTrackSlotEditor({{ state }});
+        if (editor.canMoveCircularTrackSlot(1, -1)) {{
+          throw new Error('Feature up arrow should not cross Axis');
+        }}
+
+        editor.moveCircularTrackSlot(1, 0);
+        if (state.adv.circular_track_slots[0].id !== 'gc_content') {{
+          throw new Error('Arrow move crossed Axis unexpectedly');
+        }}
+
+        editor.moveCircularTrackSlotOutside(1);
+        const ids = state.adv.circular_track_slots.map((slot) => slot.id).join(',');
+        const sides = Object.fromEntries(state.adv.circular_track_slots.map((slot) => [slot.id, slot.side]));
+        if (ids !== 'gc_content,features,ticks,gc_skew') {{
+          throw new Error(`Unexpected slot order after Move outside: ${{ids}}`);
+        }}
+        if (sides.gc_content !== 'outside' || sides.features !== 'outside' || sides.ticks !== 'inside' || sides.gc_skew !== 'inside') {{
+          throw new Error(`Unexpected sides after Move outside: ${{JSON.stringify(sides)}}`);
+        }}
+        if (state.adv.circular_track_slots[1].params.lane_direction !== 'outside') {{
+          throw new Error('Feature lane_direction was not updated to outside');
+        }}
+
+        const tickState = {{
+          adv: {{
+            nt: 'GC',
+            circular_track_slots: [
+              {{ id: 'features', renderer: 'features', side: 'inside', params: {{ lane_direction: 'inside' }} }},
+              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ label_side: 'inside', tick_side: 'inside' }} }},
+              {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', params: {{ nt: 'GC' }} }},
+              {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'inside', params: {{ nt: 'GC' }} }}
+            ]
+          }},
+          form: {{
+            track_type: 'tuckin',
+            show_depth: false,
+            suppress_gc: false,
+            suppress_skew: false
+          }}
+        }};
+
+        const tickEditor = createCircularTrackSlotEditor({{ state: tickState }});
+        tickEditor.moveCircularTrackSlotOutside(1);
+        if (tickState.adv.circular_track_slots[0].id !== 'ticks' || tickState.adv.circular_track_slots[0].side !== 'outside') {{
+          throw new Error(`Tick did not move outside: ${{JSON.stringify(tickState.adv.circular_track_slots)}}`);
+        }}
+        tickEditor.moveCircularTrackSlotInside(0);
+        const tickIds = tickState.adv.circular_track_slots.map((slot) => slot.id).join(',');
+        const tickSlot = tickState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
+        if (tickIds !== 'features,ticks,gc_content,gc_skew' || tickSlot?.side !== 'inside') {{
+          throw new Error(`Tick did not return inside: ${{tickIds}} ${{JSON.stringify(tickSlot)}}`);
+        }}
+        if (tickSlot.params.label_side !== 'inside' || tickSlot.params.tick_side !== 'inside') {{
+          throw new Error(`Tick params did not resync inside: ${{JSON.stringify(tickSlot.params)}}`);
+        }}
+
+        const outsideFeatureState = {{
+          adv: {{
+            nt: 'GC',
+            circular_track_slots: [
+              {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'outside', params: {{ nt: 'GC' }} }},
+              {{ id: 'features', renderer: 'features', side: 'outside', params: {{ lane_direction: 'outside' }} }},
+              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ label_side: 'inside', tick_side: 'inside' }} }},
+              {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', params: {{ nt: 'GC' }} }}
+            ]
+          }},
+          form: {{
+            track_type: 'tuckin',
+            show_depth: false,
+            suppress_gc: false,
+            suppress_skew: false
+          }}
+        }};
+
+        const outsideFeatureEditor = createCircularTrackSlotEditor({{ state: outsideFeatureState }});
+        outsideFeatureEditor.moveCircularTrackSlotOutside(2);
+        const outsideFeatureIds = outsideFeatureState.adv.circular_track_slots.map((slot) => slot.id).join(',');
+        const outsideFeatureTick = outsideFeatureState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
+        if (outsideFeatureIds !== 'gc_skew,ticks,features,gc_content' || outsideFeatureTick?.side !== 'outside') {{
+          throw new Error(`Tick did not move outside with outside Feature: ${{outsideFeatureIds}} ${{JSON.stringify(outsideFeatureTick)}}`);
+        }}
+        """,
+        encoding="utf-8",
+    )
+
+    subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
 
 
 def test_web_config_rejects_obsolete_circular_track_slot_import_shapes() -> None:

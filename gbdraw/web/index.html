@@ -748,8 +748,8 @@
                             </template>
 
                             <template v-else>
-                                <div>
-                                    <label class="input-label text-[10px] mb-1">Track Preset <help-tip text="Applies a preset circular track arrangement. Custom Track Slots inherit this preset unless a slot field is edited."></help-tip></label>
+                                <div v-if="!adv.circular_track_slots_enabled">
+                                    <label class="input-label text-[10px] mb-1">Track Preset <help-tip text="Applies the live circular track arrangement used while Custom Track Slots is off. Custom Track Slots inherit this preset when enabled."></help-tip></label>
                                     <select v-model="form.track_type" class="form-input text-xs py-1">
                                         <option value="tuckin">Tuckin</option>
                                         <option value="middle">Middle</option>
@@ -786,15 +786,15 @@
                                 <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                     <div class="flex items-center justify-between gap-2">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                            <input type="checkbox" v-model="adv.circular_track_slots_enabled" class="form-checkbox">
-                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Reorder circular tracks from outer to inner. The fixed Axis row shows the boundary: rows above it render outside the axis, rows below it render inside, and Middle features can sit on the axis."></help-tip></span>
+                                            <input type="checkbox" :checked="adv.circular_track_slots_enabled" @change="setCircularTrackSlotsEnabled($event.target.checked)" class="form-checkbox">
+                                            <span class="inline-flex items-center gap-1">Custom Track Slots <help-tip text="Edit an explicit circular stack. Rows above Axis render outside, rows below Axis render inside, arrows reorder within the current side, and Move outside/inside crosses the Axis explicitly."></help-tip></span>
                                         </label>
                                         <button
                                             type="button"
                                             class="btn btn-secondary text-[10px] py-0.5 px-2"
                                             @click="resetCircularTrackSlotsFromSimpleControls"
                                             :disabled="!adv.circular_track_slots_enabled"
-                                            title="Reset from current simple controls"
+                                            title="Replace the current custom stack from current simple controls"
                                         >
                                             <i class="ph ph-arrow-counter-clockwise"></i>
                                             Reset
@@ -802,9 +802,9 @@
                                     </div>
                                     <div v-if="adv.circular_track_slots_enabled" class="space-y-1.5">
                                         <div class="grid grid-cols-3 gap-1">
-                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="applyCircularTrackPreset('tuckin')">Apply Tuckin</button>
-                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="applyCircularTrackPreset('middle')">Apply Middle</button>
-                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="applyCircularTrackPreset('spreadout')">Apply Spreadout</button>
+                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('tuckin')" title="Replace the current custom stack with the Tuckin template">Reset to Tuckin</button>
+                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('middle')" title="Replace the current custom stack with the Middle template">Reset to Middle</button>
+                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('spreadout')" title="Replace the current custom stack with the Spreadout template">Reset to Spreadout</button>
                                         </div>
                                         <div class="rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-[10px] leading-snug text-slate-600">
                                             <div class="flex items-center gap-1 font-semibold text-sky-800">
@@ -818,7 +818,7 @@
                                                 <div class="inline-flex min-w-0 items-center gap-1 font-semibold text-slate-600">
                                                     <i class="ph ph-stack"></i>
                                                     <span class="truncate">Radial track stack</span>
-                                                    <help-tip text="Rows above Axis are outside the circular axis; rows below Axis are inside it. Moving a row across the Axis updates the generated track placement."></help-tip>
+                                                    <help-tip text="Rows above Axis are outside the circular axis; rows below Axis are inside it. Arrow buttons reorder within the current side only. Use Move outside or Move inside to cross the Axis."></help-tip>
                                                 </div>
                                                 <span class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-500">{{ circularTrackSlots().length }}</span>
                                             </div>
@@ -845,23 +845,21 @@
                                                     <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-1">
                                                         <input type="checkbox" v-model="entry.slot.enabled" class="form-checkbox" :title="entry.slot.enabled ? 'Enabled' : 'Disabled'">
                                                         <input v-model.trim="entry.slot.id" class="form-input px-1 py-0.5 text-[10px]" placeholder="slot_id">
-                                                        <div class="min-w-0 flex items-center gap-1">
-                                                            <select
-                                                                :value="entry.slot.renderer"
-                                                                @change="updateCircularTrackSlotRenderer(entry.slot, $event.target.value)"
-                                                                class="form-input px-1 py-0.5 text-[10px] min-w-0 flex-1"
-                                                            >
-                                                                <option v-for="renderer in circularTrackRenderers" :key="`slot-renderer-${renderer}`" :value="renderer">
-                                                                    {{ circularTrackRendererLabel(renderer) }}
-                                                                </option>
-                                                            </select>
-                                                            <span
-                                                                class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-600"
-                                                            >{{ circularTrackPlacementLabel(entry.slot.side) }}</span>
-                                                        </div>
+                                                        <select
+                                                            :value="entry.slot.renderer"
+                                                            @change="updateCircularTrackSlotRenderer(entry.slot, $event.target.value)"
+                                                            class="form-input px-1 py-0.5 text-[10px] min-w-0"
+                                                        >
+                                                            <option v-for="renderer in circularTrackRenderers" :key="`slot-renderer-${renderer}`" :value="renderer">
+                                                                {{ circularTrackRendererLabel(renderer) }}
+                                                            </option>
+                                                        </select>
                                                         <div class="flex items-center gap-0.5">
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index - 1)" :disabled="!canMoveCircularTrackSlot(entry.index, -1)" title="Move outward"><i class="ph ph-arrow-up"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index + 1)" :disabled="!canMoveCircularTrackSlot(entry.index, 1)" title="Move inward"><i class="ph ph-arrow-down"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index)" :disabled="!canMoveCircularTrackSlotOutside(entry.index)" title="Move outside Axis"><i class="ph ph-arrow-line-up"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotInside(entry.index)" :disabled="!canMoveCircularTrackSlotInside(entry.index)" title="Move inside Axis"><i class="ph ph-arrow-line-down"></i></button>
+                                                            <button v-if="entry.slot.renderer === 'features'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index)" :disabled="!canMoveCircularTrackSlotToAxis(entry.index)" title="Move feature on Axis"><i class="ph ph-record"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index)" title="Duplicate"><i class="ph ph-copy"></i></button>
                                                             <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index)" title="Remove"><i class="ph ph-trash"></i></button>
                                                         </div>

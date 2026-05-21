@@ -26,11 +26,6 @@ const DEFAULT_SLOT_IDS = {
 };
 
 const NUMERIC_RENDERERS = new Set(['dinucleotide_content', 'dinucleotide_skew', 'depth']);
-const PLACEMENT_LABELS = {
-  inside: 'Inner stack',
-  outside: 'Outer stack',
-  overlay: 'Axis anchored'
-};
 const STACK_ENTRY_AXIS = 'axis';
 const STACK_ENTRY_SLOT = 'slot';
 const PRESET_LABELS = {
@@ -258,6 +253,14 @@ const syncSlotPlacementFromSide = (slot, side) => {
   } else if (slot.renderer === 'ticks') {
     syncTickParamsForPlacement(slot, placement);
   }
+};
+
+const effectiveSlotPlacement = (slot, preset = 'tuckin') => {
+  if (!slot) return 'inside';
+  if (slot.renderer === 'features') {
+    return sideForLaneDirection(featureLaneForSlot(slot, preset));
+  }
+  return normalizePlacement(slot.side, 'inside');
 };
 
 const axisIndexForSlots = (slots, preset = 'tuckin') => {
@@ -583,8 +586,14 @@ export const hasEnabledCircularTrackRenderer = (slots, renderer) =>
   normalizeCircularTrackSlots(slots).some((slot) => slot.enabled && slot.renderer === renderer);
 
 export const createCircularTrackSlotEditor = ({ state }) => {
+  const normalizedSlotsForCurrentState = () => applyCircularTrackOrderPlacements(
+    state.adv.circular_track_slots,
+    state.adv.nt,
+    state.form.track_type
+  );
+
   const normalizeSlotsInPlace = () => {
-    const normalized = applyCircularTrackOrderPlacements(state.adv.circular_track_slots, state.adv.nt, state.form.track_type);
+    const normalized = normalizedSlotsForCurrentState();
     state.adv.circular_track_slots.splice(
       0,
       state.adv.circular_track_slots.length,
@@ -639,28 +648,27 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     normalizeSlotsInPlace();
   };
 
-  const applyCircularTrackPreset = (preset) => {
+  const resetCircularTrackSlotsToPreset = (preset) => {
     const normalizedPreset = normalizeCircularTrackPreset(preset);
-    const currentPreset = normalizeCircularTrackPreset(state.form.track_type);
-    const hasCurrentSlots = Array.isArray(state.adv.circular_track_slots) && state.adv.circular_track_slots.length > 0;
-    const preserved = hasCurrentSlots
-      ? normalizeCircularTrackSlots(state.adv.circular_track_slots, state.adv.nt, currentPreset)
-      : createDefaultCircularTrackSlots({
-        nt: state.adv.nt,
-        showDepth: Boolean(state.form.show_depth),
-        showGc: !state.form.suppress_gc,
-        showSkew: !state.form.suppress_skew,
-        preset: normalizedPreset
-      });
-    preserved.forEach((slot) => {
-      if (slot?.renderer !== 'features') return;
-      slot.params = cloneParams(slot.params);
-      slot.params.lane_direction = laneDirectionForPreset(normalizedPreset);
-      slot.side = sideForLaneDirection(slot.params.lane_direction);
+    const templateSlots = createDefaultCircularTrackSlots({
+      nt: state.adv.nt,
+      showDepth: Boolean(state.form.show_depth),
+      showGc: !state.form.suppress_gc,
+      showSkew: !state.form.suppress_skew,
+      preset: normalizedPreset
     });
-    const normalized = applyCircularTrackOrderPlacements(preserved, state.adv.nt, normalizedPreset);
+    const normalized = applyCircularTrackOrderPlacements(templateSlots, state.adv.nt, normalizedPreset);
     state.form.track_type = normalizedPreset;
     state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...normalized);
+  };
+
+  const applyCircularTrackPreset = (preset) => resetCircularTrackSlotsToPreset(preset);
+
+  const setCircularTrackSlotsEnabled = (enabled) => {
+    state.adv.circular_track_slots_enabled = Boolean(enabled);
+    if (state.adv.circular_track_slots_enabled) {
+      resetCircularTrackSlotsFromSimpleControls();
+    }
   };
 
   const addCircularTrackSlot = (renderer, placement = null) => {
@@ -694,7 +702,30 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     normalizeSlotsInPlace();
   };
 
+  const wouldCircularTrackSlotMoveCrossAxis = (fromIndex, toIndex) => {
+    const from = Number(fromIndex);
+    const to = Number(toIndex);
+    const normalized = normalizedSlotsForCurrentState();
+    if (
+      !Number.isInteger(from) ||
+      !Number.isInteger(to) ||
+      from < 0 ||
+      to < 0 ||
+      from >= normalized.length ||
+      to >= normalized.length ||
+      from === to
+    ) {
+      return true;
+    }
+
+    const movedPlacement = effectiveSlotPlacement(normalized[from], state.form.track_type);
+    const targetPlacement = effectiveSlotPlacement(normalized[to], state.form.track_type);
+    if (movedPlacement === 'overlay') return true;
+    return movedPlacement !== targetPlacement;
+  };
+
   const moveCircularTrackSlot = (fromIndex, toIndex) => {
+    if (wouldCircularTrackSlotMoveCrossAxis(fromIndex, toIndex)) return;
     normalizeSlotsInPlace();
     const from = Number(fromIndex);
     const to = Number(toIndex);
@@ -719,7 +750,81 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     const step = Number(direction);
     if (!Number.isInteger(idx) || !Number.isInteger(step) || step === 0) return false;
     const target = idx + Math.sign(step);
-    return idx >= 0 && target >= 0 && idx < state.adv.circular_track_slots.length && target < state.adv.circular_track_slots.length;
+    return !wouldCircularTrackSlotMoveCrossAxis(idx, target);
+  };
+
+  const canMoveCircularTrackSlotOutside = (index) => {
+    const idx = Number(index);
+    const normalized = normalizedSlotsForCurrentState();
+    if (!Number.isInteger(idx) || idx < 0 || idx >= normalized.length) return false;
+    return effectiveSlotPlacement(normalized[idx], state.form.track_type) !== 'outside';
+  };
+
+  const canMoveCircularTrackSlotInside = (index) => {
+    const idx = Number(index);
+    const normalized = normalizedSlotsForCurrentState();
+    if (!Number.isInteger(idx) || idx < 0 || idx >= normalized.length) return false;
+    return effectiveSlotPlacement(normalized[idx], state.form.track_type) !== 'inside';
+  };
+
+  const canMoveCircularTrackSlotToAxis = (index) => {
+    const idx = Number(index);
+    const normalized = normalizedSlotsForCurrentState();
+    if (!Number.isInteger(idx) || idx < 0 || idx >= normalized.length) return false;
+    const slot = normalized[idx];
+    return slot?.renderer === 'features' && effectiveSlotPlacement(slot, state.form.track_type) !== 'overlay';
+  };
+
+  const insertIndexNearestAxisForPlacement = (slots, placement, movedSlot) => {
+    const targetPlacement = normalizePlacement(placement);
+    const firstNonOutside = slots.findIndex((slot) => effectiveSlotPlacement(slot, state.form.track_type) !== 'outside');
+    const axisBoundary = firstNonOutside < 0 ? slots.length : firstNonOutside;
+    if (targetPlacement === 'outside') {
+      const featureIndex = slots.findIndex((slot) => slot?.enabled !== false && slot?.renderer === 'features');
+      if (
+        movedSlot?.renderer !== 'features' &&
+        featureIndex >= 0 &&
+        effectiveSlotPlacement(slots[featureIndex], state.form.track_type) === 'outside'
+      ) {
+        return featureIndex;
+      }
+      return axisBoundary;
+    }
+
+    if (movedSlot?.renderer === 'features') return axisBoundary;
+
+    const featureIndex = slots.findIndex((slot) => slot?.enabled !== false && slot?.renderer === 'features');
+    if (featureIndex >= 0) {
+      return featureIndex + 1;
+    }
+    return axisBoundary;
+  };
+
+  const moveCircularTrackSlotToPlacement = (index, placement) => {
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= state.adv.circular_track_slots.length) return;
+    normalizeSlotsInPlace();
+    const [slot] = state.adv.circular_track_slots.splice(idx, 1);
+    if (!slot) return;
+    syncSlotPlacementFromSide(slot, placement);
+    const insertIndex = insertIndexNearestAxisForPlacement(state.adv.circular_track_slots, placement, slot);
+    state.adv.circular_track_slots.splice(insertIndex, 0, slot);
+    normalizeSlotsInPlace();
+  };
+
+  const moveCircularTrackSlotOutside = (index) => {
+    if (!canMoveCircularTrackSlotOutside(index)) return;
+    moveCircularTrackSlotToPlacement(index, 'outside');
+  };
+
+  const moveCircularTrackSlotInside = (index) => {
+    if (!canMoveCircularTrackSlotInside(index)) return;
+    moveCircularTrackSlotToPlacement(index, 'inside');
+  };
+
+  const moveCircularTrackSlotToAxis = (index) => {
+    if (!canMoveCircularTrackSlotToAxis(index)) return;
+    moveCircularTrackSlotToPlacement(index, 'overlay');
   };
 
   const updateCircularTrackSlotRenderer = (slot, renderer) => {
@@ -778,11 +883,6 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const circularTrackRendererLabel = (renderer) => RENDERER_LABELS[renderer] || renderer;
-  const circularTrackPlacementLabel = (placement) => (
-    normalizeOptionalPlacement(placement) === null
-      ? 'Auto stack'
-      : (PLACEMENT_LABELS[normalizePlacement(placement)] || PLACEMENT_LABELS.inside)
-  );
   const supportsCircularTrackSlotPlacement = (renderer) => SUPPORTED_RENDERERS.includes(renderer);
 
   const circularTrackSlots = () => (
@@ -863,16 +963,23 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     resetCircularTrackSlotsFromSimpleControls,
     ensureCircularTrackDepthSlot,
+    resetCircularTrackSlotsToPreset,
     applyCircularTrackPreset,
+    setCircularTrackSlotsEnabled,
     addCircularTrackSlot,
     duplicateCircularTrackSlot,
     removeCircularTrackSlot,
     moveCircularTrackSlot,
     canMoveCircularTrackSlot,
+    moveCircularTrackSlotOutside,
+    moveCircularTrackSlotInside,
+    moveCircularTrackSlotToAxis,
+    canMoveCircularTrackSlotOutside,
+    canMoveCircularTrackSlotInside,
+    canMoveCircularTrackSlotToAxis,
     updateCircularTrackSlotRenderer,
     updateCircularTrackSlotPlacement,
     updateCircularTrackFeatureLane,
-    circularTrackPlacementLabel,
     supportsCircularTrackSlotPlacement,
     circularTrackSlots,
     circularTrackStackEntries,
