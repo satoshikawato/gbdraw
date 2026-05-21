@@ -397,7 +397,7 @@ def test_custom_slots_ignore_track_type_for_explicit_geometry(
             side="outside",
             radius=ScalarSpec(1.05, "factor"),
             width=ScalarSpec(8.0, "px"),
-            params={"tick_side": "outside", "label_side": "none"},
+            params={"tick_label_layout": "tick_only"},
         ),
         CircularTrackSlot(
             id="gc_content",
@@ -598,8 +598,7 @@ def test_normalize_circular_track_slots_allows_tick_overlay_defaults_and_axis_in
 
     assert direct.side == "overlay"
     assert direct.reserve is True
-    assert direct.params["label_side"] == "outside"
-    assert direct.params["tick_side"] == "inside"
+    assert direct.params["tick_label_layout"] == "label_out_tick_in"
 
     with_axis = normalize_circular_track_slots_with_axis(
         [
@@ -607,7 +606,7 @@ def test_normalize_circular_track_slots_allows_tick_overlay_defaults_and_axis_in
                 id="ticks",
                 renderer="ticks",
                 side="overlay",
-                params={"label_side": "inside", "tick_side": "outside"},
+                params={"tick_label_layout": "label_in_tick_out"},
             ),
             CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
         ],
@@ -616,8 +615,7 @@ def test_normalize_circular_track_slots_allows_tick_overlay_defaults_and_axis_in
 
     assert with_axis.side == "overlay"
     assert with_axis.reserve is True
-    assert with_axis.params["label_side"] == "inside"
-    assert with_axis.params["tick_side"] == "outside"
+    assert with_axis.params["tick_label_layout"] == "label_in_tick_out"
 
 
 def test_tick_overlay_layout_places_anchor_on_axis_and_supports_inverted_sides(
@@ -631,7 +629,7 @@ def test_tick_overlay_layout_places_anchor_on_axis_and_supports_inverted_sides(
                 id="ticks",
                 renderer="ticks",
                 side="overlay",
-                params={"label_side": "inside", "tick_side": "outside"},
+                params={"tick_label_layout": "label_in_tick_out"},
             ),
             CircularTrackSlot(
                 id="features",
@@ -1149,7 +1147,7 @@ def test_reordered_builtin_numeric_slots_follow_slot_order(
             CircularTrackSlot(
                 id="ticks",
                 renderer="ticks",
-                params={"label_side": "outside", "tick_side": "inside"},
+                params={"tick_label_layout": "label_out_tick_in"},
             ),
             CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
             CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
@@ -1256,7 +1254,7 @@ def test_edl933_ticks_before_features_use_measured_tick_footprint(
             CircularTrackSlot(
                 id="ticks",
                 renderer="ticks",
-                params={"label_side": "inside", "tick_side": "inside"},
+                params={"tick_label_layout": "tick_only"},
             ),
             CircularTrackSlot(id="features", renderer="features"),
             CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
@@ -1804,7 +1802,7 @@ def test_api_circular_track_slots_distribute_extra_dinucleotide_slots_evenly(
             CircularTrackSlot(
                 id="ticks",
                 renderer="ticks",
-                params={"label_side": "outside", "tick_side": "inside"},
+                params={"tick_label_layout": "label_out_tick_in"},
             ),
             "gc_content:dinucleotide_content@nt=GC,side=outside",
             "gc_skew:dinucleotide_skew@nt=GC,side=outside",
@@ -1914,7 +1912,7 @@ def test_api_explicit_inside_duplicate_dinucleotide_skew_places_when_space_is_re
                 id="ticks",
                 renderer="ticks",
                 side="outside",
-                params={"label_side": "outside", "tick_side": "outside"},
+                params={"tick_label_layout": "tick_only"},
             ),
             CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
             CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
@@ -2065,7 +2063,7 @@ def test_slot_mode_tick_radius_does_not_move_axis(monkeypatch: pytest.MonkeyPatc
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
-        circular_track_slots=["ticks:ticks@r=250px,w=12px,label_side=none,tick_side=inside"],
+        circular_track_slots=["ticks:ticks@r=250px,w=12px,tick_label_layout=tick_only"],
     )
 
     assert captured["tick_radius"] == pytest.approx(250.0)

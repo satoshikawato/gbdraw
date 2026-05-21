@@ -890,19 +890,12 @@
                                                             <option value="outside">Feature outside axis</option>
                                                         </select>
                                                     </div>
-                                                    <div v-if="entry.slot.renderer === 'ticks'" class="grid grid-cols-2 gap-1 items-center">
-                                                        <select v-model="entry.slot.params.label_side" class="form-input px-1 py-0.5 text-[10px]">
-                                                            <option value="">Follow row position</option>
-                                                            <option value="outside">Labels outside</option>
-                                                            <option value="inside">Labels inside</option>
-                                                            <option value="none">No labels</option>
-                                                        </select>
-                                                        <select v-model="entry.slot.params.tick_side" class="form-input px-1 py-0.5 text-[10px]">
-                                                            <option value="">Follow row position</option>
-                                                            <option value="inside">Ticks inside</option>
-                                                            <option value="outside">Ticks outside</option>
-                                                            <option value="both">Ticks both</option>
-                                                            <option value="none">No ticks</option>
+                                                    <div v-if="entry.slot.renderer === 'ticks'" class="grid grid-cols-1 gap-1 items-center">
+                                                        <select v-model="entry.slot.params.tick_label_layout" class="form-input px-1 py-0.5 text-[10px]">
+                                                            <option value="label_out_tick_in">Labels outside / ticks inside</option>
+                                                            <option value="label_in_tick_out">Labels inside / ticks outside</option>
+                                                            <option value="tick_only">Ticks only</option>
+                                                            <option value="label_only">Labels only</option>
                                                         </select>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">

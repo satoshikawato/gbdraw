@@ -81,6 +81,13 @@ _GENERIC_LAYOUT_KEYS = {
     "visible",
 }
 _TICK_SIDE_VALUES = {"inside", "outside", "both", "none"}
+_TICK_LABEL_LAYOUT_VALUES = {
+    "label_out_tick_in",
+    "label_in_tick_out",
+    "tick_only",
+    "label_only",
+}
+DEFAULT_TICK_LABEL_LAYOUT = "label_out_tick_in"
 _FEATURE_LANE_VALUES = {"inside", "outside", "split"}
 _SIDE_VALUES = {"inside", "outside", "overlay"}
 
@@ -133,6 +140,43 @@ def _normalize_tick_side(raw: object, *, field_name: str) -> str:
     if side not in _TICK_SIDE_VALUES:
         raise ValueError(f"{field_name} must be one of inside, outside, both, none")
     return side
+
+
+def normalize_tick_label_layout(raw: object | None) -> str:
+    layout = str(raw or DEFAULT_TICK_LABEL_LAYOUT).strip().lower()
+    if layout not in _TICK_LABEL_LAYOUT_VALUES:
+        raise ValueError(
+            "tick_label_layout must be one of "
+            "label_out_tick_in, label_in_tick_out, tick_only, label_only"
+        )
+    return layout
+
+
+def tick_sides_for_tick_label_layout(layout: object | None, side: object | None = None) -> tuple[str, str]:
+    normalized_layout = normalize_tick_label_layout(layout)
+    normalized_side = _normalize_side_value(side) if side is not None else "inside"
+    single_side = "outside" if normalized_side == "outside" else "inside"
+    if normalized_layout == "label_out_tick_in":
+        return "outside", "inside"
+    if normalized_layout == "label_in_tick_out":
+        return "inside", "outside"
+    if normalized_layout == "tick_only":
+        return "none", single_side
+    return single_side, "none"
+
+
+def tick_label_layout_from_sides(label_side: object, tick_side: object) -> str:
+    label = _normalize_tick_side(label_side, field_name="label_side")
+    tick = _normalize_tick_side(tick_side, field_name="tick_side")
+    if label == "outside" and tick == "inside":
+        return "label_out_tick_in"
+    if label == "inside" and tick == "outside":
+        return "label_in_tick_out"
+    if label == "none" and tick != "none":
+        return "tick_only"
+    if label != "none" and tick == "none":
+        return "label_only"
+    return DEFAULT_TICK_LABEL_LAYOUT
 
 
 def _normalize_feature_lane(raw: object) -> str:
@@ -382,33 +426,14 @@ def circular_track_slots_with_axis_side(
     ]
 
 
-def _default_tick_label_side_for_slot_side(side: str) -> str:
-    if side == "overlay":
-        return "outside"
-    if side == "outside":
-        return "outside"
-    return "inside"
-
-
-def _default_tick_mark_side_for_slot_side(side: str) -> str:
-    if side == "overlay":
-        return "inside"
-    if side == "outside":
-        return "outside"
-    return "inside"
-
-
 def _normalized_tick_params(params: dict[str, Any], side: str) -> dict[str, Any]:
     if "axis" in {str(key).strip().lower() for key in params}:
         raise ValueError("ticks slots no longer accept 'axis'; the circular axis is fixed and not a slot")
-    if "label_side" in params:
-        params["label_side"] = _normalize_tick_side(params["label_side"], field_name="label_side")
-    else:
-        params["label_side"] = _default_tick_label_side_for_slot_side(side)
-    if "tick_side" in params:
-        params["tick_side"] = _normalize_tick_side(params["tick_side"], field_name="tick_side")
-    else:
-        params["tick_side"] = _default_tick_mark_side_for_slot_side(side)
+    lowered_keys = {str(key).strip().lower() for key in params}
+    if "label_side" in lowered_keys or "tick_side" in lowered_keys:
+        raise ValueError("ticks slots use tick_label_layout; label_side and tick_side are no longer supported")
+    del side
+    params["tick_label_layout"] = normalize_tick_label_layout(params.get("tick_label_layout"))
     return params
 
 

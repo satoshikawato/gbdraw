@@ -19,6 +19,7 @@ from ...tracks.circular import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
     NormalizedCircularTrackSlot,
     normalize_circular_track_slots,
+    tick_sides_for_tick_label_layout,
 )
 from ...svg.circular_ticks import (  # type: ignore[reportMissingImports]
     get_circular_tick_label_radius_bounds,
@@ -531,8 +532,11 @@ def _tick_layout_from_params(
 ) -> CircularTickLayout:
     base_radius = float(canvas_config.radius)
     tick_preset = normalize_circular_track_preset(str(params.get("preset", params.get("track_preset", "tuckin"))))
-    label_side = str(params.get("label_side", "inside")).strip().lower()
-    tick_side = str(params.get("tick_side", "inside")).strip().lower()
+    tick_label_layout = str(params.get("tick_label_layout", "label_out_tick_in")).strip().lower()
+    label_side, tick_side = tick_sides_for_tick_label_layout(
+        tick_label_layout,
+        side=params.get("_slot_side"),
+    )
     tick_length_px = float(width_px) if explicit_width and width_px > 0 else None
 
     if tick_side in {"none", ""}:
@@ -754,12 +758,14 @@ def _measure_radial_slot(
         )
 
     if renderer == "ticks":
+        tick_params = dict(intent.params)
+        tick_params["_slot_side"] = intent.side
         tick_layout = _tick_layout_from_params(
             axis_radius_px=float(axis_radius_px),
             total_length=int(total_length),
             canvas_config=canvas_config,
             cfg=cfg,
-            params=intent.params,
+            params=tick_params,
             anchor_radius_px=anchor_radius_px,
             width_px=resolved_width,
             explicit_width=bool(intent.explicit_width),

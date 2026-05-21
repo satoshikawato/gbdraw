@@ -45,6 +45,7 @@ from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
 )
+from ...tracks.circular import tick_sides_for_tick_label_layout  # type: ignore[reportMissingImports]
 
 from .builders import (
     add_axis_group_on_canvas,
@@ -1233,12 +1234,18 @@ def _draw_resolved_circular_slot(
         label_side = (
             str(tick_layout.label_side)
             if tick_layout is not None
-            else str(resolved_slot.params.get("label_side", "inside"))
+            else tick_sides_for_tick_label_layout(
+                resolved_slot.params.get("tick_label_layout"),
+                side=resolved_slot.side,
+            )[0]
         ).strip().lower()
         tick_side = (
             str(tick_layout.tick_side)
             if tick_layout is not None
-            else str(resolved_slot.params.get("tick_side", "inside"))
+            else tick_sides_for_tick_label_layout(
+                resolved_slot.params.get("tick_label_layout"),
+                side=resolved_slot.side,
+            )[1]
         ).strip().lower()
         if label_side != "none" or tick_side != "none":
             tick_group_kwargs: dict[str, Any] = {

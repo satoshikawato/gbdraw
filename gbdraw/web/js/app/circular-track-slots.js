@@ -52,6 +52,13 @@ const PREVIEW_TRACK_RATIO_FACTORS = {
   short: [0.50, 1.0, 1.0],
   long: [0.25, 1.0, 1.0]
 };
+const TICK_LABEL_LAYOUTS = [
+  'label_out_tick_in',
+  'label_in_tick_out',
+  'tick_only',
+  'label_only'
+];
+const DEFAULT_TICK_LABEL_LAYOUT = 'label_out_tick_in';
 
 export const CIRCULAR_TRACK_PRESETS = ['tuckin', 'middle', 'spreadout'];
 
@@ -109,18 +116,19 @@ const normalizeOptionalPlacement = (value) => {
   return normalizePlacement(value);
 };
 
-const normalizeTickSide = (value, fallback = 'inside') => {
+const normalizeTickLabelLayout = (value, fallback = DEFAULT_TICK_LABEL_LAYOUT) => {
   const text = String(value || fallback).trim().toLowerCase();
-  return ['inside', 'outside', 'both', 'none'].includes(text) ? text : fallback;
+  return TICK_LABEL_LAYOUTS.includes(text) ? text : fallback;
 };
 
-const hasAxisTickSidePair = (labelSide, tickSide) => {
-  const label = normalizeTickSide(labelSide);
-  const tick = normalizeTickSide(tickSide);
-  return (
-    (label === 'outside' && tick === 'inside') ||
-    (label === 'inside' && tick === 'outside')
-  );
+const tickLabelLayoutFromSides = (labelSide, tickSide, fallback = DEFAULT_TICK_LABEL_LAYOUT) => {
+  const label = String(labelSide || '').trim().toLowerCase();
+  const tick = String(tickSide || '').trim().toLowerCase();
+  if (label === 'outside' && tick === 'inside') return 'label_out_tick_in';
+  if (label === 'inside' && tick === 'outside') return 'label_in_tick_out';
+  if (label === 'none' && ['inside', 'outside', 'both'].includes(tick)) return 'tick_only';
+  if (['inside', 'outside'].includes(label) && tick === 'none') return 'label_only';
+  return fallback;
 };
 
 const formatPresetName = (preset) => PRESET_LABELS[normalizeCircularTrackPreset(preset)] || PRESET_LABELS.tuckin;
@@ -245,23 +253,11 @@ const syncFeaturePlacement = (slot, preset = 'tuckin') => {
 
 const syncTickParamsForPlacement = (slot, side) => {
   if (!slot || slot.renderer !== 'ticks') return;
-  const placement = normalizePlacement(side);
+  void side;
   slot.params = cloneParams(slot.params);
-  if (placement === 'overlay') {
-    if (!hasAxisTickSidePair(slot.params.label_side, slot.params.tick_side)) {
-      slot.params.label_side = 'outside';
-      slot.params.tick_side = 'inside';
-    }
-    return;
-  }
-  const labelSide = normalizeOptionalText(slot.params.label_side);
-  if (labelSide === null || ['inside', 'outside'].includes(labelSide)) {
-    slot.params.label_side = placement;
-  }
-  const tickSide = normalizeOptionalText(slot.params.tick_side);
-  if (tickSide === null || ['inside', 'outside'].includes(tickSide)) {
-    slot.params.tick_side = placement;
-  }
+  slot.params.tick_label_layout = normalizeTickLabelLayout(slot.params.tick_label_layout);
+  delete slot.params.label_side;
+  delete slot.params.tick_side;
 };
 
 const syncSlotPlacementFromSide = (slot, side) => {
@@ -415,8 +411,7 @@ const isLegacyDefaultWebSlotShape = (source, renderer, defaultNt = 'GC', preset 
     return (
       side === 'inside' &&
       paramsMatchExactly(params, {
-        label_side: 'outside',
-        tick_side: 'inside',
+        tick_label_layout: DEFAULT_TICK_LABEL_LAYOUT,
         preset: normalizedPreset
       })
     );
@@ -496,8 +491,7 @@ export const createCircularTrackSlotForRenderer = (renderer, existingSlots = [],
   const params = {};
   const side = normalizeSlotSide(placement);
   if (normalizedRenderer === 'ticks') {
-    params.label_side = 'outside';
-    params.tick_side = 'inside';
+    params.tick_label_layout = DEFAULT_TICK_LABEL_LAYOUT;
   } else if (normalizedRenderer === 'features' && side !== null) {
     params.lane_direction = laneDirectionForSide(side);
   }
@@ -549,16 +543,14 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
   }
   if (renderer === 'ticks') {
     delete params['axis'];
-    if (!normalizeOptionalText(params.label_side) || params.label_side === 'legacy') {
-      delete params.label_side;
-    } else {
-      params.label_side = normalizeTickSide(params.label_side);
-    }
-    if (!normalizeOptionalText(params.tick_side) || params.tick_side === 'legacy') {
-      delete params.tick_side;
-    } else {
-      params.tick_side = normalizeTickSide(params.tick_side);
-    }
+    const legacyLayout = (
+      normalizeOptionalText(params.tick_label_layout) === null
+        ? tickLabelLayoutFromSides(params.label_side, params.tick_side)
+        : params.tick_label_layout
+    );
+    params.tick_label_layout = normalizeTickLabelLayout(legacyLayout);
+    delete params.label_side;
+    delete params.tick_side;
     if (normalizeOptionalText(params.preset) === null) {
       delete params.preset;
     } else {
@@ -630,8 +622,7 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
   }
 
   if (normalized.renderer === 'ticks') {
-    appendOption(options, 'label_side', params.label_side);
-    appendOption(options, 'tick_side', params.tick_side);
+    appendOption(options, 'tick_label_layout', params.tick_label_layout);
     if (normalizeOptionalText(params.preset) !== null && normalizeCircularTrackPreset(params.preset) !== normalizedPreset) {
       appendOption(options, 'preset', params.preset);
     }
@@ -962,8 +953,12 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     slot.side = normalizeSlotSide(slot.side);
     if (renderer === 'ticks') {
       delete slot.params['axis'];
-      if (normalizeOptionalText(slot.params.label_side) === null) delete slot.params.label_side;
-      if (normalizeOptionalText(slot.params.tick_side) === null) delete slot.params.tick_side;
+      slot.params.tick_label_layout = normalizeTickLabelLayout(
+        slot.params.tick_label_layout ??
+          tickLabelLayoutFromSides(slot.params.label_side, slot.params.tick_side)
+      );
+      delete slot.params.label_side;
+      delete slot.params.tick_side;
       if (normalizeOptionalText(slot.params.preset) === null) delete slot.params.preset;
       else slot.params.preset = normalizeCircularTrackPreset(slot.params.preset);
     } else if (renderer === 'features') {
@@ -1085,8 +1080,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     if (slot.renderer === 'features' && normalizeOptionalText(slot.params?.lane_direction) === null) return true;
     if (slot.renderer === 'ticks') {
       return (
-        normalizeOptionalText(slot.params?.label_side) === null ||
-        normalizeOptionalText(slot.params?.tick_side) === null
+        normalizeOptionalText(slot.params?.tick_label_layout) === null
       );
     }
     return false;

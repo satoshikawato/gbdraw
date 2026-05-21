@@ -236,7 +236,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
             circular_track_slots: [
               {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'outside', params: {{ nt: 'GC' }} }},
               {{ id: 'features', renderer: 'features', side: 'inside', params: {{ lane_direction: 'inside' }} }},
-              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ label_side: 'inside', tick_side: 'inside' }} }},
+              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ tick_label_layout: 'tick_only' }} }},
               {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'inside', params: {{ nt: 'GC' }} }}
             ]
           }},
@@ -276,7 +276,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
             nt: 'GC',
             circular_track_slots: [
               {{ id: 'features', renderer: 'features', side: 'inside', params: {{ lane_direction: 'inside' }} }},
-              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ label_side: 'inside', tick_side: 'inside' }} }},
+              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ tick_label_layout: 'tick_only' }} }},
               {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', params: {{ nt: 'GC' }} }},
               {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'inside', params: {{ nt: 'GC' }} }}
             ]
@@ -300,8 +300,8 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         if (tickIds !== 'ticks,features,gc_content,gc_skew' || tickSlot?.side !== 'inside') {{
           throw new Error(`Tick did not return inside: ${{tickIds}} ${{JSON.stringify(tickSlot)}}`);
         }}
-        if (tickSlot.params.label_side !== 'inside' || tickSlot.params.tick_side !== 'inside') {{
-          throw new Error(`Tick params did not resync inside: ${{JSON.stringify(tickSlot.params)}}`);
+        if (tickSlot.params.tick_label_layout !== 'tick_only') {{
+          throw new Error(`Tick layout did not remain tick_only: ${{JSON.stringify(tickSlot.params)}}`);
         }}
 
         const outsideFeatureState = {{
@@ -310,7 +310,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
             circular_track_slots: [
               {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'outside', params: {{ nt: 'GC' }} }},
               {{ id: 'features', renderer: 'features', side: 'outside', params: {{ lane_direction: 'outside' }} }},
-              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ label_side: 'inside', tick_side: 'inside' }} }},
+              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ tick_label_layout: 'tick_only' }} }},
               {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', params: {{ nt: 'GC' }} }}
             ]
           }},
@@ -336,7 +336,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
             circular_track_slots_axis_index: 0,
             circular_track_slots: [
               {{ id: 'features', renderer: 'features', side: 'inside', params: {{ lane_direction: 'inside' }} }},
-              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ label_side: 'inside', tick_side: 'inside' }} }},
+              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ tick_label_layout: 'tick_only' }} }},
               {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', params: {{ nt: 'GC' }} }},
               {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'inside', params: {{ nt: 'GC' }} }}
             ]
@@ -367,7 +367,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
             nt: 'GC',
             circular_track_slots_axis_index: 0,
             circular_track_slots: [
-              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ label_side: 'inside', tick_side: 'inside' }} }},
+              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ tick_label_layout: 'tick_only' }} }},
               {{ id: 'features', renderer: 'features', side: 'inside', params: {{ lane_direction: 'inside' }} }},
               {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', params: {{ nt: 'GC' }} }},
               {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'inside', params: {{ nt: 'GC' }} }}
@@ -385,17 +385,16 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         tickAxisEditor.moveCircularTrackSlotToAxis(0);
         const axisTick = tickAxisState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
         const tickStackEntries = tickAxisEditor.circularTrackStackEntries();
-        if (axisTick?.side !== 'overlay' || axisTick?.params?.label_side !== 'outside' || axisTick?.params?.tick_side !== 'inside') {{
-          throw new Error(`Tick on-axis defaults were not applied: ${{JSON.stringify(axisTick)}}`);
+        if (axisTick?.side !== 'overlay' || axisTick?.params?.tick_label_layout !== 'tick_only') {{
+          throw new Error(`Tick on-axis layout was not preserved: ${{JSON.stringify(axisTick)}}`);
         }}
         if (tickStackEntries[0]?.kind !== 'slot' || tickStackEntries[0]?.onAxis !== true) {{
           throw new Error(`Tick on-axis selection was not embedded in Axis entry: ${{JSON.stringify(tickStackEntries)}}`);
         }}
-        axisTick.params.label_side = 'inside';
-        axisTick.params.tick_side = 'outside';
+        axisTick.params.tick_label_layout = 'label_in_tick_out';
         const tickAxisSpec = tickAxisEditor.circularTrackSlotCliSpec(axisTick);
-        if (!tickAxisSpec.includes('side=overlay') || !tickAxisSpec.includes('label_side=inside') || !tickAxisSpec.includes('tick_side=outside')) {{
-          throw new Error(`Tick on-axis CLI spec lost inverted sides: ${{tickAxisSpec}}`);
+        if (!tickAxisSpec.includes('side=overlay') || !tickAxisSpec.includes('tick_label_layout=label_in_tick_out')) {{
+          throw new Error(`Tick on-axis CLI spec lost inverted layout: ${{tickAxisSpec}}`);
         }}
 
         const axisSwapState = {{
@@ -404,7 +403,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
             circular_track_slots_axis_index: 0,
             circular_track_slots: [
               {{ id: 'features', renderer: 'features', side: 'overlay', params: {{ lane_direction: 'split' }} }},
-              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ label_side: 'inside', tick_side: 'inside' }} }},
+              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ tick_label_layout: 'tick_only' }} }},
               {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', params: {{ nt: 'GC' }} }},
               {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'inside', params: {{ nt: 'GC' }} }}
             ]
@@ -429,8 +428,8 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         if (axisSwapState.adv.circular_track_slots_axis_index !== 0 || swappedFeature?.side !== 'inside' || swappedFeature?.params?.lane_direction !== 'inside') {{
           throw new Error(`Previous on-axis feature was not demoted inside: ${{JSON.stringify(axisSwapState.adv)}}`);
         }}
-        if (swappedTick?.params?.label_side !== 'outside' || swappedTick?.params?.tick_side !== 'inside') {{
-          throw new Error(`New on-axis tick defaults were not applied after swap: ${{JSON.stringify(swappedTick)}}`);
+        if (swappedTick?.params?.tick_label_layout !== 'tick_only') {{
+          throw new Error(`New on-axis tick layout was not preserved after swap: ${{JSON.stringify(swappedTick)}}`);
         }}
 
         axisSwapEditor.updateCircularTrackFeatureLane(swappedFeature, 'split');
@@ -440,14 +439,14 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         if (laneSwapIds !== 'features,ticks,gc_content,gc_skew' || laneSwapOnAxis !== 'features') {{
           throw new Error(`Feature lane on-axis selection did not swap with existing tick: ${{laneSwapIds}} onAxis=${{laneSwapOnAxis}}`);
         }}
-        if (laneSwappedTick?.side !== 'inside' || laneSwappedTick?.params?.label_side !== 'inside' || laneSwappedTick?.params?.tick_side !== 'inside') {{
+        if (laneSwappedTick?.side !== 'inside' || laneSwappedTick?.params?.tick_label_layout !== 'tick_only') {{
           throw new Error(`Previous on-axis tick was not demoted inside: ${{JSON.stringify(laneSwappedTick)}}`);
         }}
 
         const duplicateAxisSlots = applyCircularTrackOrderPlacements(
           [
             {{ id: 'features', renderer: 'features', side: 'overlay', params: {{ lane_direction: 'split' }} }},
-            {{ id: 'ticks', renderer: 'ticks', side: 'overlay', params: {{ label_side: 'outside', tick_side: 'inside' }} }},
+            {{ id: 'ticks', renderer: 'ticks', side: 'overlay', params: {{ tick_label_layout: 'label_out_tick_in' }} }},
             {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', params: {{ nt: 'GC' }} }}
           ],
           'GC',

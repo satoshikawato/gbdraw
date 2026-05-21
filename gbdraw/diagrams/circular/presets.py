@@ -16,6 +16,7 @@ from ...tracks.circular import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
     NUMERIC_CIRCULAR_TRACK_RENDERERS,
     circular_track_slots_with_axis_side,
+    tick_label_layout_from_sides,
 )
 from ...tracks.scalars import ScalarSpec  # type: ignore[reportMissingImports]
 from ...svg.circular_ticks import (  # type: ignore[reportMissingImports]
@@ -218,8 +219,7 @@ def _tick_slot_for_preset(
         width=_scalar_px(tick_width_px),
         spacing=_scalar_px(max(1.0, 0.01 * base_radius)),
         params={
-            "tick_side": tick_side,
-            "label_side": label_side,
+            "tick_label_layout": tick_label_layout_from_sides(label_side, tick_side),
             "preset": preset,
         },
     )
@@ -409,12 +409,6 @@ def _overlay_slot_on_preset_lane(
         and ("lane_direction" in params or "lanes" in params)
     ):
         side = auto_stack_side or (geometry_slot.side if geometry_slot is not None else None)
-    if renderer == "ticks" and auto_stack_side is not None:
-        explicit_params = dict(slot.params or {})
-        if "tick_side" not in explicit_params:
-            params["tick_side"] = auto_stack_side
-        if "label_side" not in explicit_params:
-            params["label_side"] = auto_stack_side
     if (
         renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
         and slot.radius is None
