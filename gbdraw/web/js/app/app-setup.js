@@ -2,7 +2,10 @@ import { state, createLinearSeq, reconcileLinearSeqPairData } from '../state.js'
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import { exportConfig, exportSession, importConfig, importSession } from '../services/config.js';
-import { disposeDiagramGenerationWorker } from '../services/diagram-generation.js';
+import {
+  disposeDiagramGenerationWorker,
+  preinitializeDiagramGenerationWorker
+} from '../services/diagram-generation.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { createSvgStyles } from './svg-styles.js';
@@ -20,6 +23,9 @@ const { onMounted, onUnmounted, watch, nextTick, computed, ref } = window.Vue;
 export const createAppSetup = () => {
   const {
     pyodideReady,
+    diagramGenerationWorkerReady,
+    diagramGenerationWorkerStatus,
+    diagramGenerationWorkerError,
     processing,
     processingStatus,
     generationCancelRequested,
@@ -229,7 +235,22 @@ export const createAppSetup = () => {
     resultsManager,
     runLabelReflow,
     refreshCircularRecordOrder,
-    resetPreviewViewport
+    resetPreviewViewport,
+    prepareDiagramGenerationWorker: async () => {
+      diagramGenerationWorkerReady.value = false;
+      diagramGenerationWorkerError.value = null;
+      diagramGenerationWorkerStatus.value = 'Preparing diagram engine...';
+      try {
+        await preinitializeDiagramGenerationWorker();
+        diagramGenerationWorkerReady.value = true;
+        diagramGenerationWorkerStatus.value = 'Diagram engine ready.';
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        diagramGenerationWorkerError.value = message;
+        diagramGenerationWorkerStatus.value = `Diagram engine failed to start: ${message}`;
+        console.error(error);
+      }
+    }
   });
 
   const {
@@ -759,6 +780,9 @@ export const createAppSetup = () => {
 
   return {
     pyodideReady,
+    diagramGenerationWorkerReady,
+    diagramGenerationWorkerStatus,
+    diagramGenerationWorkerError,
     processing,
     processingStatus,
     generationCancelRequested,

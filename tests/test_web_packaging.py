@@ -90,7 +90,6 @@ def test_index_uses_title_logo_separately_from_icon_assets() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert './assets/gbdraw-logo-title.png' in index_html
     assert '<link rel="icon" href="./assets/gbdraw-logo.svg" type="image/svg+xml">' in index_html
-    assert '<img src="./assets/gbdraw-logo.svg" alt="" class="animate-spin w-16 h-16 mb-6">' in index_html
 
 
 def test_index_includes_preprint_citation() -> None:

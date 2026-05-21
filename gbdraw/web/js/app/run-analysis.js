@@ -462,6 +462,9 @@ export const createRunAnalysis = ({
 }) => {
   const {
     pyodideReady,
+    diagramGenerationWorkerReady,
+    diagramGenerationWorkerStatus,
+    diagramGenerationWorkerError,
     processing,
     processingStatus,
     generationCancelRequested,
@@ -1235,11 +1238,20 @@ json.dumps({
   };
 
   const runAnalysisInternal = async ({ runMode = 'manual', requestId = 0 } = {}) => {
+    const isReflow = runMode === 'reflow';
     if (!pyodideReady.value) return { status: 'skipped' };
+    if (!diagramGenerationWorkerReady.value) {
+      if (!isReflow) {
+        const message = diagramGenerationWorkerError.value
+          ? `Diagram engine is not ready: ${diagramGenerationWorkerError.value}`
+          : diagramGenerationWorkerStatus.value || 'Diagram engine is still preparing.';
+        errorLog.value = formatJsError(new Error(message));
+      }
+      return { status: 'skipped' };
+    }
     const pyodide = getPyodide();
     if (!pyodide) return { status: 'skipped' };
 
-    const isReflow = runMode === 'reflow';
     const generationToken = ++latestGenerationToken;
     let keepProcessingStatus = false;
     let generationAbortController = null;

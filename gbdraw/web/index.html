@@ -343,13 +343,6 @@
 
 <div id="app" class="h-screen flex flex-col relative">
     
-    <div v-if="!pyodideReady" class="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center p-4 text-center">
-        <img src="./assets/gbdraw-logo.svg" alt="" class="animate-spin w-16 h-16 mb-6">
-        <h3 class="text-2xl font-bold text-slate-800">Initializing gbdraw...</h3>
-        <p class="text-slate-500 mt-2">Loading Python engine and dependencies.</p>
-        <p class="text-xs text-slate-400 mt-4 font-mono" v-text="loadingStatus">Loading gbdraw...</p>
-    </div>
-
     <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
         <div class="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mb-6"></div>
         <h3 class="text-xl font-bold text-slate-800 animate-pulse">Generating Diagram...</h3>
@@ -1832,11 +1825,15 @@
             </div>
             
             <div class="generate-bar shrink-0 py-4 bg-white/50 backdrop-blur-sm border-t border-slate-100 z-10 relative mt-auto">
-            <button @click="runAnalysis" :disabled="processing || !pyodideReady" 
+            <button @click="runAnalysis" :disabled="processing || !pyodideReady || !diagramGenerationWorkerReady"
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
-                <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
+                <span v-if="!processing && pyodideReady && diagramGenerationWorkerReady" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
+                <span v-else-if="!processing && pyodideReady && diagramGenerationWorkerError" class="flex items-center justify-center gap-2"><i class="ph ph-warning-circle text-xl"></i> Generator Unavailable</span>
+                <span v-else-if="!processing && !pyodideReady" class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> Preparing Python...</span>
+                <span v-else-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> Preparing Generator...</span>
                 <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
             </button>
+            <p v-if="!processing && (!pyodideReady || !diagramGenerationWorkerReady)" :class="['mt-2 text-center text-xs font-mono', diagramGenerationWorkerError || (!pyodideReady && loadingStatus.startsWith('Startup Error')) ? 'text-red-600' : 'text-slate-500']" v-text="pyodideReady ? diagramGenerationWorkerStatus : loadingStatus"></p>
             </div>
 
         </div>

@@ -121,6 +121,8 @@ const ensureWorkerInitialized = () => {
   return promise;
 };
 
+export const preinitializeDiagramGenerationWorker = () => ensureWorkerInitialized();
+
 const collectTransferList = (payload) => {
   const buffers = new Set();
   (payload?.files || []).forEach((file) => {
