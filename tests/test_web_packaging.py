@@ -183,6 +183,7 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "Use Move outside or Move inside to cross the Axis" in index_html
     assert "Move outside Axis" in index_html
     assert "Move inside Axis" in index_html
+    assert "entry.onAxis" in index_html
     assert "Add track" in index_html
     assert "Outer tracks" not in slot_source
     assert "On-axis tracks" not in slot_source
@@ -327,6 +328,38 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         const outsideFeatureTick = outsideFeatureState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
         if (outsideFeatureIds !== 'gc_skew,ticks,features,gc_content' || outsideFeatureTick?.side !== 'outside') {{
           throw new Error(`Tick did not move outside with outside Feature: ${{outsideFeatureIds}} ${{JSON.stringify(outsideFeatureTick)}}`);
+        }}
+
+        const laneSelectState = {{
+          adv: {{
+            nt: 'GC',
+            circular_track_slots_axis_index: 0,
+            circular_track_slots: [
+              {{ id: 'features', renderer: 'features', side: 'inside', params: {{ lane_direction: 'inside' }} }},
+              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ label_side: 'inside', tick_side: 'inside' }} }},
+              {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', params: {{ nt: 'GC' }} }},
+              {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'inside', params: {{ nt: 'GC' }} }}
+            ]
+          }},
+          form: {{
+            track_type: 'tuckin',
+            show_depth: false,
+            suppress_gc: false,
+            suppress_skew: false
+          }}
+        }};
+
+        const laneSelectEditor = createCircularTrackSlotEditor({{ state: laneSelectState }});
+        laneSelectEditor.updateCircularTrackFeatureLane(laneSelectState.adv.circular_track_slots[0], 'outside');
+        const movedFeature = laneSelectState.adv.circular_track_slots.find((slot) => slot.id === 'features');
+        if (laneSelectState.adv.circular_track_slots_axis_index !== 1 || movedFeature?.side !== 'outside' || movedFeature?.params?.lane_direction !== 'outside') {{
+          throw new Error(`Feature outside selection did not move outside Axis: ${{JSON.stringify(laneSelectState.adv)}}`);
+        }}
+
+        laneSelectEditor.updateCircularTrackFeatureLane(movedFeature, 'split');
+        const stackEntries = laneSelectEditor.circularTrackStackEntries();
+        if (laneSelectState.adv.circular_track_slots_axis_index !== 0 || stackEntries[0]?.kind !== 'slot' || stackEntries[0]?.onAxis !== true) {{
+          throw new Error(`Feature on-axis selection was not embedded in Axis entry: ${{JSON.stringify(stackEntries)}}`);
         }}
         """,
         encoding="utf-8",

@@ -840,8 +840,16 @@
                                                 <div
                                                     v-else
                                                     class="border rounded p-1.5 space-y-1"
-                                                    :class="circularTrackSlotUsesPresetGeometry(entry.slot) ? 'bg-sky-50/40 border-sky-200' : 'bg-white border-slate-200'"
+                                                    :class="entry.onAxis ? 'bg-slate-100 border-slate-300 ring-1 ring-slate-200' : (circularTrackSlotUsesPresetGeometry(entry.slot) ? 'bg-sky-50/40 border-sky-200' : 'bg-white border-slate-200')"
                                                 >
+                                                    <div
+                                                        v-if="entry.onAxis"
+                                                        class="flex items-center gap-2 rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600"
+                                                    >
+                                                        <span class="h-px flex-1 bg-slate-300"></span>
+                                                        <span class="inline-flex items-center gap-1"><i class="ph ph-record"></i> Axis</span>
+                                                        <span class="h-px flex-1 bg-slate-300"></span>
+                                                    </div>
                                                     <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-1">
                                                         <input type="checkbox" v-model="entry.slot.enabled" class="form-checkbox" :title="entry.slot.enabled ? 'Enabled' : 'Disabled'">
                                                         <input v-model.trim="entry.slot.id" class="form-input px-1 py-0.5 text-[10px]" placeholder="slot_id">

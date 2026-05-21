@@ -919,10 +919,9 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       return;
     }
     const normalizedLaneDirection = normalizeLaneDirection(explicitLaneDirection);
-    if (normalizedLaneDirection === 'inside') {
-      slot.params.lane_direction = 'inside';
-      slot.side = 'inside';
-      normalizeSlotsInPlace();
+    const index = state.adv.circular_track_slots.findIndex((candidate) => candidate === slot);
+    if (index >= 0) {
+      moveCircularTrackSlotToPlacement(index, sideForLaneDirection(normalizedLaneDirection));
       return;
     }
     slot.params.lane_direction = normalizedLaneDirection;
@@ -943,13 +942,21 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     const slots = Array.isArray(state.adv.circular_track_slots) ? state.adv.circular_track_slots : [];
     const axisIndex = axisIndexForCurrentSlots(slots);
     const entries = [];
+    let axisRendered = false;
     slots.forEach((slot, index) => {
-      if (index === axisIndex) {
+      const onAxis = effectiveSlotPlacement(slot, state.form.track_type) === 'overlay';
+      if (index === axisIndex && !onAxis) {
         entries.push({ kind: STACK_ENTRY_AXIS, key: 'axis' });
+        axisRendered = true;
       }
-      entries.push({ kind: STACK_ENTRY_SLOT, slot, index });
+      if (onAxis && !axisRendered) {
+        axisRendered = true;
+      }
+      entries.push({ kind: STACK_ENTRY_SLOT, slot, index, onAxis });
     });
-    if (axisIndex >= slots.length) entries.push({ kind: STACK_ENTRY_AXIS, key: 'axis' });
+    if (!axisRendered || axisIndex >= slots.length) {
+      entries.push({ kind: STACK_ENTRY_AXIS, key: 'axis' });
+    }
     return entries;
   };
 
