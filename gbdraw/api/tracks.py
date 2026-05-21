@@ -7,8 +7,10 @@ from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlotParseError,
     ScalarSpec,
     SUPPORTED_CIRCULAR_TRACK_RENDERERS,
+    circular_track_slots_with_axis_side,
     circular_track_slots_from_order,
     default_circular_track_slots,
+    normalize_circular_track_slots_with_axis,
     parse_circular_track_slot,
     parse_circular_track_slots,
 )
@@ -20,8 +22,10 @@ __all__ = [
     "CircularTrackSlotParseError",
     "ScalarSpec",
     "SUPPORTED_CIRCULAR_TRACK_RENDERERS",
+    "circular_track_slots_with_axis_side",
     "circular_track_slots_from_order",
     "default_circular_track_slots",
+    "normalize_circular_track_slots_with_axis",
     "parse_circular_track_slot",
     "parse_circular_track_slots",
 ]

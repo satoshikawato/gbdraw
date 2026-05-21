@@ -74,6 +74,7 @@ from gbdraw.legend.table import prepare_legend_table  # type: ignore[reportMissi
 from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup  # type: ignore[reportMissingImports]
 from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
+    normalize_circular_track_slots_with_axis,
     parse_circular_track_slots,
 )
 
@@ -123,6 +124,30 @@ def _parse_circular_track_slot_inputs(
     if circular_track_slots is None:
         return None
     return parse_circular_track_slots(list(circular_track_slots))
+
+
+def _validate_circular_track_axis_index(
+    circular_track_axis_index: int | None,
+    parsed_circular_track_slots: Sequence[CircularTrackSlot] | None,
+) -> int | None:
+    if circular_track_axis_index is None:
+        return None
+    if parsed_circular_track_slots is None:
+        raise ValidationError("circular_track_axis_index requires circular_track_slots.")
+    if not isinstance(circular_track_axis_index, int):
+        raise ValidationError("circular_track_axis_index must be an integer.")
+    if circular_track_axis_index < 0 or circular_track_axis_index > len(parsed_circular_track_slots):
+        raise ValidationError(
+            f"circular_track_axis_index must be between 0 and the number of circular track slots ({len(parsed_circular_track_slots)})."
+        )
+    try:
+        normalize_circular_track_slots_with_axis(
+            parsed_circular_track_slots,
+            circular_track_axis_index,
+        )
+    except Exception as exc:
+        raise ValidationError(str(exc)) from exc
+    return circular_track_axis_index
 
 
 def _circular_slots_have_renderer(
@@ -1651,6 +1676,7 @@ def assemble_circular_diagram_from_record(
     plot_title_font_size: float | None = None,
     keep_full_definition_with_plot_title: bool = False,
     circular_track_slots: Sequence[str | CircularTrackSlot] | None = None,
+    circular_track_axis_index: int | None = None,
     _definition_profile: Literal["full", "record_summary", "shared_common"] = "full",
     _tick_track_channel_override: Literal["short", "long"] | None = None,
     _precomputed_depth_df: DataFrame | None = None,
@@ -1723,6 +1749,10 @@ def assemble_circular_diagram_from_record(
             effective_definition_profile = "full"
 
     parsed_circular_track_slots = _parse_circular_track_slot_inputs(circular_track_slots)
+    circular_track_axis_index = _validate_circular_track_axis_index(
+        circular_track_axis_index,
+        parsed_circular_track_slots,
+    )
 
     legend_effective = legend
 
@@ -1876,6 +1906,7 @@ def assemble_circular_diagram_from_record(
         depth_config=depth_config,
         cfg=cfg,
         circular_track_slots=parsed_circular_track_slots,
+        circular_track_axis_index=circular_track_axis_index,
         dinucleotide_dataframes=dinucleotide_dataframes,
         definition_position="center",
         definition_profile=effective_definition_profile,
@@ -1939,6 +1970,7 @@ def assemble_circular_diagram_from_records(
     multi_record_row_gap_ratio: float = _MULTI_RECORD_ROW_GAP_RATIO,
     multi_record_positions: Sequence[str] | None = None,
     circular_track_slots: Sequence[str | CircularTrackSlot] | None = None,
+    circular_track_axis_index: int | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Build and assemble a circular diagram grid from multiple records."""
@@ -2008,6 +2040,7 @@ def assemble_circular_diagram_from_records(
             plot_title_font_size=plot_title_font_size,
             keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
             circular_track_slots=circular_track_slots,
+            circular_track_axis_index=circular_track_axis_index,
             cfg=cfg,
         )
 
@@ -2068,6 +2101,10 @@ def assemble_circular_diagram_from_records(
         resolved_depth_tables = [resolved_depth_tables[idx] for idx in ordered_indices]
 
     parsed_circular_track_slots = _parse_circular_track_slot_inputs(circular_track_slots)
+    circular_track_axis_index = _validate_circular_track_axis_index(
+        circular_track_axis_index,
+        parsed_circular_track_slots,
+    )
 
     legend_effective = legend
 
@@ -2174,6 +2211,7 @@ def assemble_circular_diagram_from_records(
             plot_title=None,
             plot_title_position="none",
             circular_track_slots=parsed_circular_track_slots,
+            circular_track_axis_index=circular_track_axis_index,
             _definition_profile=record_definition_profile,
             _tick_track_channel_override=tick_track_channel_override,
             _precomputed_depth_df=record_depth_dfs[record_index],
@@ -2674,6 +2712,7 @@ def build_circular_diagram(
         plot_title_font_size=options.plot_title_font_size,
         keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,
         circular_track_slots=tracks.circular_track_slots if tracks else None,
+        circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
         cfg=cfg,
     )
 

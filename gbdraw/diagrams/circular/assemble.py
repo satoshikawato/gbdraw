@@ -2001,6 +2001,7 @@ def add_record_on_circular_canvas(
     depth_df: DataFrame | None = None,
     cfg: GbdrawConfig | None = None,
     circular_track_slots: list[CircularTrackSlot] | None = None,
+    circular_track_axis_index: int | None = None,
     dinucleotide_dataframes: dict[str, DataFrame] | None = None,
     definition_position: str = "center",
     definition_profile: str = "full",
@@ -2067,6 +2068,7 @@ def add_record_on_circular_canvas(
                 dinucleotide=str(getattr(gc_config, "dinucleotide", "GC")),
                 tick_track_channel_override=_tick_track_channel_override,
             ),
+            axis_index=circular_track_axis_index,
         )
         layout_slots = list(radial_plan.slots)
         preferred_anchor_slot_ids = radial_plan.preferred_anchor_slot_ids
@@ -2414,6 +2416,7 @@ def assemble_circular_diagram(
     depth_config: DepthConfigurator | None = None,
     cfg: GbdrawConfig | None = None,
     circular_track_slots: list[CircularTrackSlot] | None = None,
+    circular_track_axis_index: int | None = None,
     dinucleotide_dataframes: dict[str, DataFrame] | None = None,
     definition_position: str = "center",
     definition_profile: str = "full",
@@ -2499,6 +2502,7 @@ def assemble_circular_diagram(
         depth_df=depth_df,
         cfg=cfg,
         circular_track_slots=effective_circular_track_slots,
+        circular_track_axis_index=circular_track_axis_index,
         dinucleotide_dataframes=dinucleotide_dataframes,
         definition_position=definition_position,
         definition_profile=definition_profile,
@@ -2525,6 +2529,7 @@ def plot_circular_diagram(
     depth_config: DepthConfigurator | None = None,
     cfg: GbdrawConfig | None = None,
     circular_track_slots: list[CircularTrackSlot] | None = None,
+    circular_track_axis_index: int | None = None,
     dinucleotide_dataframes: dict[str, DataFrame] | None = None,
     definition_position: str = "center",
     definition_profile: str = "full",
@@ -2549,6 +2554,7 @@ def plot_circular_diagram(
         legend_config=legend_config,
         cfg=cfg,
         circular_track_slots=circular_track_slots,
+        circular_track_axis_index=circular_track_axis_index,
         dinucleotide_dataframes=dinucleotide_dataframes,
         definition_position=definition_position,
         definition_profile=definition_profile,

@@ -9,7 +9,9 @@ import { buildLabelOverrideTsv } from './feature-editor/label-override-table.js'
 import {
   applyCircularTrackOrderPlacements,
   buildCircularTrackSlotSpec,
-  hasEnabledCircularTrackRenderer
+  clampCircularTrackAxisIndex,
+  hasEnabledCircularTrackRenderer,
+  inferLegacyAxisIndexFromFeature
 } from './circular-track-slots.js';
 
 const downloadTextFile = (filename, text) => {
@@ -1044,7 +1046,8 @@ json.dumps({
         keep_full_definition_with_plot_title: false,
         tick_label_font_size: false,
         circular_label_spacing: false,
-        circular_track_slot: false
+        circular_track_slot: false,
+        circular_track_axis_index: false
       };
       return circularMultiRecordCanvasSupportCache;
     }
@@ -1067,6 +1070,7 @@ json.dumps({
   "tick_label_font_size": "--tick_label_font_size" in _source,
   "circular_label_spacing": "--circular_label_spacing" in _source,
   "circular_track_slot": "--circular_track_slot" in _source,
+  "circular_track_axis_index": "--circular_track_axis_index" in _source,
 })
       `);
       circularMultiRecordCanvasSupportCache = JSON.parse(String(raw));
@@ -1084,7 +1088,8 @@ json.dumps({
         keep_full_definition_with_plot_title: false,
         tick_label_font_size: false,
         circular_label_spacing: false,
-        circular_track_slot: false
+        circular_track_slot: false,
+        circular_track_axis_index: false
       };
     }
     return circularMultiRecordCanvasSupportCache;
@@ -1600,16 +1605,31 @@ json.dumps({
         const normalizedCircularPlotTitle = String(form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(adv.plot_title_position);
         const useCircularTrackSlots = adv.circular_track_slots_enabled === true;
+        const circularTrackAxisIndex = clampCircularTrackAxisIndex(
+          adv.circular_track_slots_axis_index,
+          Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots.length : 0
+        );
         const circularTrackSlots = useCircularTrackSlots
-          ? applyCircularTrackOrderPlacements(adv.circular_track_slots, adv.nt, form.track_type)
+          ? applyCircularTrackOrderPlacements(
+              adv.circular_track_slots,
+              adv.nt,
+              form.track_type,
+              circularTrackAxisIndex
+            )
           : [];
         if (useCircularTrackSlots) {
-          if (!multiCanvasSupport.circular_track_slot) {
+          if (!multiCanvasSupport.circular_track_slot || !multiCanvasSupport.circular_track_axis_index) {
             throw new Error(
-              'Current gbdraw wheel does not support --circular_track_slot. Rebuild and redeploy the web wheel.'
+              'Current gbdraw wheel does not support --circular_track_slot and --circular_track_axis_index. Rebuild and redeploy the web wheel.'
             );
           }
           adv.circular_track_slots.splice(0, adv.circular_track_slots.length, ...circularTrackSlots);
+          adv.circular_track_slots_axis_index = clampCircularTrackAxisIndex(
+            circularTrackAxisIndex === null
+              ? inferLegacyAxisIndexFromFeature(circularTrackSlots, form.track_type)
+              : circularTrackAxisIndex,
+            circularTrackSlots.length
+          );
         }
         const hasPlotTitleFontSize =
           adv.plot_title_font_size !== null &&
@@ -1811,8 +1831,15 @@ json.dumps({
           }
         }
         if (useCircularTrackSlots) {
+          args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));
           circularTrackSlots.forEach((slot) => {
-            args.push('--circular_track_slot', buildCircularTrackSlotSpec(slot, adv.nt, form.track_type));
+            args.push(
+              '--circular_track_slot',
+              buildCircularTrackSlotSpec(slot, adv.nt, form.track_type, {
+                includeSide: false,
+                forceSplitLane: true
+              })
+            );
           });
         }
         const hasCircularDepthFile = Boolean(files.c_depth);

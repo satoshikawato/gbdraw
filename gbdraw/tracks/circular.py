@@ -314,6 +314,71 @@ def _normalized_feature_side_and_params(slot: CircularTrackSlot, params: dict[st
     return str(side), reserve, params
 
 
+def _axis_derived_side(slot_index: int, axis_index: int) -> str:
+    return "outside" if int(slot_index) < int(axis_index) else "inside"
+
+
+def _axis_side_conflict_message(slot: CircularTrackSlot, derived_side: str, explicit_side: str) -> str:
+    return (
+        f"--circular_track_axis_index places slot '{slot.id}' {derived_side}, "
+        f"but the slot specifies side={explicit_side}. Remove side= or move the Axis boundary."
+    )
+
+
+def _slot_with_axis_derived_side(slot: CircularTrackSlot, slot_index: int, axis_index: int) -> CircularTrackSlot:
+    """Return a transient slot whose side/lane matches an explicit axis boundary."""
+
+    derived_side = _axis_derived_side(slot_index, axis_index)
+    renderer = _normalize_renderer(str(slot.renderer))
+    params = {str(key): value for key, value in dict(slot.params or {}).items()}
+    explicit_side = _normalize_side_value(slot.side) if slot.side is not None else None
+
+    if renderer == "features":
+        raw_lane = params.get("lane_direction", params.get("lanes"))
+        lane = _normalize_feature_lane(raw_lane) if raw_lane is not None else None
+        if lane == "split":
+            if explicit_side is not None and explicit_side != "overlay":
+                raise ValueError(
+                    f"--circular_track_axis_index places split feature slot '{slot.id}' on the Axis, "
+                    f"but the slot specifies side={explicit_side}. Use side=overlay or remove side=."
+                )
+            params.pop("lanes", None)
+            params["lane_direction"] = "split"
+            return replace(slot, renderer=renderer, side="overlay", params=params)
+        if lane in {"inside", "outside"} and lane != derived_side:
+            raise ValueError(
+                f"--circular_track_axis_index places feature slot '{slot.id}' {derived_side}, "
+                f"but the slot specifies lane_direction={lane}. Remove lane_direction= or move the Axis boundary."
+            )
+        if explicit_side is not None and explicit_side != derived_side:
+            raise ValueError(_axis_side_conflict_message(slot, derived_side, explicit_side))
+        params.pop("lanes", None)
+        params["lane_direction"] = lane or derived_side
+        return replace(slot, renderer=renderer, side=derived_side, params=params)
+
+    if explicit_side is not None and explicit_side != derived_side:
+        raise ValueError(_axis_side_conflict_message(slot, derived_side, explicit_side))
+    return replace(slot, renderer=renderer, side=derived_side, params=params)
+
+
+def circular_track_slots_with_axis_side(
+    slots: Sequence[CircularTrackSlot],
+    axis_index: int,
+) -> list[CircularTrackSlot]:
+    """Derive transient slot sides from an explicit circular Axis boundary."""
+
+    if not isinstance(axis_index, int):
+        raise ValueError("--circular_track_axis_index must be an integer")
+    if axis_index < 0 or axis_index > len(slots):
+        raise ValueError(
+            f"--circular_track_axis_index must be between 0 and the number of circular track slots ({len(slots)})"
+        )
+    return [
+        _slot_with_axis_derived_side(slot, slot_index, axis_index)
+        for slot_index, slot in enumerate(slots)
+    ]
+
+
 def _normalized_tick_params(slot: CircularTrackSlot, params: dict[str, Any]) -> dict[str, Any]:
     if "axis" in {str(key).strip().lower() for key in params}:
         raise ValueError("ticks slots no longer accept 'axis'; the circular axis is fixed and not a slot")
@@ -396,6 +461,17 @@ def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[N
             )
         )
     return normalized
+
+
+def normalize_circular_track_slots_with_axis(
+    slots: Sequence[CircularTrackSlot],
+    axis_index: int | None = None,
+) -> list[NormalizedCircularTrackSlot]:
+    """Normalize circular slots, optionally deriving side from an explicit Axis index."""
+
+    if axis_index is None:
+        return normalize_circular_track_slots(slots)
+    return normalize_circular_track_slots(circular_track_slots_with_axis_side(slots, axis_index))
 
 
 def default_circular_track_slots(
@@ -489,9 +565,11 @@ __all__ = [
     "CircularTrackSlotParseError",
     "NormalizedCircularTrackSlot",
     "SUPPORTED_CIRCULAR_TRACK_RENDERERS",
+    "circular_track_slots_with_axis_side",
     "circular_track_slots_from_order",
     "default_circular_track_slots",
     "normalize_circular_track_slots",
+    "normalize_circular_track_slots_with_axis",
     "parse_circular_track_slot",
     "parse_circular_track_slots",
 ]

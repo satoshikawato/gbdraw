@@ -15,6 +15,7 @@ from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...tracks.circular import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
     NUMERIC_CIRCULAR_TRACK_RENDERERS,
+    circular_track_slots_with_axis_side,
 )
 from ...tracks.scalars import ScalarSpec  # type: ignore[reportMissingImports]
 from ...svg.circular_ticks import (  # type: ignore[reportMissingImports]
@@ -444,6 +445,8 @@ def circular_track_slots_from_preset_order(
     slots: Sequence[CircularTrackSlot],
     preset: str,
     context: CircularPresetContext,
+    *,
+    axis_index: int | None = None,
 ) -> CircularPresetRadialPlan:
     """Overlay user slot order/overrides onto record-local preset defaults.
 
@@ -453,6 +456,8 @@ def circular_track_slots_from_preset_order(
     """
 
     normalized_preset = normalize_circular_track_preset(preset)
+    if axis_index is not None:
+        slots = circular_track_slots_with_axis_side(slots, axis_index)
     preset_slots = tuple(circular_track_slots_for_preset(normalized_preset, context))
     preset_by_id = {str(slot.id): slot for slot in preset_slots}
     preset_by_renderer: dict[str, CircularTrackSlot] = {}

@@ -33,6 +33,7 @@ from .tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
     ScalarSpec,
     circular_track_slots_from_order,
+    normalize_circular_track_slots_with_axis,
     parse_circular_track_slots,
 )
 
@@ -469,6 +470,11 @@ def _get_args(args) -> argparse.Namespace:
         action='append',
         default=[])
     parser.add_argument(
+        '--circular_track_axis_index',
+        type=int,
+        default=None,
+        help='Axis boundary index for --circular_track_slot order. Slots before this index render outside; slots at or after it render inside.')
+    parser.add_argument(
         '--gc_content_width',
         help='GC content track width for circular mode (in px; must be > 0).',
         type=float)
@@ -534,14 +540,25 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--circular_label_spacing must be > 0")
     if args.circular_track_order and args.circular_track_slot:
         parser.error("--circular_track_order cannot be combined with --circular_track_slot")
+    if args.circular_track_axis_index is not None and not (args.circular_track_order or args.circular_track_slot):
+        parser.error("--circular_track_axis_index requires --circular_track_slot or --circular_track_order")
+    circular_track_slots_for_validation: list[CircularTrackSlot] | None = None
     if args.circular_track_order:
         try:
-            circular_track_slots_from_order(args.circular_track_order)
+            circular_track_slots_for_validation = circular_track_slots_from_order(args.circular_track_order)
         except Exception as exc:
             parser.error(str(exc))
     if args.circular_track_slot:
         try:
-            parse_circular_track_slots(args.circular_track_slot)
+            circular_track_slots_for_validation = parse_circular_track_slots(args.circular_track_slot)
+        except Exception as exc:
+            parser.error(str(exc))
+    if args.circular_track_axis_index is not None:
+        try:
+            normalize_circular_track_slots_with_axis(
+                circular_track_slots_for_validation or [],
+                args.circular_track_axis_index,
+            )
         except Exception as exc:
             parser.error(str(exc))
     if args.multi_record_min_radius_ratio <= 0 or args.multi_record_min_radius_ratio > 1:
@@ -631,6 +648,7 @@ def circular_main(cmd_args) -> None:
     feature_width: Optional[float] = args.feature_width
     circular_track_order: str | None = args.circular_track_order
     circular_track_slot_specs: list[str] = list(args.circular_track_slot or [])
+    circular_track_axis_index: int | None = args.circular_track_axis_index
     gc_content_width: Optional[float] = args.gc_content_width
     gc_content_radius: Optional[float] = args.gc_content_radius
     gc_skew_width: Optional[float] = args.gc_skew_width
@@ -854,6 +872,7 @@ def circular_main(cmd_args) -> None:
             multi_record_positions=multi_record_positions or None,
             cfg=cfg,
             circular_track_slots=circular_track_slots_or_none,
+            circular_track_axis_index=circular_track_axis_index,
         )
         save_figure(canvas, out_formats)
     else:
@@ -888,6 +907,7 @@ def circular_main(cmd_args) -> None:
                 keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
                 cfg=cfg,
                 circular_track_slots=circular_track_slots_or_none,
+                circular_track_axis_index=circular_track_axis_index,
             )
             save_figure(canvas, out_formats)
 

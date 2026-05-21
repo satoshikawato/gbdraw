@@ -8,9 +8,11 @@ from .circular import (  # type: ignore[reportMissingImports]
     CircularTrackSlotParseError,
     NormalizedCircularTrackSlot,
     SUPPORTED_CIRCULAR_TRACK_RENDERERS,
+    circular_track_slots_with_axis_side,
     circular_track_slots_from_order,
     default_circular_track_slots,
     normalize_circular_track_slots,
+    normalize_circular_track_slots_with_axis,
     parse_circular_track_slot,
     parse_circular_track_slots,
 )
@@ -24,9 +26,11 @@ __all__ = [
     "ScalarSpec",
     "ScalarUnit",
     "SUPPORTED_CIRCULAR_TRACK_RENDERERS",
+    "circular_track_slots_with_axis_side",
     "circular_track_slots_from_order",
     "default_circular_track_slots",
     "normalize_circular_track_slots",
+    "normalize_circular_track_slots_with_axis",
     "parse_circular_track_slot",
     "parse_circular_track_slots",
 ]

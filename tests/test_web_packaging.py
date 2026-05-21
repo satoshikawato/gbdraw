@@ -159,12 +159,15 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
 
     assert "circular_track_slots_enabled" in state_source
+    assert "circular_track_slots_axis_index" in state_source
     assert "createDefaultCircularTrackSlots()" in state_source
-    assert "applyCircularTrackOrderPlacements(state.adv.circular_track_slots" in config_source
+    assert "inferLegacyAxisIndexFromFeature(normalizedSlots, state.form.track_type)" in config_source
     assert '"circular_track_slot": "--circular_track_slot" in _source' in run_source
+    assert '"circular_track_axis_index": "--circular_track_axis_index" in _source' in run_source
     assert "args.push('--track_type', form.track_type);" in run_source
-    assert "args.push('--circular_track_slot', buildCircularTrackSlotSpec(slot, adv.nt, form.track_type));" in run_source
-    assert "applyCircularTrackOrderPlacements(adv.circular_track_slots, adv.nt, form.track_type)" in run_source
+    assert "args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));" in run_source
+    assert "buildCircularTrackSlotSpec(slot, adv.nt, form.track_type, {" in run_source
+    assert "applyCircularTrackOrderPlacements(" in run_source
     assert "if (!useCircularTrackSlots)" in run_source
     assert "hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth')" in run_source
     assert "Custom Track Slots" in index_html
@@ -293,7 +296,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         tickEditor.moveCircularTrackSlotInside(0);
         const tickIds = tickState.adv.circular_track_slots.map((slot) => slot.id).join(',');
         const tickSlot = tickState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
-        if (tickIds !== 'features,ticks,gc_content,gc_skew' || tickSlot?.side !== 'inside') {{
+        if (tickIds !== 'ticks,features,gc_content,gc_skew' || tickSlot?.side !== 'inside') {{
           throw new Error(`Tick did not return inside: ${{tickIds}} ${{JSON.stringify(tickSlot)}}`);
         }}
         if (tickSlot.params.label_side !== 'inside' || tickSlot.params.tick_side !== 'inside') {{
@@ -336,8 +339,9 @@ def test_web_config_rejects_obsolete_circular_track_slot_import_shapes() -> None
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
 
-    assert "circular_track_slots_schema_version: 2" in state_source
-    assert "const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 2;" in config_source
+    assert "circular_track_slots_schema_version: 3" in state_source
+    assert "const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;" in config_source
+    assert "const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 2;" in config_source
     assert "adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION" in config_source
     assert "validateImportedCircularTrackSlots(data);" in config_source
     assert "validateImportedCircularTrackSlots(data.config);" in config_source

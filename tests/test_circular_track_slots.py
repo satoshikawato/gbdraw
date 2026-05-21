@@ -20,6 +20,7 @@ from gbdraw.tracks import (
     ScalarSpec,
     default_circular_track_slots,
     normalize_circular_track_slots,
+    normalize_circular_track_slots_with_axis,
     parse_circular_track_slot,
     parse_circular_track_slots,
 )
@@ -541,6 +542,47 @@ def test_normalize_circular_track_slots_derives_feature_side_from_lane_direction
     assert split.side == "overlay"
     assert split.reserve is True
     assert outside.side == "outside"
+
+
+def test_normalize_circular_track_slots_with_axis_derives_sides_and_feature_lane() -> None:
+    ticks, features, gc_content = normalize_circular_track_slots_with_axis(
+        [
+            CircularTrackSlot(id="ticks", renderer="ticks"),
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+        ],
+        axis_index=2,
+    )
+
+    assert ticks.side == "outside"
+    assert features.side == "outside"
+    assert features.params["lane_direction"] == "outside"
+    assert gc_content.side == "inside"
+
+
+def test_normalize_circular_track_slots_with_axis_rejects_conflicting_side() -> None:
+    with pytest.raises(ValueError, match="places slot 'ticks' outside"):
+        normalize_circular_track_slots_with_axis(
+            [CircularTrackSlot(id="ticks", renderer="ticks", side="inside")],
+            axis_index=1,
+        )
+
+
+def test_normalize_circular_track_slots_with_axis_keeps_split_feature_overlay() -> None:
+    split = normalize_circular_track_slots_with_axis(
+        [
+            CircularTrackSlot(
+                id="features",
+                renderer="features",
+                params={"lane_direction": "split"},
+            )
+        ],
+        axis_index=0,
+    )[0]
+
+    assert split.side == "overlay"
+    assert split.reserve is True
+    assert split.params["lane_direction"] == "split"
 
 
 @pytest.mark.circular
@@ -2035,3 +2077,38 @@ def test_cli_circular_track_slot_forwards_raw_specs(monkeypatch: pytest.MonkeyPa
         "features:features",
         "at_skew:dinucleotide_skew@nt=AT,w=24px",
     ]
+
+
+def test_cli_circular_track_axis_index_forwards_value(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    record = _load_record()
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, mode: [record])
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
+
+    def fake_assemble(*args, **kwargs):
+        captured["circular_track_axis_index"] = kwargs.get("circular_track_axis_index")
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+
+    circular_cli_module.circular_main(
+        [
+            "--gbk",
+            "dummy.gb",
+            "--circular_track_axis_index",
+            "1",
+            "--circular_track_slot",
+            "ticks:ticks",
+            "--circular_track_slot",
+            "gc_skew:dinucleotide_skew",
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert captured["circular_track_axis_index"] == 1

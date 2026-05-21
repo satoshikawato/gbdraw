@@ -1,10 +1,16 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
-import { applyCircularTrackOrderPlacements } from '../app/circular-track-slots.js';
+import {
+  applyCircularTrackOrderPlacements,
+  clampCircularTrackAxisIndex,
+  inferLegacyAxisIndexFromFeature,
+  normalizeCircularTrackSlots
+} from '../app/circular-track-slots.js';
 
-const SESSION_VERSION = 21;
+const SESSION_VERSION = 22;
 const LOSAT_CACHE_SCHEMA = 2;
-const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 2;
+const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
+const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 2;
 const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = [
   'gapAfter',
   'gap_after',
@@ -197,7 +203,10 @@ const validateImportedCircularTrackSlots = (configData = {}) => {
   if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return;
   if (!Object.prototype.hasOwnProperty.call(adv, 'circular_track_slots')) return;
 
-  if (adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION) {
+  if (
+    adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION &&
+    adv.circular_track_slots_schema_version !== LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION
+  ) {
     throw new Error(
       `Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${CIRCULAR_TRACK_SLOT_SCHEMA_VERSION}.`
     );
@@ -509,10 +518,29 @@ const applyConfigData = (data) => {
   state.adv.depth_width_circular = normalizePositiveNumberOrNull(state.adv.depth_width_circular);
   state.adv.circular_track_slots_schema_version = CIRCULAR_TRACK_SLOT_SCHEMA_VERSION;
   state.adv.circular_track_slots_enabled = state.adv.circular_track_slots_enabled === true;
+  {
+    const normalizedSlots = normalizeCircularTrackSlots(
+      state.adv.circular_track_slots,
+      state.adv.nt,
+      state.form.track_type
+    );
+    const importedAxis = clampCircularTrackAxisIndex(
+      state.adv.circular_track_slots_axis_index,
+      normalizedSlots.length
+    );
+    state.adv.circular_track_slots_axis_index = importedAxis === null
+      ? inferLegacyAxisIndexFromFeature(normalizedSlots, state.form.track_type)
+      : importedAxis;
+  }
   state.adv.circular_track_slots.splice(
     0,
     state.adv.circular_track_slots.length,
-    ...applyCircularTrackOrderPlacements(state.adv.circular_track_slots, state.adv.nt, state.form.track_type)
+    ...applyCircularTrackOrderPlacements(
+      state.adv.circular_track_slots,
+      state.adv.nt,
+      state.form.track_type,
+      state.adv.circular_track_slots_axis_index
+    )
   );
   state.adv.depth_window_size = normalizePositiveNumberOrNull(state.adv.depth_window_size);
   state.adv.depth_step_size = normalizePositiveNumberOrNull(state.adv.depth_step_size);
