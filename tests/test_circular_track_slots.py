@@ -585,6 +585,72 @@ def test_normalize_circular_track_slots_with_axis_keeps_split_feature_overlay() 
     assert split.params["lane_direction"] == "split"
 
 
+def test_normalize_circular_track_slots_allows_tick_overlay_defaults_and_axis_index() -> None:
+    direct = normalize_circular_track_slots(
+        [
+            CircularTrackSlot(
+                id="ticks",
+                renderer="ticks",
+                side="overlay",
+            )
+        ]
+    )[0]
+
+    assert direct.side == "overlay"
+    assert direct.reserve is True
+    assert direct.params["label_side"] == "outside"
+    assert direct.params["tick_side"] == "inside"
+
+    with_axis = normalize_circular_track_slots_with_axis(
+        [
+            CircularTrackSlot(
+                id="ticks",
+                renderer="ticks",
+                side="overlay",
+                params={"label_side": "inside", "tick_side": "outside"},
+            ),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+        ],
+        axis_index=1,
+    )[0]
+
+    assert with_axis.side == "overlay"
+    assert with_axis.reserve is True
+    assert with_axis.params["label_side"] == "inside"
+    assert with_axis.params["tick_side"] == "outside"
+
+
+def test_tick_overlay_layout_places_anchor_on_axis_and_supports_inverted_sides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    layout = _capture_circular_radial_layout(
+        monkeypatch,
+        track_type="tuckin",
+        circular_track_slots=[
+            CircularTrackSlot(
+                id="ticks",
+                renderer="ticks",
+                side="overlay",
+                params={"label_side": "inside", "tick_side": "outside"},
+            ),
+            CircularTrackSlot(
+                id="features",
+                renderer="features",
+                params={"lane_direction": "inside"},
+            ),
+        ],
+    )
+
+    assert layout.ticks is not None
+    assert layout.ticks.anchor_radius_px == pytest.approx(layout.axis.radius_px)
+    assert layout.ticks.tick_side == "outside"
+    assert layout.ticks.label_side == "inside"
+    assert layout.ticks.tick_band_px.inner_px == pytest.approx(layout.axis.radius_px)
+    assert layout.ticks.tick_band_px.outer_px > layout.axis.radius_px
+    assert layout.ticks.label_band_px is not None
+    assert layout.ticks.label_band_px.outer_px < layout.axis.radius_px
+
+
 @pytest.mark.circular
 def test_circular_preset_slots_do_not_emit_origin_metadata() -> None:
     from gbdraw.canvas import CircularCanvasConfigurator

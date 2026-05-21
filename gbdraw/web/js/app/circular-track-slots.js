@@ -109,6 +109,20 @@ const normalizeOptionalPlacement = (value) => {
   return normalizePlacement(value);
 };
 
+const normalizeTickSide = (value, fallback = 'inside') => {
+  const text = String(value || fallback).trim().toLowerCase();
+  return ['inside', 'outside', 'both', 'none'].includes(text) ? text : fallback;
+};
+
+const hasAxisTickSidePair = (labelSide, tickSide) => {
+  const label = normalizeTickSide(labelSide);
+  const tick = normalizeTickSide(tickSide);
+  return (
+    (label === 'outside' && tick === 'inside') ||
+    (label === 'inside' && tick === 'outside')
+  );
+};
+
 const formatPresetName = (preset) => PRESET_LABELS[normalizeCircularTrackPreset(preset)] || PRESET_LABELS.tuckin;
 
 const laneDirectionLabel = (laneDirection) => {
@@ -233,6 +247,13 @@ const syncTickParamsForPlacement = (slot, side) => {
   if (!slot || slot.renderer !== 'ticks') return;
   const placement = normalizePlacement(side);
   slot.params = cloneParams(slot.params);
+  if (placement === 'overlay') {
+    if (!hasAxisTickSidePair(slot.params.label_side, slot.params.tick_side)) {
+      slot.params.label_side = 'outside';
+      slot.params.tick_side = 'inside';
+    }
+    return;
+  }
   const labelSide = normalizeOptionalText(slot.params.label_side);
   if (labelSide === null || ['inside', 'outside'].includes(labelSide)) {
     slot.params.label_side = placement;
@@ -288,6 +309,10 @@ const syncSlotsFromAxisIndex = (slots, axisIndex, preset = 'tuckin') => {
   const resolvedAxis = axis === null ? inferLegacyAxisIndexFromFeature(slots, preset) : axis;
   slots.forEach((slot, index) => {
     if (!slot) return;
+    if (effectiveSlotPlacement(slot, preset) === 'overlay') {
+      syncSlotPlacementFromSide(slot, 'overlay');
+      return;
+    }
     if (slot.renderer === 'features' && featureLaneForSlot(slot, preset) === 'split') {
       syncSlotPlacementFromSide(slot, 'overlay');
       return;
@@ -504,9 +529,13 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
     delete params['axis'];
     if (!normalizeOptionalText(params.label_side) || params.label_side === 'legacy') {
       delete params.label_side;
+    } else {
+      params.label_side = normalizeTickSide(params.label_side);
     }
     if (!normalizeOptionalText(params.tick_side) || params.tick_side === 'legacy') {
       delete params.tick_side;
+    } else {
+      params.tick_side = normalizeTickSide(params.tick_side);
     }
     if (normalizeOptionalText(params.preset) === null) {
       delete params.preset;
@@ -835,7 +864,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     const normalized = normalizedSlotsForCurrentState();
     if (!Number.isInteger(idx) || idx < 0 || idx >= normalized.length) return false;
     const slot = normalized[idx];
-    return slot?.renderer === 'features' && effectiveSlotPlacement(slot, state.form.track_type) !== 'overlay';
+    return ['features', 'ticks'].includes(slot?.renderer) && effectiveSlotPlacement(slot, state.form.track_type) !== 'overlay';
   };
 
   const moveCircularTrackSlotToPlacement = (index, placement) => {

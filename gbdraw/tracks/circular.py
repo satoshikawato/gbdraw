@@ -356,6 +356,9 @@ def _slot_with_axis_derived_side(slot: CircularTrackSlot, slot_index: int, axis_
         params["lane_direction"] = lane or derived_side
         return replace(slot, renderer=renderer, side=derived_side, params=params)
 
+    if renderer == "ticks" and explicit_side == "overlay":
+        return replace(slot, renderer=renderer, side="overlay", params=params)
+
     if explicit_side is not None and explicit_side != derived_side:
         raise ValueError(_axis_side_conflict_message(slot, derived_side, explicit_side))
     return replace(slot, renderer=renderer, side=derived_side, params=params)
@@ -379,17 +382,33 @@ def circular_track_slots_with_axis_side(
     ]
 
 
-def _normalized_tick_params(slot: CircularTrackSlot, params: dict[str, Any]) -> dict[str, Any]:
+def _default_tick_label_side_for_slot_side(side: str) -> str:
+    if side == "overlay":
+        return "outside"
+    if side == "outside":
+        return "outside"
+    return "inside"
+
+
+def _default_tick_mark_side_for_slot_side(side: str) -> str:
+    if side == "overlay":
+        return "inside"
+    if side == "outside":
+        return "outside"
+    return "inside"
+
+
+def _normalized_tick_params(params: dict[str, Any], side: str) -> dict[str, Any]:
     if "axis" in {str(key).strip().lower() for key in params}:
         raise ValueError("ticks slots no longer accept 'axis'; the circular axis is fixed and not a slot")
     if "label_side" in params:
         params["label_side"] = _normalize_tick_side(params["label_side"], field_name="label_side")
     else:
-        params["label_side"] = "inside"
+        params["label_side"] = _default_tick_label_side_for_slot_side(side)
     if "tick_side" in params:
         params["tick_side"] = _normalize_tick_side(params["tick_side"], field_name="tick_side")
     else:
-        params["tick_side"] = "inside"
+        params["tick_side"] = _default_tick_mark_side_for_slot_side(side)
     return params
 
 
@@ -430,7 +449,8 @@ def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[N
             side, reserve, params = _normalized_feature_side_and_params(slot, params)
         elif renderer == "ticks":
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
-            params = _normalized_tick_params(slot, params)
+            reserve = side == "overlay"
+            params = _normalized_tick_params(params, side)
         elif renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
         elif renderer == "spacer":

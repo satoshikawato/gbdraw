@@ -361,6 +361,42 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         if (laneSelectState.adv.circular_track_slots_axis_index !== 0 || stackEntries[0]?.kind !== 'slot' || stackEntries[0]?.onAxis !== true) {{
           throw new Error(`Feature on-axis selection was not embedded in Axis entry: ${{JSON.stringify(stackEntries)}}`);
         }}
+
+        const tickAxisState = {{
+          adv: {{
+            nt: 'GC',
+            circular_track_slots_axis_index: 0,
+            circular_track_slots: [
+              {{ id: 'ticks', renderer: 'ticks', side: 'inside', params: {{ label_side: 'inside', tick_side: 'inside' }} }},
+              {{ id: 'features', renderer: 'features', side: 'inside', params: {{ lane_direction: 'inside' }} }},
+              {{ id: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', params: {{ nt: 'GC' }} }},
+              {{ id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'inside', params: {{ nt: 'GC' }} }}
+            ]
+          }},
+          form: {{
+            track_type: 'tuckin',
+            show_depth: false,
+            suppress_gc: false,
+            suppress_skew: false
+          }}
+        }};
+
+        const tickAxisEditor = createCircularTrackSlotEditor({{ state: tickAxisState }});
+        tickAxisEditor.moveCircularTrackSlotToAxis(0);
+        const axisTick = tickAxisState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
+        const tickStackEntries = tickAxisEditor.circularTrackStackEntries();
+        if (axisTick?.side !== 'overlay' || axisTick?.params?.label_side !== 'outside' || axisTick?.params?.tick_side !== 'inside') {{
+          throw new Error(`Tick on-axis defaults were not applied: ${{JSON.stringify(axisTick)}}`);
+        }}
+        if (tickStackEntries[0]?.kind !== 'slot' || tickStackEntries[0]?.onAxis !== true) {{
+          throw new Error(`Tick on-axis selection was not embedded in Axis entry: ${{JSON.stringify(tickStackEntries)}}`);
+        }}
+        axisTick.params.label_side = 'inside';
+        axisTick.params.tick_side = 'outside';
+        const tickAxisSpec = tickAxisEditor.circularTrackSlotCliSpec(axisTick);
+        if (!tickAxisSpec.includes('side=overlay') || !tickAxisSpec.includes('label_side=inside') || !tickAxisSpec.includes('tick_side=outside')) {{
+          throw new Error(`Tick on-axis CLI spec lost inverted sides: ${{tickAxisSpec}}`);
+        }}
         """,
         encoding="utf-8",
     )

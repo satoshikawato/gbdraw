@@ -867,7 +867,7 @@
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index + 1)" :disabled="!canMoveCircularTrackSlot(entry.index, 1)" title="Move inward"><i class="ph ph-arrow-down"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index)" :disabled="!canMoveCircularTrackSlotOutside(entry.index)" title="Move outside Axis"><i class="ph ph-arrow-line-up"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotInside(entry.index)" :disabled="!canMoveCircularTrackSlotInside(entry.index)" title="Move inside Axis"><i class="ph ph-arrow-line-down"></i></button>
-                                                            <button v-if="entry.slot.renderer === 'features'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index)" :disabled="!canMoveCircularTrackSlotToAxis(entry.index)" title="Move feature on Axis"><i class="ph ph-record"></i></button>
+                                                            <button v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'ticks'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index)" :disabled="!canMoveCircularTrackSlotToAxis(entry.index)" title="Track on Axis"><i class="ph ph-record"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index)" title="Duplicate"><i class="ph ph-copy"></i></button>
                                                             <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index)" title="Remove"><i class="ph ph-trash"></i></button>
                                                         </div>
@@ -893,10 +893,14 @@
                                                     <div v-if="entry.slot.renderer === 'ticks'" class="grid grid-cols-2 gap-1 items-center">
                                                         <select v-model="entry.slot.params.label_side" class="form-input px-1 py-0.5 text-[10px]">
                                                             <option value="">Follow row position</option>
+                                                            <option value="outside">Labels outside</option>
+                                                            <option value="inside">Labels inside</option>
                                                             <option value="none">No labels</option>
                                                         </select>
                                                         <select v-model="entry.slot.params.tick_side" class="form-input px-1 py-0.5 text-[10px]">
                                                             <option value="">Follow row position</option>
+                                                            <option value="inside">Ticks inside</option>
+                                                            <option value="outside">Ticks outside</option>
                                                             <option value="both">Ticks both</option>
                                                             <option value="none">No ticks</option>
                                                         </select>
