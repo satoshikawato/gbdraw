@@ -594,11 +594,21 @@ def test_assemble_circular_diagram_from_records_shared_legend_and_unique_ids() -
 
     all_group_ids = [group.attrib.get("id", "") for group in root.findall(".//svg:g[@id]", ns)]
 
-    for base_id in ("Axis", "tick", "labels", "gc_content"):
+    for base_id in ("Axis", "tick", "gc_content"):
         ids = [gid for gid in all_group_ids if gid == base_id or gid.startswith(f"{base_id}_")]
         assert len(ids) == len(records)
         assert len(ids) == len(set(ids))
         assert all(gid != base_id for gid in ids)
+
+    for record_index in range(len(records)):
+        record_group = root.find(f".//svg:g[@id='record_{record_index}']", ns)
+        assert record_group is not None
+        record_label_ids = {
+            group.attrib.get("id", "")
+            for group in record_group.findall("./svg:g[@id]", ns)
+            if group.attrib.get("id", "").startswith("label_")
+        }
+        assert {"label_leaders", "label_text"}.issubset(record_label_ids)
 
     skew_ids = [
         gid
