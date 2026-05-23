@@ -618,6 +618,60 @@ def test_web_config_rejects_obsolete_circular_track_slot_import_shapes() -> None
         assert f"'{obsolete_param_key}'" in config_source
 
 
+def test_web_session_uses_structured_depth_file_codec(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    source_path = WEB_ROOT / "js" / "services" / "depth-file-codec.js"
+    module_path = tmp_path / "depth-file-codec.mjs"
+    module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+    check_path = tmp_path / "check-depth-file-codec.mjs"
+    check_path.write_text(
+        f"""
+        import {{ DEPTH_FILE_ENCODING, decodeDepthText, encodeDepthText }} from {module_path.as_uri()!r};
+
+        const depthText = [
+          'reference_name\\tposition\\tdepth',
+          'refA\\t1\\t10',
+          'refA\\t2\\t20.5',
+          'refA\\t4\\t0',
+          'refB\\t10\\t1e2',
+          ''
+        ].join('\\n');
+        const payload = encodeDepthText(depthText);
+        if (!payload) throw new Error('Depth codec did not encode a valid TSV.');
+        if (payload.records.length !== 2) throw new Error(`Expected two reference records: ${{JSON.stringify(payload)}}`);
+        if (payload.records[0].id !== 'refA') throw new Error(`Reference ID was not stored once per record: ${{JSON.stringify(payload.records[0])}}`);
+        const refARuns = payload.records[0].runs;
+        if (refARuns.length !== 2) throw new Error(`Gapped coordinates should create two runs: ${{JSON.stringify(refARuns)}}`);
+        if (JSON.stringify(refARuns[0].slice(0, 3)) !== JSON.stringify([1, 1, 2])) {{
+          throw new Error(`Unexpected start/step/count for first run: ${{JSON.stringify(refARuns[0])}}`);
+        }}
+        if (decodeDepthText(payload) !== depthText) throw new Error('Depth codec did not round-trip text.');
+        if (encodeDepthText('refA\\t1\\t10\\textra\\n') !== null) throw new Error('Extra TSV columns should fall back to base64 storage.');
+
+        const largeDepthText = Array.from({{ length: 5000 }}, (_, idx) =>
+          `refA\\t${{idx + 1}}\\t${{(idx * 17) % 80}}`
+        ).join('\\n') + '\\n';
+        const largePayload = encodeDepthText(largeDepthText);
+        const structuredJson = JSON.stringify({{ encoding: DEPTH_FILE_ENCODING, data: largePayload }});
+        const base64Json = JSON.stringify({{ data: Buffer.from(largeDepthText).toString('base64') }});
+        if (structuredJson.length >= base64Json.length * 0.5) {{
+          throw new Error(`Structured depth codec was not compact enough: ${{structuredJson.length}} vs ${{base64Json.length}}`);
+        }}
+        """,
+        encoding="utf-8",
+    )
+
+    subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
+
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    assert "depth: await serializeDepthFile(seq.depth)" in config_source
+    assert "c_depth: await serializeDepthFile(state.files.c_depth)" in config_source
+    assert "downloadJson(sessionData, sessionFilename, { pretty: false });" in config_source
+
+
 def test_web_config_persists_manual_qualifier_priority_rules() -> None:
     source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     assert "qualifierPriorityRules: cloneQualifierPriorityRules(state.manualPriorityRules)" in source

@@ -6,8 +6,14 @@ import {
   inferLegacyAxisIndexFromFeature,
   normalizeCircularTrackSlots
 } from '../app/circular-track-slots.js';
+import {
+  DEPTH_FILE_ENCODING,
+  decodeDepthText,
+  encodeDepthText,
+  isEncodedDepthFileEntry
+} from './depth-file-codec.js';
 
-const SESSION_VERSION = 22;
+const SESSION_VERSION = 23;
 const LOSAT_CACHE_SCHEMA = 2;
 const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
 const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 2;
@@ -119,8 +125,8 @@ const safeDeepMerge = (target, source) => {
   });
 };
 
-const downloadJson = (data, filename) => {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
+const downloadJson = (data, filename, { pretty = true } = {}) => {
+  const blob = new Blob([pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data)], {
     type: 'application/json'
   });
   const url = URL.createObjectURL(blob);
@@ -758,8 +764,37 @@ const serializeFile = async (file) => {
   };
 };
 
+const serializeDepthFile = async (file) => {
+  if (!file) return null;
+  try {
+    const text = await file.text();
+    const encodedDepth = encodeDepthText(text);
+    if (encodedDepth) {
+      return {
+        name: file.name || 'depth.tsv',
+        type: file.type || 'text/tab-separated-values',
+        size: file.size || text.length,
+        lastModified: file.lastModified || Date.now(),
+        encoding: DEPTH_FILE_ENCODING,
+        data: encodedDepth
+      };
+    }
+  } catch (err) {
+    console.warn('Failed to encode depth file for session storage; falling back to base64.', err);
+  }
+  return serializeFile(file);
+};
+
 const deserializeFile = (entry) => {
   if (!entry || !entry.data) return null;
+  if (isEncodedDepthFileEntry(entry)) {
+    const text = decodeDepthText(entry.data);
+    return new File([text], entry.name || 'depth.tsv', {
+      type: entry.type || 'text/tab-separated-values',
+      lastModified: entry.lastModified || Date.now()
+    });
+  }
+  if (typeof entry.data !== 'string') return null;
   const bytes = base64ToUint8(entry.data);
   return new File([bytes], entry.name || 'file', {
     type: entry.type || 'application/octet-stream',
@@ -921,7 +956,7 @@ const serializeFiles = async () => {
       gb: await serializeFile(seq.gb),
       gff: await serializeFile(seq.gff),
       fasta: await serializeFile(seq.fasta),
-      depth: await serializeFile(seq.depth),
+      depth: await serializeDepthFile(seq.depth),
       blast: await serializeFile(seq.blast),
       losat_gencode: seq.losat_gencode ?? 1,
       losat_filename: seq.losat_filename ?? '',
@@ -937,7 +972,7 @@ const serializeFiles = async () => {
     c_gb: await serializeFile(state.files.c_gb),
     c_gff: await serializeFile(state.files.c_gff),
     c_fasta: await serializeFile(state.files.c_fasta),
-    c_depth: await serializeFile(state.files.c_depth),
+    c_depth: await serializeDepthFile(state.files.c_depth),
     d_color: await serializeFile(state.files.d_color),
     t_color: await serializeFile(state.files.t_color),
     blacklist: await serializeFile(state.files.blacklist),
@@ -1152,7 +1187,7 @@ export const exportSession = async (titleOverride = null) => {
     if (!proceed) return;
   }
   lastSessionFilename = sessionFilename;
-  downloadJson(sessionData, sessionFilename);
+  downloadJson(sessionData, sessionFilename, { pretty: false });
 };
 
 export const importConfig = async (e) => {
