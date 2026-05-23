@@ -12,6 +12,7 @@ import math
 from functools import lru_cache
 
 from .filtering import get_label_text, preprocess_label_filtering
+from .policy import normalize_label_rendering
 from ..config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ..features.coordinates import get_strand
 from ..core.text import calculate_bbox_dimensions
@@ -4580,6 +4581,7 @@ def prepare_label_list(
     inner_labels = []
     label_filtering = cfg.labels.filtering.as_dict()
     label_filtering = preprocess_label_filtering(label_filtering)
+    label_rendering = normalize_label_rendering(cfg.labels.rendering)
     length_threshold = cfg.labels.length_threshold.circular
     length_param = determine_length_parameter(total_length, length_threshold)
     track_type = _normalize_circular_track_preset(track_preset or cfg.canvas.circular.track_type)
@@ -4772,6 +4774,10 @@ def prepare_label_list(
                 longest_segment_end,
                 total_length,
             )
+            if label_rendering == "external_only":
+                is_embedded = False
+            elif label_rendering == "embedded_only" and not is_embedded:
+                continue
             label_entry["label_text"] = feature_label_text
             label_entry["middle"] = label_middle
             label_entry["start"] = label_start

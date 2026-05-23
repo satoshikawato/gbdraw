@@ -934,6 +934,7 @@ export const createRunAnalysis = ({
         placement: false,
         rotation: false,
         linear_label_spacing: false,
+        label_rendering: false,
         track_layout: false,
         track_axis_gap: false,
         ruler_on_axis: false,
@@ -961,6 +962,7 @@ json.dumps({
   "placement": "--label_placement" in _source,
   "rotation": "--label_rotation" in _source,
   "linear_label_spacing": "--linear_label_spacing" in _source,
+  "label_rendering": "--label_rendering" in _source,
   "track_layout": "--track_layout" in _source,
   "track_axis_gap": "--track_axis_gap" in _source,
   "ruler_on_axis": "--ruler_on_axis" in _source,
@@ -984,6 +986,7 @@ json.dumps({
         placement: false,
         rotation: false,
         linear_label_spacing: false,
+        label_rendering: false,
         track_layout: false,
         track_axis_gap: false,
         ruler_on_axis: false,
@@ -1002,6 +1005,17 @@ json.dumps({
       };
     }
     return linearLabelSupportCache;
+  };
+
+  const normalizeLabelRendering = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    return ['embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
+  };
+
+  const normalizePositiveNumberOrNull = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
   };
 
   const normalizeFeatureShape = (value) => (String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle');
@@ -1049,6 +1063,7 @@ json.dumps({
         keep_full_definition_with_plot_title: false,
         tick_label_font_size: false,
         circular_label_spacing: false,
+        label_rendering: false,
         circular_track_slot: false,
         circular_track_axis_index: false
       };
@@ -1072,6 +1087,7 @@ json.dumps({
   "keep_full_definition_with_plot_title": "--keep_full_definition_with_plot_title" in _source,
   "tick_label_font_size": "--tick_label_font_size" in _source,
   "circular_label_spacing": "--circular_label_spacing" in _source,
+  "label_rendering": "--label_rendering" in _source,
   "circular_track_slot": "--circular_track_slot" in _source,
   "circular_track_axis_index": "--circular_track_axis_index" in _source,
 })
@@ -1091,6 +1107,7 @@ json.dumps({
         keep_full_definition_with_plot_title: false,
         tick_label_font_size: false,
         circular_label_spacing: false,
+        label_rendering: false,
         circular_track_slot: false,
         circular_track_axis_index: false
       };
@@ -1723,6 +1740,16 @@ json.dumps({
         const labelsMode = String(labelsModeRaw || 'none').trim().toLowerCase();
         if (labelsMode === 'out') args.push('--labels');
         if (labelsMode === 'both') args.push('--labels', 'both');
+        const normalizedLabelRendering = labelsMode === 'none' ? 'auto' : normalizeLabelRendering(adv.label_rendering);
+        adv.label_rendering = normalizedLabelRendering;
+        if (normalizedLabelRendering !== 'auto') {
+          if (!multiCanvasSupport.label_rendering) {
+            throw new Error(
+              'Current gbdraw wheel does not support --label_rendering. Rebuild and redeploy the web wheel.'
+            );
+          }
+          args.push('--label_rendering', normalizedLabelRendering);
+        }
         if (!useCircularTrackSlots) {
           if (form.suppress_gc) args.push('--suppress_gc');
           if (form.suppress_skew) args.push('--suppress_skew');
@@ -1791,17 +1818,15 @@ json.dumps({
         if (adv.outer_label_y_offset) args.push('--outer_label_y_radius_offset', adv.outer_label_y_offset);
         if (adv.inner_label_x_offset) args.push('--inner_label_x_radius_offset', adv.inner_label_x_offset);
         if (adv.inner_label_y_offset) args.push('--inner_label_y_radius_offset', adv.inner_label_y_offset);
-        if (
-          adv.circular_label_spacing !== null &&
-          adv.circular_label_spacing !== undefined &&
-          adv.circular_label_spacing !== ''
-        ) {
+        const normalizedCircularLabelSpacing = normalizePositiveNumberOrNull(adv.circular_label_spacing);
+        adv.circular_label_spacing = normalizedCircularLabelSpacing;
+        if (normalizedCircularLabelSpacing !== null) {
           if (!multiCanvasSupport.circular_label_spacing) {
             throw new Error(
               'Current gbdraw wheel does not support --circular_label_spacing. Rebuild and redeploy the web wheel.'
             );
           }
-          args.push('--circular_label_spacing', adv.circular_label_spacing);
+          args.push('--circular_label_spacing', normalizedCircularLabelSpacing);
         }
         if (
           !useCircularTrackSlots &&
@@ -2010,10 +2035,17 @@ json.dumps({
           if (form.show_labels_linear === 'first') args.push('first');
         }
         const normalizedLabelPlacement = adv.label_placement === 'on_feature' ? 'above_feature' : adv.label_placement;
+        let normalizedLabelRendering = form.show_labels_linear === 'none' ? 'auto' : normalizeLabelRendering(adv.label_rendering);
+        if (normalizedLabelPlacement === 'above_feature') {
+          normalizedLabelRendering = 'auto';
+        }
+        adv.label_rendering = normalizedLabelRendering;
+        const normalizedLinearLabelSpacing = normalizePositiveNumberOrNull(adv.linear_label_spacing);
+        adv.linear_label_spacing = normalizedLinearLabelSpacing;
         const wantsPlacementOption = normalizedLabelPlacement && normalizedLabelPlacement !== 'auto';
+        const wantsLabelRenderingOption = normalizedLabelRendering !== 'auto';
         const wantsRotationOption = adv.label_rotation !== null && adv.label_rotation !== undefined && adv.label_rotation !== '';
-        const wantsLinearLabelSpacingOption =
-          adv.linear_label_spacing !== null && adv.linear_label_spacing !== undefined && adv.linear_label_spacing !== '';
+        const wantsLinearLabelSpacingOption = normalizedLinearLabelSpacing !== null;
         const wantsTrackLayoutOption = normalizedTrackLayout !== 'middle';
         const wantsTrackAxisGapOption =
           adv.track_axis_gap !== null && adv.track_axis_gap !== undefined && adv.track_axis_gap !== '';
@@ -2038,6 +2070,7 @@ json.dumps({
         const linearLabelSupport = getLinearLabelOptionSupport();
         if (
           wantsPlacementOption ||
+          wantsLabelRenderingOption ||
           wantsRotationOption ||
           wantsLinearLabelSpacingOption ||
           wantsTrackLayoutOption ||
@@ -2056,6 +2089,9 @@ json.dumps({
         ) {
           if (wantsPlacementOption && !linearLabelSupport.placement) {
             throw new Error("Current gbdraw wheel does not support --label_placement. Rebuild and redeploy the web wheel.");
+          }
+          if (wantsLabelRenderingOption && !linearLabelSupport.label_rendering) {
+            throw new Error("Current gbdraw wheel does not support --label_rendering. Rebuild and redeploy the web wheel.");
           }
           if (wantsRotationOption && !linearLabelSupport.rotation) {
             throw new Error("Current gbdraw wheel does not support --label_rotation. Rebuild and redeploy the web wheel.");
@@ -2119,11 +2155,14 @@ json.dumps({
         if (normalizedLabelPlacement && normalizedLabelPlacement !== 'auto') {
           args.push('--label_placement', normalizedLabelPlacement);
         }
+        if (normalizedLabelRendering !== 'auto') {
+          args.push('--label_rendering', normalizedLabelRendering);
+        }
         if (adv.label_rotation !== null && adv.label_rotation !== undefined && adv.label_rotation !== '') {
           args.push('--label_rotation', adv.label_rotation);
         }
-        if (adv.linear_label_spacing !== null && adv.linear_label_spacing !== undefined && adv.linear_label_spacing !== '') {
-          args.push('--linear_label_spacing', adv.linear_label_spacing);
+        if (normalizedLinearLabelSpacing !== null) {
+          args.push('--linear_label_spacing', normalizedLinearLabelSpacing);
         }
         if (normalizedTrackLayout !== 'middle') {
           args.push('--track_layout', normalizedTrackLayout);

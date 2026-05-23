@@ -641,6 +641,12 @@ def _get_args(args) -> argparse.Namespace:
         metavar="{auto,above_feature}",
     )
     parser.add_argument(
+        '--label_rendering',
+        help='Label rendering policy: "auto" embeds fitting labels and routes others externally; "embedded_only" drops external labels; "external_only" forces labels outside feature bodies. Cannot be combined with --label_placement above_feature except as "auto". Default: "auto".',
+        choices=['auto', 'embedded_only', 'external_only'],
+        default='auto',
+        type=str)
+    parser.add_argument(
         '--label_rotation',
         help='Linear label rotation in degrees (optional; float; default: 0). In above_feature mode, rotated labels start from the feature midpoint.',
         type=float,
@@ -848,6 +854,8 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--depth_small_tick_interval must be > 0")
     if args.depth_tick_font_size is not None and args.depth_tick_font_size <= 0:
         parser.error("--depth_tick_font_size must be > 0")
+    if args.label_placement == "above_feature" and args.label_rendering != "auto":
+        parser.error("--label_rendering embedded_only|external_only cannot be used with --label_placement above_feature")
     if args.collinear_min_anchors <= 0:
         parser.error("--collinear_min_anchors must be > 0")
     if args.collinear_max_unit_gap < 0:
@@ -1013,6 +1021,7 @@ def linear_main(cmd_args) -> None:
     plot_title_position: str = str(args.plot_title_position or "bottom").strip().lower()
     plot_title_font_size: Optional[float] = args.plot_title_font_size
     label_font_size: Optional[float] = args.label_font_size
+    label_rendering: str = args.label_rendering
     label_placement: Optional[str] = args.label_placement
     label_rotation: Optional[float] = args.label_rotation
     track_layout: str = args.track_layout
@@ -1051,6 +1060,7 @@ def linear_main(cmd_args) -> None:
         linear_definition_show_length=definition_show_length,
         label_font_size=label_font_size,
         linear_label_spacing=args.linear_label_spacing,
+        label_rendering=label_rendering,
         label_placement=label_placement,
         label_rotation=label_rotation,
         line_stroke_color=line_stroke_color, 

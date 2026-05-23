@@ -1471,6 +1471,17 @@
                                             <label class="input-label text-[10px] mb-0">Label Font Size <help-tip text="Font size for feature labels."></help-tip></label>
                                             <input type="number" v-model.number="adv.label_font_size" class="form-input form-input-compact" placeholder="Auto">
                                         </div>
+                                        <div v-if="!(mode === 'linear' && adv.label_placement === 'above_feature')">
+                                            <label class="input-label text-[10px] mb-0">
+                                                Label Rendering
+                                                <help-tip text="Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies."></help-tip>
+                                            </label>
+                                            <select v-model="adv.label_rendering" class="form-input form-input-compact">
+                                                <option value="auto">Auto</option>
+                                                <option value="embedded_only">Embedded Only</option>
+                                                <option value="external_only">External Only</option>
+                                            </select>
+                                        </div>
                                         <template v-if="mode === 'circular'">
                                             <div>
                                                 <label class="input-label text-[10px] mb-0">
@@ -1479,8 +1490,11 @@
                                                 </label>
                                                 <input
                                                     type="number"
+                                                    min="0.01"
+                                                    step="0.5"
                                                     :value="adv.circular_label_spacing ?? ''"
                                                     @input="adv.circular_label_spacing = $event.target.value === '' ? null : Number($event.target.value)"
+                                                    @blur="adv.circular_label_spacing = Number($event.target.value) > 0 ? Number($event.target.value) : null"
                                                     class="form-input form-input-compact"
                                                     placeholder="Auto"
                                                 >
@@ -1492,7 +1506,11 @@
                                                     Label Placement
                                                     <help-tip text="Auto follows track direction (Above/Middle: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on)."></help-tip>
                                                 </label>
-                                                <select v-model="adv.label_placement" class="form-input form-input-compact">
+                                                <select
+                                                    v-model="adv.label_placement"
+                                                    @change="adv.label_placement === 'above_feature' && (adv.label_rendering = 'auto')"
+                                                    class="form-input form-input-compact"
+                                                >
                                                     <option value="auto">Auto</option>
                                                     <option value="above_feature">Above Feature</option>
                                                 </select>
@@ -1517,8 +1535,11 @@
                                                 </label>
                                                 <input
                                                     type="number"
+                                                    min="0.01"
+                                                    step="0.5"
                                                     :value="adv.linear_label_spacing ?? ''"
                                                     @input="adv.linear_label_spacing = $event.target.value === '' ? null : Number($event.target.value)"
+                                                    @blur="adv.linear_label_spacing = Number($event.target.value) > 0 ? Number($event.target.value) : null"
                                                     class="form-input form-input-compact"
                                                     placeholder="Auto"
                                                 >

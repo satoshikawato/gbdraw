@@ -323,6 +323,7 @@ const adv = reactive({
   label_font_size: null,
   circular_label_spacing: null,
   linear_label_spacing: null,
+  label_rendering: 'auto',
   label_placement: 'auto',
   label_rotation: null,
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal, Mapping
 
+from gbdraw.labels.policy import LabelRenderingPolicy, normalize_label_rendering
+
 from .common import ShortLongFloatConfig  # type: ignore[reportMissingImports]
 
 
@@ -122,6 +124,7 @@ class LabelsSpacingConfig:
 
 @dataclass(frozen=True)
 class LabelsConfig:
+    rendering: LabelRenderingPolicy
     filtering: LabelsFilteringConfig
     length_threshold: LabelsLengthThresholdConfig
     font_size: LabelsFontSizeConfig
@@ -158,6 +161,7 @@ class LabelsConfig:
             }
 
         return cls(
+            rendering=normalize_label_rendering(d.get("rendering", "auto")),
             filtering=LabelsFilteringConfig.from_dict(d.get("filtering", {})),
             length_threshold=LabelsLengthThresholdConfig.from_dict(d["length_threshold"]),
             font_size=LabelsFontSizeConfig.from_dict(d["font_size"]),

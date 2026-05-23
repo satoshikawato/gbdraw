@@ -160,6 +160,11 @@ const normalizeLegendPosition = (value, fallback = 'left') => {
   return normalized || fallback;
 };
 
+const normalizeLabelRendering = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['auto', 'embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
+};
+
 const normalizePositiveNumberOrNull = (value) => {
   if (
     value === null ||
@@ -416,6 +421,10 @@ const applyConfigData = (data) => {
   if (data.adv) safeDeepMerge(state.adv, data.adv);
   if (state.adv.label_placement === 'on_feature') {
     state.adv.label_placement = 'above_feature';
+  }
+  state.adv.label_rendering = normalizeLabelRendering(state.adv.label_rendering);
+  if (state.adv.label_placement === 'above_feature') {
+    state.adv.label_rendering = 'auto';
   }
   state.adv.circular_label_spacing = normalizePositiveNumberOrNull(state.adv.circular_label_spacing);
   state.adv.linear_label_spacing = normalizePositiveNumberOrNull(state.adv.linear_label_spacing);

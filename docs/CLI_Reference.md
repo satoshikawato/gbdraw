@@ -72,6 +72,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--plot_title_position {none,top,bottom}] [--separate_strands]
               [--track_type TRACK_TYPE] [--resolve_overlaps]
               [--labels [{none,out,both}]]
+              [--label_rendering {auto,embedded_only,external_only}]
               [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
@@ -196,6 +197,11 @@ options:
                         Label placement mode: no argument or "out" (outside),
                         "both" (outside+inside), or "none" (hidden). Default:
                         "none".
+  --label_rendering {auto,embedded_only,external_only}
+                        Label rendering policy. "auto" embeds labels that fit
+                        and routes the rest externally; "embedded_only" drops
+                        external labels; "external_only" forces labels outside
+                        feature bodies. Default: "auto".
   --label_whitelist LABEL_WHITELIST
                         Path to a TSV file for label whitelisting by regex
                         pattern (optional); mutually exclusive with
@@ -299,6 +305,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--record_label RECORD_LABEL]
               [--label_font_size LABEL_FONT_SIZE]
               [--label_placement {auto,above_feature}]
+              [--label_rendering {auto,embedded_only,external_only}]
               [--label_rotation LABEL_ROTATION]
               [--track_layout {above,middle,below}] [--track_axis_gap AUTO|PX]
               [--ruler_on_axis] [-f FORMAT] [-l LEGEND]
@@ -427,6 +434,12 @@ options:
                         "above_feature"; default: "auto"). "above_feature"
                         draws labels above features (or below negative-strand
                         features when --separate_strands is used).
+  --label_rendering {auto,embedded_only,external_only}
+                        Label rendering policy. "auto" embeds labels that fit
+                        and routes the rest externally; "embedded_only" drops
+                        external labels; "external_only" forces labels outside
+                        feature bodies. Non-auto values cannot be combined with
+                        --label_placement above_feature.
   --label_rotation LABEL_ROTATION
                         Linear label rotation in degrees (optional; float;
                         default: 0). In above_feature mode, rotated labels
