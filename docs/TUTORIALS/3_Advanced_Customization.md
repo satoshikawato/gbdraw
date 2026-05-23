@@ -178,6 +178,38 @@ gbdraw linear \
   -o MjeNMV_linear_label_override
 ```
 
+### 5. Control Embedded vs External Labels
+
+Use `--label_rendering embedded_only` to keep only labels that fit inside
+feature bodies, or `--label_rendering external_only` to force labels outside.
+The default `auto` behavior is unchanged.
+
+```bash
+gbdraw circular \
+  --gbk MjeNMV.gbk \
+  --labels \
+  --label_rendering embedded_only \
+  -o MjeNMV_embedded_labels
+
+gbdraw linear \
+  --gbk MjeNMV.gbk \
+  --show_labels all \
+  --label_rendering external_only \
+  -o MjeNMV_external_labels
+```
+
+For slanted labels above linear features, use `--label_placement above_feature`
+without `--label_rendering`:
+
+```bash
+gbdraw linear \
+  --gbk MjeNMV.gbk \
+  --show_labels all \
+  --label_placement above_feature \
+  --label_rotation 45 \
+  -o MjeNMV_above_feature_labels
+```
+
 ## Part 3: Fine-Tune Plot Appearance
 
 Use the current stroke and text options for publication-oriented styling:

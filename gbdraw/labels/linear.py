@@ -12,6 +12,7 @@ import math
 from collections import defaultdict
 
 from .filtering import get_label_text  # type: ignore[reportMissingImports]
+from .policy import normalize_label_rendering
 from ..config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ..features.coordinates import get_strand  # type: ignore[reportMissingImports]
 from ..core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
@@ -323,9 +324,14 @@ def prepare_label_list_linear(
     font_family = cfg.objects.text.font_family
     font_size = cfg.labels.font_size.linear.for_length_param(length_param)
     linear_label_cfg = cfg.labels.linear
+    label_rendering = normalize_label_rendering(cfg.labels.rendering)
     label_spacing_px = float(cfg.labels.spacing.linear)
     external_bucket_size = _external_label_bucket_size(alignment_width)
     force_above_feature = linear_label_cfg.placement == "above_feature"
+    if force_above_feature and label_rendering != "auto":
+        raise ValueError(
+            "label_rendering embedded_only|external_only cannot be used with label_placement above_feature"
+        )
     base_rotation_deg = linear_label_cfg.rotation
     interval = cfg.canvas.dpi
     label_filtering = cfg.labels.filtering.as_dict()
@@ -512,10 +518,10 @@ def prepare_label_list_linear(
                 }
             )
             track_dict["track_0"].append(label_entry)
-        elif bbox_width_px < longest_segment_length_in_pixels:
+        elif label_rendering != "external_only" and bbox_width_px < longest_segment_length_in_pixels:
             label_entry.update({"middle_y": feature_y, "is_embedded": True, "track_id": "track_0"})
             track_dict["track_0"].append(label_entry)
-        else:
+        elif label_rendering != "embedded_only":
             # For external labels: find lowest possible track
             label_entry.update({"middle_y": 0, "is_embedded": False})
 

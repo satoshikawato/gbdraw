@@ -395,9 +395,9 @@ def _tick_label_radial_offsets(
         half_height = bbox_height / 2.0
         return half_height, half_height
     if baseline == "text-before-edge":
-        return bbox_height, 0.0
+        return (0.0, bbox_height) if reverse_path else (bbox_height, 0.0)
     if baseline == "text-after-edge":
-        return 0.0, bbox_height
+        return (bbox_height, 0.0) if reverse_path else (0.0, bbox_height)
     half_height = bbox_height / 2.0
     return half_height, half_height
 
@@ -463,7 +463,12 @@ def resolve_circular_tick_label_geometry(
     if normalized_label_side in {"inside", "outside"} and normalized_tick_side in {"inside", "outside", "both"}:
         margin_px = _tick_label_margin_px(font_size, tick_width)
         if normalized_label_side == "inside":
-            path_radius = float(tick_inner) - margin_px - label_outer_offset_px
+            path_radius = (
+                float(tick_inner)
+                - margin_px
+                - (float(bbox_height_px) / 4.0)
+                - label_outer_offset_px
+            )
         else:
             path_radius = float(tick_outer) + margin_px + label_inner_offset_px
     if str(tick_side or "legacy").strip().lower() not in {"none", ""}:
@@ -701,4 +706,3 @@ __all__ = [
     "resolve_circular_tick_label_geometry",
     "set_tick_label_anchor_value",
 ]
-

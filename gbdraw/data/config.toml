@@ -183,6 +183,7 @@ long = 0.0
 
 
 [labels]
+rendering = "auto"
 
 [labels.filtering]
 blacklist_keywords = ["hypothetical", "uncharacterized", "putative", "unknown"]

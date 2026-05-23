@@ -400,6 +400,12 @@ def _get_args(args) -> argparse.Namespace:
         default='none',
         choices=['none', 'out', 'both'],
         type=str)
+    parser.add_argument(
+        '--label_rendering',
+        help='Label rendering policy: "auto" embeds fitting labels and routes others externally; "embedded_only" drops external labels; "external_only" forces labels outside feature bodies. Default: "auto".',
+        choices=['auto', 'embedded_only', 'external_only'],
+        default='auto',
+        type=str)
 
     label_list_group = parser.add_mutually_exclusive_group()
     label_list_group.add_argument(
@@ -632,6 +638,7 @@ def circular_main(cmd_args) -> None:
     depth_small_tick_interval: Optional[float] = args.depth_small_tick_interval
     depth_tick_font_size: Optional[float] = args.depth_tick_font_size
     labels_mode: str = args.labels
+    label_rendering: str = args.label_rendering
     show_labels: bool = labels_mode != "none"
     resolve_overlaps: bool = args.resolve_overlaps
     allow_inner_labels: bool = labels_mode == "both"
@@ -759,6 +766,7 @@ def circular_main(cmd_args) -> None:
         circular_definition_font_size=definition_font_size,
         plot_title_font_size=plot_title_font_size,
         label_font_size=label_font_size,
+        label_rendering=label_rendering,
         label_blacklist=label_blacklist,
         label_whitelist=label_whitelist,
         label_table=label_table_path,
