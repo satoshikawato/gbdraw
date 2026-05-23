@@ -81,13 +81,13 @@ def test_circular_tick_label_outside_uses_margin_from_tick_band() -> None:
         assert geometry.radial_inner_px - tick_outer == pytest.approx(expected_gap)
 
 
-def test_circular_tick_label_inside_uses_margin_from_tick_band() -> None:
+def test_circular_tick_label_inside_uses_legacy_center_offset_clearance() -> None:
     base_kwargs = {
         **_tick_label_kwargs(),
         "label_side": "inside",
         "tick_side": "outside",
     }
-    expected_gap = max(2.0, base_kwargs["font_size"] * 0.15) + (base_kwargs["tick_width"] / 2.0)
+    expected_margin = max(2.0, base_kwargs["font_size"] * 0.15) + (base_kwargs["tick_width"] / 2.0)
     tick_inner, _tick_outer = get_circular_tick_path_radius_bounds(
         center_radius_px=base_kwargs["center_radius_px"],
         total_len=base_kwargs["total_len"],
@@ -98,6 +98,7 @@ def test_circular_tick_label_inside_uses_margin_from_tick_band() -> None:
         tick_length_px=base_kwargs["tick_length_px"],
     )
 
+    path_radii = []
     for tick, label_text in ((1_000_000, "1.0 Mbp"), (3_000_000, "3.0 Mbp")):
         geometry = resolve_circular_tick_label_geometry(
             **base_kwargs,
@@ -105,7 +106,10 @@ def test_circular_tick_label_inside_uses_margin_from_tick_band() -> None:
             label_text=label_text,
         )
 
+        path_radii.append(geometry.path_radius_px)
+        expected_gap = expected_margin + (geometry.bbox_height_px / 4.0)
         assert tick_inner - geometry.radial_outer_px == pytest.approx(expected_gap)
+    assert path_radii[0] == pytest.approx(path_radii[1])
 
 
 def test_circular_tick_label_textpath_uses_middle_anchor() -> None:
