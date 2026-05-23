@@ -865,12 +865,12 @@ def _protein_sort_key(protein: CdsProtein) -> tuple[int, int, int, str]:
 
 
 _ORTHOGROUP_NAME_SOURCE_WEIGHTS = {
-    "product": 80,
-    "gene": 55,
+    "gene": 80,
+    "product": 55,
     "note": 35,
     "label": 10,
 }
-_ORTHOGROUP_NAME_SOURCE_ORDER = ("product", "gene", "note", "label")
+_ORTHOGROUP_NAME_SOURCE_ORDER = ("gene", "product", "note", "label")
 _ORTHOGROUP_NAME_SOURCE_RANK = {
     source: index for index, source in enumerate(_ORTHOGROUP_NAME_SOURCE_ORDER)
 }
@@ -1017,15 +1017,27 @@ def _iter_orthogroup_name_candidates(
             )
         )
 
-    return sorted(
-        candidates,
-        key=lambda candidate: (
-            -candidate.score,
-            _ORTHOGROUP_NAME_SOURCE_RANK.get(candidate.source, 99),
-            -candidate.record_coverage_count,
-            -candidate.member_count,
-            candidate.text.casefold(),
-        ),
+    return sorted(candidates, key=_orthogroup_name_candidate_sort_key)
+
+
+def _orthogroup_name_candidate_sort_key(
+    candidate: OrthogroupNameCandidate,
+) -> tuple[int, float, int, int, int, str]:
+    gene_priority = (
+        candidate.source == "gene"
+        and not _is_weak_orthogroup_name_candidate(candidate.text, candidate.source)
+        and (
+            candidate.record_coverage_count >= 2
+            or candidate.representative_count > 0
+        )
+    )
+    return (
+        0 if gene_priority else 1,
+        -candidate.score,
+        _ORTHOGROUP_NAME_SOURCE_RANK.get(candidate.source, 99),
+        -candidate.record_coverage_count,
+        -candidate.member_count,
+        candidate.text.casefold(),
     )
 
 

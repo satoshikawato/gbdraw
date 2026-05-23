@@ -659,15 +659,76 @@ def test_build_orthogroups_suggests_names_from_cds_annotations() -> None:
         extraction.protein_map,
     )
 
-    assert orthogroups.names_by_orthogroup_id["og_1"] == "DNA-directed RNA polymerase beta subunit"
+    assert orthogroups.names_by_orthogroup_id["og_1"] == "rpoB"
     assert orthogroups.confidence_by_orthogroup_id["og_1"] == "high"
     assert orthogroups.descriptions_by_orthogroup_id["og_1"] == (
-        "Suggested from product annotations in 3 of 3 records."
+        "Suggested from gene annotations in 2 of 3 records."
     )
     candidates = orthogroups.name_candidates_by_orthogroup_id["og_1"]
-    assert candidates[0].source == "product"
-    assert candidates[0].record_coverage_count == 3
+    assert candidates[0].source == "gene"
+    assert candidates[0].record_coverage_count == 2
     assert orthogroups.orthogroups["og_1"][0].product == "DNA-directed RNA polymerase beta subunit"
+
+
+@pytest.mark.linear
+def test_build_orthogroups_keeps_product_consensus_over_single_nonrepresentative_gene() -> None:
+    records = [
+        _record(
+            "record_a",
+            features=[
+                _cds(
+                    0,
+                    9,
+                    qualifiers={
+                        "translation": ["MKT*"],
+                        "product": ["DNA polymerase"],
+                    },
+                ),
+                _cds(
+                    9,
+                    18,
+                    qualifiers={
+                        "translation": ["MKT*"],
+                        "gene": ["polA"],
+                        "product": ["DNA polymerase"],
+                    },
+                ),
+            ],
+        ),
+        _record(
+            "record_b",
+            features=[
+                _cds(
+                    18,
+                    27,
+                    qualifiers={
+                        "translation": ["MKT*"],
+                        "product": ["DNA polymerase"],
+                    },
+                ),
+            ],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    hits = pd.DataFrame.from_records(
+        [
+            _hit_row("gbd_r0001_cds000001", "gbd_r0002_cds000001"),
+            _hit_row("gbd_r0001_cds000002", "gbd_r0002_cds000001"),
+        ],
+        columns=COMPARISON_COLUMNS,
+    )
+
+    orthogroups = build_orthogroups_from_protein_hits(
+        [hits],
+        extraction.protein_map,
+    )
+
+    assert orthogroups.names_by_orthogroup_id["og_1"] == "DNA polymerase"
+    candidates = orthogroups.name_candidates_by_orthogroup_id["og_1"]
+    assert candidates[0].source == "product"
+    assert candidates[0].record_coverage_count == 2
+    assert candidates[1].source == "gene"
+    assert candidates[1].representative_count == 0
 
 
 @pytest.mark.linear
@@ -980,9 +1041,10 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups() -> No
 
     assert "error" not in result
     assert result["orthogroups"][0]["member_count"] == 2
-    assert result["orthogroups"][0]["name"] == "DNA-directed RNA polymerase beta subunit"
+    assert result["orthogroups"][0]["name"] == "rpoB"
     assert result["orthogroups"][0]["nameConfidence"] == "high"
     assert result["orthogroups"][0]["nameCandidates"][0]["recordCoverageCount"] == 2
+    assert result["orthogroups"][0]["nameCandidates"][0]["source"] == "gene"
     assert result["orthogroups"][0]["members"][0]["product"] == "DNA-directed RNA polymerase beta subunit"
     rows = result["pairs"][0]["rows"]
     assert rows[0]["orthogroup_id"] == "og_1"
