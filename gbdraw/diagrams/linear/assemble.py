@@ -125,6 +125,33 @@ def _axis_ruler_extents(canvas_config: LinearCanvasConfigurator, cfg: GbdrawConf
     return 0.0, 0.0
 
 
+def _record_plot_track_stack_bottom_y(
+    *,
+    axis_y: float,
+    record_id: str,
+    canvas_config: LinearCanvasConfigurator,
+    record_heights_below: dict[str, float],
+    record_label_heights_below: dict[str, float],
+    non_middle_layout: bool,
+) -> float | None:
+    """Return the absolute y-coordinate for the drawn plot-track stack bottom."""
+    visual_bottom = float(getattr(canvas_config, "plot_tracks_visual_bottom", 0.0))
+    if visual_bottom <= 0.0:
+        return None
+
+    plot_offset_y = float(axis_y)
+    if non_middle_layout:
+        current_feature_height_below = record_heights_below.get(record_id, canvas_config.cds_padding)
+        plot_offset_y += current_feature_height_below - canvas_config.cds_padding
+    plot_offset_y += record_label_heights_below.get(record_id, 0.0)
+    return (
+        plot_offset_y
+        + canvas_config.cds_padding
+        + canvas_config.vertical_padding
+        + visual_bottom
+    )
+
+
 def _precalculate_feature_track_heights(
     records: list[SeqRecord],
     feature_config: FeatureDrawingConfigurator,
@@ -582,12 +609,25 @@ def assemble_linear_diagram(
 
             # Get the height below axis for the current record (feature tracks + GC/skew)
             current_feature_height_below = record_heights_below.get(current_record_id, canvas_config.cds_padding)
+            current_label_height_below = record_label_heights_below.get(current_record_id, 0.0)
             height_below_axis = (
                 current_feature_height_below
+                + current_label_height_below
                 + canvas_config.plot_tracks_height
             )
-            current_label_height_below = record_label_heights_below.get(current_record_id, 0.0)
-            height_below_axis += current_label_height_below
+            current_plot_stack_bottom_y = _record_plot_track_stack_bottom_y(
+                axis_y=current_y,
+                record_id=current_record_id,
+                canvas_config=canvas_config,
+                record_heights_below=record_heights_below,
+                record_label_heights_below=record_label_heights_below,
+                non_middle_layout=non_middle_layout,
+            )
+            if current_plot_stack_bottom_y is not None:
+                height_below_axis = max(
+                    height_below_axis,
+                    current_plot_stack_bottom_y - current_y,
+                )
 
             # Get the height above axis for the next record (labels or feature tracks)
             next_label_height = record_label_heights_above.get(next_record_id, 0)
@@ -767,11 +807,18 @@ def assemble_linear_diagram(
                 ribbon_start_y = record_offsets[i]
                 ribbon_end_y = record_offsets[i + 1]
             else:
-                height_below_axis = (
-                    canvas_config.cds_padding
-                    + canvas_config.plot_tracks_height
+                plot_stack_bottom_y = _record_plot_track_stack_bottom_y(
+                    axis_y=record_offsets[i],
+                    record_id=record_ids[i],
+                    canvas_config=canvas_config,
+                    record_heights_below=record_heights_below,
+                    record_label_heights_below=record_label_heights_below,
+                    non_middle_layout=non_middle_layout,
                 )
-                ribbon_start_y = record_offsets[i] + height_below_axis
+                if plot_stack_bottom_y is None:
+                    ribbon_start_y = record_offsets[i] + canvas_config.cds_padding
+                else:
+                    ribbon_start_y = plot_stack_bottom_y
                 ribbon_end_y = record_offsets[i + 1] - canvas_config.cds_padding
             comparison_offsets.append(ribbon_start_y)
             height = max(0.0, ribbon_end_y - ribbon_start_y)

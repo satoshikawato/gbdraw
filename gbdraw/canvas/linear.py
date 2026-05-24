@@ -68,6 +68,19 @@ def _calculate_linear_plot_track_layout(tracks: list[_LinearPlotTrack]) -> tuple
     return anchor_offsets, padding_segments, stack_span
 
 
+def _calculate_linear_plot_track_visual_bottom(
+    tracks: list[_LinearPlotTrack],
+    anchor_offsets: dict[str, float],
+) -> float:
+    """Return the drawn stack bottom relative to the shared plot-track anchor."""
+    if not tracks:
+        return 0.0
+    return max(
+        anchor_offsets[track.key] + track.bottom_extent
+        for track in tracks
+    )
+
+
 class LinearCanvasConfigurator:
     """
     Configures the settings for a linear canvas used for genomic data visualization.
@@ -178,6 +191,7 @@ class LinearCanvasConfigurator:
         self.depth_height: float = self.default_depth_height if self.show_depth else 0.0
         self.gc_height: float = self.default_gc_height if self.show_gc else 0.0
         self.skew_height: float = self.default_gc_height if self.show_skew else 0.0
+        gc_content_mode = str(getattr(self._cfg.objects.gc_content, "mode", "deviation"))
 
         tracks: list[_LinearPlotTrack] = []
         if self.show_depth:
@@ -190,11 +204,17 @@ class LinearCanvasConfigurator:
                 )
             )
         if self.show_gc:
+            if gc_content_mode == "percent":
+                gc_top_extent = 0.0
+                gc_bottom_extent = self.gc_height
+            else:
+                gc_top_extent = 0.5 * self.gc_height
+                gc_bottom_extent = 0.5 * self.gc_height
             tracks.append(
                 _LinearPlotTrack(
                     key="gc_content",
-                    top_extent=0.5 * self.gc_height,
-                    bottom_extent=0.5 * self.gc_height,
+                    top_extent=gc_top_extent,
+                    bottom_extent=gc_bottom_extent,
                 )
             )
         if self.show_skew:
@@ -209,6 +229,10 @@ class LinearCanvasConfigurator:
         track_offsets, padding_segments, stack_span = _calculate_linear_plot_track_layout(tracks)
         self.plot_track_offsets = track_offsets
         self.plot_tracks_height = stack_span
+        self.plot_tracks_visual_bottom = _calculate_linear_plot_track_visual_bottom(
+            tracks,
+            track_offsets,
+        )
         self.depth_track_offset = track_offsets.get("depth", 0.0)
         self.gc_content_track_offset = track_offsets.get("gc_content", 0.0)
         self.gc_skew_track_offset = track_offsets.get("gc_skew", 0.0)

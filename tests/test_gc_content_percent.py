@@ -51,6 +51,12 @@ def _axis_font_sizes(svg: str, axis_id: str) -> set[str]:
     return set(re.findall(r'font-size="([^"]+)"', match.group(0)))
 
 
+def _svg_group_translate_y(svg: str, group_id: str) -> float:
+    match = re.search(rf'<g id="{re.escape(group_id)}" transform="translate\([^,]+,([^)]+)\)"', svg)
+    assert match is not None
+    return float(match.group(1))
+
+
 def test_gc_content_config_defaults_preserve_deviation_mode() -> None:
     cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
 
@@ -138,6 +144,48 @@ def test_linear_gc_content_percent_mode_adds_percent_axis_without_depth_axis() -
     assert ">0%<" in svg
     assert ">50%<" in svg
     assert ">100%<" in svg
+
+
+@pytest.mark.linear
+def test_linear_gc_content_percent_mode_reserves_full_height_before_gc_skew() -> None:
+    from gbdraw.canvas import LinearCanvasConfigurator
+    from gbdraw.config.modify import modify_config_dict
+
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_gc=True,
+        show_skew=True,
+        gc_content_mode="percent",
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=160,
+        config_dict=config_dict,
+        legend="none",
+        cfg=cfg,
+    )
+
+    gc_bottom = canvas_config.gc_content_track_offset + canvas_config.gc_height
+    skew_top = canvas_config.gc_skew_track_offset - (0.5 * canvas_config.skew_height)
+
+    assert skew_top == pytest.approx(gc_bottom)
+
+    svg = assemble_linear_diagram_from_records(
+        [_make_record()],
+        legend="none",
+        config_overrides={
+            "show_gc": True,
+            "show_skew": True,
+            "gc_content_mode": "percent",
+        },
+        window=20,
+        step=20,
+    ).tostring()
+    gc_y = _svg_group_translate_y(svg, "gc_content")
+    skew_y = _svg_group_translate_y(svg, "gc_skew")
+
+    assert skew_y - (0.5 * canvas_config.skew_height) == pytest.approx(gc_y + canvas_config.gc_height)
 
 
 def test_default_gc_content_deviation_mode_does_not_emit_percent_axis() -> None:

@@ -75,6 +75,15 @@ def _extract_comparison_group_y(svg_content: str) -> float:
     return float(match.group(1))
 
 
+def _extract_group_translate_y(svg_content: str, group_id: str) -> float:
+    match = re.search(
+        rf'<g id="{re.escape(group_id)}" transform="translate\([^,]+,([\-0-9.]+)\)">',
+        svg_content,
+    )
+    assert match is not None
+    return float(match.group(1))
+
+
 def _extract_first_comparison_path_ys(svg_content: str) -> tuple[float, float, float, float]:
     match = re.search(r'<g id="comparison1"[^>]*><path d="([^"]+)"', svg_content)
     assert match is not None
@@ -499,6 +508,38 @@ def test_linear_pairwise_hits_span_between_axes_for_non_middle_layouts(tmp_path:
     assert path_y2 == pytest.approx(0.0)
     assert path_y3 == pytest.approx(axis_delta)
     assert path_y4 == pytest.approx(axis_delta)
+
+
+@pytest.mark.linear
+def test_linear_pairwise_starts_at_percent_gc_skew_stack_bottom(tmp_path: Path) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_GBK, INPUT_MELA_GBK],
+        [
+            "-b",
+            str(INPUT_MJE_MELA_BLAST),
+            "--show_gc",
+            "--show_skew",
+            "--gc_content_mode",
+            "percent",
+        ],
+        output_name="linear_pairwise_percent_gc_stack_bottom",
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        show_gc=True,
+        show_skew=True,
+        gc_content_mode="percent",
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    comparison_group_y = _extract_comparison_group_y(svg_content)
+    gc_skew_y = _extract_group_translate_y(svg_content, "gc_skew")
+    gc_skew_bottom_y = gc_skew_y + (0.5 * cfg.canvas.linear.default_gc_height)
+
+    assert comparison_group_y == pytest.approx(gc_skew_bottom_y)
 
 
 @pytest.mark.linear
