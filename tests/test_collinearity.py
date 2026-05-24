@@ -39,6 +39,7 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators.blast import BlastMatchConfigurator
+from gbdraw.core.color import interpolate_color
 from gbdraw.io.collinearity import parse_native_collinearity_tsv, write_native_collinearity_tsv
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.legend.table import prepare_legend_table
@@ -80,6 +81,37 @@ def _first_fasta_id(fasta_text: str) -> str:
         if line.startswith(">"):
             return line[1:].split(None, 1)[0]
     return ""
+
+
+def _hex_distance(color_a: str, color_b: str) -> float:
+    rgb_a = tuple(int(color_a[index : index + 2], 16) for index in (1, 3, 5))
+    rgb_b = tuple(int(color_b[index : index + 2], 16) for index in (1, 3, 5))
+    return math.sqrt(sum((a - b) ** 2 for a, b in zip(rgb_a, rgb_b)))
+
+
+def _build_collinearity_match_group() -> PairWiseMatchGroup:
+    group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
+    group.canvas_config = SimpleNamespace(
+        normalize_length=False,
+        alignment_width=1000,
+        longest_genome=1000,
+    )
+    group.records = [_record("record_a", []), _record("record_b", [])]
+    group.comparison_count = 1
+    group.comparison_height = 40
+    group.query_offset_x = 0
+    group.subject_offset_x = 0
+    group.query_alignment_offset_x = 0
+    group.subject_alignment_offset_x = 0
+    group.min_identity = 0
+    group.match_min_color = "#ffffff"
+    group.match_max_color = "#000000"
+    group.match_fill_opacity = 0.75
+    group.match_stroke_color = "none"
+    group.match_stroke_width = 0
+    group.collinearity_orientation_colors = {"plus": "#112233", "minus": "#445566"}
+    group.collinearity_orientation_min_colors = {"plus": "#eeeeee", "minus": "#ffeeee"}
+    return group
 
 
 def _web_protein_entry(
@@ -273,6 +305,8 @@ def test_single_anchor_block_orientation_uses_feature_strands() -> None:
 def test_collinearity_color_mode_defaults_to_orientation_and_aliases_identity() -> None:
     assert normalize_collinearity_color_mode(None) == "orientation"
     assert normalize_collinearity_color_mode("identity") == "average_identity"
+    assert normalize_collinearity_color_mode("orientation_identity") == "orientation_identity"
+    assert normalize_collinearity_color_mode("orientation-identity") == "orientation_identity"
 
 
 @pytest.mark.linear
@@ -1029,6 +1063,23 @@ def test_linear_cli_parses_collinear_block_evalue_none() -> None:
 
 
 @pytest.mark.linear
+def test_linear_cli_accepts_orientation_identity_collinear_color_mode() -> None:
+    args = linear_cli_module._get_args(
+        [
+            "--gbk",
+            "a.gb",
+            "b.gb",
+            "--protein_blastp_mode",
+            "collinear",
+            "--collinear_color_mode",
+            "orientation_identity",
+        ]
+    )
+
+    assert args.collinear_color_mode == "orientation_identity"
+
+
+@pytest.mark.linear
 def test_linear_cli_parses_collinear_min_anchors() -> None:
     default_args = linear_cli_module._get_args(["--gbk", "a.gb", "b.gb"])
     explicit_args = linear_cli_module._get_args(
@@ -1513,7 +1564,9 @@ def test_blast_configurator_reads_collinearity_colors_from_default_colors() -> N
             ("pairwise_match_min", "#ffffff"),
             ("pairwise_match_max", "#000000"),
             ("pairwise_match", "#cccccc"),
+            ("collinear_block_plus_min", "#ddeeff"),
             ("collinear_block_minus", "#445566"),
+            ("collinear_block_minus_min", "#ffdddd"),
         ],
         columns=["feature_type", "color"],
     )
@@ -1529,6 +1582,7 @@ def test_blast_configurator_reads_collinearity_colors_from_default_colors() -> N
     )
 
     assert config.collinearity_orientation_colors == {"plus": "#d3d3d3", "minus": "#445566"}
+    assert config.collinearity_orientation_min_colors == {"plus": "#ddeeff", "minus": "#ffdddd"}
 
 
 @pytest.mark.linear
@@ -1618,6 +1672,64 @@ def test_average_identity_collinearity_legend_uses_average_identity_label() -> N
 
 
 @pytest.mark.linear
+def test_orientation_identity_collinearity_legend_uses_two_orientation_gradients() -> None:
+    feature_config = SimpleNamespace(
+        color_table=None,
+        default_colors=pd.DataFrame([("CDS", "#54bcf8"), ("default", "#d3d3d3")], columns=["feature_type", "color"]),
+        block_stroke_color="none",
+        block_stroke_width=0,
+    )
+    gc_config = SimpleNamespace(
+        show_gc=False,
+        dinucleotide="GC",
+        stroke_color="none",
+        stroke_width=0,
+        high_fill_color="#ffffff",
+        low_fill_color="#000000",
+    )
+    skew_config = SimpleNamespace(
+        show_skew=False,
+        stroke_color="none",
+        stroke_width=0,
+        high_fill_color="#ffffff",
+        low_fill_color="#000000",
+    )
+    blast_config = SimpleNamespace(
+        min_color="#ffffff",
+        max_color="#000000",
+        identity=0,
+        hide_pairwise_identity_legend=False,
+        pairwise_identity_legend_entries=[
+            {
+                "label": "Collinear identity",
+                "min_color": "#eeeeee",
+                "max_color": "#112233",
+            },
+            {
+                "label": "Inverted identity",
+                "min_color": "#ffeeee",
+                "max_color": "#445566",
+            },
+        ],
+    )
+
+    legend_table = prepare_legend_table(
+        gc_config,
+        skew_config,
+        feature_config,
+        [],
+        blast_config=blast_config,
+        has_blast=True,
+    )
+
+    assert "Collinear identity" in legend_table
+    assert "Inverted identity" in legend_table
+    assert "Pairwise match identity" not in legend_table
+    assert legend_table["Collinear identity"]["min_color"] == "#eeeeee"
+    assert legend_table["Inverted identity"]["max_color"] == "#445566"
+
+
+@pytest.mark.linear
 def test_collinearity_orientation_colors_use_default_color_overrides() -> None:
     group = PairWiseMatchGroup.__new__(PairWiseMatchGroup)
     group.canvas_config = SimpleNamespace(
@@ -1655,6 +1767,120 @@ def test_collinearity_orientation_colors_use_default_color_overrides() -> None:
     drawing.add(group.generate_linear_match_path(row))
 
     assert 'fill="#445566"' in drawing.tostring()
+
+
+@pytest.mark.linear
+def test_orientation_identity_collinearity_uses_orientation_specific_identity_ramp() -> None:
+    group = _build_collinearity_match_group()
+    row = SimpleNamespace(
+        identity=95,
+        qstart=1,
+        qend=100,
+        sstart=10,
+        send=110,
+        collinearity_block_id="block_0001",
+        collinearity_orientation="minus",
+        collinearity_color_mode="orientation_identity",
+    )
+
+    path = group.generate_linear_match_path(row)
+
+    assert path.attribs["fill"] == interpolate_color("#ffeeee", "#445566", 0.95)
+    assert path.attribs["fill"] != "#445566"
+    assert path.attribs["data-collinearity-color-mode"] == "orientation_identity"
+    assert path.attribs["data-collinearity-orientation"] == "minus"
+    assert float(path.attribs["data-identity-factor"]) == pytest.approx(0.95)
+
+
+@pytest.mark.linear
+def test_orientation_identity_collinearity_low_identity_is_paler_than_high_identity() -> None:
+    group = _build_collinearity_match_group()
+    high = group.generate_linear_match_path(
+        SimpleNamespace(
+            identity=95,
+            qstart=1,
+            qend=100,
+            sstart=10,
+            send=110,
+            collinearity_block_id="block_high",
+            collinearity_orientation="minus",
+            collinearity_color_mode="orientation_identity",
+        )
+    )
+    low = group.generate_linear_match_path(
+        SimpleNamespace(
+            identity=25,
+            qstart=1,
+            qend=100,
+            sstart=10,
+            send=110,
+            collinearity_block_id="block_low",
+            collinearity_orientation="minus",
+            collinearity_color_mode="orientation_identity",
+        )
+    )
+
+    assert _hex_distance(str(high.attribs["fill"]), "#445566") < _hex_distance(
+        str(low.attribs["fill"]),
+        "#445566",
+    )
+    assert _hex_distance(str(low.attribs["fill"]), "#ffeeee") < _hex_distance(
+        str(high.attribs["fill"]),
+        "#ffeeee",
+    )
+
+
+@pytest.mark.linear
+def test_orientation_identity_collinearity_uses_two_orientation_gradients() -> None:
+    group = _build_collinearity_match_group()
+    plus = group.generate_linear_match_path(
+        SimpleNamespace(
+            identity=50,
+            qstart=1,
+            qend=100,
+            sstart=10,
+            send=110,
+            collinearity_block_id="block_plus",
+            collinearity_orientation="plus",
+            collinearity_color_mode="orientation_identity",
+        )
+    )
+    minus = group.generate_linear_match_path(
+        SimpleNamespace(
+            identity=50,
+            qstart=1,
+            qend=100,
+            sstart=10,
+            send=110,
+            collinearity_block_id="block_minus",
+            collinearity_orientation="minus",
+            collinearity_color_mode="orientation_identity",
+        )
+    )
+
+    assert plus.attribs["fill"] == interpolate_color("#eeeeee", "#112233", 0.5)
+    assert minus.attribs["fill"] == interpolate_color("#ffeeee", "#445566", 0.5)
+    assert plus.attribs["fill"] != minus.attribs["fill"]
+
+
+@pytest.mark.linear
+def test_average_identity_collinearity_ignores_orientation_colors() -> None:
+    group = _build_collinearity_match_group()
+    row = SimpleNamespace(
+        identity=95,
+        qstart=1,
+        qend=100,
+        sstart=10,
+        send=110,
+        collinearity_block_id="block_0001",
+        collinearity_orientation="minus",
+        collinearity_color_mode="average_identity",
+    )
+
+    path = group.generate_linear_match_path(row)
+
+    assert path.attribs["fill"] == interpolate_color("#ffffff", "#000000", 0.95)
+    assert path.attribs["fill"] != "#445566"
 
 
 @pytest.mark.linear

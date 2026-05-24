@@ -1,4 +1,9 @@
-import { estimateColorFactor, interpolateColor, resolveCollinearMatchColor } from '../color-utils.js';
+import {
+  estimateColorFactor,
+  interpolateColor,
+  resolveCollinearMatchColor,
+  resolvePairwiseLegendGradientColorKeys
+} from '../color-utils.js';
 import {
   getDefinitionGroupTranslate,
   getElementsBounds,
@@ -10,6 +15,24 @@ const CIRCULAR_LEGEND_EDGE_PADDING = 16;
 const CIRCULAR_LEGEND_CONTENT_GAP = 12;
 const CIRCULAR_LEGEND_PLOT_TITLE_GAP = 20;
 const CIRCULAR_PLOT_TITLE_BOTTOM_MARGIN = 24;
+
+const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
+  let updated = false;
+  pairwiseLegend.querySelectorAll('linearGradient').forEach((gradient) => {
+    const legendKey = gradient.closest('g[data-legend-key]')?.getAttribute('data-legend-key') || '';
+    const { minKey, maxKey } = resolvePairwiseLegendGradientColorKeys(legendKey);
+    const minColor = colors[minKey];
+    const maxColor = colors[maxKey];
+    if (!minColor || !maxColor) return;
+    const stops = gradient.querySelectorAll('stop');
+    if (stops.length >= 2) {
+      stops[0].setAttribute('stop-color', minColor);
+      stops[1].setAttribute('stop-color', maxColor);
+      updated = true;
+    }
+  });
+  return updated;
+};
 
 export const createLegendRepositionActions = ({
   state,
@@ -517,19 +540,10 @@ export const createLegendRepositionActions = ({
                 if (!legend) return;
                 const pairwiseLegend = legend.querySelector('#pairwise_legend');
                 if (pairwiseLegend) {
-                  const gradient = pairwiseLegend.querySelector('linearGradient');
-                  if (gradient) {
-                    const stops = gradient.querySelectorAll('stop');
-                    if (stops.length >= 2) {
-                      stops[0].setAttribute('stop-color', appliedPaletteColors.value.pairwise_match_min);
-                      stops[1].setAttribute('stop-color', appliedPaletteColors.value.pairwise_match_max);
-                      console.log(
-                        `[DEBUG] Updated ${idx === 0 ? 'horizontal' : 'vertical'} pairwise gradient:`,
-                        appliedPaletteColors.value.pairwise_match_min,
-                        '->',
-                        appliedPaletteColors.value.pairwise_match_max
-                      );
-                    }
+                  if (updatePairwiseLegendGradientStops(pairwiseLegend, appliedPaletteColors.value)) {
+                    console.log(
+                      `[DEBUG] Updated ${idx === 0 ? 'horizontal' : 'vertical'} pairwise gradient`
+                    );
                   }
                 }
               });
@@ -792,10 +806,13 @@ export const createLegendRepositionActions = ({
           if (currentFill) {
             const collinearityBlockId = path.getAttribute('data-collinearity-block-id') || '';
             const collinearityColorMode = path.getAttribute('data-collinearity-color-mode') || '';
+            const metadataText = path.getAttribute('data-identity-factor');
+            const metadataFactor = metadataText === null || metadataText === '' ? NaN : Number(metadataText);
             const collinearColor = resolveCollinearMatchColor({
               blockId: collinearityBlockId,
               colorMode: collinearityColorMode,
               orientation: path.getAttribute('data-collinearity-orientation') || '',
+              identityFactor: Number.isFinite(metadataFactor) ? metadataFactor : null,
               colors
             });
             if (collinearColor) {
@@ -805,7 +822,6 @@ export const createLegendRepositionActions = ({
             if (collinearityBlockId && !collinearityColorMode) return;
 
             let factor;
-            const metadataFactor = Number(path.getAttribute('data-identity-factor'));
             if (Number.isFinite(metadataFactor)) {
               factor = metadataFactor;
               pairwiseMatchFactors.value[pathKey] = factor;

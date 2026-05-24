@@ -326,7 +326,7 @@ const normalizeBlastpMode = (value) => {
 const normalizeCollinearColorMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   if (normalized === 'identity') return 'average_identity';
-  return ['average_identity', 'orientation'].includes(normalized) ? normalized : 'orientation';
+  return ['average_identity', 'orientation', 'orientation_identity'].includes(normalized) ? normalized : 'orientation';
 };
 const normalizeCollinearAnchorMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');

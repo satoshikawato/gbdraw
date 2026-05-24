@@ -223,13 +223,16 @@ class LegendGroup:
             if properties["type"] != "gradient":
                 continue
 
-            gradient_id = f"blast_legend_grad_{abs(hash(properties['min_color'] + properties['max_color']))}"
+            gradient_key = str(key).replace(" ", "_").replace("+", "plus").replace("-", "minus")
+            gradient_id = f"blast_legend_grad_{abs(hash(properties['min_color'] + properties['max_color'] + gradient_key))}"
+            entry_group = Group(debug=False)
+            entry_group.attribs["data-legend-key"] = str(key)
 
             # Create gradient
             gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
             gradient.add_stop_color(offset="0%", color=properties["min_color"])
             gradient.add_stop_color(offset="100%", color=properties["max_color"])
-            group.add(gradient)
+            entry_group.add(gradient)
 
             # Title
             title_path = generate_text_path(
@@ -248,7 +251,7 @@ class LegendGroup:
             )
             title_x_offset = grad_bar_width / 2
             title_path.translate(title_x_offset, gradient_y_offset)
-            group.add(title_path)
+            entry_group.add(title_path)
             gradient_y_offset += title_path_bbox_height + (self.rect_size / 2)
 
             # Gradient rectangle
@@ -260,7 +263,7 @@ class LegendGroup:
                 stroke_width=properties["width"],
             )
             grad_rect.translate(0, gradient_y_offset)
-            group.add(grad_rect)
+            entry_group.add(grad_rect)
 
             # Labels
             min_identity = properties.get("min_value", 0)
@@ -281,7 +284,7 @@ class LegendGroup:
                 text_anchor="start",
             )
             label_0.translate(0, gradient_y_offset + self.rect_size / 2 + 2)
-            group.add(label_0)
+            entry_group.add(label_0)
 
             label_100 = generate_text_path(
                 "100%",
@@ -295,7 +298,7 @@ class LegendGroup:
                 text_anchor="end",
             )
             label_100.translate(grad_bar_width, gradient_y_offset + self.rect_size / 2 + 2)
-            group.add(label_100)
+            entry_group.add(label_100)
 
             _, min_label_bbox_height = calculate_bbox_dimensions(
                 min_label_text, self.font_family, self.font_size, self.dpi
@@ -305,6 +308,7 @@ class LegendGroup:
             )
             label_bbox_height = max(min_label_bbox_height, max_label_bbox_height)
             gradient_y_offset += label_bbox_height + self.rect_size / 2 + 2
+            group.add(entry_group)
 
         return group, grad_bar_width, gradient_y_offset
 

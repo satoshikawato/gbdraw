@@ -548,10 +548,11 @@
                                                 <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMinAnchors" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                             <div>
-                                                <label class="text-[9px] flex items-center">Color mode <help-tip text="Average identity uses the block's alignment-length-weighted average identity gradient, and Orientation colors plus blocks gray and inverted blocks red."></help-tip></label>
+                                                <label class="text-[9px] flex items-center">Color mode <help-tip text="Average identity uses one identity gradient, Orientation uses fixed plus/minus colors, and Orientation + identity uses separate plus and minus identity gradients."></help-tip></label>
                                                 <select v-model="losat.blastp.collinearColorMode" class="form-input px-1 py-0.5 text-xs">
                                                     <option value="average_identity">Average identity</option>
                                                     <option value="orientation">Orientation</option>
+                                                    <option value="orientation_identity">Orientation + identity</option>
                                                 </select>
                                             </div>
                                             <div>
@@ -1208,7 +1209,7 @@
 
                             <div>
                                 <div class="flex justify-between items-center mb-2">
-                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS (-d) <help-tip text="Base colors for features, comparison tracks, and collinear blocks. Orientation mode uses collinear_block_plus and collinear_block_minus."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS (-d) <help-tip text="Base colors for features, comparison tracks, and collinear blocks. Orientation + identity uses collinear_block_plus_min, collinear_block_plus, collinear_block_minus_min, and collinear_block_minus."></help-tip></h4>
                                     <button @click="resetColors" class="text-[10px] text-blue-600 hover:underline">Reset</button>
                                 </div>
                                 <div class="mb-2 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">

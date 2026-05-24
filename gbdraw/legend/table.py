@@ -182,20 +182,32 @@ def prepare_legend_table(
                 "width": skew_stroke_width,
             }
     if has_blast and blast_config and not bool(getattr(blast_config, "hide_pairwise_identity_legend", False)):
-        identity_legend_label = str(
-            getattr(blast_config, "pairwise_identity_legend_label", "Pairwise match identity")
-        )
-        legend_table[identity_legend_label] = {
-            "type": "gradient",
-            "min_color": blast_config.min_color,
-            "max_color": blast_config.max_color,
-            "stroke": "none",
-            "width": 0,
-            "min_value": blast_config.identity,
-        }
+        identity_legend_entries = getattr(blast_config, "pairwise_identity_legend_entries", None)
+        if identity_legend_entries:
+            for entry in identity_legend_entries:
+                label = str(entry["label"])
+                legend_table[label] = {
+                    "type": "gradient",
+                    "min_color": entry["min_color"],
+                    "max_color": entry["max_color"],
+                    "stroke": "none",
+                    "width": 0,
+                    "min_value": blast_config.identity,
+                }
+        else:
+            identity_legend_label = str(
+                getattr(blast_config, "pairwise_identity_legend_label", "Pairwise match identity")
+            )
+            legend_table[identity_legend_label] = {
+                "type": "gradient",
+                "min_color": blast_config.min_color,
+                "max_color": blast_config.max_color,
+                "stroke": "none",
+                "width": 0,
+                "min_value": blast_config.identity,
+            }
     return legend_table
 
 
 __all__ = ["prepare_legend_table"]
-
 

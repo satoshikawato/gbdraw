@@ -901,12 +901,12 @@ def _resolve_pairwise_match_style(style: str) -> Literal["ribbon", "curve"]:
     return cast(Literal["ribbon", "curve"], normalized)
 
 
-def _comparison_frames_have_collinearity_color_mode(
+def _comparison_frames_collinearity_color_modes(
     frames: Sequence[DataFrame] | None,
-    modes: set[str],
-) -> bool:
+) -> set[str]:
+    color_modes: set[str] = set()
     if not frames:
-        return False
+        return color_modes
     for frame in frames:
         if "collinearity_color_mode" not in frame.columns:
             continue
@@ -914,9 +914,9 @@ def _comparison_frames_have_collinearity_color_mode(
             normalized = str(value).strip().lower().replace("-", "_")
             if normalized == "identity":
                 normalized = "average_identity"
-            if normalized in modes:
-                return True
-    return False
+            if normalized in {"average_identity", "orientation", "orientation_identity"}:
+                color_modes.add(normalized)
+    return color_modes
 
 
 def _resolve_plot_title_font_size(value: float | None) -> float:
@@ -1568,28 +1568,26 @@ def assemble_linear_diagram_from_records(
         cfg=cfg,
     )
     blast_config.collinearity_color_mode = normalized_collinearity_color_mode
-    uses_collinearity_rendering = (
-        collinearity_blocks is not None
-        or normalized_protein_blastp_mode == "collinear"
-        or _comparison_frames_have_collinearity_color_mode(
-            resolved_protein_comparisons,
-            {"average_identity", "orientation"},
-        )
+    collinearity_color_modes = _comparison_frames_collinearity_color_modes(
+        resolved_protein_comparisons
     )
-    blast_config.hide_pairwise_identity_legend = (
-        uses_collinearity_rendering
-        and normalized_collinearity_color_mode == "orientation"
-    ) or _comparison_frames_have_collinearity_color_mode(
-        resolved_protein_comparisons,
-        {"orientation"},
-    )
-    if (
-        uses_collinearity_rendering
-        and normalized_collinearity_color_mode == "average_identity"
-    ) or _comparison_frames_have_collinearity_color_mode(
-        resolved_protein_comparisons,
-        {"average_identity"},
-    ):
+    if collinearity_blocks is not None or normalized_protein_blastp_mode == "collinear":
+        collinearity_color_modes.add(normalized_collinearity_color_mode)
+    blast_config.hide_pairwise_identity_legend = collinearity_color_modes == {"orientation"}
+    if "orientation_identity" in collinearity_color_modes:
+        blast_config.pairwise_identity_legend_entries = [
+            {
+                "label": "Collinear identity",
+                "min_color": blast_config.collinearity_orientation_min_colors["plus"],
+                "max_color": blast_config.collinearity_orientation_colors["plus"],
+            },
+            {
+                "label": "Inverted identity",
+                "min_color": blast_config.collinearity_orientation_min_colors["minus"],
+                "max_color": blast_config.collinearity_orientation_colors["minus"],
+            },
+        ]
+    elif "average_identity" in collinearity_color_modes:
         blast_config.pairwise_identity_legend_label = "Average identity"
 
     canvas_config = LinearCanvasConfigurator(

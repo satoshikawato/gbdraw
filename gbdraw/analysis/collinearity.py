@@ -18,7 +18,6 @@ from gbdraw.analysis.collinearity_units import (
     CollinearityUnit,
     CollinearityUnitIndex,
     CollinearityUnitMode,
-    build_collinearity_unit_index,
 )
 from gbdraw.analysis.protein_colinearity import (
     CdsProtein,
@@ -41,7 +40,7 @@ from gbdraw.io.comparisons import COMPARISON_COLUMNS
 CollinearityOrientation = Literal["plus", "minus"]
 CollinearityBlockKind = Literal["syntenic", "cluster", "singleton"]
 CollinearityScoreMode = Literal["constant", "bitscore"]
-CollinearityColorMode = Literal["average_identity", "orientation"]
+CollinearityColorMode = Literal["average_identity", "orientation", "orientation_identity"]
 CollinearityAnchorMode = Literal["all", "one_to_one", "rbh"]
 CollinearitySearchScope = Literal["adjacent", "all"]
 
@@ -69,7 +68,7 @@ COLLINEARITY_METADATA_COLUMNS = (
     "subject_feature_svg_id",
 )
 COLLINEARITY_COMPARISON_COLUMNS = tuple(COMPARISON_COLUMNS) + COLLINEARITY_METADATA_COLUMNS
-COLLINEARITY_COLOR_MODES = ("average_identity", "orientation")
+COLLINEARITY_COLOR_MODES = ("average_identity", "orientation", "orientation_identity")
 COLLINEARITY_ANCHOR_MODES = ("all", "one_to_one", "rbh")
 COLLINEARITY_SEARCH_SCOPES = ("adjacent", "all")
 

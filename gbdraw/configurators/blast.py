@@ -8,6 +8,8 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from gbdraw.core.color import (
     COLLINEAR_ORIENTATION_COLOR_KEYS,
+    COLLINEAR_ORIENTATION_MIN_COLOR_KEYS,
+    DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
     DEFAULT_COLLINEAR_ORIENTATION_COLORS,
 )
 
@@ -77,6 +79,14 @@ class BlastMatchConfigurator:
                 DEFAULT_COLLINEAR_ORIENTATION_COLORS[orientation],
             )
             for orientation, color_key in COLLINEAR_ORIENTATION_COLOR_KEYS.items()
+        }
+        self.collinearity_orientation_min_colors: dict[str, str] = {
+            orientation: _default_color(
+                default_colors_df,
+                color_key,
+                DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS[orientation],
+            )
+            for orientation, color_key in COLLINEAR_ORIENTATION_MIN_COLOR_KEYS.items()
         }
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self.fill_opacity: float = cfg.objects.blast_match.fill_opacity

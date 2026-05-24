@@ -1,4 +1,9 @@
-import { estimateColorFactor, interpolateColor, resolveCollinearMatchColor } from './color-utils.js';
+import {
+  estimateColorFactor,
+  interpolateColor,
+  resolveCollinearMatchColor,
+  resolvePairwiseLegendGradientColorKeys
+} from './color-utils.js';
 import { ruleMatchesFeature } from './feature-utils.js';
 
 export const createSvgStyles = ({ state, watch, legendActions }) => {
@@ -116,30 +121,47 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       const pairwiseLegend = legend.querySelector('#pairwise_legend');
       if (!pairwiseLegend) return;
 
-      const gradient = pairwiseLegend.querySelector('linearGradient');
-      if (!gradient) return;
+      pairwiseLegend.querySelectorAll('linearGradient').forEach((gradient) => {
+        const currentId = gradient.id;
+        if (!currentId || currentId.endsWith(`_${suffix}`)) return;
 
-      const currentId = gradient.id;
-      if (currentId.endsWith(`_${suffix}`)) return;
+        const baseId = currentId.replace(/_[hv]$/, '');
+        const newId = `${baseId}_${suffix}`;
+        gradient.setAttribute('id', newId);
+        changed = true;
 
-      const baseId = currentId.replace(/_[hv]$/, '');
-      const newId = `${baseId}_${suffix}`;
-      gradient.setAttribute('id', newId);
-      changed = true;
-
-      const paths = pairwiseLegend.querySelectorAll('path');
-      paths.forEach((path) => {
-        const fill = path.getAttribute('fill');
-        if (fill && fill.includes('url(#')) {
-          path.setAttribute('fill', `url(#${newId})`);
-          changed = true;
-        }
+        const paths = pairwiseLegend.querySelectorAll('path');
+        paths.forEach((path) => {
+          const fill = path.getAttribute('fill');
+          if (fill === `url(#${currentId})`) {
+            path.setAttribute('fill', `url(#${newId})`);
+            changed = true;
+          }
+        });
       });
     };
 
     fixGradientId(horizontalLegend, 'h');
     fixGradientId(verticalLegend, 'v');
     return changed;
+  };
+
+  const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
+    let updated = false;
+    pairwiseLegend.querySelectorAll('linearGradient').forEach((gradient) => {
+      const legendKey = gradient.closest('g[data-legend-key]')?.getAttribute('data-legend-key') || '';
+      const { minKey, maxKey } = resolvePairwiseLegendGradientColorKeys(legendKey);
+      const minColor = colors[minKey];
+      const maxColor = colors[maxKey];
+      if (!minColor || !maxColor) return;
+      const stops = gradient.querySelectorAll('stop');
+      if (stops.length >= 2) {
+        stops[0].setAttribute('stop-color', minColor);
+        stops[1].setAttribute('stop-color', maxColor);
+        updated = true;
+      }
+    });
+    return updated;
   };
 
   const applyPaletteToSvg = () => {
@@ -219,10 +241,13 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
           if (currentFill) {
             const collinearityBlockId = path.getAttribute('data-collinearity-block-id') || '';
             const collinearityColorMode = path.getAttribute('data-collinearity-color-mode') || '';
+            const metadataText = path.getAttribute('data-identity-factor');
+            const metadataFactor = metadataText === null || metadataText === '' ? NaN : Number(metadataText);
             const collinearColor = resolveCollinearMatchColor({
               blockId: collinearityBlockId,
               colorMode: collinearityColorMode,
               orientation: path.getAttribute('data-collinearity-orientation') || '',
+              identityFactor: Number.isFinite(metadataFactor) ? metadataFactor : null,
               colors
             });
             if (collinearColor) {
@@ -233,7 +258,6 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
             if (collinearityBlockId && !collinearityColorMode) return;
 
             let factor;
-            const metadataFactor = Number(path.getAttribute('data-identity-factor'));
             if (Number.isFinite(metadataFactor)) {
               factor = metadataFactor;
               pairwiseMatchFactors.value[pathKey] = factor;
@@ -357,15 +381,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     if (colors.pairwise_match_min && colors.pairwise_match_max) {
       const allPairwiseLegends = svg.querySelectorAll('#pairwise_legend, [id="pairwise_legend"]');
       allPairwiseLegends.forEach((pairwiseLegend) => {
-        const gradient = pairwiseLegend.querySelector('linearGradient');
-        if (gradient) {
-          const stops = gradient.querySelectorAll('stop');
-          if (stops.length >= 2) {
-            stops[0].setAttribute('stop-color', colors.pairwise_match_min);
-            stops[1].setAttribute('stop-color', colors.pairwise_match_max);
-            updatedCount++;
-          }
-        }
+        if (updatePairwiseLegendGradientStops(pairwiseLegend, colors)) updatedCount++;
       });
     }
 

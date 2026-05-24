@@ -59,10 +59,12 @@ class LegendDrawingConfigurator:
         line_margin = (24 / 14) * self.color_rect_size  # move to config
         x_margin = (22 / 14) * self.color_rect_size  # move to config
         total_width = canvas_config.total_width
-        for key, properties in legend_table.items():
-            if properties.get("type") == "gradient":
-                self.has_gradient = True
-                self.pairwise_legend_width = (10 * self.color_rect_size) if self.has_gradient else 0
+        gradient_count = sum(
+            1 for properties in legend_table.values() if properties.get("type") == "gradient"
+        )
+        if gradient_count:
+            self.has_gradient = True
+            self.pairwise_legend_width = 10 * self.color_rect_size
         if canvas_config.legend_position == "top" or canvas_config.legend_position == "bottom":
             bbox_list = [
                 calculate_bbox_dimensions(item, self.font_family, self.font_size, self.dpi)
@@ -78,7 +80,9 @@ class LegendDrawingConfigurator:
                 total_legend_width = total_feature_legend_width
             if total_legend_width <= total_width:
                 self.legend_width = total_legend_width
-                self.legend_height = self.color_rect_size + 2 * line_margin
+                feature_legend_height = self.color_rect_size + 2 * line_margin
+                gradient_legend_height = gradient_count * (2 * self.color_rect_size + 2 * line_margin)
+                self.legend_height = max(feature_legend_height, gradient_legend_height)
                 self.total_feature_legend_width = self.legend_width - self.pairwise_legend_width
                 self.num_of_columns = len(legend_table)
                 return self
@@ -123,7 +127,7 @@ class LegendDrawingConfigurator:
                     num_lines += 1
 
             if self.has_gradient:
-                num_lines += 2
+                num_lines += 2 * gradient_count
 
             if num_lines > 0:
                 self.legend_height = self.color_rect_size + (num_lines - 1) * line_margin

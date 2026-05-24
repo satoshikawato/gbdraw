@@ -14,6 +14,16 @@ export const COLLINEAR_ORIENTATION_COLOR_KEYS = Object.freeze({
   minus: 'collinear_block_minus'
 });
 
+export const COLLINEAR_ORIENTATION_MIN_COLOR_KEYS = Object.freeze({
+  plus: 'collinear_block_plus_min',
+  minus: 'collinear_block_minus_min'
+});
+
+export const DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS = Object.freeze({
+  plus: '#f2f2f2',
+  minus: '#FFE7E7'
+});
+
 export const DEFAULT_COLLINEAR_ORIENTATION_COLORS = Object.freeze({
   plus: '#d3d3d3',
   minus: '#E15759'
@@ -23,11 +33,30 @@ export const DEFAULT_COMPARISON_COLORS = Object.freeze({
   pairwise_match: '#d3d3d3',
   pairwise_match_min: '#FFE7E7',
   pairwise_match_max: '#FF7272',
+  collinear_block_plus_min: DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS.plus,
   collinear_block_plus: DEFAULT_COLLINEAR_ORIENTATION_COLORS.plus,
+  collinear_block_minus_min: DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS.minus,
   collinear_block_minus: DEFAULT_COLLINEAR_ORIENTATION_COLORS.minus
 });
 
 export const COMPARISON_COLOR_KEYS = Object.freeze(Object.keys(DEFAULT_COMPARISON_COLORS));
+
+export const resolvePairwiseLegendGradientColorKeys = (legendKey) => {
+  const normalizedKey = String(legendKey || '').trim();
+  if (normalizedKey === 'Collinear identity') {
+    return {
+      minKey: COLLINEAR_ORIENTATION_MIN_COLOR_KEYS.plus,
+      maxKey: COLLINEAR_ORIENTATION_COLOR_KEYS.plus
+    };
+  }
+  if (normalizedKey === 'Inverted identity') {
+    return {
+      minKey: COLLINEAR_ORIENTATION_MIN_COLOR_KEYS.minus,
+      maxKey: COLLINEAR_ORIENTATION_COLOR_KEYS.minus
+    };
+  }
+  return { minKey: 'pairwise_match_min', maxKey: 'pairwise_match_max' };
+};
 
 const COLOR_NAME_MAP = {
   aliceblue: '#F0F8FF',
@@ -249,16 +278,33 @@ export const normalizePaletteDefinitions = (palettes = {}) => {
   return normalized;
 };
 
-export const resolveCollinearMatchColor = ({ blockId, colorMode, orientation, colors = {} }) => {
+export const resolveCollinearMatchColor = ({
+  blockId,
+  colorMode,
+  orientation,
+  identityFactor,
+  colors = {}
+}) => {
   const normalizedBlockId = String(blockId || '').trim();
   if (!normalizedBlockId) return null;
 
-  const normalizedMode = String(colorMode || '').trim().toLowerCase();
-  if (normalizedMode === 'orientation') {
-    const normalizedOrientation = String(orientation || '').trim().toLowerCase();
-    const colorKey = COLLINEAR_ORIENTATION_COLOR_KEYS[normalizedOrientation];
-    if (!colorKey) return null;
-    return colors[colorKey] || DEFAULT_COLLINEAR_ORIENTATION_COLORS[normalizedOrientation];
+  const normalizedMode = String(colorMode || '').trim().toLowerCase().replace(/-/g, '_');
+  const normalizedOrientation = String(orientation || '').trim().toLowerCase();
+  const colorKey = COLLINEAR_ORIENTATION_COLOR_KEYS[normalizedOrientation];
+  const minColorKey = COLLINEAR_ORIENTATION_MIN_COLOR_KEYS[normalizedOrientation];
+  if (!colorKey) return null;
+  const orientationColor = colors[colorKey] || DEFAULT_COLLINEAR_ORIENTATION_COLORS[normalizedOrientation];
+
+  if (normalizedMode === 'orientation') return orientationColor;
+  if (normalizedMode === 'orientation_identity') {
+    const factor = Number(identityFactor);
+    if (!Number.isFinite(factor)) return null;
+    const minColor = colors[minColorKey] || DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS[normalizedOrientation];
+    return interpolateColor(
+      minColor,
+      orientationColor,
+      factor
+    );
   }
 
   return null;

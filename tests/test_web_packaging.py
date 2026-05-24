@@ -252,6 +252,81 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "canMoveCircularTrackSlotInside: circularTrackSlotEditor.canMoveCircularTrackSlotInside" in app_setup_source
 
 
+def test_web_collinear_orientation_identity_mode_is_wired() -> None:
+    index_source = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    color_source = (WEB_ROOT / "js" / "app" / "color-utils.js").read_text(encoding="utf-8")
+    svg_styles_source = (WEB_ROOT / "js" / "app" / "svg-styles.js").read_text(encoding="utf-8")
+
+    assert '<option value="orientation_identity">Orientation + identity</option>' in index_source
+    assert "['average_identity', 'orientation', 'orientation_identity']" in run_source
+    assert "['average_identity', 'orientation', 'orientation_identity']" in config_source
+    assert "normalizedMode === 'orientation_identity'" in color_source
+    assert "collinear_block_plus_min" in color_source
+    assert "collinear_block_minus_min" in color_source
+    assert "identityFactor: Number.isFinite(metadataFactor) ? metadataFactor : null" in svg_styles_source
+
+
+def test_web_collinear_orientation_identity_recoloring_uses_identity_factor(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    source_path = WEB_ROOT / "js" / "app" / "color-utils.js"
+    module_path = tmp_path / "color-utils.mjs"
+    module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+    check_path = tmp_path / "check-color-utils.mjs"
+    check_path.write_text(
+        f"""
+        import {{ interpolateColor, resolveCollinearMatchColor }} from {module_path.as_uri()!r};
+
+        const colors = {{
+          pairwise_match_min: '#ffffff',
+          pairwise_match_max: '#000000',
+          collinear_block_plus_min: '#eeeeee',
+          collinear_block_plus: '#808080',
+          collinear_block_minus_min: '#ffeeee',
+          collinear_block_minus: '#ff0000'
+        }};
+        const graded = resolveCollinearMatchColor({{
+          blockId: 'block_1',
+          colorMode: 'orientation_identity',
+          orientation: 'minus',
+          identityFactor: 0.5,
+          colors
+        }});
+        const expected = interpolateColor('#ffeeee', '#ff0000', 0.5);
+        if (graded !== expected) {{
+          throw new Error(`Expected orientation identity ramp ${{expected}}, got ${{graded}}`);
+        }}
+        const fixed = resolveCollinearMatchColor({{
+          blockId: 'block_1',
+          colorMode: 'orientation',
+          orientation: 'minus',
+          identityFactor: 0.5,
+          colors
+        }});
+        if (fixed !== '#ff0000') {{
+          throw new Error(`Orientation mode should keep a fixed endpoint color, got ${{fixed}}`);
+        }}
+        const averageIdentity = resolveCollinearMatchColor({{
+          blockId: 'block_1',
+          colorMode: 'average_identity',
+          orientation: 'minus',
+          identityFactor: 0.5,
+          colors
+        }});
+        if (averageIdentity !== null) {{
+          throw new Error(`Average identity mode should fall back to pairwise recoloring, got ${{averageIdentity}}`);
+        }}
+        """,
+        encoding="utf-8",
+    )
+
+    subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
+
+
 def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path: Path) -> None:
     node = shutil.which("node")
     if node is None:
