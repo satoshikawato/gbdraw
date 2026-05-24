@@ -126,9 +126,9 @@ def _parse_collinear_color_mode(value: str) -> str:
     normalized = str(value).strip().lower().replace("-", "_")
     if normalized == "identity":
         normalized = "average_identity"
-    if normalized not in {"average_identity", "orientation"}:
+    if normalized not in {"average_identity", "orientation", "orientation_identity"}:
         raise argparse.ArgumentTypeError(
-            "collinear_color_mode must be one of: average_identity, orientation"
+            "collinear_color_mode must be one of: average_identity, orientation, orientation_identity"
         )
     return normalized
 
@@ -356,9 +356,9 @@ def _get_args(args) -> argparse.Namespace:
         '--collinear_color_mode',
         '--collinear-color-mode',
         dest='collinear_color_mode',
-        help='Collinear ribbon color mode: average_identity or orientation (default: orientation).',
+        help='Collinear ribbon color mode: average_identity, orientation, or orientation_identity (default: orientation).',
         type=_parse_collinear_color_mode,
-        choices=["average_identity", "orientation"],
+        choices=["average_identity", "orientation", "orientation_identity"],
         default='orientation')
     parser.add_argument(
         '--collinear_blocks',

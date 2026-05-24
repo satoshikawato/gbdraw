@@ -115,6 +115,29 @@ def test_local_index_keeps_cloudflare_analytics_as_deploy_only() -> None:
     assert "CLOUDFLARE_WEB_ANALYTICS_NOTICE" in index_html
 
 
+def test_web_losat_threaded_browser_wiring() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    config_source = (WEB_ROOT / "js" / "config.js").read_text(encoding="utf-8")
+    losat_source = (WEB_ROOT / "js" / "services" / "losat.js").read_text(encoding="utf-8")
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+
+    assert 'LOSAT_THREADED_WASM_URL = "./wasm/losat/losat-threaded.wasm"' in config_source
+    assert "losat-threaded-worker.js" in losat_source
+    assert "wasi_thread_start" in (WEB_ROOT / "js" / "workers" / "losat-wasi-thread-worker.js").read_text(encoding="utf-8")
+    assert 'v-model="losat.parallelWorkers"' in index_html
+    assert 'v-model="losat.threadsPerJob"' in index_html
+    assert "executionMode: 'auto'" in (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    assert "losatRuntimeCompatibility" in run_source
+    assert "onRuntimeStatus" in run_source
+
+
+def test_web_losat_thread_count_options_are_contiguous() -> None:
+    source = (WEB_ROOT / "js" / "app" / "losat-settings.js").read_text(encoding="utf-8")
+    assert "const createPositiveIntegerOptions = (maxValue) =>" in source
+    assert "return createPositiveIntegerOptions(losatHardwareThreads.value);" in source
+    assert "return createPositiveIntegerOptions(maxThreads);" in source
+
+
 def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) -> None:
     ensure_prepared_browser_wheel()
     cloudflare_module = _load_prepare_cloudflare_pages_module()
@@ -130,6 +153,10 @@ def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) 
     assert "connect-src 'self' https://cloudflareinsights.com;" in index_html
     assert "CLOUDFLARE_WEB_ANALYTICS_SCRIPT" not in index_html
     assert "CLOUDFLARE_WEB_ANALYTICS_NOTICE" not in index_html
+    headers = (bundle_path / "_headers").read_text(encoding="utf-8")
+    assert "Cross-Origin-Opener-Policy: same-origin" in headers
+    assert "Cross-Origin-Embedder-Policy: require-corp" in headers
+    assert "Cross-Origin-Resource-Policy: same-origin" in headers
 
 
 def test_wrangler_uses_cloudflare_bundle_directory() -> None:
@@ -250,6 +277,104 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "moveCircularTrackSlotInside: circularTrackSlotEditor.moveCircularTrackSlotInside" in app_setup_source
     assert "canMoveCircularTrackSlotOutside: circularTrackSlotEditor.canMoveCircularTrackSlotOutside" in app_setup_source
     assert "canMoveCircularTrackSlotInside: circularTrackSlotEditor.canMoveCircularTrackSlotInside" in app_setup_source
+
+
+def test_web_collinear_orientation_identity_mode_is_wired() -> None:
+    index_source = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    color_source = (WEB_ROOT / "js" / "app" / "color-utils.js").read_text(encoding="utf-8")
+    svg_styles_source = (WEB_ROOT / "js" / "app" / "svg-styles.js").read_text(encoding="utf-8")
+
+    assert '<option value="orientation_identity">Orientation + identity</option>' in index_source
+    assert "['average_identity', 'orientation', 'orientation_identity']" in run_source
+    assert "['average_identity', 'orientation', 'orientation_identity']" in config_source
+    assert "normalizedMode === 'orientation_identity'" in color_source
+    assert "collinear_block_plus_min" in color_source
+    assert "collinear_block_minus_min" in color_source
+    assert "identityFactor: Number.isFinite(metadataFactor) ? metadataFactor : null" in svg_styles_source
+
+
+def test_web_collinear_orientation_identity_recoloring_uses_identity_factor(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    source_path = WEB_ROOT / "js" / "app" / "color-utils.js"
+    module_path = tmp_path / "color-utils.mjs"
+    module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+    check_path = tmp_path / "check-color-utils.mjs"
+    check_path.write_text(
+        f"""
+        import {{
+          interpolateColor,
+          normalizePaletteColors,
+          resolveCollinearMatchColor,
+          resolvePairwiseLegendGradientColorKeys
+        }} from {module_path.as_uri()!r};
+
+        const colors = {{
+          pairwise_match_min: '#ffffff',
+          pairwise_match_max: '#000000',
+          collinear_block_plus_min: '#eeeeee',
+          collinear_block_plus: '#808080',
+          collinear_block_minus_min: '#ffeeee',
+          collinear_block_minus: '#ff0000'
+        }};
+        const graded = resolveCollinearMatchColor({{
+          blockId: 'block_1',
+          colorMode: 'orientation_identity',
+          orientation: 'minus',
+          identityFactor: 0.5,
+          colors
+        }});
+        const expected = interpolateColor('#ffeeee', '#ff0000', 0.5);
+        if (graded !== expected) {{
+          throw new Error(`Expected orientation identity ramp ${{expected}}, got ${{graded}}`);
+        }}
+        const fixed = resolveCollinearMatchColor({{
+          blockId: 'block_1',
+          colorMode: 'orientation',
+          orientation: 'minus',
+          identityFactor: 0.5,
+          colors
+        }});
+        if (fixed !== '#ff0000') {{
+          throw new Error(`Orientation mode should keep a fixed endpoint color, got ${{fixed}}`);
+        }}
+        const averageIdentity = resolveCollinearMatchColor({{
+          blockId: 'block_1',
+          colorMode: 'average_identity',
+          orientation: 'minus',
+          identityFactor: 0.5,
+          colors
+        }});
+        if (averageIdentity !== null) {{
+          throw new Error(`Average identity mode should fall back to pairwise recoloring, got ${{averageIdentity}}`);
+        }}
+        const plusLegendKeys = resolvePairwiseLegendGradientColorKeys('Collinear');
+        if (
+          plusLegendKeys.minKey !== 'collinear_block_plus_min' ||
+          plusLegendKeys.maxKey !== 'collinear_block_plus'
+        ) {{
+          throw new Error(`Collinear legend should use plus gradient keys, got ${{JSON.stringify(plusLegendKeys)}}`);
+        }}
+        const minusLegendKeys = resolvePairwiseLegendGradientColorKeys('Inverted');
+        if (
+          minusLegendKeys.minKey !== 'collinear_block_minus_min' ||
+          minusLegendKeys.maxKey !== 'collinear_block_minus'
+        ) {{
+          throw new Error(`Inverted legend should use minus gradient keys, got ${{JSON.stringify(minusLegendKeys)}}`);
+        }}
+        const aliasPalette = normalizePaletteColors({{ collinear_block_plus_max: '#123456' }});
+        if (aliasPalette.collinear_block_plus !== '#123456') {{
+          throw new Error(`collinear_block_plus_max should alias collinear_block_plus, got ${{aliasPalette.collinear_block_plus}}`);
+        }}
+        """,
+        encoding="utf-8",
+    )
+
+    subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
 
 
 def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path: Path) -> None:
@@ -730,7 +855,10 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         build_root / "gbdraw" / "web" / "vendor" / "pyodide" / "v0.29.0" / "full" / "pyodide.asm.wasm",
         build_root / "gbdraw" / "web" / "vendor" / "browser_wasi_shim" / "dist" / "index.js",
         build_root / "gbdraw" / "web" / "vendor" / "phosphor-icons" / "regular" / "style.css",
+        build_root / "gbdraw" / "web" / "js" / "workers" / "losat-threaded-worker.js",
+        build_root / "gbdraw" / "web" / "js" / "workers" / "losat-wasi-thread-worker.js",
         build_root / "gbdraw" / "web" / "wasm" / "losat" / "losat.wasm",
+        build_root / "gbdraw" / "web" / "wasm" / "losat" / "losat-threaded.wasm",
         *(build_root / "gbdraw" / "web" / path for path in verify_module.REQUIRED_UI_FONT_FILES),
         *(build_root / "gbdraw" / "web" / path for path in verify_module._parse_local_wheel_paths()),
     ]

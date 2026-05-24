@@ -70,7 +70,10 @@ from gbdraw.diagrams.circular.positioning import place_definition_group_on_size 
 from gbdraw.diagrams.linear import assemble_linear_diagram  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
 from gbdraw.features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
-from gbdraw.legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
+from gbdraw.legend.table import (  # type: ignore[reportMissingImports]
+    configure_pairwise_identity_legend_from_comparisons,
+    prepare_legend_table,
+)
 from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup  # type: ignore[reportMissingImports]
 from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
@@ -901,24 +904,6 @@ def _resolve_pairwise_match_style(style: str) -> Literal["ribbon", "curve"]:
     return cast(Literal["ribbon", "curve"], normalized)
 
 
-def _comparison_frames_have_collinearity_color_mode(
-    frames: Sequence[DataFrame] | None,
-    modes: set[str],
-) -> bool:
-    if not frames:
-        return False
-    for frame in frames:
-        if "collinearity_color_mode" not in frame.columns:
-            continue
-        for value in frame["collinearity_color_mode"].dropna():
-            normalized = str(value).strip().lower().replace("-", "_")
-            if normalized == "identity":
-                normalized = "average_identity"
-            if normalized in modes:
-                return True
-    return False
-
-
 def _resolve_plot_title_font_size(value: float | None) -> float:
     if value is None:
         return float(_PLOT_TITLE_DEFAULT_FONT_SIZE)
@@ -1568,29 +1553,16 @@ def assemble_linear_diagram_from_records(
         cfg=cfg,
     )
     blast_config.collinearity_color_mode = normalized_collinearity_color_mode
-    uses_collinearity_rendering = (
-        collinearity_blocks is not None
-        or normalized_protein_blastp_mode == "collinear"
-        or _comparison_frames_have_collinearity_color_mode(
-            resolved_protein_comparisons,
-            {"average_identity", "orientation"},
-        )
+    additional_color_modes = (
+        {normalized_collinearity_color_mode}
+        if collinearity_blocks is not None or normalized_protein_blastp_mode == "collinear"
+        else None
     )
-    blast_config.hide_pairwise_identity_legend = (
-        uses_collinearity_rendering
-        and normalized_collinearity_color_mode == "orientation"
-    ) or _comparison_frames_have_collinearity_color_mode(
+    configure_pairwise_identity_legend_from_comparisons(
+        blast_config,
         resolved_protein_comparisons,
-        {"orientation"},
+        additional_color_modes=additional_color_modes,
     )
-    if (
-        uses_collinearity_rendering
-        and normalized_collinearity_color_mode == "average_identity"
-    ) or _comparison_frames_have_collinearity_color_mode(
-        resolved_protein_comparisons,
-        {"average_identity"},
-    ):
-        blast_config.pairwise_identity_legend_label = "Average identity"
 
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=len(records),

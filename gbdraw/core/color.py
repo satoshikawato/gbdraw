@@ -5,8 +5,16 @@ COLLINEAR_ORIENTATION_COLOR_KEYS = {
     "plus": "collinear_block_plus",
     "minus": "collinear_block_minus",
 }
+COLLINEAR_ORIENTATION_MIN_COLOR_KEYS = {
+    "plus": "collinear_block_plus_min",
+    "minus": "collinear_block_minus_min",
+}
+DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS = {
+    "plus": "#f0f1f5",
+    "minus": "#FFE7E7",
+}
 DEFAULT_COLLINEAR_ORIENTATION_COLORS = {
-    "plus": "#d3d3d3",
+    "plus": "#8b9cc1",
     "minus": "#E15759",
 }
 
@@ -32,6 +40,8 @@ def interpolate_color(color_min: str, color_max: str, factor: float) -> str:
 
 __all__ = [
     "COLLINEAR_ORIENTATION_COLOR_KEYS",
+    "COLLINEAR_ORIENTATION_MIN_COLOR_KEYS",
+    "DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS",
     "DEFAULT_COLLINEAR_ORIENTATION_COLORS",
     "interpolate_color",
 ]

@@ -326,7 +326,7 @@ const normalizeBlastpMode = (value) => {
 const normalizeCollinearColorMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   if (normalized === 'identity') return 'average_identity';
-  return ['average_identity', 'orientation'].includes(normalized) ? normalized : 'orientation';
+  return ['average_identity', 'orientation', 'orientation_identity'].includes(normalized) ? normalized : 'orientation';
 };
 const normalizeCollinearAnchorMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
@@ -504,6 +504,7 @@ export const createRunAnalysis = ({
     losatProgram,
     losat,
     losatCacheInfo,
+    losatThreadingStatus,
     losatCache,
     orthogroups,
     featureOrthogroupIndex,
@@ -923,7 +924,32 @@ export const createRunAnalysis = ({
     const raw = String(losat.parallelWorkers || 'auto').trim().toLowerCase();
     if (raw === 'auto') return undefined;
     const parsed = Number(raw);
-    return Number.isInteger(parsed) && parsed >= 1 && parsed <= 4 ? parsed : undefined;
+    return Number.isInteger(parsed) && parsed >= 1 ? parsed : undefined;
+  };
+
+  const getLosatExecutionMode = () => {
+    const raw = String(losat.executionMode || 'auto').trim().toLowerCase();
+    return ['auto', 'serial', 'threaded'].includes(raw) ? raw : 'auto';
+  };
+
+  const getLosatThreadsPerJob = () => {
+    if (losatProgram.value !== 'blastp') return 1;
+    const raw = String(losat.threadsPerJob || 'auto').trim().toLowerCase();
+    if (raw === 'auto') return undefined;
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed >= 1 ? parsed : undefined;
+  };
+
+  const getLosatTotalThreadBudget = () => {
+    const raw = String(losat.totalThreadBudget || 'safe').trim().toLowerCase();
+    if (raw === 'safe' || raw === 'auto') return undefined;
+    if (raw === 'available') {
+      return Math.max(1, Number(globalThis.navigator?.hardwareConcurrency || 4) || 4);
+    }
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed < 1) return undefined;
+    const hardwareBudget = Math.max(1, Number(globalThis.navigator?.hardwareConcurrency || 4) || 4);
+    return Math.min(parsed, hardwareBudget);
   };
 
   const getLinearLabelOptionSupport = () => {
@@ -2346,8 +2372,17 @@ json.dumps({
               uniqueJobs: 0
             }
           : null;
+        const losatExecutionMode = useLosat ? getLosatExecutionMode() : 'serial';
+        const losatRequestedThreadsPerJob = useLosat ? getLosatThreadsPerJob() : undefined;
+        const losatRequestedTotalThreadBudget = useLosat ? getLosatTotalThreadBudget() : undefined;
         const losatRuntimeWarmup = useLosat
-          ? prepareLosatRuntime().catch((error) => {
+          ? prepareLosatRuntime({ includeThreaded: losatExecutionMode !== 'serial' }).then((runtime) => {
+              if (runtime?.threaded && losatThreadingStatus) {
+                const { wasmModule: _wasmModule, ...threadedStatus } = runtime.threaded;
+                losatThreadingStatus.value = threadedStatus;
+              }
+              return runtime;
+            }).catch((error) => {
               console.warn('LOSAT runtime warmup failed; execution will report the error if LOSAT is used.', error);
               return null;
             })
@@ -2536,6 +2571,12 @@ json.dumps({
           const subjectHash = await getSeqHash(subjectIdx);
           const payload = JSON.stringify({
             cacheSchema: LOSAT_CACHE_SCHEMA,
+            losatRuntimeCompatibility: losatExecutionMode === 'serial'
+              ? 'serial-v1'
+              : 'threaded-compatible-v1',
+            losatThreadsPerJob: losatExecutionMode === 'serial'
+              ? 1
+              : (losatRequestedThreadsPerJob || 'auto'),
             program: losatProgram.value,
             outfmt: String(losat.outfmt || '6'),
             args: argsKey,
@@ -2727,8 +2768,14 @@ json.dumps({
             const executionStartedAt = getNow();
             const losatResults = await runLosatPairsParallel(losatJobs, {
               concurrency: getLosatParallelWorkers(),
+              executionMode: losatExecutionMode,
+              totalThreadBudget: losatRequestedTotalThreadBudget,
+              threadsPerJob: losatRequestedThreadsPerJob,
               sequences: sequenceEntriesByKey,
               signal: generationAbortSignal,
+              onRuntimeStatus: (status) => {
+                losatThreadingStatus.value = status;
+              },
               onProgress: ({ completed, total }) => {
                 if (generationAbortSignal?.aborted || generationCancelRequested.value) return;
                 setProcessingStatus(`Running LOSAT: ${completed}/${total} LOSAT jobs complete`);

@@ -313,7 +313,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--protein_blastp_mode {none,pairwise,orthogroup,collinear}]
               [--collinear_min_anchors COLLINEAR_MIN_ANCHORS]
               [--collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP]
-              [--collinear_color_mode {average_identity,orientation}]
+              [--collinear_color_mode {average_identity,orientation,orientation_identity}]
               [--collinear_blocks COLLINEAR_BLOCKS]
               [--save_collinear_blocks SAVE_COLLINEAR_BLOCKS]
               [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT] [-n NT] [-w WINDOW]
@@ -394,9 +394,10 @@ options:
   --collinear_max_unit_gap, --collinear-max-unit-gap, --collinear_max_gene_gap, --collinear-max-gene-gap COLLINEAR_MAX_UNIT_GAP
                         Maximum unit gap between neighboring collinear anchors
                         (default: 0).
-  --collinear_color_mode, --collinear-color-mode {average_identity,orientation}
-                        Collinear ribbon color mode: average_identity or
-                        orientation (default: orientation).
+  --collinear_color_mode, --collinear-color-mode {average_identity,orientation,orientation_identity}
+                        Collinear ribbon color mode: average_identity,
+                        orientation, or orientation_identity (default:
+                        orientation).
   --collinear_blocks, --collinear-blocks COLLINEAR_BLOCKS
                         Headered native .collinear.tsv file to import instead
                         of running LOSATP.

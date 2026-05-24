@@ -153,7 +153,7 @@ const circularMultiRecordPlotTitlePosition = ref(null);
 const suppressCircularMultiRecordDefaults = ref(false);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
-const blastSource = ref('upload'); // 'upload' | 'losat'
+const blastSource = ref('losat'); // 'upload' | 'losat'
 const losatProgram = ref('blastn'); // 'blastn' | 'tblastx' | 'blastp'
 const files = reactive({
   c_gb: null,
@@ -410,6 +410,10 @@ const adv = reactive({
 
 const losat = reactive({
   outfmt: '6',
+  parallelWorkers: undefined,
+  executionMode: 'auto',
+  totalThreadBudget: 'safe',
+  threadsPerJob: 'auto',
   blastn: {
     task: 'megablast'
   },
@@ -432,6 +436,10 @@ const losat = reactive({
 });
 
 const losatCacheInfo = ref([]);
+const losatThreadingStatus = ref({
+  state: 'unknown',
+  message: ''
+});
 const losatCache = ref(new Map());
 const orthogroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
@@ -843,6 +851,7 @@ export const state = {
   adv,
   losat,
   losatCacheInfo,
+  losatThreadingStatus,
   losatCache,
   orthogroups,
   featureOrthogroupIndex,

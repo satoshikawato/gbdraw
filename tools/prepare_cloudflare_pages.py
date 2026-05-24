@@ -14,6 +14,11 @@ DEFAULT_ANALYTICS_TOKEN = "e4dc2e66d09549868f5a5ac7d7a6e633"
 ANALYTICS_TOKEN_ENV = "CLOUDFLARE_WEB_ANALYTICS_TOKEN"
 SCRIPT_MARKER = "<!-- CLOUDFLARE_WEB_ANALYTICS_SCRIPT -->"
 NOTICE_MARKER = "<!-- CLOUDFLARE_WEB_ANALYTICS_NOTICE -->"
+ISOLATION_HEADERS = """/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
+"""
 
 
 def _load_prepare_browser_wheel_module():
@@ -71,6 +76,7 @@ def build_cloudflare_pages_bundle(
         "connect-src 'self' https://cloudflareinsights.com;",
     )
     index_path.write_text(index_html, encoding="utf-8")
+    (output_root / "_headers").write_text(ISOLATION_HEADERS, encoding="utf-8")
     return output_root
 
 

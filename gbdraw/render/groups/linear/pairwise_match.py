@@ -10,6 +10,7 @@ from svgwrite.path import Path
 from ....canvas import LinearCanvasConfigurator
 from ....layout.linear_coords import normalize_position_linear
 from ....core.color import (
+    DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
     DEFAULT_COLLINEAR_ORIENTATION_COLORS,
     interpolate_color,
 )
@@ -50,6 +51,10 @@ def _match_draw_order_key(row: object) -> tuple[int, float, float, float, float,
         _row_float(row, "sstart"),
         block_id,
     )
+
+
+def _normalize_collinearity_color_mode(value: object) -> str:
+    return str(value or "").strip().lower().replace("-", "_")
 
 
 class PairWiseMatchGroup:
@@ -101,6 +106,10 @@ class PairWiseMatchGroup:
         self.collinearity_orientation_colors: dict[str, str] = {
             **DEFAULT_COLLINEAR_ORIENTATION_COLORS,
             **(getattr(blast_config, "collinearity_orientation_colors", {}) or {}),
+        }
+        self.collinearity_orientation_min_colors: dict[str, str] = {
+            **DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
+            **(getattr(blast_config, "collinearity_orientation_min_colors", {}) or {}),
         }
         self.match_style: str = str(getattr(blast_config, "match_style", "ribbon")).lower()
         self.curve_tension: float = float(getattr(blast_config, "curve_tension", 0.5))
@@ -164,20 +173,8 @@ class PairWiseMatchGroup:
         subject_end_y: float
         identity_percent = float(row.identity)
         factor = (identity_percent - self.min_identity) / (100 - self.min_identity)
-        dynamic_fill_color = interpolate_color(self.match_min_color, self.match_max_color, factor)
-        collinearity_block_id = str(_row_value(row, "collinearity_block_id", "") or "")
-        collinearity_orientation = str(_row_value(row, "collinearity_orientation", "") or "")
-        collinearity_color_mode = str(_row_value(row, "collinearity_color_mode", "") or "").lower()
-        if collinearity_block_id and collinearity_color_mode == "orientation":
-            orientation_colors = getattr(
-                self,
-                "collinearity_orientation_colors",
-                DEFAULT_COLLINEAR_ORIENTATION_COLORS,
-            )
-            dynamic_fill_color = orientation_colors.get(
-                collinearity_orientation,
-                dynamic_fill_color,
-            )
+        default_gradient_color = interpolate_color(self.match_min_color, self.match_max_color, factor)
+        dynamic_fill_color = self.resolve_match_fill_color(row, factor, default_gradient_color)
         query_start, query_end, subject_start, subject_end = self.calculate_offsets(row)
         query_start_x, query_start_y, query_end_x, query_end_y = self.normalize_positions(
             query_start, query_end, 0, is_query=True
@@ -222,6 +219,45 @@ class PairWiseMatchGroup:
         path.attribs["data-identity-factor"] = f"{factor:.6g}"
         self.add_optional_metadata_attributes(path, row)
         return path
+
+    def resolve_match_fill_color(
+        self,
+        row: DataFrame,
+        factor: float,
+        default_gradient_color: str,
+    ) -> str:
+        collinearity_block_id = str(_row_value(row, "collinearity_block_id", "") or "").strip()
+        if not collinearity_block_id:
+            return default_gradient_color
+
+        color_mode = _normalize_collinearity_color_mode(
+            _row_value(row, "collinearity_color_mode", "")
+        )
+        if color_mode == "average_identity":
+            return default_gradient_color
+
+        orientation = str(_row_value(row, "collinearity_orientation", "") or "").strip().lower()
+        orientation_colors = getattr(
+            self,
+            "collinearity_orientation_colors",
+            DEFAULT_COLLINEAR_ORIENTATION_COLORS,
+        )
+        orientation_color = orientation_colors.get(orientation)
+        if not orientation_color:
+            return default_gradient_color
+
+        if color_mode == "orientation":
+            return orientation_color
+        if color_mode == "orientation_identity":
+            orientation_min_colors = getattr(
+                self,
+                "collinearity_orientation_min_colors",
+                DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
+            )
+            min_color = orientation_min_colors.get(orientation, self.match_min_color)
+            return interpolate_color(min_color, orientation_color, factor)
+
+        return default_gradient_color
 
     def add_optional_metadata_attributes(self, path: Path, row: DataFrame) -> None:
         collinearity_block_id = str(_row_value(row, "collinearity_block_id", "") or "").strip()

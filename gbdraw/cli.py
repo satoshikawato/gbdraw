@@ -30,6 +30,16 @@ from .linear import linear_main
 from .exceptions import GbdrawError
 from .version import __version_display__
 
+
+class IsolatedSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+    """Serve the browser UI with the headers required for SharedArrayBuffer."""
+
+    def end_headers(self) -> None:
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        super().end_headers()
+
 def print_version() -> None:
     print(f"gbdraw version {__version_display__}")
 
@@ -47,7 +57,7 @@ def start_local_server(directory: str):
 
     port = find_free_port()
     
-    handler = partial(http.server.SimpleHTTPRequestHandler, directory=directory)
+    handler = partial(IsolatedSimpleHTTPRequestHandler, directory=directory)
     
     try:
         httpd = socketserver.TCPServer(("127.0.0.1", port), handler)

@@ -1,5 +1,5 @@
 export const GBDRAW_WHEEL_NAME = "gbdraw-0.12.0b0-py3-none-any.whl";
-export const GBDRAW_WHEEL_CACHE_BUST = "20260524-124651";
+export const GBDRAW_WHEEL_CACHE_BUST = "20260524-220113";
 export const PYODIDE_INDEX_URL = "./vendor/pyodide/v0.29.0/full/";
 export const PYODIDE_LOCAL_WHEELS = [
   "./vendor/pyodide-wheels/six-1.17.0-py2.py3-none-any.whl",
@@ -12,6 +12,7 @@ export const PYODIDE_LOCAL_WHEELS = [
   "./vendor/pyodide-wheels/bcbio_gff-0.7.1-py3-none-any.whl",
   "./vendor/pyodide-wheels/pandas-2.3.2-cp313-cp313-pyodide_2025_0_wasm32.whl"
 ];
+export const LOSAT_THREADED_WASM_URL = "./wasm/losat/losat-threaded.wasm";
 export const WASI_SHIM_URL = "./vendor/browser_wasi_shim/dist/index.js";
 
 export const DEBUG = false;
