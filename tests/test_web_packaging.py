@@ -124,8 +124,8 @@ def test_web_losat_threaded_browser_wiring() -> None:
     assert 'LOSAT_THREADED_WASM_URL = "./wasm/losat/losat-threaded.wasm"' in config_source
     assert "losat-threaded-worker.js" in losat_source
     assert "wasi_thread_start" in (WEB_ROOT / "js" / "workers" / "losat-wasi-thread-worker.js").read_text(encoding="utf-8")
-    assert "Parallel pairs" in index_html
-    assert "Threads per LOSAT job" in index_html
+    assert 'v-model="losat.parallelWorkers"' in index_html
+    assert 'v-model="losat.threadsPerJob"' in index_html
     assert "executionMode: 'auto'" in (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     assert "losatRuntimeCompatibility" in run_source
     assert "onRuntimeStatus" in run_source
