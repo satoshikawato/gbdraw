@@ -119,18 +119,14 @@ export const createLosatSettings = ({ state }) => {
       const value = index + 1;
       return {
         value: String(value),
-        label: `${value} ${value === 1 ? 'pair' : 'pairs'}`
+        label: `${value} ${value === 1 ? 'run' : 'runs'}`
       };
     });
   });
 
-  const losatThreadingPlanSummary = computed(() => {
-    const selectedWorkers = parsePositiveInteger(losat.parallelWorkers) || losatAutoPairWorkers.value;
-    const effectiveWorkers = Math.min(selectedWorkers, losatMaxPairWorkers.value);
-    return `${losatHardwareThreads.value} cores reported; LOSAT can use up to ${losatTotalThreadBudget.value} cores. ` +
-      `Selected: ${effectiveWorkers} parallel ${effectiveWorkers === 1 ? 'pair' : 'pairs'}, ` +
-      `${losatEffectiveThreadsPerJob.value} LOSAT thread${losatEffectiveThreadsPerJob.value === 1 ? '' : 's'} per pair.`;
-  });
+  const losatThreadingPlanSummary = computed(() =>
+    'By default, LOSAT can use up to half the number of cores available.'
+  );
 
   watch(
     () => [losatThreadsPerJobFixed.value, losat.threadsPerJob],
