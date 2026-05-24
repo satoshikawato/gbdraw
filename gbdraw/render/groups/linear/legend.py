@@ -220,7 +220,7 @@ class LegendGroup:
         group = Group(id="pairwise_legend")
         font = self.font_family
         bar_width = 10 * self.rect_size
-        label_gap = self.text_x_offset
+        label_gap = 0.75 * self.rect_size
         label_width = max(
             calculate_bbox_dimensions(str(key), self.font_family, self.font_size, self.dpi)[0]
             for key, _ in gradient_entries

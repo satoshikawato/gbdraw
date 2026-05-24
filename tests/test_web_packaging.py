@@ -115,6 +115,22 @@ def test_local_index_keeps_cloudflare_analytics_as_deploy_only() -> None:
     assert "CLOUDFLARE_WEB_ANALYTICS_NOTICE" in index_html
 
 
+def test_web_losat_threaded_browser_wiring() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    config_source = (WEB_ROOT / "js" / "config.js").read_text(encoding="utf-8")
+    losat_source = (WEB_ROOT / "js" / "services" / "losat.js").read_text(encoding="utf-8")
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+
+    assert 'LOSAT_THREADED_WASM_URL = "./wasm/losat/losat-threaded.wasm"' in config_source
+    assert "losat-threaded-worker.js" in losat_source
+    assert "wasi_thread_start" in (WEB_ROOT / "js" / "workers" / "losat-wasi-thread-worker.js").read_text(encoding="utf-8")
+    assert "Pair workers" in index_html
+    assert "Threads per LOSAT job" in index_html
+    assert "executionMode: 'auto'" in (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    assert "losatRuntimeCompatibility" in run_source
+    assert "onRuntimeStatus" in run_source
+
+
 def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) -> None:
     ensure_prepared_browser_wheel()
     cloudflare_module = _load_prepare_cloudflare_pages_module()

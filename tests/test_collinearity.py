@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import xml.etree.ElementTree as ET
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -42,6 +43,7 @@ from gbdraw.analysis.protein_colinearity import (
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators.blast import BlastMatchConfigurator
 from gbdraw.core.color import interpolate_color
+from gbdraw.core.text import calculate_bbox_dimensions
 from gbdraw.io.collinearity import parse_native_collinearity_tsv, write_native_collinearity_tsv
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.legend.table import prepare_legend_table
@@ -90,6 +92,14 @@ def _hex_distance(color_a: str, color_b: str) -> float:
     rgb_a = tuple(int(color_a[index : index + 2], 16) for index in (1, 3, 5))
     rgb_b = tuple(int(color_b[index : index + 2], 16) for index in (1, 3, 5))
     return math.sqrt(sum((a - b) ** 2 for a, b in zip(rgb_a, rgb_b)))
+
+
+def _translate_xy(transform: str | None) -> tuple[float, float]:
+    assert transform is not None
+    assert transform.startswith("translate(")
+    parts = transform.removeprefix("translate(").removesuffix(")").replace(",", " ").split()
+    assert len(parts) >= 2
+    return float(parts[0]), float(parts[1])
 
 
 def _build_collinearity_match_group() -> PairWiseMatchGroup:
@@ -1792,13 +1802,29 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
     }
 
     drawing = Drawing(debug=False)
-    drawing.add(LegendGroup(config_dict, canvas_config, legend_config, legend_table).get_group())
+    legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table)
+    drawing.add(legend_group.get_group())
     svg_text = drawing.tostring()
 
     assert svg_text.index('data-legend-key="Collinear"') < svg_text.index(
         'data-legend-key="Inverted"'
     )
     assert svg_text.count("<linearGradient") == 4
+
+    root = ET.fromstring(svg_text)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    collinear_entry = root.find(".//svg:g[@data-legend-key='Collinear']", namespace)
+    assert collinear_entry is not None
+    collinear_bar = next(
+        path
+        for path in collinear_entry.findall("svg:path", namespace)
+        if str(path.get("fill", "")).startswith("url(")
+    )
+    bar_x, _ = _translate_xy(collinear_bar.get("transform"))
+    label_width, _ = calculate_bbox_dimensions(
+        "Collinear", legend_config.font_family, legend_config.font_size, legend_group.dpi
+    )
+    assert bar_x == pytest.approx(label_width + 0.75 * legend_config.color_rect_size)
 
 
 @pytest.mark.linear
