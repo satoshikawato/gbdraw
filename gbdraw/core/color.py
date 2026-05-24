@@ -10,11 +10,11 @@ COLLINEAR_ORIENTATION_MIN_COLOR_KEYS = {
     "minus": "collinear_block_minus_min",
 }
 DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS = {
-    "plus": "#f2f2f2",
+    "plus": "#f0f1f5",
     "minus": "#FFE7E7",
 }
 DEFAULT_COLLINEAR_ORIENTATION_COLORS = {
-    "plus": "#d3d3d3",
+    "plus": "#8b9cc1",
     "minus": "#E15759",
 }
 

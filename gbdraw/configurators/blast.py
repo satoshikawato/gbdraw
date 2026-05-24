@@ -14,11 +14,17 @@ from gbdraw.core.color import (
 )
 
 
-def _default_color(default_colors_df: DataFrame, feature_type: str, fallback: str) -> str:
-    matching_rows = default_colors_df[default_colors_df["feature_type"] == feature_type]
-    if matching_rows.empty:
-        return fallback
-    return str(matching_rows["color"].values[0])
+def _default_color(
+    default_colors_df: DataFrame,
+    feature_type: str,
+    fallback: str,
+    *aliases: str,
+) -> str:
+    for candidate in (feature_type, *aliases):
+        matching_rows = default_colors_df[default_colors_df["feature_type"] == candidate]
+        if not matching_rows.empty:
+            return str(matching_rows["color"].values[0])
+    return fallback
 
 
 class BlastMatchConfigurator:
@@ -77,6 +83,7 @@ class BlastMatchConfigurator:
                 default_colors_df,
                 color_key,
                 DEFAULT_COLLINEAR_ORIENTATION_COLORS[orientation],
+                f"{color_key}_max",
             )
             for orientation, color_key in COLLINEAR_ORIENTATION_COLOR_KEYS.items()
         }

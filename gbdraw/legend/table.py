@@ -1,9 +1,104 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import List, Optional, Set, Tuple
+from typing import Iterable, List, Optional, Sequence, Set, Tuple
 
 from pandas import DataFrame
+
+from gbdraw.core.color import (
+    DEFAULT_COLLINEAR_ORIENTATION_COLORS,
+    DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
+)
+
+
+_COLLINEARITY_COLOR_MODES = {"average_identity", "orientation", "orientation_identity"}
+
+
+def _normalize_collinearity_legend_color_mode(value: object) -> str | None:
+    normalized = str(value or "").strip().lower().replace("-", "_")
+    if normalized == "identity":
+        normalized = "average_identity"
+    if normalized in _COLLINEARITY_COLOR_MODES:
+        return normalized
+    return None
+
+
+def collect_comparison_collinearity_color_modes(
+    comparison_dataframes: Sequence[DataFrame] | None,
+) -> set[str]:
+    """Collect recognized collinearity color modes from comparison metadata."""
+
+    color_modes: set[str] = set()
+    if not comparison_dataframes:
+        return color_modes
+    for frame in comparison_dataframes:
+        if "collinearity_color_mode" not in frame.columns:
+            continue
+        for value in frame["collinearity_color_mode"].dropna():
+            normalized = _normalize_collinearity_legend_color_mode(value)
+            if normalized is not None:
+                color_modes.add(normalized)
+    return color_modes
+
+
+def configure_pairwise_identity_legend_from_comparisons(
+    blast_config,
+    comparison_dataframes: Sequence[DataFrame] | None,
+    *,
+    additional_color_modes: Iterable[object] | None = None,
+) -> set[str]:
+    """Configure pairwise identity legend labels from collinearity metadata."""
+
+    color_modes = collect_comparison_collinearity_color_modes(comparison_dataframes)
+    for value in additional_color_modes or ():
+        normalized = _normalize_collinearity_legend_color_mode(value)
+        if normalized is not None:
+            color_modes.add(normalized)
+
+    if not color_modes:
+        return color_modes
+
+    if hasattr(blast_config, "pairwise_identity_legend_entries"):
+        delattr(blast_config, "pairwise_identity_legend_entries")
+    if hasattr(blast_config, "pairwise_identity_legend_label"):
+        delattr(blast_config, "pairwise_identity_legend_label")
+
+    blast_config.hide_pairwise_identity_legend = color_modes == {"orientation"}
+    if "orientation_identity" in color_modes:
+        orientation_min_colors = getattr(
+            blast_config,
+            "collinearity_orientation_min_colors",
+            DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
+        )
+        orientation_colors = getattr(
+            blast_config,
+            "collinearity_orientation_colors",
+            DEFAULT_COLLINEAR_ORIENTATION_COLORS,
+        )
+        blast_config.pairwise_identity_legend_entries = [
+            {
+                "label": "Collinear",
+                "min_color": orientation_min_colors.get(
+                    "plus", DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS["plus"]
+                ),
+                "max_color": orientation_colors.get(
+                    "plus", DEFAULT_COLLINEAR_ORIENTATION_COLORS["plus"]
+                ),
+            },
+            {
+                "label": "Inverted",
+                "min_color": orientation_min_colors.get(
+                    "minus", DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS["minus"]
+                ),
+                "max_color": orientation_colors.get(
+                    "minus", DEFAULT_COLLINEAR_ORIENTATION_COLORS["minus"]
+                ),
+            },
+        ]
+    elif "average_identity" in color_modes:
+        blast_config.pairwise_identity_legend_label = "Average identity"
+
+    return color_modes
 
 
 def _resolve_legend_feature_color(default_colors: DataFrame, feature_type: str) -> str:
@@ -209,5 +304,9 @@ def prepare_legend_table(
     return legend_table
 
 
-__all__ = ["prepare_legend_table"]
+__all__ = [
+    "collect_comparison_collinearity_color_modes",
+    "configure_pairwise_identity_legend_from_comparisons",
+    "prepare_legend_table",
+]
 

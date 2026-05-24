@@ -611,6 +611,14 @@ const applyConfigData = (data) => {
     state.losat.parallelWorkers = ['1', '2', '3', '4'].includes(rawParallelWorkers)
       ? rawParallelWorkers
       : undefined;
+    const rawExecutionMode = String(data.losat.executionMode ?? '').trim().toLowerCase();
+    state.losat.executionMode = ['auto', 'serial', 'threaded'].includes(rawExecutionMode)
+      ? rawExecutionMode
+      : 'auto';
+    const rawThreadsPerJob = String(data.losat.threadsPerJob ?? 'auto').trim().toLowerCase();
+    state.losat.threadsPerJob = ['auto', '1', '2', '4', '8', '16'].includes(rawThreadsPerJob)
+      ? rawThreadsPerJob
+      : 'auto';
     state.losat.blastp.mode = normalizeBlastpMode(state.losat.blastp?.mode);
     state.losat.blastp.maxHits = normalizePositiveInteger(state.losat.blastp?.maxHits, 5);
     state.losat.blastp.candidateLimit = null;

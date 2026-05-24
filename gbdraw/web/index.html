@@ -496,9 +496,17 @@
                             </div>
                             <div class="mt-3 pt-3 border-t border-slate-200">
                                 <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Settings <help-tip text="Configure browser-side LOSAT execution and how blastp comparison results are reduced before drawing."></help-tip></div>
-                                <div class="grid grid-cols-1 gap-1 mb-2">
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-1 mb-2">
                                     <div>
-                                        <label class="text-[9px] flex items-center">Parallel workers <help-tip text="Number of LOSAT jobs to run at the same time. Auto chooses a conservative worker count for the browser."></help-tip></label>
+                                        <label class="text-[9px] flex items-center">Execution <help-tip text="Auto uses threaded LOSAT only when the browser supports it and the workload is large enough. Serial always uses the existing browser artifact."></help-tip></label>
+                                        <select v-model="losat.executionMode" class="form-input px-1 py-0.5 text-xs">
+                                            <option value="auto">Auto</option>
+                                            <option value="serial">Serial</option>
+                                            <option value="threaded">Threaded</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-[9px] flex items-center">Pair workers <help-tip text="Number of independent LOSAT pair jobs to run at the same time. This is separate from internal LOSAT threads."></help-tip></label>
                                         <select v-model="losat.parallelWorkers" class="form-input px-1 py-0.5 text-xs">
                                             <option :value="undefined">Auto</option>
                                             <option value="1">1</option>
@@ -507,6 +515,21 @@
                                             <option value="4">4</option>
                                         </select>
                                     </div>
+                                    <div>
+                                        <label class="text-[9px] flex items-center">Threads per LOSAT job <help-tip text="Passed as --num-threads only when the threaded LOSAT artifact is used."></help-tip></label>
+                                        <select v-model="losat.threadsPerJob" class="form-input px-1 py-0.5 text-xs">
+                                            <option value="auto">Auto</option>
+                                            <option value="1">1</option>
+                                            <option value="2">2</option>
+                                            <option value="4">4</option>
+                                            <option value="8">8</option>
+                                            <option value="16">16</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="text-[10px] text-slate-500 mb-2 flex items-start gap-1 leading-snug">
+                                    <i class="ph ph-cpu mt-0.5"></i>
+                                    <span>{{ losatThreadingStatus.message }}</span>
                                 </div>
                                 <div v-if="losatProgram === 'blastn'" class="space-y-2">
                                     <div class="grid grid-cols-1 gap-1">

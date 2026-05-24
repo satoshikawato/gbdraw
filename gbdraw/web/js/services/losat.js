@@ -1,15 +1,21 @@
-import { WASI_SHIM_URL } from '../config.js';
+import { LOSAT_THREADED_WASM_URL, WASI_SHIM_URL } from '../config.js';
 
 const DEFAULT_WASM_PATH = './wasm/losat/losat.wasm';
+const DEFAULT_THREADED_WASM_PATH = LOSAT_THREADED_WASM_URL || './wasm/losat/losat-threaded.wasm';
 const DEFAULT_MAX_WORKERS = 4;
+const DEFAULT_THREADED_MIN_FASTA_CHARS = 500000;
+const DEFAULT_MAX_TOTAL_THREADS = 16;
+const DEFAULT_MAX_THREADS_PER_JOB = 16;
 const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
 
 let wasiShimPromise = null;
-let wasmModulePromise = null;
+const wasmModulePromises = new Map();
 let directInstancePromise = null;
+const threadedSupportPromises = new Map();
 
 const resolveAssetUrl = (path) => new URL(path, window.location.href).toString();
 const resolveWorkerUrl = () => new URL('../workers/losat-worker.js', import.meta.url).toString();
+const resolveThreadedWorkerUrl = () => new URL('../workers/losat-threaded-worker.js', import.meta.url).toString();
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
 const formatDuration = (startedAt) => `${((getNow() - startedAt) / 1000).toFixed(2)}s`;
 
@@ -52,8 +58,9 @@ const loadWasiShim = async () => {
 };
 
 const loadLosatModule = async (wasmPath = DEFAULT_WASM_PATH) => {
-  if (!wasmModulePromise) {
-    wasmModulePromise = (async () => {
+  const key = String(wasmPath || DEFAULT_WASM_PATH);
+  if (!wasmModulePromises.has(key)) {
+    wasmModulePromises.set(key, (async () => {
       const resolvedWasmPath = resolveAssetUrl(wasmPath);
       const response = await fetch(resolvedWasmPath, { cache: 'no-store' });
       if (!response.ok) {
@@ -61,9 +68,9 @@ const loadLosatModule = async (wasmPath = DEFAULT_WASM_PATH) => {
       }
       const bytes = await response.arrayBuffer();
       return WebAssembly.compile(bytes);
-    })();
+    })());
   }
-  return wasmModulePromise;
+  return wasmModulePromises.get(key);
 };
 
 const concatUint8Arrays = (chunks) => {
@@ -81,6 +88,60 @@ const hasDirectLosatApi = (wasmModule) =>
   WebAssembly.Module.exports(wasmModule).some(
     (entry) => entry.kind === 'function' && entry.name === 'losat_web_run_pair'
   );
+
+const moduleHasThreadedWasiShape = (wasmModule) => {
+  const exports = WebAssembly.Module.exports(wasmModule);
+  const imports = WebAssembly.Module.imports(wasmModule);
+  return exports.some((entry) => entry.kind === 'function' && entry.name === '_start') &&
+    exports.some((entry) => entry.kind === 'function' && entry.name === 'wasi_thread_start') &&
+    imports.some((entry) => entry.module === 'env' && entry.name === 'memory' && entry.kind === 'memory') &&
+    imports.some((entry) => entry.module === 'wasi' && entry.name === 'thread-spawn' && entry.kind === 'function');
+};
+
+const buildThreadingStatus = (state, message, details = {}) => ({
+  state,
+  message,
+  ...details
+});
+
+export const getLosatThreadingSupport = async ({
+  threadedWasmPath = DEFAULT_THREADED_WASM_PATH
+} = {}) => {
+  if (typeof Worker !== 'function') {
+    return buildThreadingStatus('unavailable', 'Web Workers are unavailable in this browser.');
+  }
+  if (typeof SharedArrayBuffer !== 'function') {
+    return buildThreadingStatus('unavailable', 'SharedArrayBuffer is unavailable.');
+  }
+  if (globalThis.crossOriginIsolated !== true) {
+    return buildThreadingStatus('unavailable', 'Cross-origin isolation is not enabled.');
+  }
+
+  const key = String(threadedWasmPath || DEFAULT_THREADED_WASM_PATH);
+  if (!threadedSupportPromises.has(key)) {
+    threadedSupportPromises.set(key, (async () => {
+      const wasmModule = await loadLosatModule(threadedWasmPath);
+      if (!moduleHasThreadedWasiShape(wasmModule)) {
+        return buildThreadingStatus(
+          'unavailable',
+          'Threaded LOSAT wasm is missing WASI thread imports or exports.',
+          { wasmModule: null }
+        );
+      }
+      return buildThreadingStatus(
+        'available',
+        'Threaded LOSAT is available.',
+        { wasmModule }
+      );
+    })().catch((error) =>
+      buildThreadingStatus(
+        'unavailable',
+        error?.message ? String(error.message) : String(error || 'Threaded LOSAT is unavailable.')
+      )
+    ));
+  }
+  return threadedSupportPromises.get(key);
+};
 
 const instantiateDirectLosat = async (
   { WASI, File, OpenFile, PreopenDirectory, ConsoleStdout },
@@ -263,6 +324,82 @@ const getDefaultConcurrency = (jobCount) => {
   return Math.min(jobCount, hardwareLimit, DEFAULT_MAX_WORKERS);
 };
 
+const getHardwareThreadBudget = () =>
+  Math.max(1, Number(globalThis.navigator?.hardwareConcurrency || 4) || 4);
+
+const normalizeExecutionMode = (value) => {
+  const mode = String(value || 'auto').trim().toLowerCase();
+  return ['auto', 'serial', 'threaded'].includes(mode) ? mode : 'auto';
+};
+
+const normalizeThreadsPerJob = (value, { fallback = null, maxThreads = DEFAULT_MAX_THREADS_PER_JOB } = {}) => {
+  if (value === undefined || value === null || String(value).trim().toLowerCase() === 'auto') {
+    return fallback;
+  }
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, Math.max(1, Number(maxThreads) || DEFAULT_MAX_THREADS_PER_JOB));
+};
+
+const getAutoThreadsPerJob = (jobs) => {
+  const budget = Math.min(DEFAULT_MAX_THREADS_PER_JOB, getHardwareThreadBudget());
+  if (!Array.isArray(jobs) || jobs.length !== 1) return Math.max(1, Math.min(2, budget));
+  return Math.max(2, Math.min(budget, getHardwareThreadBudget() - 1 || 1));
+};
+
+const getThreadedFastaCharCount = (job, sequenceStore) => {
+  let total = 0;
+  try {
+    total += resolveJobSequence(sequenceStore, job.querySequenceKey, 'query').length;
+    total += resolveJobSequence(sequenceStore, job.subjectSequenceKey, 'subject').length;
+  } catch {
+    return 0;
+  }
+  return total;
+};
+
+const shouldUseThreadedLosat = (jobs, sequenceStore, threadsPerJob) => {
+  if (!Array.isArray(jobs) || jobs.length === 0 || threadsPerJob <= 1) return false;
+  if (jobs.length === 1) {
+    return getThreadedFastaCharCount(jobs[0], sequenceStore) >= DEFAULT_THREADED_MIN_FASTA_CHARS;
+  }
+  const totalChars = jobs.reduce((sum, job) => sum + getThreadedFastaCharCount(job, sequenceStore), 0);
+  return totalChars >= DEFAULT_THREADED_MIN_FASTA_CHARS * 2;
+};
+
+const buildRuntimeStatus = (state, message, details = {}) => ({
+  state,
+  message,
+  ...details
+});
+
+const notifyRuntimeStatus = (callback, status) => {
+  if (typeof callback === 'function') callback(status);
+};
+
+const buildThreadedRuntimePlan = (jobs, options, sequenceStore) => {
+  const requestedPairWorkers = Number.isFinite(options.concurrency)
+    ? Math.max(1, Math.floor(options.concurrency))
+    : getDefaultConcurrency(jobs.length);
+  const autoThreadsPerJob = getAutoThreadsPerJob(jobs);
+  const requestedThreadsPerJob = normalizeThreadsPerJob(options.threadsPerJob, {
+    fallback: autoThreadsPerJob,
+    maxThreads: DEFAULT_MAX_THREADS_PER_JOB
+  });
+  const totalBudget = Math.min(DEFAULT_MAX_TOTAL_THREADS, getHardwareThreadBudget());
+  const threadsPerJob = Math.max(1, Math.min(requestedThreadsPerJob, totalBudget));
+  const pairWorkers = Math.max(
+    1,
+    Math.min(jobs.length, requestedPairWorkers, Math.max(1, Math.floor(totalBudget / Math.max(1, threadsPerJob))))
+  );
+  return {
+    pairWorkers,
+    threadsPerJob,
+    useful: shouldUseThreadedLosat(jobs, sequenceStore, threadsPerJob),
+    totalBudget
+  };
+};
+
 const formatPairErrorPrefix = (job) => {
   const pairNumber = Number.isInteger(job?.pairIndex) ? job.pairIndex + 1 : null;
   return pairNumber ? `LOSAT pair #${pairNumber}` : 'LOSAT pair';
@@ -397,6 +534,7 @@ const runLosatPairsWithWorkers = async (
   { concurrency, workerUrl, wasmPath, onProgress, sequences, signal } = {}
 ) => {
   throwIfAborted(signal);
+  const sequenceStore = normalizeSequenceStore(sequences);
   const workerCount = Math.min(
     jobs.length,
     Math.max(1, Number.isFinite(concurrency) ? Math.floor(concurrency) : getDefaultConcurrency(jobs.length))
@@ -560,10 +698,247 @@ const runLosatPairsWithWorkers = async (
   });
 };
 
+const runLosatPairsThreaded = async (
+  jobs,
+  {
+    concurrency,
+    onProgress,
+    sequences,
+    signal,
+    threadedWasmPath = DEFAULT_THREADED_WASM_PATH,
+    threadedWorkerUrl,
+    threadsPerJob,
+    wasmModule
+  } = {}
+) => {
+  throwIfAborted(signal);
+  const sequenceStore = normalizeSequenceStore(sequences);
+  const workerCount = Math.min(
+    jobs.length,
+    Math.max(1, Number.isFinite(concurrency) ? Math.floor(concurrency) : 1)
+  );
+  if (workerCount <= 0) return [];
+
+  const startedAt = getNow();
+  const resolvedWorkerUrl = threadedWorkerUrl || resolveThreadedWorkerUrl();
+  const resolvedWasmUrl = resolveAssetUrl(threadedWasmPath || DEFAULT_THREADED_WASM_PATH);
+  const resolvedWasiShimUrl = resolveAssetUrl(WASI_SHIM_URL);
+  const compiledModule = wasmModule || await loadLosatModule(threadedWasmPath || DEFAULT_THREADED_WASM_PATH);
+  const effectiveThreads = Math.max(1, Number(threadsPerJob) || 1);
+  const results = new Array(jobs.length);
+  const activeWorkers = new Set();
+  let nextJobIndex = 0;
+  let completed = 0;
+  let requestId = 0;
+  let settled = false;
+
+  return new Promise((resolve, reject) => {
+    let handleAbort = null;
+    const cleanup = () => {
+      if (handleAbort) signal?.removeEventListener?.('abort', handleAbort);
+      activeWorkers.forEach((worker) => worker.terminate());
+      activeWorkers.clear();
+    };
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const maybeResolve = () => {
+      if (settled || completed < jobs.length) return;
+      settled = true;
+      cleanup();
+      console.info(
+        `Completed ${jobs.length} threaded LOSAT pair${jobs.length === 1 ? '' : 's'} with ${workerCount} pair worker${workerCount === 1 ? '' : 's'} and ${effectiveThreads} thread${effectiveThreads === 1 ? '' : 's'} per job in ${formatDuration(startedAt)}.`
+      );
+      resolve(results);
+    };
+    const launchNext = () => {
+      if (settled) return;
+      if (signal?.aborted) {
+        fail(getAbortReason(signal));
+        return;
+      }
+      if (nextJobIndex >= jobs.length) {
+        maybeResolve();
+        return;
+      }
+
+      const index = nextJobIndex;
+      nextJobIndex += 1;
+      const job = jobs[index];
+      const id = `threaded-${Date.now()}-${requestId}`;
+      requestId += 1;
+      let payloadJob;
+      try {
+        payloadJob = materializeJobSequences(job, sequenceStore);
+      } catch (error) {
+        fail(new Error(`${formatPairErrorPrefix(job)}: ${error?.message || error}`));
+        return;
+      }
+
+      let worker;
+      try {
+        worker = new Worker(resolvedWorkerUrl, { type: 'module' });
+      } catch (error) {
+        fail(new Error(`${formatPairErrorPrefix(job)}: ${error?.message || error}`));
+        return;
+      }
+      activeWorkers.add(worker);
+
+      const cleanupWorker = () => {
+        worker.removeEventListener('message', handleMessage);
+        worker.removeEventListener('error', handleError);
+        worker.removeEventListener('messageerror', handleMessageError);
+        worker.terminate();
+        activeWorkers.delete(worker);
+      };
+
+      const handleMessage = (event) => {
+        const data = event.data || {};
+        if (data.id !== id) return;
+        if (data.type && data.type !== 'run') return;
+        cleanupWorker();
+
+        if (!data.ok) {
+          fail(new Error(`${formatPairErrorPrefix(job)}: ${data.error || 'Threaded LOSAT worker failed'}`));
+          return;
+        }
+        if (signal?.aborted) {
+          fail(getAbortReason(signal));
+          return;
+        }
+
+        if (data.stderr) {
+          console.info(`Threaded LOSAT stderr for ${formatPairErrorPrefix(job)}:\n${data.stderr}`);
+        }
+        results[index] = { ...job, text: data.text || '' };
+        completed += 1;
+        if (typeof onProgress === 'function') {
+          onProgress({ completed, total: jobs.length, job, index, threaded: true, spawnCount: data.spawnCount || 0 });
+        }
+        launchNext();
+        maybeResolve();
+      };
+
+      const handleError = (event) => {
+        cleanupWorker();
+        fail(new Error(`${formatPairErrorPrefix(job)}: ${event.message || 'Threaded LOSAT worker error'}`));
+      };
+
+      const handleMessageError = () => {
+        cleanupWorker();
+        fail(new Error(`${formatPairErrorPrefix(job)}: Threaded LOSAT worker message could not be decoded`));
+      };
+
+      worker.addEventListener('message', handleMessage);
+      worker.addEventListener('error', handleError);
+      worker.addEventListener('messageerror', handleMessageError);
+      worker.postMessage({
+        type: 'run',
+        id,
+        module: compiledModule,
+        wasmUrl: resolvedWasmUrl,
+        wasiShimUrl: resolvedWasiShimUrl,
+        job,
+        queryFasta: payloadJob.queryFasta,
+        subjectFasta: payloadJob.subjectFasta,
+        threadsPerJob: effectiveThreads
+      });
+    };
+
+    handleAbort = () => fail(getAbortReason(signal));
+    if (signal?.aborted) {
+      handleAbort();
+      return;
+    }
+    signal?.addEventListener?.('abort', handleAbort, { once: true });
+    console.info(
+      `Running threaded LOSAT with ${workerCount} pair worker${workerCount === 1 ? '' : 's'} and ${effectiveThreads} thread${effectiveThreads === 1 ? '' : 's'} per job.`
+    );
+    for (let i = 0; i < workerCount; i += 1) launchNext();
+  });
+};
+
 export const runLosatPairsParallel = async (jobs, options = {}) => {
   const jobList = Array.isArray(jobs) ? jobs : [];
   if (jobList.length === 0) return [];
   throwIfAborted(options.signal);
+
+  const executionMode = normalizeExecutionMode(options.executionMode);
+  const sequenceStore = normalizeSequenceStore(options.sequences);
+  let threadedFallbackReason = '';
+
+  if (executionMode !== 'serial') {
+    const plan = buildThreadedRuntimePlan(jobList, options, sequenceStore);
+    const support = await getLosatThreadingSupport({
+      threadedWasmPath: options.threadedWasmPath || DEFAULT_THREADED_WASM_PATH
+    });
+    throwIfAborted(options.signal);
+
+    if (support.state === 'available' && (executionMode === 'threaded' || plan.useful)) {
+      notifyRuntimeStatus(
+        options.onRuntimeStatus,
+        buildRuntimeStatus(
+          'running',
+          `Running threaded LOSAT: ${plan.threadsPerJob} thread${plan.threadsPerJob === 1 ? '' : 's'} per job, ${plan.pairWorkers} pair worker${plan.pairWorkers === 1 ? '' : 's'}.`,
+          {
+            mode: 'threaded',
+            threadsPerJob: plan.threadsPerJob,
+            pairWorkers: plan.pairWorkers,
+            totalBudget: plan.totalBudget
+          }
+        )
+      );
+      try {
+        const results = await runLosatPairsThreaded(jobList, {
+          ...options,
+          concurrency: plan.pairWorkers,
+          sequences: options.sequences,
+          threadedWasmPath: options.threadedWasmPath || DEFAULT_THREADED_WASM_PATH,
+          threadsPerJob: plan.threadsPerJob,
+          wasmModule: support.wasmModule
+        });
+        notifyRuntimeStatus(
+          options.onRuntimeStatus,
+          buildRuntimeStatus(
+            'available',
+            `Threaded LOSAT completed with ${plan.threadsPerJob} thread${plan.threadsPerJob === 1 ? '' : 's'} per job.`,
+            { mode: 'threaded', threadsPerJob: plan.threadsPerJob, pairWorkers: plan.pairWorkers }
+          )
+        );
+        return results;
+      } catch (error) {
+        if (isAbortError(error, options.signal)) throw getAbortReason(options.signal);
+        if (executionMode === 'threaded') throw error;
+        threadedFallbackReason = error?.message ? String(error.message) : String(error || 'Threaded LOSAT failed.');
+        console.warn('Threaded LOSAT failed; falling back to serial browser execution.', error);
+      }
+    } else if (executionMode === 'threaded') {
+      throw new Error(support.message || 'Threaded LOSAT is unavailable.');
+    } else {
+      threadedFallbackReason = support.state === 'available'
+        ? 'Current LOSAT workload is below the threaded auto threshold.'
+        : support.message || 'Threaded LOSAT is unavailable.';
+    }
+
+    if (threadedFallbackReason) {
+      notifyRuntimeStatus(
+        options.onRuntimeStatus,
+        buildRuntimeStatus(
+          'fallback',
+          `Using serial LOSAT: ${threadedFallbackReason}`,
+          { mode: 'serial', fallbackReason: threadedFallbackReason }
+        )
+      );
+    }
+  } else {
+    notifyRuntimeStatus(
+      options.onRuntimeStatus,
+      buildRuntimeStatus('disabled', 'Using serial LOSAT by request.', { mode: 'serial' })
+    );
+  }
 
   try {
     return await runLosatPairsWithWorkers(jobList, options);
@@ -574,9 +949,16 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
   }
 };
 
-export const prepareLosatRuntime = async ({ wasmPath = DEFAULT_WASM_PATH } = {}) => {
-  await Promise.all([
+export const prepareLosatRuntime = async ({
+  wasmPath = DEFAULT_WASM_PATH,
+  includeThreaded = false,
+  threadedWasmPath = DEFAULT_THREADED_WASM_PATH
+} = {}) => {
+  const prepared = await Promise.all([
     loadWasiShim(),
     loadLosatModule(wasmPath)
   ]);
+  if (!includeThreaded) return { wasiShim: prepared[0], wasmModule: prepared[1], threaded: null };
+  const threaded = await getLosatThreadingSupport({ threadedWasmPath });
+  return { wasiShim: prepared[0], wasmModule: prepared[1], threaded };
 };

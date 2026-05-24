@@ -36,7 +36,10 @@ from ...render.groups.linear.length_bar import (
     RULER_TICK_LENGTH,
 )
 from ...io.comparisons import filter_comparison_dataframe, load_comparisons
-from ...legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
+from ...legend.table import (  # type: ignore[reportMissingImports]
+    configure_pairwise_identity_legend_from_comparisons,
+    prepare_legend_table,
+)
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...layout.linear import calculate_feature_position_factors_linear  # type: ignore[reportMissingImports]
 from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px  # type: ignore[reportMissingImports]
@@ -74,6 +77,40 @@ def _is_axis_ruler_enabled(canvas_config: LinearCanvasConfigurator, cfg: GbdrawC
         and scale_style == "ruler"
         and track_layout in {"above", "below"}
     )
+
+
+def _load_linear_comparison_dataframes(
+    blast_files,
+    comparison_dataframes: list[DataFrame] | None,
+    blast_config,
+) -> list[DataFrame]:
+    if not (blast_files or comparison_dataframes):
+        return []
+
+    comparison_sources: list[list[DataFrame]] = []
+    if blast_files:
+        comparison_sources.append(load_comparisons(blast_files, blast_config))
+    if comparison_dataframes:
+        comparison_sources.append(
+            [
+                filter_comparison_dataframe(comparison, blast_config)
+                for comparison in comparison_dataframes
+            ]
+        )
+
+    comparisons: list[DataFrame] = []
+    max_source_len = max((len(source) for source in comparison_sources), default=0)
+    for index in range(max_source_len):
+        frames = [
+            source[index]
+            for source in comparison_sources
+            if index < len(source)
+        ]
+        if len(frames) == 1:
+            comparisons.append(frames[0])
+        elif frames:
+            comparisons.append(pd.concat(frames, ignore_index=True))
+    return comparisons
 
 
 def _gc_config_matching_linear_depth_axis_font_size(
@@ -537,7 +574,12 @@ def assemble_linear_diagram(
 
     # Prepare legend group
     has_blast = bool(blast_files or comparison_dataframes)
-    comparisons: list[DataFrame] = []
+    comparisons = _load_linear_comparison_dataframes(
+        blast_files,
+        comparison_dataframes,
+        blast_config,
+    )
+    configure_pairwise_identity_legend_from_comparisons(blast_config, comparisons)
     legend_table: dict = {}
     legend_group: LegendGroup | None = None
     required_legend_height = 0.0
@@ -656,29 +698,6 @@ def assemble_linear_diagram(
                     + max(1.0, 0.5 * float(canvas_config.vertical_padding)),
                 )
             current_y += inter_record_space
-
-    if has_blast:
-        comparison_sources: list[list[DataFrame]] = []
-        if blast_files:
-            comparison_sources.append(load_comparisons(blast_files, blast_config))
-        if comparison_dataframes:
-            comparison_sources.append(
-                [
-                    filter_comparison_dataframe(comparison, blast_config)
-                    for comparison in comparison_dataframes
-                ]
-            )
-        max_source_len = max((len(source) for source in comparison_sources), default=0)
-        for index in range(max_source_len):
-            frames = [
-                source[index]
-                for source in comparison_sources
-                if index < len(source)
-            ]
-            if len(frames) == 1:
-                comparisons.append(frames[0])
-            elif frames:
-                comparisons.append(pd.concat(frames, ignore_index=True))
 
     orthogroup_alignment_offsets = calculate_orthogroup_alignment_offsets(
         records,

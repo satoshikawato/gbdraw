@@ -20,12 +20,12 @@ export const COLLINEAR_ORIENTATION_MIN_COLOR_KEYS = Object.freeze({
 });
 
 export const DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS = Object.freeze({
-  plus: '#f2f2f2',
+  plus: '#f0f1f5',
   minus: '#FFE7E7'
 });
 
 export const DEFAULT_COLLINEAR_ORIENTATION_COLORS = Object.freeze({
-  plus: '#d3d3d3',
+  plus: '#8b9cc1',
   minus: '#E15759'
 });
 
@@ -43,13 +43,17 @@ export const COMPARISON_COLOR_KEYS = Object.freeze(Object.keys(DEFAULT_COMPARISO
 
 export const resolvePairwiseLegendGradientColorKeys = (legendKey) => {
   const normalizedKey = String(legendKey || '').trim();
-  if (normalizedKey === 'Collinear identity') {
+  if (
+    normalizedKey === 'Collinear' ||
+    normalizedKey === 'Same direction' ||
+    normalizedKey === 'Collinear identity'
+  ) {
     return {
       minKey: COLLINEAR_ORIENTATION_MIN_COLOR_KEYS.plus,
       maxKey: COLLINEAR_ORIENTATION_COLOR_KEYS.plus
     };
   }
-  if (normalizedKey === 'Inverted identity') {
+  if (normalizedKey === 'Inverted' || normalizedKey === 'Inverted identity') {
     return {
       minKey: COLLINEAR_ORIENTATION_MIN_COLOR_KEYS.minus,
       maxKey: COLLINEAR_ORIENTATION_COLOR_KEYS.minus
@@ -263,6 +267,9 @@ export const normalizePaletteColors = (colors = {}) => {
   Object.keys(normalized).forEach((key) => {
     if (/^collinear_block_\d+$/.test(key)) delete normalized[key];
   });
+  if (normalized.collinear_block_plus_max && !normalized.collinear_block_plus) {
+    normalized.collinear_block_plus = normalized.collinear_block_plus_max;
+  }
   Object.entries(DEFAULT_COMPARISON_COLORS).forEach(([key, value]) => {
     if (!normalized[key]) normalized[key] = value;
   });

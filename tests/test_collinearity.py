@@ -14,6 +14,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.analysis.collinearity as collinearity_module
+import gbdraw.diagrams.linear.assemble as linear_assemble_module
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
@@ -32,6 +33,7 @@ from gbdraw.analysis.collinearity import (
     normalize_collinearity_search_scope,
     orthogroup_edges_to_lossless_collinearity_anchors,
 )
+from gbdraw.api import assemble_linear_diagram_from_records
 import gbdraw.linear as linear_cli_module
 from gbdraw.analysis.protein_colinearity import (
     extract_cds_proteins,
@@ -43,6 +45,7 @@ from gbdraw.core.color import interpolate_color
 from gbdraw.io.collinearity import parse_native_collinearity_tsv, write_native_collinearity_tsv
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.legend.table import prepare_legend_table
+from gbdraw.render.groups.linear.legend import LegendGroup
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 from gbdraw.exceptions import ValidationError
 
@@ -1581,8 +1584,34 @@ def test_blast_configurator_reads_collinearity_colors_from_default_colors() -> N
         default_colors_df=default_colors,
     )
 
-    assert config.collinearity_orientation_colors == {"plus": "#d3d3d3", "minus": "#445566"}
+    assert config.collinearity_orientation_colors == {"plus": "#8b9cc1", "minus": "#445566"}
     assert config.collinearity_orientation_min_colors == {"plus": "#ddeeff", "minus": "#ffdddd"}
+
+
+@pytest.mark.linear
+def test_blast_configurator_accepts_plus_max_collinearity_color_alias() -> None:
+    default_colors = pd.DataFrame(
+        [
+            ("pairwise_match_min", "#ffffff"),
+            ("pairwise_match_max", "#000000"),
+            ("pairwise_match", "#cccccc"),
+            ("collinear_block_plus_min", "#ddeeff"),
+            ("collinear_block_plus_max", "#123456"),
+        ],
+        columns=["feature_type", "color"],
+    )
+
+    config = BlastMatchConfigurator(
+        evalue=1e-5,
+        bitscore=50,
+        identity=0,
+        alignment_length=0,
+        sequence_length_dict={},
+        config_dict=load_config_toml("gbdraw.data", "config.toml"),
+        default_colors_df=default_colors,
+    )
+
+    assert config.collinearity_orientation_colors["plus"] == "#123456"
 
 
 @pytest.mark.linear
@@ -1701,12 +1730,12 @@ def test_orientation_identity_collinearity_legend_uses_two_orientation_gradients
         hide_pairwise_identity_legend=False,
         pairwise_identity_legend_entries=[
             {
-                "label": "Collinear identity",
+                "label": "Collinear",
                 "min_color": "#eeeeee",
                 "max_color": "#112233",
             },
             {
-                "label": "Inverted identity",
+                "label": "Inverted",
                 "min_color": "#ffeeee",
                 "max_color": "#445566",
             },
@@ -1722,11 +1751,88 @@ def test_orientation_identity_collinearity_legend_uses_two_orientation_gradients
         has_blast=True,
     )
 
-    assert "Collinear identity" in legend_table
-    assert "Inverted identity" in legend_table
+    assert "Collinear" in legend_table
+    assert "Inverted" in legend_table
     assert "Pairwise match identity" not in legend_table
-    assert legend_table["Collinear identity"]["min_color"] == "#eeeeee"
-    assert legend_table["Inverted identity"]["max_color"] == "#445566"
+    assert legend_table["Collinear"]["min_color"] == "#eeeeee"
+    assert legend_table["Inverted"]["max_color"] == "#445566"
+
+
+@pytest.mark.linear
+def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted() -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    canvas_config = SimpleNamespace(legend_position="bottom", total_width=800)
+    legend_config = SimpleNamespace(
+        font_family="'Liberation Sans', 'Arial', sans-serif",
+        font_weight="normal",
+        font_size=10.0,
+        color_rect_size=12.0,
+        num_of_columns=1,
+        has_gradient=True,
+        total_feature_legend_width=0.0,
+        pairwise_legend_width=160.0,
+    )
+    legend_table = {
+        "Collinear": {
+            "type": "gradient",
+            "min_color": "#e7ffff",
+            "max_color": "#57e1df",
+            "stroke": "none",
+            "width": 0,
+            "min_value": 0,
+        },
+        "Inverted": {
+            "type": "gradient",
+            "min_color": "#ffeeee",
+            "max_color": "#e15759",
+            "stroke": "none",
+            "width": 0,
+            "min_value": 0,
+        },
+    }
+
+    drawing = Drawing(debug=False)
+    drawing.add(LegendGroup(config_dict, canvas_config, legend_config, legend_table).get_group())
+    svg_text = drawing.tostring()
+
+    assert svg_text.index('data-legend-key="Collinear"') < svg_text.index(
+        'data-legend-key="Inverted"'
+    )
+    assert svg_text.count("<linearGradient") == 4
+
+
+@pytest.mark.linear
+def test_blast_file_collinearity_metadata_drives_orientation_identity_legend(monkeypatch) -> None:
+    frame = pd.DataFrame(
+        [
+            {
+                **_hit_row("record_a", "record_b"),
+                "collinearity_block_id": "block_1",
+                "collinearity_orientation": "plus",
+                "collinearity_color_mode": "orientation_identity",
+            }
+        ]
+    )
+
+    def fake_load_comparisons(_blast_files, _blast_config):
+        return [frame]
+
+    monkeypatch.setattr(linear_assemble_module, "load_comparisons", fake_load_comparisons)
+
+    svg_text = assemble_linear_diagram_from_records(
+        [_record("record_a", []), _record("record_b", [])],
+        blast_files=["/virtual/blast_0.txt"],
+        legend="bottom",
+        config_overrides={"show_gc": False, "show_skew": False},
+        bitscore=0,
+        identity=0,
+        evalue=1,
+        alignment_length=0,
+    ).tostring()
+
+    assert 'data-legend-key="Collinear"' in svg_text
+    assert 'data-legend-key="Inverted"' in svg_text
+    assert 'data-legend-key="Pairwise match identity"' not in svg_text
 
 
 @pytest.mark.linear

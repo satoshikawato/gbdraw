@@ -410,6 +410,9 @@ const adv = reactive({
 
 const losat = reactive({
   outfmt: '6',
+  parallelWorkers: undefined,
+  executionMode: 'auto',
+  threadsPerJob: 'auto',
   blastn: {
     task: 'megablast'
   },
@@ -432,6 +435,10 @@ const losat = reactive({
 });
 
 const losatCacheInfo = ref([]);
+const losatThreadingStatus = ref({
+  state: 'unknown',
+  message: 'Threaded LOSAT has not been checked yet.'
+});
 const losatCache = ref(new Map());
 const orthogroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
@@ -843,6 +850,7 @@ export const state = {
   adv,
   losat,
   losatCacheInfo,
+  losatThreadingStatus,
   losatCache,
   orthogroups,
   featureOrthogroupIndex,

@@ -211,20 +211,125 @@ class LegendGroup:
 
         return group, width, height
 
+    def _build_pairwise_gradient_id(self, key: str, properties: dict) -> str:
+        gradient_key = str(key).replace(" ", "_").replace("+", "plus").replace("-", "minus")
+        return f"blast_legend_grad_{abs(hash(properties['min_color'] + properties['max_color'] + gradient_key))}"
+
+    def _build_compact_pairwise_legend(self, gradient_entries: list[tuple[str, dict]]) -> tuple[Group, float, float]:
+        """Build multi-row pairwise legend for orientation-specific identity ramps."""
+        group = Group(id="pairwise_legend")
+        font = self.font_family
+        bar_width = 10 * self.rect_size
+        label_gap = self.text_x_offset
+        label_width = max(
+            calculate_bbox_dimensions(str(key), self.font_family, self.font_size, self.dpi)[0]
+            for key, _ in gradient_entries
+        )
+        bar_x = label_width + label_gap
+        total_width = bar_x + bar_width
+        row_height = self.line_height
+        path_desc = (
+            f"M 0,{-self.rect_size / 2} L {bar_width},{-self.rect_size / 2} "
+            f"L {bar_width},{self.rect_size / 2} L 0,{self.rect_size / 2} z"
+        )
+
+        for idx, (key, properties) in enumerate(gradient_entries):
+            row_y = self.rect_size / 2 + idx * row_height
+            gradient_id = self._build_pairwise_gradient_id(key, properties)
+            entry_group = Group(debug=False)
+            entry_group.attribs["data-legend-key"] = str(key)
+
+            gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
+            gradient.add_stop_color(offset="0%", color=properties["min_color"])
+            gradient.add_stop_color(offset="100%", color=properties["max_color"])
+            entry_group.add(gradient)
+
+            label_path = generate_text_path(
+                key,
+                0,
+                0,
+                0,
+                self.font_size,
+                "normal",
+                font,
+                dominant_baseline="central",
+                text_anchor="start",
+            )
+            label_path.translate(0, row_y)
+            entry_group.add(label_path)
+
+            grad_rect = Path(
+                d=path_desc,
+                fill=f"url(#{gradient_id})",
+                stroke=properties["stroke"],
+                stroke_width=properties["width"],
+            )
+            grad_rect.translate(bar_x, row_y)
+            entry_group.add(grad_rect)
+            group.add(entry_group)
+
+        min_identity = gradient_entries[0][1].get("min_value", 0)
+        if min_identity == int(min_identity):
+            min_label_text = f"{int(min_identity)}%"
+        else:
+            min_label_text = f"{min_identity}%"
+
+        scale_y = self.rect_size + (len(gradient_entries) - 1) * row_height + 2
+        label_0 = generate_text_path(
+            min_label_text,
+            0,
+            0,
+            0,
+            self.font_size,
+            "normal",
+            font,
+            dominant_baseline="hanging",
+            text_anchor="start",
+        )
+        label_0.translate(bar_x, scale_y)
+        group.add(label_0)
+
+        label_100 = generate_text_path(
+            "100%",
+            0,
+            0,
+            0,
+            self.font_size,
+            "normal",
+            font,
+            dominant_baseline="hanging",
+            text_anchor="end",
+        )
+        label_100.translate(bar_x + bar_width, scale_y)
+        group.add(label_100)
+
+        _, min_label_bbox_height = calculate_bbox_dimensions(
+            min_label_text, self.font_family, self.font_size, self.dpi
+        )
+        _, max_label_bbox_height = calculate_bbox_dimensions(
+            "100%", self.font_family, self.font_size, self.dpi
+        )
+        total_height = scale_y + max(min_label_bbox_height, max_label_bbox_height)
+        return group, total_width, total_height
+
     def _build_pairwise_legend(self) -> tuple[Group, float, float]:
         """Build pairwise (gradient) legend for BLAST comparisons."""
+        gradient_entries = [
+            (str(key), properties)
+            for key, properties in self.legend_table.items()
+            if properties["type"] == "gradient"
+        ]
+        if len(gradient_entries) > 1:
+            return self._build_compact_pairwise_legend(gradient_entries)
+
         group = Group(id="pairwise_legend")
         font = self.font_family
         grad_bar_width = self.pairwise_legend_width
 
         gradient_y_offset = 0
 
-        for key, properties in self.legend_table.items():
-            if properties["type"] != "gradient":
-                continue
-
-            gradient_key = str(key).replace(" ", "_").replace("+", "plus").replace("-", "minus")
-            gradient_id = f"blast_legend_grad_{abs(hash(properties['min_color'] + properties['max_color'] + gradient_key))}"
+        for key, properties in gradient_entries:
+            gradient_id = self._build_pairwise_gradient_id(key, properties)
             entry_group = Group(debug=False)
             entry_group.attribs["data-legend-key"] = str(key)
 

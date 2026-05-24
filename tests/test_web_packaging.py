@@ -130,6 +130,10 @@ def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) 
     assert "connect-src 'self' https://cloudflareinsights.com;" in index_html
     assert "CLOUDFLARE_WEB_ANALYTICS_SCRIPT" not in index_html
     assert "CLOUDFLARE_WEB_ANALYTICS_NOTICE" not in index_html
+    headers = (bundle_path / "_headers").read_text(encoding="utf-8")
+    assert "Cross-Origin-Opener-Policy: same-origin" in headers
+    assert "Cross-Origin-Embedder-Policy: require-corp" in headers
+    assert "Cross-Origin-Resource-Policy: same-origin" in headers
 
 
 def test_wrangler_uses_cloudflare_bundle_directory() -> None:
@@ -279,7 +283,12 @@ def test_web_collinear_orientation_identity_recoloring_uses_identity_factor(tmp_
     check_path = tmp_path / "check-color-utils.mjs"
     check_path.write_text(
         f"""
-        import {{ interpolateColor, resolveCollinearMatchColor }} from {module_path.as_uri()!r};
+        import {{
+          interpolateColor,
+          normalizePaletteColors,
+          resolveCollinearMatchColor,
+          resolvePairwiseLegendGradientColorKeys
+        }} from {module_path.as_uri()!r};
 
         const colors = {{
           pairwise_match_min: '#ffffff',
@@ -319,6 +328,24 @@ def test_web_collinear_orientation_identity_recoloring_uses_identity_factor(tmp_
         }});
         if (averageIdentity !== null) {{
           throw new Error(`Average identity mode should fall back to pairwise recoloring, got ${{averageIdentity}}`);
+        }}
+        const plusLegendKeys = resolvePairwiseLegendGradientColorKeys('Collinear');
+        if (
+          plusLegendKeys.minKey !== 'collinear_block_plus_min' ||
+          plusLegendKeys.maxKey !== 'collinear_block_plus'
+        ) {{
+          throw new Error(`Collinear legend should use plus gradient keys, got ${{JSON.stringify(plusLegendKeys)}}`);
+        }}
+        const minusLegendKeys = resolvePairwiseLegendGradientColorKeys('Inverted');
+        if (
+          minusLegendKeys.minKey !== 'collinear_block_minus_min' ||
+          minusLegendKeys.maxKey !== 'collinear_block_minus'
+        ) {{
+          throw new Error(`Inverted legend should use minus gradient keys, got ${{JSON.stringify(minusLegendKeys)}}`);
+        }}
+        const aliasPalette = normalizePaletteColors({{ collinear_block_plus_max: '#123456' }});
+        if (aliasPalette.collinear_block_plus !== '#123456') {{
+          throw new Error(`collinear_block_plus_max should alias collinear_block_plus, got ${{aliasPalette.collinear_block_plus}}`);
         }}
         """,
         encoding="utf-8",
@@ -805,7 +832,10 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         build_root / "gbdraw" / "web" / "vendor" / "pyodide" / "v0.29.0" / "full" / "pyodide.asm.wasm",
         build_root / "gbdraw" / "web" / "vendor" / "browser_wasi_shim" / "dist" / "index.js",
         build_root / "gbdraw" / "web" / "vendor" / "phosphor-icons" / "regular" / "style.css",
+        build_root / "gbdraw" / "web" / "js" / "workers" / "losat-threaded-worker.js",
+        build_root / "gbdraw" / "web" / "js" / "workers" / "losat-wasi-thread-worker.js",
         build_root / "gbdraw" / "web" / "wasm" / "losat" / "losat.wasm",
+        build_root / "gbdraw" / "web" / "wasm" / "losat" / "losat-threaded.wasm",
         *(build_root / "gbdraw" / "web" / path for path in verify_module.REQUIRED_UI_FONT_FILES),
         *(build_root / "gbdraw" / "web" / path for path in verify_module._parse_local_wheel_paths()),
     ]

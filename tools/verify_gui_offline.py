@@ -260,6 +260,8 @@ def _assert_packaged_assets() -> None:
         WEB_ROOT / "js" / "app.js",
         WEB_ROOT / "js" / "services" / "losat.js",
         WEB_ROOT / "js" / "workers" / "losat-worker.js",
+        WEB_ROOT / "js" / "workers" / "losat-threaded-worker.js",
+        WEB_ROOT / "js" / "workers" / "losat-wasi-thread-worker.js",
         WEB_ROOT / "vendor" / "vue" / "vue.global.js",
         WEB_ROOT / "vendor" / "tailwindcss" / "tailwindcss-play.js",
         *(WEB_ROOT / path for path in REQUIRED_UI_FONT_FILES),
@@ -276,6 +278,7 @@ def _assert_packaged_assets() -> None:
         WEB_ROOT / "vendor" / "dompurify" / "purify.min.js",
         WEB_ROOT / "vendor" / "phosphor-icons" / "regular" / "style.css",
         WEB_ROOT / "wasm" / "losat" / "losat.wasm",
+        WEB_ROOT / "wasm" / "losat" / "losat-threaded.wasm",
         browser_wheel_path,
         *(WEB_ROOT / path for path in _parse_local_wheel_paths()),
     ]
@@ -287,6 +290,12 @@ def _assert_packaged_assets() -> None:
 
 
 class QuietSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+    def end_headers(self) -> None:
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        super().end_headers()
+
     def log_message(self, format: str, *args: object) -> None:
         return
 
@@ -347,6 +356,14 @@ def smoke_test() -> None:
         context.route("**/*", route_handler)
         page = context.new_page()
         page.goto(base_url, wait_until="domcontentloaded")
+        isolation_state = page.evaluate(
+            "() => ({ isolated: crossOriginIsolated === true, sharedArrayBuffer: typeof SharedArrayBuffer === 'function' })"
+        )
+        if not isolation_state["isolated"] or not isolation_state["sharedArrayBuffer"]:
+            raise RuntimeError(
+                "GUI local server did not enable browser isolation for threaded LOSAT: "
+                f"{isolation_state}"
+            )
         page.wait_for_function(
             """
             () => {
@@ -668,7 +685,11 @@ def inspect_wheel(wheel_path: Path) -> None:
         "gbdraw/web/assets/gbdraw-logo-title.png",
         "gbdraw/web/js/app.js",
         "gbdraw/web/js/services/losat.js",
+        "gbdraw/web/js/workers/losat-worker.js",
+        "gbdraw/web/js/workers/losat-threaded-worker.js",
+        "gbdraw/web/js/workers/losat-wasi-thread-worker.js",
         "gbdraw/web/wasm/losat/losat.wasm",
+        "gbdraw/web/wasm/losat/losat-threaded.wasm",
         expected_browser_wheel,
         "gbdraw/web/vendor/vue/vue.global.js",
         "gbdraw/web/vendor/tailwindcss/tailwindcss-play.js",

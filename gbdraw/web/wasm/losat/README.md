@@ -1,15 +1,27 @@
-Place the LOSAT WebAssembly binary here as `losat.wasm`.
+Place the LOSAT WebAssembly binaries here:
 
-Suggested build (from the LOSAT repo root):
+- `losat.wasm`: serial browser artifact with the direct `losat_web_*` API.
+- `losat-threaded.wasm`: threaded command artifact for cross-origin-isolated browsers.
+
+Suggested serial build (from the LOSAT repo root):
 ```
-cd /mnt/c/Users/kawato/Documents/GitHub/LOSAT/LOSAT
+cd /mnt/c/Users/genom/GitHub/LOSAT
 rustup target add wasm32-wasip1
 cargo build --release --target wasm32-wasip1 --no-default-features --lib
-cp target/wasm32-wasip1/release/LOSAT.wasm /mnt/c/Users/kawato/Documents/GitHub/gbdraw/gbdraw/web/wasm/losat/losat.wasm
+cp target/wasm32-wasip1/release/LOSAT.wasm /mnt/c/Users/genom/GitHub/gbdraw/gbdraw/web/wasm/losat/losat.wasm
+```
+
+Suggested threaded build:
+```
+cd /mnt/c/Users/genom/GitHub/LOSAT
+rustup target add wasm32-wasip1-threads
+cargo build --release --target wasm32-wasip1-threads --features wasm-threads
+cp target/wasm32-wasip1-threads/release/LOSAT.wasm /mnt/c/Users/genom/GitHub/gbdraw/gbdraw/web/wasm/losat/losat-threaded.wasm
 ```
 
 Notes:
-- The web app expects `losat.wasm` (lowercase filename).
-- Newer builds export the direct `losat_web_*` API; the web app falls back to
-  the WASI CLI path when those exports are absent.
-- `tblastx` runs single-threaded in the browser build.
+- The web app keeps `losat.wasm` as the serial fallback.
+- `losat-threaded.wasm` must export `_start` and `wasi_thread_start`, import
+  shared memory from `env.memory`, and import `wasi.thread-spawn`.
+- Threaded browser execution also requires COOP/COEP response headers so
+  `SharedArrayBuffer` is available.
