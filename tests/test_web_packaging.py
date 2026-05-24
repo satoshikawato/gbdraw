@@ -124,11 +124,18 @@ def test_web_losat_threaded_browser_wiring() -> None:
     assert 'LOSAT_THREADED_WASM_URL = "./wasm/losat/losat-threaded.wasm"' in config_source
     assert "losat-threaded-worker.js" in losat_source
     assert "wasi_thread_start" in (WEB_ROOT / "js" / "workers" / "losat-wasi-thread-worker.js").read_text(encoding="utf-8")
-    assert "Pair workers" in index_html
+    assert "Parallel pairs" in index_html
     assert "Threads per LOSAT job" in index_html
     assert "executionMode: 'auto'" in (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     assert "losatRuntimeCompatibility" in run_source
     assert "onRuntimeStatus" in run_source
+
+
+def test_web_losat_thread_count_options_are_contiguous() -> None:
+    source = (WEB_ROOT / "js" / "app" / "losat-settings.js").read_text(encoding="utf-8")
+    assert "const createPositiveIntegerOptions = (maxValue) =>" in source
+    assert "return createPositiveIntegerOptions(losatHardwareThreads.value);" in source
+    assert "return createPositiveIntegerOptions(maxThreads);" in source
 
 
 def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) -> None:

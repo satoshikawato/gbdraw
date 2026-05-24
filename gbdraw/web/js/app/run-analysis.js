@@ -933,6 +933,7 @@ export const createRunAnalysis = ({
   };
 
   const getLosatThreadsPerJob = () => {
+    if (losatProgram.value !== 'blastp') return 1;
     const raw = String(losat.threadsPerJob || 'auto').trim().toLowerCase();
     if (raw === 'auto') return undefined;
     const parsed = Number(raw);
