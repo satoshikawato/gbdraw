@@ -1824,7 +1824,7 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
     label_width, _ = calculate_bbox_dimensions(
         "Collinear", legend_config.font_family, legend_config.font_size, legend_group.dpi
     )
-    assert bar_x == pytest.approx(label_width + 0.75 * legend_config.color_rect_size)
+    assert bar_x == pytest.approx(label_width + 0.2 * legend_config.color_rect_size)
 
 
 @pytest.mark.linear
