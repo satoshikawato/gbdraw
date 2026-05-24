@@ -254,6 +254,14 @@ const initializeWorkerRuntime = async ({
   ]);
 };
 
+const mergeSequencePayload = (sequences = []) => {
+  if (!Array.isArray(sequences)) return;
+  sequences.forEach((entry) => {
+    if (!entry || entry.key === undefined) return;
+    sequenceStore.set(String(entry.key), String(entry.fasta || ''));
+  });
+};
+
 const resolveSequence = (key, label) => {
   const normalizedKey = String(key || '');
   if (!normalizedKey || !sequenceStore.has(normalizedKey)) {
@@ -267,7 +275,7 @@ const resolveSequence = (key, label) => {
 };
 
 self.onmessage = async (event) => {
-  const { id, type, job } = event.data || {};
+  const { id, type, job, sequences } = event.data || {};
   try {
     if (type === 'init') {
       await initializeWorkerRuntime(event.data || {});
@@ -280,6 +288,7 @@ self.onmessage = async (event) => {
     if (!runtime) {
       throw new Error('LOSAT worker has not been initialized.');
     }
+    mergeSequencePayload(sequences);
     const text = await runLosatPair({
       ...job,
       queryFasta: resolveSequence(job?.querySequenceKey, 'query'),

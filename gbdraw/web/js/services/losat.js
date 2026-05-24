@@ -283,9 +283,6 @@ const normalizeSequenceStore = (sequences) => {
   return new Map();
 };
 
-const sequenceStoreToPayload = (sequences) =>
-  Array.from(normalizeSequenceStore(sequences), ([key, fasta]) => ({ key, fasta }));
-
 const resolveJobSequence = (sequenceStore, key, label) => {
   const normalizedKey = String(key || '');
   if (!normalizedKey || !sequenceStore.has(normalizedKey)) {
@@ -303,6 +300,22 @@ const materializeJobSequences = (job, sequenceStore) => ({
   queryFasta: resolveJobSequence(sequenceStore, job.querySequenceKey, 'query'),
   subjectFasta: resolveJobSequence(sequenceStore, job.subjectSequenceKey, 'subject')
 });
+
+const buildJobSequencePayload = (job, sequenceStore, loadedKeys) => {
+  const payload = [];
+  const addSequence = (key, label) => {
+    const normalizedKey = String(key || '');
+    if (!normalizedKey || loadedKeys.has(normalizedKey)) return;
+    payload.push({
+      key: normalizedKey,
+      fasta: resolveJobSequence(sequenceStore, normalizedKey, label)
+    });
+    loadedKeys.add(normalizedKey);
+  };
+  addSequence(job.querySequenceKey, 'query');
+  addSequence(job.subjectSequenceKey, 'subject');
+  return payload;
+};
 
 const runLosatPairsSequential = async (jobs, { onProgress, sequences, signal } = {}) => {
   throwIfAborted(signal);
@@ -397,9 +410,9 @@ const runLosatPairsWithWorkers = async (
   const resolvedWasiShimUrl = resolveAssetUrl(WASI_SHIM_URL);
   const wasmModule = await loadLosatModule(wasmPath || DEFAULT_WASM_PATH);
   throwIfAborted(signal);
-  const sequencePayload = sequenceStoreToPayload(sequences);
   const results = new Array(jobs.length);
   const workers = [];
+  const workerLoadedSequenceKeys = new Map();
   let nextJobIndex = 0;
   let completed = 0;
   let settled = false;
@@ -407,7 +420,9 @@ const runLosatPairsWithWorkers = async (
 
   try {
     for (let i = 0; i < workerCount; i += 1) {
-      workers.push(new Worker(resolvedWorkerUrl, { type: 'module' }));
+      const worker = new Worker(resolvedWorkerUrl, { type: 'module' });
+      workers.push(worker);
+      workerLoadedSequenceKeys.set(worker, new Set());
     }
     await Promise.all(
       workers.map((worker, index) =>
@@ -418,8 +433,7 @@ const runLosatPairsWithWorkers = async (
             id: `init-${index}-${Date.now()}`,
             wasmModule,
             wasmUrl: resolvedWasmUrl,
-            wasiShimUrl: resolvedWasiShimUrl,
-            sequences: sequencePayload
+            wasiShimUrl: resolvedWasiShimUrl
           },
           signal
         )
@@ -477,6 +491,15 @@ const runLosatPairsWithWorkers = async (
       const job = jobs[index];
       const id = `${Date.now()}-${requestId}`;
       requestId += 1;
+      const loadedKeys = workerLoadedSequenceKeys.get(worker) || new Set();
+      let sequencePayload = [];
+      try {
+        sequencePayload = buildJobSequencePayload(job, sequenceStore, loadedKeys);
+        workerLoadedSequenceKeys.set(worker, loadedKeys);
+      } catch (error) {
+        fail(new Error(`${formatPairErrorPrefix(job)}: ${error?.message || error}`));
+        return;
+      }
 
       const handleMessage = (event) => {
         const data = event.data || {};
@@ -523,7 +546,8 @@ const runLosatPairsWithWorkers = async (
       worker.postMessage({
         type: 'run',
         id,
-        job
+        job,
+        sequences: sequencePayload
       });
     };
 
