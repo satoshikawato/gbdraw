@@ -11,6 +11,8 @@ from .common import ShortLongFloatConfig
 
 PairwiseMatchStyle = Literal["ribbon", "curve"]
 _PAIRWISE_MATCH_STYLES: tuple[PairwiseMatchStyle, ...] = ("ribbon", "curve")
+GcContentMode = Literal["deviation", "percent"]
+_GC_CONTENT_MODES: tuple[GcContentMode, ...] = ("deviation", "percent")
 
 
 def _normalize_pairwise_match_style(value: Any) -> PairwiseMatchStyle:
@@ -27,6 +29,13 @@ def _normalize_curve_tension(value: Any) -> float:
     return tension
 
 
+def _normalize_gc_content_mode(value: Any) -> GcContentMode:
+    normalized = str(value if value is not None else "deviation").strip().lower()
+    if normalized not in _GC_CONTENT_MODES:
+        raise ValidationError("gc_content_mode must be one of: deviation, percent")
+    return normalized  # type: ignore[return-value]
+
+
 @dataclass(frozen=True)
 class ObjectsTextConfig:
     font_family: str
@@ -41,13 +50,33 @@ class ObjectsGcContentConfig:
     stroke_color: str
     stroke_width: float
     fill_opacity: float
+    mode: GcContentMode
+    min_percent: float | None
+    max_percent: float | None
+    show_axis: bool
+    show_ticks: bool
+    large_tick_interval: float | None
+    small_tick_interval: float | None
+    tick_font_size: float | None
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsGcContentConfig":
+        min_percent = _optional_gc_content_bound(d.get("min_percent", 0))
+        max_percent = _optional_gc_content_bound(d.get("max_percent", 100))
+        if min_percent is not None and max_percent is not None and min_percent > max_percent:
+            raise ValidationError("gc_content_min_percent must be <= gc_content_max_percent")
         return cls(
             stroke_color=str(d["stroke_color"]),
             stroke_width=float(d["stroke_width"]),
             fill_opacity=float(d["fill_opacity"]),
+            mode=_normalize_gc_content_mode(d.get("mode", "deviation")),
+            min_percent=min_percent,
+            max_percent=max_percent,
+            show_axis=_bool_from_config(d.get("show_axis", True), default=True),
+            show_ticks=_bool_from_config(d.get("show_ticks", True), default=True),
+            large_tick_interval=_optional_gc_content_positive(d.get("large_tick_interval", 20)),
+            small_tick_interval=_optional_gc_content_positive(d.get("small_tick_interval", None)),
+            tick_font_size=_optional_gc_content_positive(d.get("tick_font_size", None)),
         )
 
 
@@ -86,6 +115,34 @@ def _optional_depth_positive(value: Any) -> float | None:
             return None
         return float(normalized)
     return float(value)
+
+
+def _optional_gc_content_bound(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"", "auto", "none", "null"}:
+            return None
+        value = normalized
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValidationError("gc_content_min_percent/gc_content_max_percent must be finite numbers")
+    return parsed
+
+
+def _optional_gc_content_positive(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"", "auto", "none", "null"}:
+            return None
+        value = normalized
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise ValidationError("gc_content tick intervals and tick_font_size must be positive finite numbers")
+    return parsed
 
 
 def _bool_from_config(value: Any, *, default: bool) -> bool:

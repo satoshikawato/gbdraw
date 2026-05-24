@@ -55,6 +55,15 @@ class GcContentConfigurator:
         self.stroke_color: str = cfg.objects.gc_content.stroke_color
         self.stroke_width: float = cfg.objects.gc_content.stroke_width
         self.fill_opacity: float = cfg.objects.gc_content.fill_opacity
+        self.mode: str = cfg.objects.gc_content.mode
+        self.min_percent: float | None = cfg.objects.gc_content.min_percent
+        self.max_percent: float | None = cfg.objects.gc_content.max_percent
+        self.show_axis: bool = cfg.objects.gc_content.show_axis
+        self.show_ticks: bool = cfg.objects.gc_content.show_ticks
+        self.large_tick_interval: float | None = cfg.objects.gc_content.large_tick_interval
+        self.tick_interval: float | None = self.large_tick_interval
+        self.small_tick_interval: float | None = cfg.objects.gc_content.small_tick_interval
+        self.tick_font_size: float | None = cfg.objects.gc_content.tick_font_size
         self.show_gc: bool = cfg.canvas.show_gc
 
 

@@ -109,23 +109,26 @@ def generate_circular_gc_skew_path_desc(
     return skew_desc
 
 
-def generate_circular_depth_path_desc(
+def generate_circular_scalar_area_path_desc(
     radius: float,
     record_len: int,
-    depth_df: DataFrame,
+    scalar_df: DataFrame,
     track_width: float,
     norm_factor: float,
+    *,
+    value_column: str = "value_normalized",
+    position_column: str = "position",
 ) -> str:
-    """Return an annular filled area path for binned circular depth coverage."""
+    """Return an annular filled area path for normalized scalar values."""
 
-    if depth_df.empty or record_len <= 0 or track_width <= 0:
+    if scalar_df.empty or record_len <= 0 or track_width <= 0:
         return ""
 
     baseline_radius = max(0.0, (float(radius) * float(norm_factor)) - (0.5 * float(track_width)))
-    values = depth_df["depth_normalized"].to_numpy(dtype=float)
+    values = scalar_df[value_column].to_numpy(dtype=float)
     values = np.clip(values, 0.0, 1.0)
     outer_radii = baseline_radius + (float(track_width) * values)
-    positions = depth_df["position"].to_numpy(dtype=float)
+    positions = scalar_df[position_column].to_numpy(dtype=float)
     angles_rad = np.radians(360.0 * (positions / float(record_len)) - 90.0)
 
     outer_x = outer_radii * np.cos(angles_rad)
@@ -141,6 +144,25 @@ def generate_circular_depth_path_desc(
     path_segments.extend(f"L{x} {y}" for x, y in zip(reversed(inner_x), reversed(inner_y)))
     path_segments.append("z")
     return "".join(path_segments)
+
+
+def generate_circular_depth_path_desc(
+    radius: float,
+    record_len: int,
+    depth_df: DataFrame,
+    track_width: float,
+    norm_factor: float,
+) -> str:
+    """Return an annular filled area path for binned circular depth coverage."""
+
+    return generate_circular_scalar_area_path_desc(
+        radius,
+        record_len,
+        depth_df,
+        track_width,
+        norm_factor,
+        value_column="depth_normalized",
+    )
 
 
 def draw_circle_path(radius: float, stroke_color: str, stroke_width: float) -> Circle:
@@ -160,6 +182,7 @@ def draw_circle_path(radius: float, stroke_color: str, stroke_width: float) -> C
 __all__ = [
     "draw_circle_path",
     "generate_circular_depth_path_desc",
+    "generate_circular_scalar_area_path_desc",
     "generate_circle_path_desc",
     "generate_circular_gc_content_path_desc",
     "generate_circular_gc_skew_path_desc",

@@ -83,6 +83,14 @@ default = [1000, 100]
 stroke_color = 'none'
 stroke_width = 0
 fill_opacity = 1
+mode = "deviation"
+min_percent = 0
+max_percent = 100
+show_axis = true
+show_ticks = true
+large_tick_interval = 20
+small_tick_interval = "none"
+tick_font_size = "auto"
 [objects.gc_content.circular]
 norm_factor = 0.65
 [objects.gc_content.linear]

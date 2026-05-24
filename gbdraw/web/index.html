@@ -1682,6 +1682,51 @@
                                 <div><label class="input-label text-[10px]">Dinucleotide <help-tip text="Dinucleotide to use (e.g., 'GC'). Default is 'GC'."></help-tip></label><input type="text" v-model="adv.nt" class="form-input form-input-compact" placeholder="GC"></div>
                             </div>
 
+                            <div>
+                                <label class="input-label text-[10px]">GC Content Mode <help-tip text="Deviation centers the track around the window mean. Percent draws absolute GC percentage from a baseline."></help-tip></label>
+                                <select v-model="adv.gc_content_mode" class="form-select form-input-compact">
+                                    <option value="deviation">Deviation</option>
+                                    <option value="percent">Percent</option>
+                                </select>
+                            </div>
+
+                            <div v-if="adv.gc_content_mode === 'percent'" class="space-y-2">
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <label class="input-label text-[10px]">GC Min % <help-tip text="Minimum GC percentage for percent-mode clipping and axis scaling."></help-tip></label>
+                                        <input type="number" step="0.1" v-model.number="adv.gc_content_min_percent" class="form-input form-input-compact" placeholder="0">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">GC Max % <help-tip text="Maximum GC percentage for percent-mode clipping and axis scaling."></help-tip></label>
+                                        <input type="number" step="0.1" v-model.number="adv.gc_content_max_percent" class="form-input form-input-compact" placeholder="100">
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="adv.gc_content_show_axis" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Percent Axis <help-tip text="Show the GC content percent axis line. Hiding the axis also hides percent tick marks and labels."></help-tip></span>
+                                    </label>
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="adv.gc_content_show_ticks" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Percent Ticks <help-tip text="Show GC content percent-axis tick marks and labels."></help-tip></span>
+                                    </label>
+                                </div>
+                                <div class="grid grid-cols-3 gap-1.5">
+                                    <div>
+                                        <label class="input-label text-[10px]">Large Tick <help-tip text="GC content percent-mode large tick interval."></help-tip></label>
+                                        <input type="number" min="0.01" step="1" v-model.number="adv.gc_content_tick_interval" class="form-input form-input-compact" placeholder="20">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Small Tick <help-tip text="GC content percent-mode small tick interval. Leave blank to hide small ticks."></help-tip></label>
+                                        <input type="number" min="0.01" step="1" v-model.number="adv.gc_content_small_tick_interval" class="form-input form-input-compact" placeholder="None">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Tick Font <help-tip text="Font size for GC content percent tick labels. Leave blank for auto."></help-tip></label>
+                                        <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_tick_font_size" class="form-input form-input-compact" placeholder="Auto">
+                                    </div>
+                                </div>
+                            </div>
+
                             <template v-if="mode === 'linear'">
                                 <div>
                                     <label class="input-label text-[10px]">GC Height <help-tip text="Height of the linear GC content and GC skew tracks. Applies to whichever of those tracks are enabled when the diagram is generated."></help-tip></label>

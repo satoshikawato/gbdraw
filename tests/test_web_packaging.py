@@ -158,6 +158,33 @@ def test_web_run_analysis_wires_scale_and_tick_font_size_options() -> None:
     assert "args.push('--scale_font_size', adv.scale_font_size);" in source
 
 
+def test_web_wires_gc_content_percent_options() -> None:
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+
+    assert "gc_content_mode: 'deviation'" in state_source
+    assert "gc_content_min_percent: 0" in state_source
+    assert "gc_content_max_percent: 100" in state_source
+    assert "gc_content_tick_interval: 20" in state_source
+    assert "state.adv.gc_content_mode" in config_source
+    assert "state.adv.gc_content_min_percent" in config_source
+    assert "state.adv.gc_content_max_percent" in config_source
+    assert "appendGcContentPercentArgs" in run_source
+    assert "if (adv.gc_content_mode !== 'percent') return;" in run_source
+    assert "args.push('--gc_content_mode', 'percent');" in run_source
+    assert "args.push('--gc_content_min_percent', String(minPercent));" in run_source
+    assert "args.push('--gc_content_max_percent', String(maxPercent));" in run_source
+    assert "args.push('--gc_content_large_tick_interval', adv.gc_content_tick_interval);" in run_source
+    assert "args.push('--hide_gc_content_axis');" in run_source
+    assert "args.push('--hide_gc_content_ticks');" in run_source
+    assert 'v-model="adv.gc_content_mode"' in index_html
+    assert "GC Content Mode" in index_html
+    assert "adv.gc_content_mode === 'percent'" in index_html
+    assert "GC Min %" in index_html
+
+
 def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")

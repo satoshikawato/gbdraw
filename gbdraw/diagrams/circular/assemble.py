@@ -39,6 +39,7 @@ from ...labels.circular import (  # type: ignore[reportMissingImports]
 )
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
 from ...layout.circular import calculate_feature_position_factors_circular  # type: ignore[reportMissingImports]
+from ...layout.circular_depth_axis import depth_axis_tick_font_size_px  # type: ignore[reportMissingImports]
 from ...layout.common import calculate_cds_ratio  # type: ignore[reportMissingImports]
 from ...legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
@@ -1038,6 +1039,46 @@ def _slot_config_with_dinucleotide(config: Any, nt: str) -> Any:
     return cloned
 
 
+def _slot_gc_config_with_axis_font_size(
+    config: GcContentConfigurator,
+    nt: str,
+    tick_font_size: float | None,
+) -> GcContentConfigurator:
+    slot_config = _slot_config_with_dinucleotide(config, nt)
+    if tick_font_size is None or getattr(slot_config, "tick_font_size", None) is not None:
+        return slot_config
+    cloned = copy.copy(slot_config)
+    cloned.tick_font_size = float(tick_font_size)
+    return cloned
+
+
+def _gc_content_matches_depth_axis_font_size(
+    *,
+    gc_config: GcContentConfigurator,
+    depth_config: DepthConfigurator | None,
+    resolved_track_slots: Sequence[CircularResolvedSlot],
+) -> float | None:
+    if depth_config is None:
+        return None
+    if str(getattr(gc_config, "mode", "deviation")).strip().lower() != "percent":
+        return None
+    if getattr(gc_config, "tick_font_size", None) is not None:
+        return None
+    if not bool(getattr(depth_config, "show_axis", True)) or not bool(getattr(depth_config, "show_ticks", True)):
+        return None
+    depth_slot = next(
+        (
+            slot
+            for slot in resolved_track_slots
+            if str(slot.renderer) == "depth" and float(slot.draw_width_px) > 0
+        ),
+        None,
+    )
+    if depth_slot is None:
+        return None
+    return depth_axis_tick_font_size_px(depth_config, float(depth_slot.draw_width_px))
+
+
 def _slot_dataframe_for_nt(
     *,
     nt: str,
@@ -1174,6 +1215,7 @@ def _draw_resolved_circular_slot(
     depth_config: DepthConfigurator | None,
     cfg: GbdrawConfig,
     dinucleotide_dataframes: dict[str, DataFrame] | None,
+    gc_content_tick_font_size_override: float | None = None,
     precomputed_feature_dict: dict | None = None,
     precalculated_labels: list[dict] | None = None,
     _tick_track_channel_override: str | None = None,
@@ -1327,12 +1369,17 @@ def _draw_resolved_circular_slot(
         }
         if use_slot_group_id:
             gc_kwargs["group_id"] = str(resolved_slot.id)
+        slot_gc_config = _slot_gc_config_with_axis_font_size(
+            gc_config,
+            nt,
+            gc_content_tick_font_size_override,
+        )
         return add_gc_content_group_on_canvas(
             canvas,
             gb_record,
             slot_df,
             canvas_config,
-            _slot_config_with_dinucleotide(gc_config, nt),
+            slot_gc_config,
             config_dict,
             **gc_kwargs,
         )
@@ -2198,6 +2245,11 @@ def add_record_on_circular_canvas(
     setattr(canvas_config, "circular_radial_layout", radial_layout)
     setattr(canvas_config, "circular_feature_layout", radial_layout.features)
     resolved_track_slots = _resolved_slots_from_radial_layout(radial_layout, layout_slots)
+    gc_content_tick_font_size_override = _gc_content_matches_depth_axis_font_size(
+        gc_config=gc_config,
+        depth_config=depth_config if show_depth_track else None,
+        resolved_track_slots=resolved_track_slots,
+    )
     if radial_layout.outer_content_radius_px > float(canvas_config.radius):
         if _expand_canvas_to_fit_radius(canvas_config, radial_layout.outer_content_radius_px):
             _sync_canvas_viewbox(canvas, canvas_config)
@@ -2336,6 +2388,7 @@ def add_record_on_circular_canvas(
             depth_config=depth_config,
             cfg=cfg,
             dinucleotide_dataframes=dinucleotide_dataframes,
+            gc_content_tick_font_size_override=gc_content_tick_font_size_override,
             precomputed_feature_dict=precomputed_feature_dict,
             precalculated_labels=precalculated_labels,
             _tick_track_channel_override=_tick_track_channel_override,

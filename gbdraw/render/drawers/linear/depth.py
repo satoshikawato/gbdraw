@@ -11,6 +11,7 @@ from svgwrite.text import Text
 
 from ....configurators import DepthConfigurator
 from ....layout.linear_coords import normalize_position_to_linear_track
+from ....layout.scalar_axis import linear_scalar_axis_tick_font_size_px
 from ....svg.linear_tracks import calculate_depth_path_desc
 
 
@@ -184,7 +185,7 @@ class DepthDrawer:
         )
 
         axis_min, axis_max = self._axis_bounds(depth_df)
-        font_size = float(self.tick_font_size) if self.tick_font_size is not None else max(5.0, min(8.0, float(track_height) * 0.7))
+        font_size = linear_scalar_axis_tick_font_size_px(self, track_height)
         large_tick_values = self._tick_values(axis_min, axis_max)
         for tick_value in self._small_tick_values(axis_min, axis_max, large_tick_values):
             normalized = self._scaled_fraction(tick_value, axis_min, axis_max)

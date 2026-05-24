@@ -562,6 +562,14 @@ const applyConfigData = (data) => {
   state.adv.depth_tick_interval = normalizePositiveNumberOrNull(state.adv.depth_tick_interval);
   state.adv.depth_small_tick_interval = normalizePositiveNumberOrNull(state.adv.depth_small_tick_interval);
   state.adv.depth_tick_font_size = normalizePositiveNumberOrNull(state.adv.depth_tick_font_size);
+  state.adv.gc_content_mode = String(state.adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
+    ? 'percent'
+    : 'deviation';
+  state.adv.gc_content_show_axis = state.adv.gc_content_show_axis !== false;
+  state.adv.gc_content_show_ticks = state.adv.gc_content_show_ticks !== false;
+  state.adv.gc_content_tick_interval = normalizePositiveNumberOrNull(state.adv.gc_content_tick_interval);
+  state.adv.gc_content_small_tick_interval = normalizePositiveNumberOrNull(state.adv.gc_content_small_tick_interval);
+  state.adv.gc_content_tick_font_size = normalizePositiveNumberOrNull(state.adv.gc_content_tick_font_size);
   const normalizeNonNegativeNumberOrNull = (value) => {
     if (
       value === null ||
@@ -582,6 +590,16 @@ const applyConfigData = (data) => {
     state.adv.depth_min > state.adv.depth_max
   ) {
     state.adv.depth_max = null;
+  }
+  const normalizeFiniteNumberOrFallback = (value, fallback) => {
+    if (value === null || value === undefined || value === '') return fallback;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
+  };
+  state.adv.gc_content_min_percent = normalizeFiniteNumberOrFallback(state.adv.gc_content_min_percent, 0);
+  state.adv.gc_content_max_percent = normalizeFiniteNumberOrFallback(state.adv.gc_content_max_percent, 100);
+  if (state.adv.gc_content_min_percent > state.adv.gc_content_max_percent) {
+    state.adv.gc_content_max_percent = state.adv.gc_content_min_percent;
   }
   state.adv.linear_show_replicon = state.adv.linear_show_replicon === true;
   state.adv.linear_show_accession = state.adv.linear_show_accession !== false;

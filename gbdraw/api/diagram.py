@@ -233,6 +233,27 @@ def _validate_depth_config(depth_config) -> None:
         raise ValidationError("depth_tick_font_size must be > 0")
 
 
+def _validate_gc_content_config(gc_content_config) -> None:
+    if str(getattr(gc_content_config, "mode", "deviation")) not in {"deviation", "percent"}:
+        raise ValidationError("gc_content_mode must be one of: deviation, percent")
+    min_percent = getattr(gc_content_config, "min_percent", None)
+    max_percent = getattr(gc_content_config, "max_percent", None)
+    if min_percent is not None and not math.isfinite(float(min_percent)):
+        raise ValidationError("gc_content_min_percent must be a finite number")
+    if max_percent is not None and not math.isfinite(float(max_percent)):
+        raise ValidationError("gc_content_max_percent must be a finite number")
+    if min_percent is not None and max_percent is not None and float(min_percent) > float(max_percent):
+        raise ValidationError("gc_content_min_percent must be <= gc_content_max_percent")
+    for attr, label in (
+        ("large_tick_interval", "gc_content_large_tick_interval"),
+        ("small_tick_interval", "gc_content_small_tick_interval"),
+        ("tick_font_size", "gc_content_tick_font_size"),
+    ):
+        value = getattr(gc_content_config, attr, None)
+        if value is not None and (not math.isfinite(float(value)) or float(value) <= 0):
+            raise ValidationError(f"{label} must be > 0")
+
+
 def _validate_positive_optional(name: str, value: int | None) -> None:
     if value is not None and int(value) <= 0:
         raise ValidationError(f"{name} must be > 0")
@@ -1441,6 +1462,7 @@ def assemble_linear_diagram_from_records(
     show_depth = resolved_depth_tables is not None
     if show_depth != bool(cfg.canvas.show_depth):
         cfg = replace(cfg, canvas=replace(cfg.canvas, show_depth=show_depth))
+    _validate_gc_content_config(cfg.objects.gc_content)
     _validate_depth_config(cfg.objects.depth)
 
     if selected_features_set is None:
@@ -1727,6 +1749,7 @@ def assemble_circular_diagram_from_record(
         cfg = replace(cfg, canvas=replace(cfg.canvas, show_depth=show_depth_from_input))
     if cfg.objects.depth.share_axis and cfg.objects.depth.max_depth is None and _shared_depth_max is not None:
         cfg = _cfg_with_depth_scale_max(cfg, _shared_depth_max)
+    _validate_gc_content_config(cfg.objects.gc_content)
     _validate_depth_config(cfg.objects.depth)
 
     if selected_features_set is None:
@@ -2091,6 +2114,7 @@ def assemble_circular_diagram_from_records(
     show_depth_from_input = resolved_depth_tables is not None
     if show_depth_from_input != bool(cfg.canvas.show_depth):
         cfg = replace(cfg, canvas=replace(cfg.canvas, show_depth=show_depth_from_input))
+    _validate_gc_content_config(cfg.objects.gc_content)
     _validate_depth_config(cfg.objects.depth)
 
     ordered_indices, row_counts = _resolve_multi_record_positions(

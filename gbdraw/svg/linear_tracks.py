@@ -92,26 +92,29 @@ def calculate_gc_skew_path_desc(
     return gc_skew_desc
 
 
-def calculate_depth_path_desc(
+def calculate_linear_scalar_area_path_desc(
     start_x: float,
     start_y: float,
-    depth_df: DataFrame,
+    scalar_df: DataFrame,
     record_len: int,
     alignment_width: float,
     genome_size_normalization_factor: float,
     track_height: float,
+    *,
+    value_column: str = "value_normalized",
+    position_column: str = "position",
 ) -> str:
-    """Return a filled linear area path for binned depth coverage."""
+    """Return a filled linear area path for normalized scalar values."""
 
-    if depth_df.empty or record_len <= 0 or track_height <= 0:
+    if scalar_df.empty or record_len <= 0 or track_height <= 0:
         return ""
 
     baseline_y = float(start_y) + float(track_height)
     x_values: list[float] = []
     y_values: list[float] = []
-    for _, row in depth_df.iterrows():
-        position = int(row["position"])
-        value = max(0.0, min(1.0, float(row["depth_normalized"])))
+    for _, row in scalar_df.iterrows():
+        position = int(row[position_column])
+        value = max(0.0, min(1.0, float(row[value_column])))
         x_value = normalize_position_to_linear_track(
             position, record_len, alignment_width, genome_size_normalization_factor
         )
@@ -135,11 +138,35 @@ def calculate_depth_path_desc(
     return "".join(path_segments)
 
 
+def calculate_depth_path_desc(
+    start_x: float,
+    start_y: float,
+    depth_df: DataFrame,
+    record_len: int,
+    alignment_width: float,
+    genome_size_normalization_factor: float,
+    track_height: float,
+) -> str:
+    """Return a filled linear area path for binned depth coverage."""
+
+    return calculate_linear_scalar_area_path_desc(
+        start_x,
+        start_y,
+        depth_df,
+        record_len,
+        alignment_width,
+        genome_size_normalization_factor,
+        track_height,
+        value_column="depth_normalized",
+    )
+
+
 __all__ = [
     "calculate_corrdinate",
     "calculate_depth_path_desc",
     "calculate_gc_content_path_desc",
     "calculate_gc_skew_path_desc",
+    "calculate_linear_scalar_area_path_desc",
 ]
 
 

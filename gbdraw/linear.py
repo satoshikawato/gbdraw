@@ -424,6 +424,57 @@ def _get_args(args) -> argparse.Namespace:
         help='plot GC content below genome (default: False). ',
         action='store_true')
     parser.add_argument(
+        '--gc_content_mode',
+        help='GC content display mode: deviation (current centered behavior) or percent (absolute 0-100%% area track).',
+        choices=['deviation', 'percent'],
+        default=None)
+    parser.add_argument(
+        '--gc_content_min_percent',
+        help='Minimum GC percent for percent-mode clipping/axis (optional; finite number).',
+        type=float)
+    parser.add_argument(
+        '--gc_content_max_percent',
+        help='Maximum GC percent for percent-mode clipping/axis (optional; finite number).',
+        type=float)
+    parser.add_argument(
+        '--gc_content_tick_interval',
+        help='GC content percent-mode large tick interval (optional; must be > 0; alias for --gc_content_large_tick_interval).',
+        type=float)
+    parser.add_argument(
+        '--gc_content_large_tick_interval',
+        help='GC content percent-mode large tick interval (optional; must be > 0).',
+        type=float)
+    parser.add_argument(
+        '--gc_content_small_tick_interval',
+        help='GC content percent-mode small tick interval (optional; must be > 0; hidden by default).',
+        type=float)
+    parser.add_argument(
+        '--gc_content_tick_font_size',
+        help='GC content percent-mode tick label font size (optional; must be > 0).',
+        type=float)
+    parser.add_argument(
+        '--show_gc_content_axis',
+        dest='gc_content_show_axis',
+        help='Show GC content percent-mode axis line, ticks, and labels.',
+        action='store_true',
+        default=None)
+    parser.add_argument(
+        '--hide_gc_content_axis',
+        dest='gc_content_show_axis',
+        help='Hide GC content percent-mode axis line, ticks, and labels.',
+        action='store_false')
+    parser.add_argument(
+        '--show_gc_content_ticks',
+        dest='gc_content_show_ticks',
+        help='Show GC content percent-mode axis ticks and labels.',
+        action='store_true',
+        default=None)
+    parser.add_argument(
+        '--hide_gc_content_ticks',
+        dest='gc_content_show_ticks',
+        help='Hide GC content percent-mode axis ticks and labels.',
+        action='store_false')
+    parser.add_argument(
         '--show_skew',
         help='plot GC skew below genome (default: False). ',
         action='store_true')
@@ -854,6 +905,24 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--depth_small_tick_interval must be > 0")
     if args.depth_tick_font_size is not None and args.depth_tick_font_size <= 0:
         parser.error("--depth_tick_font_size must be > 0")
+    for option_name in ("gc_content_min_percent", "gc_content_max_percent"):
+        option_value = getattr(args, option_name)
+        if option_value is not None and not math.isfinite(float(option_value)):
+            parser.error(f"--{option_name} must be a finite number")
+    if (
+        args.gc_content_min_percent is not None
+        and args.gc_content_max_percent is not None
+        and args.gc_content_min_percent > args.gc_content_max_percent
+    ):
+        parser.error("--gc_content_min_percent must be <= --gc_content_max_percent")
+    if args.gc_content_tick_interval is not None and args.gc_content_tick_interval <= 0:
+        parser.error("--gc_content_tick_interval must be > 0")
+    if args.gc_content_large_tick_interval is not None and args.gc_content_large_tick_interval <= 0:
+        parser.error("--gc_content_large_tick_interval must be > 0")
+    if args.gc_content_small_tick_interval is not None and args.gc_content_small_tick_interval <= 0:
+        parser.error("--gc_content_small_tick_interval must be > 0")
+    if args.gc_content_tick_font_size is not None and args.gc_content_tick_font_size <= 0:
+        parser.error("--gc_content_tick_font_size must be > 0")
     if args.label_placement == "above_feature" and args.label_rendering != "auto":
         parser.error("--label_rendering embedded_only|external_only cannot be used with --label_placement above_feature")
     if args.collinear_min_anchors <= 0:
@@ -905,7 +974,7 @@ def linear_main(cmd_args) -> None:
     args: argparse.Namespace = _get_args(cmd_args)
     if '-i' in cmd_args or '--input' in cmd_args:
         logger.warning(
-            "WARNING: The -i/--input option is deprecated and will be removed in a future version. Please use --gbk instead.")  
+            "WARNING: The -i/--input option is deprecated and will be removed in a future version. Please use --gbk instead.")
     out_file_prefix: str = args.output
     blast_files: str = args.blast
     protein_blastp_mode: str = str(args.protein_blastp_mode or "none")
@@ -929,6 +998,15 @@ def linear_main(cmd_args) -> None:
     resolve_overlaps: bool = args.resolve_overlaps
     dinucleotide: str = args.nt.upper()
     show_gc: bool = args.show_gc
+    gc_content_mode: str | None = args.gc_content_mode
+    gc_content_min_percent: Optional[float] = args.gc_content_min_percent
+    gc_content_max_percent: Optional[float] = args.gc_content_max_percent
+    gc_content_show_axis: bool | None = args.gc_content_show_axis
+    gc_content_show_ticks: bool | None = args.gc_content_show_ticks
+    gc_content_tick_interval: Optional[float] = args.gc_content_tick_interval
+    gc_content_large_tick_interval: Optional[float] = args.gc_content_large_tick_interval
+    gc_content_small_tick_interval: Optional[float] = args.gc_content_small_tick_interval
+    gc_content_tick_font_size: Optional[float] = args.gc_content_tick_font_size
     manual_window: int = args.window
     manual_step: int = args.step
     depth_files: list[str] | None = args.depth
@@ -1043,17 +1121,17 @@ def linear_main(cmd_args) -> None:
         scale_label_color = axis_stroke_color
     axis_stroke_width: Optional[float] = args.axis_stroke_width
     line_stroke_color: Optional[str] = args.line_stroke_color
-    line_stroke_width: Optional[float] = args.line_stroke_width       
+    line_stroke_width: Optional[float] = args.line_stroke_width
     if plot_title_font_size is not None and float(plot_title_font_size) <= 0:
         raise ValidationError("plot_title_font_size must be > 0")
     if args.linear_label_spacing is not None and float(args.linear_label_spacing) <= 0:
         raise ValidationError("linear_label_spacing must be > 0")
     config_dict = modify_config_dict(
-        config_dict, 
-        block_stroke_color=block_stroke_color, 
-        block_stroke_width=block_stroke_width, 
-        linear_axis_stroke_color=axis_stroke_color, 
-        linear_axis_stroke_width=axis_stroke_width, 
+        config_dict,
+        block_stroke_color=block_stroke_color,
+        block_stroke_width=block_stroke_width,
+        linear_axis_stroke_color=axis_stroke_color,
+        linear_axis_stroke_width=axis_stroke_width,
         linear_definition_font_size=definition_font_size,
         linear_definition_show_replicon=definition_show_replicon,
         linear_definition_show_accession=definition_show_accession,
@@ -1063,10 +1141,19 @@ def linear_main(cmd_args) -> None:
         label_rendering=label_rendering,
         label_placement=label_placement,
         label_rotation=label_rotation,
-        line_stroke_color=line_stroke_color, 
-        line_stroke_width=line_stroke_width, 
-        show_gc=show_gc, 
-        show_skew=show_skew, 
+        line_stroke_color=line_stroke_color,
+        line_stroke_width=line_stroke_width,
+        show_gc=show_gc,
+        gc_content_mode=gc_content_mode,
+        gc_content_min_percent=gc_content_min_percent,
+        gc_content_max_percent=gc_content_max_percent,
+        gc_content_show_axis=gc_content_show_axis,
+        gc_content_show_ticks=gc_content_show_ticks,
+        gc_content_tick_interval=gc_content_tick_interval,
+        gc_content_large_tick_interval=gc_content_large_tick_interval,
+        gc_content_small_tick_interval=gc_content_small_tick_interval,
+        gc_content_tick_font_size=gc_content_tick_font_size,
+        show_skew=show_skew,
         show_depth=show_depth,
         depth_color=depth_color,
         depth_height=depth_height,

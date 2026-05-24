@@ -1628,6 +1628,57 @@ json.dumps({
           args.push('--depth_tick_font_size', adv.depth_tick_font_size);
         }
       };
+      const appendGcContentPercentArgs = () => {
+        adv.gc_content_mode = String(adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
+          ? 'percent'
+          : 'deviation';
+        if (adv.gc_content_mode !== 'percent') return;
+
+        args.push('--gc_content_mode', 'percent');
+        const minPercent = Number(adv.gc_content_min_percent);
+        const maxPercent = Number(adv.gc_content_max_percent);
+        if (!Number.isFinite(minPercent)) {
+          throw new Error('GC content minimum percent must be a finite number.');
+        }
+        if (!Number.isFinite(maxPercent)) {
+          throw new Error('GC content maximum percent must be a finite number.');
+        }
+        if (minPercent > maxPercent) {
+          throw new Error('GC content minimum percent must be less than or equal to maximum percent.');
+        }
+        adv.gc_content_min_percent = minPercent;
+        adv.gc_content_max_percent = maxPercent;
+        args.push('--gc_content_min_percent', String(minPercent));
+        args.push('--gc_content_max_percent', String(maxPercent));
+
+        if (adv.gc_content_show_axis === false) args.push('--hide_gc_content_axis');
+        if (adv.gc_content_show_ticks === false) args.push('--hide_gc_content_ticks');
+        if (
+          adv.gc_content_tick_interval !== null &&
+          adv.gc_content_tick_interval !== undefined &&
+          adv.gc_content_tick_interval !== ''
+        ) {
+          if (Number(adv.gc_content_tick_interval) <= 0) throw new Error('GC content large tick interval must be greater than 0.');
+          args.push('--gc_content_large_tick_interval', adv.gc_content_tick_interval);
+        }
+        if (
+          adv.gc_content_small_tick_interval !== null &&
+          adv.gc_content_small_tick_interval !== undefined &&
+          adv.gc_content_small_tick_interval !== ''
+        ) {
+          if (Number(adv.gc_content_small_tick_interval) <= 0) throw new Error('GC content small tick interval must be greater than 0.');
+          args.push('--gc_content_small_tick_interval', adv.gc_content_small_tick_interval);
+        }
+        if (
+          adv.gc_content_tick_font_size !== null &&
+          adv.gc_content_tick_font_size !== undefined &&
+          adv.gc_content_tick_font_size !== ''
+        ) {
+          if (Number(adv.gc_content_tick_font_size) <= 0) throw new Error('GC content tick font size must be greater than 0.');
+          args.push('--gc_content_tick_font_size', adv.gc_content_tick_font_size);
+        }
+      };
+      appendGcContentPercentArgs();
 
       if (mode.value === 'circular') {
         const multiCanvasSupport = getCircularMultiRecordCanvasOptionSupport();

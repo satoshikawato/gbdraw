@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-
-from ..configurators import DepthConfigurator
+from typing import Any
 
 
 DEPTH_AXIS_STROKE_WIDTH_PX = 0.8
@@ -22,11 +21,12 @@ class DepthAxisFootprint:
 
 
 def depth_axis_tick_font_size_px(
-    depth_config: DepthConfigurator,
+    depth_config: Any,
     track_width_px: float,
 ) -> float:
-    if depth_config.tick_font_size is not None:
-        return max(0.0, float(depth_config.tick_font_size))
+    tick_font_size = getattr(depth_config, "tick_font_size", None)
+    if tick_font_size is not None:
+        return max(0.0, float(tick_font_size))
     return max(
         DEPTH_AXIS_DEFAULT_FONT_MIN_PX,
         min(
@@ -37,7 +37,7 @@ def depth_axis_tick_font_size_px(
 
 
 def resolve_depth_axis_footprint(
-    depth_config: DepthConfigurator,
+    depth_config: Any,
     track_width_px: float,
 ) -> DepthAxisFootprint:
     if not bool(depth_config.show_axis):

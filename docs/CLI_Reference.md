@@ -87,6 +87,15 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--circular_track_slot CIRCULAR_TRACK_SLOT]
               [--gc_content_width GC_CONTENT_WIDTH]
               [--gc_content_radius GC_CONTENT_RADIUS]
+              [--gc_content_mode {deviation,percent}]
+              [--gc_content_min_percent GC_CONTENT_MIN_PERCENT]
+              [--gc_content_max_percent GC_CONTENT_MAX_PERCENT]
+              [--gc_content_tick_interval GC_CONTENT_TICK_INTERVAL]
+              [--gc_content_large_tick_interval GC_CONTENT_LARGE_TICK_INTERVAL]
+              [--gc_content_small_tick_interval GC_CONTENT_SMALL_TICK_INTERVAL]
+              [--gc_content_tick_font_size GC_CONTENT_TICK_FONT_SIZE]
+              [--show_gc_content_axis] [--hide_gc_content_axis]
+              [--show_gc_content_ticks] [--hide_gc_content_ticks]
               [--gc_skew_width GC_SKEW_WIDTH]
               [--gc_skew_radius GC_SKEW_RADIUS]
               [--legend_box_size LEGEND_BOX_SIZE]
@@ -259,6 +268,27 @@ options:
   --gc_content_radius GC_CONTENT_RADIUS
                         GC content track center radius for circular mode (as a
                         ratio of base radius; must be > 0).
+  --gc_content_mode {deviation,percent}
+                        GC content display mode. deviation keeps the existing
+                        mean-centered track. percent draws absolute GC
+                        percentage as a baseline area track.
+  --gc_content_min_percent GC_CONTENT_MIN_PERCENT
+                        Minimum GC percent for percent-mode clipping/axis.
+  --gc_content_max_percent GC_CONTENT_MAX_PERCENT
+                        Maximum GC percent for percent-mode clipping/axis.
+  --gc_content_tick_interval GC_CONTENT_TICK_INTERVAL
+                        GC content percent-mode large tick interval; alias for
+                        --gc_content_large_tick_interval.
+  --gc_content_large_tick_interval GC_CONTENT_LARGE_TICK_INTERVAL
+                        GC content percent-mode large tick interval.
+  --gc_content_small_tick_interval GC_CONTENT_SMALL_TICK_INTERVAL
+                        GC content percent-mode small tick interval.
+  --gc_content_tick_font_size GC_CONTENT_TICK_FONT_SIZE
+                        GC content percent-mode tick label font size.
+  --show_gc_content_axis, --hide_gc_content_axis
+                        Show or hide the GC content percent-mode axis.
+  --show_gc_content_ticks, --hide_gc_content_ticks
+                        Show or hide GC content percent-mode ticks and labels.
   --gc_skew_width GC_SKEW_WIDTH
                         GC skew track width for circular mode (in px; must be
                         > 0).
@@ -287,7 +317,17 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--collinear_blocks COLLINEAR_BLOCKS]
               [--save_collinear_blocks SAVE_COLLINEAR_BLOCKS]
               [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT] [-n NT] [-w WINDOW]
-              [-s STEP] [--separate_strands] [--show_gc] [--show_skew]
+              [-s STEP] [--separate_strands] [--show_gc]
+              [--gc_content_mode {deviation,percent}]
+              [--gc_content_min_percent GC_CONTENT_MIN_PERCENT]
+              [--gc_content_max_percent GC_CONTENT_MAX_PERCENT]
+              [--gc_content_tick_interval GC_CONTENT_TICK_INTERVAL]
+              [--gc_content_large_tick_interval GC_CONTENT_LARGE_TICK_INTERVAL]
+              [--gc_content_small_tick_interval GC_CONTENT_SMALL_TICK_INTERVAL]
+              [--gc_content_tick_font_size GC_CONTENT_TICK_FONT_SIZE]
+              [--show_gc_content_axis] [--hide_gc_content_axis]
+              [--show_gc_content_ticks] [--hide_gc_content_ticks]
+              [--show_skew]
               [--align_center] [--evalue EVALUE] [--bitscore BITSCORE]
               [--identity IDENTITY] [--alignment_length ALIGNMENT_LENGTH]
               [--pairwise_match_style {ribbon,curve}]
@@ -378,6 +418,27 @@ options:
                         Features of undefined strands are shown on the forward
                         strand.
   --show_gc             plot GC content below genome (default: False).
+  --gc_content_mode {deviation,percent}
+                        GC content display mode. deviation keeps the existing
+                        mean-centered track. percent draws absolute GC
+                        percentage as a baseline area track.
+  --gc_content_min_percent GC_CONTENT_MIN_PERCENT
+                        Minimum GC percent for percent-mode clipping/axis.
+  --gc_content_max_percent GC_CONTENT_MAX_PERCENT
+                        Maximum GC percent for percent-mode clipping/axis.
+  --gc_content_tick_interval GC_CONTENT_TICK_INTERVAL
+                        GC content percent-mode large tick interval; alias for
+                        --gc_content_large_tick_interval.
+  --gc_content_large_tick_interval GC_CONTENT_LARGE_TICK_INTERVAL
+                        GC content percent-mode large tick interval.
+  --gc_content_small_tick_interval GC_CONTENT_SMALL_TICK_INTERVAL
+                        GC content percent-mode small tick interval.
+  --gc_content_tick_font_size GC_CONTENT_TICK_FONT_SIZE
+                        GC content percent-mode tick label font size.
+  --show_gc_content_axis, --hide_gc_content_axis
+                        Show or hide the GC content percent-mode axis.
+  --show_gc_content_ticks, --hide_gc_content_ticks
+                        Show or hide GC content percent-mode ticks and labels.
   --show_skew           plot GC skew below genome (default: False).
   --align_center        Align genomes to the center (default: False).
   --evalue EVALUE       evalue threshold (default=1e-2)

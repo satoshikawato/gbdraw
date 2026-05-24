@@ -8,6 +8,7 @@ This module was extracted from `gbdraw.linear_diagram_components` to improve coh
 
 from __future__ import annotations
 
+import copy
 from dataclasses import replace
 import math
 
@@ -15,7 +16,6 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 import pandas as pd
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
 from ...analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from ...analysis.depth import depth_df as build_depth_df  # type: ignore[reportMissingImports]
@@ -39,6 +39,7 @@ from ...io.comparisons import filter_comparison_dataframe, load_comparisons
 from ...legend.table import prepare_legend_table  # type: ignore[reportMissingImports]
 from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...layout.linear import calculate_feature_position_factors_linear  # type: ignore[reportMissingImports]
+from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px  # type: ignore[reportMissingImports]
 from ...labels.linear import calculate_label_y_bounds  # type: ignore[reportMissingImports]
 
 from .builders import (
@@ -73,6 +74,28 @@ def _is_axis_ruler_enabled(canvas_config: LinearCanvasConfigurator, cfg: GbdrawC
         and scale_style == "ruler"
         and track_layout in {"above", "below"}
     )
+
+
+def _gc_config_matching_linear_depth_axis_font_size(
+    *,
+    gc_config: GcContentConfigurator,
+    depth_config: DepthConfigurator | None,
+    canvas_config: LinearCanvasConfigurator,
+    depth_enabled: bool,
+) -> GcContentConfigurator:
+    if (
+        not depth_enabled
+        or depth_config is None
+        or str(getattr(gc_config, "mode", "deviation")).strip().lower() != "percent"
+        or getattr(gc_config, "tick_font_size", None) is not None
+        or not bool(getattr(depth_config, "show_axis", True))
+        or not bool(getattr(depth_config, "show_ticks", True))
+    ):
+        return gc_config
+
+    cloned = copy.copy(gc_config)
+    cloned.tick_font_size = linear_scalar_axis_tick_font_size_px(depth_config, canvas_config.depth_height)
+    return cloned
 
 
 def _axis_ruler_extents(canvas_config: LinearCanvasConfigurator, cfg: GbdrawConfig) -> tuple[float, float]:
@@ -112,7 +135,7 @@ def _precalculate_feature_track_heights(
     """
     Pre-calculates the height required for feature tracks for each record.
     This is needed when resolve_overlaps is enabled as features may span multiple tracks.
-    
+
     Returns:
         - dict mapping record_id -> height below the axis line (for lower tracks)
         - dict mapping record_id -> height above the axis line (for upper tracks)
@@ -132,12 +155,12 @@ def _precalculate_feature_track_heights(
         else None
     )
     axis_ruler_above, axis_ruler_below = _axis_ruler_extents(canvas_config, cfg)
-    
+
     if precomputed_feature_dicts is None:
         color_table, default_colors = preprocess_color_tables(
             feature_config.color_table, feature_config.default_colors
         )
-    
+
     for index, record in enumerate(records):
         if precomputed_feature_dicts is not None:
             feature_dict = precomputed_feature_dicts[index]
@@ -201,19 +224,19 @@ def _precalculate_feature_track_heights(
         precise_height_below = max(0.0, max_bottom_y)
         undisplaced_height_above = max(0.0, -min_top_y_undisplaced)
         middle_undisplaced_height_above = max(0.0, -min_top_y_middle_undisplaced)
-        
+
         if track_layout == "middle":
             # Keep existing middle-mode sizing behavior for backward compatibility.
             max_positive_track = 0
             min_negative_track = 0
-            
+
             for feature_obj in feature_dict.values():
                 track_id = feature_obj.feature_track_id
                 if track_id > max_positive_track:
                     max_positive_track = track_id
                 if track_id < min_negative_track:
                     min_negative_track = track_id
-            
+
             if canvas_config.strandedness:
                 # Stranded mode: positive tracks above axis, negative tracks below
                 num_tracks_above = max_positive_track + 1
@@ -240,7 +263,7 @@ def _precalculate_feature_track_heights(
             middle_undisplaced_height_above = max(middle_undisplaced_height_above, axis_ruler_above)
         if axis_ruler_below > 0.0:
             height_below = max(height_below, axis_ruler_below)
-        
+
         record_heights_above[record.id] = height_above
         record_heights_below[record.id] = height_below
         record_top_guard_above[record.id] = precise_height_above
@@ -412,7 +435,7 @@ def assemble_linear_diagram(
         canvas_config,
         cfg=cfg,
     )
-    
+
     # Pre-calculate feature track heights for each record (needed for resolve_overlaps)
     (
         record_heights_below,
@@ -427,7 +450,7 @@ def assemble_linear_diagram(
         cfg,
         precomputed_feature_dicts=record_feature_dicts,
     )
-    
+
     if required_label_height > 0:
         if canvas_config.vertical_offset < required_label_height:
             canvas_config.vertical_offset = (
@@ -478,6 +501,12 @@ def assemble_linear_diagram(
     if not depth_enabled:
         canvas_config.show_depth = False
         canvas_config.set_gc_height_and_gc_padding()
+    gc_axis_config = _gc_config_matching_linear_depth_axis_font_size(
+        gc_config=gc_config,
+        depth_config=depth_config,
+        canvas_config=canvas_config,
+        depth_enabled=depth_enabled,
+    )
 
     # Prepare legend group
     has_blast = bool(blast_files or comparison_dataframes)
@@ -550,7 +579,7 @@ def assemble_linear_diagram(
         if i < len(record_ids) - 1:
             current_record_id = record_ids[i]
             next_record_id = record_ids[i + 1]
-            
+
             # Get the height below axis for the current record (feature tracks + GC/skew)
             current_feature_height_below = record_heights_below.get(current_record_id, canvas_config.cds_padding)
             height_below_axis = (
@@ -559,7 +588,7 @@ def assemble_linear_diagram(
             )
             current_label_height_below = record_label_heights_below.get(current_record_id, 0.0)
             height_below_axis += current_label_height_below
-            
+
             # Get the height above axis for the next record (labels or feature tracks)
             next_label_height = record_label_heights_above.get(next_record_id, 0)
             next_feature_height_above = record_heights_above.get(next_record_id, canvas_config.cds_padding)
@@ -571,7 +600,7 @@ def assemble_linear_diagram(
             else:
                 # Use cds_padding * 1.5 as minimum gap to ensure clean separation with some breathing room
                 min_gap = canvas_config.cds_padding * 1.5
-            
+
             # Total inter-record space: below current + gap + above next
             inter_record_space = height_below_axis + min_gap + height_above_next_axis
             inter_record_space = max(
@@ -836,7 +865,7 @@ def assemble_linear_diagram(
                 gc_offset_y,
                 offset_x,
                 canvas_config,
-                gc_config,
+                gc_axis_config,
                 config_dict,
                 cfg=record_cfg,
                 gc_df=shared_gc_df,

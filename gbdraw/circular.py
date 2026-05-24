@@ -489,6 +489,57 @@ def _get_args(args) -> argparse.Namespace:
         help='GC content track center radius for circular mode (as a ratio of base radius; must be > 0).',
         type=float)
     parser.add_argument(
+        '--gc_content_mode',
+        help='GC content display mode: deviation (current centered behavior) or percent (absolute 0-100%% area track).',
+        choices=['deviation', 'percent'],
+        default=None)
+    parser.add_argument(
+        '--gc_content_min_percent',
+        help='Minimum GC percent for percent-mode clipping/axis (optional; finite number).',
+        type=float)
+    parser.add_argument(
+        '--gc_content_max_percent',
+        help='Maximum GC percent for percent-mode clipping/axis (optional; finite number).',
+        type=float)
+    parser.add_argument(
+        '--gc_content_tick_interval',
+        help='GC content percent-mode large tick interval (optional; must be > 0; alias for --gc_content_large_tick_interval).',
+        type=float)
+    parser.add_argument(
+        '--gc_content_large_tick_interval',
+        help='GC content percent-mode large tick interval (optional; must be > 0).',
+        type=float)
+    parser.add_argument(
+        '--gc_content_small_tick_interval',
+        help='GC content percent-mode small tick interval (optional; must be > 0; hidden by default).',
+        type=float)
+    parser.add_argument(
+        '--gc_content_tick_font_size',
+        help='GC content percent-mode tick label font size (optional; must be > 0).',
+        type=float)
+    parser.add_argument(
+        '--show_gc_content_axis',
+        dest='gc_content_show_axis',
+        help='Show GC content percent-mode axis line, ticks, and labels.',
+        action='store_true',
+        default=None)
+    parser.add_argument(
+        '--hide_gc_content_axis',
+        dest='gc_content_show_axis',
+        help='Hide GC content percent-mode axis line, ticks, and labels.',
+        action='store_false')
+    parser.add_argument(
+        '--show_gc_content_ticks',
+        dest='gc_content_show_ticks',
+        help='Show GC content percent-mode axis ticks and labels.',
+        action='store_true',
+        default=None)
+    parser.add_argument(
+        '--hide_gc_content_ticks',
+        dest='gc_content_show_ticks',
+        help='Hide GC content percent-mode axis ticks and labels.',
+        action='store_false')
+    parser.add_argument(
         '--gc_skew_width',
         help='GC skew track width for circular mode (in px; must be > 0).',
         type=float)
@@ -514,6 +565,24 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--gc_content_width must be > 0")
     if args.gc_content_radius is not None and args.gc_content_radius <= 0:
         parser.error("--gc_content_radius must be > 0")
+    for option_name in ("gc_content_min_percent", "gc_content_max_percent"):
+        option_value = getattr(args, option_name)
+        if option_value is not None and not math.isfinite(float(option_value)):
+            parser.error(f"--{option_name} must be a finite number")
+    if (
+        args.gc_content_min_percent is not None
+        and args.gc_content_max_percent is not None
+        and args.gc_content_min_percent > args.gc_content_max_percent
+    ):
+        parser.error("--gc_content_min_percent must be <= --gc_content_max_percent")
+    if args.gc_content_tick_interval is not None and args.gc_content_tick_interval <= 0:
+        parser.error("--gc_content_tick_interval must be > 0")
+    if args.gc_content_large_tick_interval is not None and args.gc_content_large_tick_interval <= 0:
+        parser.error("--gc_content_large_tick_interval must be > 0")
+    if args.gc_content_small_tick_interval is not None and args.gc_content_small_tick_interval <= 0:
+        parser.error("--gc_content_small_tick_interval must be > 0")
+    if args.gc_content_tick_font_size is not None and args.gc_content_tick_font_size <= 0:
+        parser.error("--gc_content_tick_font_size must be > 0")
     if args.gc_skew_width is not None and args.gc_skew_width <= 0:
         parser.error("--gc_skew_width must be > 0")
     if args.gc_skew_radius is not None and args.gc_skew_radius <= 0:
@@ -658,6 +727,15 @@ def circular_main(cmd_args) -> None:
     circular_track_axis_index: int | None = args.circular_track_axis_index
     gc_content_width: Optional[float] = args.gc_content_width
     gc_content_radius: Optional[float] = args.gc_content_radius
+    gc_content_mode: str | None = args.gc_content_mode
+    gc_content_min_percent: Optional[float] = args.gc_content_min_percent
+    gc_content_max_percent: Optional[float] = args.gc_content_max_percent
+    gc_content_show_axis: bool | None = args.gc_content_show_axis
+    gc_content_show_ticks: bool | None = args.gc_content_show_ticks
+    gc_content_tick_interval: Optional[float] = args.gc_content_tick_interval
+    gc_content_large_tick_interval: Optional[float] = args.gc_content_large_tick_interval
+    gc_content_small_tick_interval: Optional[float] = args.gc_content_small_tick_interval
+    gc_content_tick_font_size: Optional[float] = args.gc_content_tick_font_size
     gc_skew_width: Optional[float] = args.gc_skew_width
     gc_skew_radius: Optional[float] = args.gc_skew_radius
     if plot_title_font_size is not None and float(plot_title_font_size) <= 0:
@@ -749,6 +827,15 @@ def circular_main(cmd_args) -> None:
         strandedness=strandedness,
         resolve_overlaps=resolve_overlaps,
         show_gc=show_gc,
+        gc_content_mode=gc_content_mode,
+        gc_content_min_percent=gc_content_min_percent,
+        gc_content_max_percent=gc_content_max_percent,
+        gc_content_show_axis=gc_content_show_axis,
+        gc_content_show_ticks=gc_content_show_ticks,
+        gc_content_tick_interval=gc_content_tick_interval,
+        gc_content_large_tick_interval=gc_content_large_tick_interval,
+        gc_content_small_tick_interval=gc_content_small_tick_interval,
+        gc_content_tick_font_size=gc_content_tick_font_size,
         show_skew=show_skew,
         show_depth=show_depth,
         depth_color=depth_color,
