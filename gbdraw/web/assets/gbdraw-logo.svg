@@ -26,23 +26,23 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="px"
-     showguides="true"
-     inkscape:zoom="0.64000703"
-     inkscape:cx="288.27808"
-     inkscape:cy="348.43367"
+     showguides="false"
+     inkscape:zoom="1"
+     inkscape:cx="26.5"
+     inkscape:cy="389"
      inkscape:window-width="1280"
      inkscape:window-height="730"
      inkscape:window-x="-6"
      inkscape:window-y="-6"
      inkscape:window-maximized="1"
-     inkscape:current-layer="g1">
+     inkscape:current-layer="g10">
     <sodipodi:guide
        position="117.06572,67.733338"
        orientation="0,-1"
        id="guide1"
        inkscape:locked="false" />
     <sodipodi:guide
-       position="67.745816,118.36564"
+       position="67.731011,24.201877"
        orientation="1,0"
        id="guide2"
        inkscape:locked="false" />
@@ -50,6 +50,21 @@
        position="68.212138,12.271406"
        orientation="0,-1"
        id="guide10"
+       inkscape:locked="false" />
+    <sodipodi:guide
+       position="67.731011,24.201877"
+       orientation="0,-1"
+       id="guide3"
+       inkscape:locked="false" />
+    <sodipodi:guide
+       position="67.717056,13.618548"
+       orientation="0,-1"
+       id="guide4"
+       inkscape:locked="false" />
+    <sodipodi:guide
+       position="127.53252,24.083028"
+       orientation="1,0"
+       id="guide5"
        inkscape:locked="false" />
   </sodipodi:namedview>
   <defs
@@ -66,7 +81,8 @@
         <path
            id="path1"
            style="paint-order:markers fill stroke"
-           d="m 67.732299,11.443229 v 10.5823 c 24.411803,0 44.041241,19.480855 44.041241,43.591654 0,24.1108 -19.629438,43.590107 -44.041241,43.590107 v 0.11885 H 7.930782 v 10.5823 h 59.81547 v -0.11782 c 30.072856,-0.008 54.611138,-24.294982 54.611138,-54.173437 0,-29.883103 -24.545833,-54.173954 -54.625091,-54.173954 z" />
+           d="m 67.732299,11.443229 v 10.5823 c 24.411803,0 44.041241,19.480855 44.041241,43.591654 0,24.1108 -19.629438,43.590107 -44.041241,43.590107 v 0 H 7.930782 v 10.58333 h 59.81547 v 0 c 30.072856,-0.008 54.611138,-24.294982 54.611138,-54.173437 0,-29.883103 -24.545833,-54.173954 -54.625091,-54.173954 z"
+           sodipodi:nodetypes="ccsccccccsc" />
       </g>
       <path
          style="paint-order:markers fill stroke"
