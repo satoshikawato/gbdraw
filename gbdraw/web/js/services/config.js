@@ -608,7 +608,8 @@ const applyConfigData = (data) => {
   if (data.losat) {
     safeDeepMerge(state.losat, data.losat);
     const rawParallelWorkers = String(data.losat.parallelWorkers ?? '').trim().toLowerCase();
-    state.losat.parallelWorkers = ['1', '2', '3', '4'].includes(rawParallelWorkers)
+    const parsedParallelWorkers = Number(rawParallelWorkers);
+    state.losat.parallelWorkers = Number.isInteger(parsedParallelWorkers) && parsedParallelWorkers >= 1
       ? rawParallelWorkers
       : undefined;
     const rawExecutionMode = String(data.losat.executionMode ?? '').trim().toLowerCase();
@@ -616,9 +617,17 @@ const applyConfigData = (data) => {
       ? rawExecutionMode
       : 'auto';
     const rawThreadsPerJob = String(data.losat.threadsPerJob ?? 'auto').trim().toLowerCase();
-    state.losat.threadsPerJob = ['auto', '1', '2', '4', '8', '16'].includes(rawThreadsPerJob)
+    const parsedThreadsPerJob = Number(rawThreadsPerJob);
+    state.losat.threadsPerJob = rawThreadsPerJob === 'auto' ||
+      (Number.isInteger(parsedThreadsPerJob) && parsedThreadsPerJob >= 1)
       ? rawThreadsPerJob
       : 'auto';
+    const rawTotalThreadBudget = String(data.losat.totalThreadBudget ?? 'safe').trim().toLowerCase();
+    const parsedTotalThreadBudget = Number(rawTotalThreadBudget);
+    state.losat.totalThreadBudget = ['safe', 'auto', 'available'].includes(rawTotalThreadBudget) ||
+      (Number.isInteger(parsedTotalThreadBudget) && parsedTotalThreadBudget >= 1)
+      ? (rawTotalThreadBudget === 'auto' ? 'safe' : rawTotalThreadBudget)
+      : 'safe';
     state.losat.blastp.mode = normalizeBlastpMode(state.losat.blastp?.mode);
     state.losat.blastp.maxHits = normalizePositiveInteger(state.losat.blastp?.maxHits, 5);
     state.losat.blastp.candidateLimit = null;

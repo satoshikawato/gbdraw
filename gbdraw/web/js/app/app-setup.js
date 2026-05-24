@@ -17,6 +17,7 @@ import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 import { createOrthogroupEditor } from './orthogroups.js';
 import { createCircularTrackSlotEditor } from './circular-track-slots.js';
+import { createLosatSettings } from './losat-settings.js';
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref } = window.Vue;
 
@@ -186,6 +187,7 @@ export const createAppSetup = () => {
 
   const circularTrackNewRenderer = ref('dinucleotide_skew');
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
+  const losatSettings = createLosatSettings({ state });
   watch(
     () => [adv.circular_track_slots_enabled, form.show_depth],
     ([slotsEnabled, showDepth]) => {
@@ -851,6 +853,7 @@ export const createAppSetup = () => {
     circularTrackPresetSummary: circularTrackSlotEditor.circularTrackPresetSummary,
     circularTrackSlotUsesPresetGeometry: circularTrackSlotEditor.circularTrackSlotUsesPresetGeometry,
     losat,
+    ...losatSettings,
     losatCacheInfo,
     losatThreadingStatus,
     orthogroups,

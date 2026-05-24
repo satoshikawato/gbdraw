@@ -412,6 +412,7 @@ const losat = reactive({
   outfmt: '6',
   parallelWorkers: undefined,
   executionMode: 'auto',
+  totalThreadBudget: 'safe',
   threadsPerJob: 'auto',
   blastn: {
     task: 'megablast'

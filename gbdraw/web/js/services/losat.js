@@ -327,6 +327,20 @@ const getDefaultConcurrency = (jobCount) => {
 const getHardwareThreadBudget = () =>
   Math.max(1, Number(globalThis.navigator?.hardwareConcurrency || 4) || 4);
 
+const normalizeTotalThreadBudget = (value) => {
+  const hardwareBudget = getHardwareThreadBudget();
+  const normalized = String(value ?? 'safe').trim().toLowerCase();
+  if (!normalized || normalized === 'safe' || normalized === 'auto') {
+    return Math.min(DEFAULT_MAX_TOTAL_THREADS, hardwareBudget);
+  }
+  if (normalized === 'available') return hardwareBudget;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return Math.min(DEFAULT_MAX_TOTAL_THREADS, hardwareBudget);
+  }
+  return Math.max(1, Math.min(parsed, hardwareBudget));
+};
+
 const normalizeExecutionMode = (value) => {
   const mode = String(value || 'auto').trim().toLowerCase();
   return ['auto', 'serial', 'threaded'].includes(mode) ? mode : 'auto';
@@ -378,19 +392,23 @@ const notifyRuntimeStatus = (callback, status) => {
 };
 
 const buildThreadedRuntimePlan = (jobs, options, sequenceStore) => {
+  const hasExplicitTotalBudget = Number.isFinite(options.totalThreadBudget);
   const requestedPairWorkers = Number.isFinite(options.concurrency)
     ? Math.max(1, Math.floor(options.concurrency))
-    : getDefaultConcurrency(jobs.length);
+    : hasExplicitTotalBudget
+      ? jobs.length
+      : getDefaultConcurrency(jobs.length);
   const autoThreadsPerJob = getAutoThreadsPerJob(jobs);
+  const totalBudget = normalizeTotalThreadBudget(options.totalThreadBudget);
   const requestedThreadsPerJob = normalizeThreadsPerJob(options.threadsPerJob, {
     fallback: autoThreadsPerJob,
-    maxThreads: DEFAULT_MAX_THREADS_PER_JOB
+    maxThreads: Math.max(1, totalBudget - 1)
   });
-  const totalBudget = Math.min(DEFAULT_MAX_TOTAL_THREADS, getHardwareThreadBudget());
-  const threadsPerJob = Math.max(1, Math.min(requestedThreadsPerJob, totalBudget));
+  const threadsPerJob = Math.max(1, Math.min(requestedThreadsPerJob, Math.max(1, totalBudget - 1)));
+  const workersPerThreadedJob = Math.max(1, threadsPerJob + 1);
   const pairWorkers = Math.max(
     1,
-    Math.min(jobs.length, requestedPairWorkers, Math.max(1, Math.floor(totalBudget / Math.max(1, threadsPerJob))))
+    Math.min(jobs.length, requestedPairWorkers, Math.max(1, Math.floor(totalBudget / workersPerThreadedJob)))
   );
   return {
     pairWorkers,
