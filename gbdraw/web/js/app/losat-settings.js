@@ -1,11 +1,13 @@
 const { computed, ref, watch, onMounted } = window.Vue;
 
-const SAFE_LOSAT_THREAD_BUDGET = 16;
 const DEFAULT_LOSAT_PAIR_WORKER_AUTO_LIMIT = 4;
 const LOSAT_THREAD_OPTION_BASES = [1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128];
 
 const getBrowserHardwareThreads = () =>
   Math.max(1, Number(globalThis.navigator?.hardwareConcurrency || 4) || 4);
+
+const getSafeLosatThreadBudget = (hardwareThreads) =>
+  Math.max(1, Math.floor(hardwareThreads / 2));
 
 const parsePositiveInteger = (value) => {
   const parsed = Number(value);
@@ -49,7 +51,7 @@ export const createLosatSettings = ({ state }) => {
   });
 
   const losatSafeThreadBudget = computed(() =>
-    Math.min(SAFE_LOSAT_THREAD_BUDGET, losatHardwareThreads.value)
+    getSafeLosatThreadBudget(losatHardwareThreads.value)
   );
 
   const losatTotalThreadBudget = computed(() => {
@@ -73,9 +75,9 @@ export const createLosatSettings = ({ state }) => {
   });
 
   const getLosatAutoThreadsPerJob = () => {
-    const hardwareBudget = Math.min(SAFE_LOSAT_THREAD_BUDGET, losatHardwareThreads.value);
+    const hardwareBudget = losatSafeThreadBudget.value;
     if (losatEstimatedJobCount.value !== 1) return Math.max(1, Math.min(2, hardwareBudget));
-    return Math.max(2, Math.min(hardwareBudget, losatHardwareThreads.value - 1 || 1));
+    return Math.max(1, Math.min(hardwareBudget, Math.max(1, losatHardwareThreads.value - 1)));
   };
 
   const losatEffectiveThreadsPerJob = computed(() => {
@@ -117,24 +119,21 @@ export const createLosatSettings = ({ state }) => {
   });
 
   const losatPairWorkerOptions = computed(() => {
-    const perJobSlots = losatEffectiveThreadsPerJob.value + 1;
     return Array.from({ length: losatMaxPairWorkers.value }, (_, index) => {
       const value = index + 1;
-      const slotCount = value * perJobSlots;
       return {
         value: String(value),
-        label: `${value} (${slotCount}/${losatTotalThreadBudget.value} slots)`
+        label: `${value} ${value === 1 ? 'pair' : 'pairs'}`
       };
     });
   });
 
   const losatThreadingPlanSummary = computed(() => {
-    const perJobSlots = losatEffectiveThreadsPerJob.value + 1;
     const selectedWorkers = parsePositiveInteger(losat.parallelWorkers) || losatAutoPairWorkers.value;
     const effectiveWorkers = Math.min(selectedWorkers, losatMaxPairWorkers.value);
-    return `${losatHardwareThreads.value} cores reported; ${losatTotalThreadBudget.value} worker slots allowed. ` +
-      `Each pair job uses ${perJobSlots} slots (${losatEffectiveThreadsPerJob.value} LOSAT thread${losatEffectiveThreadsPerJob.value === 1 ? '' : 's'} + 1 runner), so up to ${losatMaxPairWorkers.value} pair worker${losatMaxPairWorkers.value === 1 ? '' : 's'} can run now. ` +
-      `Selected: ${effectiveWorkers} pair worker${effectiveWorkers === 1 ? '' : 's'}.`;
+    return `${losatHardwareThreads.value} cores reported; LOSAT can use up to ${losatTotalThreadBudget.value} cores. ` +
+      `Selected: ${effectiveWorkers} parallel ${effectiveWorkers === 1 ? 'pair' : 'pairs'}, ` +
+      `${losatEffectiveThreadsPerJob.value} LOSAT thread${losatEffectiveThreadsPerJob.value === 1 ? '' : 's'} per pair.`;
   });
 
   watch(

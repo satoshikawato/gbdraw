@@ -484,8 +484,8 @@
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="lInputType" value="gff" class="text-blue-600"> GFF3 + FASTA</label>
                         </div>
                         <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="blastSource" value="upload" class="text-blue-600"> Upload BLAST TSV</label>
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="blastSource" value="losat" class="text-blue-600"> Run LOSAT</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="blastSource" value="upload" class="text-blue-600"> Upload BLAST TSV</label>
                         </div>
                         <div v-if="blastSource === 'losat'" class="p-3 bg-slate-50 rounded-lg border border-slate-200">
                             <div class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">LOSAT Mode</div>
@@ -506,7 +506,7 @@
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="text-[9px] flex items-center">Total cores <help-tip text="Browser-reported logical cores available for threaded LOSAT. Safe keeps the previous cap; Available uses the full browser-reported count."></help-tip></label>
+                                        <label class="text-[9px] flex items-center">Total cores <help-tip text="Browser-reported logical cores available for threaded LOSAT. Safe uses up to half of the reported cores; Available uses the full reported count."></help-tip></label>
                                         <select v-model="losat.totalThreadBudget" class="form-input px-1 py-0.5 text-xs">
                                             <option value="safe">Safe ({{ losatSafeThreadBudget }})</option>
                                             <option value="available">Available ({{ losatHardwareThreads }})</option>
@@ -514,9 +514,9 @@
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="text-[9px] flex items-center">Pair workers <help-tip text="Number of independent LOSAT pair jobs to run at the same time. Options already account for the runner worker used by each pair job."></help-tip></label>
+                                        <label class="text-[9px] flex items-center">Parallel pairs <help-tip text="Number of genome-pair comparisons LOSAT runs at the same time. Higher values may finish faster but can make the browser less responsive."></help-tip></label>
                                         <select v-model="losat.parallelWorkers" class="form-input px-1 py-0.5 text-xs">
-                                            <option :value="undefined">Auto ({{ losatAutoPairWorkers }})</option>
+                                            <option :value="undefined">Auto ({{ losatAutoPairWorkers }} {{ losatAutoPairWorkers === 1 ? 'pair' : 'pairs' }})</option>
                                             <option v-for="option in losatPairWorkerOptions" :key="`losat-pair-workers-${option.value}`" :value="option.value">{{ option.label }}</option>
                                         </select>
                                     </div>

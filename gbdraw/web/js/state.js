@@ -153,7 +153,7 @@ const circularMultiRecordPlotTitlePosition = ref(null);
 const suppressCircularMultiRecordDefaults = ref(false);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
-const blastSource = ref('upload'); // 'upload' | 'losat'
+const blastSource = ref('losat'); // 'upload' | 'losat'
 const losatProgram = ref('blastn'); // 'blastn' | 'tblastx' | 'blastp'
 const files = reactive({
   c_gb: null,
@@ -438,7 +438,7 @@ const losat = reactive({
 const losatCacheInfo = ref([]);
 const losatThreadingStatus = ref({
   state: 'unknown',
-  message: 'Threaded LOSAT has not been checked yet.'
+  message: ''
 });
 const losatCache = ref(new Map());
 const orthogroups = ref([]);
