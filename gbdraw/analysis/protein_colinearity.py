@@ -604,6 +604,11 @@ def _validate_candidate_limit(candidate_limit: int | None) -> None:
         raise ValidationError("protein_blastp_candidate_limit must be > 0 or None")
 
 
+def _validate_losatp_threads(threads: int | None) -> None:
+    if threads is not None and int(threads) <= 0:
+        raise ValidationError("losatp_threads must be > 0 or None")
+
+
 def normalize_protein_blastp_mode(mode: str | None) -> ProteinBlastpMode:
     """Return a validated LOSATP blastp mode."""
 
@@ -1352,11 +1357,13 @@ def run_losatp_blastp(
     *,
     losatp_bin: str = "losat",
     max_hits: int | None = None,
+    threads: int | None = None,
 ) -> DataFrame:
     """Run external LOSATP blastp and parse outfmt 6 output."""
 
     if max_hits is not None:
         _validate_max_hits(max_hits, option_name="protein_blastp_candidate_limit")
+    _validate_losatp_threads(threads)
     with tempfile.TemporaryDirectory(prefix="gbdraw_losatp_") as temp_dir:
         temp_path = Path(temp_dir)
         query_path = temp_path / "query.faa"
@@ -1378,6 +1385,8 @@ def run_losatp_blastp(
         ]
         if max_hits is not None:
             command.extend(["-max_target_seqs", str(int(max_hits))])
+        if threads is not None:
+            command.extend(["--num-threads", str(int(threads))])
         logger.info("INFO: Running LOSATP blastp for protein colinearity.")
         try:
             completed = subprocess.run(
@@ -1420,6 +1429,7 @@ def _run_losatp_search(
     subject_fasta: str,
     *,
     losatp_bin: str,
+    losatp_threads: int | None,
     candidate_limit: int | None,
     runner: LosatpRunner | None,
 ) -> DataFrame:
@@ -1430,6 +1440,7 @@ def _run_losatp_search(
         subject_fasta,
         losatp_bin=losatp_bin,
         max_hits=candidate_limit,
+        threads=losatp_threads,
     )
 
 
@@ -1495,6 +1506,7 @@ def build_pairwise_protein_blastp_comparisons(
     records: Sequence[SeqRecord],
     *,
     losatp_bin: str = "losat",
+    losatp_threads: int | None = None,
     max_hits: int = 5,
     candidate_limit: int | None = None,
     evalue: float = 1e-5,
@@ -1508,6 +1520,7 @@ def build_pairwise_protein_blastp_comparisons(
     if len(records) < 2:
         raise ValidationError("protein_blastp_mode='pairwise' requires at least two records")
     _validate_max_hits(max_hits)
+    _validate_losatp_threads(losatp_threads)
     _validate_candidate_limit(candidate_limit)
     if int(alignment_length) < 0:
         raise ValidationError("alignment_length must be >= 0")
@@ -1527,6 +1540,7 @@ def build_pairwise_protein_blastp_comparisons(
             query_fasta,
             subject_fasta,
             losatp_bin=losatp_bin,
+            losatp_threads=losatp_threads,
             candidate_limit=candidate_limit,
             runner=runner,
         )
@@ -1552,6 +1566,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
     records: Sequence[SeqRecord],
     *,
     losatp_bin: str = "losat",
+    losatp_threads: int | None = None,
     candidate_limit: int | None = None,
     evalue: float = 1e-5,
     bitscore: float = 50.0,
@@ -1563,6 +1578,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
 
     if len(records) < 2:
         raise ValidationError("protein_blastp_mode='orthogroup' requires at least two records")
+    _validate_losatp_threads(losatp_threads)
     _validate_candidate_limit(candidate_limit)
     if int(alignment_length) < 0:
         raise ValidationError("alignment_length must be >= 0")
@@ -1585,6 +1601,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                 query_fasta,
                 subject_fasta,
                 losatp_bin=losatp_bin,
+                losatp_threads=losatp_threads,
                 candidate_limit=search_candidate_limit,
                 runner=runner,
             )
@@ -1592,6 +1609,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                 subject_fasta,
                 query_fasta,
                 losatp_bin=losatp_bin,
+                losatp_threads=losatp_threads,
                 candidate_limit=search_candidate_limit,
                 runner=runner,
             )
@@ -1635,6 +1653,7 @@ def build_protein_colinearity_comparisons(
     records: Sequence[SeqRecord],
     *,
     losatp_bin: str = "losat",
+    losatp_threads: int | None = None,
     max_hits: int = 5,
     candidate_limit: int | None = None,
     evalue: float = 1e-5,
@@ -1648,6 +1667,7 @@ def build_protein_colinearity_comparisons(
     return build_pairwise_protein_blastp_comparisons(
         records,
         losatp_bin=losatp_bin,
+        losatp_threads=losatp_threads,
         max_hits=max_hits,
         candidate_limit=candidate_limit,
         evalue=evalue,

@@ -207,6 +207,13 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         default='losat')
     parser.add_argument(
+        '--losatp_threads',
+        '--losatp-threads',
+        dest='losatp_threads',
+        help='Threads passed to LOSATP via --num-threads for --protein_blastp_mode pairwise/orthogroup/collinear (default: LOSAT default).',
+        type=int,
+        default=None)
+    parser.add_argument(
         '--protein_blastp_mode',
         '--protein-blastp-mode',
         dest='protein_blastp_mode',
@@ -881,6 +888,8 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--save_collinear_blocks requires --protein_blastp_mode collinear or --collinear_blocks")
     if args.protein_blastp_max_hits <= 0:
         parser.error("--protein_blastp_max_hits must be > 0")
+    if args.losatp_threads is not None and args.losatp_threads <= 0:
+        parser.error("--losatp_threads must be > 0")
     if args.align_orthogroup_feature and args.protein_blastp_mode != "orthogroup" and not args.blast:
         parser.error("--align_orthogroup_feature requires --protein_blastp_mode orthogroup")
     if args.show_depth and not args.depth:
@@ -979,6 +988,7 @@ def linear_main(cmd_args) -> None:
     blast_files: str = args.blast
     protein_blastp_mode: str = str(args.protein_blastp_mode or "none")
     losatp_bin: str = args.losatp_bin
+    losatp_threads: int | None = args.losatp_threads
     protein_blastp_max_hits: int = args.protein_blastp_max_hits
     protein_blastp_candidate_limit: int | None = args.protein_blastp_candidate_limit
     align_orthogroup_feature: str = str(args.align_orthogroup_feature or "").strip()
@@ -1295,6 +1305,7 @@ def linear_main(cmd_args) -> None:
         collinearity_result = build_orthogroup_collinearity_blocks(
             records,
             losatp_bin=losatp_bin,
+            losatp_threads=losatp_threads,
             candidate_limit=protein_blastp_candidate_limit,
             evalue=evalue,
             bitscore=bitscore,
@@ -1343,6 +1354,7 @@ def linear_main(cmd_args) -> None:
         protein_comparisons=collinearity_comparisons,
         protein_blastp_mode="none" if collinearity_comparisons is not None else protein_blastp_mode,
         losatp_bin=losatp_bin,
+        losatp_threads=losatp_threads,
         protein_blastp_max_hits=protein_blastp_max_hits,
         protein_blastp_candidate_limit=protein_blastp_candidate_limit,
         align_orthogroup_feature=align_orthogroup_feature or None,

@@ -61,6 +61,9 @@ const buildLosatArgs = ({ program, outfmt, extraArgs, threadsPerJob }) => {
   return args;
 };
 
+const getChildWorkerCount = (threadsPerJob) =>
+  Math.max(0, Math.floor(Math.max(1, Number(threadsPerJob) || 1)) - 1);
+
 const instantiateWithMemory = async ({ module, memory, wasi, spawnThread }) =>
   WebAssembly.instantiate(module, {
     env: { memory },
@@ -256,6 +259,7 @@ const runThreadedLosat = async ({
   const stdin = new OpenFile(new File(new Uint8Array(), { readonly: true }));
   const preopen = new PreopenDirectory('.', files);
   const effectiveThreads = Math.max(1, Number(threadsPerJob) || 1);
+  const childWorkerCount = getChildWorkerCount(effectiveThreads);
   const args = buildLosatArgs({
     program: job.program,
     outfmt: job.outfmt,
@@ -380,9 +384,9 @@ const runThreadedLosat = async ({
     if (typeof instance.exports._start !== 'function') {
       throw new Error('Threaded LOSAT wasm does not export _start.');
     }
-    if (effectiveThreads > 1) {
+    if (childWorkerCount > 0) {
       const prepared = await Promise.all(
-        Array.from({ length: effectiveThreads }, () =>
+        Array.from({ length: childWorkerCount }, () =>
           prepareThreadWorker({
             compiledModule,
             wasmUrl,

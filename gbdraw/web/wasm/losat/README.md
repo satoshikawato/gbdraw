@@ -25,3 +25,5 @@ Notes:
   shared memory from `env.memory`, and import `wasi.thread-spawn`.
 - Threaded browser execution also requires COOP/COEP response headers so
   `SharedArrayBuffer` is available.
+- For threaded LOSAT, `--num-threads N` is treated as N compute threads. The
+  browser wrapper runs the main job worker plus `N - 1` WASI thread workers.

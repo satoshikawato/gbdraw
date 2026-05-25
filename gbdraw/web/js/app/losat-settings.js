@@ -76,7 +76,7 @@ export const createLosatSettings = ({ state }) => {
     if (losatThreadsPerJobFixed.value) return 1;
     const hardwareBudget = losatSafeThreadBudget.value;
     if (losatEstimatedJobCount.value !== 1) return Math.max(1, Math.min(2, hardwareBudget));
-    return Math.max(1, Math.min(hardwareBudget, Math.max(1, losatHardwareThreads.value - 1)));
+    return Math.max(1, hardwareBudget);
   };
 
   const losatEffectiveThreadsPerJob = computed(() => {
@@ -85,19 +85,19 @@ export const createLosatSettings = ({ state }) => {
     const requested = raw === 'auto'
       ? getLosatAutoThreadsPerJob()
       : parsePositiveInteger(raw) || getLosatAutoThreadsPerJob();
-    return Math.max(1, Math.min(requested, Math.max(1, losatTotalThreadBudget.value - 1)));
+    return Math.max(1, Math.min(requested, Math.max(1, losatTotalThreadBudget.value)));
   });
 
   const losatThreadOptions = computed(() => {
     if (losatThreadsPerJobFixed.value) {
       return [{ value: '1', label: 'Fixed (1)' }];
     }
-    const maxThreads = Math.max(1, losatTotalThreadBudget.value - 1);
+    const maxThreads = Math.max(1, losatTotalThreadBudget.value);
     return createPositiveIntegerOptions(maxThreads);
   });
 
   const losatMaxPairWorkers = computed(() => {
-    const perJobSlots = losatEffectiveThreadsPerJob.value + 1;
+    const perJobSlots = losatEffectiveThreadsPerJob.value;
     const budgetLimited = Math.max(1, Math.floor(losatTotalThreadBudget.value / perJobSlots));
     return Math.max(1, Math.min(losatEstimatedJobCount.value, budgetLimited));
   });
@@ -105,7 +105,7 @@ export const createLosatSettings = ({ state }) => {
   const losatAutoPairWorkers = computed(() => {
     const budgetMode = String(losat.totalThreadBudget || 'safe').trim().toLowerCase();
     if (!['safe', 'auto'].includes(budgetMode)) return losatMaxPairWorkers.value;
-    const hardwareLimit = Math.max(1, losatHardwareThreads.value - 1);
+    const hardwareLimit = Math.max(1, losatHardwareThreads.value);
     const defaultConcurrency = Math.min(
       losatEstimatedJobCount.value,
       hardwareLimit,
@@ -125,7 +125,7 @@ export const createLosatSettings = ({ state }) => {
   });
 
   const losatThreadingPlanSummary = computed(() =>
-    'By default, LOSAT can use up to half the number of cores available.'
+    'By default, LOSAT can use up to half the number of cores available; N threads means N LOSAT compute threads.'
   );
 
   watch(

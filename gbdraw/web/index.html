@@ -506,7 +506,7 @@
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="text-[9px] flex items-center">Total threads <help-tip text="Browser-reported logical threads available for threaded LOSAT. Safe uses up to half of the reported threads; Available uses the full reported count."></help-tip></label>
+                                        <label class="text-[9px] flex items-center">Total threads <help-tip text="Browser-reported logical threads available for threaded LOSAT. Safe uses up to half of the reported threads; Available uses the full reported count. N requested threads are all available to LOSAT computation."></help-tip></label>
                                         <select v-model="losat.totalThreadBudget" class="form-input px-1 py-0.5 text-xs">
                                             <option value="safe">Safe ({{ losatSafeThreadBudget }})</option>
                                             <option value="available">Available ({{ losatHardwareThreads }})</option>
@@ -521,7 +521,7 @@
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="text-[9px] flex items-center">Threads per run <help-tip text="LOSATN and TLOSATX are fixed at 1 thread per run. LOSATP can pass --num-threads when the threaded LOSAT artifact is used. Parallel run options update from this value."></help-tip></label>
+                                        <label class="text-[9px] flex items-center">Threads per run <help-tip text="LOSATN and TLOSATX are fixed at 1 thread per run. LOSATP can pass --num-threads when the threaded LOSAT artifact is used. A value of N uses N LOSAT compute threads."></help-tip></label>
                                         <select v-model="losat.threadsPerJob" class="form-input px-1 py-0.5 text-xs" :disabled="losatThreadsPerJobFixed">
                                             <option value="auto">Auto ({{ losatEffectiveThreadsPerJob }})</option>
                                             <option v-for="option in losatThreadOptions" :key="`losat-threads-${option.value}`" :value="option.value">{{ option.label }}</option>

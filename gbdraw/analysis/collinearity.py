@@ -2097,6 +2097,7 @@ def build_orthogroup_collinearity_blocks(
     records: Sequence[SeqRecord],
     *,
     losatp_bin: str = "losat",
+    losatp_threads: int | None = None,
     candidate_limit: int | None = None,
     evalue: float = 1e-5,
     bitscore: float = 50.0,
@@ -2112,6 +2113,8 @@ def build_orthogroup_collinearity_blocks(
 
     if len(records) < 2:
         raise ValidationError("protein_blastp_mode='collinear' requires at least two records")
+    if losatp_threads is not None and int(losatp_threads) <= 0:
+        raise ValidationError("losatp_threads must be > 0 or None")
     lossless_params = _lossless_params_from_legacy(params)
     normalized_edge_mode = normalize_collinearity_anchor_mode(str(edge_mode))
     normalized_search_scope = normalize_collinearity_search_scope(str(search_scope))
@@ -2134,6 +2137,7 @@ def build_orthogroup_collinearity_blocks(
             query_fasta,
             subject_fasta,
             losatp_bin=losatp_bin,
+            losatp_threads=losatp_threads,
             candidate_limit=search_candidate_limit,
             runner=runner,
         )
@@ -2149,6 +2153,7 @@ def build_orthogroup_collinearity_blocks(
                 subject_fasta,
                 query_fasta,
                 losatp_bin=losatp_bin,
+                losatp_threads=losatp_threads,
                 candidate_limit=search_candidate_limit,
                 runner=runner,
             )
@@ -2175,6 +2180,7 @@ def build_native_collinearity_blocks(
     records: Sequence[SeqRecord],
     *,
     losatp_bin: str = "losat",
+    losatp_threads: int | None = None,
     candidate_limit: int | None = None,
     evalue: float = 1e-5,
     bitscore: float = 50.0,
@@ -2191,6 +2197,7 @@ def build_native_collinearity_blocks(
     return build_orthogroup_collinearity_blocks(
         records,
         losatp_bin=losatp_bin,
+        losatp_threads=losatp_threads,
         candidate_limit=candidate_limit,
         evalue=evalue,
         bitscore=bitscore,
