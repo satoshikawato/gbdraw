@@ -125,7 +125,7 @@ export const createLosatSettings = ({ state }) => {
   });
 
   const losatThreadingPlanSummary = computed(() =>
-    'By default, LOSAT can use up to half the number of cores available; N threads means N LOSAT compute threads.'
+    'By default, LOSAT can use up to half the number of cores available.'
   );
 
   watch(
