@@ -310,6 +310,7 @@ options:
 usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--fasta [FASTA_FILE ...]] [-b [BLAST ...]] [-t TABLE]
               [--losatp_bin LOSATP_BIN]
+              [--losatp_threads LOSATP_THREADS]
               [--protein_blastp_mode {none,pairwise,orthogroup,collinear}]
               [--collinear_min_anchors COLLINEAR_MIN_ANCHORS]
               [--collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP]
@@ -383,6 +384,10 @@ options:
   --losatp_bin, --losatp-bin LOSATP_BIN
                         LOSATP executable for --protein_blastp_mode
                         pairwise/orthogroup/collinear (default: losat).
+  --losatp_threads, --losatp-threads LOSATP_THREADS
+                        Threads passed to LOSATP via --num-threads for
+                        --protein_blastp_mode pairwise/orthogroup/collinear
+                        (default: LOSAT default).
   --protein_blastp_mode, --protein-blastp-mode {none,pairwise,orthogroup,collinear}
                         LOSATP blastp mode: none, pairwise adjacent ribbons,
                         all-record Orthogroups, or Collinear blocks (default:

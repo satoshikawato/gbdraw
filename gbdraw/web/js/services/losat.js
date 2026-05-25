@@ -358,7 +358,7 @@ const normalizeThreadsPerJob = (value, { fallback = null, maxThreads = DEFAULT_M
 const getAutoThreadsPerJob = (jobs) => {
   const budget = Math.min(DEFAULT_MAX_THREADS_PER_JOB, getHardwareThreadBudget());
   if (!Array.isArray(jobs) || jobs.length !== 1) return Math.max(1, Math.min(2, budget));
-  return Math.max(2, Math.min(budget, getHardwareThreadBudget() - 1 || 1));
+  return Math.max(1, budget);
 };
 
 const getThreadedFastaCharCount = (job, sequenceStore) => {
@@ -402,10 +402,10 @@ const buildThreadedRuntimePlan = (jobs, options, sequenceStore) => {
   const totalBudget = normalizeTotalThreadBudget(options.totalThreadBudget);
   const requestedThreadsPerJob = normalizeThreadsPerJob(options.threadsPerJob, {
     fallback: autoThreadsPerJob,
-    maxThreads: Math.max(1, totalBudget - 1)
+    maxThreads: Math.max(1, totalBudget)
   });
-  const threadsPerJob = Math.max(1, Math.min(requestedThreadsPerJob, Math.max(1, totalBudget - 1)));
-  const workersPerThreadedJob = Math.max(1, threadsPerJob + 1);
+  const threadsPerJob = Math.max(1, Math.min(requestedThreadsPerJob, Math.max(1, totalBudget)));
+  const workersPerThreadedJob = Math.max(1, threadsPerJob);
   const pairWorkers = Math.max(
     1,
     Math.min(jobs.length, requestedPairWorkers, Math.max(1, Math.floor(totalBudget / workersPerThreadedJob)))

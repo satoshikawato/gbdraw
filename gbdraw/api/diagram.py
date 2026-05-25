@@ -1301,6 +1301,7 @@ def assemble_linear_diagram_from_records(
     collinearity_search_scope: CollinearitySearchScope | str = "adjacent",
     collinearity_color_mode: CollinearityColorMode | str = "orientation",
     losatp_bin: str = "losat",
+    losatp_threads: int | None = None,
     protein_blastp_max_hits: int = 5,
     protein_blastp_candidate_limit: int | None = None,
     align_orthogroup_feature: str | None = None,
@@ -1356,6 +1357,8 @@ def assemble_linear_diagram_from_records(
     normalized_collinearity_color_mode = normalize_collinearity_color_mode(str(collinearity_color_mode))
     if int(protein_blastp_max_hits) <= 0:
         raise ValidationError("protein_blastp_max_hits must be > 0")
+    if losatp_threads is not None and int(losatp_threads) <= 0:
+        raise ValidationError("losatp_threads must be > 0 or None")
     if protein_blastp_candidate_limit is not None and int(protein_blastp_candidate_limit) <= 0:
         raise ValidationError("protein_blastp_candidate_limit must be > 0 or None")
     if normalized_protein_blastp_mode != "none" and protein_comparisons is not None:
@@ -1470,6 +1473,7 @@ def assemble_linear_diagram_from_records(
         protein_blastp_result = build_pairwise_protein_blastp_comparisons(
             records,
             losatp_bin=losatp_bin,
+            losatp_threads=losatp_threads,
             max_hits=int(protein_blastp_max_hits),
             candidate_limit=protein_blastp_candidate_limit,
             evalue=evalue,
@@ -1482,6 +1486,7 @@ def assemble_linear_diagram_from_records(
         protein_blastp_result = build_rbh_orthogroup_protein_blastp_comparisons(
             records,
             losatp_bin=losatp_bin,
+            losatp_threads=losatp_threads,
             candidate_limit=protein_blastp_candidate_limit,
             evalue=evalue,
             bitscore=bitscore,
@@ -1494,6 +1499,7 @@ def assemble_linear_diagram_from_records(
         collinearity_result = build_orthogroup_collinearity_blocks(
             records,
             losatp_bin=losatp_bin,
+            losatp_threads=losatp_threads,
             candidate_limit=protein_blastp_candidate_limit,
             evalue=evalue,
             bitscore=bitscore,
@@ -2749,6 +2755,7 @@ def build_linear_diagram(
         collinearity_search_scope=options.collinearity_search_scope,
         collinearity_color_mode=options.collinearity_color_mode,
         losatp_bin=options.losatp_bin,
+        losatp_threads=options.losatp_threads,
         protein_blastp_max_hits=options.protein_blastp_max_hits,
         protein_blastp_candidate_limit=options.protein_blastp_candidate_limit,
         align_orthogroup_feature=options.align_orthogroup_feature,

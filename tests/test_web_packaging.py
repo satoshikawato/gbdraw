@@ -133,9 +133,15 @@ def test_web_losat_threaded_browser_wiring() -> None:
 
 def test_web_losat_thread_count_options_are_contiguous() -> None:
     source = (WEB_ROOT / "js" / "app" / "losat-settings.js").read_text(encoding="utf-8")
+    service_source = (WEB_ROOT / "js" / "services" / "losat.js").read_text(encoding="utf-8")
+    worker_source = (WEB_ROOT / "js" / "workers" / "losat-threaded-worker.js").read_text(encoding="utf-8")
     assert "const createPositiveIntegerOptions = (maxValue) =>" in source
     assert "return createPositiveIntegerOptions(losatHardwareThreads.value);" in source
     assert "return createPositiveIntegerOptions(maxThreads);" in source
+    assert "const perJobSlots = losatEffectiveThreadsPerJob.value;" in source
+    assert "const workersPerThreadedJob = Math.max(1, threadsPerJob);" in service_source
+    assert "getChildWorkerCount(effectiveThreads)" in worker_source
+    assert "Array.from({ length: childWorkerCount }" in worker_source
 
 
 def test_cloudflare_bundle_includes_analytics_and_hosted_notice(tmp_path: Path) -> None:

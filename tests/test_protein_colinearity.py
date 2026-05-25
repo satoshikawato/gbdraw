@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
 
 import pandas as pd
 import pytest
@@ -12,6 +13,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.api.diagram as api_diagram_module
+import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.linear as linear_cli_module
 from gbdraw.analysis.protein_colinearity import (
     build_orthogroups_from_protein_hits,
@@ -527,6 +529,33 @@ def test_parse_losatp_outfmt6_returns_standard_columns() -> None:
     assert parsed.columns.tolist() == list(COMPARISON_COLUMNS)
     assert parsed.iloc[0]["identity"] == pytest.approx(91.5)
     assert parsed.iloc[0]["bitscore"] == pytest.approx(150)
+
+
+@pytest.mark.linear
+def test_run_losatp_blastp_passes_num_threads(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+
+    protein_colinearity_module.run_losatp_blastp(
+        ">query\nM\n",
+        ">subject\nM\n",
+        losatp_bin="custom-losat",
+        max_hits=3,
+        threads=4,
+    )
+
+    command = captured["command"]
+    assert command[0:2] == ["custom-losat", "blastp"]
+    assert "-max_target_seqs" in command
+    assert command[command.index("-max_target_seqs") + 1] == "3"
+    assert "--num-threads" in command
+    assert command[command.index("--num-threads") + 1] == "4"
 
 
 @pytest.mark.linear
@@ -1363,6 +1392,7 @@ def test_build_linear_diagram_forwards_protein_blastp_options(
         options=DiagramOptions(
             protein_blastp_mode="orthogroup",
             losatp_bin="custom-losat",
+            losatp_threads=8,
             protein_blastp_max_hits=7,
             protein_blastp_candidate_limit=99,
         ),
@@ -1371,6 +1401,7 @@ def test_build_linear_diagram_forwards_protein_blastp_options(
     assert isinstance(canvas, Drawing)
     assert captured["protein_blastp_mode"] == "orthogroup"
     assert captured["losatp_bin"] == "custom-losat"
+    assert captured["losatp_threads"] == 8
     assert captured["protein_blastp_max_hits"] == 7
     assert captured["protein_blastp_candidate_limit"] == 99
     assert captured["align_orthogroup_feature"] is None
@@ -1467,6 +1498,8 @@ def test_linear_cli_forwards_protein_blastp_options(
             "orthogroup",
             "--losatp_bin",
             "custom-losat",
+            "--losatp_threads",
+            "6",
             "--protein_blastp_max_hits",
             "9",
             "--protein_blastp_candidate_limit",
@@ -1480,6 +1513,7 @@ def test_linear_cli_forwards_protein_blastp_options(
 
     assert captured["protein_blastp_mode"] == "orthogroup"
     assert captured["losatp_bin"] == "custom-losat"
+    assert captured["losatp_threads"] == 6
     assert captured["protein_blastp_max_hits"] == 9
     assert captured["protein_blastp_candidate_limit"] == 123
     assert captured["align_orthogroup_feature"] is None
