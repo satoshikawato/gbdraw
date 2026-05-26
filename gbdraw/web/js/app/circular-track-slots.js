@@ -712,6 +712,67 @@ const conservationEntriesForState = (state) => {
   );
 };
 
+const positiveNumberOrNull = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+export const estimateCircularConservationLayoutWarning = (state) => {
+  const currentMode = String(state?.mode?.value ?? state?.mode ?? '').trim().toLowerCase();
+  if (currentMode && currentMode !== 'circular') return '';
+  if (state?.circularConservation?.enabled !== true) return '';
+
+  const entries = conservationEntriesForState(state);
+  if (entries.length <= 0) return '';
+
+  const preset = normalizeCircularTrackPreset(state?.form?.track_type);
+  const lengthParam = getPreviewLengthParam(state);
+  const axisRadius = PREVIEW_RADIUS_PX;
+  const defaultSpacing = previewSpacingPx();
+  const lane = laneDirectionForPreset(preset);
+  const featureLaneCount = previewFeatureLaneCount(state);
+  const featureWidth = previewWidthPxForRenderer('features', lengthParam);
+  const featureBandWidth = (featureLaneCount * featureWidth) + (Math.max(0, featureLaneCount - 1) * defaultSpacing);
+  let availableInsidePx = axisRadius - defaultSpacing;
+  if (lane === 'inside') {
+    const featureCenter = previewFeatureRadiusRatio(preset, lengthParam, state) * axisRadius;
+    availableInsidePx = featureCenter - (featureBandWidth / 2) - defaultSpacing;
+  } else if (lane === 'split') {
+    availableInsidePx = axisRadius - (featureBandWidth / 2) - defaultSpacing;
+  }
+  availableInsidePx = Math.max(0, availableInsidePx);
+
+  const ringWidth = positiveNumberOrNull(state?.circularConservation?.ring_width)
+    ?? previewWidthPxForRenderer('sequence_conservation', lengthParam);
+  const ringGap = positiveNumberOrNull(state?.circularConservation?.ring_gap) ?? defaultSpacing;
+  const showGc = !Boolean(state?.form?.suppress_gc);
+  const showSkew = !Boolean(state?.form?.suppress_skew);
+  const showDepth = Boolean(state?.form?.show_depth);
+  const numericAfterConservationPx =
+    (showDepth ? previewWidthPxForRenderer('depth', lengthParam) + defaultSpacing : 0) +
+    (showGc ? previewWidthPxForRenderer('dinucleotide_content', lengthParam) + defaultSpacing : 0) +
+    (showSkew ? previewWidthPxForRenderer('dinucleotide_skew', lengthParam) + defaultSpacing : 0);
+  const requestedStackPx =
+    (entries.length * ringWidth) +
+    (Math.max(0, entries.length - 1) * ringGap) +
+    numericAfterConservationPx;
+  const compressedStackPx =
+    (entries.length * 4) +
+    (Math.max(0, entries.length - 1) * 1) +
+    (showDepth ? 10 + 1 : 0) +
+    (showGc ? 10 + 1 : 0) +
+    (showSkew ? 12 + 1 : 0);
+
+  if (compressedStackPx > availableInsidePx) {
+    return `Conservation has ${entries.length} inside ring(s) plus other circular tracks; even compressed rings may not fit. Reduce Ring Width/GAP, disable GC/skew/depth tracks, or move tracks outside before generating.`;
+  }
+  if (requestedStackPx > availableInsidePx * 0.9 || (entries.length >= 5 && (showGc || showSkew || showDepth))) {
+    return `Conservation has ${entries.length} inside ring(s); gbdraw will auto-compress ring width/gap when needed. If generation still fails, reduce Ring Width/GAP or disable GC/skew/depth tracks.`;
+  }
+  return '';
+};
+
 const managedConservationSlotKey = (slot) => String(slot?.params?.series_key || '').trim();
 
 const refreshManagedConservationSlot = (slot, entry, orderIndex) => {

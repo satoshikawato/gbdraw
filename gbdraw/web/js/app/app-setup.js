@@ -16,7 +16,10 @@ import { createLegendLayout } from './legend-layout.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 import { createOrthogroupEditor } from './orthogroups.js';
-import { createCircularTrackSlotEditor } from './circular-track-slots.js';
+import {
+  createCircularTrackSlotEditor,
+  estimateCircularConservationLayoutWarning
+} from './circular-track-slots.js';
 import { createLosatSettings } from './losat-settings.js';
 import {
   conservationSourceDescriptors,
@@ -197,6 +200,7 @@ export const createAppSetup = () => {
   const circularTrackNewRenderer = ref('dinucleotide_skew');
   const circularConservationFastaInput = ref(null);
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
+  const circularConservationLayoutWarning = computed(() => estimateCircularConservationLayoutWarning(state));
   const losatSettings = createLosatSettings({ state });
   const isCircularConservationUploadSource = () => (
     String(circularConservation.source || '').trim().toLowerCase() === 'upload'
@@ -934,6 +938,7 @@ export const createAppSetup = () => {
     losatProgram,
     files,
     circularConservation,
+    circularConservationLayoutWarning,
     circularConservationFastaInput,
     circularConservationSeriesRows,
     canMoveCircularConservationSeries,

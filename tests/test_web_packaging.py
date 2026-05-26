@@ -443,7 +443,12 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
     check_path = tmp_path / "check-circular-track-slots.mjs"
     check_path.write_text(
         f"""
-        import {{ applyCircularTrackOrderPlacements, createDefaultCircularTrackSlots, createCircularTrackSlotEditor }} from {module_path.as_uri()!r};
+        import {{
+          applyCircularTrackOrderPlacements,
+          createDefaultCircularTrackSlots,
+          createCircularTrackSlotEditor,
+          estimateCircularConservationLayoutWarning
+        }} from {module_path.as_uri()!r};
 
         const defaultSlots = createDefaultCircularTrackSlots({{ preset: 'tuckin' }});
         const defaultTick = defaultSlots.find((slot) => slot.id === 'ticks');
@@ -531,6 +536,32 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         }}
         if (conservationEditor.circularTrackSlotDisplayLabel(conservationSlots[0]) !== 'Beta') {{
           throw new Error(`Conservation slot display label was not series label: ${{conservationEditor.circularTrackSlotDisplayLabel(conservationSlots[0])}}`);
+        }}
+        const warningState = {{
+          mode: {{ value: 'circular' }},
+          form: {{
+            track_type: 'tuckin',
+            show_depth: false,
+            suppress_gc: false,
+            suppress_skew: false
+          }},
+          files: {{
+            c_conservation_blasts: [],
+            c_conservation_fastas: Array.from({{ length: 6 }}, (_, idx) => ({{
+              name: `comparison_${{idx + 1}}.fa`,
+              size: 10 + idx,
+              lastModified: 100 + idx
+            }}))
+          }},
+          circularConservation: {{
+            enabled: true,
+            source: 'losat',
+            series: []
+          }}
+        }};
+        const conservationWarning = estimateCircularConservationLayoutWarning(warningState);
+        if (!conservationWarning.includes('auto-compress')) {{
+          throw new Error(`Expected conservation layout warning, got: ${{conservationWarning}}`);
         }}
 
         const outerTickSlots = applyCircularTrackOrderPlacements(

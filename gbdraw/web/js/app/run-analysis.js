@@ -590,8 +590,8 @@ export const createRunAnalysis = ({
     for (const text of texts) {
       const lines = String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
       for (const line of lines) {
-        const cleaned = line.replace(/^(ValueError|RuntimeError):\s*/, '');
-        if (/^Circular track slot '.+' cannot fit inside the feature\/tick stack\./.test(cleaned)) {
+        const cleaned = line.replace(/^(ValueError|RuntimeError|ValidationError):\s*/, '');
+        if (/^Circular track slot '.+' cannot fit inside\b/.test(cleaned)) {
           return cleaned;
         }
       }
@@ -1181,6 +1181,20 @@ json.dumps({
       };
     }
     return circularMultiRecordCanvasSupportCache;
+  };
+
+  const runCircularLayoutPreflight = (preflightArgs) => {
+    const pyodide = getPyodide();
+    if (!pyodide) return null;
+    const runWrapper = pyodide.globals.get('run_gbdraw_wrapper');
+    const pyArgs = pyodide.toPy((preflightArgs || []).map((arg) => String(arg)));
+    try {
+      const resultJson = runWrapper('circular', pyArgs, null);
+      return JSON.parse(String(resultJson || 'null'));
+    } finally {
+      pyArgs.destroy?.();
+      runWrapper.destroy?.();
+    }
   };
 
   const downloadLosatPair = async (pairIndex, customName) => {
@@ -2058,6 +2072,36 @@ json.dumps({
             : 'losat';
           const width = normalizePositiveNumberOrNull(circularConservation.ring_width);
           const gap = normalizePositiveNumberOrNull(circularConservation.ring_gap);
+          const writeEmptyConservationPreflightFiles = (count) => {
+            const paths = [];
+            for (let index = 0; index < count; index += 1) {
+              const path = `/conservation_preflight_${index}.txt`;
+              pyodide.FS.writeFile(path, new Uint8Array());
+              paths.push(path);
+            }
+            return paths;
+          };
+          const runConservationLayoutPreflight = (blastPaths, reference) => {
+            if (isReflow || !Array.isArray(blastPaths) || blastPaths.length === 0) return true;
+            throwIfGenerationCanceled();
+            setProcessingStatus('Checking circular track layout...');
+            const preflightArgs = [
+              ...args,
+              '--conservation_blast',
+              ...blastPaths,
+              '--conservation_reference',
+              reference
+            ];
+            const preflight = runCircularLayoutPreflight(preflightArgs);
+            if (!preflight?.error) return true;
+            const formatted = formatPythonError(preflight.error);
+            if (isReflow) {
+              labelReflowLastError.value = formatted?.summary || 'Auto reflow failed';
+            } else {
+              errorLog.value = formatted;
+            }
+            return false;
+          };
           const appendConservationStyleArgs = (series) => {
             const labels = series.map((entry) => entry.label);
             const colors = series.map((entry) => entry.color);
@@ -2263,6 +2307,10 @@ json.dumps({
             const rawReference = String(circularConservation.reference || 'auto').trim().toLowerCase();
             conservationReference = ['query', 'subject'].includes(rawReference) ? rawReference : 'auto';
             losatCacheInfo.value = [];
+            appendConservationStyleArgs(conservationSeries);
+            if (!runConservationLayoutPreflight(conservationBlastPaths, conservationReference)) {
+              return { status: 'error' };
+            }
           } else {
             const comparisonFiles = normalizeFileList(files.c_conservation_fastas);
             if (comparisonFiles.length === 0) {
@@ -2271,11 +2319,15 @@ json.dumps({
             const conservationEntries = orderedConservationSources(comparisonFiles, circularConservation);
             const orderedComparisonFiles = conservationEntries.map((entry) => entry.file);
             conservationSeries = buildConservationSeries(comparisonFiles, circularConservation);
+            appendConservationStyleArgs(conservationSeries);
+            const preflightBlastPaths = writeEmptyConservationPreflightFiles(orderedComparisonFiles.length);
+            if (!runConservationLayoutPreflight(preflightBlastPaths, 'subject')) {
+              return { status: 'error' };
+            }
             conservationBlastPaths = await runCircularLosatConservation(orderedComparisonFiles);
             conservationReference = 'subject';
           }
 
-          appendConservationStyleArgs(conservationSeries);
           args.push('--conservation_blast', ...conservationBlastPaths);
           args.push('--conservation_reference', conservationReference);
         } else {
