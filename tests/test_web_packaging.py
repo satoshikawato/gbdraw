@@ -304,6 +304,8 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "circularConservation" in app_setup_source
     assert "circularConservationSeriesRows" in app_setup_source
     assert "syncCircularConservationSeries" in app_setup_source
+    assert "addCircularConservationComparisonFile" in app_setup_source
+    assert "removeCircularConservationSource" in app_setup_source
     assert "circularConservation: state.circularConservation" in config_source
     assert "normalizeCircularConservationSeries" in config_source
     assert "c_conservation_blasts: await serializeFileArray" in config_source
@@ -311,6 +313,8 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "Conservation Rings" in index_html
     assert "BLAST outfmt 6/7 files" in index_html
     assert "Comparison FASTA files" in index_html
+    assert "Add Comparison FASTA" in index_html
+    assert "@click=\"removeCircularConservationSource(row.index)\"" in index_html
     assert "type=\"color\" v-model=\"circularConservation.series[row.index].color\"" in index_html
     assert ":multiple=\"true\"" in index_html
     assert "props: ['label', 'accept', 'modelValue', 'small', 'multiple']" in components_source

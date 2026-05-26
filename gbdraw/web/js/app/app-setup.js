@@ -19,6 +19,7 @@ import { createOrthogroupEditor } from './orthogroups.js';
 import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 import { createLosatSettings } from './losat-settings.js';
 import {
+  conservationSourceDescriptors,
   defaultConservationSeriesLabel,
   moveConservationSeriesEntry,
   normalizeFileList,
@@ -194,13 +195,27 @@ export const createAppSetup = () => {
   });
 
   const circularTrackNewRenderer = ref('dinucleotide_skew');
+  const circularConservationFastaInput = ref(null);
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
   const losatSettings = createLosatSettings({ state });
-  const getCircularConservationSourceFiles = () => (
+  const isCircularConservationUploadSource = () => (
     String(circularConservation.source || '').trim().toLowerCase() === 'upload'
+  );
+  const getCircularConservationSourceFiles = () => (
+    isCircularConservationUploadSource()
       ? normalizeFileList(files.c_conservation_blasts)
       : normalizeFileList(files.c_conservation_fastas)
   );
+  const setCircularConservationSourceFiles = (nextFiles) => {
+    const normalized = normalizeFileList(nextFiles);
+    if (isCircularConservationUploadSource()) {
+      files.c_conservation_blasts = normalized;
+    } else {
+      files.c_conservation_fastas = normalized;
+    }
+    losatCacheInfo.value = [];
+    syncCircularConservationSeries();
+  };
   const syncCircularConservationSeries = () => {
     const sourceFiles = getCircularConservationSourceFiles();
     const legacyLabels = parseConservationLabelText(circularConservation.labels);
@@ -218,6 +233,7 @@ export const createAppSetup = () => {
     return (Array.isArray(circularConservation.series) ? circularConservation.series : []).map((entry, index) => ({
       index,
       filename: String(entry?.fileName || `source_${Number(index) + 1}`).trim(),
+      sourceLabel: `${isCircularConservationUploadSource() ? 'BLAST' : 'Comparison'} ${Number(index) + 1}`,
       defaultLabel: defaultConservationSeriesLabel(
         { name: entry?.fileName },
         Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry.sourceIndex) : index
@@ -242,6 +258,33 @@ export const createAppSetup = () => {
         circularTrackSlotEditor.syncCircularConservationSlots();
       }
     }
+  };
+  const openCircularConservationComparisonFilePicker = () => {
+    circularConservationFastaInput.value?.click();
+  };
+  const addCircularConservationComparisonFile = (event) => {
+    const target = event?.target || null;
+    const selectedFile = Array.from(target?.files || []).filter(Boolean)[0] || null;
+    if (!selectedFile) return;
+    files.c_conservation_fastas = [...normalizeFileList(files.c_conservation_fastas), selectedFile];
+    losatCacheInfo.value = [];
+    syncCircularConservationSeries();
+    if (target) target.value = '';
+  };
+  const removeCircularConservationSource = (index) => {
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= circularConservation.series.length) return;
+    const entry = circularConservation.series[idx];
+    const sourceFiles = getCircularConservationSourceFiles();
+    const descriptors = conservationSourceDescriptors(sourceFiles);
+    let sourceIndex = descriptors.findIndex((descriptor) => descriptor.sourceKey === String(entry?.sourceKey || ''));
+    if (sourceIndex < 0) {
+      const fileName = String(entry?.fileName || '').trim();
+      sourceIndex = descriptors.findIndex((descriptor) => descriptor.fileName === fileName);
+    }
+    if (sourceIndex < 0 && idx < sourceFiles.length) sourceIndex = idx;
+    if (sourceIndex < 0 || sourceIndex >= sourceFiles.length) return;
+    setCircularConservationSourceFiles(sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex));
   };
   watch(
     () => [
@@ -891,9 +934,13 @@ export const createAppSetup = () => {
     losatProgram,
     files,
     circularConservation,
+    circularConservationFastaInput,
     circularConservationSeriesRows,
     canMoveCircularConservationSeries,
     moveCircularConservationSeries,
+    openCircularConservationComparisonFilePicker,
+    addCircularConservationComparisonFile,
+    removeCircularConservationSource,
     syncCircularConservationSeries,
     linearSeqs,
     linearReorderNotice,
