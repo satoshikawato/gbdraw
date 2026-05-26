@@ -210,6 +210,9 @@ export const createAppSetup = () => {
       ? normalizeFileList(files.c_conservation_blasts)
       : normalizeFileList(files.c_conservation_fastas)
   );
+  const syncCircularConservationEnabled = (sourceFiles = getCircularConservationSourceFiles()) => {
+    circularConservation.enabled = normalizeFileList(sourceFiles).length > 0;
+  };
   const setCircularConservationSourceFiles = (nextFiles) => {
     const normalized = normalizeFileList(nextFiles);
     if (isCircularConservationUploadSource()) {
@@ -222,6 +225,7 @@ export const createAppSetup = () => {
   };
   const syncCircularConservationSeries = () => {
     const sourceFiles = getCircularConservationSourceFiles();
+    syncCircularConservationEnabled(sourceFiles);
     const legacyLabels = parseConservationLabelText(circularConservation.labels);
     const nextSeries = reconcileConservationSeries({
       sourceFiles,

@@ -2080,15 +2080,21 @@ json.dumps({
           args.push('--gff', '/input.gff', '--fasta', '/input.fasta');
         }
 
-        if (circularConservation.enabled === true) {
+        const sourceMode = String(circularConservation.source || '').trim().toLowerCase() === 'upload'
+          ? 'upload'
+          : 'losat';
+        const circularConservationSourceFiles = sourceMode === 'upload'
+          ? normalizeFileList(files.c_conservation_blasts)
+          : normalizeFileList(files.c_conservation_fastas);
+        const shouldDrawCircularPairwiseComparisons = circularConservationSourceFiles.length > 0;
+        circularConservation.enabled = shouldDrawCircularPairwiseComparisons;
+
+        if (shouldDrawCircularPairwiseComparisons) {
           if (!multiCanvasSupport.conservation_blast || !multiCanvasSupport.conservation_reference) {
             throw new Error(
-              'Current gbdraw wheel does not support circular conservation rings. Rebuild and redeploy the web wheel.'
+              'Current gbdraw wheel does not support circular pairwise comparison rings. Rebuild and redeploy the web wheel.'
             );
           }
-          const sourceMode = String(circularConservation.source || '').trim().toLowerCase() === 'upload'
-            ? 'upload'
-            : 'losat';
           const width = normalizePositiveNumberOrNull(circularConservation.ring_width);
           const gap = normalizePositiveNumberOrNull(circularConservation.ring_gap);
           const writeEmptyConservationPreflightFiles = (count) => {
@@ -2209,7 +2215,7 @@ json.dumps({
               const fileObj = comparisonFiles[index];
               const queryFasta = await fileObj.text();
               if (getFastaSequenceLength(queryFasta) <= 0) {
-                throw new Error(`Conservation comparison FASTA #${index + 1} has no sequence data.`);
+                throw new Error(`Pairwise comparison FASTA #${index + 1} has no sequence data.`);
               }
               const queryHash = await hashText(queryFasta);
               const querySequenceKey = `circular-query:${queryHash}`;
@@ -2312,9 +2318,9 @@ json.dumps({
           let conservationReference = 'auto';
           let conservationSeries = [];
           if (sourceMode === 'upload') {
-            const blastFiles = normalizeFileList(files.c_conservation_blasts);
+            const blastFiles = circularConservationSourceFiles;
             if (blastFiles.length === 0) {
-              throw new Error('Please upload at least one BLAST outfmt 6/7 file or disable Conservation Rings.');
+              throw new Error('Please upload at least one BLAST outfmt 6/7 file for Pairwise Comparisons.');
             }
             const conservationEntries = orderedConservationSources(blastFiles, circularConservation);
             conservationSeries = buildConservationSeries(blastFiles, circularConservation);
@@ -2331,9 +2337,9 @@ json.dumps({
               return { status: 'error' };
             }
           } else {
-            const comparisonFiles = normalizeFileList(files.c_conservation_fastas);
+            const comparisonFiles = circularConservationSourceFiles;
             if (comparisonFiles.length === 0) {
-              throw new Error('Please upload at least one comparison FASTA file or disable Conservation Rings.');
+              throw new Error('Please upload at least one comparison FASTA file for Pairwise Comparisons.');
             }
             const conservationEntries = orderedConservationSources(comparisonFiles, circularConservation);
             const orderedComparisonFiles = conservationEntries.map((entry) => entry.file);

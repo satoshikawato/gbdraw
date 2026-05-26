@@ -22,7 +22,7 @@ const RENDERER_LABELS = {
   dinucleotide_content: 'Dinucleotide content',
   dinucleotide_skew: 'Dinucleotide skew',
   depth: 'Depth',
-  sequence_conservation: 'Conservation',
+  sequence_conservation: 'Pairwise comparison',
   spacer: 'Spacer'
 };
 
@@ -765,10 +765,10 @@ export const estimateCircularConservationLayoutWarning = (state) => {
     (showSkew ? 12 + 1 : 0);
 
   if (compressedStackPx > availableInsidePx) {
-    return `Conservation has ${entries.length} inside ring(s) plus other circular tracks; even compressed rings may not fit. Reduce Ring Width/GAP, disable GC/skew/depth tracks, or move tracks outside before generating.`;
+    return `There are ${entries.length} inside pairwise comparison ring(s) plus other circular tracks; even compressed rings may not fit. Reduce Ring Width/GAP, disable GC/skew/depth tracks, or move tracks outside before generating.`;
   }
   if (requestedStackPx > availableInsidePx * 0.9 || (entries.length >= 5 && (showGc || showSkew || showDepth))) {
-    return `Conservation has ${entries.length} inside ring(s); gbdraw will auto-compress ring width/gap when needed. If generation still fails, reduce Ring Width/GAP or disable GC/skew/depth tracks.`;
+    return `There are ${entries.length} inside pairwise comparison ring(s); gbdraw will auto-compress ring width/gap when needed. If generation still fails, reduce Ring Width/GAP or disable GC/skew/depth tracks.`;
   }
   return '';
 };

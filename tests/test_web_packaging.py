@@ -309,13 +309,16 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "circularConservation" in app_setup_source
     assert "circularConservationSeriesRows" in app_setup_source
     assert "syncCircularConservationSeries" in app_setup_source
+    assert "syncCircularConservationEnabled" in app_setup_source
     assert "addCircularConservationComparisonFile" in app_setup_source
     assert "removeCircularConservationSource" in app_setup_source
     assert "circularConservation: state.circularConservation" in config_source
     assert "normalizeCircularConservationSeries" in config_source
     assert "c_conservation_blasts: await serializeFileArray" in config_source
     assert "normalizeCircularConservationReference" in config_source
-    assert "Conservation Rings" in index_html
+    assert "Pairwise Comparisons" in index_html
+    assert "Conservation Rings" not in index_html
+    assert 'v-model="circularConservation.enabled"' not in index_html
     assert "BLAST outfmt 6/7 files" in index_html
     assert "Comparison FASTA files" in index_html
     assert "@click=\"openCircularConservationComparisonFilePicker\"" in index_html
