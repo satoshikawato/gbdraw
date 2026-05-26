@@ -504,21 +504,6 @@
                                     </div>
                                 </div>
                                 <div v-else class="space-y-2">
-                                    <div>
-                                        <div class="flex justify-between items-end mb-1">
-                                            <label class="input-label mb-0">Comparison FASTA files</label>
-                                        </div>
-                                        <input
-                                            type="file"
-                                            ref="circularConservationFastaInput"
-                                            accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain,text/*"
-                                            @change="addCircularConservationComparisonFile"
-                                            class="hidden"
-                                        >
-                                        <button type="button" class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker">
-                                            <i class="ph ph-plus"></i> Add Comparison FASTA
-                                        </button>
-                                    </div>
                                     <div class="grid grid-cols-1 gap-1">
                                         <div>
                                             <label class="text-[9px] flex items-center">Task <help-tip text="Browser LOSAT conservation currently uses blastn. The displayed circular sequence is the BLAST subject."></help-tip></label>
@@ -538,8 +523,9 @@
                                         </button>
                                     </div>
                                 </div>
-                                <div v-if="circularConservationSeriesRows.length > 0" class="space-y-1">
-                                    <label class="text-[9px] flex items-center">Series <help-tip text="Set the ring name, color, and default order for each conservation FASTA or BLAST source. Custom Track Slots can override the radial track order."></help-tip></label>
+                                <div v-if="circularConservation.source === 'losat' || circularConservationSeriesRows.length > 0" class="space-y-1">
+                                    <label v-if="circularConservation.source === 'losat'" class="input-label mb-0 flex items-center">Comparison FASTA files <help-tip text="Add one comparison FASTA per conservation ring, then set the ring name, color, and default order. Custom Track Slots can override the radial track order."></help-tip></label>
+                                    <label v-else class="text-[9px] flex items-center">Series <help-tip text="Set the ring name, color, and default order for each conservation FASTA or BLAST source. Custom Track Slots can override the radial track order."></help-tip></label>
                                     <div v-for="row in circularConservationSeriesRows" :key="`conservation-series-${row.index}-${row.filename}`" class="grid grid-cols-[1.8rem_minmax(0,1fr)_auto] gap-1.5 items-center">
                                         <input type="color" v-model="circularConservation.series[row.index].color" class="h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="`Color for ${row.filename}`">
                                         <div class="min-w-0 space-y-0.5">
@@ -552,8 +538,19 @@
                                             <button type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeCircularConservationSource(row.index)" title="Remove series"><i class="ph ph-trash"></i></button>
                                         </div>
                                     </div>
+                                    <input
+                                        v-if="circularConservation.source === 'losat'"
+                                        type="file"
+                                        ref="circularConservationFastaInput"
+                                        accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain,text/*"
+                                        @change="addCircularConservationComparisonFile"
+                                        class="hidden"
+                                    >
+                                    <button v-if="circularConservation.source === 'losat'" type="button" class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker">
+                                        <i class="ph ph-plus"></i> Add Seq
+                                    </button>
                                 </div>
-                                <div v-else>
+                                <div v-else-if="circularConservation.source === 'upload'">
                                     <label class="text-[9px] flex items-center">Series names <help-tip text="Optional fallback names for rings, one per source. Use new lines or commas."></help-tip></label>
                                     <textarea v-model="circularConservation.labels" rows="2" class="form-input px-1 py-0.5 text-xs" placeholder="Ring A&#10;Ring B"></textarea>
                                 </div>

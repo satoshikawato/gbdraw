@@ -313,7 +313,7 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "Conservation Rings" in index_html
     assert "BLAST outfmt 6/7 files" in index_html
     assert "Comparison FASTA files" in index_html
-    assert "Add Comparison FASTA" in index_html
+    assert "@click=\"openCircularConservationComparisonFilePicker\"" in index_html
     assert "@click=\"removeCircularConservationSource(row.index)\"" in index_html
     assert "type=\"color\" v-model=\"circularConservation.series[row.index].color\"" in index_html
     assert ":multiple=\"true\"" in index_html
