@@ -63,6 +63,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--plot_title PLOT_TITLE]
               [--plot_title_font_size PLOT_TITLE_FONT_SIZE]
               [--keep_full_definition_with_plot_title]
+              [--center_reserved_radius CENTER_RESERVED_RADIUS]
               [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--suppress_gc]
               [--suppress_skew]
               [--conservation_blast BLAST [BLAST ...]]
@@ -169,6 +170,9 @@ options:
   --keep_full_definition_with_plot_title
                         Keep the full centered record definition when a
                         circular plot title is shown (default: False).
+  --center_reserved_radius CENTER_RESERVED_RADIUS
+                        Override the centered definition reserved radius for
+                        circular track packing (in px; must be >= 0).
   --label_font_size LABEL_FONT_SIZE
                         Label font size (optional; default: 14 (pt) for
                         genomes <= 50 kb, 8 for genomes >= 50 kb)

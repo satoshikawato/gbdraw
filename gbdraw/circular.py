@@ -233,6 +233,10 @@ def _get_args(args) -> argparse.Namespace:
         help='Keep the full centered record definition when a circular plot title is shown (default: False).',
         action='store_true')
     parser.add_argument(
+        '--center_reserved_radius',
+        help='Override the centered definition reserved radius for circular track packing (in px; must be >= 0).',
+        type=float)
+    parser.add_argument(
         '--label_font_size',
         help='Label font size (optional; default: 14 (pt) for genomes <= 50 kb, 8 for genomes >= 50 kb)',
         type=float)
@@ -651,6 +655,10 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--conservation_ring_width must be > 0")
     if args.conservation_ring_gap is not None and args.conservation_ring_gap <= 0:
         parser.error("--conservation_ring_gap must be > 0")
+    if args.center_reserved_radius is not None and (
+        not math.isfinite(float(args.center_reserved_radius)) or args.center_reserved_radius < 0
+    ):
+        parser.error("--center_reserved_radius must be a finite number >= 0")
     if args.alignment_length < 0:
         parser.error("--alignment_length must be >= 0")
     if not math.isfinite(float(args.identity)) or args.identity < 0 or args.identity > 100:
@@ -754,6 +762,7 @@ def circular_main(cmd_args) -> None:
     definition_font_size: Optional[float] = args.definition_font_size
     plot_title_font_size: Optional[float] = args.plot_title_font_size
     keep_full_definition_with_plot_title: bool = args.keep_full_definition_with_plot_title
+    center_reserved_radius: Optional[float] = args.center_reserved_radius
     label_font_size: Optional[float] = args.label_font_size
     suppress_gc: bool = args.suppress_gc
     suppress_skew: bool = args.suppress_skew
@@ -1044,6 +1053,7 @@ def circular_main(cmd_args) -> None:
             plot_title_position=plot_title_position,
             plot_title_font_size=plot_title_font_size,
             keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
+            center_reserved_radius=center_reserved_radius,
             multi_record_size_mode=multi_record_size_mode,
             multi_record_min_radius_ratio=multi_record_min_radius_ratio,
             multi_record_column_gap_ratio=multi_record_column_gap_ratio,
@@ -1094,6 +1104,7 @@ def circular_main(cmd_args) -> None:
                 plot_title_position=plot_title_position,
                 plot_title_font_size=plot_title_font_size,
                 keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
+                center_reserved_radius=center_reserved_radius,
                 cfg=cfg,
                 circular_track_slots=circular_track_slots_or_none,
                 circular_track_axis_index=circular_track_axis_index,

@@ -616,6 +616,7 @@ const applyConfigData = (data) => {
     const numeric = Number(value);
     return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
   };
+  state.adv.center_reserved_radius = normalizeNonNegativeNumberOrNull(state.adv.center_reserved_radius);
   state.adv.depth_min = normalizeNonNegativeNumberOrNull(state.adv.depth_min);
   state.adv.depth_max = normalizeNonNegativeNumberOrNull(state.adv.depth_max);
   if (

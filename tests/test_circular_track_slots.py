@@ -247,6 +247,7 @@ def _capture_circular_radial_layout(
     *,
     track_type: str,
     circular_track_slots: list[CircularTrackSlot] | None = None,
+    center_reserved_radius: float | None = None,
     input_filename: str = "HmmtDNA.gbk",
 ):
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
@@ -272,6 +273,8 @@ def _capture_circular_radial_layout(
     kwargs = {}
     if circular_track_slots is not None:
         kwargs["circular_track_slots"] = circular_track_slots
+    if center_reserved_radius is not None:
+        kwargs["center_reserved_radius"] = center_reserved_radius
 
     assemble_circular_diagram_from_record(
         record,
@@ -2243,3 +2246,46 @@ def test_cli_circular_track_axis_index_forwards_value(monkeypatch: pytest.Monkey
     )
 
     assert captured["circular_track_axis_index"] == 1
+
+
+def test_center_reserved_radius_overrides_radial_definition_band(monkeypatch: pytest.MonkeyPatch) -> None:
+    layout = _capture_circular_radial_layout(
+        monkeypatch,
+        track_type="tuckin",
+        center_reserved_radius=42.0,
+    )
+
+    assert layout.definition_reserved_band_px is not None
+    assert layout.definition_reserved_band_px.inner_px == pytest.approx(0.0)
+    assert layout.definition_reserved_band_px.outer_px == pytest.approx(42.0)
+
+
+def test_cli_center_reserved_radius_forwards_value(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    record = _load_record()
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, mode: [record])
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
+
+    def fake_assemble(*args, **kwargs):
+        captured["center_reserved_radius"] = kwargs.get("center_reserved_radius")
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+
+    circular_cli_module.circular_main(
+        [
+            "--gbk",
+            "dummy.gb",
+            "--center_reserved_radius",
+            "48",
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert captured["center_reserved_radius"] == pytest.approx(48.0)

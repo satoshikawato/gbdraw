@@ -228,11 +228,15 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
 
     assert "circular_track_slots_enabled" in state_source
     assert "circular_track_slots_axis_index" in state_source
+    assert "center_reserved_radius: null" in state_source
     assert "createDefaultCircularTrackSlots()" in state_source
+    assert "state.adv.center_reserved_radius = normalizeNonNegativeNumberOrNull(state.adv.center_reserved_radius);" in config_source
     assert "inferLegacyAxisIndexFromFeature(normalizedSlots, state.form.track_type)" in config_source
     assert '"circular_track_slot": "--circular_track_slot" in _source' in run_source
     assert '"circular_track_axis_index": "--circular_track_axis_index" in _source' in run_source
+    assert '"center_reserved_radius": "--center_reserved_radius" in _source' in run_source
     assert "args.push('--track_type', form.track_type);" in run_source
+    assert "args.push('--center_reserved_radius', String(normalizedCenterReservedRadius));" in run_source
     assert "args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));" in run_source
     assert "buildCircularTrackSlotSpec(slot, adv.nt, form.track_type, {" in run_source
     assert "applyCircularTrackOrderPlacements(" in run_source
@@ -244,6 +248,7 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "Reset to Tuckin" in index_html
     assert "Reset to Middle" in index_html
     assert "Reset to Spreadout" in index_html
+    assert "Center Reserved Radius" in index_html
     assert "Apply Tuckin" not in index_html
     assert "arrows reorder within the current side" in index_html
     assert "Radial track stack" in index_html

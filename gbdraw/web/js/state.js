@@ -415,6 +415,7 @@ const adv = reactive({
   plot_title_position: 'none',
   plot_title_font_size: null,
   keep_full_definition_with_plot_title: false,
+  center_reserved_radius: null,
   feature_width_circular: null,
   depth_width_circular: null,
   gc_content_width_circular: null,

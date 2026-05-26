@@ -43,6 +43,7 @@ class TrackOptions:
 
     circular_track_slots: Sequence[str | CircularTrackSlot] | None = None
     circular_track_axis_index: int | None = None
+    center_reserved_radius: float | None = None
 
 
 @dataclass(frozen=True)

@@ -1068,6 +1068,12 @@ json.dumps({
     return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
   };
 
+  const normalizeNonNegativeNumberOrNull = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+  };
+
   const normalizeFeatureShape = (value) => (String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle');
 
   const getFeatureShapeOptionSupport = () => {
@@ -1111,6 +1117,7 @@ json.dumps({
         plot_title_position: false,
         plot_title_font_size: false,
         keep_full_definition_with_plot_title: false,
+        center_reserved_radius: false,
         tick_label_font_size: false,
         circular_label_spacing: false,
         label_rendering: false,
@@ -1141,6 +1148,7 @@ json.dumps({
   "plot_title_position": "--plot_title_position" in _source,
   "plot_title_font_size": "--plot_title_font_size" in _source,
   "keep_full_definition_with_plot_title": "--keep_full_definition_with_plot_title" in _source,
+  "center_reserved_radius": "--center_reserved_radius" in _source,
   "tick_label_font_size": "--tick_label_font_size" in _source,
   "circular_label_spacing": "--circular_label_spacing" in _source,
   "label_rendering": "--label_rendering" in _source,
@@ -1167,6 +1175,7 @@ json.dumps({
         plot_title_position: false,
         plot_title_font_size: false,
         keep_full_definition_with_plot_title: false,
+        center_reserved_radius: false,
         tick_label_font_size: false,
         circular_label_spacing: false,
         label_rendering: false,
@@ -1813,10 +1822,12 @@ json.dumps({
             ? parsedPlotTitleFontSize
             : null;
         const keepFullDefinitionWithPlotTitle = Boolean(adv.keep_full_definition_with_plot_title);
+        const normalizedCenterReservedRadius = normalizeNonNegativeNumberOrNull(adv.center_reserved_radius);
         form.plot_title = normalizedCircularPlotTitle;
         adv.plot_title_position = normalizedPlotTitlePosition;
         adv.plot_title_font_size = normalizedPlotTitleFontSize;
         adv.keep_full_definition_with_plot_title = keepFullDefinitionWithPlotTitle;
+        adv.center_reserved_radius = normalizedCenterReservedRadius;
 
         if (selectedFeatureShapes.length > 0) {
           const shapeOptionSupport = getFeatureShapeOptionSupport();
@@ -1865,6 +1876,14 @@ json.dumps({
             );
           }
           args.push('--keep_full_definition_with_plot_title');
+        }
+        if (useCircularTrackSlots && normalizedCenterReservedRadius !== null) {
+          if (!multiCanvasSupport.center_reserved_radius) {
+            throw new Error(
+              'Current gbdraw wheel does not support --center_reserved_radius. Rebuild and redeploy the web wheel.'
+            );
+          }
+          args.push('--center_reserved_radius', String(normalizedCenterReservedRadius));
         }
         const labelsModeRaw =
           typeof form.labels_mode === 'string'

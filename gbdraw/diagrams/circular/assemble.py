@@ -2124,6 +2124,7 @@ def add_record_on_circular_canvas(
     definition_position: str = "center",
     definition_profile: str = "full",
     definition_group_id: str | None = None,
+    center_reserved_radius: float | None = None,
     _tick_track_channel_override: str | None = None,
 ) -> Drawing:
     """
@@ -2281,7 +2282,9 @@ def add_record_on_circular_canvas(
     resolved_track_slots: list[CircularResolvedSlot] = []
     resolved_feature_anchor_radius_px: float | None = None
     definition_reserved_radius_px: float | None = None
-    if str(definition_position).strip().lower() == "center":
+    if center_reserved_radius is not None:
+        definition_reserved_radius_px = max(0.0, float(center_reserved_radius))
+    elif str(definition_position).strip().lower() == "center":
         definition_reserved_radius_px = _definition_reserved_radius_px(
             gb_record,
             canvas_config,
@@ -2549,6 +2552,7 @@ def assemble_circular_diagram(
     definition_position: str = "center",
     definition_profile: str = "full",
     definition_group_id: str | None = None,
+    center_reserved_radius: float | None = None,
     _tick_track_channel_override: str | None = None,
 ) -> Drawing:
     """
@@ -2640,6 +2644,7 @@ def assemble_circular_diagram(
         definition_position=definition_position,
         definition_profile=definition_profile,
         definition_group_id=definition_group_id,
+        center_reserved_radius=center_reserved_radius,
         _tick_track_channel_override=_tick_track_channel_override,
     )
     return canvas
@@ -2669,6 +2674,7 @@ def plot_circular_diagram(
     definition_position: str = "center",
     definition_profile: str = "full",
     definition_group_id: str | None = None,
+    center_reserved_radius: float | None = None,
 ) -> Drawing:
     """
     Backwards-compatible wrapper that assembles and saves a circular diagram.
@@ -2696,6 +2702,7 @@ def plot_circular_diagram(
         definition_position=definition_position,
         definition_profile=definition_profile,
         definition_group_id=definition_group_id,
+        center_reserved_radius=center_reserved_radius,
     )
     save_figure(canvas, out_formats)
     return canvas

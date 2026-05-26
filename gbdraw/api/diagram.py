@@ -484,6 +484,11 @@ def _validate_positive_float_optional(name: str, value: float | None) -> None:
         raise ValidationError(f"{name} must be > 0")
 
 
+def _validate_nonnegative_float_optional(name: str, value: float | None) -> None:
+    if value is not None and (not math.isfinite(float(value)) or float(value) < 0):
+        raise ValidationError(f"{name} must be a finite number >= 0")
+
+
 def _resolve_depth_window_step(
     *,
     window: int,
@@ -1904,6 +1909,7 @@ def assemble_circular_diagram_from_record(
     plot_title_position: Literal["none", "top", "bottom"] = "none",
     plot_title_font_size: float | None = None,
     keep_full_definition_with_plot_title: bool = False,
+    center_reserved_radius: float | None = None,
     circular_track_slots: Sequence[str | CircularTrackSlot] | None = None,
     circular_track_axis_index: int | None = None,
     evalue: float = 1e-5,
@@ -1929,6 +1935,7 @@ def assemble_circular_diagram_from_record(
     _validate_positive_optional("depth_step", depth_step)
     _validate_positive_float_optional("conservation_ring_width", conservation_ring_width)
     _validate_positive_float_optional("conservation_ring_gap", conservation_ring_gap)
+    _validate_nonnegative_float_optional("center_reserved_radius", center_reserved_radius)
     if color_table is None and color_table_file is not None:
         color_table = read_color_table(color_table_file)
     if feature_table is None and feature_table_file is not None:
@@ -2206,6 +2213,7 @@ def assemble_circular_diagram_from_record(
         dinucleotide_dataframes=dinucleotide_dataframes,
         definition_position="center",
         definition_profile=effective_definition_profile,
+        center_reserved_radius=center_reserved_radius,
         _tick_track_channel_override=_tick_track_channel_override,
     )
     if show_plot_title:
@@ -2267,6 +2275,7 @@ def assemble_circular_diagram_from_records(
     plot_title_position: Literal["none", "top", "bottom"] = "none",
     plot_title_font_size: float | None = None,
     keep_full_definition_with_plot_title: bool = False,
+    center_reserved_radius: float | None = None,
     multi_record_size_mode: Literal["linear", "auto", "equal", "sqrt"] = "auto",
     multi_record_min_radius_ratio: float = 0.55,
     multi_record_column_gap_ratio: float = _MULTI_RECORD_COLUMN_GAP_RATIO,
@@ -2287,6 +2296,7 @@ def assemble_circular_diagram_from_records(
     _validate_positive_optional("depth_step", depth_step)
     _validate_positive_float_optional("conservation_ring_width", conservation_ring_width)
     _validate_positive_float_optional("conservation_ring_gap", conservation_ring_gap)
+    _validate_nonnegative_float_optional("center_reserved_radius", center_reserved_radius)
 
     normalized_multi_record_size_mode = _resolve_multi_record_size_mode(
         str(multi_record_size_mode)
@@ -2355,6 +2365,7 @@ def assemble_circular_diagram_from_records(
             plot_title_position=normalized_plot_title_position,
             plot_title_font_size=plot_title_font_size,
             keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
+            center_reserved_radius=center_reserved_radius,
             circular_track_slots=circular_track_slots,
             circular_track_axis_index=circular_track_axis_index,
             evalue=evalue,
@@ -2596,6 +2607,7 @@ def assemble_circular_diagram_from_records(
             strain=strain,
             plot_title=None,
             plot_title_position="none",
+            center_reserved_radius=center_reserved_radius,
             circular_track_slots=parsed_circular_track_slots,
             circular_track_axis_index=circular_track_axis_index,
             evalue=evalue,
@@ -3138,6 +3150,7 @@ def build_circular_diagram(
         ),
         plot_title_font_size=options.plot_title_font_size,
         keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,
+        center_reserved_radius=tracks.center_reserved_radius if tracks else None,
         circular_track_slots=tracks.circular_track_slots if tracks else None,
         circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
         cfg=cfg,

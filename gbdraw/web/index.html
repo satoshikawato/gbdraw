@@ -962,6 +962,12 @@
                                             </div>
                                             <div>{{ circularTrackPresetSummary().detail }}</div>
                                         </div>
+                                        <div class="grid grid-cols-2 gap-1.5 rounded border border-slate-200 bg-white/70 p-1.5">
+                                            <div>
+                                                <label class="input-label text-[10px]">Center Reserved Radius <help-tip text="Override the centered definition reserved radius in px. Lower values let inside tracks move closer to the center and may overlap center text."></help-tip></label>
+                                                <input type="number" min="0" step="1" v-model.number="adv.center_reserved_radius" class="form-input form-input-compact" placeholder="Auto">
+                                            </div>
+                                        </div>
                                         <div class="rounded border border-slate-200 bg-white/70 p-1.5 space-y-1">
                                             <div class="flex items-center justify-between gap-2 text-[10px]">
                                                 <div class="inline-flex min-w-0 items-center gap-1 font-semibold text-slate-600">
