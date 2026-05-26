@@ -383,7 +383,7 @@ def _inherited_width_for_renderer(
     if renderer == "features":
         return _scalar_px(_default_feature_width_px(context))
     if renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
-        return _scalar_px(_default_numeric_width_px(renderer, context))
+        return None
     if params_slot is not None:
         return params_slot.width
     return None

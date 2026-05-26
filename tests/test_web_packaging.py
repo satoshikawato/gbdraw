@@ -534,6 +534,9 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         if (!betaSpec.includes('track_index=1') || !betaSpec.includes('source_index=0')) {{
           throw new Error(`Conservation slot CLI spec did not pin the ordered source: ${{betaSpec}}`);
         }}
+        if (betaSpec.includes('w=')) {{
+          throw new Error(`Default conservation slot should keep auto width, got: ${{betaSpec}}`);
+        }}
         if (conservationEditor.circularTrackSlotDisplayLabel(conservationSlots[0]) !== 'Beta') {{
           throw new Error(`Conservation slot display label was not series label: ${{conservationEditor.circularTrackSlotDisplayLabel(conservationSlots[0])}}`);
         }}

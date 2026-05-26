@@ -747,6 +747,70 @@ def test_blank_builtin_numeric_slots_reflow_as_movable_stack_without_explicit_ra
 
 
 @pytest.mark.circular
+def test_custom_conservation_slot_keeps_auto_width_for_compression() -> None:
+    from gbdraw.canvas import CircularCanvasConfigurator
+    from gbdraw.config.models import GbdrawConfig
+    from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_track_slots_from_preset_order
+    from gbdraw.diagrams.circular.radial_layout import resolve_circular_radial_layout
+
+    record = _load_record()
+    config_dict = _base_config(track_type="tuckin")
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_config = CircularCanvasConfigurator("test", config_dict, "none", record, cfg=cfg)
+    context = CircularPresetContext(
+        cfg=cfg,
+        canvas_config=canvas_config,
+        total_length=len(record.seq),
+        strandedness=bool(cfg.canvas.strandedness),
+        show_features=True,
+        show_ticks=True,
+        show_depth=False,
+        show_gc=True,
+        show_skew=True,
+    )
+
+    plan = circular_track_slots_from_preset_order(
+        [
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(
+                id="conservation_1",
+                renderer="sequence_conservation",
+                params={"track_index": 1, "source_index": 0},
+            ),
+            CircularTrackSlot(id="ticks", renderer="ticks"),
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
+        ],
+        "tuckin",
+        context,
+    )
+    plan_by_id = {slot.id: slot for slot in plan.slots}
+
+    assert plan_by_id["conservation_1"].width is None
+    assert plan_by_id["conservation_1"].params["_auto_compress"] is True
+    assert plan_by_id["gc_content"].width is None
+    assert plan_by_id["gc_content"].params["_auto_compress"] is True
+    assert plan_by_id["gc_skew"].width is None
+    assert plan_by_id["gc_skew"].params["_auto_compress"] is True
+
+    layout = resolve_circular_radial_layout(
+        total_length=len(record.seq),
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=plan.slots,
+        preferred_anchor_slot_ids=plan.preferred_anchor_slot_ids,
+    )
+    by_id = {slot.id: slot for slot in layout.slots}
+
+    assert not by_id["conservation_1"].explicit_width
+    assert not by_id["gc_content"].explicit_width
+    assert not by_id["gc_skew"].explicit_width
+    assert by_id["conservation_1"].requested_width_px > 0
+    assert by_id["gc_content"].requested_width_px > 0
+    assert by_id["gc_skew"].requested_width_px > 0
+
+
+@pytest.mark.circular
 def test_default_preset_tick_draw_uses_resolved_tick_options(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
