@@ -431,6 +431,10 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
 
     source_path = WEB_ROOT / "js" / "app" / "circular-track-slots.js"
     module_path = tmp_path / "circular-track-slots.mjs"
+    (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
+    for dependency in ["conservation-series.js", "color-utils.js"]:
+        dep_path = WEB_ROOT / "js" / "app" / dependency
+        (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
     check_path = tmp_path / "check-circular-track-slots.mjs"
     check_path.write_text(
@@ -480,6 +484,49 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         const resetTick = defaultState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
         if (resetTick?.side !== 'inside' || resetTick?.params?.tick_label_layout !== 'label_in_tick_out') {{
           throw new Error(`Enabling custom slots did not use the inward default Tick layout: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);
+        }}
+
+        const conservationState = {{
+          adv: {{
+            nt: 'GC',
+            circular_track_slots_enabled: false,
+            circular_track_slots_axis_index: null,
+            circular_track_slots: createDefaultCircularTrackSlots({{ preset: 'tuckin' }})
+          }},
+          form: {{
+            track_type: 'tuckin',
+            show_depth: false,
+            suppress_gc: false,
+            suppress_skew: false
+          }},
+          files: {{
+            c_conservation_blasts: [],
+            c_conservation_fastas: [
+              {{ name: 'alpha.fa', size: 10, lastModified: 100 }},
+              {{ name: 'beta.fa', size: 20, lastModified: 200 }}
+            ]
+          }},
+          circularConservation: {{
+            enabled: true,
+            source: 'losat',
+            series: [
+              {{ sourceKey: 'beta.fa|20|200|0', fileName: 'beta.fa', label: 'Beta', color: '#f28e2b' }},
+              {{ sourceKey: 'alpha.fa|10|100|0', fileName: 'alpha.fa', label: 'Alpha', color: '#4e79a7' }}
+            ]
+          }}
+        }};
+        const conservationEditor = createCircularTrackSlotEditor({{ state: conservationState }});
+        conservationEditor.setCircularTrackSlotsEnabled(true);
+        const conservationSlots = conservationState.adv.circular_track_slots.filter((slot) => slot.renderer === 'sequence_conservation');
+        if (conservationSlots.length !== 2 || conservationSlots[0].params.label !== 'Beta' || conservationSlots[1].params.label !== 'Alpha') {{
+          throw new Error(`Conservation slots were not materialized in series order: ${{JSON.stringify(conservationState.adv.circular_track_slots)}}`);
+        }}
+        const betaSpec = conservationEditor.circularTrackSlotCliSpec(conservationSlots[0]);
+        if (!betaSpec.includes('track_index=1') || !betaSpec.includes('source_index=0')) {{
+          throw new Error(`Conservation slot CLI spec did not pin the ordered source: ${{betaSpec}}`);
+        }}
+        if (conservationEditor.circularTrackSlotDisplayLabel(conservationSlots[0]) !== 'Beta') {{
+          throw new Error(`Conservation slot display label was not series label: ${{conservationEditor.circularTrackSlotDisplayLabel(conservationSlots[0])}}`);
         }}
 
         const outerTickSlots = applyCircularTrackOrderPlacements(

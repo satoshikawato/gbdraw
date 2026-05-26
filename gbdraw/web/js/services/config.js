@@ -304,7 +304,9 @@ const normalizeCircularConservationSeries = (series) => {
   return series
     .filter((entry) => entry && typeof entry === 'object')
     .map((entry, index) => ({
+      sourceKey: String(entry.sourceKey || ''),
       fileName: String(entry.fileName || ''),
+      sourceIndex: Number.isInteger(Number(entry.sourceIndex)) ? Number(entry.sourceIndex) : index,
       label: String(entry.label ?? entry.name ?? ''),
       color: normalizeHexColor(entry.color, '#4e79a7')
     }));

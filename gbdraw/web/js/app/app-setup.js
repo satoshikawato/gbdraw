@@ -18,47 +18,15 @@ import { setupWatchers } from './watchers.js';
 import { createOrthogroupEditor } from './orthogroups.js';
 import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 import { createLosatSettings } from './losat-settings.js';
-import { resolveColorToHex } from './color-utils.js';
+import {
+  defaultConservationSeriesLabel,
+  moveConservationSeriesEntry,
+  normalizeFileList,
+  parseConservationLabelText,
+  reconcileConservationSeries
+} from './conservation-series.js';
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref } = window.Vue;
-
-const CONSERVATION_SERIES_COLORS = [
-  '#4e79a7',
-  '#f28e2b',
-  '#59a14f',
-  '#e15759',
-  '#76b7b2',
-  '#edc948',
-  '#b07aa1',
-  '#ff9da7',
-  '#9c755f',
-  '#bab0ac'
-];
-
-const normalizeFileList = (files) => (Array.isArray(files) ? files.filter(Boolean) : (files ? [files] : []));
-
-const defaultConservationSeriesLabel = (file, index) => {
-  const raw = String(file?.name || `Series ${Number(index) + 1}`).trim();
-  const withoutExtension = raw.replace(/\.[^.]+$/, '').trim();
-  return withoutExtension || `Series ${Number(index) + 1}`;
-};
-
-const parseConservationLabelText = (value) =>
-  String(value || '')
-    .split(/[\n,]+/)
-    .map((label) => label.trim())
-    .filter(Boolean);
-
-const normalizeConservationSeriesColor = (value, index) => {
-  const fallback = CONSERVATION_SERIES_COLORS[Number(index) % CONSERVATION_SERIES_COLORS.length];
-  const resolved = resolveColorToHex(String(value || fallback).trim());
-  const color = String(resolved || fallback).trim();
-  const shortMatch = color.match(/^#([0-9a-fA-F]{3})$/);
-  if (shortMatch) {
-    return `#${shortMatch[1].split('').map((char) => char + char).join('').toLowerCase()}`;
-  }
-  return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : fallback;
-};
 
 export const createAppSetup = () => {
   const {
@@ -235,35 +203,46 @@ export const createAppSetup = () => {
   );
   const syncCircularConservationSeries = () => {
     const sourceFiles = getCircularConservationSourceFiles();
-    const previous = Array.isArray(circularConservation.series) ? circularConservation.series : [];
     const legacyLabels = parseConservationLabelText(circularConservation.labels);
-    const previousByName = new Map();
-    previous.forEach((entry) => {
-      const fileName = String(entry?.fileName || '').trim();
-      if (fileName && !previousByName.has(fileName)) previousByName.set(fileName, entry);
-    });
-    const nextSeries = sourceFiles.map((file, index) => {
-      const fileName = String(file?.name || `source_${Number(index) + 1}`).trim();
-      const defaultLabel = defaultConservationSeriesLabel(file, index);
-      const previousEntry = previous[index]?.fileName === fileName
-        ? previous[index]
-        : previousByName.get(fileName);
-      const rawLabel = previousEntry?.label ?? previousEntry?.name ?? legacyLabels[index] ?? defaultLabel;
-      return {
-        fileName,
-        label: String(rawLabel || defaultLabel).trim() || defaultLabel,
-        color: normalizeConservationSeriesColor(previousEntry?.color, index)
-      };
+    const nextSeries = reconcileConservationSeries({
+      sourceFiles,
+      previousSeries: circularConservation.series,
+      legacyLabels
     });
     circularConservation.series.splice(0, circularConservation.series.length, ...nextSeries);
+    if (adv.circular_track_slots_enabled === true) {
+      circularTrackSlotEditor.syncCircularConservationSlots();
+    }
   };
   const circularConservationSeriesRows = computed(() => {
-    return getCircularConservationSourceFiles().map((file, index) => ({
+    return (Array.isArray(circularConservation.series) ? circularConservation.series : []).map((entry, index) => ({
       index,
-      filename: String(file?.name || `source_${Number(index) + 1}`).trim(),
-      defaultLabel: defaultConservationSeriesLabel(file, index)
+      filename: String(entry?.fileName || `source_${Number(index) + 1}`).trim(),
+      defaultLabel: defaultConservationSeriesLabel(
+        { name: entry?.fileName },
+        Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry.sourceIndex) : index
+      )
     }));
   });
+  const canMoveCircularConservationSeries = (index, direction) => {
+    const idx = Number(index);
+    const target = idx + Math.sign(Number(direction));
+    return (
+      Array.isArray(circularConservation.series) &&
+      Number.isInteger(idx) &&
+      idx >= 0 &&
+      idx < circularConservation.series.length &&
+      target >= 0 &&
+      target < circularConservation.series.length
+    );
+  };
+  const moveCircularConservationSeries = (index, direction) => {
+    if (moveConservationSeriesEntry(circularConservation.series, index, direction)) {
+      if (adv.circular_track_slots_enabled === true) {
+        circularTrackSlotEditor.syncCircularConservationSlots();
+      }
+    }
+  };
   watch(
     () => [
       circularConservation.source,
@@ -279,10 +258,22 @@ export const createAppSetup = () => {
     ([slotsEnabled, showDepth]) => {
       if (slotsEnabled) {
         circularTrackSlotEditor.normalizeCircularTrackSlots();
+        circularTrackSlotEditor.syncCircularConservationSlots();
       }
       if (slotsEnabled && showDepth) {
         circularTrackSlotEditor.ensureCircularTrackDepthSlot();
       }
+    }
+  );
+  watch(
+    () => [
+      adv.circular_track_slots_enabled,
+      circularConservation.enabled,
+      circularConservation.source,
+      circularConservation.series.map((entry) => `${entry?.sourceKey || ''}:${entry?.label || ''}:${entry?.color || ''}`).join('|')
+    ],
+    ([slotsEnabled]) => {
+      if (slotsEnabled) circularTrackSlotEditor.syncCircularConservationSlots();
     }
   );
   const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions });
@@ -901,6 +892,8 @@ export const createAppSetup = () => {
     files,
     circularConservation,
     circularConservationSeriesRows,
+    canMoveCircularConservationSeries,
+    moveCircularConservationSeries,
     syncCircularConservationSeries,
     linearSeqs,
     linearReorderNotice,
@@ -939,6 +932,10 @@ export const createAppSetup = () => {
     circularTrackSlots: circularTrackSlotEditor.circularTrackSlots,
     circularTrackStackEntries: circularTrackSlotEditor.circularTrackStackEntries,
     circularTrackSlotCliSpec: circularTrackSlotEditor.circularTrackSlotCliSpec,
+    circularTrackSlotDisplayLabel: circularTrackSlotEditor.circularTrackSlotDisplayLabel,
+    circularTrackSlotDisplayMeta: circularTrackSlotEditor.circularTrackSlotDisplayMeta,
+    circularTrackSlotColor: circularTrackSlotEditor.circularTrackSlotColor,
+    isManagedCircularConservationSlot: circularTrackSlotEditor.isManagedCircularConservationSlot,
     circularTrackPresetSummary: circularTrackSlotEditor.circularTrackPresetSummary,
     circularTrackSlotUsesPresetGeometry: circularTrackSlotEditor.circularTrackSlotUsesPresetGeometry,
     losat,

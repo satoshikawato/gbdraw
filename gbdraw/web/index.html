@@ -530,12 +530,16 @@
                                     </div>
                                 </div>
                                 <div v-if="circularConservationSeriesRows.length > 0" class="space-y-1">
-                                    <label class="text-[9px] flex items-center">Series <help-tip text="Set the ring name and color for each conservation FASTA or BLAST source."></help-tip></label>
-                                    <div v-for="row in circularConservationSeriesRows" :key="`conservation-series-${row.index}-${row.filename}`" class="grid grid-cols-[1.8rem_minmax(0,1fr)] gap-1.5 items-center">
+                                    <label class="text-[9px] flex items-center">Series <help-tip text="Set the ring name, color, and default order for each conservation FASTA or BLAST source. Custom Track Slots can override the radial track order."></help-tip></label>
+                                    <div v-for="row in circularConservationSeriesRows" :key="`conservation-series-${row.index}-${row.filename}`" class="grid grid-cols-[1.8rem_minmax(0,1fr)_auto] gap-1.5 items-center">
                                         <input type="color" v-model="circularConservation.series[row.index].color" class="h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="`Color for ${row.filename}`">
                                         <div class="min-w-0 space-y-0.5">
                                             <input type="text" v-model="circularConservation.series[row.index].label" :placeholder="row.defaultLabel" class="form-input px-1 py-0.5 text-xs">
                                             <div class="text-[9px] text-slate-500 truncate">{{ row.filename }}</div>
+                                        </div>
+                                        <div class="flex items-center gap-0.5">
+                                            <button type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, -1)" :disabled="!canMoveCircularConservationSeries(row.index, -1)" title="Move series outward"><i class="ph ph-arrow-up"></i></button>
+                                            <button type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, 1)" :disabled="!canMoveCircularConservationSeries(row.index, 1)" title="Move series inward"><i class="ph ph-arrow-down"></i></button>
                                         </div>
                                     </div>
                                 </div>
@@ -1006,8 +1010,15 @@
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index)" :disabled="!canMoveCircularTrackSlotOutside(entry.index)" title="Move outside Axis"><i class="ph ph-arrow-line-up"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotInside(entry.index)" :disabled="!canMoveCircularTrackSlotInside(entry.index)" title="Move inside Axis"><i class="ph ph-arrow-line-down"></i></button>
                                                             <button v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'ticks'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index)" :disabled="!canMoveCircularTrackSlotToAxis(entry.index)" title="Track on Axis"><i class="ph ph-record"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index)" title="Duplicate"><i class="ph ph-copy"></i></button>
-                                                            <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index)" title="Remove"><i class="ph ph-trash"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index)" :disabled="isManagedCircularConservationSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : 'Duplicate'"><i class="ph ph-copy"></i></button>
+                                                            <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index)" :disabled="isManagedCircularConservationSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Disable this comparison track with the checkbox' : 'Remove'"><i class="ph ph-trash"></i></button>
+                                                        </div>
+                                                    </div>
+                                                    <div v-if="isManagedCircularConservationSlot(entry.slot)" class="grid grid-cols-[1.15rem_minmax(0,1fr)] gap-1.5 items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-1">
+                                                        <span class="h-4 w-4 rounded border border-slate-300" :style="{ backgroundColor: circularTrackSlotColor(entry.slot) || '#94a3b8' }"></span>
+                                                        <div class="min-w-0">
+                                                            <div class="truncate text-[10px] font-semibold text-slate-700">{{ circularTrackSlotDisplayLabel(entry.slot) }}</div>
+                                                            <div class="truncate text-[9px] text-slate-500">{{ circularTrackSlotDisplayMeta(entry.slot) }}</div>
                                                         </div>
                                                     </div>
                                                     <div class="grid grid-cols-4 gap-1">

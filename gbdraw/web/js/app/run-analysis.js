@@ -13,20 +13,10 @@ import {
   hasEnabledCircularTrackRenderer,
   inferLegacyAxisIndexFromFeature
 } from './circular-track-slots.js';
-import { resolveColorToHex } from './color-utils.js';
-
-const CONSERVATION_SERIES_COLORS = [
-  '#4e79a7',
-  '#f28e2b',
-  '#59a14f',
-  '#e15759',
-  '#76b7b2',
-  '#edc948',
-  '#b07aa1',
-  '#ff9da7',
-  '#9c755f',
-  '#bab0ac'
-];
+import {
+  normalizeFileList,
+  orderedConservationSources
+} from './conservation-series.js';
 
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
@@ -308,39 +298,11 @@ const extractAllLosatFastaFast = async ({ file, text, fmt }) => {
   };
 };
 const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const normalizeFileList = (files) => (Array.isArray(files) ? files.filter(Boolean) : (files ? [files] : []));
-const parseConservationLabels = (value) =>
-  String(value || '')
-    .split(/[\n,]+/)
-    .map((label) => label.trim())
-    .filter(Boolean);
-const defaultConservationSeriesLabel = (file, index) => {
-  const raw = String(file?.name || `Series ${Number(index) + 1}`).trim();
-  const withoutExtension = raw.replace(/\.[^.]+$/, '').trim();
-  return withoutExtension || `Series ${Number(index) + 1}`;
-};
-const normalizeConservationSeriesColor = (value, index) => {
-  const fallback = CONSERVATION_SERIES_COLORS[Number(index) % CONSERVATION_SERIES_COLORS.length];
-  const resolved = resolveColorToHex(String(value || fallback).trim());
-  const color = String(resolved || fallback).trim();
-  const shortMatch = color.match(/^#([0-9a-fA-F]{3})$/);
-  if (shortMatch) {
-    return `#${shortMatch[1].split('').map((char) => char + char).join('').toLowerCase()}`;
-  }
-  return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : fallback;
-};
 const buildConservationSeries = (sourceFiles, circularConservation) => {
-  const legacyLabels = parseConservationLabels(circularConservation.labels);
-  const series = Array.isArray(circularConservation.series) ? circularConservation.series : [];
-  return sourceFiles.map((file, index) => {
-    const entry = series[index] || {};
-    const defaultLabel = defaultConservationSeriesLabel(file, index);
-    const label = String(entry.label ?? entry.name ?? legacyLabels[index] ?? defaultLabel).trim() || defaultLabel;
-    return {
-      label,
-      color: normalizeConservationSeriesColor(entry.color, index)
-    };
-  });
+  return orderedConservationSources(sourceFiles, circularConservation).map((entry) => ({
+    label: entry.label,
+    color: entry.color
+  }));
 };
 const normalizeFeatureVisibilityMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -2291,10 +2253,11 @@ json.dumps({
             if (blastFiles.length === 0) {
               throw new Error('Please upload at least one BLAST outfmt 6/7 file or disable Conservation Rings.');
             }
+            const conservationEntries = orderedConservationSources(blastFiles, circularConservation);
             conservationSeries = buildConservationSeries(blastFiles, circularConservation);
-            for (let index = 0; index < blastFiles.length; index += 1) {
+            for (let index = 0; index < conservationEntries.length; index += 1) {
               const blastPath = `/conservation_blast_${index}.txt`;
-              await stageUploadedFile(blastFiles[index], blastPath);
+              await stageUploadedFile(conservationEntries[index].file, blastPath);
               conservationBlastPaths.push(blastPath);
             }
             const rawReference = String(circularConservation.reference || 'auto').trim().toLowerCase();
@@ -2305,8 +2268,10 @@ json.dumps({
             if (comparisonFiles.length === 0) {
               throw new Error('Please upload at least one comparison FASTA file or disable Conservation Rings.');
             }
+            const conservationEntries = orderedConservationSources(comparisonFiles, circularConservation);
+            const orderedComparisonFiles = conservationEntries.map((entry) => entry.file);
             conservationSeries = buildConservationSeries(comparisonFiles, circularConservation);
-            conservationBlastPaths = await runCircularLosatConservation(comparisonFiles);
+            conservationBlastPaths = await runCircularLosatConservation(orderedComparisonFiles);
             conservationReference = 'subject';
           }
 

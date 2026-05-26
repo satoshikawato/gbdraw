@@ -1,3 +1,11 @@
+import {
+  CONSERVATION_SLOT_MANAGER,
+  isManagedConservationSlot,
+  normalizeFileList,
+  orderedConservationSources,
+  safeConservationSlotId
+} from './conservation-series.js';
+
 const SUPPORTED_RENDERERS = [
   'features',
   'ticks',
@@ -678,6 +686,9 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
     if (nt !== null && normalizeNt(nt) !== normalizeNt(defaultNt)) {
       options.push(`nt=${normalizeNt(nt)}`);
     }
+  } else if (normalized.renderer === 'sequence_conservation') {
+    appendOption(options, 'track_index', params.track_index);
+    appendOption(options, 'source_index', params.source_index);
   }
   appendOption(options, 'legend_label', params.legend_label);
 
@@ -686,6 +697,50 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
 
 export const hasEnabledCircularTrackRenderer = (slots, renderer) =>
   normalizeCircularTrackSlots(slots).some((slot) => slot.enabled && slot.renderer === renderer);
+
+const conservationSourceFilesForState = (state) => (
+  String(state?.circularConservation?.source || '').trim().toLowerCase() === 'upload'
+    ? normalizeFileList(state?.files?.c_conservation_blasts)
+    : normalizeFileList(state?.files?.c_conservation_fastas)
+);
+
+const conservationEntriesForState = (state) => {
+  if (state?.circularConservation?.enabled !== true) return [];
+  return orderedConservationSources(
+    conservationSourceFilesForState(state),
+    state.circularConservation
+  );
+};
+
+const managedConservationSlotKey = (slot) => String(slot?.params?.series_key || '').trim();
+
+const refreshManagedConservationSlot = (slot, entry, orderIndex) => {
+  if (!slot || !entry) return slot;
+  slot.renderer = 'sequence_conservation';
+  slot.side = normalizePlacement(slot.side, 'inside') === 'overlay' ? 'inside' : normalizePlacement(slot.side, 'inside');
+  slot.params = cloneParams(slot.params);
+  slot.params.managed = CONSERVATION_SLOT_MANAGER;
+  slot.params.series_key = String(entry.sourceKey || '');
+  slot.params.source_index = String(Number(entry.orderIndex ?? orderIndex));
+  slot.params.track_index = String(Number(entry.orderIndex ?? orderIndex) + 1);
+  slot.params.label = String(entry.label || entry.defaultLabel || entry.fileName || `Comparison ${Number(orderIndex) + 1}`);
+  slot.params.color = String(entry.color || '');
+  slot.params.fileName = String(entry.fileName || '');
+  return slot;
+};
+
+const makeManagedConservationSlot = (entry, orderIndex, existingIds) => refreshManagedConservationSlot(
+  makeSlot({
+    id: safeConservationSlotId(entry, orderIndex, existingIds),
+    renderer: 'sequence_conservation',
+    side: 'inside',
+    params: {
+      managed: CONSERVATION_SLOT_MANAGER
+    }
+  }),
+  entry,
+  orderIndex
+);
 
 export const createCircularTrackSlotEditor = ({ state }) => {
   const axisIndexForCurrentSlots = (slots) => {
@@ -745,6 +800,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       state.adv.circular_track_slots_axis_index
     );
     state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...normalized);
+    syncCircularConservationSlots();
   };
 
   const ensureCircularTrackDepthSlot = () => {
@@ -782,6 +838,57 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     normalizeSlotsInPlace();
   };
 
+  const syncCircularConservationSlots = () => {
+    const entries = conservationEntriesForState(state);
+    const slots = Array.isArray(state.adv.circular_track_slots)
+      ? state.adv.circular_track_slots
+      : [];
+    const desiredKeys = new Set(entries.map((entry) => String(entry.sourceKey || '')));
+    const existingIds = new Set(slots.map((slot) => String(slot?.id || '').trim()).filter(Boolean));
+    const entryByKey = new Map(entries.map((entry) => [String(entry.sourceKey || ''), entry]));
+    const entryOrderByKey = new Map(entries.map((entry, index) => [String(entry.sourceKey || ''), index]));
+
+    const nextSlots = [];
+    const presentKeys = new Set();
+    slots.forEach((slot) => {
+      if (!isManagedConservationSlot(slot)) {
+        nextSlots.push(slot);
+        return;
+      }
+      const key = managedConservationSlotKey(slot);
+      if (!key || !desiredKeys.has(key) || presentKeys.has(key)) return;
+      refreshManagedConservationSlot(slot, entryByKey.get(key), entryOrderByKey.get(key) ?? presentKeys.size);
+      presentKeys.add(key);
+      nextSlots.push(slot);
+    });
+
+    const missingSlots = [];
+    entries.forEach((entry, index) => {
+      const key = String(entry.sourceKey || '');
+      if (!key || presentKeys.has(key)) return;
+      missingSlots.push(makeManagedConservationSlot(entry, index, existingIds));
+      presentKeys.add(key);
+    });
+
+    if (missingSlots.length > 0) {
+      let insertIndex = -1;
+      nextSlots.forEach((slot, index) => {
+        if (isManagedConservationSlot(slot)) insertIndex = index;
+      });
+      if (insertIndex < 0) {
+        insertIndex = nextSlots.findIndex((slot) => slot?.renderer === 'features');
+      }
+      nextSlots.splice(Math.max(0, insertIndex + 1), 0, ...missingSlots);
+    }
+
+    state.adv.circular_track_slots.splice(
+      0,
+      state.adv.circular_track_slots.length,
+      ...nextSlots
+    );
+    normalizeSlotsInPlace();
+  };
+
   const resetCircularTrackSlotsToPreset = (preset) => {
     const normalizedPreset = normalizeCircularTrackPreset(preset);
     const templateSlots = createDefaultCircularTrackSlots({
@@ -803,6 +910,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     );
     state.form.track_type = normalizedPreset;
     state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...normalized);
+    syncCircularConservationSlots();
   };
 
   const applyCircularTrackPreset = (preset) => resetCircularTrackSlotsToPreset(preset);
@@ -1049,6 +1157,23 @@ export const createCircularTrackSlotEditor = ({ state }) => {
 
   const circularTrackRendererLabel = (renderer) => RENDERER_LABELS[renderer] || renderer;
   const supportsCircularTrackSlotPlacement = (renderer) => SUPPORTED_RENDERERS.includes(renderer);
+  const isManagedCircularConservationSlot = (slot) => isManagedConservationSlot(slot);
+  const circularTrackSlotDisplayLabel = (slot) => {
+    if (isManagedConservationSlot(slot)) {
+      return String(slot?.params?.label || slot?.params?.fileName || slot?.id || 'Conservation').trim();
+    }
+    return circularTrackRendererLabel(slot?.renderer);
+  };
+  const circularTrackSlotDisplayMeta = (slot) => {
+    if (isManagedConservationSlot(slot)) {
+      return String(slot?.params?.fileName || slot?.params?.series_key || '').trim();
+    }
+    return '';
+  };
+  const circularTrackSlotColor = (slot) => {
+    if (isManagedConservationSlot(slot)) return String(slot?.params?.color || '').trim();
+    return '';
+  };
 
   const circularTrackSlots = () => (
     Array.isArray(state.adv.circular_track_slots)
@@ -1133,6 +1258,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     circularTrackRenderers: SUPPORTED_RENDERERS,
     circularTrackRendererLabel,
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
+    syncCircularConservationSlots,
     resetCircularTrackSlotsFromSimpleControls,
     ensureCircularTrackDepthSlot,
     resetCircularTrackSlotsToPreset,
@@ -1153,9 +1279,13 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     updateCircularTrackSlotPlacement,
     updateCircularTrackFeatureLane,
     supportsCircularTrackSlotPlacement,
+    isManagedCircularConservationSlot,
     circularTrackSlots,
     circularTrackStackEntries,
     circularTrackSlotCliSpec,
+    circularTrackSlotDisplayLabel,
+    circularTrackSlotDisplayMeta,
+    circularTrackSlotColor,
     circularTrackPresetSummary,
     circularTrackSlotUsesPresetGeometry
   };

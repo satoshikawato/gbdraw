@@ -170,6 +170,13 @@ def _circular_slots_have_renderer(
     return any(slot.enabled and str(slot.renderer) == renderer for slot in (slots or []))
 
 
+def _circular_slots_define_renderer(
+    slots: Sequence[CircularTrackSlot] | None,
+    renderer: str,
+) -> bool:
+    return any(str(slot.renderer) == renderer for slot in (slots or []))
+
+
 def _dinucleotides_from_circular_slots(
     slots: Sequence[CircularTrackSlot] | None,
     *,
@@ -338,6 +345,7 @@ def _apply_conservation_track_params_to_slots(
     out: list[CircularTrackSlot] = []
     track_order = list(tracks)
     next_track_index = 0
+    used_source_indexes: set[int] = set()
     for slot in base_slots:
         if str(slot.renderer) != "sequence_conservation":
             out.append(slot)
@@ -346,7 +354,18 @@ def _apply_conservation_track_params_to_slots(
         params = dict(slot.params or {})
         raw_track_index = params.get("track_index")
         track: ConservationTrack | None = None
-        if raw_track_index is not None:
+        raw_source_index = params.get("source_index")
+        if raw_source_index is not None:
+            try:
+                wanted_source_index = int(raw_source_index)
+                track = next(
+                    item
+                    for item in track_order
+                    if int(item.source_index) == wanted_source_index
+                )
+            except Exception:
+                track = None
+        if track is None and raw_track_index is not None:
             try:
                 wanted_track_index = int(raw_track_index)
                 track = next(
@@ -357,10 +376,17 @@ def _apply_conservation_track_params_to_slots(
             except Exception:
                 track = None
         if track is None and next_track_index < len(track_order):
-            track = track_order[next_track_index]
-            next_track_index += 1
+            while (
+                next_track_index < len(track_order)
+                and int(track_order[next_track_index].source_index) in used_source_indexes
+            ):
+                next_track_index += 1
+            if next_track_index < len(track_order):
+                track = track_order[next_track_index]
+                next_track_index += 1
 
         if track is not None:
+            used_source_indexes.add(int(track.source_index))
             params.setdefault("track_index", int(track.track_index))
             params.setdefault("source_index", int(track.source_index))
             params.setdefault("label", track.track_label)
@@ -2008,7 +2034,7 @@ def assemble_circular_diagram_from_record(
         show_gc = cfg.canvas.show_gc
         show_skew = cfg.canvas.show_skew
     if conservation_tracks:
-        if _circular_slots_have_renderer(parsed_circular_track_slots, "sequence_conservation"):
+        if _circular_slots_define_renderer(parsed_circular_track_slots, "sequence_conservation"):
             parsed_circular_track_slots = _apply_conservation_track_params_to_slots(
                 parsed_circular_track_slots or (),
                 conservation_tracks,
@@ -2440,7 +2466,7 @@ def assemble_circular_diagram_from_records(
         show_gc = cfg.canvas.show_gc
         show_skew = cfg.canvas.show_skew
     if first_record_conservation_tracks:
-        if _circular_slots_have_renderer(parsed_circular_track_slots, "sequence_conservation"):
+        if _circular_slots_define_renderer(parsed_circular_track_slots, "sequence_conservation"):
             parsed_circular_track_slots = _apply_conservation_track_params_to_slots(
                 parsed_circular_track_slots or (),
                 first_record_conservation_tracks,

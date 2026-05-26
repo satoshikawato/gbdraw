@@ -226,6 +226,61 @@ def test_circular_api_renders_source_colored_conservation_ring() -> None:
     assert "#e15759" in svg
 
 
+def test_circular_api_uses_explicit_conservation_slot_source_indexes() -> None:
+    canvas = assemble_circular_diagram_from_record(
+        _record(),
+        conservation_dataframes=[
+            _comparison_frame([_hit(subject="rec1", sstart=1, send=60)]),
+            _comparison_frame([_hit(subject="rec1", sstart=61, send=120)]),
+        ],
+        conservation_reference="subject",
+        conservation_labels=["Reference A", "Reference B"],
+        circular_track_slots=[
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(id="ticks", renderer="ticks"),
+            CircularTrackSlot(
+                id="conservation_b",
+                renderer="sequence_conservation",
+                params={"source_index": 1},
+            ),
+            CircularTrackSlot(
+                id="conservation_a",
+                renderer="sequence_conservation",
+                params={"source_index": 0},
+            ),
+        ],
+        legend="right",
+    )
+    svg = canvas.tostring()
+
+    assert 'id="conservation_Reference_B"' in svg
+    assert 'id="conservation_Reference_A"' in svg
+    assert svg.index('id="conservation_Reference_B"') < svg.index('id="conservation_Reference_A"')
+
+
+def test_disabled_explicit_conservation_slot_suppresses_auto_insert() -> None:
+    canvas = assemble_circular_diagram_from_record(
+        _record(),
+        conservation_dataframes=[
+            _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
+        ],
+        conservation_reference="subject",
+        conservation_labels=["Hidden reference"],
+        circular_track_slots=[
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(
+                id="hidden_conservation",
+                renderer="sequence_conservation",
+                enabled=False,
+            ),
+        ],
+        legend="right",
+    )
+    svg = canvas.tostring()
+
+    assert 'id="conservation_Hidden_reference"' not in svg
+
+
 def test_circular_diagram_options_forward_conservation_dataframe() -> None:
     canvas = build_circular_diagram(
         _record(),
