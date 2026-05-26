@@ -124,6 +124,50 @@ def _element_x_bounds(element: ET.Element, dpi: int, parent_x: float = 0.0) -> t
     return min(bound[0] for bound in finite_bounds), max(bound[1] for bound in finite_bounds)
 
 
+def _text_y_bounds(text: ET.Element, y_offset: float, dpi: int) -> tuple[float, float]:
+    caption = "".join(text.itertext())
+    font_family = text.get("font-family", "")
+    font_size = float(str(text.get("font-size", "0")).replace("px", ""))
+    _, height = calculate_bbox_dimensions(caption, font_family, font_size, dpi)
+    dominant_baseline = text.get("dominant-baseline", "middle")
+    if dominant_baseline in {"central", "middle"}:
+        half_height = float(height) / 2.0
+        return y_offset - half_height, y_offset + half_height
+    if dominant_baseline == "hanging":
+        return y_offset, y_offset + float(height)
+    return y_offset - float(height), y_offset
+
+
+def _element_y_bounds(element: ET.Element, dpi: int, parent_y: float = 0.0) -> tuple[float, float]:
+    _, local_y = _translate_xy_or_zero(element.get("transform"))
+    y_offset = parent_y + local_y
+    tag = element.tag.rsplit("}", 1)[-1]
+    bounds: list[tuple[float, float]] = []
+
+    if tag == "path":
+        d_attr = element.get("d", "")
+        ys = [
+            float(match.group(1))
+            for match in re.finditer(r"[ML]\s*[-+0-9.eE]+\s*,\s*([-+0-9.eE]+)", d_attr)
+        ]
+        if ys:
+            bounds.append((y_offset + min(ys), y_offset + max(ys)))
+    elif tag == "text":
+        bounds.append(_text_y_bounds(element, y_offset, dpi))
+
+    for child in list(element):
+        bounds.append(_element_y_bounds(child, dpi, y_offset))
+
+    finite_bounds = [
+        bound
+        for bound in bounds
+        if bound[0] != float("inf") and bound[1] != float("-inf")
+    ]
+    if not finite_bounds:
+        return float("inf"), float("-inf")
+    return min(bound[0] for bound in finite_bounds), max(bound[1] for bound in finite_bounds)
+
+
 def test_conservation_loader_keeps_logical_source_indexes_after_skip(tmp_path: Path) -> None:
     missing = tmp_path / "missing.tsv"
     valid = _comparison_frame([_hit()])
@@ -425,6 +469,55 @@ def test_circular_vertical_conservation_legend_centers_feature_and_gradient_bloc
     assert first_gradient_label is not None
     label_x, _ = _translate_xy(first_gradient_label.get("transform"))
     assert label_x == pytest.approx(0.0)
+
+
+def test_circular_bottom_conservation_legend_centers_feature_and_gradient_blocks_vertically() -> None:
+    canvas_config = SimpleNamespace(legend_position="bottom", dpi=96)
+    legend_config = SimpleNamespace(
+        font_family="'Liberation Sans', 'Arial', sans-serif",
+        font_size=10.0,
+        color_rect_size=12.0,
+        legend_width=500.0,
+        legend_height=80.0,
+        pairwise_legend_width=160.0,
+    )
+    legend_table = {
+        "CDS": {"type": "solid", "fill": "#54bcf8", "stroke": "none", "width": 0},
+        "tRNA": {"type": "solid", "fill": "#e9ba42", "stroke": "none", "width": 0},
+        "barcode07.draft": {
+            "type": "gradient",
+            "min_color": "#dbe8f5",
+            "max_color": "#4e79a7",
+            "stroke": "none",
+            "width": 0,
+            "min_value": 0,
+        },
+        "barcode15.draft": {
+            "type": "gradient",
+            "min_color": "#fdebd8",
+            "max_color": "#f28e2b",
+            "stroke": "none",
+            "width": 0,
+            "min_value": 0,
+        },
+    }
+
+    drawing = Drawing(debug=False)
+    drawing.add(CircularLegendGroup(canvas_config, legend_config, legend_table).get_group())
+    root = ET.fromstring(drawing.tostring())
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+
+    feature_legend = root.find(".//svg:g[@id='feature_legend']", ns)
+    gradient_legend = root.find(".//svg:g[@id='conservation_identity_legend']", ns)
+    assert feature_legend is not None
+    assert gradient_legend is not None
+
+    feature_top, feature_bottom = _element_y_bounds(feature_legend, canvas_config.dpi)
+    gradient_top, gradient_bottom = _element_y_bounds(gradient_legend, canvas_config.dpi)
+
+    feature_center = (feature_top + feature_bottom) / 2.0
+    gradient_center = (gradient_top + gradient_bottom) / 2.0
+    assert feature_center == pytest.approx(gradient_center, abs=1.0)
 
 
 def test_circular_api_uses_explicit_conservation_slot_source_indexes() -> None:

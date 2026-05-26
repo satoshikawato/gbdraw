@@ -286,8 +286,27 @@ class LegendGroup:
             if current_row:
                 rows.append(current_row)
 
+            feature_group = Group(id="feature_legend") if gradient_entries else self.legend_group
+            feature_height = (
+                self.color_rect_size + ((len(rows) - 1) * line_margin)
+                if rows
+                else 0.0
+            )
+            gradient_group = None
+            gradient_group_width = 0.0
+            gradient_height = 0.0
+            if gradient_entries:
+                gradient_group, gradient_group_width, gradient_height = self._build_gradient_legend(
+                    gradient_entries
+                )
+            feature_y_offset = max(0.0, (gradient_height - feature_height) / 2.0)
+            gradient_y_offset = max(0.0, (feature_height - gradient_height) / 2.0)
+
             for row_index, row_entries in enumerate(rows):
-                row_y = row_index * line_margin
+                if gradient_entries:
+                    row_y = feature_y_offset + (self.color_rect_size / 2.0) + (row_index * line_margin)
+                else:
+                    row_y = row_index * line_margin
                 row_width = sum(float(entry[2]) for entry in row_entries)
                 if math.isfinite(wrap_width):
                     row_start_x = x_margin + max(0.0, (wrap_width - row_width) * 0.5)
@@ -313,13 +332,15 @@ class LegendGroup:
                     )
                     legend_path.translate(current_x, row_y)
                     entry_group.add(legend_path)
-                    self.legend_group.add(entry_group)
+                    feature_group.add(entry_group)
                     current_x += float(entry_width)
+            if gradient_entries and rows:
+                self.legend_group.add(feature_group)
             if gradient_entries:
-                gradient_group, gradient_group_width, gradient_height = self._build_gradient_legend(gradient_entries)
+                assert gradient_group is not None
                 gradient_group.translate(
                     max(wrap_width + x_margin, self.legend_config.legend_width - gradient_group_width),
-                    max(0.0, (self.legend_config.legend_height - gradient_height) / 2.0),
+                    gradient_y_offset,
                 )
                 self.legend_group.add(gradient_group)
         else:
@@ -348,6 +369,7 @@ class LegendGroup:
                 else 0.0
             )
 
+            feature_group = Group(id="feature_legend") if gradient_entries else self.legend_group
             count = 0
             for key, properties, _entry_width in solid_entries:
                 # Create entry group with data attribute for identification
@@ -367,8 +389,10 @@ class LegendGroup:
                 )
                 legend_path.translate(feature_x_offset + x_margin, count * line_margin)
                 entry_group.add(legend_path)
-                self.legend_group.add(entry_group)
+                feature_group.add(entry_group)
                 count += 1
+            if gradient_entries and solid_entries:
+                self.legend_group.add(feature_group)
             if gradient_entries:
                 gradient_group, gradient_group_width, _ = self._build_gradient_legend(gradient_entries)
                 gradient_group.translate(
