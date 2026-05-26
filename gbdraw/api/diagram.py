@@ -394,7 +394,7 @@ def _apply_conservation_track_params_to_slots(
         out.append(
             replace(
                 slot,
-                side=slot.side or "inside",
+                side=slot.side,
                 width=slot.width or (ScalarSpec(float(width), "px") if width is not None else None),
                 spacing=slot.spacing or (ScalarSpec(float(gap), "px") if gap is not None else None),
                 params=params,

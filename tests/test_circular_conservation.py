@@ -258,6 +258,32 @@ def test_circular_api_uses_explicit_conservation_slot_source_indexes() -> None:
     assert svg.index('id="conservation_Reference_B"') < svg.index('id="conservation_Reference_A"')
 
 
+def test_circular_api_keeps_axis_derived_side_for_conservation_slot() -> None:
+    canvas = assemble_circular_diagram_from_record(
+        _record(),
+        conservation_dataframes=[
+            _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
+        ],
+        conservation_reference="subject",
+        conservation_labels=["Outer conservation"],
+        circular_track_slots=[
+            CircularTrackSlot(
+                id="conservation_outer",
+                renderer="sequence_conservation",
+                params={"source_index": 0},
+            ),
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(id="ticks", renderer="ticks"),
+        ],
+        circular_track_axis_index=1,
+        legend="right",
+    )
+    svg = canvas.tostring()
+
+    assert 'id="conservation_Outer_conservation"' in svg
+    assert 'data-track-label="Outer conservation"' in svg
+
+
 def test_disabled_explicit_conservation_slot_suppresses_auto_insert() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
