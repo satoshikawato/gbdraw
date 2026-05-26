@@ -22,6 +22,7 @@ from ...configurators import (  # type: ignore[reportMissingImports]
 )
 from ...render.groups.circular import (  # type: ignore[reportMissingImports]
     AxisGroup,
+    ConservationGroup,
     DefinitionGroup,
     DepthGroup,
     GcContentGroup,
@@ -72,6 +73,36 @@ def add_depth_group_on_canvas(
     ).get_group()
     depth_group = center_group_on_canvas(depth_group, canvas_config)
     canvas.add(depth_group)
+    return canvas
+
+
+def add_conservation_group_on_canvas(
+    canvas: Drawing,
+    gb_record: SeqRecord,
+    conservation_track,
+    canvas_config: CircularCanvasConfigurator,
+    *,
+    inner_radius_px: float,
+    outer_radius_px: float,
+    min_identity: float,
+    cfg: GbdrawConfig | None = None,
+) -> Drawing:
+    """Adds one circular conservation ring group to the canvas."""
+    cfg = cfg or canvas_config._cfg
+    conservation_group: Group = ConservationGroup(
+        hits=conservation_track.hits,
+        total_length=len(gb_record.seq),
+        track_label=conservation_track.track_label,
+        track_color=conservation_track.track_color,
+        source_index=conservation_track.source_index,
+        track_index=conservation_track.track_index,
+        inner_radius_px=inner_radius_px,
+        outer_radius_px=outer_radius_px,
+        min_identity=min_identity,
+        cfg=cfg,
+    ).get_group()
+    conservation_group = center_group_on_canvas(conservation_group, canvas_config)
+    canvas.add(conservation_group)
     return canvas
 
 

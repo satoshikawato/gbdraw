@@ -35,6 +35,7 @@ Options (examples):
   --fasta              Input FASTA file(s) (required with --gff; mutually exclusive with --gbk)
   -o, --output         Output file prefix (optional)
   -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)
+  --conservation_blast BLAST result file(s) for circular conservation rings (-outfmt 6 or 7)
 
 Additional Information:
   - For full documentation, visit: https://github.com/satoshikawato/gbdraw/
@@ -63,7 +64,15 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--plot_title_font_size PLOT_TITLE_FONT_SIZE]
               [--keep_full_definition_with_plot_title]
               [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--suppress_gc]
-              [--suppress_skew] [-l LEGEND] [--multi_record_canvas]
+              [--suppress_skew]
+              [--conservation_blast BLAST [BLAST ...]]
+              [--conservation_reference {query,subject,auto}]
+              [--conservation_labels LABEL [LABEL ...]]
+              [--conservation_ring_width CONSERVATION_RING_WIDTH]
+              [--conservation_ring_gap CONSERVATION_RING_GAP]
+              [--evalue EVALUE] [--bitscore BITSCORE] [--identity IDENTITY]
+              [--alignment_length ALIGNMENT_LENGTH]
+              [-l LEGEND] [--multi_record_canvas]
               [--multi_record_size_mode {auto,linear,equal,sqrt}]
               [--multi_record_min_radius_ratio MULTI_RECORD_MIN_RADIUS_RATIO]
               [--multi_record_column_gap_ratio MULTI_RECORD_COLUMN_GAP_RATIO]
@@ -167,6 +176,32 @@ options:
                         pdf, eps, ps; default: svg).
   --suppress_gc         Suppress GC content track (default: False).
   --suppress_skew       Suppress GC skew track (default: False).
+  --conservation_blast BLAST [BLAST ...]
+                        Precomputed BLAST outfmt 6/7 file(s) for circular
+                        conservation rings.
+  --conservation_reference {query,subject,auto}
+                        BLAST side containing displayed circular reference
+                        coordinates. Use "subject" for BLAST generated as
+                        comparison FASTA query against displayed genome
+                        subject. Default: "auto".
+  --conservation_labels LABEL [LABEL ...]
+                        Labels for conservation rings, aligned by logical
+                        source index.
+  --conservation_ring_width CONSERVATION_RING_WIDTH
+                        Conservation ring width for circular mode (in px; must
+                        be > 0).
+  --conservation_ring_gap CONSERVATION_RING_GAP
+                        Conservation ring gap for circular mode (in px; must
+                        be > 0).
+  --evalue EVALUE       Maximum BLAST e-value retained for conservation rings
+                        (default: 1e-5).
+  --bitscore BITSCORE   Minimum BLAST bitscore retained for conservation rings
+                        (default: 50).
+  --identity IDENTITY   Minimum BLAST identity percentage retained for
+                        conservation rings (default: 70).
+  --alignment_length ALIGNMENT_LENGTH
+                        Minimum BLAST alignment length retained for
+                        conservation rings (default: 0).
   -l, --legend LEGEND   Legend position (default: "right"; "left", "right",
                         "top", "bottom", "upper_left", "upper_right",
                         "lower_left", "lower_right", "none")
@@ -303,6 +338,8 @@ options:
                         Legend font size (optional; float; default: 20 (pt)
                         for genomes <= 50 kb, 16 for genomes >= 50 kb).
 ```
+
+Circular conservation rings use one ring per `--conservation_blast` source and a shared identity gradient legend. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit. The CLI does not run LOSAT for conservation rings, so provide precomputed BLAST output.
 
 ## Linear Mode
 

@@ -18,8 +18,47 @@ import { setupWatchers } from './watchers.js';
 import { createOrthogroupEditor } from './orthogroups.js';
 import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 import { createLosatSettings } from './losat-settings.js';
+import { resolveColorToHex } from './color-utils.js';
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref } = window.Vue;
+
+const CONSERVATION_SERIES_COLORS = [
+  '#4e79a7',
+  '#f28e2b',
+  '#59a14f',
+  '#e15759',
+  '#76b7b2',
+  '#edc948',
+  '#b07aa1',
+  '#ff9da7',
+  '#9c755f',
+  '#bab0ac'
+];
+
+const normalizeFileList = (files) => (Array.isArray(files) ? files.filter(Boolean) : (files ? [files] : []));
+
+const defaultConservationSeriesLabel = (file, index) => {
+  const raw = String(file?.name || `Series ${Number(index) + 1}`).trim();
+  const withoutExtension = raw.replace(/\.[^.]+$/, '').trim();
+  return withoutExtension || `Series ${Number(index) + 1}`;
+};
+
+const parseConservationLabelText = (value) =>
+  String(value || '')
+    .split(/[\n,]+/)
+    .map((label) => label.trim())
+    .filter(Boolean);
+
+const normalizeConservationSeriesColor = (value, index) => {
+  const fallback = CONSERVATION_SERIES_COLORS[Number(index) % CONSERVATION_SERIES_COLORS.length];
+  const resolved = resolveColorToHex(String(value || fallback).trim());
+  const color = String(resolved || fallback).trim();
+  const shortMatch = color.match(/^#([0-9a-fA-F]{3})$/);
+  if (shortMatch) {
+    return `#${shortMatch[1].split('').map((char) => char + char).join('').toLowerCase()}`;
+  }
+  return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : fallback;
+};
 
 export const createAppSetup = () => {
   const {
@@ -50,6 +89,7 @@ export const createAppSetup = () => {
     blastSource,
     losatProgram,
     files,
+    circularConservation,
     linearSeqs,
     form,
     adv,
@@ -188,6 +228,52 @@ export const createAppSetup = () => {
   const circularTrackNewRenderer = ref('dinucleotide_skew');
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
   const losatSettings = createLosatSettings({ state });
+  const getCircularConservationSourceFiles = () => (
+    String(circularConservation.source || '').trim().toLowerCase() === 'upload'
+      ? normalizeFileList(files.c_conservation_blasts)
+      : normalizeFileList(files.c_conservation_fastas)
+  );
+  const syncCircularConservationSeries = () => {
+    const sourceFiles = getCircularConservationSourceFiles();
+    const previous = Array.isArray(circularConservation.series) ? circularConservation.series : [];
+    const legacyLabels = parseConservationLabelText(circularConservation.labels);
+    const previousByName = new Map();
+    previous.forEach((entry) => {
+      const fileName = String(entry?.fileName || '').trim();
+      if (fileName && !previousByName.has(fileName)) previousByName.set(fileName, entry);
+    });
+    const nextSeries = sourceFiles.map((file, index) => {
+      const fileName = String(file?.name || `source_${Number(index) + 1}`).trim();
+      const defaultLabel = defaultConservationSeriesLabel(file, index);
+      const previousEntry = previous[index]?.fileName === fileName
+        ? previous[index]
+        : previousByName.get(fileName);
+      const rawLabel = previousEntry?.label ?? previousEntry?.name ?? legacyLabels[index] ?? defaultLabel;
+      return {
+        fileName,
+        label: String(rawLabel || defaultLabel).trim() || defaultLabel,
+        color: normalizeConservationSeriesColor(previousEntry?.color, index)
+      };
+    });
+    circularConservation.series.splice(0, circularConservation.series.length, ...nextSeries);
+  };
+  const circularConservationSeriesRows = computed(() => {
+    return getCircularConservationSourceFiles().map((file, index) => ({
+      index,
+      filename: String(file?.name || `source_${Number(index) + 1}`).trim(),
+      defaultLabel: defaultConservationSeriesLabel(file, index)
+    }));
+  });
+  watch(
+    () => [
+      circularConservation.source,
+      files.c_conservation_blasts,
+      files.c_conservation_fastas,
+      circularConservation.labels
+    ],
+    syncCircularConservationSeries,
+    { deep: true, immediate: true }
+  );
   watch(
     () => [adv.circular_track_slots_enabled, form.show_depth],
     ([slotsEnabled, showDepth]) => {
@@ -813,6 +899,9 @@ export const createAppSetup = () => {
     blastSource,
     losatProgram,
     files,
+    circularConservation,
+    circularConservationSeriesRows,
+    syncCircularConservationSeries,
     linearSeqs,
     linearReorderNotice,
     addLinearSeq,

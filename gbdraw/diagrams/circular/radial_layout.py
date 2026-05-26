@@ -597,6 +597,8 @@ def _default_width_px(
     base = float(canvas_config.radius) * float(canvas_config.track_ratio)
     if renderer == "features":
         return base * float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+    if renderer == "sequence_conservation":
+        return base * float(cfg.canvas.circular.track_ratio_factors[length_param][0])
     if renderer == "depth":
         return base * float(cfg.canvas.circular.track_ratio_factors[length_param][1]) * 0.5
     if renderer == "dinucleotide_skew":

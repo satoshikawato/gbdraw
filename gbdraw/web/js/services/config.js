@@ -13,7 +13,7 @@ import {
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
 
-const SESSION_VERSION = 23;
+const SESSION_VERSION = 24;
 const LOSAT_CACHE_SCHEMA = 2;
 const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
 const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 2;
@@ -279,6 +279,37 @@ const normalizePairwiseMatchStyle = (value) => {
   return ['ribbon', 'curve'].includes(normalized) ? normalized : 'ribbon';
 };
 
+const normalizeCircularConservationSource = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'upload' ? 'upload' : 'losat';
+};
+
+const normalizeCircularConservationReference = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['auto', 'query', 'subject'].includes(normalized) ? normalized : 'auto';
+};
+
+const normalizeHexColor = (value, fallback = '#4e79a7') => {
+  const resolved = resolveColorToHex(String(value || fallback).trim());
+  const color = String(resolved || fallback).trim();
+  const shortMatch = color.match(/^#([0-9a-fA-F]{3})$/);
+  if (shortMatch) {
+    return `#${shortMatch[1].split('').map((char) => char + char).join('').toLowerCase()}`;
+  }
+  return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : fallback;
+};
+
+const normalizeCircularConservationSeries = (series) => {
+  if (!Array.isArray(series)) return [];
+  return series
+    .filter((entry) => entry && typeof entry === 'object')
+    .map((entry, index) => ({
+      fileName: String(entry.fileName || ''),
+      label: String(entry.label ?? entry.name ?? ''),
+      color: normalizeHexColor(entry.color, '#4e79a7')
+    }));
+};
+
 const normalizeFeatureShapes = (featureShapes) => {
   const normalized = {};
   if (!featureShapes || typeof featureShapes !== 'object' || Array.isArray(featureShapes)) {
@@ -308,6 +339,7 @@ const buildConfigData = () => ({
   blacklistText: state.manualBlacklist.value,
   blastSource: state.blastSource.value,
   losatProgram: state.losatProgram.value,
+  circularConservation: state.circularConservation,
   webEdits: {
     orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
     orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
@@ -701,6 +733,20 @@ const applyConfigData = (data) => {
     const program = String(data.losatProgram);
     state.losatProgram.value = ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn';
   }
+  if (data.circularConservation) {
+    safeDeepMerge(state.circularConservation, data.circularConservation);
+  }
+  state.circularConservation.enabled = state.circularConservation.enabled === true;
+  state.circularConservation.source = normalizeCircularConservationSource(state.circularConservation.source);
+  state.circularConservation.reference = normalizeCircularConservationReference(state.circularConservation.reference);
+  state.circularConservation.labels = String(state.circularConservation.labels || '');
+  state.circularConservation.series.splice(
+    0,
+    state.circularConservation.series.length,
+    ...normalizeCircularConservationSeries(state.circularConservation.series)
+  );
+  state.circularConservation.ring_width = normalizePositiveNumberOrNull(state.circularConservation.ring_width);
+  state.circularConservation.ring_gap = normalizePositiveNumberOrNull(state.circularConservation.ring_gap);
   const webEdits = data.webEdits && typeof data.webEdits === 'object' ? data.webEdits : {};
   if (Object.prototype.hasOwnProperty.call(webEdits, 'orthogroupNameOverrides')) {
     replaceStringMap(state.orthogroupNameOverrides, webEdits.orthogroupNameOverrides);
@@ -797,6 +843,11 @@ const serializeFile = async (file) => {
     lastModified: file.lastModified || Date.now(),
     data: bufferToBase64(buffer)
   };
+};
+
+const serializeFileArray = async (files) => {
+  const items = Array.isArray(files) ? files.filter(Boolean) : [];
+  return Promise.all(items.map((file) => serializeFile(file)));
 };
 
 const serializeDepthFile = async (file) => {
@@ -1008,6 +1059,8 @@ const serializeFiles = async () => {
     c_gff: await serializeFile(state.files.c_gff),
     c_fasta: await serializeFile(state.files.c_fasta),
     c_depth: await serializeDepthFile(state.files.c_depth),
+    c_conservation_blasts: await serializeFileArray(state.files.c_conservation_blasts),
+    c_conservation_fastas: await serializeFileArray(state.files.c_conservation_fastas),
     d_color: await serializeFile(state.files.d_color),
     t_color: await serializeFile(state.files.t_color),
     blacklist: await serializeFile(state.files.blacklist),
@@ -1022,6 +1075,8 @@ const applyFiles = (filesData) => {
   state.files.c_gff = null;
   state.files.c_fasta = null;
   state.files.c_depth = null;
+  state.files.c_conservation_blasts = [];
+  state.files.c_conservation_fastas = [];
   state.files.d_color = null;
   state.files.t_color = null;
   state.files.blacklist = null;
@@ -1038,6 +1093,12 @@ const applyFiles = (filesData) => {
   state.files.c_gff = deserializeFile(filesData.c_gff);
   state.files.c_fasta = deserializeFile(filesData.c_fasta);
   state.files.c_depth = deserializeFile(filesData.c_depth);
+  state.files.c_conservation_blasts = Array.isArray(filesData.c_conservation_blasts)
+    ? filesData.c_conservation_blasts.map((entry) => deserializeFile(entry)).filter(Boolean)
+    : [];
+  state.files.c_conservation_fastas = Array.isArray(filesData.c_conservation_fastas)
+    ? filesData.c_conservation_fastas.map((entry) => deserializeFile(entry)).filter(Boolean)
+    : [];
   state.files.d_color = deserializeFile(filesData.d_color);
   state.files.t_color = deserializeFile(filesData.t_color);
   state.files.blacklist = deserializeFile(filesData.blacklist);
@@ -1128,6 +1189,12 @@ export const exportSession = async (titleOverride = null) => {
     (state.files.c_gff?.size || 0) +
     (state.files.c_fasta?.size || 0) +
     (state.files.c_depth?.size || 0) +
+    (Array.isArray(state.files.c_conservation_blasts)
+      ? state.files.c_conservation_blasts.reduce((sum, file) => sum + (file?.size || 0), 0)
+      : 0) +
+    (Array.isArray(state.files.c_conservation_fastas)
+      ? state.files.c_conservation_fastas.reduce((sum, file) => sum + (file?.size || 0), 0)
+      : 0) +
     (state.files.d_color?.size || 0) +
     (state.files.t_color?.size || 0) +
     (state.files.blacklist?.size || 0) +

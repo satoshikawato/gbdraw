@@ -75,6 +75,17 @@ const svgContent = computed(() => {
         'data-subject-unit-id',
         'data-pairwise-match-style',
         'data-identity-factor',
+        'data-source-index',
+        'data-track-index',
+        'data-track-label',
+        'data-track-color',
+        'data-identity',
+        'data-query',
+        'data-subject',
+        'data-evalue',
+        'data-bitscore',
+        'data-orientation',
+        'data-reference-record-id',
         'fill',
         'fill-opacity',
         'stroke',
@@ -160,11 +171,23 @@ const files = reactive({
   c_gff: null,
   c_fasta: null,
   c_depth: null,
+  c_conservation_blasts: [],
+  c_conservation_fastas: [],
   d_color: null,
   t_color: null,
   blacklist: null,
   whitelist: null,
   qualifier_priority: null
+});
+
+const circularConservation = reactive({
+  enabled: false,
+  source: 'losat',
+  reference: 'auto',
+  labels: '',
+  series: [],
+  ring_width: null,
+  ring_gap: null
 });
 
 let linearSeqUidCounter = 0;
@@ -846,6 +869,7 @@ export const state = {
   blastSource,
   losatProgram,
   files,
+  circularConservation,
   linearSeqs,
   form,
   adv,

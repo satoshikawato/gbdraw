@@ -1,0 +1,259 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pandas as pd
+import pytest
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+
+from gbdraw.analysis.conservation import (
+    load_conservation_sources,
+    normalize_conservation_tracks_for_record,
+)
+from gbdraw.api.diagram import assemble_circular_diagram_from_record, build_circular_diagram
+from gbdraw.api.options import DiagramOptions
+from gbdraw.exceptions import ValidationError
+from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.tracks import CircularTrackSlot, normalize_circular_track_slots
+
+
+class _BlastConfig:
+    evalue = 1e-5
+    bitscore = 50.0
+    identity = 70.0
+    alignment_length = 0
+
+
+def _record(record_id: str = "rec1", length: int = 120) -> SeqRecord:
+    record = SeqRecord(Seq("A" * length), id=record_id, name=record_id)
+    record.annotations["molecule_type"] = "DNA"
+    return record
+
+
+def _comparison_frame(rows: list[tuple[object, ...]]) -> pd.DataFrame:
+    return pd.DataFrame(rows, columns=COMPARISON_COLUMNS)
+
+
+def _hit(
+    query: str = "query1",
+    subject: str = "rec1",
+    qstart: int = 1,
+    qend: int = 20,
+    sstart: int = 5,
+    send: int = 24,
+    identity: float = 90.0,
+) -> tuple[object, ...]:
+    return (
+        query,
+        subject,
+        identity,
+        20,
+        0,
+        0,
+        qstart,
+        qend,
+        sstart,
+        send,
+        1e-20,
+        100.0,
+    )
+
+
+def test_conservation_loader_keeps_logical_source_indexes_after_skip(tmp_path: Path) -> None:
+    missing = tmp_path / "missing.tsv"
+    valid = _comparison_frame([_hit()])
+
+    result = load_conservation_sources(
+        blast_config=_BlastConfig(),
+        conservation_files=[str(missing)],
+        conservation_dataframes=[pd.DataFrame(), valid],
+        labels=["missing source", "valid source"],
+    )
+
+    assert result.sources[0].source_index == 0
+    assert result.sources[0].skipped is True
+    assert result.sources[1].source_index == 1
+    assert result.sources[1].label == "valid source"
+
+    tracks = normalize_conservation_tracks_for_record(
+        result,
+        displayed_records=[_record()],
+        record=_record(),
+        conservation_reference="subject",
+    )
+    assert len(tracks) == 1
+    assert tracks[0].source_index == 1
+    assert tracks[0].track_index == 1
+    assert tracks[0].track_label == "valid source"
+
+
+def test_conservation_normalization_uses_subject_reverse_coordinates() -> None:
+    result = load_conservation_sources(
+        blast_config=_BlastConfig(),
+        conservation_dataframes=[
+            _comparison_frame([_hit(subject="rec1", sstart=10, send=5)])
+        ],
+        labels=["subject hits"],
+    )
+
+    tracks = normalize_conservation_tracks_for_record(
+        result,
+        displayed_records=[_record()],
+        record=_record(),
+        conservation_reference="auto",
+    )
+    row = tracks[0].hits.iloc[0]
+
+    assert tracks[0].reference_side == "subject"
+    assert row["start"] == 5
+    assert row["end"] == 10
+    assert row["draw_start"] == pytest.approx(4.0)
+    assert row["draw_end"] == pytest.approx(10.0)
+    assert row["orientation"] == "reverse"
+
+
+def test_conservation_empty_valid_source_keeps_empty_ring() -> None:
+    result = load_conservation_sources(
+        blast_config=_BlastConfig(),
+        conservation_dataframes=[
+            _comparison_frame([_hit(identity=50.0)])
+        ],
+        labels=["filtered out"],
+    )
+
+    assert result.sources[0].skipped is False
+    tracks = normalize_conservation_tracks_for_record(
+        result,
+        displayed_records=[_record()],
+        record=_record(),
+        conservation_reference="subject",
+    )
+
+    assert len(tracks) == 1
+    assert tracks[0].reference_side == "subject"
+    assert tracks[0].hits.empty
+
+
+def test_conservation_empty_file_keeps_empty_ring(tmp_path: Path) -> None:
+    empty_file = tmp_path / "empty.tsv"
+    empty_file.write_text("", encoding="utf-8")
+
+    result = load_conservation_sources(
+        blast_config=_BlastConfig(),
+        conservation_files=[str(empty_file)],
+        labels=["empty source"],
+    )
+
+    assert result.sources[0].skipped is False
+    tracks = normalize_conservation_tracks_for_record(
+        result,
+        displayed_records=[_record()],
+        record=_record(),
+        conservation_reference="subject",
+    )
+    assert len(tracks) == 1
+    assert tracks[0].hits.empty
+
+
+def test_conservation_auto_reference_ambiguity_requires_explicit_side() -> None:
+    result = load_conservation_sources(
+        blast_config=_BlastConfig(),
+        conservation_dataframes=[
+            _comparison_frame([_hit(query="rec1", subject="rec1")])
+        ],
+    )
+
+    with pytest.raises(ValidationError, match="both BLAST sides"):
+        normalize_conservation_tracks_for_record(
+            result,
+            displayed_records=[_record()],
+            record=_record(),
+            conservation_reference="auto",
+        )
+
+
+def test_sequence_conservation_slot_rejects_overlay_side() -> None:
+    with pytest.raises(ValueError, match="cannot use side=overlay"):
+        normalize_circular_track_slots(
+            [
+                CircularTrackSlot(
+                    id="conservation_1",
+                    renderer="sequence_conservation",
+                    side="overlay",
+                )
+            ]
+        )
+
+
+def test_circular_api_renders_conservation_ring_and_gradient_legend() -> None:
+    canvas = assemble_circular_diagram_from_record(
+        _record(),
+        conservation_dataframes=[
+            _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
+        ],
+        conservation_reference="subject",
+        conservation_labels=["Reference A"],
+        conservation_ring_width=12,
+        conservation_ring_gap=4,
+        legend="right",
+    )
+    svg = canvas.tostring()
+
+    assert 'id="conservation_Reference_A"' in svg
+    assert 'data-track-label="Reference A"' in svg
+    assert 'data-reference-record-id="rec1"' in svg
+    assert 'data-legend-key="Conservation identity"' in svg
+
+
+def test_circular_api_renders_source_colored_conservation_ring() -> None:
+    canvas = assemble_circular_diagram_from_record(
+        _record(),
+        conservation_dataframes=[
+            _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
+        ],
+        conservation_reference="subject",
+        conservation_labels=["barcode13"],
+        conservation_colors=["#E15759"],
+        legend="right",
+    )
+    svg = canvas.tostring()
+
+    assert 'id="conservation_barcode13"' in svg
+    assert 'data-track-label="barcode13"' in svg
+    assert 'data-track-color="#e15759"' in svg
+    assert 'data-legend-key="barcode13"' in svg
+    assert "#e15759" in svg
+
+
+def test_circular_diagram_options_forward_conservation_dataframe() -> None:
+    canvas = build_circular_diagram(
+        _record(),
+        options=DiagramOptions(
+            conservation_dataframes=[
+                _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
+            ],
+            conservation_reference="subject",
+            conservation_labels=["Option ring"],
+            conservation_colors=["red"],
+            conservation_ring_width=10,
+            conservation_ring_gap=3,
+        ),
+    )
+    svg = canvas.tostring()
+
+    assert 'id="conservation_Option_ring"' in svg
+    assert 'data-track-label="Option ring"' in svg
+    assert 'data-track-color="#ff0000"' in svg
+
+
+def test_circular_api_rejects_nonpositive_conservation_geometry() -> None:
+    with pytest.raises(ValidationError, match="conservation_ring_gap must be > 0"):
+        assemble_circular_diagram_from_record(
+            _record(),
+            conservation_dataframes=[
+                _comparison_frame([_hit(subject="rec1")])
+            ],
+            conservation_reference="subject",
+            conservation_ring_gap=0,
+        )

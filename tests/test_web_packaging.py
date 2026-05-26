@@ -285,6 +285,47 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "canMoveCircularTrackSlotInside: circularTrackSlotEditor.canMoveCircularTrackSlotInside" in app_setup_source
 
 
+def test_web_wires_circular_conservation_options() -> None:
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    slot_source = (WEB_ROOT / "js" / "app" / "circular-track-slots.js").read_text(encoding="utf-8")
+    app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+    components_source = (WEB_ROOT / "js" / "components.js").read_text(encoding="utf-8")
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+
+    assert "const circularConservation = reactive" in state_source
+    assert "c_conservation_blasts: []" in state_source
+    assert "c_conservation_fastas: []" in state_source
+    assert "series: []" in state_source
+    assert "'data-source-index'" in state_source
+    assert "'data-reference-record-id'" in state_source
+    assert "'data-track-color'" in state_source
+    assert "circularConservation" in app_setup_source
+    assert "circularConservationSeriesRows" in app_setup_source
+    assert "syncCircularConservationSeries" in app_setup_source
+    assert "circularConservation: state.circularConservation" in config_source
+    assert "normalizeCircularConservationSeries" in config_source
+    assert "c_conservation_blasts: await serializeFileArray" in config_source
+    assert "normalizeCircularConservationReference" in config_source
+    assert "Conservation Rings" in index_html
+    assert "BLAST outfmt 6/7 files" in index_html
+    assert "Comparison FASTA files" in index_html
+    assert "type=\"color\" v-model=\"circularConservation.series[row.index].color\"" in index_html
+    assert ":multiple=\"true\"" in index_html
+    assert "props: ['label', 'accept', 'modelValue', 'small', 'multiple']" in components_source
+    assert '"conservation_blast": "--conservation_blast" in _source' in run_source
+    assert '"conservation_colors": "--conservation_colors" in _source' in run_source
+    assert "runCircularLosatConservation" in run_source
+    assert "buildConservationSeries" in run_source
+    assert "args.push('--conservation_colors', ...colors);" in run_source
+    assert "args.push('--conservation_blast', ...conservationBlastPaths);" in run_source
+    assert "args.push('--conservation_reference', conservationReference);" in run_source
+    assert "flow: 'circular-conservation'" in run_source
+    assert "conservationReference = 'subject';" in run_source
+    assert "'sequence_conservation'" in slot_source
+
+
 def test_web_collinear_orientation_identity_mode_is_wired() -> None:
     index_source = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")

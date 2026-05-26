@@ -259,6 +259,58 @@ def _get_args(args) -> argparse.Namespace:
         help='Show depth coverage track. Implied when --depth is supplied.',
         action='store_true')
     parser.add_argument(
+        '--conservation_blast',
+        metavar='BLAST',
+        help='Precomputed BLAST outfmt 6/7 file(s) for circular conservation rings.',
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--conservation_reference',
+        help='BLAST side containing displayed circular reference coordinates.',
+        choices=['query', 'subject', 'auto'],
+        default='auto',
+        type=str)
+    parser.add_argument(
+        '--conservation_labels',
+        metavar='LABEL',
+        help='Labels for conservation rings, aligned by logical source index.',
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--conservation_colors',
+        metavar='COLOR',
+        help='Colors for conservation rings, aligned by logical source index. Accepts SVG color names or #RRGGBB.',
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--conservation_ring_width',
+        help='Conservation ring width for circular mode (in px; must be > 0).',
+        type=float)
+    parser.add_argument(
+        '--conservation_ring_gap',
+        help='Conservation ring gap for circular mode (in px; must be > 0).',
+        type=float)
+    parser.add_argument(
+        '--evalue',
+        help='Maximum BLAST e-value retained for conservation rings (default: 1e-5).',
+        type=float,
+        default=1e-5)
+    parser.add_argument(
+        '--bitscore',
+        help='Minimum BLAST bitscore retained for conservation rings (default: 50).',
+        type=float,
+        default=50.0)
+    parser.add_argument(
+        '--identity',
+        help='Minimum BLAST identity percentage retained for conservation rings (default: 70).',
+        type=float,
+        default=70.0)
+    parser.add_argument(
+        '--alignment_length',
+        help='Minimum BLAST alignment length retained for conservation rings (default: 0).',
+        type=int,
+        default=0)
+    parser.add_argument(
         '--depth_color',
         help='Depth track fill color (optional; default: #4A90E2).',
         type=str)
@@ -595,6 +647,22 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--depth_step must be > 0")
     if args.show_depth and not args.depth:
         parser.error("--show_depth requires --depth")
+    if args.conservation_ring_width is not None and args.conservation_ring_width <= 0:
+        parser.error("--conservation_ring_width must be > 0")
+    if args.conservation_ring_gap is not None and args.conservation_ring_gap <= 0:
+        parser.error("--conservation_ring_gap must be > 0")
+    if args.alignment_length < 0:
+        parser.error("--alignment_length must be >= 0")
+    if not math.isfinite(float(args.identity)) or args.identity < 0 or args.identity > 100:
+        parser.error("--identity must be a finite number in [0, 100]")
+    if not math.isfinite(float(args.evalue)) or args.evalue < 0:
+        parser.error("--evalue must be a finite number >= 0")
+    if not math.isfinite(float(args.bitscore)):
+        parser.error("--bitscore must be a finite number")
+    if args.conservation_labels and not args.conservation_blast:
+        parser.error("--conservation_labels requires --conservation_blast")
+    if args.conservation_colors and not args.conservation_blast:
+        parser.error("--conservation_colors requires --conservation_blast")
     if args.depth_min is not None and args.depth_min < 0:
         parser.error("--depth_min must be >= 0")
     if args.depth_max is not None and args.depth_max < 0:
@@ -706,6 +774,16 @@ def circular_main(cmd_args) -> None:
     depth_large_tick_interval: Optional[float] = args.depth_large_tick_interval
     depth_small_tick_interval: Optional[float] = args.depth_small_tick_interval
     depth_tick_font_size: Optional[float] = args.depth_tick_font_size
+    conservation_blast_files: list[str] | None = list(args.conservation_blast or []) or None
+    conservation_reference: str = args.conservation_reference
+    conservation_labels: list[str] | None = list(args.conservation_labels or []) or None
+    conservation_colors: list[str] | None = list(args.conservation_colors or []) or None
+    conservation_ring_width: Optional[float] = args.conservation_ring_width
+    conservation_ring_gap: Optional[float] = args.conservation_ring_gap
+    evalue: float = args.evalue
+    bitscore: float = args.bitscore
+    identity: float = args.identity
+    alignment_length: int = args.alignment_length
     labels_mode: str = args.labels
     label_rendering: str = args.label_rendering
     show_labels: bool = labels_mode != "none"
@@ -940,6 +1018,12 @@ def circular_main(cmd_args) -> None:
         outfile_prefix = output_prefix if output_prefix is not None else first_accession
         canvas = assemble_circular_diagram_from_records(
             gb_records,
+            conservation_blast_files=conservation_blast_files,
+            conservation_reference=conservation_reference,
+            conservation_labels=conservation_labels,
+            conservation_colors=conservation_colors,
+            conservation_ring_width=conservation_ring_width,
+            conservation_ring_gap=conservation_ring_gap,
             config_dict=config_dict,
             color_table=color_table,
             default_colors=default_colors,
@@ -968,6 +1052,10 @@ def circular_main(cmd_args) -> None:
             cfg=cfg,
             circular_track_slots=circular_track_slots_or_none,
             circular_track_axis_index=circular_track_axis_index,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
         )
         save_figure(canvas, out_formats)
     else:
@@ -980,6 +1068,12 @@ def circular_main(cmd_args) -> None:
             outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
             canvas = assemble_circular_diagram_from_record(
                 gb_record,
+                conservation_blast_files=conservation_blast_files,
+                conservation_reference=conservation_reference,
+                conservation_labels=conservation_labels,
+                conservation_colors=conservation_colors,
+                conservation_ring_width=conservation_ring_width,
+                conservation_ring_gap=conservation_ring_gap,
                 config_dict=config_dict,
                 color_table=color_table,
                 default_colors=default_colors,
@@ -1003,6 +1097,10 @@ def circular_main(cmd_args) -> None:
                 cfg=cfg,
                 circular_track_slots=circular_track_slots_or_none,
                 circular_track_axis_index=circular_track_axis_index,
+                evalue=evalue,
+                bitscore=bitscore,
+                identity=identity,
+                alignment_length=alignment_length,
             )
             save_figure(canvas, out_formats)
 

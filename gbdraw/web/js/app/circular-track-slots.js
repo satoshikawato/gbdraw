@@ -4,6 +4,7 @@ const SUPPORTED_RENDERERS = [
   'dinucleotide_content',
   'dinucleotide_skew',
   'depth',
+  'sequence_conservation',
   'spacer'
 ];
 
@@ -13,6 +14,7 @@ const RENDERER_LABELS = {
   dinucleotide_content: 'Dinucleotide content',
   dinucleotide_skew: 'Dinucleotide skew',
   depth: 'Depth',
+  sequence_conservation: 'Conservation',
   spacer: 'Spacer'
 };
 
@@ -22,10 +24,11 @@ const DEFAULT_SLOT_IDS = {
   dinucleotide_content: 'gc_content',
   dinucleotide_skew: 'gc_skew',
   depth: 'depth',
+  sequence_conservation: 'conservation',
   spacer: 'spacer'
 };
 
-const NUMERIC_RENDERERS = new Set(['dinucleotide_content', 'dinucleotide_skew', 'depth']);
+const NUMERIC_RENDERERS = new Set(['dinucleotide_content', 'dinucleotide_skew', 'depth', 'sequence_conservation']);
 const STACK_ENTRY_AXIS = 'axis';
 const STACK_ENTRY_SLOT = 'slot';
 const PRESET_LABELS = {
@@ -165,6 +168,7 @@ const previewWidthPxForRenderer = (renderer, lengthParam) => {
   const base = PREVIEW_RADIUS_PX * PREVIEW_TRACK_RATIO;
   const factors = PREVIEW_TRACK_RATIO_FACTORS[lengthParam] || PREVIEW_TRACK_RATIO_FACTORS.long;
   if (renderer === 'features') return base * Number(factors[0]);
+  if (renderer === 'sequence_conservation') return base * Number(factors[0]);
   if (renderer === 'depth') return base * Number(factors[1]) * 0.5;
   if (renderer === 'dinucleotide_skew') return base * Number(factors[2]);
   if (renderer === 'ticks') return 0;
