@@ -1,6 +1,8 @@
 import {
   getAllFeatureLegendGroups,
+  getComparisonLegendGroup,
   getLegendChildById,
+  isInsideComparisonLegend,
   isCurrentLegendHorizontal,
   parseTransform,
   parseTransformXY
@@ -602,6 +604,7 @@ export const createLegendLayoutActions = ({ state }) => {
     if (targetGroups.length === 0) return;
 
     for (const targetGroup of targetGroups) {
+      const comparisonLegend = getComparisonLegendGroup(targetGroup);
       let rectSize = 14;
       const firstColorRect = targetGroup.querySelector(
         'path[fill]:not([fill="none"]):not([fill^="url("])'
@@ -616,11 +619,15 @@ export const createLegendLayoutActions = ({ state }) => {
       const lineHeight = (24 / 14) * rectSize;
       const textXOffset = (22 / 14) * rectSize;
 
-      const texts = Array.from(targetGroup.querySelectorAll('text'));
+      const texts = Array.from(targetGroup.querySelectorAll('text')).filter((el) => {
+        if (!comparisonLegend) return true;
+        return !comparisonLegend.contains(el);
+      });
       if (texts.length === 0) continue;
 
       const allRects = Array.from(targetGroup.querySelectorAll('path')).filter((r) => {
         const fill = r.getAttribute('fill');
+        if (comparisonLegend && comparisonLegend.contains(r)) return false;
         return fill && fill !== 'none' && !fill.startsWith('url(');
       });
 
@@ -726,11 +733,10 @@ export const createLegendLayoutActions = ({ state }) => {
 
     const featureLegendGroup = legendGroup.querySelector('#feature_legend') || legendGroup;
     const isRootLegendGroup = featureLegendGroup === legendGroup;
-    const pairwiseLegend = legendGroup.querySelector('#pairwise_legend');
+    const pairwiseLegend = getComparisonLegendGroup(legendGroup);
 
     const textElements = Array.from(featureLegendGroup.querySelectorAll('text')).filter((el) => {
-      if (!pairwiseLegend) return true;
-      return !el.closest('#pairwise_legend');
+      return !isInsideComparisonLegend(el);
     });
     if (textElements.length === 0) return null;
 
@@ -738,7 +744,7 @@ export const createLegendLayoutActions = ({ state }) => {
     const colorRects = Array.from(featureLegendGroup.querySelectorAll('path')).filter((r) => {
       const fill = r.getAttribute('fill');
       if (!fill || fill === 'none' || fill.startsWith('url(')) return false;
-      if (pairwiseLegend && r.closest('#pairwise_legend')) return false;
+      if (isInsideComparisonLegend(r)) return false;
       return true;
     });
     if (colorRects.length > 0) {
@@ -888,7 +894,7 @@ export const createLegendLayoutActions = ({ state }) => {
 
       if (layout === 'horizontal') {
         const heightDiff = effectivePairwiseBBox.height - featureHeight;
-        if (heightDiff > 0 && !isRootLegendGroup) {
+        if (heightDiff > 0) {
           featureShiftY = heightDiff / 2;
         } else if (heightDiff < 0) {
           pairwiseY += (-heightDiff) / 2;
@@ -896,7 +902,7 @@ export const createLegendLayoutActions = ({ state }) => {
         pairwiseX = featureX + featureWidth + textXOffset;
       } else {
         const widthDiff = effectivePairwiseBBox.width - featureWidth;
-        if (widthDiff > 0 && !isRootLegendGroup) {
+        if (widthDiff > 0) {
           featureShiftX = widthDiff / 2;
         } else if (widthDiff < 0) {
           pairwiseX += (-widthDiff) / 2;
@@ -906,6 +912,17 @@ export const createLegendLayoutActions = ({ state }) => {
 
       if (!isRootLegendGroup) {
         featureLegendGroup.setAttribute('transform', `translate(${featureShiftX}, ${featureShiftY})`);
+      } else if (featureShiftX !== 0 || featureShiftY !== 0) {
+        entries.forEach((entry) => {
+          const shiftedX = Number(entry.newX) + featureShiftX;
+          const shiftedY = Number(entry.newY) + featureShiftY;
+          entry.newX = shiftedX;
+          entry.newY = shiftedY;
+          entry.text.setAttribute('transform', `translate(${shiftedX}, ${shiftedY})`);
+          if (entry.rect) {
+            entry.rect.setAttribute('transform', `translate(${shiftedX - textXOffset}, ${shiftedY})`);
+          }
+        });
       }
       const adjustedPairwiseY = pairwiseY - pairwiseContentOffsetY;
       pairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${adjustedPairwiseY})`);

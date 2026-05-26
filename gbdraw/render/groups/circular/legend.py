@@ -323,32 +323,56 @@ class LegendGroup:
                 )
                 self.legend_group.add(gradient_group)
         else:
-            count = 0
+            solid_entries: list[tuple[str, dict, float]] = []
             for key, properties in self.legend_table.items():
-                if properties.get("type") == "solid":
-                    # Create entry group with data attribute for identification
-                    entry_group = Group(debug=False)
-                    entry_group.attribs["data-legend-key"] = str(key)
+                if properties.get("type") != "solid":
+                    continue
+                text_width, _ = calculate_bbox_dimensions(
+                    str(key), self.font_family, self.font_size, self.dpi
+                )
+                solid_entries.append((str(key), properties, float(x_margin) + float(text_width)))
 
-                    rect_path = Path(
-                        d=path_desc,
-                        fill=properties["fill"],
-                        stroke=properties["stroke"],
-                        stroke_width=properties["width"],
-                    )
-                    rect_path.translate(0, count * line_margin)
-                    entry_group.add(rect_path)
-                    legend_path = generate_text_path(
-                        key, 0, 0, 0, self.font_size, "normal", font, dominant_baseline="central", text_anchor="start"
-                    )
-                    legend_path.translate(x_margin, count * line_margin)
-                    entry_group.add(legend_path)
-                    self.legend_group.add(entry_group)
-                    count += 1
+            gradient_group_width = 0.0
+            if gradient_entries:
+                _, gradient_group_width, _ = self._build_gradient_legend(gradient_entries)
+
+            feature_block_width = max((entry[2] for entry in solid_entries), default=0.0)
+            alignment_width = max(
+                float(self.legend_config.legend_width),
+                feature_block_width,
+                float(gradient_group_width),
+            )
+            feature_x_offset = (
+                max(0.0, (alignment_width - feature_block_width) / 2.0)
+                if gradient_entries and feature_block_width > 0
+                else 0.0
+            )
+
+            count = 0
+            for key, properties, _entry_width in solid_entries:
+                # Create entry group with data attribute for identification
+                entry_group = Group(debug=False)
+                entry_group.attribs["data-legend-key"] = str(key)
+
+                rect_path = Path(
+                    d=path_desc,
+                    fill=properties["fill"],
+                    stroke=properties["stroke"],
+                    stroke_width=properties["width"],
+                )
+                rect_path.translate(feature_x_offset, count * line_margin)
+                entry_group.add(rect_path)
+                legend_path = generate_text_path(
+                    key, 0, 0, 0, self.font_size, "normal", font, dominant_baseline="central", text_anchor="start"
+                )
+                legend_path.translate(feature_x_offset + x_margin, count * line_margin)
+                entry_group.add(legend_path)
+                self.legend_group.add(entry_group)
+                count += 1
             if gradient_entries:
                 gradient_group, gradient_group_width, _ = self._build_gradient_legend(gradient_entries)
                 gradient_group.translate(
-                    max(0.0, (float(self.legend_config.legend_width) - float(gradient_group_width)) / 2.0),
+                    max(0.0, (alignment_width - float(gradient_group_width)) / 2.0),
                     count * line_margin + (line_margin * 0.5 if count else 0.0),
                 )
                 self.legend_group.add(gradient_group)
