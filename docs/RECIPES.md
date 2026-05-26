@@ -198,6 +198,24 @@ gbdraw linear \
   -f svg
 ```
 
+### Circular conservation rings from BLAST
+
+```bash
+blastn -query comparison.fasta -subject reference.fasta -outfmt 7 -out comparison_vs_reference.blast.out
+
+gbdraw circular \
+  --gbk reference.gb \
+  --conservation_blast comparison_vs_reference.blast.out \
+  --conservation_reference subject \
+  --conservation_labels "Comparison" \
+  --identity 75 \
+  --alignment_length 500 \
+  -o circular_conservation \
+  -f svg
+```
+
+Use additional `--conservation_blast` files to add additional rings. Circular conservation uses raw HSP spans; reverse-coordinate BLAST rows are drawn as reverse hits rather than circular wraparound hits.
+
 ## Color and Label Tables
 
 ### Override default feature colors

@@ -43,6 +43,7 @@ class TrackOptions:
 
     circular_track_slots: Sequence[str | CircularTrackSlot] | None = None
     circular_track_axis_index: int | None = None
+    center_reserved_radius: float | None = None
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,13 @@ class DiagramOptions:
     depth_file: str | None = None
     depth_tables: Sequence[DataFrame] | None = None
     depth_files: Sequence[str] | None = None
+    conservation_blast_files: Sequence[str] | None = None
+    conservation_dataframes: Sequence[DataFrame] | None = None
+    conservation_reference: Literal["query", "subject", "auto"] = "auto"
+    conservation_labels: Sequence[str] | None = None
+    conservation_colors: Sequence[str] | None = None
+    conservation_ring_width: float | None = None
+    conservation_ring_gap: float | None = None
     plot_title: str | None = None
     plot_title_font_size: float | None = None
     keep_full_definition_with_plot_title: bool = False

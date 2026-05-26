@@ -120,6 +120,8 @@ def _default_numeric_width_px(
 ) -> float:
     length_param = str(context.canvas_config.length_param)
     base = float(context.canvas_config.radius) * float(context.canvas_config.track_ratio)
+    if renderer == "sequence_conservation":
+        return base * float(context.cfg.canvas.circular.track_ratio_factors[length_param][0])
     if renderer == "depth":
         return base * float(context.cfg.canvas.circular.track_ratio_factors[length_param][1]) * 0.5
     if renderer == "dinucleotide_skew":
@@ -381,7 +383,7 @@ def _inherited_width_for_renderer(
     if renderer == "features":
         return _scalar_px(_default_feature_width_px(context))
     if renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
-        return _scalar_px(_default_numeric_width_px(renderer, context))
+        return None
     if params_slot is not None:
         return params_slot.width
     return None

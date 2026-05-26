@@ -74,6 +74,19 @@ stroke_width = 0
 style = 'ribbon'
 curve_tension = 0.5
 
+[objects.conservation]
+fill_opacity = 1.0
+stroke_color = "none"
+stroke_width = 0
+min_color = "#f0f1f5"
+max_color = "#8b9cc1"
+background_color = "#f2f2f2"
+background_opacity = 0.35
+show_background = true
+ring_width = "auto"
+ring_gap = "auto"
+reference = "auto"
+
 [objects.sliding_window]
 up10m = [100000, 10000]
 up1m = [10000, 1000]

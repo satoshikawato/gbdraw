@@ -18,6 +18,10 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 
 from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
+from ...analysis.conservation import (  # type: ignore[reportMissingImports]
+    ConservationTrack,
+    conservation_track_gradient_colors,
+)
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...configurators import (  # type: ignore[reportMissingImports]
     FeatureDrawingConfigurator,
@@ -50,6 +54,7 @@ from ...tracks.circular import tick_sides_for_tick_label_layout  # type: ignore[
 
 from .builders import (
     add_axis_group_on_canvas,
+    add_conservation_group_on_canvas,
     add_depth_group_on_canvas,
     add_gc_content_group_on_canvas,
     add_gc_skew_group_on_canvas,
@@ -1118,6 +1123,9 @@ def _sync_legend_table_for_circular_slots(
     skew_config: GcSkewConfigurator,
     depth_config: DepthConfigurator | None,
     depth_df: DataFrame | None,
+    cfg: GbdrawConfig,
+    conservation_tracks: Sequence[ConservationTrack] | None = None,
+    conservation_min_identity: float | None = None,
 ) -> dict:
     """Replace singleton numeric legend entries with slot-aware entries."""
     if circular_track_slots is None:
@@ -1197,6 +1205,31 @@ def _sync_legend_table_for_circular_slots(
                     "stroke": skew_config.stroke_color,
                     "width": skew_config.stroke_width,
                 }
+    if conservation_tracks:
+        if any(track.track_color for track in conservation_tracks):
+            for track in conservation_tracks:
+                min_color, max_color = conservation_track_gradient_colors(
+                    track.track_color,
+                    default_min_color=cfg.objects.conservation.min_color,
+                    default_max_color=cfg.objects.conservation.max_color,
+                )
+                out[_unique_legend_key(out, track.track_label)] = {
+                    "type": "gradient",
+                    "min_color": min_color,
+                    "max_color": max_color,
+                    "stroke": "none",
+                    "width": 0,
+                    "min_value": float(conservation_min_identity or 0.0),
+                }
+        else:
+            out[_unique_legend_key(out, "Conservation identity")] = {
+                "type": "gradient",
+                "min_color": cfg.objects.conservation.min_color,
+                "max_color": cfg.objects.conservation.max_color,
+                "stroke": "none",
+                "width": 0,
+                "min_value": float(conservation_min_identity or 0.0),
+            }
     return out
 
 
@@ -1213,6 +1246,8 @@ def _draw_resolved_circular_slot(
     skew_config: GcSkewConfigurator,
     depth_df: DataFrame | None,
     depth_config: DepthConfigurator | None,
+    conservation_tracks: Sequence[ConservationTrack] | None,
+    conservation_min_identity: float,
     cfg: GbdrawConfig,
     dinucleotide_dataframes: dict[str, DataFrame] | None,
     gc_content_tick_font_size_override: float | None = None,
@@ -1343,6 +1378,33 @@ def _draw_resolved_circular_slot(
             depth_config,
             config_dict,
             **depth_kwargs,
+        )
+
+    if renderer == "sequence_conservation":
+        track_index = int(resolved_slot.params.get("track_index", 0) or 0)
+        track = next(
+            (
+                conservation_track
+                for conservation_track in (conservation_tracks or ())
+                if int(conservation_track.track_index) == track_index
+            ),
+            None,
+        )
+        if track is None:
+            logger.warning(
+                "Skipping circular conservation slot '%s' because conservation data are unavailable.",
+                resolved_slot.id,
+            )
+            return canvas
+        return add_conservation_group_on_canvas(
+            canvas,
+            gb_record,
+            track,
+            canvas_config,
+            inner_radius_px=float(resolved_slot.draw_inner_radius_px),
+            outer_radius_px=float(resolved_slot.draw_outer_radius_px),
+            min_identity=float(conservation_min_identity),
+            cfg=cfg,
         )
 
     default_nt = str(getattr(gc_config, "dinucleotide", "GC")).upper()
@@ -2053,6 +2115,8 @@ def add_record_on_circular_canvas(
     *,
     depth_config: DepthConfigurator | None = None,
     depth_df: DataFrame | None = None,
+    conservation_tracks: Sequence[ConservationTrack] | None = None,
+    conservation_min_identity: float = 0.0,
     cfg: GbdrawConfig | None = None,
     circular_track_slots: list[CircularTrackSlot] | None = None,
     circular_track_axis_index: int | None = None,
@@ -2060,6 +2124,7 @@ def add_record_on_circular_canvas(
     definition_position: str = "center",
     definition_profile: str = "full",
     definition_group_id: str | None = None,
+    center_reserved_radius: float | None = None,
     _tick_track_channel_override: str | None = None,
 ) -> Drawing:
     """
@@ -2217,7 +2282,9 @@ def add_record_on_circular_canvas(
     resolved_track_slots: list[CircularResolvedSlot] = []
     resolved_feature_anchor_radius_px: float | None = None
     definition_reserved_radius_px: float | None = None
-    if str(definition_position).strip().lower() == "center":
+    if center_reserved_radius is not None:
+        definition_reserved_radius_px = max(0.0, float(center_reserved_radius))
+    elif str(definition_position).strip().lower() == "center":
         definition_reserved_radius_px = _definition_reserved_radius_px(
             gb_record,
             canvas_config,
@@ -2386,6 +2453,8 @@ def add_record_on_circular_canvas(
             skew_config=skew_config,
             depth_df=depth_df,
             depth_config=depth_config,
+            conservation_tracks=conservation_tracks,
+            conservation_min_identity=conservation_min_identity,
             cfg=cfg,
             dinucleotide_dataframes=dinucleotide_dataframes,
             gc_content_tick_font_size_override=gc_content_tick_font_size_override,
@@ -2474,6 +2543,8 @@ def assemble_circular_diagram(
     legend_config: LegendDrawingConfigurator,
     depth_df: DataFrame | None = None,
     depth_config: DepthConfigurator | None = None,
+    conservation_tracks: Sequence[ConservationTrack] | None = None,
+    conservation_min_identity: float = 0.0,
     cfg: GbdrawConfig | None = None,
     circular_track_slots: list[CircularTrackSlot] | None = None,
     circular_track_axis_index: int | None = None,
@@ -2481,6 +2552,7 @@ def assemble_circular_diagram(
     definition_position: str = "center",
     definition_profile: str = "full",
     definition_group_id: str | None = None,
+    center_reserved_radius: float | None = None,
     _tick_track_channel_override: str | None = None,
 ) -> Drawing:
     """
@@ -2540,6 +2612,9 @@ def assemble_circular_diagram(
             skew_config=skew_config,
             depth_config=depth_config,
             depth_df=depth_df,
+            cfg=cfg,
+            conservation_tracks=conservation_tracks,
+            conservation_min_identity=conservation_min_identity,
         )
         legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
         canvas_config.recalculate_canvas_dimensions(legend_config)
@@ -2560,6 +2635,8 @@ def assemble_circular_diagram(
         legend_table,
         depth_config=depth_config,
         depth_df=depth_df,
+        conservation_tracks=conservation_tracks,
+        conservation_min_identity=conservation_min_identity,
         cfg=cfg,
         circular_track_slots=effective_circular_track_slots,
         circular_track_axis_index=circular_track_axis_index,
@@ -2567,6 +2644,7 @@ def assemble_circular_diagram(
         definition_position=definition_position,
         definition_profile=definition_profile,
         definition_group_id=definition_group_id,
+        center_reserved_radius=center_reserved_radius,
         _tick_track_channel_override=_tick_track_channel_override,
     )
     return canvas
@@ -2587,6 +2665,8 @@ def plot_circular_diagram(
     legend_config: LegendDrawingConfigurator,
     depth_df: DataFrame | None = None,
     depth_config: DepthConfigurator | None = None,
+    conservation_tracks: Sequence[ConservationTrack] | None = None,
+    conservation_min_identity: float = 0.0,
     cfg: GbdrawConfig | None = None,
     circular_track_slots: list[CircularTrackSlot] | None = None,
     circular_track_axis_index: int | None = None,
@@ -2594,6 +2674,7 @@ def plot_circular_diagram(
     definition_position: str = "center",
     definition_profile: str = "full",
     definition_group_id: str | None = None,
+    center_reserved_radius: float | None = None,
 ) -> Drawing:
     """
     Backwards-compatible wrapper that assembles and saves a circular diagram.
@@ -2605,6 +2686,8 @@ def plot_circular_diagram(
         depth_df=depth_df,
         gc_config=gc_config,
         depth_config=depth_config,
+        conservation_tracks=conservation_tracks,
+        conservation_min_identity=conservation_min_identity,
         skew_config=skew_config,
         feature_config=feature_config,
         species=species,
@@ -2619,6 +2702,7 @@ def plot_circular_diagram(
         definition_position=definition_position,
         definition_profile=definition_profile,
         definition_group_id=definition_group_id,
+        center_reserved_radius=center_reserved_radius,
     )
     save_figure(canvas, out_formats)
     return canvas

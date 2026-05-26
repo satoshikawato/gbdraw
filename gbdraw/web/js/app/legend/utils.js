@@ -6,6 +6,15 @@ export const getLegendChildById = (parent, id) => {
   return null;
 };
 
+const COMPARISON_LEGEND_SELECTOR = '#pairwise_legend, #conservation_identity_legend';
+
+export const getComparisonLegendGroup = (parent) =>
+  getLegendChildById(parent, 'pairwise_legend') ||
+  getLegendChildById(parent, 'conservation_identity_legend');
+
+export const isInsideComparisonLegend = (el) =>
+  Boolean(el?.closest?.(COMPARISON_LEGEND_SELECTOR));
+
 export const parseTransformXY = (transform) => {
   if (!transform) return { x: 0, y: 0 };
   const match = transform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);

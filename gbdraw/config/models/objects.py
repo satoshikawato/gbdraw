@@ -217,6 +217,58 @@ class ObjectsBlastMatchConfig:
         )
 
 
+def _optional_auto_positive_float(value: Any, *, field_name: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"", "auto", "none", "null"}:
+            return None
+        value = normalized
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise ValidationError(f"{field_name} must be a positive finite number or auto")
+    return parsed
+
+
+def _normalize_conservation_reference(value: Any) -> str:
+    normalized = str(value if value is not None else "auto").strip().lower()
+    if normalized not in {"query", "subject", "auto"}:
+        raise ValidationError("conservation reference must be one of: query, subject, auto")
+    return normalized
+
+
+@dataclass(frozen=True)
+class ObjectsConservationConfig:
+    fill_opacity: float
+    stroke_color: str
+    stroke_width: float
+    min_color: str
+    max_color: str
+    background_color: str
+    background_opacity: float
+    show_background: bool
+    ring_width: float | None
+    ring_gap: float | None
+    reference: str
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsConservationConfig":
+        return cls(
+            fill_opacity=float(d.get("fill_opacity", 1.0)),
+            stroke_color=str(d.get("stroke_color", "none")),
+            stroke_width=float(d.get("stroke_width", 0)),
+            min_color=str(d.get("min_color", "#f0f1f5")),
+            max_color=str(d.get("max_color", "#8b9cc1")),
+            background_color=str(d.get("background_color", "#f2f2f2")),
+            background_opacity=float(d.get("background_opacity", 0.35)),
+            show_background=_bool_from_config(d.get("show_background", True), default=True),
+            ring_width=_optional_auto_positive_float(d.get("ring_width", None), field_name="conservation ring_width"),
+            ring_gap=_optional_auto_positive_float(d.get("ring_gap", None), field_name="conservation ring_gap"),
+            reference=_normalize_conservation_reference(d.get("reference", "auto")),
+        )
+
+
 @dataclass(frozen=True)
 class ObjectsFeaturesConfig:
     features_drawn: list[str]
@@ -433,6 +485,7 @@ class ObjectsConfig:
     gc_skew: ObjectsGcSkewConfig
     depth: ObjectsDepthConfig
     blast_match: ObjectsBlastMatchConfig
+    conservation: ObjectsConservationConfig
     features: ObjectsFeaturesConfig
     legends: ObjectsLegendsConfig
     ticks: ObjectsTicksConfig
@@ -449,6 +502,7 @@ class ObjectsConfig:
             gc_skew=ObjectsGcSkewConfig.from_dict(d["gc_skew"]),
             depth=ObjectsDepthConfig.from_dict(d.get("depth", {})),
             blast_match=ObjectsBlastMatchConfig.from_dict(d["blast_match"]),
+            conservation=ObjectsConservationConfig.from_dict(d.get("conservation", {})),
             features=ObjectsFeaturesConfig.from_dict(d["features"]),
             legends=ObjectsLegendsConfig.from_dict(d["legends"]),
             ticks=ObjectsTicksConfig.from_dict(d["ticks"]),

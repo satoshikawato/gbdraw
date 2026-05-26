@@ -1,9 +1,18 @@
+import {
+  CONSERVATION_SLOT_MANAGER,
+  isManagedConservationSlot,
+  normalizeFileList,
+  orderedConservationSources,
+  safeConservationSlotId
+} from './conservation-series.js';
+
 const SUPPORTED_RENDERERS = [
   'features',
   'ticks',
   'dinucleotide_content',
   'dinucleotide_skew',
   'depth',
+  'sequence_conservation',
   'spacer'
 ];
 
@@ -13,6 +22,7 @@ const RENDERER_LABELS = {
   dinucleotide_content: 'Dinucleotide content',
   dinucleotide_skew: 'Dinucleotide skew',
   depth: 'Depth',
+  sequence_conservation: 'Conservation',
   spacer: 'Spacer'
 };
 
@@ -22,10 +32,11 @@ const DEFAULT_SLOT_IDS = {
   dinucleotide_content: 'gc_content',
   dinucleotide_skew: 'gc_skew',
   depth: 'depth',
+  sequence_conservation: 'conservation',
   spacer: 'spacer'
 };
 
-const NUMERIC_RENDERERS = new Set(['dinucleotide_content', 'dinucleotide_skew', 'depth']);
+const NUMERIC_RENDERERS = new Set(['dinucleotide_content', 'dinucleotide_skew', 'depth', 'sequence_conservation']);
 const STACK_ENTRY_AXIS = 'axis';
 const STACK_ENTRY_SLOT = 'slot';
 const PRESET_LABELS = {
@@ -165,6 +176,7 @@ const previewWidthPxForRenderer = (renderer, lengthParam) => {
   const base = PREVIEW_RADIUS_PX * PREVIEW_TRACK_RATIO;
   const factors = PREVIEW_TRACK_RATIO_FACTORS[lengthParam] || PREVIEW_TRACK_RATIO_FACTORS.long;
   if (renderer === 'features') return base * Number(factors[0]);
+  if (renderer === 'sequence_conservation') return base * Number(factors[0]);
   if (renderer === 'depth') return base * Number(factors[1]) * 0.5;
   if (renderer === 'dinucleotide_skew') return base * Number(factors[2]);
   if (renderer === 'ticks') return 0;
@@ -674,6 +686,9 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
     if (nt !== null && normalizeNt(nt) !== normalizeNt(defaultNt)) {
       options.push(`nt=${normalizeNt(nt)}`);
     }
+  } else if (normalized.renderer === 'sequence_conservation') {
+    appendOption(options, 'track_index', params.track_index);
+    appendOption(options, 'source_index', params.source_index);
   }
   appendOption(options, 'legend_label', params.legend_label);
 
@@ -682,6 +697,111 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
 
 export const hasEnabledCircularTrackRenderer = (slots, renderer) =>
   normalizeCircularTrackSlots(slots).some((slot) => slot.enabled && slot.renderer === renderer);
+
+const conservationSourceFilesForState = (state) => (
+  String(state?.circularConservation?.source || '').trim().toLowerCase() === 'upload'
+    ? normalizeFileList(state?.files?.c_conservation_blasts)
+    : normalizeFileList(state?.files?.c_conservation_fastas)
+);
+
+const conservationEntriesForState = (state) => {
+  if (state?.circularConservation?.enabled !== true) return [];
+  return orderedConservationSources(
+    conservationSourceFilesForState(state),
+    state.circularConservation
+  );
+};
+
+const positiveNumberOrNull = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+export const estimateCircularConservationLayoutWarning = (state) => {
+  const currentMode = String(state?.mode?.value ?? state?.mode ?? '').trim().toLowerCase();
+  if (currentMode && currentMode !== 'circular') return '';
+  if (state?.circularConservation?.enabled !== true) return '';
+
+  const entries = conservationEntriesForState(state);
+  if (entries.length <= 0) return '';
+
+  const preset = normalizeCircularTrackPreset(state?.form?.track_type);
+  const lengthParam = getPreviewLengthParam(state);
+  const axisRadius = PREVIEW_RADIUS_PX;
+  const defaultSpacing = previewSpacingPx();
+  const lane = laneDirectionForPreset(preset);
+  const featureLaneCount = previewFeatureLaneCount(state);
+  const featureWidth = previewWidthPxForRenderer('features', lengthParam);
+  const featureBandWidth = (featureLaneCount * featureWidth) + (Math.max(0, featureLaneCount - 1) * defaultSpacing);
+  let availableInsidePx = axisRadius - defaultSpacing;
+  if (lane === 'inside') {
+    const featureCenter = previewFeatureRadiusRatio(preset, lengthParam, state) * axisRadius;
+    availableInsidePx = featureCenter - (featureBandWidth / 2) - defaultSpacing;
+  } else if (lane === 'split') {
+    availableInsidePx = axisRadius - (featureBandWidth / 2) - defaultSpacing;
+  }
+  availableInsidePx = Math.max(0, availableInsidePx);
+
+  const ringWidth = positiveNumberOrNull(state?.circularConservation?.ring_width)
+    ?? previewWidthPxForRenderer('sequence_conservation', lengthParam);
+  const ringGap = positiveNumberOrNull(state?.circularConservation?.ring_gap) ?? defaultSpacing;
+  const showGc = !Boolean(state?.form?.suppress_gc);
+  const showSkew = !Boolean(state?.form?.suppress_skew);
+  const showDepth = Boolean(state?.form?.show_depth);
+  const numericAfterConservationPx =
+    (showDepth ? previewWidthPxForRenderer('depth', lengthParam) + defaultSpacing : 0) +
+    (showGc ? previewWidthPxForRenderer('dinucleotide_content', lengthParam) + defaultSpacing : 0) +
+    (showSkew ? previewWidthPxForRenderer('dinucleotide_skew', lengthParam) + defaultSpacing : 0);
+  const requestedStackPx =
+    (entries.length * ringWidth) +
+    (Math.max(0, entries.length - 1) * ringGap) +
+    numericAfterConservationPx;
+  const compressedStackPx =
+    (entries.length * 4) +
+    (Math.max(0, entries.length - 1) * 1) +
+    (showDepth ? 10 + 1 : 0) +
+    (showGc ? 10 + 1 : 0) +
+    (showSkew ? 12 + 1 : 0);
+
+  if (compressedStackPx > availableInsidePx) {
+    return `Conservation has ${entries.length} inside ring(s) plus other circular tracks; even compressed rings may not fit. Reduce Ring Width/GAP, disable GC/skew/depth tracks, or move tracks outside before generating.`;
+  }
+  if (requestedStackPx > availableInsidePx * 0.9 || (entries.length >= 5 && (showGc || showSkew || showDepth))) {
+    return `Conservation has ${entries.length} inside ring(s); gbdraw will auto-compress ring width/gap when needed. If generation still fails, reduce Ring Width/GAP or disable GC/skew/depth tracks.`;
+  }
+  return '';
+};
+
+const managedConservationSlotKey = (slot) => String(slot?.params?.series_key || '').trim();
+
+const refreshManagedConservationSlot = (slot, entry, orderIndex) => {
+  if (!slot || !entry) return slot;
+  slot.renderer = 'sequence_conservation';
+  slot.side = normalizePlacement(slot.side, 'inside') === 'overlay' ? 'inside' : normalizePlacement(slot.side, 'inside');
+  slot.params = cloneParams(slot.params);
+  slot.params.managed = CONSERVATION_SLOT_MANAGER;
+  slot.params.series_key = String(entry.sourceKey || '');
+  slot.params.source_index = String(Number(entry.orderIndex ?? orderIndex));
+  slot.params.track_index = String(Number(entry.orderIndex ?? orderIndex) + 1);
+  slot.params.label = String(entry.label || entry.defaultLabel || entry.fileName || `Comparison ${Number(orderIndex) + 1}`);
+  slot.params.color = String(entry.color || '');
+  slot.params.fileName = String(entry.fileName || '');
+  return slot;
+};
+
+const makeManagedConservationSlot = (entry, orderIndex, existingIds) => refreshManagedConservationSlot(
+  makeSlot({
+    id: safeConservationSlotId(entry, orderIndex, existingIds),
+    renderer: 'sequence_conservation',
+    side: 'inside',
+    params: {
+      managed: CONSERVATION_SLOT_MANAGER
+    }
+  }),
+  entry,
+  orderIndex
+);
 
 export const createCircularTrackSlotEditor = ({ state }) => {
   const axisIndexForCurrentSlots = (slots) => {
@@ -741,6 +861,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       state.adv.circular_track_slots_axis_index
     );
     state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...normalized);
+    syncCircularConservationSlots();
   };
 
   const ensureCircularTrackDepthSlot = () => {
@@ -778,6 +899,57 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     normalizeSlotsInPlace();
   };
 
+  const syncCircularConservationSlots = () => {
+    const entries = conservationEntriesForState(state);
+    const slots = Array.isArray(state.adv.circular_track_slots)
+      ? state.adv.circular_track_slots
+      : [];
+    const desiredKeys = new Set(entries.map((entry) => String(entry.sourceKey || '')));
+    const existingIds = new Set(slots.map((slot) => String(slot?.id || '').trim()).filter(Boolean));
+    const entryByKey = new Map(entries.map((entry) => [String(entry.sourceKey || ''), entry]));
+    const entryOrderByKey = new Map(entries.map((entry, index) => [String(entry.sourceKey || ''), index]));
+
+    const nextSlots = [];
+    const presentKeys = new Set();
+    slots.forEach((slot) => {
+      if (!isManagedConservationSlot(slot)) {
+        nextSlots.push(slot);
+        return;
+      }
+      const key = managedConservationSlotKey(slot);
+      if (!key || !desiredKeys.has(key) || presentKeys.has(key)) return;
+      refreshManagedConservationSlot(slot, entryByKey.get(key), entryOrderByKey.get(key) ?? presentKeys.size);
+      presentKeys.add(key);
+      nextSlots.push(slot);
+    });
+
+    const missingSlots = [];
+    entries.forEach((entry, index) => {
+      const key = String(entry.sourceKey || '');
+      if (!key || presentKeys.has(key)) return;
+      missingSlots.push(makeManagedConservationSlot(entry, index, existingIds));
+      presentKeys.add(key);
+    });
+
+    if (missingSlots.length > 0) {
+      let insertIndex = -1;
+      nextSlots.forEach((slot, index) => {
+        if (isManagedConservationSlot(slot)) insertIndex = index;
+      });
+      if (insertIndex < 0) {
+        insertIndex = nextSlots.findIndex((slot) => slot?.renderer === 'features');
+      }
+      nextSlots.splice(Math.max(0, insertIndex + 1), 0, ...missingSlots);
+    }
+
+    state.adv.circular_track_slots.splice(
+      0,
+      state.adv.circular_track_slots.length,
+      ...nextSlots
+    );
+    normalizeSlotsInPlace();
+  };
+
   const resetCircularTrackSlotsToPreset = (preset) => {
     const normalizedPreset = normalizeCircularTrackPreset(preset);
     const templateSlots = createDefaultCircularTrackSlots({
@@ -799,6 +971,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     );
     state.form.track_type = normalizedPreset;
     state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...normalized);
+    syncCircularConservationSlots();
   };
 
   const applyCircularTrackPreset = (preset) => resetCircularTrackSlotsToPreset(preset);
@@ -1045,6 +1218,23 @@ export const createCircularTrackSlotEditor = ({ state }) => {
 
   const circularTrackRendererLabel = (renderer) => RENDERER_LABELS[renderer] || renderer;
   const supportsCircularTrackSlotPlacement = (renderer) => SUPPORTED_RENDERERS.includes(renderer);
+  const isManagedCircularConservationSlot = (slot) => isManagedConservationSlot(slot);
+  const circularTrackSlotDisplayLabel = (slot) => {
+    if (isManagedConservationSlot(slot)) {
+      return String(slot?.params?.label || slot?.params?.fileName || slot?.id || 'Conservation').trim();
+    }
+    return circularTrackRendererLabel(slot?.renderer);
+  };
+  const circularTrackSlotDisplayMeta = (slot) => {
+    if (isManagedConservationSlot(slot)) {
+      return String(slot?.params?.fileName || slot?.params?.series_key || '').trim();
+    }
+    return '';
+  };
+  const circularTrackSlotColor = (slot) => {
+    if (isManagedConservationSlot(slot)) return String(slot?.params?.color || '').trim();
+    return '';
+  };
 
   const circularTrackSlots = () => (
     Array.isArray(state.adv.circular_track_slots)
@@ -1129,6 +1319,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     circularTrackRenderers: SUPPORTED_RENDERERS,
     circularTrackRendererLabel,
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
+    syncCircularConservationSlots,
     resetCircularTrackSlotsFromSimpleControls,
     ensureCircularTrackDepthSlot,
     resetCircularTrackSlotsToPreset,
@@ -1149,9 +1340,13 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     updateCircularTrackSlotPlacement,
     updateCircularTrackFeatureLane,
     supportsCircularTrackSlotPlacement,
+    isManagedCircularConservationSlot,
     circularTrackSlots,
     circularTrackStackEntries,
     circularTrackSlotCliSpec,
+    circularTrackSlotDisplayLabel,
+    circularTrackSlotDisplayMeta,
+    circularTrackSlotColor,
     circularTrackPresetSummary,
     circularTrackSlotUsesPresetGeometry
   };

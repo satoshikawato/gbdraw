@@ -45,6 +45,12 @@ The most common causes are:
 
 See [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
 
+## Why is my circular conservation ring empty?
+
+Check that the BLAST file is outfmt 6 or 7, the displayed circular record ID appears on the side selected by `--conservation_reference`, and the thresholds are not too strict. When BLAST was generated as `blastn -query comparison.fasta -subject reference.fasta`, use `--conservation_reference subject`.
+
+Circular conservation rings draw raw HSP spans only. A BLAST row where the selected reference start is greater than the selected reference end is treated as reverse orientation, not as a hit crossing the circular origin; binned or wraparound inference is not part of the current implementation.
+
 ## Can pairwise comparison links be curved?
 
 Yes. In linear mode, `--pairwise_match_style ribbon` is the default straight filled ribbon style. Use `--pairwise_match_style curve` for curved filled ribbons, which are useful for dense synteny-style views while still preserving each match span.

@@ -13,6 +13,7 @@ CircularTrackRendererName = Literal[
     "dinucleotide_content",
     "dinucleotide_skew",
     "depth",
+    "sequence_conservation",
     "spacer",
 ]
 
@@ -25,12 +26,17 @@ SUPPORTED_CIRCULAR_TRACK_RENDERERS: frozenset[str] = frozenset(
         "dinucleotide_content",
         "dinucleotide_skew",
         "depth",
+        "sequence_conservation",
         "spacer",
     }
 )
 
 NUMERIC_CIRCULAR_TRACK_RENDERERS: frozenset[str] = frozenset(
-    {"dinucleotide_content", "dinucleotide_skew", "depth"}
+    {"dinucleotide_content", "dinucleotide_skew", "depth", "sequence_conservation"}
+)
+
+CONSERVATION_CIRCULAR_TRACK_RENDERERS: frozenset[str] = frozenset(
+    {"sequence_conservation"}
 )
 
 _RENDERER_ALIASES: dict[str, str] = {
@@ -38,6 +44,8 @@ _RENDERER_ALIASES: dict[str, str] = {
     "content": "dinucleotide_content",
     "gc_skew": "dinucleotide_skew",
     "skew": "dinucleotide_skew",
+    "conservation": "sequence_conservation",
+    "circular_comparison": "sequence_conservation",
 }
 
 _ORDER_RENDERER_BY_ID: dict[str, str] = {
@@ -476,6 +484,10 @@ def normalize_circular_track_slots(slots: Sequence[CircularTrackSlot]) -> list[N
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
             reserve = side == "overlay"
             params = _normalized_tick_params(params, side)
+        elif renderer == "sequence_conservation":
+            side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
+            if side == "overlay":
+                raise ValueError("sequence_conservation slots cannot use side=overlay")
         elif renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
         elif renderer == "spacer":
@@ -609,6 +621,7 @@ __all__ = [
     "CircularTrackSlot",
     "CircularTrackSlotParseError",
     "NormalizedCircularTrackSlot",
+    "CONSERVATION_CIRCULAR_TRACK_RENDERERS",
     "SUPPORTED_CIRCULAR_TRACK_RENDERERS",
     "circular_track_slots_with_axis_side",
     "circular_track_slots_from_order",

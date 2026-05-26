@@ -124,6 +124,38 @@ Use `--alignment_length` when you want to hide very short BLAST hits and keep on
 > [!IMPORTANT]
 > BLAST files must follow the same order as the genome list.
 
+## 6. Circular Conservation Rings
+
+Circular mode can draw BLAST HSPs as concentric conservation rings around each displayed record. This is useful when one annotated reference genome should be compared against one or more unannotated FASTA sequences.
+
+Generate BLAST with the displayed circular genome as the subject:
+
+```bash
+blastn \
+  -query Shigella_dysenteriae.fasta \
+  -subject Escherichia_coli.fasta \
+  -outfmt 7 \
+  -out Shigella_vs_Escherichia.blastn.out
+```
+
+Then render the circular reference with a conservation ring:
+
+```bash
+gbdraw circular \
+  --gbk Escherichia_coli.gbk \
+  --conservation_blast Shigella_vs_Escherichia.blastn.out \
+  --conservation_reference subject \
+  --conservation_labels "Shigella dysenteriae" \
+  --identity 75 \
+  --alignment_length 500 \
+  -o Escherichia_conservation \
+  -f svg
+```
+
+Use one `--conservation_blast` file per ring. If gbdraw can identify the displayed reference IDs on only one BLAST side, `--conservation_reference auto` works; otherwise set `query` or `subject` explicitly. BLAST rows with `start > end` on the selected reference side are drawn as reverse-orientation hits, not as circular wraparound hits.
+
+In the web app, circular mode also supports Conservation Rings from uploaded BLAST outfmt 6/7 files or browser LOSAT `blastn`. LOSAT mode uses each comparison FASTA as the query and the displayed circular genome as the subject, so the generated BLAST results are passed to gbdraw with `conservation_reference=subject`.
+
 [< Back to the Tutorials Index](./TUTORIALS.md)
 [< Back to Tutorial 1](./1_Customizing_Plots.md) | [Go to Tutorial 3 >](./3_Advanced_Customization.md)
 

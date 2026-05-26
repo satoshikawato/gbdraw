@@ -476,6 +476,86 @@
                             :model-value="files.c_depth"
                             @update:model-value="files.c_depth = $event; form.show_depth = form.show_depth || Boolean($event)"
                         ></file-uploader>
+
+                        <div class="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
+                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                <input type="checkbox" v-model="circularConservation.enabled" class="form-checkbox">
+                                <span class="inline-flex items-center gap-1">Conservation Rings <help-tip text="Draw one circular conservation ring per uploaded BLAST outfmt 6/7 file or browser LOSAT blastn comparison FASTA. Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits."></help-tip></span>
+                            </label>
+                            <div v-if="circularConservation.enabled" class="space-y-3">
+                                <div class="flex gap-4 text-sm font-bold">
+                                    <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" class="text-blue-600"> LOSAT blastn</label>
+                                    <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="upload" class="text-blue-600"> Upload BLAST</label>
+                                </div>
+                                <div v-if="circularConservation.source === 'upload'" class="space-y-2">
+                                    <file-uploader
+                                        label="BLAST outfmt 6/7 files"
+                                        v-model="files.c_conservation_blasts"
+                                        :multiple="true"
+                                        accept=".tsv,.tab,.txt,.out,.blast,text/tab-separated-values,text/plain,text/*"
+                                    ></file-uploader>
+                                    <div>
+                                        <label class="text-[9px] flex items-center">Reference side <help-tip text="Use Auto when exactly one BLAST side matches the displayed reference record IDs; choose Query or Subject for ambiguous files."></help-tip></label>
+                                        <select v-model="circularConservation.reference" class="form-input px-1 py-0.5 text-xs">
+                                            <option value="auto">Auto</option>
+                                            <option value="query">Query</option>
+                                            <option value="subject">Subject</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div v-else class="space-y-2">
+                                    <div class="grid grid-cols-1 gap-1">
+                                        <div>
+                                            <label class="text-[9px] flex items-center">Task <help-tip text="Browser LOSAT conservation currently uses blastn. The displayed circular sequence is the BLAST subject."></help-tip></label>
+                                            <select v-model="losat.blastn.task" class="form-input px-1 py-0.5 text-xs">
+                                                <option value="megablast">megablast</option>
+                                                <option value="blastn">blastn</option>
+                                                <option value="dc-megablast">dc-megablast</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button @click="downloadLosatCache" class="btn btn-secondary text-xs w-full" :disabled="losatCacheInfo.length === 0">
+                                            <i class="ph ph-download-simple"></i> Save Raw LOSAT TSV
+                                        </button>
+                                        <button @click="clearLosatCache" class="btn btn-danger text-xs w-full" :disabled="losatCacheInfo.length === 0">
+                                            <i class="ph ph-trash"></i> Clear Cache
+                                        </button>
+                                    </div>
+                                </div>
+                                <div v-if="circularConservation.source === 'losat' || circularConservationSeriesRows.length > 0" class="space-y-1">
+                                    <label v-if="circularConservation.source === 'losat'" class="input-label mb-0 flex items-center">Comparison FASTA files <help-tip text="Add one comparison FASTA per conservation ring, then set the ring name, color, and default order. Custom Track Slots can override the radial track order."></help-tip></label>
+                                    <label v-else class="text-[9px] flex items-center">Series <help-tip text="Set the ring name, color, and default order for each conservation FASTA or BLAST source. Custom Track Slots can override the radial track order."></help-tip></label>
+                                    <div v-for="row in circularConservationSeriesRows" :key="`conservation-series-${row.index}-${row.filename}`" class="grid grid-cols-[1.8rem_minmax(0,1fr)_auto] gap-1.5 items-center">
+                                        <input type="color" v-model="circularConservation.series[row.index].color" class="h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="`Color for ${row.filename}`">
+                                        <div class="min-w-0 space-y-0.5">
+                                            <input type="text" v-model="circularConservation.series[row.index].label" :placeholder="row.defaultLabel" class="form-input px-1 py-0.5 text-xs">
+                                            <div class="text-[9px] text-slate-500 truncate"><span class="font-bold text-slate-600">{{ row.sourceLabel }}</span> - {{ row.filename }}</div>
+                                        </div>
+                                        <div class="flex items-center gap-0.5">
+                                            <button type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, -1)" :disabled="!canMoveCircularConservationSeries(row.index, -1)" title="Move series outward"><i class="ph ph-arrow-up"></i></button>
+                                            <button type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, 1)" :disabled="!canMoveCircularConservationSeries(row.index, 1)" title="Move series inward"><i class="ph ph-arrow-down"></i></button>
+                                            <button type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeCircularConservationSource(row.index)" title="Remove series"><i class="ph ph-trash"></i></button>
+                                        </div>
+                                    </div>
+                                    <input
+                                        v-if="circularConservation.source === 'losat'"
+                                        type="file"
+                                        ref="circularConservationFastaInput"
+                                        accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain,text/*"
+                                        @change="addCircularConservationComparisonFile"
+                                        class="hidden"
+                                    >
+                                    <button v-if="circularConservation.source === 'losat'" type="button" class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker">
+                                        <i class="ph ph-plus"></i> Add Seq
+                                    </button>
+                                </div>
+                                <div v-else-if="circularConservation.source === 'upload'">
+                                    <label class="text-[9px] flex items-center">Series names <help-tip text="Optional fallback names for rings, one per source. Use new lines or commas."></help-tip></label>
+                                    <textarea v-model="circularConservation.labels" rows="2" class="form-input px-1 py-0.5 text-xs" placeholder="Ring A&#10;Ring B"></textarea>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div v-if="mode === 'linear'" class="space-y-4">
@@ -882,6 +962,12 @@
                                             </div>
                                             <div>{{ circularTrackPresetSummary().detail }}</div>
                                         </div>
+                                        <div class="grid grid-cols-2 gap-1.5 rounded border border-slate-200 bg-white/70 p-1.5">
+                                            <div>
+                                                <label class="input-label text-[10px]">Center Reserved Radius <help-tip text="Override the centered definition reserved radius in px. Lower values let inside tracks move closer to the center and may overlap center text."></help-tip></label>
+                                                <input type="number" min="0" step="1" v-model.number="adv.center_reserved_radius" class="form-input form-input-compact" placeholder="Auto">
+                                            </div>
+                                        </div>
                                         <div class="rounded border border-slate-200 bg-white/70 p-1.5 space-y-1">
                                             <div class="flex items-center justify-between gap-2 text-[10px]">
                                                 <div class="inline-flex min-w-0 items-center gap-1 font-semibold text-slate-600">
@@ -937,8 +1023,15 @@
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index)" :disabled="!canMoveCircularTrackSlotOutside(entry.index)" title="Move outside Axis"><i class="ph ph-arrow-line-up"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotInside(entry.index)" :disabled="!canMoveCircularTrackSlotInside(entry.index)" title="Move inside Axis"><i class="ph ph-arrow-line-down"></i></button>
                                                             <button v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'ticks'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index)" :disabled="!canMoveCircularTrackSlotToAxis(entry.index)" title="Track on Axis"><i class="ph ph-record"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index)" title="Duplicate"><i class="ph ph-copy"></i></button>
-                                                            <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index)" title="Remove"><i class="ph ph-trash"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index)" :disabled="isManagedCircularConservationSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : 'Duplicate'"><i class="ph ph-copy"></i></button>
+                                                            <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index)" :disabled="isManagedCircularConservationSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Disable this comparison track with the checkbox' : 'Remove'"><i class="ph ph-trash"></i></button>
+                                                        </div>
+                                                    </div>
+                                                    <div v-if="isManagedCircularConservationSlot(entry.slot)" class="grid grid-cols-[1.15rem_minmax(0,1fr)] gap-1.5 items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-1">
+                                                        <span class="h-4 w-4 rounded border border-slate-300" :style="{ backgroundColor: circularTrackSlotColor(entry.slot) || '#94a3b8' }"></span>
+                                                        <div class="min-w-0">
+                                                            <div class="truncate text-[10px] font-semibold text-slate-700">{{ circularTrackSlotDisplayLabel(entry.slot) }}</div>
+                                                            <div class="truncate text-[9px] text-slate-500">{{ circularTrackSlotDisplayMeta(entry.slot) }}</div>
                                                         </div>
                                                     </div>
                                                     <div class="grid grid-cols-4 gap-1">
@@ -1865,6 +1958,46 @@
                     </details>
                 </div>
 
+                <div v-if="mode === 'circular' && circularConservation.enabled" class="card bg-slate-50/50">
+                    <details>
+                        <summary><i class="ph ph-target"></i> Conservation <help-tip text="Filter conservation BLAST/LOSAT hits and tune circular ring geometry."></help-tip></summary>
+                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
+                            <div class="grid grid-cols-2 gap-1.5">
+                                <div>
+                                    <label class="input-label text-[10px]">Ring Width</label>
+                                    <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_width" class="form-input form-input-compact" placeholder="Auto">
+                                </div>
+                                <div>
+                                    <label class="input-label text-[10px]">Ring Gap</label>
+                                    <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_gap" class="form-input form-input-compact" placeholder="Auto">
+                                </div>
+                            </div>
+                            <div v-if="circularConservationLayoutWarning" class="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-800">
+                                <i class="ph ph-warning-circle text-sm mt-0.5"></i>
+                                <span>{{ circularConservationLayoutWarning }}</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-1.5">
+                                <div>
+                                    <label class="input-label text-[10px]">Bitscore</label>
+                                    <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? 50 : Number($event.target.value)" class="form-input form-input-compact" placeholder="50">
+                                </div>
+                                <div>
+                                    <label class="input-label text-[10px]">E-value</label>
+                                    <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? '1e-2' : String($event.target.value).trim()" class="form-input form-input-compact" placeholder="1e-2">
+                                </div>
+                                <div>
+                                    <label class="input-label text-[10px]">Minimum Identity</label>
+                                    <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
+                                </div>
+                                <div>
+                                    <label class="input-label text-[10px]">Minimum Length</label>
+                                    <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
                 <div v-if="mode === 'linear'" class="card bg-slate-50/50">
                     <details>
                         <summary><i class="ph ph-arrows-left-right"></i> Pairwise Match <help-tip text="Adjust pairwise comparison height and filter BLAST or LOSAT tracks."></help-tip></summary>
@@ -1967,6 +2100,10 @@
             </div>
             
             <div class="generate-bar shrink-0 py-4 bg-white/50 backdrop-blur-sm border-t border-slate-100 z-10 relative mt-auto">
+            <div v-if="circularConservationLayoutWarning" class="mb-3 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
+                <i class="ph ph-warning-circle text-sm mt-0.5"></i>
+                <span>{{ circularConservationLayoutWarning }}</span>
+            </div>
             <button @click="runAnalysis" :disabled="processing || !pyodideReady || !diagramGenerationWorkerReady"
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
                 <span v-if="!processing && pyodideReady && diagramGenerationWorkerReady" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
@@ -2993,17 +3130,17 @@
     <div class="w-full">
         <div class="flex justify-between items-end mb-1">
             <label :class="['input-label mb-0', small ? 'input-label-sm' : '']">{{ label }}</label>
-            <button v-if="modelValue" @click.stop="clearFile" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash"></i> Remove</button>
+            <button v-if="hasSelection" @click.stop="clearFile" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash"></i> Remove</button>
         </div>
-        <div class="upload-zone cursor-pointer" :class="{'ready': modelValue, 'py-0.5 min-h-[30px]': small}" @click="$refs.input.click()">
-            <input type="file" ref="input" :accept="accept || '.gb,.gbk,.gbff,.genbank,.ddbj,.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,.tsv,.tab,.txt,.out,.blast,text/plain,text/tab-separated-values,text/*'" @change="handleFile" class="hidden">
-            <div v-if="!modelValue" class="flex items-center justify-center gap-2 text-slate-400 group-hover:text-blue-600 transition-colors">
+        <div class="upload-zone cursor-pointer" :class="{'ready': hasSelection, 'py-0.5 min-h-[30px]': small}" @click="$refs.input.click()">
+            <input type="file" ref="input" :multiple="multiple" :accept="accept || '.gb,.gbk,.gbff,.genbank,.ddbj,.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,.tsv,.tab,.txt,.out,.blast,text/plain,text/tab-separated-values,text/*'" @change="handleFile" class="hidden">
+            <div v-if="!hasSelection" class="flex items-center justify-center gap-2 text-slate-400 group-hover:text-blue-600 transition-colors">
                 <i class="ph ph-upload-simple" :class="small ? 'text-base' : 'text-xl'"></i>
                 <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">Click to Browse</span>
             </div>
             <div v-else class="text-green-700 font-bold truncate w-full px-2 flex items-center justify-center gap-2" :class="small ? 'text-[10px]' : 'text-xs'">
                 <i class="ph ph-check-circle text-lg"></i>
-                <span>{{ modelValue.name }}</span>
+                <span>{{ selectedLabel }}</span>
             </div>
         </div>
     </div>

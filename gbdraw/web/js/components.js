@@ -1,4 +1,4 @@
-const { ref, reactive } = window.Vue;
+const { ref, reactive, computed } = window.Vue;
 
 export const HelpTip = {
   template: '#help-tip-template',
@@ -51,17 +51,35 @@ export const HelpTip = {
 
 export const FileUploader = {
   template: '#file-uploader-template',
-  props: ['label', 'accept', 'modelValue', 'small'],
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple'],
   emits: ['update:modelValue'],
   setup(props, { emit }) {
     const input = ref(null);
+    const selectedFiles = computed(() => {
+      if (Array.isArray(props.modelValue)) return props.modelValue.filter(Boolean);
+      return props.modelValue ? [props.modelValue] : [];
+    });
+    const hasSelection = computed(() => selectedFiles.value.length > 0);
+    const selectedLabel = computed(() => {
+      const items = selectedFiles.value;
+      if (items.length === 0) return '';
+      if (items.length === 1) return items[0]?.name || 'Selected file';
+      const firstNames = items.slice(0, 2).map((file) => file?.name || 'file').join(', ');
+      const suffix = items.length > 2 ? ` +${items.length - 2}` : '';
+      return `${items.length} files: ${firstNames}${suffix}`;
+    });
     const handleFile = (e) => {
-      if (e.target.files[0]) emit('update:modelValue', e.target.files[0]);
+      const nextFiles = Array.from(e.target.files || []);
+      if (props.multiple) {
+        emit('update:modelValue', nextFiles);
+      } else if (nextFiles[0]) {
+        emit('update:modelValue', nextFiles[0]);
+      }
       e.target.value = '';
     };
     const clearFile = () => {
-      emit('update:modelValue', null);
+      emit('update:modelValue', props.multiple ? [] : null);
     };
-    return { input, handleFile, clearFile };
+    return { input, handleFile, clearFile, hasSelection, selectedLabel };
   }
 };

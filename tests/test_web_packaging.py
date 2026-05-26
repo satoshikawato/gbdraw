@@ -228,11 +228,15 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
 
     assert "circular_track_slots_enabled" in state_source
     assert "circular_track_slots_axis_index" in state_source
+    assert "center_reserved_radius: null" in state_source
     assert "createDefaultCircularTrackSlots()" in state_source
+    assert "state.adv.center_reserved_radius = normalizeNonNegativeNumberOrNull(state.adv.center_reserved_radius);" in config_source
     assert "inferLegacyAxisIndexFromFeature(normalizedSlots, state.form.track_type)" in config_source
     assert '"circular_track_slot": "--circular_track_slot" in _source' in run_source
     assert '"circular_track_axis_index": "--circular_track_axis_index" in _source' in run_source
+    assert '"center_reserved_radius": "--center_reserved_radius" in _source' in run_source
     assert "args.push('--track_type', form.track_type);" in run_source
+    assert "args.push('--center_reserved_radius', String(normalizedCenterReservedRadius));" in run_source
     assert "args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));" in run_source
     assert "buildCircularTrackSlotSpec(slot, adv.nt, form.track_type, {" in run_source
     assert "applyCircularTrackOrderPlacements(" in run_source
@@ -244,6 +248,7 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "Reset to Tuckin" in index_html
     assert "Reset to Middle" in index_html
     assert "Reset to Spreadout" in index_html
+    assert "Center Reserved Radius" in index_html
     assert "Apply Tuckin" not in index_html
     assert "arrows reorder within the current side" in index_html
     assert "Radial track stack" in index_html
@@ -283,6 +288,51 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "moveCircularTrackSlotInside: circularTrackSlotEditor.moveCircularTrackSlotInside" in app_setup_source
     assert "canMoveCircularTrackSlotOutside: circularTrackSlotEditor.canMoveCircularTrackSlotOutside" in app_setup_source
     assert "canMoveCircularTrackSlotInside: circularTrackSlotEditor.canMoveCircularTrackSlotInside" in app_setup_source
+
+
+def test_web_wires_circular_conservation_options() -> None:
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    slot_source = (WEB_ROOT / "js" / "app" / "circular-track-slots.js").read_text(encoding="utf-8")
+    app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+    components_source = (WEB_ROOT / "js" / "components.js").read_text(encoding="utf-8")
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+
+    assert "const circularConservation = reactive" in state_source
+    assert "c_conservation_blasts: []" in state_source
+    assert "c_conservation_fastas: []" in state_source
+    assert "series: []" in state_source
+    assert "'data-source-index'" in state_source
+    assert "'data-reference-record-id'" in state_source
+    assert "'data-track-color'" in state_source
+    assert "circularConservation" in app_setup_source
+    assert "circularConservationSeriesRows" in app_setup_source
+    assert "syncCircularConservationSeries" in app_setup_source
+    assert "addCircularConservationComparisonFile" in app_setup_source
+    assert "removeCircularConservationSource" in app_setup_source
+    assert "circularConservation: state.circularConservation" in config_source
+    assert "normalizeCircularConservationSeries" in config_source
+    assert "c_conservation_blasts: await serializeFileArray" in config_source
+    assert "normalizeCircularConservationReference" in config_source
+    assert "Conservation Rings" in index_html
+    assert "BLAST outfmt 6/7 files" in index_html
+    assert "Comparison FASTA files" in index_html
+    assert "@click=\"openCircularConservationComparisonFilePicker\"" in index_html
+    assert "@click=\"removeCircularConservationSource(row.index)\"" in index_html
+    assert "type=\"color\" v-model=\"circularConservation.series[row.index].color\"" in index_html
+    assert ":multiple=\"true\"" in index_html
+    assert "props: ['label', 'accept', 'modelValue', 'small', 'multiple']" in components_source
+    assert '"conservation_blast": "--conservation_blast" in _source' in run_source
+    assert '"conservation_colors": "--conservation_colors" in _source' in run_source
+    assert "runCircularLosatConservation" in run_source
+    assert "buildConservationSeries" in run_source
+    assert "args.push('--conservation_colors', ...colors);" in run_source
+    assert "args.push('--conservation_blast', ...conservationBlastPaths);" in run_source
+    assert "args.push('--conservation_reference', conservationReference);" in run_source
+    assert "flow: 'circular-conservation'" in run_source
+    assert "conservationReference = 'subject';" in run_source
+    assert "'sequence_conservation'" in slot_source
 
 
 def test_web_collinear_orientation_identity_mode_is_wired() -> None:
@@ -390,11 +440,20 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
 
     source_path = WEB_ROOT / "js" / "app" / "circular-track-slots.js"
     module_path = tmp_path / "circular-track-slots.mjs"
+    (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
+    for dependency in ["conservation-series.js", "color-utils.js"]:
+        dep_path = WEB_ROOT / "js" / "app" / dependency
+        (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
     check_path = tmp_path / "check-circular-track-slots.mjs"
     check_path.write_text(
         f"""
-        import {{ applyCircularTrackOrderPlacements, createDefaultCircularTrackSlots, createCircularTrackSlotEditor }} from {module_path.as_uri()!r};
+        import {{
+          applyCircularTrackOrderPlacements,
+          createDefaultCircularTrackSlots,
+          createCircularTrackSlotEditor,
+          estimateCircularConservationLayoutWarning
+        }} from {module_path.as_uri()!r};
 
         const defaultSlots = createDefaultCircularTrackSlots({{ preset: 'tuckin' }});
         const defaultTick = defaultSlots.find((slot) => slot.id === 'ticks');
@@ -439,6 +498,78 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         const resetTick = defaultState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
         if (resetTick?.side !== 'inside' || resetTick?.params?.tick_label_layout !== 'label_in_tick_out') {{
           throw new Error(`Enabling custom slots did not use the inward default Tick layout: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);
+        }}
+
+        const conservationState = {{
+          adv: {{
+            nt: 'GC',
+            circular_track_slots_enabled: false,
+            circular_track_slots_axis_index: null,
+            circular_track_slots: createDefaultCircularTrackSlots({{ preset: 'tuckin' }})
+          }},
+          form: {{
+            track_type: 'tuckin',
+            show_depth: false,
+            suppress_gc: false,
+            suppress_skew: false
+          }},
+          files: {{
+            c_conservation_blasts: [],
+            c_conservation_fastas: [
+              {{ name: 'alpha.fa', size: 10, lastModified: 100 }},
+              {{ name: 'beta.fa', size: 20, lastModified: 200 }}
+            ]
+          }},
+          circularConservation: {{
+            enabled: true,
+            source: 'losat',
+            series: [
+              {{ sourceKey: 'beta.fa|20|200|0', fileName: 'beta.fa', label: 'Beta', color: '#f28e2b' }},
+              {{ sourceKey: 'alpha.fa|10|100|0', fileName: 'alpha.fa', label: 'Alpha', color: '#4e79a7' }}
+            ]
+          }}
+        }};
+        const conservationEditor = createCircularTrackSlotEditor({{ state: conservationState }});
+        conservationEditor.setCircularTrackSlotsEnabled(true);
+        const conservationSlots = conservationState.adv.circular_track_slots.filter((slot) => slot.renderer === 'sequence_conservation');
+        if (conservationSlots.length !== 2 || conservationSlots[0].params.label !== 'Beta' || conservationSlots[1].params.label !== 'Alpha') {{
+          throw new Error(`Conservation slots were not materialized in series order: ${{JSON.stringify(conservationState.adv.circular_track_slots)}}`);
+        }}
+        const betaSpec = conservationEditor.circularTrackSlotCliSpec(conservationSlots[0]);
+        if (!betaSpec.includes('track_index=1') || !betaSpec.includes('source_index=0')) {{
+          throw new Error(`Conservation slot CLI spec did not pin the ordered source: ${{betaSpec}}`);
+        }}
+        if (betaSpec.includes('w=')) {{
+          throw new Error(`Default conservation slot should keep auto width, got: ${{betaSpec}}`);
+        }}
+        if (conservationEditor.circularTrackSlotDisplayLabel(conservationSlots[0]) !== 'Beta') {{
+          throw new Error(`Conservation slot display label was not series label: ${{conservationEditor.circularTrackSlotDisplayLabel(conservationSlots[0])}}`);
+        }}
+        const warningState = {{
+          mode: {{ value: 'circular' }},
+          form: {{
+            track_type: 'tuckin',
+            show_depth: false,
+            suppress_gc: false,
+            suppress_skew: false
+          }},
+          files: {{
+            c_conservation_blasts: [],
+            c_conservation_fastas: Array.from({{ length: 6 }}, (_, idx) => ({{
+              name: `comparison_${{idx + 1}}.fa`,
+              size: 10 + idx,
+              lastModified: 100 + idx
+            }}))
+          }},
+          circularConservation: {{
+            enabled: true,
+            source: 'losat',
+            series: []
+          }}
+        }};
+        const conservationWarning = estimateCircularConservationLayoutWarning(warningState);
+        if (!conservationWarning.includes('auto-compress')) {{
+          throw new Error(`Expected conservation layout warning, got: ${{conservationWarning}}`);
         }}
 
         const outerTickSlots = applyCircularTrackOrderPlacements(

@@ -36,6 +36,10 @@ MIN_NUMERIC_WIDTH_PX = 10.0
 MIN_NUMERIC_WIDTH_FRACTION = 0.55
 MIN_SKEW_WIDTH_PX = 12.0
 MIN_SKEW_WIDTH_FRACTION = 0.65
+MIN_CONSERVATION_WIDTH_PX = 6.0
+MIN_CONSERVATION_WIDTH_FRACTION = 0.35
+MIN_DENSE_CONSERVATION_WIDTH_PX = 4.0
+MIN_AUTO_STACK_SPACING_PX = 1.0
 PREFERRED_MIN_NUMERIC_WIDTH_FRACTION = 0.4
 PREFERRED_MIN_SKEW_WIDTH_FRACTION = 0.4
 
@@ -229,6 +233,7 @@ class _RadialSlotIntent:
     width_px: float
     explicit_anchor: bool
     explicit_width: bool
+    explicit_spacing: bool
     spacing_px: float
     z: int
     compress: bool
@@ -597,6 +602,8 @@ def _default_width_px(
     base = float(canvas_config.radius) * float(canvas_config.track_ratio)
     if renderer == "features":
         return base * float(cfg.canvas.circular.track_ratio_factors[length_param][0])
+    if renderer == "sequence_conservation":
+        return base * float(cfg.canvas.circular.track_ratio_factors[length_param][0])
     if renderer == "depth":
         return base * float(cfg.canvas.circular.track_ratio_factors[length_param][1]) * 0.5
     if renderer == "dinucleotide_skew":
@@ -691,6 +698,7 @@ def _slot_intents(
                 width_px=max(0.0, float(width_px)),
                 explicit_anchor=explicit_anchor,
                 explicit_width=slot.width is not None,
+                explicit_spacing=slot.spacing is not None,
                 spacing_px=max(0.0, float(spacing_px)),
                 z=slot.z,
                 compress=slot.compress,
@@ -831,6 +839,8 @@ def _min_readable_numeric_width_px(renderer: str, default_width_px: float) -> fl
     width = max(0.0, float(default_width_px))
     if width <= LAYOUT_EPSILON:
         return 0.0
+    if renderer == "sequence_conservation":
+        return min(width, max(MIN_CONSERVATION_WIDTH_PX, MIN_CONSERVATION_WIDTH_FRACTION * width))
     if renderer == "dinucleotide_skew":
         return min(width, max(MIN_SKEW_WIDTH_PX, MIN_SKEW_WIDTH_FRACTION * width))
     return min(width, max(MIN_NUMERIC_WIDTH_PX, MIN_NUMERIC_WIDTH_FRACTION * width))
@@ -840,6 +850,8 @@ def _min_readable_preferred_width_px(renderer: str, default_width_px: float) -> 
     width = max(0.0, float(default_width_px))
     if width <= LAYOUT_EPSILON:
         return 0.0
+    if renderer == "sequence_conservation":
+        return min(width, max(MIN_CONSERVATION_WIDTH_PX, PREFERRED_MIN_NUMERIC_WIDTH_FRACTION * width))
     if renderer == "dinucleotide_skew":
         return min(width, max(MIN_SKEW_WIDTH_PX, PREFERRED_MIN_SKEW_WIDTH_FRACTION * width))
     return min(width, max(MIN_NUMERIC_WIDTH_PX, PREFERRED_MIN_NUMERIC_WIDTH_FRACTION * width))
@@ -849,6 +861,8 @@ def _min_dense_stack_numeric_width_px(renderer: str, default_width_px: float) ->
     width = max(0.0, float(default_width_px))
     if width <= LAYOUT_EPSILON:
         return 0.0
+    if renderer == "sequence_conservation":
+        return min(width, MIN_DENSE_CONSERVATION_WIDTH_PX)
     if renderer == "dinucleotide_skew":
         return min(width, MIN_SKEW_WIDTH_PX)
     return min(width, MIN_NUMERIC_WIDTH_PX)
@@ -1188,6 +1202,26 @@ def _scaled_inside_auto_width(intent: _RadialSlotIntent, scale: float) -> tuple[
     return scaled_width, scaled_width < width - LAYOUT_EPSILON
 
 
+def _scaled_inside_auto_spacing(intent: _RadialSlotIntent, scale: float) -> float:
+    spacing = max(0.0, float(intent.spacing_px))
+    if (
+        spacing <= LAYOUT_EPSILON
+        or intent.explicit_spacing
+        or not _shrinkable_inside_numeric(intent)
+    ):
+        return spacing
+    return max(min(spacing, MIN_AUTO_STACK_SPACING_PX), spacing * float(scale))
+
+
+def _inside_stack_failure_hint(intents: Sequence[_RadialSlotIntent]) -> str:
+    if any(intent.renderer == "sequence_conservation" for intent in intents):
+        return (
+            " For many conservation rings, reduce Ring Width/Ring Gap, disable GC/skew/depth tracks, "
+            "move some tracks outside, or reduce the number of comparison files."
+        )
+    return ""
+
+
 def _place_inside_auto_stack_group(
     intents: Sequence[_RadialSlotIntent],
     *,
@@ -1229,7 +1263,10 @@ def _place_inside_auto_stack_group(
             if _slot_reserves(intent) and resolved.reserved_band_px is not None:
                 working_occupied.append((intent.slot_id, resolved.reserved_band_px))
             if resolved.packing_band_px is not None:
-                working_outer = min(working_outer, float(resolved.packing_band_px.inner_px) - intent.spacing_px)
+                working_outer = min(
+                    working_outer,
+                    float(resolved.packing_band_px.inner_px) - _scaled_inside_auto_spacing(intent, scale),
+                )
         if not failed:
             return tuple(resolved_group)
 
@@ -1238,6 +1275,7 @@ def _place_inside_auto_stack_group(
         f"Circular track slot '{first_unplaced}' cannot fit inside between "
         f"{placement_window.inner_px:.1f}px and {placement_window.outer_px:.1f}px. "
         "Move the slot, reduce widths, disable conflicting labels, or use side=outside."
+        f"{_inside_stack_failure_hint(intents)}"
     )
 
 
@@ -1762,7 +1800,14 @@ def resolve_circular_radial_layout(
     )
     resolved_by_index: dict[int, CircularResolvedSlot] = {}
     intent_by_index = {intent.slot_index: intent for intent in intents}
-    spacing_by_index = {intent.slot_index: intent.spacing_px for intent in intents}
+    spacing_by_index = {
+        intent.slot_index: (
+            _scaled_inside_auto_spacing(intent, 0.0)
+            if intent.side == "inside"
+            else intent.spacing_px
+        )
+        for intent in intents
+    }
     movable_by_index = {
         intent.slot_index: intent.placement_policy in {"auto", "preferred"}
         for intent in intents

@@ -16,8 +16,19 @@ import { createLegendLayout } from './legend-layout.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 import { createOrthogroupEditor } from './orthogroups.js';
-import { createCircularTrackSlotEditor } from './circular-track-slots.js';
+import {
+  createCircularTrackSlotEditor,
+  estimateCircularConservationLayoutWarning
+} from './circular-track-slots.js';
 import { createLosatSettings } from './losat-settings.js';
+import {
+  conservationSourceDescriptors,
+  defaultConservationSeriesLabel,
+  moveConservationSeriesEntry,
+  normalizeFileList,
+  parseConservationLabelText,
+  reconcileConservationSeries
+} from './conservation-series.js';
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref } = window.Vue;
 
@@ -50,6 +61,7 @@ export const createAppSetup = () => {
     blastSource,
     losatProgram,
     files,
+    circularConservation,
     linearSeqs,
     form,
     adv,
@@ -186,17 +198,129 @@ export const createAppSetup = () => {
   });
 
   const circularTrackNewRenderer = ref('dinucleotide_skew');
+  const circularConservationFastaInput = ref(null);
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
+  const circularConservationLayoutWarning = computed(() => estimateCircularConservationLayoutWarning(state));
   const losatSettings = createLosatSettings({ state });
+  const isCircularConservationUploadSource = () => (
+    String(circularConservation.source || '').trim().toLowerCase() === 'upload'
+  );
+  const getCircularConservationSourceFiles = () => (
+    isCircularConservationUploadSource()
+      ? normalizeFileList(files.c_conservation_blasts)
+      : normalizeFileList(files.c_conservation_fastas)
+  );
+  const setCircularConservationSourceFiles = (nextFiles) => {
+    const normalized = normalizeFileList(nextFiles);
+    if (isCircularConservationUploadSource()) {
+      files.c_conservation_blasts = normalized;
+    } else {
+      files.c_conservation_fastas = normalized;
+    }
+    losatCacheInfo.value = [];
+    syncCircularConservationSeries();
+  };
+  const syncCircularConservationSeries = () => {
+    const sourceFiles = getCircularConservationSourceFiles();
+    const legacyLabels = parseConservationLabelText(circularConservation.labels);
+    const nextSeries = reconcileConservationSeries({
+      sourceFiles,
+      previousSeries: circularConservation.series,
+      legacyLabels
+    });
+    circularConservation.series.splice(0, circularConservation.series.length, ...nextSeries);
+    if (adv.circular_track_slots_enabled === true) {
+      circularTrackSlotEditor.syncCircularConservationSlots();
+    }
+  };
+  const circularConservationSeriesRows = computed(() => {
+    return (Array.isArray(circularConservation.series) ? circularConservation.series : []).map((entry, index) => ({
+      index,
+      filename: String(entry?.fileName || `source_${Number(index) + 1}`).trim(),
+      sourceLabel: `${isCircularConservationUploadSource() ? 'BLAST' : 'Comparison'} ${Number(index) + 1}`,
+      defaultLabel: defaultConservationSeriesLabel(
+        { name: entry?.fileName },
+        Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry.sourceIndex) : index
+      )
+    }));
+  });
+  const canMoveCircularConservationSeries = (index, direction) => {
+    const idx = Number(index);
+    const target = idx + Math.sign(Number(direction));
+    return (
+      Array.isArray(circularConservation.series) &&
+      Number.isInteger(idx) &&
+      idx >= 0 &&
+      idx < circularConservation.series.length &&
+      target >= 0 &&
+      target < circularConservation.series.length
+    );
+  };
+  const moveCircularConservationSeries = (index, direction) => {
+    if (moveConservationSeriesEntry(circularConservation.series, index, direction)) {
+      if (adv.circular_track_slots_enabled === true) {
+        circularTrackSlotEditor.syncCircularConservationSlots();
+      }
+    }
+  };
+  const openCircularConservationComparisonFilePicker = () => {
+    circularConservationFastaInput.value?.click();
+  };
+  const addCircularConservationComparisonFile = (event) => {
+    const target = event?.target || null;
+    const selectedFile = Array.from(target?.files || []).filter(Boolean)[0] || null;
+    if (!selectedFile) return;
+    files.c_conservation_fastas = [...normalizeFileList(files.c_conservation_fastas), selectedFile];
+    losatCacheInfo.value = [];
+    syncCircularConservationSeries();
+    if (target) target.value = '';
+  };
+  const removeCircularConservationSource = (index) => {
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= circularConservation.series.length) return;
+    const entry = circularConservation.series[idx];
+    const sourceFiles = getCircularConservationSourceFiles();
+    const descriptors = conservationSourceDescriptors(sourceFiles);
+    let sourceIndex = descriptors.findIndex((descriptor) => descriptor.sourceKey === String(entry?.sourceKey || ''));
+    if (sourceIndex < 0) {
+      const fileName = String(entry?.fileName || '').trim();
+      sourceIndex = descriptors.findIndex((descriptor) => descriptor.fileName === fileName);
+    }
+    if (sourceIndex < 0 && idx < sourceFiles.length) sourceIndex = idx;
+    if (sourceIndex < 0 || sourceIndex >= sourceFiles.length) return;
+    setCircularConservationSourceFiles(sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex));
+  };
+  watch(
+    () => [
+      circularConservation.source,
+      files.c_conservation_blasts,
+      files.c_conservation_fastas,
+      circularConservation.labels
+    ],
+    syncCircularConservationSeries,
+    { deep: true, immediate: true }
+  );
   watch(
     () => [adv.circular_track_slots_enabled, form.show_depth],
     ([slotsEnabled, showDepth]) => {
       if (slotsEnabled) {
         circularTrackSlotEditor.normalizeCircularTrackSlots();
+        circularTrackSlotEditor.syncCircularConservationSlots();
       }
       if (slotsEnabled && showDepth) {
         circularTrackSlotEditor.ensureCircularTrackDepthSlot();
       }
+    }
+  );
+  watch(
+    () => [
+      adv.circular_track_slots_enabled,
+      circularConservation.enabled,
+      circularConservation.source,
+      circularConservation.series.map((entry) => `${entry?.sourceKey || ''}:${entry?.label || ''}:${entry?.color || ''}`).join('|')
+    ],
+    ([slotsEnabled]) => {
+      if (slotsEnabled) circularTrackSlotEditor.syncCircularConservationSlots();
     }
   );
   const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions });
@@ -813,6 +937,16 @@ export const createAppSetup = () => {
     blastSource,
     losatProgram,
     files,
+    circularConservation,
+    circularConservationLayoutWarning,
+    circularConservationFastaInput,
+    circularConservationSeriesRows,
+    canMoveCircularConservationSeries,
+    moveCircularConservationSeries,
+    openCircularConservationComparisonFilePicker,
+    addCircularConservationComparisonFile,
+    removeCircularConservationSource,
+    syncCircularConservationSeries,
     linearSeqs,
     linearReorderNotice,
     addLinearSeq,
@@ -850,6 +984,10 @@ export const createAppSetup = () => {
     circularTrackSlots: circularTrackSlotEditor.circularTrackSlots,
     circularTrackStackEntries: circularTrackSlotEditor.circularTrackStackEntries,
     circularTrackSlotCliSpec: circularTrackSlotEditor.circularTrackSlotCliSpec,
+    circularTrackSlotDisplayLabel: circularTrackSlotEditor.circularTrackSlotDisplayLabel,
+    circularTrackSlotDisplayMeta: circularTrackSlotEditor.circularTrackSlotDisplayMeta,
+    circularTrackSlotColor: circularTrackSlotEditor.circularTrackSlotColor,
+    isManagedCircularConservationSlot: circularTrackSlotEditor.isManagedCircularConservationSlot,
     circularTrackPresetSummary: circularTrackSlotEditor.circularTrackPresetSummary,
     circularTrackSlotUsesPresetGeometry: circularTrackSlotEditor.circularTrackSlotUsesPresetGeometry,
     losat,

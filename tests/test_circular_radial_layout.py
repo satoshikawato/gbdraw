@@ -261,6 +261,70 @@ def _small_radial_canvas() -> tuple[CircularCanvasConfigurator, GbdrawConfig]:
     return canvas_config, cfg
 
 
+def test_auto_conservation_stack_compresses_ring_width_and_gap_when_tight() -> None:
+    canvas_config, cfg = _small_radial_canvas()
+    canvas_config.radius = 300.0
+    conservation_slots = [
+        CircularTrackSlot(id=f"conservation_{idx}", renderer="sequence_conservation")
+        for idx in range(22)
+    ]
+
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        cfg=cfg,
+        slots=[
+            CircularTrackSlot(id="features", renderer="features"),
+            *conservation_slots,
+            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+        ],
+        feature_dict={"a": _Feature(0)},
+        show_features=True,
+        show_ticks=False,
+    )
+
+    by_id = {slot.id: slot for slot in layout.slots}
+    resolved_conservation = [by_id[f"conservation_{idx}"] for idx in range(22)]
+    assert all(slot.compressed for slot in resolved_conservation)
+    assert resolved_conservation[0].resolved_width_px < resolved_conservation[0].requested_width_px
+
+    gap_px = (
+        resolved_conservation[0].packing_band_px.inner_px
+        - resolved_conservation[1].packing_band_px.outer_px
+    )
+    assert gap_px == pytest.approx(1.0)
+    assert gap_px < 0.01 * float(canvas_config.radius)
+    assert by_id["gc_content"].compressed
+    assert by_id["gc_skew"].compressed
+
+
+def test_explicit_conservation_ring_width_is_not_auto_compressed() -> None:
+    canvas_config, cfg = _small_radial_canvas()
+    canvas_config.radius = 300.0
+
+    with pytest.raises(Exception, match="cannot fit inside"):
+        resolve_circular_radial_layout(
+            total_length=1000,
+            canvas_config=canvas_config,
+            cfg=cfg,
+            slots=[
+                CircularTrackSlot(id="features", renderer="features"),
+                *[
+                    CircularTrackSlot(
+                        id=f"conservation_{idx}",
+                        renderer="sequence_conservation",
+                        width=ScalarSpec(20.0, "px"),
+                    )
+                    for idx in range(22)
+                ],
+            ],
+            feature_dict={"a": _Feature(0)},
+            show_features=True,
+            show_ticks=False,
+        )
+
+
 def test_radial_numeric_stack_places_default_inside_tracks_when_space_allows() -> None:
     canvas_config, cfg = _small_radial_canvas()
     layout = resolve_circular_radial_layout(

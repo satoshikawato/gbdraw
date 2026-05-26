@@ -23,6 +23,14 @@ from svgwrite import Drawing  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
 from gbdraw.analysis.depth import depth_df as build_depth_df, read_depth_tsv  # type: ignore[reportMissingImports]
+from gbdraw.analysis.conservation import (  # type: ignore[reportMissingImports]
+    ConservationLoadResult,
+    ConservationTrack,
+    conservation_track_gradient_colors,
+    load_conservation_sources,
+    normalize_conservation_reference,
+    normalize_conservation_tracks_for_record,
+)
 from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
     OrthogroupResult,
     ProteinBlastpMode,
@@ -77,6 +85,8 @@ from gbdraw.legend.table import (  # type: ignore[reportMissingImports]
 from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup  # type: ignore[reportMissingImports]
 from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
+    ScalarSpec,
+    circular_track_slots_from_order,
     normalize_circular_track_slots_with_axis,
     parse_circular_track_slots,
 )
@@ -160,6 +170,13 @@ def _circular_slots_have_renderer(
     return any(slot.enabled and str(slot.renderer) == renderer for slot in (slots or []))
 
 
+def _circular_slots_define_renderer(
+    slots: Sequence[CircularTrackSlot] | None,
+    renderer: str,
+) -> bool:
+    return any(str(slot.renderer) == renderer for slot in (slots or []))
+
+
 def _dinucleotides_from_circular_slots(
     slots: Sequence[CircularTrackSlot] | None,
     *,
@@ -184,6 +201,206 @@ def _build_circular_dinucleotide_dataframes(
     nts: set[str],
 ) -> dict[str, DataFrame]:
     return {nt: skew_df(record, window, step, nt) for nt in sorted(nts)}
+
+
+def _has_conservation_inputs(
+    conservation_blast_files: Sequence[str] | None,
+    conservation_dataframes: Sequence[DataFrame] | None,
+) -> bool:
+    return bool(conservation_blast_files or conservation_dataframes)
+
+
+def _build_conservation_blast_config(
+    records: Sequence[SeqRecord],
+    *,
+    evalue: float,
+    bitscore: float,
+    identity: float,
+    alignment_length: int,
+    config_dict: dict,
+    default_colors: DataFrame,
+    cfg: GbdrawConfig,
+) -> BlastMatchConfigurator:
+    return BlastMatchConfigurator(
+        evalue=float(evalue),
+        bitscore=float(bitscore),
+        identity=float(identity),
+        alignment_length=int(alignment_length),
+        sequence_length_dict=create_dict_for_sequence_lengths(records),
+        config_dict=config_dict,
+        default_colors_df=default_colors,
+        cfg=cfg,
+    )
+
+
+def _load_conservation_result(
+    records: Sequence[SeqRecord],
+    *,
+    conservation_blast_files: Sequence[str] | None,
+    conservation_dataframes: Sequence[DataFrame] | None,
+    conservation_labels: Sequence[str] | None,
+    conservation_colors: Sequence[str] | None,
+    evalue: float,
+    bitscore: float,
+    identity: float,
+    alignment_length: int,
+    config_dict: dict,
+    default_colors: DataFrame,
+    cfg: GbdrawConfig,
+) -> ConservationLoadResult | None:
+    if not _has_conservation_inputs(conservation_blast_files, conservation_dataframes):
+        return None
+    if alignment_length < 0:
+        raise ValidationError("alignment_length must be >= 0")
+    blast_config = _build_conservation_blast_config(
+        records,
+        evalue=evalue,
+        bitscore=bitscore,
+        identity=identity,
+        alignment_length=alignment_length,
+        config_dict=config_dict,
+        default_colors=default_colors,
+        cfg=cfg,
+    )
+    return load_conservation_sources(
+        blast_config=blast_config,
+        conservation_files=conservation_blast_files,
+        conservation_dataframes=conservation_dataframes,
+        labels=conservation_labels,
+        colors=conservation_colors,
+    )
+
+
+def _conservation_ring_width(
+    cfg: GbdrawConfig,
+    explicit_width: float | None,
+) -> float | None:
+    return float(explicit_width) if explicit_width is not None else cfg.objects.conservation.ring_width
+
+
+def _conservation_ring_gap(
+    cfg: GbdrawConfig,
+    explicit_gap: float | None,
+) -> float | None:
+    return float(explicit_gap) if explicit_gap is not None else cfg.objects.conservation.ring_gap
+
+
+def _conservation_slots_for_tracks(
+    tracks: Sequence[ConservationTrack],
+    *,
+    cfg: GbdrawConfig,
+    conservation_ring_width: float | None,
+    conservation_ring_gap: float | None,
+) -> list[CircularTrackSlot]:
+    width = _conservation_ring_width(cfg, conservation_ring_width)
+    gap = _conservation_ring_gap(cfg, conservation_ring_gap)
+    return [
+        CircularTrackSlot(
+            id=f"conservation_{int(track.track_index)}",
+            renderer="sequence_conservation",
+            side="inside",
+            width=ScalarSpec(float(width), "px") if width is not None else None,
+            spacing=ScalarSpec(float(gap), "px") if gap is not None else None,
+            params={
+                "track_index": int(track.track_index),
+                "source_index": int(track.source_index),
+                "label": track.track_label,
+                "color": track.track_color or "",
+            },
+        )
+        for track in tracks
+    ]
+
+
+def _insert_conservation_slots(
+    base_slots: Sequence[CircularTrackSlot],
+    conservation_slots: Sequence[CircularTrackSlot],
+) -> list[CircularTrackSlot]:
+    if not conservation_slots:
+        return list(base_slots)
+    out: list[CircularTrackSlot] = []
+    inserted = False
+    for slot in base_slots:
+        out.append(slot)
+        if not inserted and str(slot.renderer) == "features":
+            out.extend(conservation_slots)
+            inserted = True
+    if not inserted:
+        out = list(conservation_slots) + out
+    return out
+
+
+def _apply_conservation_track_params_to_slots(
+    base_slots: Sequence[CircularTrackSlot],
+    tracks: Sequence[ConservationTrack],
+    *,
+    cfg: GbdrawConfig,
+    conservation_ring_width: float | None,
+    conservation_ring_gap: float | None,
+) -> list[CircularTrackSlot]:
+    if not tracks:
+        return list(base_slots)
+    width = _conservation_ring_width(cfg, conservation_ring_width)
+    gap = _conservation_ring_gap(cfg, conservation_ring_gap)
+    out: list[CircularTrackSlot] = []
+    track_order = list(tracks)
+    next_track_index = 0
+    used_source_indexes: set[int] = set()
+    for slot in base_slots:
+        if str(slot.renderer) != "sequence_conservation":
+            out.append(slot)
+            continue
+
+        params = dict(slot.params or {})
+        raw_track_index = params.get("track_index")
+        track: ConservationTrack | None = None
+        raw_source_index = params.get("source_index")
+        if raw_source_index is not None:
+            try:
+                wanted_source_index = int(raw_source_index)
+                track = next(
+                    item
+                    for item in track_order
+                    if int(item.source_index) == wanted_source_index
+                )
+            except Exception:
+                track = None
+        if track is None and raw_track_index is not None:
+            try:
+                wanted_track_index = int(raw_track_index)
+                track = next(
+                    item
+                    for item in track_order
+                    if int(item.track_index) == wanted_track_index
+                )
+            except Exception:
+                track = None
+        if track is None and next_track_index < len(track_order):
+            while (
+                next_track_index < len(track_order)
+                and int(track_order[next_track_index].source_index) in used_source_indexes
+            ):
+                next_track_index += 1
+            if next_track_index < len(track_order):
+                track = track_order[next_track_index]
+                next_track_index += 1
+
+        if track is not None:
+            used_source_indexes.add(int(track.source_index))
+            params.setdefault("track_index", int(track.track_index))
+            params.setdefault("source_index", int(track.source_index))
+            params.setdefault("label", track.track_label)
+            params.setdefault("color", track.track_color or "")
+        out.append(
+            replace(
+                slot,
+                side=slot.side,
+                width=slot.width or (ScalarSpec(float(width), "px") if width is not None else None),
+                spacing=slot.spacing or (ScalarSpec(float(gap), "px") if gap is not None else None),
+                params=params,
+            )
+        )
+    return out
 
 
 def _resolve_circular_window_step(
@@ -260,6 +477,16 @@ def _validate_gc_content_config(gc_content_config) -> None:
 def _validate_positive_optional(name: str, value: int | None) -> None:
     if value is not None and int(value) <= 0:
         raise ValidationError(f"{name} must be > 0")
+
+
+def _validate_positive_float_optional(name: str, value: float | None) -> None:
+    if value is not None and (not math.isfinite(float(value)) or float(value) <= 0):
+        raise ValidationError(f"{name} must be > 0")
+
+
+def _validate_nonnegative_float_optional(name: str, value: float | None) -> None:
+    if value is not None and (not math.isfinite(float(value)) or float(value) < 0):
+        raise ValidationError(f"{name} must be a finite number >= 0")
 
 
 def _resolve_depth_window_step(
@@ -1649,6 +1876,13 @@ def assemble_linear_diagram_from_records(
 def assemble_circular_diagram_from_record(
     gb_record: SeqRecord,
     *,
+    conservation_blast_files: Sequence[str] | None = None,
+    conservation_dataframes: Sequence[DataFrame] | None = None,
+    conservation_reference: Literal["query", "subject", "auto"] | str = "auto",
+    conservation_labels: Sequence[str] | None = None,
+    conservation_colors: Sequence[str] | None = None,
+    conservation_ring_width: float | None = None,
+    conservation_ring_gap: float | None = None,
     config_dict: dict | None = None,
     config_overrides: Mapping[str, object] | None = None,
     color_table: Optional[DataFrame] = None,
@@ -1675,12 +1909,18 @@ def assemble_circular_diagram_from_record(
     plot_title_position: Literal["none", "top", "bottom"] = "none",
     plot_title_font_size: float | None = None,
     keep_full_definition_with_plot_title: bool = False,
+    center_reserved_radius: float | None = None,
     circular_track_slots: Sequence[str | CircularTrackSlot] | None = None,
     circular_track_axis_index: int | None = None,
+    evalue: float = 1e-5,
+    bitscore: float = 50.0,
+    identity: float = 70.0,
+    alignment_length: int = 0,
     _definition_profile: Literal["full", "record_summary", "shared_common"] = "full",
     _tick_track_channel_override: Literal["short", "long"] | None = None,
     _precomputed_depth_df: DataFrame | None = None,
     _shared_depth_max: float | None = None,
+    _precomputed_conservation_tracks: Sequence[ConservationTrack] | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
@@ -1693,6 +1933,9 @@ def assemble_circular_diagram_from_record(
     """
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
+    _validate_positive_float_optional("conservation_ring_width", conservation_ring_width)
+    _validate_positive_float_optional("conservation_ring_gap", conservation_ring_gap)
+    _validate_nonnegative_float_optional("center_reserved_radius", center_reserved_radius)
     if color_table is None and color_table_file is not None:
         color_table = read_color_table(color_table_file)
     if feature_table is None and feature_table_file is not None:
@@ -1749,6 +1992,35 @@ def assemble_circular_diagram_from_record(
         else:
             effective_definition_profile = "full"
 
+    conservation_mode = normalize_conservation_reference(conservation_reference)
+    if _precomputed_conservation_tracks is not None:
+        conservation_tracks = tuple(_precomputed_conservation_tracks)
+    else:
+        conservation_load_result = _load_conservation_result(
+            [gb_record],
+            conservation_blast_files=conservation_blast_files,
+            conservation_dataframes=conservation_dataframes,
+            conservation_labels=conservation_labels,
+            conservation_colors=conservation_colors,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+            config_dict=config_dict,
+            default_colors=default_colors,
+            cfg=cfg,
+        )
+        conservation_tracks = (
+            normalize_conservation_tracks_for_record(
+                conservation_load_result,
+                displayed_records=[gb_record],
+                record=gb_record,
+                conservation_reference=conservation_mode,
+            )
+            if conservation_load_result is not None
+            else ()
+        )
+
     parsed_circular_track_slots = _parse_circular_track_slot_inputs(circular_track_slots)
     circular_track_axis_index = _validate_circular_track_axis_index(
         circular_track_axis_index,
@@ -1768,6 +2040,34 @@ def assemble_circular_diagram_from_record(
         show_depth = cfg.canvas.show_depth
         show_gc = cfg.canvas.show_gc
         show_skew = cfg.canvas.show_skew
+    if conservation_tracks:
+        if _circular_slots_define_renderer(parsed_circular_track_slots, "sequence_conservation"):
+            parsed_circular_track_slots = _apply_conservation_track_params_to_slots(
+                parsed_circular_track_slots or (),
+                conservation_tracks,
+                cfg=cfg,
+                conservation_ring_width=conservation_ring_width,
+                conservation_ring_gap=conservation_ring_gap,
+            )
+        else:
+            conservation_slots = _conservation_slots_for_tracks(
+                conservation_tracks,
+                cfg=cfg,
+                conservation_ring_width=conservation_ring_width,
+                conservation_ring_gap=conservation_ring_gap,
+            )
+            if parsed_circular_track_slots is None:
+                parsed_circular_track_slots = circular_track_slots_from_order(
+                    "features,ticks,depth,gc_content,gc_skew",
+                    show_depth=show_depth,
+                    show_gc=show_gc,
+                    show_skew=show_skew,
+                    dinucleotide=dinucleotide,
+                )
+            parsed_circular_track_slots = _insert_conservation_slots(
+                parsed_circular_track_slots,
+                conservation_slots,
+            )
     canvas_cfg = cfg.canvas
     canvas_cfg = replace(
         canvas_cfg,
@@ -1905,12 +2205,15 @@ def assemble_circular_diagram_from_record(
         legend_config=legend_config,
         depth_df=resolved_depth_df,
         depth_config=depth_config,
+        conservation_tracks=conservation_tracks,
+        conservation_min_identity=float(identity),
         cfg=cfg,
         circular_track_slots=parsed_circular_track_slots,
         circular_track_axis_index=circular_track_axis_index,
         dinucleotide_dataframes=dinucleotide_dataframes,
         definition_position="center",
         definition_profile=effective_definition_profile,
+        center_reserved_radius=center_reserved_radius,
         _tick_track_channel_override=_tick_track_channel_override,
     )
     if show_plot_title:
@@ -1937,6 +2240,13 @@ def assemble_circular_diagram_from_record(
 def assemble_circular_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
+    conservation_blast_files: Sequence[str] | None = None,
+    conservation_dataframes: Sequence[DataFrame] | None = None,
+    conservation_reference: Literal["query", "subject", "auto"] | str = "auto",
+    conservation_labels: Sequence[str] | None = None,
+    conservation_colors: Sequence[str] | None = None,
+    conservation_ring_width: float | None = None,
+    conservation_ring_gap: float | None = None,
     config_dict: dict | None = None,
     config_overrides: Mapping[str, object] | None = None,
     color_table: Optional[DataFrame] = None,
@@ -1965,6 +2275,7 @@ def assemble_circular_diagram_from_records(
     plot_title_position: Literal["none", "top", "bottom"] = "none",
     plot_title_font_size: float | None = None,
     keep_full_definition_with_plot_title: bool = False,
+    center_reserved_radius: float | None = None,
     multi_record_size_mode: Literal["linear", "auto", "equal", "sqrt"] = "auto",
     multi_record_min_radius_ratio: float = 0.55,
     multi_record_column_gap_ratio: float = _MULTI_RECORD_COLUMN_GAP_RATIO,
@@ -1972,6 +2283,10 @@ def assemble_circular_diagram_from_records(
     multi_record_positions: Sequence[str] | None = None,
     circular_track_slots: Sequence[str | CircularTrackSlot] | None = None,
     circular_track_axis_index: int | None = None,
+    evalue: float = 1e-5,
+    bitscore: float = 50.0,
+    identity: float = 70.0,
+    alignment_length: int = 0,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Build and assemble a circular diagram grid from multiple records."""
@@ -1979,6 +2294,9 @@ def assemble_circular_diagram_from_records(
         raise ValidationError("records is empty")
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
+    _validate_positive_float_optional("conservation_ring_width", conservation_ring_width)
+    _validate_positive_float_optional("conservation_ring_gap", conservation_ring_gap)
+    _validate_nonnegative_float_optional("center_reserved_radius", center_reserved_radius)
 
     normalized_multi_record_size_mode = _resolve_multi_record_size_mode(
         str(multi_record_size_mode)
@@ -2014,6 +2332,13 @@ def assemble_circular_diagram_from_records(
             single_depth_file = depth_files[0]
         return assemble_circular_diagram_from_record(
             records[0],
+            conservation_blast_files=conservation_blast_files,
+            conservation_dataframes=conservation_dataframes,
+            conservation_reference=conservation_reference,
+            conservation_labels=conservation_labels,
+            conservation_colors=conservation_colors,
+            conservation_ring_width=conservation_ring_width,
+            conservation_ring_gap=conservation_ring_gap,
             config_dict=config_dict,
             config_overrides=config_overrides,
             color_table=color_table,
@@ -2040,8 +2365,13 @@ def assemble_circular_diagram_from_records(
             plot_title_position=normalized_plot_title_position,
             plot_title_font_size=plot_title_font_size,
             keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
+            center_reserved_radius=center_reserved_radius,
             circular_track_slots=circular_track_slots,
             circular_track_axis_index=circular_track_axis_index,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
             cfg=cfg,
         )
 
@@ -2102,6 +2432,32 @@ def assemble_circular_diagram_from_records(
     if resolved_depth_tables is not None:
         resolved_depth_tables = [resolved_depth_tables[idx] for idx in ordered_indices]
 
+    conservation_mode = normalize_conservation_reference(conservation_reference)
+    conservation_load_result = _load_conservation_result(
+        records,
+        conservation_blast_files=conservation_blast_files,
+        conservation_dataframes=conservation_dataframes,
+        conservation_labels=conservation_labels,
+        conservation_colors=conservation_colors,
+        evalue=evalue,
+        bitscore=bitscore,
+        identity=identity,
+        alignment_length=alignment_length,
+        config_dict=config_dict,
+        default_colors=default_colors,
+        cfg=cfg,
+    )
+    first_record_conservation_tracks = (
+        normalize_conservation_tracks_for_record(
+            conservation_load_result,
+            displayed_records=records,
+            record=records[0],
+            conservation_reference=conservation_mode,
+        )
+        if conservation_load_result is not None
+        else ()
+    )
+
     parsed_circular_track_slots = _parse_circular_track_slot_inputs(circular_track_slots)
     circular_track_axis_index = _validate_circular_track_axis_index(
         circular_track_axis_index,
@@ -2120,6 +2476,34 @@ def assemble_circular_diagram_from_records(
         show_depth = cfg.canvas.show_depth
         show_gc = cfg.canvas.show_gc
         show_skew = cfg.canvas.show_skew
+    if first_record_conservation_tracks:
+        if _circular_slots_define_renderer(parsed_circular_track_slots, "sequence_conservation"):
+            parsed_circular_track_slots = _apply_conservation_track_params_to_slots(
+                parsed_circular_track_slots or (),
+                first_record_conservation_tracks,
+                cfg=cfg,
+                conservation_ring_width=conservation_ring_width,
+                conservation_ring_gap=conservation_ring_gap,
+            )
+        else:
+            conservation_slots = _conservation_slots_for_tracks(
+                first_record_conservation_tracks,
+                cfg=cfg,
+                conservation_ring_width=conservation_ring_width,
+                conservation_ring_gap=conservation_ring_gap,
+            )
+            if parsed_circular_track_slots is None:
+                parsed_circular_track_slots = circular_track_slots_from_order(
+                    "features,ticks,depth,gc_content,gc_skew",
+                    show_depth=show_depth,
+                    show_gc=show_gc,
+                    show_skew=show_skew,
+                    dinucleotide=dinucleotide,
+                )
+            parsed_circular_track_slots = _insert_conservation_slots(
+                parsed_circular_track_slots,
+                conservation_slots,
+            )
     canvas_cfg = replace(
         cfg.canvas,
         show_depth=bool(show_depth and resolved_depth_tables is not None),
@@ -2192,8 +2576,19 @@ def assemble_circular_diagram_from_records(
             if resolved_depth_tables is not None and record_index < len(resolved_depth_tables)
             else None
         )
+        record_conservation_tracks = (
+            normalize_conservation_tracks_for_record(
+                conservation_load_result,
+                displayed_records=records,
+                record=record,
+                conservation_reference=conservation_mode,
+            )
+            if conservation_load_result is not None
+            else ()
+        )
         sub_canvas = assemble_circular_diagram_from_record(
             record,
+            conservation_reference=conservation_mode,
             config_dict=config_dict,
             color_table=color_table,
             default_colors=default_colors,
@@ -2212,12 +2607,18 @@ def assemble_circular_diagram_from_records(
             strain=strain,
             plot_title=None,
             plot_title_position="none",
+            center_reserved_radius=center_reserved_radius,
             circular_track_slots=parsed_circular_track_slots,
             circular_track_axis_index=circular_track_axis_index,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
             _definition_profile=record_definition_profile,
             _tick_track_channel_override=tick_track_channel_override,
             _precomputed_depth_df=record_depth_dfs[record_index],
             _shared_depth_max=shared_depth_max,
+            _precomputed_conservation_tracks=record_conservation_tracks,
             cfg=scaled_cfg,
         )
         canvases.append(sub_canvas)
@@ -2503,6 +2904,31 @@ def assemble_circular_diagram_from_records(
             default_used_features=default_used_features,
             depth_config=depth_config,
         )
+        if first_record_conservation_tracks:
+            if any(track.track_color for track in first_record_conservation_tracks):
+                for track in first_record_conservation_tracks:
+                    min_color, max_color = conservation_track_gradient_colors(
+                        track.track_color,
+                        default_min_color=cfg.objects.conservation.min_color,
+                        default_max_color=cfg.objects.conservation.max_color,
+                    )
+                    legend_table[track.track_label] = {
+                        "type": "gradient",
+                        "min_color": min_color,
+                        "max_color": max_color,
+                        "stroke": "none",
+                        "width": 0,
+                        "min_value": float(identity),
+                    }
+            else:
+                legend_table["Conservation identity"] = {
+                    "type": "gradient",
+                    "min_color": cfg.objects.conservation.min_color,
+                    "max_color": cfg.objects.conservation.max_color,
+                    "stroke": "none",
+                    "width": 0,
+                    "min_value": float(identity),
+                }
         if legend_table:
             legend_config = LegendDrawingConfigurator(
                 color_table=color_table,
@@ -2703,6 +3129,17 @@ def build_circular_diagram(
             if options.depth_file is not None
             else (options.depth_files[0] if options.depth_files else None)
         ),
+        conservation_blast_files=options.conservation_blast_files,
+        conservation_dataframes=options.conservation_dataframes,
+        conservation_reference=options.conservation_reference,
+        conservation_labels=options.conservation_labels,
+        conservation_colors=options.conservation_colors,
+        conservation_ring_width=options.conservation_ring_width,
+        conservation_ring_gap=options.conservation_ring_gap,
+        evalue=options.evalue,
+        bitscore=options.bitscore,
+        identity=options.identity,
+        alignment_length=options.alignment_length,
         species=options.species,
         strain=options.strain,
         plot_title=options.plot_title,
@@ -2713,6 +3150,7 @@ def build_circular_diagram(
         ),
         plot_title_font_size=options.plot_title_font_size,
         keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,
+        center_reserved_radius=tracks.center_reserved_radius if tracks else None,
         circular_track_slots=tracks.circular_track_slots if tracks else None,
         circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
         cfg=cfg,

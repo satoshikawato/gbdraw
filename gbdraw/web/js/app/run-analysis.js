@@ -13,6 +13,10 @@ import {
   hasEnabledCircularTrackRenderer,
   inferLegacyAxisIndexFromFeature
 } from './circular-track-slots.js';
+import {
+  normalizeFileList,
+  orderedConservationSources
+} from './conservation-series.js';
 
 const downloadTextFile = (filename, text) => {
   const safeName = filename || 'losat.tsv';
@@ -280,7 +284,26 @@ const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelect
     canonicalLength: transformed.sequence.length
   };
 };
+const extractAllLosatFastaFast = async ({ file, text, fmt }) => {
+  if (typeof text !== 'string' && !file?.text) {
+    throw new Error('Input file is not available for browser FASTA extraction.');
+  }
+  const sourceText = typeof text === 'string' ? text : await file.text();
+  const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
+  if (!records.length) throw new Error('No records found for circular conservation reference.');
+  return {
+    fasta: records.map((record) => buildFastaText(record)).join(''),
+    recordIds: records.map((record) => record.id),
+    canonicalLength: records.reduce((sum, record) => sum + String(record.sequence || '').length, 0)
+  };
+};
 const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const buildConservationSeries = (sourceFiles, circularConservation) => {
+  return orderedConservationSources(sourceFiles, circularConservation).map((entry) => ({
+    label: entry.label,
+    color: entry.color
+  }));
+};
 const normalizeFeatureVisibilityMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized === 'on' || normalized === 'off' ? normalized : 'default';
@@ -506,6 +529,7 @@ export const createRunAnalysis = ({
     losatCacheInfo,
     losatThreadingStatus,
     losatCache,
+    circularConservation,
     orthogroups,
     featureOrthogroupIndex,
     selectedOrthogroupAlignmentFeature,
@@ -566,8 +590,8 @@ export const createRunAnalysis = ({
     for (const text of texts) {
       const lines = String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
       for (const line of lines) {
-        const cleaned = line.replace(/^(ValueError|RuntimeError):\s*/, '');
-        if (/^Circular track slot '.+' cannot fit inside the feature\/tick stack\./.test(cleaned)) {
+        const cleaned = line.replace(/^(ValueError|RuntimeError|ValidationError):\s*/, '');
+        if (/^Circular track slot '.+' cannot fit inside\b/.test(cleaned)) {
           return cleaned;
         }
       }
@@ -1044,6 +1068,12 @@ json.dumps({
     return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
   };
 
+  const normalizeNonNegativeNumberOrNull = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+  };
+
   const normalizeFeatureShape = (value) => (String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle');
 
   const getFeatureShapeOptionSupport = () => {
@@ -1087,11 +1117,18 @@ json.dumps({
         plot_title_position: false,
         plot_title_font_size: false,
         keep_full_definition_with_plot_title: false,
+        center_reserved_radius: false,
         tick_label_font_size: false,
         circular_label_spacing: false,
         label_rendering: false,
         circular_track_slot: false,
-        circular_track_axis_index: false
+        circular_track_axis_index: false,
+        conservation_blast: false,
+        conservation_reference: false,
+        conservation_labels: false,
+        conservation_colors: false,
+        conservation_ring_width: false,
+        conservation_ring_gap: false
       };
       return circularMultiRecordCanvasSupportCache;
     }
@@ -1111,11 +1148,18 @@ json.dumps({
   "plot_title_position": "--plot_title_position" in _source,
   "plot_title_font_size": "--plot_title_font_size" in _source,
   "keep_full_definition_with_plot_title": "--keep_full_definition_with_plot_title" in _source,
+  "center_reserved_radius": "--center_reserved_radius" in _source,
   "tick_label_font_size": "--tick_label_font_size" in _source,
   "circular_label_spacing": "--circular_label_spacing" in _source,
   "label_rendering": "--label_rendering" in _source,
   "circular_track_slot": "--circular_track_slot" in _source,
   "circular_track_axis_index": "--circular_track_axis_index" in _source,
+  "conservation_blast": "--conservation_blast" in _source,
+  "conservation_reference": "--conservation_reference" in _source,
+  "conservation_labels": "--conservation_labels" in _source,
+  "conservation_colors": "--conservation_colors" in _source,
+  "conservation_ring_width": "--conservation_ring_width" in _source,
+  "conservation_ring_gap": "--conservation_ring_gap" in _source,
 })
       `);
       circularMultiRecordCanvasSupportCache = JSON.parse(String(raw));
@@ -1131,14 +1175,35 @@ json.dumps({
         plot_title_position: false,
         plot_title_font_size: false,
         keep_full_definition_with_plot_title: false,
+        center_reserved_radius: false,
         tick_label_font_size: false,
         circular_label_spacing: false,
         label_rendering: false,
         circular_track_slot: false,
-        circular_track_axis_index: false
+        circular_track_axis_index: false,
+        conservation_blast: false,
+        conservation_reference: false,
+        conservation_labels: false,
+        conservation_colors: false,
+        conservation_ring_width: false,
+        conservation_ring_gap: false
       };
     }
     return circularMultiRecordCanvasSupportCache;
+  };
+
+  const runCircularLayoutPreflight = (preflightArgs) => {
+    const pyodide = getPyodide();
+    if (!pyodide) return null;
+    const runWrapper = pyodide.globals.get('run_gbdraw_wrapper');
+    const pyArgs = pyodide.toPy((preflightArgs || []).map((arg) => String(arg)));
+    try {
+      const resultJson = runWrapper('circular', pyArgs, null);
+      return JSON.parse(String(resultJson || 'null'));
+    } finally {
+      pyArgs.destroy?.();
+      runWrapper.destroy?.();
+    }
   };
 
   const downloadLosatPair = async (pairIndex, customName) => {
@@ -1757,10 +1822,12 @@ json.dumps({
             ? parsedPlotTitleFontSize
             : null;
         const keepFullDefinitionWithPlotTitle = Boolean(adv.keep_full_definition_with_plot_title);
+        const normalizedCenterReservedRadius = normalizeNonNegativeNumberOrNull(adv.center_reserved_radius);
         form.plot_title = normalizedCircularPlotTitle;
         adv.plot_title_position = normalizedPlotTitlePosition;
         adv.plot_title_font_size = normalizedPlotTitleFontSize;
         adv.keep_full_definition_with_plot_title = keepFullDefinitionWithPlotTitle;
+        adv.center_reserved_radius = normalizedCenterReservedRadius;
 
         if (selectedFeatureShapes.length > 0) {
           const shapeOptionSupport = getFeatureShapeOptionSupport();
@@ -1809,6 +1876,14 @@ json.dumps({
             );
           }
           args.push('--keep_full_definition_with_plot_title');
+        }
+        if (useCircularTrackSlots && normalizedCenterReservedRadius !== null) {
+          if (!multiCanvasSupport.center_reserved_radius) {
+            throw new Error(
+              'Current gbdraw wheel does not support --center_reserved_radius. Rebuild and redeploy the web wheel.'
+            );
+          }
+          args.push('--center_reserved_radius', String(normalizedCenterReservedRadius));
         }
         const labelsModeRaw =
           typeof form.labels_mode === 'string'
@@ -2003,6 +2078,279 @@ json.dumps({
           await stageUploadedFile(files.c_gff, '/input.gff');
           await stageUploadedFile(files.c_fasta, '/input.fasta');
           args.push('--gff', '/input.gff', '--fasta', '/input.fasta');
+        }
+
+        if (circularConservation.enabled === true) {
+          if (!multiCanvasSupport.conservation_blast || !multiCanvasSupport.conservation_reference) {
+            throw new Error(
+              'Current gbdraw wheel does not support circular conservation rings. Rebuild and redeploy the web wheel.'
+            );
+          }
+          const sourceMode = String(circularConservation.source || '').trim().toLowerCase() === 'upload'
+            ? 'upload'
+            : 'losat';
+          const width = normalizePositiveNumberOrNull(circularConservation.ring_width);
+          const gap = normalizePositiveNumberOrNull(circularConservation.ring_gap);
+          const writeEmptyConservationPreflightFiles = (count) => {
+            const paths = [];
+            for (let index = 0; index < count; index += 1) {
+              const path = `/conservation_preflight_${index}.txt`;
+              pyodide.FS.writeFile(path, new Uint8Array());
+              paths.push(path);
+            }
+            return paths;
+          };
+          const runConservationLayoutPreflight = (blastPaths, reference) => {
+            if (isReflow || !Array.isArray(blastPaths) || blastPaths.length === 0) return true;
+            throwIfGenerationCanceled();
+            setProcessingStatus('Checking circular track layout...');
+            const preflightArgs = [
+              ...args,
+              '--conservation_blast',
+              ...blastPaths,
+              '--conservation_reference',
+              reference
+            ];
+            const preflight = runCircularLayoutPreflight(preflightArgs);
+            if (!preflight?.error) return true;
+            const formatted = formatPythonError(preflight.error);
+            if (isReflow) {
+              labelReflowLastError.value = formatted?.summary || 'Auto reflow failed';
+            } else {
+              errorLog.value = formatted;
+            }
+            return false;
+          };
+          const appendConservationStyleArgs = (series) => {
+            const labels = series.map((entry) => entry.label);
+            const colors = series.map((entry) => entry.color);
+            if (labels.length > 0) {
+              if (!multiCanvasSupport.conservation_labels) {
+                throw new Error(
+                  'Current gbdraw wheel does not support --conservation_labels. Rebuild and redeploy the web wheel.'
+                );
+              }
+              args.push('--conservation_labels', ...labels);
+            }
+            if (colors.length > 0) {
+              if (!multiCanvasSupport.conservation_colors) {
+                throw new Error(
+                  'Current gbdraw wheel does not support --conservation_colors. Rebuild and redeploy the web wheel.'
+                );
+              }
+              args.push('--conservation_colors', ...colors);
+            }
+            if (width !== null) {
+              if (!multiCanvasSupport.conservation_ring_width) {
+                throw new Error(
+                  'Current gbdraw wheel does not support --conservation_ring_width. Rebuild and redeploy the web wheel.'
+                );
+              }
+              args.push('--conservation_ring_width', String(width));
+            }
+            if (gap !== null) {
+              if (!multiCanvasSupport.conservation_ring_gap) {
+                throw new Error(
+                  'Current gbdraw wheel does not support --conservation_ring_gap. Rebuild and redeploy the web wheel.'
+                );
+              }
+              args.push('--conservation_ring_gap', String(gap));
+            }
+            adv.min_bitscore = normalizeBlastThresholdNumber(
+              adv.min_bitscore,
+              DEFAULT_LINEAR_BLAST_FILTERS.bitscore
+            );
+            adv.evalue = normalizeBlastThresholdText(adv.evalue, DEFAULT_LINEAR_BLAST_FILTERS.evalue);
+            adv.identity = normalizeBlastThresholdNumber(
+              adv.identity,
+              DEFAULT_LINEAR_BLAST_FILTERS.identity
+            );
+            adv.alignment_length = normalizeBlastThresholdNumber(
+              adv.alignment_length,
+              DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
+              { integer: true }
+            );
+            args.push(
+              '--bitscore',
+              adv.min_bitscore,
+              '--evalue',
+              adv.evalue,
+              '--identity',
+              adv.identity,
+              '--alignment_length',
+              adv.alignment_length
+            );
+          };
+
+          const runCircularLosatConservation = async (comparisonFiles) => {
+            const normalizedTask = String(losat.blastn?.task || 'megablast').trim() || 'megablast';
+            const extraArgs = ['--task', normalizedTask];
+            const subjectFile = cInputType.value === 'gb' ? files.c_gb : files.c_fasta;
+            const subjectFmt = cInputType.value === 'gb' ? 'genbank' : 'fasta';
+            const subjectEntry = await extractAllLosatFastaFast({
+              file: subjectFile,
+              fmt: subjectFmt
+            });
+            const subjectHash = await hashText(subjectEntry.fasta);
+            const subjectSequenceKey = `circular-subject:${subjectHash}`;
+            const sequenceEntriesByKey = new Map([[subjectSequenceKey, subjectEntry.fasta]]);
+            const cacheMap = losatCache.value || new Map();
+            const cacheInfo = [];
+            const losatPairs = [];
+            const losatJobs = [];
+            const pendingJobKeys = new Set();
+            const executionMode = getLosatExecutionMode();
+            const runtimeCompatibility = executionMode === 'serial'
+              ? 'serial-v1'
+              : 'threaded-compatible-v1';
+
+            for (let index = 0; index < comparisonFiles.length; index += 1) {
+              throwIfGenerationCanceled();
+              const fileObj = comparisonFiles[index];
+              const queryFasta = await fileObj.text();
+              if (getFastaSequenceLength(queryFasta) <= 0) {
+                throw new Error(`Conservation comparison FASTA #${index + 1} has no sequence data.`);
+              }
+              const queryHash = await hashText(queryFasta);
+              const querySequenceKey = `circular-query:${queryHash}`;
+              sequenceEntriesByKey.set(querySequenceKey, queryFasta);
+              const cacheKey = await hashText(JSON.stringify({
+                cacheSchema: LOSAT_CACHE_SCHEMA,
+                flow: 'circular-conservation',
+                losatRuntimeCompatibility: runtimeCompatibility,
+                losatThreadsPerJob: 1,
+                program: 'blastn',
+                outfmt: String(losat.outfmt || '6'),
+                args: extraArgs,
+                queryCanonicalHash: queryHash,
+                subjectCanonicalHash: subjectHash
+              }));
+              const fallbackName = makeSafeFilename(
+                `${String(fileObj?.name || `comparison_${index + 1}`).replace(/\.[^.]+$/, '')}.circular_conservation.losatn.tsv`
+              );
+              const pair = {
+                sourceIndex: index,
+                cacheKey,
+                filename: fallbackName
+              };
+              losatPairs.push(pair);
+              cacheInfo.push({
+                key: cacheKey,
+                filename: fallbackName,
+                display: true
+              });
+              if (!isRawLosatCacheEntry(cacheMap.get(cacheKey)) && !pendingJobKeys.has(cacheKey)) {
+                pendingJobKeys.add(cacheKey);
+                losatJobs.push({
+                  pairIndex: index,
+                  cacheKey,
+                  program: 'blastn',
+                  querySequenceKey,
+                  subjectSequenceKey,
+                  queryCanonicalHash: queryHash,
+                  subjectCanonicalHash: subjectHash,
+                  outfmt: losat.outfmt || '6',
+                  extraArgs
+                });
+              }
+            }
+
+            if (losatJobs.length > 0) {
+              setProcessingStatus(`Running LOSAT conservation: 0/${losatJobs.length} jobs complete`);
+              const runtime = await prepareLosatRuntime({ includeThreaded: executionMode !== 'serial' }).catch((error) => {
+                console.warn('LOSAT runtime warmup failed; execution will report the error.', error);
+                return null;
+              });
+              if (runtime?.threaded && losatThreadingStatus) {
+                const { wasmModule: _wasmModule, ...threadedStatus } = runtime.threaded;
+                losatThreadingStatus.value = threadedStatus;
+              }
+              const losatResults = await runLosatPairsParallel(losatJobs, {
+                concurrency: getLosatParallelWorkers(),
+                executionMode,
+                totalThreadBudget: getLosatTotalThreadBudget(),
+                threadsPerJob: 1,
+                sequences: sequenceEntriesByKey,
+                signal: generationAbortSignal,
+                onRuntimeStatus: (status) => {
+                  losatThreadingStatus.value = status;
+                },
+                onProgress: ({ completed, total }) => {
+                  if (generationAbortSignal?.aborted || generationCancelRequested.value) return;
+                  setProcessingStatus(`Running LOSAT conservation: ${completed}/${total} jobs complete`);
+                }
+              });
+              losatResults.forEach((result) => {
+                const job = losatJobs.find((item) => item.cacheKey === result.cacheKey);
+                cacheMap.set(result.cacheKey, {
+                  schema: LOSAT_CACHE_SCHEMA,
+                  kind: 'raw-losat',
+                  text: result.text,
+                  program: 'blastn',
+                  queryCanonicalHash: job?.queryCanonicalHash || '',
+                  subjectCanonicalHash: job?.subjectCanonicalHash || ''
+                });
+              });
+            } else {
+              setProcessingStatus('Using cached LOSAT conservation results...');
+            }
+
+            const paths = [];
+            for (const pair of losatPairs) {
+              const cached = cacheMap.get(pair.cacheKey);
+              const blastText = isRawLosatCacheEntry(cached) ? cached.text : '';
+              const blastPath = `/conservation_blast_${pair.sourceIndex}.txt`;
+              stageTextFile(blastPath, blastText);
+              paths.push(blastPath);
+            }
+            losatCacheInfo.value = cacheInfo;
+            losatCache.value = cacheMap;
+            return paths;
+          };
+
+          let conservationBlastPaths = [];
+          let conservationReference = 'auto';
+          let conservationSeries = [];
+          if (sourceMode === 'upload') {
+            const blastFiles = normalizeFileList(files.c_conservation_blasts);
+            if (blastFiles.length === 0) {
+              throw new Error('Please upload at least one BLAST outfmt 6/7 file or disable Conservation Rings.');
+            }
+            const conservationEntries = orderedConservationSources(blastFiles, circularConservation);
+            conservationSeries = buildConservationSeries(blastFiles, circularConservation);
+            for (let index = 0; index < conservationEntries.length; index += 1) {
+              const blastPath = `/conservation_blast_${index}.txt`;
+              await stageUploadedFile(conservationEntries[index].file, blastPath);
+              conservationBlastPaths.push(blastPath);
+            }
+            const rawReference = String(circularConservation.reference || 'auto').trim().toLowerCase();
+            conservationReference = ['query', 'subject'].includes(rawReference) ? rawReference : 'auto';
+            losatCacheInfo.value = [];
+            appendConservationStyleArgs(conservationSeries);
+            if (!runConservationLayoutPreflight(conservationBlastPaths, conservationReference)) {
+              return { status: 'error' };
+            }
+          } else {
+            const comparisonFiles = normalizeFileList(files.c_conservation_fastas);
+            if (comparisonFiles.length === 0) {
+              throw new Error('Please upload at least one comparison FASTA file or disable Conservation Rings.');
+            }
+            const conservationEntries = orderedConservationSources(comparisonFiles, circularConservation);
+            const orderedComparisonFiles = conservationEntries.map((entry) => entry.file);
+            conservationSeries = buildConservationSeries(comparisonFiles, circularConservation);
+            appendConservationStyleArgs(conservationSeries);
+            const preflightBlastPaths = writeEmptyConservationPreflightFiles(orderedComparisonFiles.length);
+            if (!runConservationLayoutPreflight(preflightBlastPaths, 'subject')) {
+              return { status: 'error' };
+            }
+            conservationBlastPaths = await runCircularLosatConservation(orderedComparisonFiles);
+            conservationReference = 'subject';
+          }
+
+          args.push('--conservation_blast', ...conservationBlastPaths);
+          args.push('--conservation_reference', conservationReference);
+        } else {
+          losatCacheInfo.value = [];
         }
       } else {
         if (selectedFeatureShapes.length > 0) {
