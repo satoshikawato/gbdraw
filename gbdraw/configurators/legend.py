@@ -3,6 +3,7 @@
 
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from gbdraw.core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
+from gbdraw.legend.circular_layout import build_circular_legend_layout  # type: ignore[reportMissingImports]
 
 
 class LegendDrawingConfigurator:
@@ -56,6 +57,26 @@ class LegendDrawingConfigurator:
         return bbox_width_px, bbox_height_px
 
     def recalculate_legend_dimensions(self, legend_table, canvas_config):
+        if canvas_config.__class__.__name__ == "CircularCanvasConfigurator":
+            layout = build_circular_legend_layout(
+                legend_table,
+                legend_position=canvas_config.legend_position,
+                canvas_width=float(canvas_config.total_width),
+                font_family=self.font_family,
+                font_size=float(self.font_size),
+                dpi=int(self.dpi),
+                color_rect_size=float(self.color_rect_size),
+            )
+            self.has_gradient = layout.has_gradient
+            self.pairwise_legend_width = layout.pairwise_legend_width
+            self.legend_width = layout.width
+            self.legend_height = layout.height
+            self.total_feature_legend_width = layout.feature_width
+            self.num_of_lines = layout.num_lines
+            self.num_of_columns = layout.num_columns
+            self.num_of_items_per_line = layout.num_items_per_line
+            return self
+
         line_margin = (24 / 14) * self.color_rect_size  # move to config
         x_margin = (22 / 14) * self.color_rect_size  # move to config
         total_width = canvas_config.total_width

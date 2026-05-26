@@ -309,13 +309,16 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "circularConservation" in app_setup_source
     assert "circularConservationSeriesRows" in app_setup_source
     assert "syncCircularConservationSeries" in app_setup_source
+    assert "syncCircularConservationEnabled" in app_setup_source
     assert "addCircularConservationComparisonFile" in app_setup_source
     assert "removeCircularConservationSource" in app_setup_source
     assert "circularConservation: state.circularConservation" in config_source
     assert "normalizeCircularConservationSeries" in config_source
     assert "c_conservation_blasts: await serializeFileArray" in config_source
     assert "normalizeCircularConservationReference" in config_source
-    assert "Conservation Rings" in index_html
+    assert "Pairwise Comparisons" in index_html
+    assert "Conservation Rings" not in index_html
+    assert 'v-model="circularConservation.enabled"' not in index_html
     assert "BLAST outfmt 6/7 files" in index_html
     assert "Comparison FASTA files" in index_html
     assert "@click=\"openCircularConservationComparisonFilePicker\"" in index_html
@@ -454,6 +457,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
           createCircularTrackSlotEditor,
           estimateCircularConservationLayoutWarning
         }} from {module_path.as_uri()!r};
+        import {{ normalizeConservationSeriesColor }} from './conservation-series.js';
 
         const defaultSlots = createDefaultCircularTrackSlots({{ preset: 'tuckin' }});
         const defaultTick = defaultSlots.find((slot) => slot.id === 'ticks');
@@ -570,6 +574,14 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         const conservationWarning = estimateCircularConservationLayoutWarning(warningState);
         if (!conservationWarning.includes('auto-compress')) {{
           throw new Error(`Expected conservation layout warning, got: ${{conservationWarning}}`);
+        }}
+        const softenedDefaultColor = normalizeConservationSeriesColor(null, 0);
+        if (softenedDefaultColor !== '#6e91b7') {{
+          throw new Error(`Expected softened default conservation color #6e91b7, got: ${{softenedDefaultColor}}`);
+        }}
+        const explicitColor = normalizeConservationSeriesColor('#4e79a7', 0);
+        if (explicitColor !== '#4e79a7') {{
+          throw new Error(`Explicit conservation colors should be preserved, got: ${{explicitColor}}`);
         }}
 
         const outerTickSlots = applyCircularTrackOrderPlacements(

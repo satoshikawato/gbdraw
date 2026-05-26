@@ -1,8 +1,9 @@
-import { resolveColorToHex } from './color-utils.js';
+import { interpolateColor, resolveColorToHex } from './color-utils.js';
 
 export const CONSERVATION_SLOT_MANAGER = 'circular_conservation';
 
-const CONSERVATION_SERIES_COLORS = [
+const CONSERVATION_SERIES_COLOR_BLEND_TO_WHITE = 0.18;
+const CONSERVATION_SERIES_BASE_COLORS = [
   '#4e79a7',
   '#f28e2b',
   '#59a14f',
@@ -14,6 +15,9 @@ const CONSERVATION_SERIES_COLORS = [
   '#9c755f',
   '#bab0ac'
 ];
+const CONSERVATION_SERIES_COLORS = CONSERVATION_SERIES_BASE_COLORS.map((color) =>
+  interpolateColor(color, '#ffffff', CONSERVATION_SERIES_COLOR_BLEND_TO_WHITE)
+);
 
 export const normalizeFileList = (files) => (Array.isArray(files) ? files.filter(Boolean) : (files ? [files] : []));
 
