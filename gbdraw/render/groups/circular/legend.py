@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import math
+from typing import Mapping
 
 from svgwrite.container import Group
 from svgwrite.gradients import LinearGradient
 from svgwrite.path import Path
 
-from ....core.text import calculate_bbox_dimensions
+from ....legend.circular_layout import CircularGradientLegendLayout, build_circular_legend_layout
 from ....svg.text_path import generate_text_path
 
 
@@ -23,6 +23,30 @@ class LegendGroup:
 
         self.color_rect_size = self.legend_config.color_rect_size
         self.num_of_lines = len(self.legend_table.keys())
+        canvas_width = float(
+            getattr(
+                self.canvas_config,
+                "total_width",
+                getattr(self.legend_config, "legend_width", 0.0),
+            )
+        )
+        configured_width = float(getattr(self.legend_config, "legend_width", 0.0) or 0.0)
+        configured_pairwise_width = float(
+            getattr(self.legend_config, "pairwise_legend_width", 0.0) or 0.0
+        )
+        self.layout = build_circular_legend_layout(
+            self.legend_table,
+            legend_position=str(getattr(self.canvas_config, "legend_position", "right")),
+            canvas_width=canvas_width,
+            font_family=self.font_family,
+            font_size=float(self.font_size),
+            dpi=int(self.dpi),
+            color_rect_size=float(self.color_rect_size),
+            legend_width=configured_width if configured_width > 0 else None,
+            pairwise_legend_width=(
+                configured_pairwise_width if configured_pairwise_width > 0 else None
+            ),
+        )
         self.add_elements_to_group()
 
     def create_rectangle_path_for_legend(self) -> str:
@@ -36,134 +60,89 @@ class LegendGroup:
         )
         return rectangle_path
 
-    def _gradient_entries(self) -> list[tuple[str, dict]]:
-        return [
-            (str(key), properties)
-            for key, properties in self.legend_table.items()
-            if properties.get("type") == "gradient"
-        ]
-
-    def _gradient_id(self, key: str, properties: dict) -> str:
+    def _gradient_id(self, key: str, properties: Mapping[str, object]) -> str:
         raw = f"{key}_{properties['min_color']}_{properties['max_color']}"
         safe = "".join(char if char.isalnum() else "_" for char in raw).strip("_")
         return f"circular_legend_grad_{safe or 'identity'}"
 
-    def _min_label_text(self, value: object) -> str:
-        min_identity = float(value or 0)
-        if min_identity == int(min_identity):
-            return f"{int(min_identity)}%"
-        return f"{min_identity}%"
-
-    def _build_compact_gradient_legend(self, gradient_entries: list[tuple[str, dict]]) -> tuple[Group, float, float]:
+    def _build_gradient_legend(self, layout: CircularGradientLegendLayout) -> Group:
         group = Group(id="conservation_identity_legend")
         font = self.font_family
-        bar_width = 10 * self.color_rect_size
-        label_gap = 0.2 * self.color_rect_size
-        label_width = max(
-            calculate_bbox_dimensions(str(key), self.font_family, self.font_size, self.dpi)[0]
-            for key, _ in gradient_entries
-        )
-        bar_x = float(label_width) + label_gap
-        total_width = bar_x + bar_width
-        row_height = (24 / 14) * self.color_rect_size
         path_desc = (
-            f"M 0,{-self.color_rect_size / 2} L {bar_width},{-self.color_rect_size / 2} "
-            f"L {bar_width},{self.color_rect_size / 2} L 0,{self.color_rect_size / 2} z"
+            f"M 0,{-self.color_rect_size / 2} L {layout.bar_width},{-self.color_rect_size / 2} "
+            f"L {layout.bar_width},{self.color_rect_size / 2} L 0,{self.color_rect_size / 2} z"
         )
 
-        for idx, (key, properties) in enumerate(gradient_entries):
-            row_y = self.color_rect_size / 2 + idx * row_height
-            gradient_id = self._gradient_id(key, properties)
-            entry_group = Group(debug=False)
-            entry_group.attribs["data-legend-key"] = str(key)
+        if layout.compact:
+            for entry in layout.compact_entries:
+                properties = entry.properties
+                gradient_id = self._gradient_id(entry.key, properties)
+                entry_group = Group(debug=False)
+                entry_group.attribs["data-legend-key"] = str(entry.key)
 
-            gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
-            gradient.add_stop_color(offset="0%", color=properties["min_color"])
-            gradient.add_stop_color(offset="100%", color=properties["max_color"])
-            entry_group.add(gradient)
+                gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
+                gradient.add_stop_color(offset="0%", color=properties["min_color"])
+                gradient.add_stop_color(offset="100%", color=properties["max_color"])
+                entry_group.add(gradient)
 
-            label_path = generate_text_path(
-                key,
+                label_path = generate_text_path(
+                    entry.key,
+                    0,
+                    0,
+                    0,
+                    self.font_size,
+                    "normal",
+                    font,
+                    dominant_baseline="central",
+                    text_anchor="start",
+                )
+                label_path.translate(0, entry.label_y)
+                entry_group.add(label_path)
+
+                grad_rect = Path(
+                    d=path_desc,
+                    fill=f"url(#{gradient_id})",
+                    stroke=properties["stroke"],
+                    stroke_width=properties["width"],
+                )
+                grad_rect.translate(layout.bar_x, entry.bar_y)
+                entry_group.add(grad_rect)
+                group.add(entry_group)
+
+            min_label = generate_text_path(
+                layout.min_label_text,
                 0,
                 0,
                 0,
                 self.font_size,
                 "normal",
                 font,
-                dominant_baseline="central",
+                dominant_baseline="hanging",
                 text_anchor="start",
             )
-            label_path.translate(0, row_y)
-            entry_group.add(label_path)
+            min_label.translate(layout.bar_x, layout.scale_y)
+            group.add(min_label)
 
-            grad_rect = Path(
-                d=path_desc,
-                fill=f"url(#{gradient_id})",
-                stroke=properties["stroke"],
-                stroke_width=properties["width"],
+            max_label = generate_text_path(
+                "100%",
+                0,
+                0,
+                0,
+                self.font_size,
+                "normal",
+                font,
+                dominant_baseline="hanging",
+                text_anchor="end",
             )
-            grad_rect.translate(bar_x, row_y)
-            entry_group.add(grad_rect)
-            group.add(entry_group)
+            max_label.translate(layout.bar_x + layout.bar_width, layout.scale_y)
+            group.add(max_label)
+            return group
 
-        min_label_text = self._min_label_text(gradient_entries[0][1].get("min_value", 0))
-        scale_y = self.color_rect_size + (len(gradient_entries) - 1) * row_height + 2
-        min_label = generate_text_path(
-            min_label_text,
-            0,
-            0,
-            0,
-            self.font_size,
-            "normal",
-            font,
-            dominant_baseline="hanging",
-            text_anchor="start",
-        )
-        min_label.translate(bar_x, scale_y)
-        group.add(min_label)
-
-        max_label = generate_text_path(
-            "100%",
-            0,
-            0,
-            0,
-            self.font_size,
-            "normal",
-            font,
-            dominant_baseline="hanging",
-            text_anchor="end",
-        )
-        max_label.translate(bar_x + bar_width, scale_y)
-        group.add(max_label)
-
-        _, min_label_height = calculate_bbox_dimensions(
-            min_label_text, self.font_family, self.font_size, self.dpi
-        )
-        _, max_label_height = calculate_bbox_dimensions(
-            "100%", self.font_family, self.font_size, self.dpi
-        )
-        total_height = scale_y + max(float(min_label_height), float(max_label_height))
-        return group, total_width, total_height
-
-    def _build_gradient_legend(self, gradient_entries: list[tuple[str, dict]]) -> tuple[Group, float, float]:
-        if len(gradient_entries) > 1:
-            return self._build_compact_gradient_legend(gradient_entries)
-
-        group = Group(id="conservation_identity_legend")
-        font = self.font_family
-        bar_width = 10 * self.color_rect_size
-        row_height = (24 / 14) * self.color_rect_size
-        path_desc = (
-            f"M 0,{-self.color_rect_size / 2} L {bar_width},{-self.color_rect_size / 2} "
-            f"L {bar_width},{self.color_rect_size / 2} L 0,{self.color_rect_size / 2} z"
-        )
-        y_offset = 0.0
-        total_width = bar_width
-
-        for key, properties in gradient_entries:
-            gradient_id = self._gradient_id(key, properties)
+        for entry in layout.single_entries:
+            properties = entry.properties
+            gradient_id = self._gradient_id(entry.key, properties)
             entry_group = Group(debug=False)
-            entry_group.attribs["data-legend-key"] = str(key)
+            entry_group.attribs["data-legend-key"] = str(entry.key)
 
             gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
             gradient.add_stop_color(offset="0%", color=properties["min_color"])
@@ -171,7 +150,7 @@ class LegendGroup:
             entry_group.add(gradient)
 
             title_path = generate_text_path(
-                key,
+                entry.key,
                 0,
                 0,
                 0,
@@ -181,13 +160,8 @@ class LegendGroup:
                 dominant_baseline="hanging",
                 text_anchor="middle",
             )
-            title_width, title_height = calculate_bbox_dimensions(
-                str(key), self.font_family, self.font_size, self.dpi
-            )
-            title_path.translate(bar_width / 2.0, y_offset)
+            title_path.translate(entry.title_x, entry.title_y)
             entry_group.add(title_path)
-            total_width = max(total_width, float(title_width))
-            y_offset += float(title_height) + (self.color_rect_size / 2.0)
 
             grad_rect = Path(
                 d=path_desc,
@@ -195,12 +169,11 @@ class LegendGroup:
                 stroke=properties["stroke"],
                 stroke_width=properties["width"],
             )
-            grad_rect.translate(0, y_offset)
+            grad_rect.translate(entry.bar_x, entry.bar_y)
             entry_group.add(grad_rect)
 
-            min_label_text = self._min_label_text(properties.get("min_value", 0))
             min_label = generate_text_path(
-                min_label_text,
+                layout.min_label_text,
                 0,
                 0,
                 0,
@@ -210,7 +183,7 @@ class LegendGroup:
                 dominant_baseline="hanging",
                 text_anchor="start",
             )
-            min_label.translate(0, y_offset + self.color_rect_size / 2.0 + 2)
+            min_label.translate(entry.min_label_x, entry.scale_label_y)
             entry_group.add(min_label)
             max_label = generate_text_path(
                 "100%",
@@ -223,183 +196,57 @@ class LegendGroup:
                 dominant_baseline="hanging",
                 text_anchor="end",
             )
-            max_label.translate(bar_width, y_offset + self.color_rect_size / 2.0 + 2)
+            max_label.translate(entry.max_label_x, entry.scale_label_y)
             entry_group.add(max_label)
-            _, label_height = calculate_bbox_dimensions(
-                "100%", self.font_family, self.font_size, self.dpi
-            )
-            y_offset += self.color_rect_size / 2.0 + 2 + float(label_height)
             group.add(entry_group)
-            y_offset += row_height * 0.35
 
-        return group, total_width, max(0.0, y_offset)
+        return group
 
     def add_elements_to_group(self):
         path_desc = (
             f"M {0},{-0.5 * self.color_rect_size} "
-            f"L {self.legend_config.legend_width},{-0.5 * self.color_rect_size} "
-            f"L {self.legend_config.legend_width},{self.legend_config.legend_height -0.5 * self.color_rect_size} "
-            f"L {0},{self.legend_config.legend_height -0.5 * self.color_rect_size} z"
+            f"L {self.layout.width},{-0.5 * self.color_rect_size} "
+            f"L {self.layout.width},{self.layout.height -0.5 * self.color_rect_size} "
+            f"L {0},{self.layout.height -0.5 * self.color_rect_size} z"
         )
         rect_path = Path(d=path_desc, fill="none", stroke="none", stroke_width=0)
         self.legend_group.add(rect_path)
         path_desc = self.create_rectangle_path_for_legend()
         font = self.font_family
-        line_margin = (24 / 14) * self.color_rect_size
-        x_margin = (22 / 14) * self.color_rect_size
+        feature_group = Group(id="feature_legend") if self.layout.gradient is not None else self.legend_group
+        for entry in self.layout.solid_entries:
+            entry_group = Group(debug=False)
+            entry_group.attribs["data-legend-key"] = str(entry.key)
 
-        horizontal_layout = self.canvas_config.legend_position in {"top", "bottom"}
-        gradient_entries = self._gradient_entries()
-        gradient_width = float(self.legend_config.pairwise_legend_width) if gradient_entries else 0.0
-        if horizontal_layout:
-            wrap_width = float(self.legend_config.legend_width)
-            if gradient_entries:
-                wrap_width = max(self.color_rect_size, wrap_width - gradient_width - x_margin)
-            if wrap_width <= 0:
-                wrap_width = float("inf")
-
-            solid_entries: list[tuple[str, dict, float]] = []
-            for key, properties in self.legend_table.items():
-                if properties.get("type") != "solid":
-                    continue
-                text_width, _ = calculate_bbox_dimensions(
-                    str(key), self.font_family, self.font_size, self.dpi
-                )
-                entry_width = float(text_width) + (2 * x_margin)
-                solid_entries.append((str(key), properties, entry_width))
-
-            rows: list[list[tuple[str, dict, float]]] = []
-            current_row: list[tuple[str, dict, float]] = []
-            current_row_width = 0.0
-            for key, properties, entry_width in solid_entries:
-                exceeds_wrap = (
-                    math.isfinite(wrap_width)
-                    and current_row
-                    and ((current_row_width + x_margin + entry_width) > wrap_width)
-                )
-                if exceeds_wrap:
-                    rows.append(current_row)
-                    current_row = []
-                    current_row_width = 0.0
-                current_row.append((key, properties, entry_width))
-                current_row_width += entry_width
-            if current_row:
-                rows.append(current_row)
-
-            feature_group = Group(id="feature_legend") if gradient_entries else self.legend_group
-            feature_height = (
-                self.color_rect_size + ((len(rows) - 1) * line_margin)
-                if rows
-                else 0.0
+            rect_path = Path(
+                d=path_desc,
+                fill=entry.properties["fill"],
+                stroke=entry.properties["stroke"],
+                stroke_width=entry.properties["width"],
             )
-            gradient_group = None
-            gradient_group_width = 0.0
-            gradient_height = 0.0
-            if gradient_entries:
-                gradient_group, gradient_group_width, gradient_height = self._build_gradient_legend(
-                    gradient_entries
-                )
-            feature_y_offset = max(0.0, (gradient_height - feature_height) / 2.0)
-            gradient_y_offset = max(0.0, (feature_height - gradient_height) / 2.0)
-
-            for row_index, row_entries in enumerate(rows):
-                if gradient_entries:
-                    row_y = feature_y_offset + (self.color_rect_size / 2.0) + (row_index * line_margin)
-                else:
-                    row_y = row_index * line_margin
-                row_width = sum(float(entry[2]) for entry in row_entries)
-                if math.isfinite(wrap_width):
-                    row_start_x = x_margin + max(0.0, (wrap_width - row_width) * 0.5)
-                else:
-                    row_start_x = x_margin
-                current_x = row_start_x
-
-                for key, properties, entry_width in row_entries:
-                    # Create entry group with data attribute for identification
-                    entry_group = Group(debug=False)
-                    entry_group.attribs["data-legend-key"] = str(key)
-
-                    rect_path = Path(
-                        d=path_desc,
-                        fill=properties["fill"],
-                        stroke=properties["stroke"],
-                        stroke_width=properties["width"],
-                    )
-                    rect_path.translate(current_x - x_margin, row_y)
-                    entry_group.add(rect_path)
-                    legend_path = generate_text_path(
-                        key, 0, 0, 0, self.font_size, "normal", font, dominant_baseline="central", text_anchor="start"
-                    )
-                    legend_path.translate(current_x, row_y)
-                    entry_group.add(legend_path)
-                    feature_group.add(entry_group)
-                    current_x += float(entry_width)
-            if gradient_entries and rows:
-                self.legend_group.add(feature_group)
-            if gradient_entries:
-                assert gradient_group is not None
-                gradient_group.translate(
-                    max(wrap_width + x_margin, self.legend_config.legend_width - gradient_group_width),
-                    gradient_y_offset,
-                )
-                self.legend_group.add(gradient_group)
-        else:
-            solid_entries: list[tuple[str, dict, float]] = []
-            for key, properties in self.legend_table.items():
-                if properties.get("type") != "solid":
-                    continue
-                text_width, _ = calculate_bbox_dimensions(
-                    str(key), self.font_family, self.font_size, self.dpi
-                )
-                solid_entries.append((str(key), properties, float(x_margin) + float(text_width)))
-
-            gradient_group_width = 0.0
-            if gradient_entries:
-                _, gradient_group_width, _ = self._build_gradient_legend(gradient_entries)
-
-            feature_block_width = max((entry[2] for entry in solid_entries), default=0.0)
-            alignment_width = max(
-                float(self.legend_config.legend_width),
-                feature_block_width,
-                float(gradient_group_width),
+            rect_path.translate(entry.rect_x, entry.rect_y)
+            entry_group.add(rect_path)
+            legend_path = generate_text_path(
+                entry.key,
+                0,
+                0,
+                0,
+                self.font_size,
+                "normal",
+                font,
+                dominant_baseline="central",
+                text_anchor="start",
             )
-            feature_x_offset = (
-                max(0.0, (alignment_width - feature_block_width) / 2.0)
-                if gradient_entries and feature_block_width > 0
-                else 0.0
-            )
+            legend_path.translate(entry.text_x, entry.text_y)
+            entry_group.add(legend_path)
+            feature_group.add(entry_group)
 
-            feature_group = Group(id="feature_legend") if gradient_entries else self.legend_group
-            count = 0
-            for key, properties, _entry_width in solid_entries:
-                # Create entry group with data attribute for identification
-                entry_group = Group(debug=False)
-                entry_group.attribs["data-legend-key"] = str(key)
-
-                rect_path = Path(
-                    d=path_desc,
-                    fill=properties["fill"],
-                    stroke=properties["stroke"],
-                    stroke_width=properties["width"],
-                )
-                rect_path.translate(feature_x_offset, count * line_margin)
-                entry_group.add(rect_path)
-                legend_path = generate_text_path(
-                    key, 0, 0, 0, self.font_size, "normal", font, dominant_baseline="central", text_anchor="start"
-                )
-                legend_path.translate(feature_x_offset + x_margin, count * line_margin)
-                entry_group.add(legend_path)
-                feature_group.add(entry_group)
-                count += 1
-            if gradient_entries and solid_entries:
-                self.legend_group.add(feature_group)
-            if gradient_entries:
-                gradient_group, gradient_group_width, _ = self._build_gradient_legend(gradient_entries)
-                gradient_group.translate(
-                    max(0.0, (alignment_width - float(gradient_group_width)) / 2.0),
-                    count * line_margin + (line_margin * 0.5 if count else 0.0),
-                )
-                self.legend_group.add(gradient_group)
+        if self.layout.gradient is not None and self.layout.solid_entries:
+            self.legend_group.add(feature_group)
+        if self.layout.gradient is not None:
+            gradient_group = self._build_gradient_legend(self.layout.gradient)
+            gradient_group.translate(self.layout.gradient_x, self.layout.gradient_y)
+            self.legend_group.add(gradient_group)
         return self.legend_group
 
     def get_group(self) -> Group:

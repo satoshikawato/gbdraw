@@ -20,6 +20,7 @@ from gbdraw.api.options import DiagramOptions
 from gbdraw.core.text import calculate_bbox_dimensions
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.legend.circular_layout import build_circular_legend_layout
 from gbdraw.render.groups.circular.legend import LegendGroup as CircularLegendGroup
 from gbdraw.tracks import CircularTrackSlot, normalize_circular_track_slots
 
@@ -393,7 +394,7 @@ def test_circular_multi_conservation_gradient_legend_uses_compact_linear_layout(
         legend_config.font_size,
         canvas_config.dpi,
     )
-    assert bar_x == pytest.approx(label_width + 0.2 * legend_config.color_rect_size)
+    assert bar_x == pytest.approx(label_width + legend_config.color_rect_size)
 
     legend_texts = [text.text for text in legend.findall(".//svg:text", ns)]
     assert legend_texts.count("0%") == 1
@@ -518,6 +519,101 @@ def test_circular_bottom_conservation_legend_centers_feature_and_gradient_blocks
     feature_center = (feature_top + feature_bottom) / 2.0
     gradient_center = (gradient_top + gradient_bottom) / 2.0
     assert feature_center == pytest.approx(gradient_center, abs=1.0)
+
+
+def test_circular_bottom_multi_conservation_layout_height_contains_gradient_block() -> None:
+    canvas_config = SimpleNamespace(legend_position="bottom", dpi=96)
+    legend_table = {
+        "CDS": {"type": "solid", "fill": "#54bcf8", "stroke": "none", "width": 0},
+        "GC content": {"type": "solid", "fill": "#999999", "stroke": "none", "width": 0},
+    }
+    for idx in range(14):
+        legend_table[f"R{idx:02d}"] = {
+            "type": "gradient",
+            "min_color": "#dbe8f5",
+            "max_color": "#4e79a7",
+            "stroke": "none",
+            "width": 0,
+            "min_value": 0,
+        }
+
+    layout = build_circular_legend_layout(
+        legend_table,
+        legend_position="bottom",
+        canvas_width=500.0,
+        font_family="'Liberation Sans', 'Arial', sans-serif",
+        font_size=10.0,
+        dpi=canvas_config.dpi,
+        color_rect_size=12.0,
+    )
+    legend_config = SimpleNamespace(
+        font_family="'Liberation Sans', 'Arial', sans-serif",
+        font_size=10.0,
+        color_rect_size=12.0,
+        legend_width=layout.width,
+        legend_height=layout.height,
+        pairwise_legend_width=layout.pairwise_legend_width,
+    )
+
+    drawing = Drawing(debug=False)
+    drawing.add(CircularLegendGroup(canvas_config, legend_config, legend_table).get_group())
+    root = ET.fromstring(drawing.tostring())
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+
+    gradient_legend = root.find(".//svg:g[@id='conservation_identity_legend']", ns)
+    assert gradient_legend is not None
+    _, gradient_bottom = _element_y_bounds(gradient_legend, canvas_config.dpi)
+
+    assert layout.height > layout.feature_height
+    assert gradient_bottom <= layout.height - (legend_config.color_rect_size / 2.0) + 1.0
+
+
+def test_circular_api_bottom_multi_conservation_legend_fits_viewbox() -> None:
+    labels = [f"R{idx:02d}" for idx in range(14)]
+    colors = [
+        "#4e79a7",
+        "#f28e2b",
+        "#59a14f",
+        "#e15759",
+        "#76b7b2",
+        "#edc948",
+        "#b07aa1",
+        "#ff9da7",
+        "#9c755f",
+        "#bab0ab",
+        "#86bc86",
+        "#d37295",
+        "#8cd17d",
+        "#fabfd2",
+    ]
+    canvas = assemble_circular_diagram_from_record(
+        _record(length=500),
+        conservation_dataframes=[
+            _comparison_frame([_hit(subject="rec1", sstart=1, send=500)])
+            for _ in labels
+        ],
+        conservation_reference="subject",
+        conservation_labels=labels,
+        conservation_colors=colors,
+        conservation_ring_width=4,
+        conservation_ring_gap=1,
+        legend="bottom",
+        selected_features_set=[],
+        config_overrides={"show_gc": False, "show_skew": False},
+    )
+    root = ET.fromstring(canvas.tostring())
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    viewbox = [float(part) for part in str(root.get("viewBox")).split()]
+    assert len(viewbox) == 4
+
+    legend = root.find(".//svg:g[@id='legend']", ns)
+    gradient_legend = root.find(".//svg:g[@id='conservation_identity_legend']", ns)
+    assert legend is not None
+    assert gradient_legend is not None
+    _, legend_y = _translate_xy(legend.get("transform"))
+    _, gradient_bottom = _element_y_bounds(gradient_legend, 96)
+
+    assert legend_y + gradient_bottom <= viewbox[1] + viewbox[3]
 
 
 def test_circular_api_uses_explicit_conservation_slot_source_indexes() -> None:
