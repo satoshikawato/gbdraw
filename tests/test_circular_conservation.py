@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+import xml.etree.ElementTree as ET
 
 import pandas as pd
 import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
+from svgwrite import Drawing
 
 from gbdraw.analysis.conservation import (
     load_conservation_sources,
@@ -13,8 +16,10 @@ from gbdraw.analysis.conservation import (
 )
 from gbdraw.api.diagram import assemble_circular_diagram_from_record, build_circular_diagram
 from gbdraw.api.options import DiagramOptions
+from gbdraw.core.text import calculate_bbox_dimensions
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.render.groups.circular.legend import LegendGroup as CircularLegendGroup
 from gbdraw.tracks import CircularTrackSlot, normalize_circular_track_slots
 
 
@@ -58,6 +63,14 @@ def _hit(
         1e-20,
         100.0,
     )
+
+
+def _translate_xy(transform: str | None) -> tuple[float, float]:
+    assert transform is not None
+    assert transform.startswith("translate(")
+    parts = transform.removeprefix("translate(").removesuffix(")").replace(",", " ").split()
+    assert len(parts) >= 2
+    return float(parts[0]), float(parts[1])
 
 
 def test_conservation_loader_keeps_logical_source_indexes_after_skip(tmp_path: Path) -> None:
@@ -224,6 +237,72 @@ def test_circular_api_renders_source_colored_conservation_ring() -> None:
     assert 'data-track-color="#e15759"' in svg
     assert 'data-legend-key="barcode13"' in svg
     assert "#e15759" in svg
+
+
+def test_circular_multi_conservation_gradient_legend_uses_compact_linear_layout() -> None:
+    canvas_config = SimpleNamespace(legend_position="right", dpi=96)
+    legend_config = SimpleNamespace(
+        font_family="'Liberation Sans', 'Arial', sans-serif",
+        font_size=10.0,
+        color_rect_size=12.0,
+        legend_width=180.0,
+        legend_height=80.0,
+        pairwise_legend_width=160.0,
+    )
+    legend_table = {
+        "barcode07.draft": {
+            "type": "gradient",
+            "min_color": "#dbe8f5",
+            "max_color": "#4e79a7",
+            "stroke": "none",
+            "width": 0,
+            "min_value": 0,
+        },
+        "barcode15.draft": {
+            "type": "gradient",
+            "min_color": "#fdebd8",
+            "max_color": "#f28e2b",
+            "stroke": "none",
+            "width": 0,
+            "min_value": 0,
+        },
+    }
+
+    drawing = Drawing(debug=False)
+    drawing.add(CircularLegendGroup(canvas_config, legend_config, legend_table).get_group())
+    root = ET.fromstring(drawing.tostring())
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    legend = root.find(".//svg:g[@id='conservation_identity_legend']", ns)
+    assert legend is not None
+    entries = legend.findall("svg:g[@data-legend-key]", ns)
+    assert [entry.get("data-legend-key") for entry in entries] == [
+        "barcode07.draft",
+        "barcode15.draft",
+    ]
+
+    first_entry = entries[0]
+    first_label = first_entry.find("svg:text", ns)
+    assert first_label is not None
+    label_x, _ = _translate_xy(first_label.get("transform"))
+    assert label_x == pytest.approx(0.0)
+
+    gradient_bar = next(
+        path
+        for path in first_entry.findall("svg:path", ns)
+        if str(path.get("fill", "")).startswith("url(")
+    )
+    bar_x, _ = _translate_xy(gradient_bar.get("transform"))
+    label_width, _ = calculate_bbox_dimensions(
+        "barcode07.draft",
+        legend_config.font_family,
+        legend_config.font_size,
+        canvas_config.dpi,
+    )
+    assert bar_x == pytest.approx(label_width + 0.2 * legend_config.color_rect_size)
+
+    legend_texts = [text.text for text in legend.findall(".//svg:text", ns)]
+    assert legend_texts.count("0%") == 1
+    assert legend_texts.count("100%") == 1
 
 
 def test_circular_api_uses_explicit_conservation_slot_source_indexes() -> None:
