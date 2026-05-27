@@ -126,6 +126,8 @@ export const createAppSetup = () => {
     clickedFeaturePos,
     featurePopupRef,
     featurePopupDrag,
+    featurePopupSize,
+    featurePopupResize,
     clickedLabel,
     clickedLabelPos,
     colorScopeDialog,
@@ -552,8 +554,52 @@ export const createAppSetup = () => {
     return Boolean(target.closest('input, textarea, select, button, label, a, [data-nodrag="true"]'));
   };
 
+  const FEATURE_POPUP_MARGIN = 12;
+  const FEATURE_POPUP_RICH_MIN_WIDTH = 360;
+  const FEATURE_POPUP_SIMPLE_MIN_WIDTH = 300;
+  const FEATURE_POPUP_MIN_HEIGHT = 220;
+
+  const clampNumber = (value, min, max) => {
+    const safeMin = Number.isFinite(min) ? min : 0;
+    const safeMax = Number.isFinite(max) ? Math.max(safeMin, max) : safeMin;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return safeMin;
+    return Math.min(Math.max(numeric, safeMin), safeMax);
+  };
+
+  const getFeaturePopupConstraints = (left = clickedFeaturePos.x, top = clickedFeaturePos.y) => {
+    const viewportWidth = Math.max(1, window.innerWidth || 1);
+    const viewportHeight = Math.max(1, window.innerHeight || 1);
+    const availableWidth = Math.max(1, viewportWidth - (FEATURE_POPUP_MARGIN * 2));
+    const availableHeight = Math.max(1, viewportHeight - (FEATURE_POPUP_MARGIN * 2));
+    const desiredMinWidth =
+      adv.rich_feature_popup === false ? FEATURE_POPUP_SIMPLE_MIN_WIDTH : FEATURE_POPUP_RICH_MIN_WIDTH;
+    const minWidth = Math.min(desiredMinWidth, availableWidth);
+    const minHeight = Math.min(FEATURE_POPUP_MIN_HEIGHT, availableHeight);
+    return {
+      minWidth,
+      minHeight,
+      maxWidth: Math.max(minWidth, viewportWidth - left - FEATURE_POPUP_MARGIN),
+      maxHeight: Math.max(minHeight, viewportHeight - top - FEATURE_POPUP_MARGIN)
+    };
+  };
+
+  const featurePopupStyle = computed(() => {
+    const style = {
+      top: `${clickedFeaturePos.y}px`,
+      left: `${clickedFeaturePos.x}px`
+    };
+    if (featurePopupSize.width > 0) {
+      style.width = `${featurePopupSize.width}px`;
+    }
+    if (featurePopupSize.height > 0) {
+      style.height = `${featurePopupSize.height}px`;
+    }
+    return style;
+  });
+
   const onFeaturePopupDrag = (event) => {
-    if (!featurePopupDrag.active) return;
+    if (!featurePopupDrag.active || featurePopupResize.active) return;
     const popup = featurePopupRef.value;
     const width = popup?.offsetWidth || 360;
     const height = popup?.offsetHeight || 260;
@@ -566,6 +612,23 @@ export const createAppSetup = () => {
     clickedFeaturePos.y = Math.min(Math.max(nextY, margin), maxY);
   };
 
+  const onFeaturePopupResize = (event) => {
+    if (!featurePopupResize.active) return;
+    const constraints = getFeaturePopupConstraints(clickedFeaturePos.x, clickedFeaturePos.y);
+    const nextWidth = featurePopupResize.startWidth + (event.clientX - featurePopupResize.startX);
+    const nextHeight = featurePopupResize.startHeight + (event.clientY - featurePopupResize.startY);
+    featurePopupSize.width = clampNumber(nextWidth, constraints.minWidth, constraints.maxWidth);
+    featurePopupSize.height = clampNumber(nextHeight, constraints.minHeight, constraints.maxHeight);
+    event.preventDefault();
+  };
+
+  const endFeaturePopupResize = () => {
+    if (!featurePopupResize.active) return;
+    featurePopupResize.active = false;
+    document.removeEventListener('mousemove', onFeaturePopupResize);
+    document.removeEventListener('mouseup', endFeaturePopupResize);
+  };
+
   const endFeaturePopupDrag = () => {
     if (!featurePopupDrag.active) return;
     featurePopupDrag.active = false;
@@ -576,6 +639,7 @@ export const createAppSetup = () => {
   const startFeaturePopupDrag = (event) => {
     if (event.button !== 0) return;
     if (!clickedFeature.value) return;
+    if (featurePopupResize.active) return;
     if (isInteractiveTarget(event.target)) return;
     const popup = featurePopupRef.value;
     if (!popup) return;
@@ -586,6 +650,31 @@ export const createAppSetup = () => {
     document.addEventListener('mousemove', onFeaturePopupDrag);
     document.addEventListener('mouseup', endFeaturePopupDrag);
     event.preventDefault();
+  };
+
+  const startFeaturePopupResize = (event) => {
+    if (event.button !== 0) return;
+    if (!clickedFeature.value) return;
+    const popup = featurePopupRef.value;
+    if (!popup) return;
+    const rect = popup.getBoundingClientRect();
+    const constraints = getFeaturePopupConstraints(rect.left, rect.top);
+
+    featurePopupDrag.active = false;
+    document.removeEventListener('mousemove', onFeaturePopupDrag);
+    document.removeEventListener('mouseup', endFeaturePopupDrag);
+
+    featurePopupResize.active = true;
+    featurePopupResize.startX = event.clientX;
+    featurePopupResize.startY = event.clientY;
+    featurePopupResize.startWidth = clampNumber(rect.width, constraints.minWidth, constraints.maxWidth);
+    featurePopupResize.startHeight = clampNumber(rect.height, constraints.minHeight, constraints.maxHeight);
+    featurePopupSize.width = featurePopupResize.startWidth;
+    featurePopupSize.height = featurePopupResize.startHeight;
+    document.addEventListener('mousemove', onFeaturePopupResize);
+    document.addEventListener('mouseup', endFeaturePopupResize);
+    event.preventDefault();
+    event.stopPropagation();
   };
 
   const normalizeSessionTitle = (value) => {
@@ -1132,7 +1221,9 @@ export const createAppSetup = () => {
     clickedLabel,
     clickedLabelPos,
     featurePopupRef,
+    featurePopupStyle,
     startFeaturePopupDrag,
+    startFeaturePopupResize,
     clickedFeatureLocation,
     copyText,
     canUseClickedOrthogroupActions,

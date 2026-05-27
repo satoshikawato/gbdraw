@@ -17,6 +17,7 @@ export const createFeatureSvgActions = ({
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
+    featurePopupSize,
     skipCaptureBaseConfig,
     adv
   } = state;
@@ -217,6 +218,10 @@ export const createFeatureSvgActions = ({
     const featureElements = getFeatureElements(svg, feat.svg_id);
     const featureElement = featureElements[0] || null;
     clickedFeature.value = buildClickedFeaturePayload(feat, featureElement);
+    if (featurePopupSize) {
+      featurePopupSize.width = 0;
+      featurePopupSize.height = 0;
+    }
 
     const popupPosition = getPopupPosition(eventLike, adv?.rich_feature_popup === false ? 440 : 720);
     clickedFeaturePos.x = popupPosition.x;

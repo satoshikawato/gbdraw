@@ -171,11 +171,51 @@
         .basic-settings .form-input.text-xs { font-size: 10px; }
         .feature-popup {
             width: min(720px, calc(100vw - 24px));
+            min-width: min(360px, calc(100vw - 24px));
+            min-height: min(220px, calc(100vh - 24px));
             max-height: calc(100vh - 24px);
-            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
         .feature-popup--simple {
             width: min(440px, calc(100vw - 24px));
+            min-width: min(300px, calc(100vw - 24px));
+        }
+        .feature-popup-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: auto;
+            padding: 0 0.25rem 1.5rem 0;
+        }
+        .feature-popup-resize-handle {
+            position: absolute;
+            right: 0.25rem;
+            bottom: 0.25rem;
+            width: 1.5rem;
+            height: 1.5rem;
+            border: 0;
+            border-radius: 0.45rem;
+            background: rgba(248, 250, 252, 0.92);
+            color: #64748b;
+            cursor: nwse-resize;
+            z-index: 1;
+        }
+        .feature-popup-resize-handle::before {
+            content: "";
+            position: absolute;
+            right: 0.35rem;
+            bottom: 0.35rem;
+            width: 0.75rem;
+            height: 0.75rem;
+            border-right: 2px solid currentColor;
+            border-bottom: 2px solid currentColor;
+            box-shadow: 4px 4px 0 -2px currentColor;
+            opacity: 0.75;
+        }
+        .feature-popup-resize-handle:hover {
+            background: #eff6ff;
+            color: #2563eb;
         }
         .feature-popup-grid {
             display: grid;
@@ -2265,7 +2305,7 @@
                            'fixed z-50 feature-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4',
                            adv.rich_feature_popup ? '' : 'feature-popup--simple'
                          ]"
-                         :style="{ top: clickedFeaturePos.y + 'px', left: clickedFeaturePos.x + 'px' }">
+                         :style="featurePopupStyle">
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100">
                             <div class="w-4 h-4 rounded mt-1" :style="{ backgroundColor: clickedFeature.color }"></div>
                             <div class="min-w-0">
@@ -2327,6 +2367,7 @@
                                 <span class="truncate">Sequence</span>
                             </button>
                         </div>
+                        <div class="feature-popup-body custom-scrollbar" data-nodrag="true">
                         <div v-if="!adv.rich_feature_popup || clickedFeature.activeTab === 'edit'" class="feature-popup-grid">
                         <div class="space-y-3">
                         <div v-if="canUseClickedOrthogroupActions" class="grid grid-cols-2 gap-2">
@@ -2668,6 +2709,13 @@
                                 </div>
                             </div>
                         </div>
+                        </div>
+                        <button type="button"
+                                class="feature-popup-resize-handle"
+                                @mousedown.stop.prevent="startFeaturePopupResize"
+                                title="Drag to resize"
+                                aria-label="Resize popup"
+                                data-nodrag="true"></button>
                     </div>
 
                     <!-- Label Text Scope Dialog -->

@@ -78,6 +78,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   box-sizing: border-box;
 }
 .gfi {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
@@ -162,7 +163,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 10px;
+  padding: 10px 18px 18px 10px;
 }
 .gfi-row {
   display: grid;
@@ -238,6 +239,33 @@ const STANDALONE_INTERACTIVE_STYLE = `
   background: #fffbeb;
   color: #92400e;
 }
+.gfi-resize-handle {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 5px;
+  background: rgba(248, 250, 252, 0.9);
+  color: #64748b;
+  cursor: nwse-resize;
+}
+.gfi-resize-handle:before {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  box-shadow: 4px 4px 0 -2px currentColor;
+}
+.gfi-resize-handle:hover {
+  background: #eff6ff;
+  color: #2563eb;
+}
 `;
 
 const STANDALONE_INTERACTIVE_SCRIPT = `
@@ -253,6 +281,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var metadata = svg.querySelector('#gbdraw-interactive-feature-metadata');
   var payload = null;
   var popup = null;
+  var activePopupResize = null;
   var baseDevicePixelRatio = Math.max(1, Number(window.devicePixelRatio) || 1);
 
   try {
@@ -429,10 +458,19 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       tabButton('sequence', 'Sequence') +
       '</div>' +
       '<div class="gfi-content">' + panel + '</div>' +
+      '<button type="button" class="gfi-resize-handle" data-resize="true" title="Drag to resize" aria-label="Resize popup"></button>' +
       '</div>';
   }
 
+  function stopPopupResize() {
+    if (!activePopupResize) return;
+    document.removeEventListener('mousemove', activePopupResize.onMove);
+    document.removeEventListener('mouseup', activePopupResize.onEnd);
+    activePopupResize = null;
+  }
+
   function closePopup() {
+    stopPopupResize();
     if (popup && popup.parentNode) {
       popup.parentNode.removeChild(popup);
     }
@@ -547,6 +585,14 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return Math.max(0.38, Math.min(1, textScale));
   }
 
+  function clampValue(value, min, max) {
+    var safeMin = Number.isFinite(min) ? min : 0;
+    var safeMax = Number.isFinite(max) ? Math.max(safeMin, max) : safeMin;
+    var numeric = Number(value);
+    if (!Number.isFinite(numeric)) return safeMin;
+    return Math.min(Math.max(numeric, safeMin), safeMax);
+  }
+
   function setPopupTextScale(root, textScale) {
     var scale = Math.max(0.38, Math.min(1, Number(textScale) || 1));
     root.style.setProperty('--gfi-text-scale', String(scale));
@@ -609,9 +655,75 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     root.style.transform = 'scale(' + (1 / safeScaleX) + ', ' + (1 / safeScaleY) + ')';
     setPopupTextScale(root, popupTextScale);
 
+    function getResizeLimits() {
+      viewport = getViewportClientRect();
+      var rect = typeof foreignObject.getBoundingClientRect === 'function'
+        ? foreignObject.getBoundingClientRect()
+        : null;
+      var left = rect && Number.isFinite(rect.left) ? rect.left : marginCss;
+      var top = rect && Number.isFinite(rect.top) ? rect.top : marginCss;
+      var minWidth = Math.min(300, Math.max(1, viewport.width - marginCss * 2));
+      var minHeight = Math.min(220, Math.max(1, viewport.height - marginCss * 2));
+      return {
+        minWidth: minWidth,
+        minHeight: minHeight,
+        maxWidth: Math.max(minWidth, viewport.width - left - marginCss),
+        maxHeight: Math.max(minHeight, viewport.height - top - marginCss)
+      };
+    }
+
+    function applyPopupCssSize(nextCssWidth, nextCssHeight) {
+      var limits = getResizeLimits();
+      popupCssWidth = clampValue(nextCssWidth, limits.minWidth, limits.maxWidth);
+      popupCssHeight = clampValue(nextCssHeight, limits.minHeight, limits.maxHeight);
+      width = popupCssWidth / safeScaleX;
+      height = popupCssHeight / safeScaleY;
+      foreignObject.setAttribute('width', width);
+      foreignObject.setAttribute('height', height);
+      root.style.width = popupCssWidth + 'px';
+      root.style.height = popupCssHeight + 'px';
+      setPopupTextScale(root, getPopupTextScale(viewport, popupCssWidth, popupCssHeight));
+    }
+
+    function startPopupResize(event) {
+      stopPopupResize();
+      var startClientX = event.clientX;
+      var startClientY = event.clientY;
+      var startWidth = popupCssWidth;
+      var startHeight = popupCssHeight;
+      var onMove = function (moveEvent) {
+        applyPopupCssSize(
+          startWidth + (moveEvent.clientX - startClientX),
+          startHeight + (moveEvent.clientY - startClientY)
+        );
+        moveEvent.preventDefault();
+      };
+      var onEnd = function () {
+        stopPopupResize();
+      };
+      activePopupResize = {
+        onMove: onMove,
+        onEnd: onEnd
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onEnd);
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
     function redraw() {
       root.innerHTML = renderPopup(feature, activeTab);
     }
+
+    root.addEventListener('mousedown', function (rootEvent) {
+      rootEvent.stopPropagation();
+      var closest = rootEvent.target && rootEvent.target.closest
+        ? rootEvent.target.closest.bind(rootEvent.target)
+        : function () { return null; };
+      var resizeHandle = closest('[data-resize]');
+      if (!resizeHandle) return;
+      startPopupResize(rootEvent);
+    });
 
     root.addEventListener('click', function (rootEvent) {
       rootEvent.stopPropagation();
