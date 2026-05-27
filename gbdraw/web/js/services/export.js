@@ -456,33 +456,91 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     };
   }
 
-  function eventPoint(event) {
+  function getViewportClientRect() {
+    var doc = document.documentElement || {};
+    var width = window.innerWidth || doc.clientWidth || 900;
+    var height = window.innerHeight || doc.clientHeight || 650;
+    return { left: 0, top: 0, right: width, bottom: height, width: width, height: height };
+  }
+
+  function clientPoint(clientX, clientY) {
     var point = typeof svg.createSVGPoint === 'function' ? svg.createSVGPoint() : null;
     var matrix = typeof svg.getScreenCTM === 'function' ? svg.getScreenCTM() : null;
     if (point && matrix) {
-      point.x = event.clientX;
-      point.y = event.clientY;
-      return point.matrixTransform(matrix.inverse());
+      try {
+        point.x = clientX;
+        point.y = clientY;
+        return point.matrixTransform(matrix.inverse());
+      } catch (error) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  function eventPoint(event) {
+    if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+      var converted = clientPoint(event.clientX, event.clientY);
+      if (converted) return converted;
     }
     var view = getViewRect();
     return { x: view.x + view.width / 2, y: view.y + view.height / 2 };
   }
 
+  function getVisibleViewRect() {
+    var viewport = getViewportClientRect();
+    var points = [
+      clientPoint(viewport.left, viewport.top),
+      clientPoint(viewport.right, viewport.top),
+      clientPoint(viewport.right, viewport.bottom),
+      clientPoint(viewport.left, viewport.bottom)
+    ].filter(function (point) {
+      return point && Number.isFinite(point.x) && Number.isFinite(point.y);
+    });
+    if (points.length !== 4) return getViewRect();
+
+    var minX = Math.min.apply(null, points.map(function (point) { return point.x; }));
+    var maxX = Math.max.apply(null, points.map(function (point) { return point.x; }));
+    var minY = Math.min.apply(null, points.map(function (point) { return point.y; }));
+    var maxY = Math.max.apply(null, points.map(function (point) { return point.y; }));
+    if (maxX <= minX || maxY <= minY) return getViewRect();
+
+    var view = getViewRect();
+    var x1 = Math.max(view.x, minX);
+    var y1 = Math.max(view.y, minY);
+    var x2 = Math.min(view.x + view.width, maxX);
+    var y2 = Math.min(view.y + view.height, maxY);
+    if (x2 <= x1 || y2 <= y1) {
+      return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    }
+    return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+  }
+
   function openPopup(feature, event) {
     closePopup();
-    var view = getViewRect();
+    var viewport = getViewportClientRect();
+    var view = getVisibleViewRect();
     var scale = getScreenScale();
-    var marginX = 12 / scale.x;
-    var marginY = 12 / scale.y;
-    var width = Math.min(460 / scale.x, Math.max(220 / scale.x, view.width - marginX * 2));
-    var height = Math.min(540 / scale.y, Math.max(260 / scale.y, view.height - marginY * 2));
+    var safeScaleX = Math.max(scale.x, 0.001);
+    var safeScaleY = Math.max(scale.y, 0.001);
+    var marginCss = 12;
+    var marginX = marginCss / safeScaleX;
+    var marginY = marginCss / safeScaleY;
+    var popupCssWidth = Math.max(1, Math.min(460, viewport.width - marginCss * 2));
+    var popupCssHeight = Math.max(1, Math.min(540, viewport.height - marginCss * 2));
+    var width = popupCssWidth / safeScaleX;
+    var height = popupCssHeight / safeScaleY;
     var point = eventPoint(event);
     var x = point.x + marginX;
     var y = point.y + marginY;
-    var maxX = view.x + Math.max(marginX, view.width - width - marginX);
-    var maxY = view.y + Math.max(marginY, view.height - height - marginY);
-    x = Math.min(Math.max(x, view.x + marginX), maxX);
-    y = Math.min(Math.max(y, view.y + marginY), maxY);
+    var minX = view.x + marginX;
+    var minY = view.y + marginY;
+    var maxX = view.x + view.width - width - marginX;
+    var maxY = view.y + view.height - height - marginY;
+    if (maxX < minX) maxX = minX;
+    if (maxY < minY) maxY = minY;
+    x = Math.min(Math.max(x, minX), maxX);
+    y = Math.min(Math.max(y, minY), maxY);
 
     var activeTab = 'details';
     var foreignObject = document.createElementNS(SVG_NS, 'foreignObject');
@@ -495,8 +553,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
     var root = document.createElementNS(XHTML_NS, 'div');
     root.setAttribute('xmlns', XHTML_NS);
-    root.style.width = '100%';
-    root.style.height = '100%';
+    root.style.width = popupCssWidth + 'px';
+    root.style.height = popupCssHeight + 'px';
+    root.style.transformOrigin = '0 0';
+    root.style.transform = 'scale(' + (1 / safeScaleX) + ', ' + (1 / safeScaleY) + ')';
 
     function redraw() {
       root.innerHTML = renderPopup(feature, activeTab);
