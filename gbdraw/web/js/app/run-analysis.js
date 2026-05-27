@@ -346,6 +346,14 @@ const normalizeBlastpMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['pairwise', 'orthogroup', 'collinear'].includes(normalized) ? normalized : 'orthogroup';
 };
+const normalizeCircularConservationLosatProgram = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'tblastx' ? 'tblastx' : 'blastn';
+};
+const normalizePositiveInteger = (value, fallback = 1) => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
 const normalizeCollinearColorMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   if (normalized === 'identity') return 'average_identity';
@@ -2189,8 +2197,23 @@ json.dumps({
           };
 
           const runCircularLosatConservation = async (comparisonFiles) => {
-            const normalizedTask = String(losat.blastn?.task || 'megablast').trim() || 'megablast';
-            const extraArgs = ['--task', normalizedTask];
+            const circularLosatProgram = normalizeCircularConservationLosatProgram(
+              circularConservation.losat_program
+            );
+            circularConservation.losat_program = circularLosatProgram;
+            const queryGencode = normalizePositiveInteger(circularConservation.query_gencode, 1);
+            const subjectGencode = normalizePositiveInteger(circularConservation.subject_gencode, 1);
+            circularConservation.query_gencode = queryGencode;
+            circularConservation.subject_gencode = subjectGencode;
+            const extraArgs = [];
+            if (circularLosatProgram === 'tblastx') {
+              extraArgs.push('--query-gencode', String(queryGencode));
+              extraArgs.push('--db-gencode', String(subjectGencode));
+            } else {
+              const normalizedTask = String(losat.blastn?.task || 'megablast').trim() || 'megablast';
+              extraArgs.push('--task', normalizedTask);
+            }
+            const circularLosatSuffix = circularLosatProgram === 'tblastx' ? 'tlosatx' : 'losatn';
             const subjectFile = cInputType.value === 'gb' ? files.c_gb : files.c_fasta;
             const subjectFmt = cInputType.value === 'gb' ? 'genbank' : 'fasta';
             const subjectEntry = await extractAllLosatFastaFast({
@@ -2225,14 +2248,14 @@ json.dumps({
                 flow: 'circular-conservation',
                 losatRuntimeCompatibility: runtimeCompatibility,
                 losatThreadsPerJob: 1,
-                program: 'blastn',
+                program: circularLosatProgram,
                 outfmt: String(losat.outfmt || '6'),
                 args: extraArgs,
                 queryCanonicalHash: queryHash,
                 subjectCanonicalHash: subjectHash
               }));
               const fallbackName = makeSafeFilename(
-                `${String(fileObj?.name || `comparison_${index + 1}`).replace(/\.[^.]+$/, '')}.circular_conservation.losatn.tsv`
+                `${String(fileObj?.name || `comparison_${index + 1}`).replace(/\.[^.]+$/, '')}.circular_conservation.${circularLosatSuffix}.tsv`
               );
               const pair = {
                 sourceIndex: index,
@@ -2250,7 +2273,7 @@ json.dumps({
                 losatJobs.push({
                   pairIndex: index,
                   cacheKey,
-                  program: 'blastn',
+                  program: circularLosatProgram,
                   querySequenceKey,
                   subjectSequenceKey,
                   queryCanonicalHash: queryHash,
@@ -2262,7 +2285,7 @@ json.dumps({
             }
 
             if (losatJobs.length > 0) {
-              setProcessingStatus(`Running LOSAT conservation: 0/${losatJobs.length} jobs complete`);
+              setProcessingStatus(`Running ${circularLosatSuffix.toUpperCase()} conservation: 0/${losatJobs.length} jobs complete`);
               const runtime = await prepareLosatRuntime({ includeThreaded: executionMode !== 'serial' }).catch((error) => {
                 console.warn('LOSAT runtime warmup failed; execution will report the error.', error);
                 return null;
@@ -2283,7 +2306,7 @@ json.dumps({
                 },
                 onProgress: ({ completed, total }) => {
                   if (generationAbortSignal?.aborted || generationCancelRequested.value) return;
-                  setProcessingStatus(`Running LOSAT conservation: ${completed}/${total} jobs complete`);
+                  setProcessingStatus(`Running ${circularLosatSuffix.toUpperCase()} conservation: ${completed}/${total} jobs complete`);
                 }
               });
               losatResults.forEach((result) => {
@@ -2292,7 +2315,7 @@ json.dumps({
                   schema: LOSAT_CACHE_SCHEMA,
                   kind: 'raw-losat',
                   text: result.text,
-                  program: 'blastn',
+                  program: circularLosatProgram,
                   queryCanonicalHash: job?.queryCanonicalHash || '',
                   subjectCanonicalHash: job?.subjectCanonicalHash || ''
                 });

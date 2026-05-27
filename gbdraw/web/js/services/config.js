@@ -301,6 +301,11 @@ const normalizeCircularConservationSource = (value) => {
   return normalized === 'upload' ? 'upload' : 'losat';
 };
 
+const normalizeCircularConservationLosatProgram = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'tblastx' ? 'tblastx' : 'blastn';
+};
+
 const normalizeCircularConservationReference = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['auto', 'query', 'subject'].includes(normalized) ? normalized : 'auto';
@@ -759,6 +764,11 @@ const applyConfigData = (data) => {
   }
   state.circularConservation.enabled = state.circularConservation.enabled === true;
   state.circularConservation.source = normalizeCircularConservationSource(state.circularConservation.source);
+  state.circularConservation.losat_program = normalizeCircularConservationLosatProgram(
+    state.circularConservation.losat_program
+  );
+  state.circularConservation.query_gencode = normalizePositiveInteger(state.circularConservation.query_gencode, 1);
+  state.circularConservation.subject_gencode = normalizePositiveInteger(state.circularConservation.subject_gencode, 1);
   state.circularConservation.reference = normalizeCircularConservationReference(state.circularConservation.reference);
   state.circularConservation.labels = String(state.circularConservation.labels || '');
   state.circularConservation.series.splice(

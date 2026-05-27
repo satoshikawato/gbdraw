@@ -791,10 +791,10 @@
 
                 <div v-if="mode === 'circular'" class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-arrows-left-right"></i> Pairwise Comparisons <help-tip text="Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSAT blastn comparison FASTA. Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits."></help-tip></summary>
+                        <summary><i class="ph ph-arrows-left-right"></i> Pairwise Comparisons <help-tip text="Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison FASTA. Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex gap-4 text-sm font-bold">
-                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" class="text-blue-600"> LOSAT blastn</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" class="text-blue-600"> Run LOSAT</label>
                                 <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="upload" class="text-blue-600"> Upload BLAST</label>
                             </div>
                             <div v-if="circularConservation.source === 'upload'" class="space-y-2">
@@ -814,14 +814,28 @@
                                 </div>
                             </div>
                             <div v-else class="space-y-2">
+                                <div class="flex gap-4 text-sm font-bold">
+                                    <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.losat_program" value="blastn" class="text-blue-600"> LOSATN</label>
+                                    <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.losat_program" value="tblastx" class="text-blue-600"> TLOSATX</label>
+                                </div>
                                 <div class="grid grid-cols-1 gap-1">
-                                    <div>
-                                        <label class="text-[9px] flex items-center">Task <help-tip text="Browser LOSAT pairwise comparisons currently use blastn. The displayed circular sequence is the BLAST subject."></help-tip></label>
+                                    <div v-if="circularConservation.losat_program === 'blastn'">
+                                        <label class="text-[9px] flex items-center">Task <help-tip text="Browser LOSATN pairwise comparisons use the displayed circular sequence as the BLAST subject."></help-tip></label>
                                         <select v-model="losat.blastn.task" class="form-input px-1 py-0.5 text-xs">
                                             <option value="megablast">megablast</option>
                                             <option value="blastn">blastn</option>
                                             <option value="dc-megablast">dc-megablast</option>
                                         </select>
+                                    </div>
+                                    <div v-else class="grid grid-cols-2 gap-1.5">
+                                        <div>
+                                            <label class="text-[9px] flex items-center">Query gencode <help-tip text="Translation table for comparison FASTA files used by TLOSATX."></help-tip></label>
+                                            <input type="number" min="1" step="1" v-model.number="circularConservation.query_gencode" class="form-input px-1 py-0.5 text-xs">
+                                        </div>
+                                        <div>
+                                            <label class="text-[9px] flex items-center">Subject gencode <help-tip text="Translation table for the displayed circular sequence used by TLOSATX."></help-tip></label>
+                                            <input type="number" min="1" step="1" v-model.number="circularConservation.subject_gencode" class="form-input px-1 py-0.5 text-xs">
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="flex gap-2">

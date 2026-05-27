@@ -356,6 +356,9 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "const circularConservation = reactive" in state_source
     assert "c_conservation_blasts: []" in state_source
     assert "c_conservation_fastas: []" in state_source
+    assert "losat_program: 'blastn'" in state_source
+    assert "query_gencode: 1" in state_source
+    assert "subject_gencode: 1" in state_source
     assert "series: []" in state_source
     assert "'data-source-index'" in state_source
     assert "'data-reference-record-id'" in state_source
@@ -368,9 +371,12 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "removeCircularConservationSource" in app_setup_source
     assert "circularConservation: state.circularConservation" in config_source
     assert "normalizeCircularConservationSeries" in config_source
+    assert "normalizeCircularConservationLosatProgram" in config_source
     assert "c_conservation_blasts: await serializeFileArray" in config_source
     assert "normalizeCircularConservationReference" in config_source
     assert "Pairwise Comparisons" in index_html
+    assert 'v-model="circularConservation.losat_program"' in index_html
+    assert "TLOSATX" in index_html
     assert "Conservation Rings" not in index_html
     assert 'v-model="circularConservation.enabled"' not in index_html
     assert "BLAST outfmt 6/7 files" in index_html
@@ -384,6 +390,8 @@ def test_web_wires_circular_conservation_options() -> None:
     assert '"conservation_colors": "--conservation_colors" in _source' in run_source
     assert "runCircularLosatConservation" in run_source
     assert "buildConservationSeries" in run_source
+    assert "program: circularLosatProgram" in run_source
+    assert "circularLosatProgram === 'tblastx'" in run_source
     assert "args.push('--conservation_colors', ...colors);" in run_source
     assert "args.push('--conservation_blast', ...conservationBlastPaths);" in run_source
     assert "args.push('--conservation_reference', conservationReference);" in run_source
