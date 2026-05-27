@@ -2196,23 +2196,25 @@ json.dumps({
             );
           };
 
-          const runCircularLosatConservation = async (comparisonFiles) => {
+          const runCircularLosatConservation = async (comparisonEntries) => {
             const circularLosatProgram = normalizeCircularConservationLosatProgram(
               circularConservation.losat_program
             );
             circularConservation.losat_program = circularLosatProgram;
-            const queryGencode = normalizePositiveInteger(circularConservation.query_gencode, 1);
             const subjectGencode = normalizePositiveInteger(circularConservation.subject_gencode, 1);
-            circularConservation.query_gencode = queryGencode;
             circularConservation.subject_gencode = subjectGencode;
-            const extraArgs = [];
-            if (circularLosatProgram === 'tblastx') {
-              extraArgs.push('--query-gencode', String(queryGencode));
-              extraArgs.push('--db-gencode', String(subjectGencode));
-            } else {
+            const buildExtraArgs = (comparisonGencode) => {
+              if (circularLosatProgram === 'tblastx') {
+                return [
+                  '--query-gencode',
+                  String(normalizePositiveInteger(comparisonGencode, 1)),
+                  '--db-gencode',
+                  String(subjectGencode)
+                ];
+              }
               const normalizedTask = String(losat.blastn?.task || 'megablast').trim() || 'megablast';
-              extraArgs.push('--task', normalizedTask);
-            }
+              return ['--task', normalizedTask];
+            };
             const circularLosatSuffix = circularLosatProgram === 'tblastx' ? 'tlosatx' : 'losatn';
             const subjectFile = cInputType.value === 'gb' ? files.c_gb : files.c_fasta;
             const subjectFmt = cInputType.value === 'gb' ? 'genbank' : 'fasta';
@@ -2233,9 +2235,10 @@ json.dumps({
               ? 'serial-v1'
               : 'threaded-compatible-v1';
 
-            for (let index = 0; index < comparisonFiles.length; index += 1) {
+            for (let index = 0; index < comparisonEntries.length; index += 1) {
               throwIfGenerationCanceled();
-              const fileObj = comparisonFiles[index];
+              const comparisonEntry = comparisonEntries[index];
+              const fileObj = comparisonEntry?.file || comparisonEntry;
               const queryFasta = await fileObj.text();
               if (getFastaSequenceLength(queryFasta) <= 0) {
                 throw new Error(`Pairwise comparison FASTA #${index + 1} has no sequence data.`);
@@ -2243,6 +2246,7 @@ json.dumps({
               const queryHash = await hashText(queryFasta);
               const querySequenceKey = `circular-query:${queryHash}`;
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);
+              const extraArgs = buildExtraArgs(comparisonEntry?.losat_gencode);
               const cacheKey = await hashText(JSON.stringify({
                 cacheSchema: LOSAT_CACHE_SCHEMA,
                 flow: 'circular-conservation',
@@ -2372,7 +2376,7 @@ json.dumps({
             if (!runConservationLayoutPreflight(preflightBlastPaths, 'subject')) {
               return { status: 'error' };
             }
-            conservationBlastPaths = await runCircularLosatConservation(orderedComparisonFiles);
+            conservationBlastPaths = await runCircularLosatConservation(conservationEntries);
             conservationReference = 'subject';
           }
 

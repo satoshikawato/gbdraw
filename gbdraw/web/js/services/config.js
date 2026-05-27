@@ -330,7 +330,8 @@ const normalizeCircularConservationSeries = (series) => {
       fileName: String(entry.fileName || ''),
       sourceIndex: Number.isInteger(Number(entry.sourceIndex)) ? Number(entry.sourceIndex) : index,
       label: String(entry.label ?? entry.name ?? ''),
-      color: normalizeHexColor(entry.color, '#4e79a7')
+      color: normalizeHexColor(entry.color, '#4e79a7'),
+      losat_gencode: normalizePositiveInteger(entry.losat_gencode, 1)
     }));
 };
 
@@ -767,7 +768,6 @@ const applyConfigData = (data) => {
   state.circularConservation.losat_program = normalizeCircularConservationLosatProgram(
     state.circularConservation.losat_program
   );
-  state.circularConservation.query_gencode = normalizePositiveInteger(state.circularConservation.query_gencode, 1);
   state.circularConservation.subject_gencode = normalizePositiveInteger(state.circularConservation.subject_gencode, 1);
   state.circularConservation.reference = normalizeCircularConservationReference(state.circularConservation.reference);
   state.circularConservation.labels = String(state.circularConservation.labels || '');

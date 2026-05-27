@@ -184,7 +184,6 @@ const circularConservation = reactive({
   enabled: false,
   source: 'losat',
   losat_program: 'blastn',
-  query_gencode: 1,
   subject_gencode: 1,
   reference: 'auto',
   labels: '',

@@ -827,13 +827,9 @@
                                             <option value="dc-megablast">dc-megablast</option>
                                         </select>
                                     </div>
-                                    <div v-else class="grid grid-cols-2 gap-1.5">
+                                    <div v-else class="grid grid-cols-1 gap-1.5">
                                         <div>
-                                            <label class="text-[9px] flex items-center">Query gencode <help-tip text="Translation table for comparison FASTA files used by TLOSATX."></help-tip></label>
-                                            <input type="number" min="1" step="1" v-model.number="circularConservation.query_gencode" class="form-input px-1 py-0.5 text-xs">
-                                        </div>
-                                        <div>
-                                            <label class="text-[9px] flex items-center">Subject gencode <help-tip text="Translation table for the displayed circular sequence used by TLOSATX."></help-tip></label>
+                                            <label class="text-[9px] flex items-center">Reference gencode <help-tip text="Translation table for the displayed circular sequence used by TLOSATX."></help-tip></label>
                                             <input type="number" min="1" step="1" v-model.number="circularConservation.subject_gencode" class="form-input px-1 py-0.5 text-xs">
                                         </div>
                                     </div>
@@ -855,6 +851,10 @@
                                     <div class="min-w-0 space-y-0.5">
                                         <input type="text" v-model="circularConservation.series[row.index].label" :placeholder="row.defaultLabel" class="form-input px-1 py-0.5 text-xs">
                                         <div class="text-[9px] text-slate-500 truncate"><span class="font-bold text-slate-600">{{ row.sourceLabel }}</span> - {{ row.filename }}</div>
+                                        <div v-if="circularConservation.source === 'losat' && circularConservation.losat_program === 'tblastx'" class="grid grid-cols-[minmax(0,1fr)_4.8rem] gap-1 items-center">
+                                            <label class="text-[9px] text-slate-500 truncate">Subject gencode</label>
+                                            <input type="number" min="1" step="1" v-model.number="circularConservation.series[row.index].losat_gencode" placeholder="1" class="form-input px-1 py-0.5 text-[10px] h-6">
+                                        </div>
                                     </div>
                                     <div class="flex items-center gap-0.5">
                                         <button type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, -1)" :disabled="!canMoveCircularConservationSeries(row.index, -1)" title="Move series outward"><i class="ph ph-arrow-up"></i></button>

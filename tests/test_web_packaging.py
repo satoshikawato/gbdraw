@@ -357,8 +357,8 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "c_conservation_blasts: []" in state_source
     assert "c_conservation_fastas: []" in state_source
     assert "losat_program: 'blastn'" in state_source
-    assert "query_gencode: 1" in state_source
     assert "subject_gencode: 1" in state_source
+    assert "losat_gencode: normalizePositiveInteger(entry.losat_gencode, 1)" in config_source
     assert "series: []" in state_source
     assert "'data-source-index'" in state_source
     assert "'data-reference-record-id'" in state_source
@@ -376,6 +376,10 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "normalizeCircularConservationReference" in config_source
     assert "Pairwise Comparisons" in index_html
     assert 'v-model="circularConservation.losat_program"' in index_html
+    assert 'v-model.number="circularConservation.series[row.index].losat_gencode"' in index_html
+    assert 'v-model.number="circularConservation.query_gencode"' not in index_html
+    assert "Default subject gencode" not in index_html
+    assert "comparisonEntry?.losat_gencode" in run_source
     assert "TLOSATX" in index_html
     assert "Conservation Rings" not in index_html
     assert 'v-model="circularConservation.enabled"' not in index_html
