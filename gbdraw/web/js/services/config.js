@@ -476,7 +476,7 @@ const restoreSessionCircularLayoutCaches = (ui = {}) => {
 const applyConfigData = (data) => {
   if (data.form) safeDeepMerge(state.form, data.form);
   if (data.adv) safeDeepMerge(state.adv, data.adv);
-  state.adv.rich_feature_popup = state.adv.rich_feature_popup !== false;
+  state.adv.rich_feature_popup = data?.adv?.rich_feature_popup === true;
   if (state.adv.label_placement === 'on_feature') {
     state.adv.label_placement = 'above_feature';
   }

@@ -337,7 +337,7 @@ const form = reactive({
 
 // Extended Advanced Config
 const adv = reactive({
-  rich_feature_popup: true,
+  rich_feature_popup: false,
   features: ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'repeat_region'],
   feature_shapes: { ...defaultFeatureShapes },
   window_size: null,

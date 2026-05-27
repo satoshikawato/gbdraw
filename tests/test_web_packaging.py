@@ -116,13 +116,13 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     helper_source = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
 
-    assert "rich_feature_popup: true" in state_source
+    assert "rich_feature_popup: false" in state_source
     assert 'v-model="adv.rich_feature_popup"' in index_html
     assert "Rich Feature Popup" in index_html
     assert "feature-popup--simple" in index_html
     assert "!adv.rich_feature_popup || clickedFeature.activeTab === 'edit'" in index_html
     assert "adv?.rich_feature_popup === false ? 440 : 720" in svg_actions_source
-    assert "state.adv.rich_feature_popup = state.adv.rich_feature_popup !== false;" in config_source
+    assert "state.adv.rich_feature_popup = data?.adv?.rich_feature_popup === true;" in config_source
     assert "clickedFeature.activeTab" in index_html
     assert "Details" in index_html
     assert "Qualifiers" in index_html
