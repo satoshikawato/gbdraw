@@ -88,7 +88,8 @@ const STANDALONE_INTERACTIVE_STYLE = `
   background: #ffffff;
   color: #334155;
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
-  font: 13px Arial, Helvetica, sans-serif;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: var(--gfi-font-size, 13px);
 }
 .gfi-header {
   display: grid;
@@ -109,7 +110,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gfi-subtitle {
   margin-top: 2px;
   color: #64748b;
-  font-size: 11px;
+  font-size: var(--gfi-subtitle-font-size, 11px);
   overflow-wrap: anywhere;
 }
 .gfi-close,
@@ -125,7 +126,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gfi-close {
   width: 28px;
   height: 28px;
-  font-size: 20px;
+  font-size: var(--gfi-close-font-size, 20px);
   line-height: 1;
 }
 .gfi-close:hover,
@@ -146,7 +147,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
 .gfi-tab {
   min-width: 0;
   padding: 6px 8px;
-  font-size: 11px;
+  font-size: var(--gfi-tab-font-size, 11px);
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -173,7 +174,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
 }
 .gfi-key {
   color: #64748b;
-  font-size: 10px;
+  font-size: var(--gfi-key-font-size, 10px);
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -181,7 +182,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   min-width: 0;
   color: #1e293b;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
+  font-size: var(--gfi-value-font-size, 11px);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -189,7 +190,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   width: 48px;
   padding: 5px 0;
   background: #f8fafc;
-  font-size: 10px;
+  font-size: var(--gfi-copy-font-size, 10px);
   font-weight: 700;
 }
 .gfi-block {
@@ -205,7 +206,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   padding: 7px 9px;
   background: #f8fafc;
   color: #475569;
-  font-size: 10px;
+  font-size: var(--gfi-block-title-font-size, 10px);
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -219,7 +220,7 @@ const STANDALONE_INTERACTIVE_STYLE = `
   overflow: auto;
   color: #1e293b;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
+  font-size: var(--gfi-pre-font-size, 11px);
   line-height: 1.45;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -252,6 +253,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
   var metadata = svg.querySelector('#gbdraw-interactive-feature-metadata');
   var payload = null;
   var popup = null;
+  var baseDevicePixelRatio = Math.max(1, Number(window.devicePixelRatio) || 1);
 
   try {
     payload = JSON.parse(metadata ? metadata.textContent || '{}' : '{}');
@@ -516,6 +518,53 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
   }
 
+  function getBrowserZoomScale(viewport) {
+    var scales = [1];
+    var visualViewport = window.visualViewport || null;
+    var visualScale = visualViewport ? Number(visualViewport.scale) : 1;
+    if (Number.isFinite(visualScale) && visualScale > 1) {
+      scales.push(visualScale);
+    }
+    var devicePixelRatio = Number(window.devicePixelRatio) || 1;
+    if (baseDevicePixelRatio > 0 && devicePixelRatio > baseDevicePixelRatio) {
+      scales.push(devicePixelRatio / baseDevicePixelRatio);
+    }
+    var outerWidth = Number(window.outerWidth);
+    var viewportWidth = viewport ? Number(viewport.width) : 0;
+    if (Number.isFinite(outerWidth) && outerWidth > 0 && Number.isFinite(viewportWidth) && viewportWidth > 0) {
+      var widthScale = outerWidth / viewportWidth;
+      if (widthScale > 1.15) {
+        scales.push(widthScale);
+      }
+    }
+    return Math.max.apply(null, scales);
+  }
+
+  function getPopupTextScale(viewport, popupCssWidth, popupCssHeight) {
+    var fitScale = Math.min(1, popupCssWidth / 460, popupCssHeight / 540);
+    var zoomScale = getBrowserZoomScale(viewport);
+    var textScale = Math.min(fitScale, 1 / zoomScale);
+    return Math.max(0.38, Math.min(1, textScale));
+  }
+
+  function setPopupTextScale(root, textScale) {
+    var scale = Math.max(0.38, Math.min(1, Number(textScale) || 1));
+    root.style.setProperty('--gfi-text-scale', String(scale));
+    [
+      ['--gfi-font-size', 13],
+      ['--gfi-subtitle-font-size', 11],
+      ['--gfi-close-font-size', 20],
+      ['--gfi-tab-font-size', 11],
+      ['--gfi-key-font-size', 10],
+      ['--gfi-value-font-size', 11],
+      ['--gfi-copy-font-size', 10],
+      ['--gfi-block-title-font-size', 10],
+      ['--gfi-pre-font-size', 11]
+    ].forEach(function (entry) {
+      root.style.setProperty(entry[0], (entry[1] * scale).toFixed(3) + 'px');
+    });
+  }
+
   function openPopup(feature, event) {
     closePopup();
     var viewport = getViewportClientRect();
@@ -528,6 +577,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var marginY = marginCss / safeScaleY;
     var popupCssWidth = Math.max(1, Math.min(460, viewport.width - marginCss * 2));
     var popupCssHeight = Math.max(1, Math.min(540, viewport.height - marginCss * 2));
+    var popupTextScale = getPopupTextScale(viewport, popupCssWidth, popupCssHeight);
     var width = popupCssWidth / safeScaleX;
     var height = popupCssHeight / safeScaleY;
     var point = eventPoint(event);
@@ -557,6 +607,7 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     root.style.height = popupCssHeight + 'px';
     root.style.transformOrigin = '0 0';
     root.style.transform = 'scale(' + (1 / safeScaleX) + ', ' + (1 / safeScaleY) + ')';
+    setPopupTextScale(root, popupTextScale);
 
     function redraw() {
       root.innerHTML = renderPopup(feature, activeTab);
