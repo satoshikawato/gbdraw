@@ -140,6 +140,22 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "sanitizeExtractedFeaturesForSession(state.extractedFeatures.value)" in config_source
 
 
+def test_svg_download_embeds_standalone_feature_popup_without_affecting_raster_exports() -> None:
+    export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
+
+    assert "gbdraw-interactive-feature-popup-v1" in export_source
+    assert "gbdraw-interactive-feature-metadata" in export_source
+    assert "gbdraw-interactive-feature-script" in export_source
+    assert "data-gbdraw-interactive-feature" in export_source
+    assert "state.adv.rich_feature_popup === false" in export_source
+    assert "buildStandaloneFeaturePayloads(svg)" in export_source
+    assert "nucleotide_sequence" in export_source
+    assert "amino_acid_sequence" in export_source
+    assert "export const downloadSVG = () => {\n  const svgString = getCurrentSvgString({ interactive: true });" in export_source
+    assert "export const downloadPNG = () => {\n  const svgString = getCurrentSvgString();" in export_source
+    assert "export const downloadPDF = async () => {\n  const svgString = getCurrentSvgString();" in export_source
+
+
 def test_local_index_keeps_cloudflare_analytics_as_deploy_only() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert "static.cloudflareinsights.com" not in index_html

@@ -13,7 +13,7 @@ const getDownloadName = (extension) => {
   return normalized;
 };
 
-const getCurrentSvgString = () => {
+const cloneCurrentSvg = () => {
   const liveSvg = state.svgContainer.value?.querySelector('svg');
   if (liveSvg) {
     const clone = liveSvg.cloneNode(true);
@@ -23,9 +23,18 @@ const getCurrentSvgString = () => {
     if (!clone.getAttribute('xmlns:xlink')) {
       clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
     }
-    return new XMLSerializer().serializeToString(clone);
+    return clone;
   }
-  return state.svgContent.value;
+  return getSvgFromString(state.svgContent.value);
+};
+
+const getCurrentSvgString = ({ interactive = false } = {}) => {
+  const clone = cloneCurrentSvg();
+  if (!clone) return state.svgContent.value;
+  if (interactive) {
+    enrichSvgWithStandaloneFeaturePopup(clone);
+  }
+  return new XMLSerializer().serializeToString(clone);
 };
 
 const getSvgFromString = (svgString) => {
@@ -52,6 +61,696 @@ const getSvgDimensions = (svg) => {
 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+const FEATURE_SELECTOR = 'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
+const INTERACTIVE_METADATA_ID = 'gbdraw-interactive-feature-metadata';
+const INTERACTIVE_STYLE_ID = 'gbdraw-interactive-feature-style';
+const INTERACTIVE_SCRIPT_ID = 'gbdraw-interactive-feature-script';
+
+const STANDALONE_INTERACTIVE_STYLE = `
+.gbdraw-interactive-feature {
+  cursor: pointer;
+}
+.gbdraw-feature-popup {
+  overflow: visible;
+  pointer-events: auto;
+}
+.gbdraw-feature-popup * {
+  box-sizing: border-box;
+}
+.gfi {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #334155;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
+  font: 13px Arial, Helvetica, sans-serif;
+}
+.gfi-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 8px;
+  align-items: start;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.gfi-title {
+  min-width: 0;
+  font-weight: 700;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gfi-subtitle {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.gfi-close,
+.gfi-copy,
+.gfi-tab {
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+  font: inherit;
+}
+.gfi-close {
+  width: 28px;
+  height: 28px;
+  font-size: 20px;
+  line-height: 1;
+}
+.gfi-close:hover,
+.gfi-copy:hover,
+.gfi-tab:hover {
+  background: #eff6ff;
+  color: #2563eb;
+}
+.gfi-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin: 8px 10px 0;
+  padding: 4px;
+  border-radius: 9px;
+  background: #f1f5f9;
+}
+.gfi-tab {
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gfi-tab.is-active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+.gfi-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+}
+.gfi-row {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr) 50px;
+  gap: 8px;
+  align-items: start;
+  padding: 7px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.gfi-key {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.gfi-value {
+  min-width: 0;
+  color: #1e293b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.gfi-copy {
+  width: 48px;
+  padding: 5px 0;
+  background: #f8fafc;
+  font-size: 10px;
+  font-weight: 700;
+}
+.gfi-block {
+  margin-bottom: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.gfi-block-title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 9px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.gfi-block-title .gfi-copy {
+  margin-left: auto;
+}
+.gfi-pre {
+  max-height: 120px;
+  margin: 0;
+  padding: 8px 9px;
+  overflow: auto;
+  color: #1e293b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.gfi-empty,
+.gfi-warning {
+  padding: 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+}
+.gfi-warning {
+  margin-bottom: 8px;
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+}
+`;
+
+const STANDALONE_INTERACTIVE_SCRIPT = `
+(function () {
+  'use strict';
+
+  var FEATURE_SELECTOR = 'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  var XHTML_NS = 'http://www.w3.org/1999/xhtml';
+  var svg = document.currentScript && document.currentScript.ownerSVGElement
+    ? document.currentScript.ownerSVGElement
+    : document.documentElement;
+  var metadata = svg.querySelector('#gbdraw-interactive-feature-metadata');
+  var payload = null;
+  var popup = null;
+
+  try {
+    payload = JSON.parse(metadata ? metadata.textContent || '{}' : '{}');
+  } catch (error) {
+    payload = {};
+  }
+
+  var features = Array.isArray(payload.features) ? payload.features : [];
+  if (!features.length) return;
+
+  var featuresById = new Map();
+  features.forEach(function (feature) {
+    var svgId = String(feature && feature.svg_id || '').trim();
+    if (svgId && !featuresById.has(svgId)) {
+      featuresById.set(svgId, feature);
+    }
+  });
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) {
+      return {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[character];
+    });
+  }
+
+  function normalizeArray(value) {
+    if (Array.isArray(value)) {
+      return value.filter(function (item) {
+        return item !== null && item !== undefined;
+      }).map(function (item) {
+        return String(item);
+      });
+    }
+    if (value === null || value === undefined || value === '') return [];
+    return [String(value)];
+  }
+
+  function locationText(feature) {
+    if (feature.location) return String(feature.location);
+    var start = Number(feature.start);
+    var end = Number(feature.end);
+    var text = (Number.isFinite(start) ? start + 1 : '') + '..' + (Number.isFinite(end) ? end : '');
+    if (feature.strand) text += ' (' + feature.strand + ')';
+    return text;
+  }
+
+  function detailRows(feature) {
+    return [
+      ['Label', feature.label || ''],
+      ['SVG ID', feature.svg_id || ''],
+      ['Record ID', feature.record_id || ''],
+      ['Record index', feature.record_idx === null || feature.record_idx === undefined ? '' : feature.record_idx],
+      ['Type', feature.type || ''],
+      ['Location', locationText(feature)],
+      ['Strand', feature.strand || '']
+    ].filter(function (row) {
+      return String(row[1] == null ? '' : row[1]) !== '';
+    });
+  }
+
+  function qualifierRows(feature) {
+    var qualifiers = feature.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
+      ? feature.qualifiers
+      : {};
+    return Object.keys(qualifiers).sort().map(function (key) {
+      var values = normalizeArray(qualifiers[key]);
+      return {
+        key: key,
+        values: values,
+        text: values.join('\\n')
+      };
+    }).filter(function (row) {
+      return row.key && row.values.length;
+    });
+  }
+
+  function copyButton(value) {
+    var index = copyValues.push(String(value == null ? '' : value)) - 1;
+    return '<button type="button" class="gfi-copy" data-copy-index="' + index + '">Copy</button>';
+  }
+
+  var copyValues = [];
+
+  function renderRows(rows) {
+    if (!rows.length) {
+      return '<div class="gfi-empty">No details available.</div>';
+    }
+    return rows.map(function (row) {
+      return '<div class="gfi-row">' +
+        '<div class="gfi-key">' + escapeHtml(row[0]) + '</div>' +
+        '<div class="gfi-value">' + escapeHtml(row[1]) + '</div>' +
+        copyButton(row[1]) +
+        '</div>';
+    }).join('');
+  }
+
+  function renderLocationParts(feature) {
+    var parts = Array.isArray(feature.location_parts) ? feature.location_parts : [];
+    if (!parts.length) return '';
+    var rows = parts.map(function (part, index) {
+      var display = String(part && part.display || '').trim();
+      var strand = String(part && part.strand || '').trim();
+      return ['Part ' + String(index + 1), strand ? display + ' (' + strand + ')' : display];
+    }).filter(function (row) {
+      return row[1];
+    });
+    if (!rows.length) return '';
+    return '<div class="gfi-block"><div class="gfi-block-title">Location parts</div>' + renderRows(rows) + '</div>';
+  }
+
+  function renderQualifiers(feature) {
+    var rows = qualifierRows(feature);
+    if (!rows.length) {
+      return '<div class="gfi-empty">No qualifiers available.</div>';
+    }
+    return rows.map(function (row) {
+      return '<div class="gfi-block">' +
+        '<div class="gfi-block-title"><span>' + escapeHtml(row.key) + '</span><span>' + row.values.length + '</span>' + copyButton(row.text) + '</div>' +
+        '<pre class="gfi-pre">' + escapeHtml(row.text) + '</pre>' +
+        '</div>';
+    }).join('');
+  }
+
+  function renderSequenceBlock(title, sequence) {
+    var text = String(sequence || '');
+    if (!text) {
+      return '<div class="gfi-block"><div class="gfi-block-title">' + escapeHtml(title) + '</div><div class="gfi-empty">No sequence available.</div></div>';
+    }
+    return '<div class="gfi-block">' +
+      '<div class="gfi-block-title"><span>' + escapeHtml(title) + '</span>' + copyButton(text) + '</div>' +
+      '<pre class="gfi-pre">' + escapeHtml(text) + '</pre>' +
+      '</div>';
+  }
+
+  function renderSequences(feature) {
+    var warnings = normalizeArray(feature.sequence_warnings);
+    var warningHtml = warnings.map(function (warning) {
+      return '<div class="gfi-warning">' + escapeHtml(warning) + '</div>';
+    }).join('');
+    return warningHtml +
+      renderSequenceBlock('Nucleotide', feature.nucleotide_sequence) +
+      renderSequenceBlock('Amino acid', feature.amino_acid_sequence);
+  }
+
+  function renderPopup(feature, activeTab) {
+    copyValues = [];
+    var tab = activeTab || 'details';
+    var panel = '';
+    if (tab === 'qualifiers') {
+      panel = renderQualifiers(feature);
+    } else if (tab === 'sequence') {
+      panel = renderSequences(feature);
+    } else {
+      panel = renderRows(detailRows(feature)) + renderLocationParts(feature);
+    }
+    function tabButton(id, label) {
+      return '<button type="button" class="gfi-tab' + (tab === id ? ' is-active' : '') + '" data-tab="' + id + '">' + label + '</button>';
+    }
+    return '<div class="gfi">' +
+      '<div class="gfi-header">' +
+      '<div><div class="gfi-title">' + escapeHtml(feature.label || feature.svg_id || 'Feature') + '</div>' +
+      '<div class="gfi-subtitle">' + escapeHtml(locationText(feature)) + '</div></div>' +
+      '<button type="button" class="gfi-close" data-close="true">x</button>' +
+      '</div>' +
+      '<div class="gfi-tabs">' +
+      tabButton('details', 'Details') +
+      tabButton('qualifiers', 'Qualifiers') +
+      tabButton('sequence', 'Sequence') +
+      '</div>' +
+      '<div class="gfi-content">' + panel + '</div>' +
+      '</div>';
+  }
+
+  function closePopup() {
+    if (popup && popup.parentNode) {
+      popup.parentNode.removeChild(popup);
+    }
+    popup = null;
+  }
+
+  function getViewRect() {
+    var viewBox = svg.viewBox && svg.viewBox.baseVal;
+    if (viewBox && viewBox.width && viewBox.height) {
+      return { x: viewBox.x, y: viewBox.y, width: viewBox.width, height: viewBox.height };
+    }
+    var width = parseFloat(svg.getAttribute('width')) || 900;
+    var height = parseFloat(svg.getAttribute('height')) || 650;
+    return { x: 0, y: 0, width: width, height: height };
+  }
+
+  function getScreenScale() {
+    var ctm = typeof svg.getScreenCTM === 'function' ? svg.getScreenCTM() : null;
+    if (!ctm) return { x: 1, y: 1 };
+    return {
+      x: Math.hypot(ctm.a, ctm.b) || 1,
+      y: Math.hypot(ctm.c, ctm.d) || 1
+    };
+  }
+
+  function eventPoint(event) {
+    var point = typeof svg.createSVGPoint === 'function' ? svg.createSVGPoint() : null;
+    var matrix = typeof svg.getScreenCTM === 'function' ? svg.getScreenCTM() : null;
+    if (point && matrix) {
+      point.x = event.clientX;
+      point.y = event.clientY;
+      return point.matrixTransform(matrix.inverse());
+    }
+    var view = getViewRect();
+    return { x: view.x + view.width / 2, y: view.y + view.height / 2 };
+  }
+
+  function openPopup(feature, event) {
+    closePopup();
+    var view = getViewRect();
+    var scale = getScreenScale();
+    var marginX = 12 / scale.x;
+    var marginY = 12 / scale.y;
+    var width = Math.min(460 / scale.x, Math.max(220 / scale.x, view.width - marginX * 2));
+    var height = Math.min(540 / scale.y, Math.max(260 / scale.y, view.height - marginY * 2));
+    var point = eventPoint(event);
+    var x = point.x + marginX;
+    var y = point.y + marginY;
+    var maxX = view.x + Math.max(marginX, view.width - width - marginX);
+    var maxY = view.y + Math.max(marginY, view.height - height - marginY);
+    x = Math.min(Math.max(x, view.x + marginX), maxX);
+    y = Math.min(Math.max(y, view.y + marginY), maxY);
+
+    var activeTab = 'details';
+    var foreignObject = document.createElementNS(SVG_NS, 'foreignObject');
+    foreignObject.setAttribute('id', 'gbdraw-feature-popup');
+    foreignObject.setAttribute('class', 'gbdraw-feature-popup');
+    foreignObject.setAttribute('x', x);
+    foreignObject.setAttribute('y', y);
+    foreignObject.setAttribute('width', width);
+    foreignObject.setAttribute('height', height);
+
+    var root = document.createElementNS(XHTML_NS, 'div');
+    root.setAttribute('xmlns', XHTML_NS);
+    root.style.width = '100%';
+    root.style.height = '100%';
+
+    function redraw() {
+      root.innerHTML = renderPopup(feature, activeTab);
+    }
+
+    root.addEventListener('click', function (rootEvent) {
+      rootEvent.stopPropagation();
+      var closest = rootEvent.target && rootEvent.target.closest
+        ? rootEvent.target.closest.bind(rootEvent.target)
+        : function () { return null; };
+      var closeButton = closest('[data-close]');
+      if (closeButton) {
+        closePopup();
+        return;
+      }
+      var tabButton = closest('[data-tab]');
+      if (tabButton) {
+        activeTab = tabButton.getAttribute('data-tab') || 'details';
+        redraw();
+        return;
+      }
+      var copyTarget = closest('[data-copy-index]');
+      if (copyTarget) {
+        var index = Number(copyTarget.getAttribute('data-copy-index'));
+        var value = Number.isFinite(index) ? copyValues[index] || '' : '';
+        Promise.resolve(copyText(value, copyTarget)).catch(function () {});
+      }
+    });
+
+    redraw();
+    foreignObject.appendChild(root);
+    svg.appendChild(foreignObject);
+    popup = foreignObject;
+  }
+
+  async function copyText(value, button) {
+    var text = String(value == null ? '' : value);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        if (button) button.textContent = 'Copied';
+        return;
+      } catch (error) {
+        // Fall back to a prompt below when clipboard permission is unavailable.
+      }
+    }
+    window.prompt('Copy text', text);
+  }
+
+  function closestFeature(node) {
+    while (node && node !== svg) {
+      if (node.matches && node.matches(FEATURE_SELECTOR)) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  svg.addEventListener('click', function (event) {
+    if (popup && popup.contains(event.target)) return;
+    var featureElement = closestFeature(event.target);
+    if (!featureElement) {
+      closePopup();
+      return;
+    }
+    var feature = featuresById.get(String(featureElement.id || ''));
+    if (!feature) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openPopup(feature, event);
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') {
+      closePopup();
+    }
+  });
+}());
+`;
+
+const normalizeStringArray = (value) => {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== null && item !== undefined)
+      .map((item) => String(item));
+  }
+  if (value === null || value === undefined || value === '') return [];
+  return [String(value)];
+};
+
+const normalizeQualifierMap = (qualifiers) => {
+  const normalized = {};
+  if (!qualifiers || typeof qualifiers !== 'object' || Array.isArray(qualifiers)) {
+    return normalized;
+  }
+  Object.entries(qualifiers).forEach(([key, value]) => {
+    const normalizedKey = String(key || '').trim();
+    const values = normalizeStringArray(value);
+    if (!normalizedKey || values.length === 0) return;
+    normalized[normalizedKey] = values;
+  });
+  return normalized;
+};
+
+const normalizeLocationParts = (parts) => {
+  if (!Array.isArray(parts)) return [];
+  return parts
+    .map((part) => {
+      const start = Number(part?.start);
+      const end = Number(part?.end);
+      const display = String(part?.display || '').trim() ||
+        `${Number.isFinite(start) ? start + 1 : ''}..${Number.isFinite(end) ? end : ''}`;
+      return {
+        start: Number.isFinite(start) ? start : null,
+        end: Number.isFinite(end) ? end : null,
+        strand: String(part?.strand || '').trim(),
+        display
+      };
+    })
+    .filter((part) => part.display && part.display !== '..');
+};
+
+const buildStandaloneFeatureLocation = (feature) => {
+  const start = Number(feature?.start);
+  const end = Number(feature?.end);
+  const startText = Number.isFinite(start) ? String(start + 1) : String(feature?.start ?? '');
+  const endText = Number.isFinite(end) ? String(end) : String(feature?.end ?? '');
+  const strand = String(feature?.strand || '').trim();
+  const range = `${startText}..${endText}`;
+  return strand ? `${range} (${strand})` : range;
+};
+
+const firstQualifierValue = (feature, key) => {
+  const qualifiers = feature?.qualifiers && typeof feature.qualifiers === 'object'
+    ? feature.qualifiers
+    : {};
+  const values = normalizeStringArray(qualifiers[key]);
+  return values.find((value) => value.trim()) || '';
+};
+
+const getStandaloneFeatureLabel = (feature) => {
+  const candidates = [
+    feature?.label,
+    feature?.gene,
+    feature?.locus_tag,
+    firstQualifierValue(feature, 'gene'),
+    firstQualifierValue(feature, 'locus_tag'),
+    firstQualifierValue(feature, 'product'),
+    feature?.product,
+    feature?.type,
+    feature?.svg_id
+  ];
+  for (const candidate of candidates) {
+    const label = String(candidate || '').trim();
+    if (label) return label;
+  }
+  return 'Feature';
+};
+
+const collectRenderedFeatureIds = (svg) => {
+  const ids = new Set();
+  if (!svg) return ids;
+  svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
+    const id = String(element.getAttribute('id') || '').trim();
+    if (id) ids.add(id);
+  });
+  return ids;
+};
+
+const buildStandaloneFeaturePayloads = (svg) => {
+  const renderedIds = collectRenderedFeatureIds(svg);
+  if (renderedIds.size === 0) return [];
+
+  const features = Array.isArray(state.extractedFeatures.value) ? state.extractedFeatures.value : [];
+  const payloads = [];
+  const seenIds = new Set();
+  features.forEach((feature) => {
+    const svgId = String(feature?.svg_id || '').trim();
+    if (!svgId || !renderedIds.has(svgId) || seenIds.has(svgId)) return;
+    seenIds.add(svgId);
+    payloads.push({
+      svg_id: svgId,
+      label: getStandaloneFeatureLabel(feature),
+      record_id: String(feature?.record_id || ''),
+      record_idx: Number.isFinite(Number(feature?.record_idx)) ? Number(feature.record_idx) : null,
+      type: String(feature?.type || ''),
+      start: Number.isFinite(Number(feature?.start)) ? Number(feature.start) : null,
+      end: Number.isFinite(Number(feature?.end)) ? Number(feature.end) : null,
+      strand: String(feature?.strand || ''),
+      location: buildStandaloneFeatureLocation(feature),
+      qualifiers: normalizeQualifierMap(feature?.qualifiers),
+      location_parts: normalizeLocationParts(feature?.location_parts),
+      nucleotide_sequence: String(feature?.nucleotide_sequence || ''),
+      amino_acid_sequence: String(feature?.amino_acid_sequence || ''),
+      sequence_warnings: normalizeStringArray(feature?.sequence_warnings)
+    });
+  });
+  return payloads;
+};
+
+const removeExistingStandaloneFeaturePopupAssets = (svg) => {
+  [INTERACTIVE_METADATA_ID, INTERACTIVE_STYLE_ID, INTERACTIVE_SCRIPT_ID, 'gbdraw-feature-popup'].forEach((id) => {
+    const element = svg.querySelector(`#${CSS.escape(id)}`);
+    if (element?.parentNode) {
+      element.parentNode.removeChild(element);
+    }
+  });
+};
+
+const addClassToken = (element, token) => {
+  const existing = String(element.getAttribute('class') || '').trim();
+  const tokens = new Set(existing ? existing.split(/\s+/) : []);
+  tokens.add(token);
+  element.setAttribute('class', Array.from(tokens).join(' '));
+};
+
+const enrichSvgWithStandaloneFeaturePopup = (svg) => {
+  if (!svg || state.adv.rich_feature_popup === false) return false;
+
+  removeExistingStandaloneFeaturePopupAssets(svg);
+  const features = buildStandaloneFeaturePayloads(svg);
+  if (features.length === 0) return false;
+
+  const featureIds = new Set(features.map((feature) => feature.svg_id));
+  svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
+    const id = String(element.getAttribute('id') || '').trim();
+    if (!featureIds.has(id)) return;
+    element.setAttribute('data-gbdraw-interactive-feature', 'true');
+    addClassToken(element, 'gbdraw-interactive-feature');
+  });
+
+  const metadata = document.createElementNS(SVG_NS, 'metadata');
+  metadata.setAttribute('id', INTERACTIVE_METADATA_ID);
+  metadata.setAttribute('data-schema', 'gbdraw-interactive-feature-popup-v1');
+  metadata.textContent = JSON.stringify({
+    schema: 'gbdraw-interactive-feature-popup-v1',
+    features
+  });
+
+  const style = document.createElementNS(SVG_NS, 'style');
+  style.setAttribute('id', INTERACTIVE_STYLE_ID);
+  style.setAttribute('type', 'text/css');
+  style.textContent = STANDALONE_INTERACTIVE_STYLE;
+
+  const script = document.createElementNS(SVG_NS, 'script');
+  script.setAttribute('id', INTERACTIVE_SCRIPT_ID);
+  script.setAttribute('type', 'application/ecmascript');
+  script.textContent = STANDALONE_INTERACTIVE_SCRIPT;
+
+  svg.appendChild(metadata);
+  svg.appendChild(style);
+  svg.appendChild(script);
+  svg.setAttribute('data-gbdraw-interactive-svg', 'true');
+  return true;
+};
 
 const ensureSvgDefs = (svg) => {
   let defs = svg.querySelector('defs');
@@ -225,7 +924,7 @@ const prepareSvgForPdf = (svg) => {
 };
 
 export const downloadSVG = () => {
-  const svgString = getCurrentSvgString();
+  const svgString = getCurrentSvgString({ interactive: true });
   if (!svgString) return;
   const blob = new Blob([svgString], { type: 'image/svg+xml' });
   const url = URL.createObjectURL(blob);
