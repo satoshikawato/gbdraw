@@ -50,6 +50,23 @@ const cloneStringMap = (source) => {
   return cloned;
 };
 
+const sanitizeExtractedFeatureForSession = (feature) => {
+  if (!feature || typeof feature !== 'object' || Array.isArray(feature)) return feature;
+  const {
+    nucleotide_sequence: _nucleotideSequence,
+    amino_acid_sequence: _aminoAcidSequence,
+    nucleotideSequence: _nucleotideSequenceAlias,
+    aminoAcidSequence: _aminoAcidSequenceAlias,
+    ...rest
+  } = feature;
+  return rest;
+};
+
+const sanitizeExtractedFeaturesForSession = (features) => {
+  if (!Array.isArray(features)) return [];
+  return features.map((feature) => sanitizeExtractedFeatureForSession(feature));
+};
+
 const replaceStringMap = (target, source) => {
   Object.keys(target).forEach((key) => delete target[key]);
   Object.entries(cloneStringMap(source)).forEach(([key, value]) => {
@@ -459,6 +476,7 @@ const restoreSessionCircularLayoutCaches = (ui = {}) => {
 const applyConfigData = (data) => {
   if (data.form) safeDeepMerge(state.form, data.form);
   if (data.adv) safeDeepMerge(state.adv, data.adv);
+  state.adv.rich_feature_popup = state.adv.rich_feature_popup !== false;
   if (state.adv.label_placement === 'on_feature') {
     state.adv.label_placement = 'above_feature';
   }
@@ -1264,7 +1282,7 @@ export const exportSession = async (titleOverride = null) => {
     files: await serializeFiles(),
     results: serializeResults(),
     features: {
-      extractedFeatures: state.extractedFeatures.value,
+      extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
       featureRecordIds: state.featureRecordIds.value,
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: JSON.parse(JSON.stringify(state.featureColorOverrides)),

@@ -1325,6 +1325,7 @@ def regenerate_definition_svg(
 def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None):
     """Extract feature info from GenBank file for UI display"""
     from Bio import SeqIO
+    from Bio.Seq import Seq
     from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
     import hashlib
 
@@ -1344,6 +1345,124 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
         else:
             key = f"{feature.type}:{start}:{end}:{strand}"
         return "f" + hashlib.md5(key.encode()).hexdigest()[:8]
+
+    def _normalize_qualifier_values(value):
+        if value is None:
+            return []
+        if isinstance(value, (list, tuple, set)):
+            source = value
+        else:
+            source = [value]
+        normalized = []
+        for item in source:
+            if item is None:
+                continue
+            normalized.append(str(item))
+        return normalized
+
+    def _first_qualifier_value(qualifiers, key):
+        values = _normalize_qualifier_values(qualifiers.get(key))
+        for value in values:
+            if value.strip():
+                return value
+        return ""
+
+    def _strand_display(strand):
+        if strand == 1:
+            return "+"
+        if strand == -1:
+            return "-"
+        return "undefined"
+
+    def _get_location_parts(location):
+        if hasattr(location, "parts") and location.parts:
+            return list(location.parts)
+        return [location]
+
+    def _format_location_parts(location):
+        parts = []
+        for part in _get_location_parts(location):
+            try:
+                start = int(part.start)
+                end = int(part.end)
+                strand = part.strand if part.strand is not None else location.strand
+                parts.append({
+                    "start": start,
+                    "end": end,
+                    "strand": _strand_display(strand),
+                    "display": f"{start + 1}..{end}",
+                })
+            except Exception:
+                continue
+        return parts
+
+    def _location_has_fuzzy_positions(location):
+        for part in _get_location_parts(location):
+            if type(part.start).__name__ != "ExactPosition" or type(part.end).__name__ != "ExactPosition":
+                return True
+        return False
+
+    def _extract_nucleotide_sequence(feature, record):
+        try:
+            return str(feature.extract(record.seq)).upper(), []
+        except Exception as exc:
+            return "", [f"Nucleotide sequence extraction skipped: {exc}"]
+
+    def _extract_amino_acid_sequence(feature, nucleotide_sequence):
+        warnings = []
+        qualifiers = feature.qualifiers or {}
+        translation = _first_qualifier_value(qualifiers, "translation")
+        if translation:
+            return "".join(str(translation).split()), warnings
+
+        if str(feature.type).upper() != "CDS":
+            return "", warnings
+
+        if "pseudo" in qualifiers or "pseudogene" in qualifiers:
+            warnings.append("CDS translation skipped for pseudo/pseudogene feature.")
+            return "", warnings
+
+        if _location_has_fuzzy_positions(feature.location):
+            warnings.append("CDS translation skipped for fuzzy feature location.")
+            return "", warnings
+
+        if not nucleotide_sequence:
+            warnings.append("CDS translation skipped because nucleotide sequence is unavailable.")
+            return "", warnings
+
+        codon_start_raw = _first_qualifier_value(qualifiers, "codon_start") or "1"
+        try:
+            codon_start = int(str(codon_start_raw).strip())
+        except Exception:
+            warnings.append(f"CDS translation skipped because codon_start is invalid: {codon_start_raw}")
+            return "", warnings
+        if codon_start not in {1, 2, 3}:
+            warnings.append(f"CDS translation skipped because codon_start is outside 1..3: {codon_start}")
+            return "", warnings
+
+        transl_table_raw = _first_qualifier_value(qualifiers, "transl_table") or "1"
+        try:
+            transl_table = int(str(transl_table_raw).strip())
+        except Exception:
+            warnings.append(f"CDS translation skipped because transl_table is invalid: {transl_table_raw}")
+            return "", warnings
+
+        coding_sequence = str(nucleotide_sequence)[codon_start - 1:]
+        if len(coding_sequence) == 0:
+            warnings.append("CDS translation skipped because coding sequence is empty after codon_start.")
+            return "", warnings
+        if len(coding_sequence) % 3 != 0:
+            warnings.append("CDS translation skipped because coding sequence length is not divisible by 3.")
+            return "", warnings
+
+        try:
+            protein = str(Seq(coding_sequence).translate(table=transl_table, to_stop=False))
+            if protein.endswith("*"):
+                protein = protein[:-1]
+            return protein, warnings
+        except Exception as exc:
+            warnings.append(f"CDS translation skipped: {exc}")
+            return "", warnings
 
     features = []
     record_ids = []
@@ -1394,6 +1513,10 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
                 start = int(feat.location.start)
                 end = int(feat.location.end)
                 strand_raw = feat.location.strand
+                location_parts = _format_location_parts(feat.location)
+                nucleotide_sequence, sequence_warnings = _extract_nucleotide_sequence(feat, record)
+                amino_acid_sequence, translation_warnings = _extract_amino_acid_sequence(feat, nucleotide_sequence)
+                sequence_warnings.extend(translation_warnings)
 
                 try:
                     svg_id = _compute_svg_feature_hash(feat, record_id=hash_record_id)
@@ -1414,12 +1537,9 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
                     svg_id = "f" + hashlib.md5(key.encode()).hexdigest()[:8]
                 qualifiers = {}
                 for q_key, q_vals in feat.qualifiers.items():
-                    if not q_vals:
+                    q_list = _normalize_qualifier_values(q_vals)
+                    if not q_list:
                         continue
-                    try:
-                        q_list = [str(v) for v in q_vals]
-                    except Exception:
-                        q_list = [str(q_vals)]
                     qualifiers[q_key.lower()] = q_list
                 features.append({
                     "id": f"f{idx}",  # Unique internal ID for UI tracking
@@ -1429,12 +1549,16 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
                     "type": feat.type,
                     "start": start,
                     "end": end,
-                    "strand": "+" if strand_raw == 1 else ("-" if strand_raw == -1 else "undefined"),
-                    "locus_tag": feat.qualifiers.get("locus_tag", [""])[0],
-                    "gene": feat.qualifiers.get("gene", [""])[0],
-                    "product": feat.qualifiers.get("product", [""])[0],
-                    "note": feat.qualifiers.get("note", [""])[0][:50] if feat.qualifiers.get("note") else "",
+                    "strand": _strand_display(strand_raw),
+                    "locus_tag": _first_qualifier_value(feat.qualifiers, "locus_tag"),
+                    "gene": _first_qualifier_value(feat.qualifiers, "gene"),
+                    "product": _first_qualifier_value(feat.qualifiers, "product"),
+                    "note": _first_qualifier_value(feat.qualifiers, "note")[:50],
                     "qualifiers": qualifiers,
+                    "location_parts": location_parts,
+                    "nucleotide_sequence": nucleotide_sequence,
+                    "amino_acid_sequence": amino_acid_sequence,
+                    "sequence_warnings": sequence_warnings,
                 })
                 idx += 1
     except Exception as e:

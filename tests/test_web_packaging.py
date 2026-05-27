@@ -108,6 +108,38 @@ def test_index_includes_preprint_citation() -> None:
     assert PREPRINT_DOI in index_html
 
 
+def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    svg_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "svg-actions.js").read_text(encoding="utf-8")
+    app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
+    helper_source = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+
+    assert "rich_feature_popup: true" in state_source
+    assert 'v-model="adv.rich_feature_popup"' in index_html
+    assert "Rich Feature Popup" in index_html
+    assert "feature-popup--simple" in index_html
+    assert "!adv.rich_feature_popup || clickedFeature.activeTab === 'edit'" in index_html
+    assert "adv?.rich_feature_popup === false ? 440 : 720" in svg_actions_source
+    assert "state.adv.rich_feature_popup = state.adv.rich_feature_popup !== false;" in config_source
+    assert "clickedFeature.activeTab" in index_html
+    assert "Details" in index_html
+    assert "Qualifiers" in index_html
+    assert "Sequence" in index_html
+    assert "ph ph-copy" in index_html
+    assert "copyText(row.value)" in index_html
+    assert "qualifierRows" in svg_actions_source
+    assert "locationParts" in svg_actions_source
+    assert "nucleotideSequence" in svg_actions_source
+    assert "aminoAcidSequence" in svg_actions_source
+    assert "navigator.clipboard?.writeText" in app_setup_source
+    assert "location_parts" in helper_source
+    assert "nucleotide_sequence" in helper_source
+    assert "amino_acid_sequence" in helper_source
+    assert "sanitizeExtractedFeaturesForSession(state.extractedFeatures.value)" in config_source
+
+
 def test_local_index_keeps_cloudflare_analytics_as_deploy_only() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert "static.cloudflareinsights.com" not in index_html
