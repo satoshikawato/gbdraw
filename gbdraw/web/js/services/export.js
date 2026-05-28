@@ -626,9 +626,22 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function getPopupTextScale(viewport, popupCssWidth, popupCssHeight) {
     var fitScale = Math.min(1, popupCssWidth / 460, popupCssHeight / 540);
+    return Math.max(0.38, Math.min(1, fitScale));
+  }
+
+  function getPopupCssMetrics(viewport) {
     var zoomScale = getBrowserZoomScale(viewport);
-    var textScale = Math.min(fitScale, 1 / zoomScale);
-    return Math.max(0.38, Math.min(1, textScale));
+    var margin = 12;
+    var availableVisualWidth = Math.max(1, viewport.width * zoomScale - margin * 2);
+    var availableVisualHeight = Math.max(1, viewport.height * zoomScale - margin * 2);
+    return {
+      zoomScale: zoomScale,
+      margin: margin,
+      width: Math.max(1, Math.min(460, availableVisualWidth)),
+      height: Math.max(1, Math.min(540, availableVisualHeight)),
+      minWidth: Math.max(1, Math.min(300, availableVisualWidth)),
+      minHeight: Math.max(1, Math.min(220, availableVisualHeight))
+    };
   }
 
   function clampValue(value, min, max) {
@@ -664,14 +677,17 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     var scale = getScreenScale();
     var safeScaleX = Math.max(scale.x, 0.001);
     var safeScaleY = Math.max(scale.y, 0.001);
-    var marginCss = 12;
-    var marginX = marginCss / safeScaleX;
-    var marginY = marginCss / safeScaleY;
-    var popupCssWidth = Math.max(1, Math.min(460, viewport.width - marginCss * 2));
-    var popupCssHeight = Math.max(1, Math.min(540, viewport.height - marginCss * 2));
+    var metrics = getPopupCssMetrics(viewport);
+    var marginCss = metrics.margin;
+    var effectiveScaleX = safeScaleX * metrics.zoomScale;
+    var effectiveScaleY = safeScaleY * metrics.zoomScale;
+    var marginX = marginCss / effectiveScaleX;
+    var marginY = marginCss / effectiveScaleY;
+    var popupCssWidth = metrics.width;
+    var popupCssHeight = metrics.height;
     var popupTextScale = getPopupTextScale(viewport, popupCssWidth, popupCssHeight);
-    var width = popupCssWidth / safeScaleX;
-    var height = popupCssHeight / safeScaleY;
+    var width = popupCssWidth / effectiveScaleX;
+    var height = popupCssHeight / effectiveScaleY;
     var point = eventPoint(event);
     var x = point.x + marginX;
     var y = point.y + marginY;
@@ -698,23 +714,25 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
     root.style.width = popupCssWidth + 'px';
     root.style.height = popupCssHeight + 'px';
     root.style.transformOrigin = '0 0';
-    root.style.transform = 'scale(' + (1 / safeScaleX) + ', ' + (1 / safeScaleY) + ')';
+    root.style.transform = 'scale(' + (1 / effectiveScaleX) + ', ' + (1 / effectiveScaleY) + ')';
     setPopupTextScale(root, popupTextScale);
 
     function getResizeLimits() {
       viewport = getViewportClientRect();
+      var resizeMetrics = getPopupCssMetrics(viewport);
       var rect = typeof foreignObject.getBoundingClientRect === 'function'
         ? foreignObject.getBoundingClientRect()
         : null;
-      var left = rect && Number.isFinite(rect.left) ? rect.left : marginCss;
-      var top = rect && Number.isFinite(rect.top) ? rect.top : marginCss;
-      var minWidth = Math.min(300, Math.max(1, viewport.width - marginCss * 2));
-      var minHeight = Math.min(220, Math.max(1, viewport.height - marginCss * 2));
+      var layoutMargin = resizeMetrics.margin / resizeMetrics.zoomScale;
+      var left = rect && Number.isFinite(rect.left) ? rect.left : layoutMargin;
+      var top = rect && Number.isFinite(rect.top) ? rect.top : layoutMargin;
+      var minWidth = resizeMetrics.minWidth;
+      var minHeight = resizeMetrics.minHeight;
       return {
         minWidth: minWidth,
         minHeight: minHeight,
-        maxWidth: Math.max(minWidth, viewport.width - left - marginCss),
-        maxHeight: Math.max(minHeight, viewport.height - top - marginCss)
+        maxWidth: Math.max(minWidth, (viewport.width - left) * resizeMetrics.zoomScale - resizeMetrics.margin),
+        maxHeight: Math.max(minHeight, (viewport.height - top) * resizeMetrics.zoomScale - resizeMetrics.margin)
       };
     }
 
@@ -722,12 +740,19 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       var limits = getResizeLimits();
       popupCssWidth = clampValue(nextCssWidth, limits.minWidth, limits.maxWidth);
       popupCssHeight = clampValue(nextCssHeight, limits.minHeight, limits.maxHeight);
-      width = popupCssWidth / safeScaleX;
-      height = popupCssHeight / safeScaleY;
+      var currentScale = getScreenScale();
+      safeScaleX = Math.max(currentScale.x, 0.001);
+      safeScaleY = Math.max(currentScale.y, 0.001);
+      metrics = getPopupCssMetrics(viewport);
+      effectiveScaleX = safeScaleX * metrics.zoomScale;
+      effectiveScaleY = safeScaleY * metrics.zoomScale;
+      width = popupCssWidth / effectiveScaleX;
+      height = popupCssHeight / effectiveScaleY;
       foreignObject.setAttribute('width', width);
       foreignObject.setAttribute('height', height);
       root.style.width = popupCssWidth + 'px';
       root.style.height = popupCssHeight + 'px';
+      root.style.transform = 'scale(' + (1 / effectiveScaleX) + ', ' + (1 / effectiveScaleY) + ')';
       setPopupTextScale(root, getPopupTextScale(viewport, popupCssWidth, popupCssHeight));
     }
 
@@ -738,9 +763,10 @@ const STANDALONE_INTERACTIVE_SCRIPT = `
       var startWidth = popupCssWidth;
       var startHeight = popupCssHeight;
       var onMove = function (moveEvent) {
+        var dragZoomScale = getBrowserZoomScale(getViewportClientRect());
         applyPopupCssSize(
-          startWidth + (moveEvent.clientX - startClientX),
-          startHeight + (moveEvent.clientY - startClientY)
+          startWidth + (moveEvent.clientX - startClientX) * dragZoomScale,
+          startHeight + (moveEvent.clientY - startClientY) * dragZoomScale
         );
         moveEvent.preventDefault();
       };

@@ -153,6 +153,10 @@ def test_svg_download_embeds_standalone_feature_popup_without_affecting_raster_e
     assert "amino_acid_sequence" in export_source
     assert "getVisibleViewRect()" in export_source
     assert "popupCssWidth" in export_source
+    assert "getPopupCssMetrics" in export_source
+    assert "var effectiveScaleX = safeScaleX * metrics.zoomScale;" in export_source
+    assert "var marginCss = metrics.margin;" in export_source
+    assert "var dragZoomScale = getBrowserZoomScale(getViewportClientRect());" in export_source
     assert "--gfi-text-scale" in export_source
     assert "getPopupTextScale" in export_source
     assert "root.style.setProperty('--gfi-text-scale'" in export_source
