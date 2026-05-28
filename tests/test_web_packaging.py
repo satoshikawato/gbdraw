@@ -303,7 +303,10 @@ def test_web_wires_addable_depth_tracks() -> None:
     assert "getDepthTrackLabelFromFile" in depth_tracks_source
     assert "isDepthTrackAutoLabel" in depth_tracks_source
     assert "depthTrackRows" in app_setup_source
-    assert "addDepthTrack" in app_setup_source
+    assert "circularDepthTrackRows" in app_setup_source
+    assert "linearDepthTrackRows" in app_setup_source
+    assert "addCircularDepthTrack" in app_setup_source
+    assert "addLinearDepthTrack" in app_setup_source
     assert "setCircularDepthFile" in app_setup_source
     assert "setLinearDepthFile" in app_setup_source
     assert "updateDepthTrackLabelFromFile(idx, file, previousFile);" in app_setup_source
@@ -317,6 +320,7 @@ def test_web_wires_addable_depth_tracks() -> None:
     assert "args.push('--depth_track_large_tick_interval', ...largeTicks);" in run_source
     assert "args.push('--depth_track_small_tick_interval', ...smallTicks);" in run_source
     assert "args.push('--depth_track_tick_font_size', ...tickFontSizes);" in run_source
+    assert "depthPaths.push('');" in run_source
 
 
 def test_web_run_analysis_wires_circular_track_slot_options() -> None:

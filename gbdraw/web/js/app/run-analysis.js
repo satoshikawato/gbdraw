@@ -1268,14 +1268,6 @@ json.dumps({
     if (depthCount === 0) {
       return 'Please upload at least one Depth TSV file or disable Show depth track.';
     }
-    const maxTrackCount = Math.max(...perRecordDepthFiles.map((items) => items.length), 0);
-    for (let trackIndex = 0; trackIndex < maxTrackCount; trackIndex += 1) {
-      const presentCount = perRecordDepthFiles.filter((items) => Boolean(items[trackIndex])).length;
-      if (presentCount === 0) continue;
-      if (presentCount !== 1 && presentCount !== linearSeqs.length) {
-        return 'For each depth track, upload one shared Depth TSV or one Depth TSV per sequence.';
-      }
-    }
     return '';
   };
 
@@ -3444,29 +3436,23 @@ json.dumps({
           const maxDepthTracks = Math.max(...depthRows.map((row) => row.length), 0);
           const depthTrackEntries = [];
           for (let depthTrackIndex = 0; depthTrackIndex < maxDepthTracks; depthTrackIndex += 1) {
-            const entries = depthRows
-              .map((row, idx) => ({ file: row[depthTrackIndex], idx }))
-              .filter((entry) => Boolean(entry.file));
-            if (entries.length === 0) continue;
-            if (entries.length !== 1 && entries.length !== linearSeqs.length) {
-              throw new Error('For each depth track, upload one shared Depth TSV or one Depth TSV per sequence.');
-            }
+            const entries = depthRows.map((row, idx) => ({ file: row[depthTrackIndex] || null, idx }));
+            const presentEntries = entries.filter((entry) => Boolean(entry.file));
+            if (presentEntries.length === 0) continue;
             const depthPaths = [];
-            if (entries.length === 1 && linearSeqs.length > 1) {
-              const depthPath = `/depth_track_${depthTrackEntries.length + 1}.tsv`;
-              await stageUploadedFile(entries[0].file, depthPath);
-              depthPaths.push(depthPath);
-            } else {
-              for (const entry of entries) {
+            for (const entry of entries) {
+              if (entry.file) {
                 const depthPath = `/seq_${entry.idx}.depth_${depthTrackEntries.length + 1}.tsv`;
                 await stageUploadedFile(entry.file, depthPath);
                 depthPaths.push(depthPath);
+              } else {
+                depthPaths.push('');
               }
             }
             args.push('--depth_track', ...depthPaths);
             depthTrackEntries.push({
               index: depthTrackIndex,
-              config: depthTrackConfigAt(depthTrackIndex, entries[0]?.file)
+              config: depthTrackConfigAt(depthTrackIndex, presentEntries[0]?.file)
             });
           }
           appendDepthTrackMetadataArgs(depthTrackEntries);

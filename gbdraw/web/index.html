@@ -518,10 +518,10 @@
                         </div>
                         <div class="space-y-2">
                             <label class="input-label mb-0">Depth TSV tracks</label>
-                            <div v-for="track in depthTrackRows" :key="`c-depth-${track.key}`" class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1">
+                            <div v-for="track in circularDepthTrackRows" :key="`c-depth-${track.key}`" class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1">
                                 <div class="flex items-center justify-between gap-2">
                                     <div class="text-[10px] font-bold text-slate-500 truncate">#{{ track.index + 1 }} {{ track.config.label || 'Depth' }}</div>
-                                    <button type="button" @click="removeDepthTrack(track.index)" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1">
+                                    <button type="button" @click="removeCircularDepthTrack(track.index)" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1">
                                         <i class="ph ph-trash"></i> Remove
                                     </button>
                                 </div>
@@ -533,7 +533,7 @@
                                     @update:model-value="setCircularDepthFile(track.index, $event)"
                                 ></file-uploader>
                             </div>
-                            <button type="button" @click="addDepthTrack" class="btn btn-secondary text-xs w-full">
+                            <button type="button" @click="addCircularDepthTrack" class="btn btn-secondary text-xs w-full">
                                 <i class="ph ph-plus"></i> Add TSV
                             </button>
                         </div>
@@ -739,10 +739,10 @@
                             <div class="mt-2 space-y-1.5">
                                 <label class="input-label mb-0">Depth TSV tracks</label>
                                 <div class="space-y-1.5">
-                                    <div v-for="track in depthTrackRows" :key="`${seq.uid}-depth-${track.key}`" class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1">
+                                    <div v-for="track in linearDepthTrackRows(seq)" :key="`${seq.uid}-depth-${track.key}`" class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1">
                                         <div class="flex items-center justify-between gap-2">
                                             <div class="text-[10px] font-bold text-slate-500 truncate">#{{ track.index + 1 }} {{ track.config.label || 'Depth' }}</div>
-                                            <button type="button" @click="removeDepthTrack(track.index)" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1">
+                                            <button type="button" @click="removeLinearDepthTrack(seq, track.index)" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1">
                                                 <i class="ph ph-trash"></i> Remove
                                             </button>
                                         </div>
@@ -755,7 +755,7 @@
                                         ></file-uploader>
                                     </div>
                                 </div>
-                                <button type="button" @click="addDepthTrack" class="btn btn-secondary text-xs w-full">
+                                <button type="button" @click="addLinearDepthTrack(seq)" class="btn btn-secondary text-xs w-full">
                                     <i class="ph ph-plus"></i> Add TSV
                                 </button>
                             </div>
@@ -2071,9 +2071,6 @@
                                     <div v-for="track in depthTrackRows" :key="`depth-settings-${track.key}`" class="rounded border border-slate-200 bg-white p-2 space-y-2">
                                         <div class="flex items-center justify-between gap-2">
                                             <div class="text-[10px] font-bold text-slate-500">Track #{{ track.index + 1 }}</div>
-                                            <button type="button" @click="removeDepthTrack(track.index)" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1">
-                                                <i class="ph ph-trash"></i> Remove
-                                            </button>
                                         </div>
                                         <div class="grid grid-cols-[1fr_44px] gap-1.5 items-end">
                                             <div>
@@ -2100,9 +2097,6 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <button type="button" @click="addDepthTrack" class="btn btn-secondary text-xs w-full">
-                                        <i class="ph ph-plus"></i> Add TSV
-                                    </button>
                                 </div>
                                 <div v-if="mode === 'linear'">
                                     <label class="input-label text-[10px]">Depth Height <help-tip text="Height of the linear depth track."></help-tip></label>

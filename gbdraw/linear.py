@@ -1020,16 +1020,21 @@ def _record_major_depth_track_files_from_cli(
         return None
     rows: list[list[str | None]] = [[] for _ in range(record_count)]
     for track_number, group in enumerate(depth_track_groups, start=1):
-        files = [str(path) for path in (group or []) if str(path).strip()]
-        if not files:
+        values = [
+            None
+            if str(path).strip().lower() in {"", "-", "none", "null"}
+            else str(path)
+            for path in (group or [])
+        ]
+        if not values or all(value is None for value in values):
             raise ValidationError(f"--depth_track #{track_number} must include at least one file.")
-        if len(files) == 1:
-            expanded = files * record_count
-        elif len(files) == record_count:
-            expanded = files
+        if len(values) == 1:
+            expanded = values * record_count
+        elif len(values) == record_count:
+            expanded = values
         else:
             raise ValidationError(
-                f"--depth_track #{track_number} must contain one file or one per record ({record_count}); got {len(files)}."
+                f"--depth_track #{track_number} must contain one file or one per record ({record_count}); got {len(values)}."
             )
         for record_index, path in enumerate(expanded):
             rows[record_index].append(path)

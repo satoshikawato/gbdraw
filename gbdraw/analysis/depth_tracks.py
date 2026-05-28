@@ -199,15 +199,10 @@ def _tracks_from_record_major_values(
         if not present:
             raise ValidationError(f"Depth track {track_index + 1} is empty.")
 
-        if single_shared_row or len(present) == 1:
+        if single_shared_row:
             source_values = [present[0][1] for _ in range(record_count)]
-        elif len(present) == record_count:
-            source_values = list(raw_track_values)
         else:
-            raise ValidationError(
-                f"Depth track {track_index + 1} must have one table/file or one per record "
-                f"({record_count}); got {len(present)}."
-            )
+            source_values = list(raw_track_values)
 
         loaded_table: DataFrame | None = None
         if values_are_files and len(present) == 1:

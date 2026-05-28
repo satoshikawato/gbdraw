@@ -274,8 +274,7 @@ const circularDepthTrackCountForState = (state) => {
   if (!Boolean(state?.form?.show_depth)) return 0;
   const fileCount = depthFileSlotsFromValue(state?.files?.c_depth).length;
   if (fileCount > 0) return fileCount;
-  const configCount = Array.isArray(state?.adv?.depth_tracks) ? state.adv.depth_tracks.length : 0;
-  return Math.max(1, configCount);
+  return 1;
 };
 
 const normalizeSlotSide = (value) => normalizeOptionalPlacement(value);
